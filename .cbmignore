@@ -1,0 +1,41 @@
+# Build artifacts
+target/
+ui/dist/
+ui/dist-tablet/
+
+# Dependencies
+node_modules/
+ui/node_modules/
+
+# Large log & build cache files
+*.log
+*.tsbuildinfo
+*.js.map
+
+# CI coverage & generated outputs
+coverage/
+graphify-out/
+playwright-report/
+test-results/
+
+# Binary & image assets
+*.exe
+*.node
+*.png
+*.jpg
+*.ico
+*.woff
+*.woff2
+*.ttf
+
+# Misc
+fuzz/
+nul
+nul.txt
+
+# Un-exclude folders that the indexer skips by default but we want indexed:
+# scripts/, docs/, audit/ contain .sh/.ps1/.bat/.md files we want searchable.
+!scripts/
+!ui/scripts/
+!docs/
+!audit/

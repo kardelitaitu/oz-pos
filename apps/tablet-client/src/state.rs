@@ -80,6 +80,14 @@ pub struct AppState {
     /// Store-scoped database manager (ADR #4 Phase 2 / ADR #7).
     /// Each resolved store is opened in its own migrated SQLite database.
     pub db_manager: StoreDatabaseManager,
+
+    /// Per-process secret for the pre-session picker ticket HMAC.
+    ///
+    /// Parity with the desktop client (audit/06 residual). Generated
+    /// once at startup. Tickets are short-lived (5 min) and die with
+    /// the process, so the secret is never persisted — a restart
+    /// simply invalidates outstanding tickets.
+    pub picker_ticket_secret: Vec<u8>,
 }
 
 impl AppState {
@@ -101,6 +109,30 @@ impl AppState {
 
         migrations::run(&mut conn)
             .map_err(|e| AppError::Internal(format!("running migrations: {e}")))?;
+
+        // ── Tenant-integrity gate (fail loud) ────────────────────────
+        // Tablet store DBs are scoped by construction to the `default`
+        // tenant. A foreign-tenant row here means a sync/restore mishap
+        // planted another store's data into this file; refuse to boot so
+        // the operator reconciles it instead of silently mixing tenants.
+        // Two indexed COUNTs (`idx_products_tenant` / `idx_users_tenant`)
+        // — cheap enough to run at every startup.
+        oz_core::db::Store::new(&conn)
+            .check_tenant_integrity()
+            .map_err(|e| AppError::Internal(format!("tenant integrity check: {e}")))?;
+
+        // ── Popularity full pass (ADR #37) ────────────────────────────
+        // Materialize popularity scores right after migrations so product
+        // lookups rank recently-managed items from the first launch (sales
+        // come from sale_lines, edit events were seeded by migration 134,
+        // search events accumulate from launch). Local-only analytics — a
+        // failure must not block startup.
+        if let Err(e) = oz_core::db::Store::new(&conn).recompute_all_popularity() {
+            tracing::warn!(
+                error = %e,
+                "popularity full pass failed; product popularity sort falls back"
+            );
+        }
 
         // ── Session TTL ──────────────────────────────────────────────
         // Read from settings; default 24h. 0 or missing = no expiry.
@@ -130,6 +162,7 @@ impl AppState {
             session_ttl_seconds,
             terminal_id: Mutex::new(None),
             db_manager,
+            picker_ticket_secret: uuid::Uuid::new_v4().as_bytes().to_vec(),
         })
     }
 
@@ -308,6 +341,7 @@ impl AppState {
             session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
             db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
+            picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
         }
     }
 
@@ -325,6 +359,7 @@ impl AppState {
             session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
             db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
+            picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
         }
     }
 

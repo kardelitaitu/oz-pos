@@ -46,6 +46,8 @@ export default function StockCountDetail({ countId, onBack }: Props) {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // Date formatting follows the active Fluent locale.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { addToast } = useToast();
   const { sessionToken: rawSessionToken } = useWorkspace();
   const sessionToken = rawSessionToken ?? '';
@@ -92,6 +94,11 @@ export default function StockCountDetail({ countId, onBack }: Props) {
 
   const handleAddLine = useCallback(async () => {
     if (!selectedSku || !expectedQty) return;
+    const expectedNum = Number(expectedQty);
+    if (!Number.isInteger(expectedNum) || expectedNum < 0) {
+      setError(l10nRef.current.getString('sc-error-qty-integer'));
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -100,7 +107,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
         countId,
         sku: selectedSku,
         productName: selectedName,
-        expectedQty: parseInt(expectedQty, 10),
+        expectedQty: Number(expectedQty),
       });
       setSelectedSku('');
       setSelectedName('');
@@ -237,7 +244,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
           <Localized id={`sc-status-${count.status}`}>{count.status}</Localized>
         </span>
         <span><Localized id={`sc-type-${count.count_type}`}>{count.count_type}</Localized></span>
-        <span>{new Date(count.created_at).toLocaleDateString()}</span>
+        <span>{new Date(count.created_at).toLocaleDateString(numLocale)}</span>
       </div>
 
       {count.notes && <p className="sc-detail-notes">{count.notes}</p>}
@@ -266,6 +273,12 @@ export default function StockCountDetail({ countId, onBack }: Props) {
           <div className="sc-add-line-search">
             <input
               type="search"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-bwignore="true"
               placeholder={l10n.getString('sc-search-placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -336,7 +349,12 @@ export default function StockCountDetail({ countId, onBack }: Props) {
                     type="number"
                     className="sc-counted-input"
                     value={line.counted_qty ?? ''}
-                    onChange={(e) => handleRecordCount(line.id, parseInt(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const v = e.target.value === '' ? 0 : Number(e.target.value);
+                      // Counted quantities are whole units; ignore fractional
+                      // in-progress input instead of silently truncating it.
+                      if (Number.isInteger(v) && v >= 0) handleRecordCount(line.id, v);
+                    }}
                     min="0"
                     aria-label={l10n.getString('sc-counted-aria', { sku: line.sku })}
                   />

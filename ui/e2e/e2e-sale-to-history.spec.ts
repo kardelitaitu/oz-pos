@@ -21,7 +21,7 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 test.describe('Critical Path: Sale → Sales History', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'kasir', '1234');
+    await loginAs(page, 'staff', '1234');
     await selectWorkspace(page, WORKSPACES.STORE_POS);
   });
 
@@ -71,18 +71,15 @@ test.describe('Critical Path: Sale → Sales History', () => {
     await tenderedInput.pressSequentially('9999999', { delay: 30 });
     await page.waitForTimeout(200);
     const typedVal = await tenderedInput.inputValue();
-    console.log(`  [diag] tendered after type: "${typedVal}"`);
     if (!typedVal || Number(typedVal.replace(/[^0-9.]/g, '')) < 1000) {
       const exactBtn = page.locator('.payment-quick-cash .payment-quick-btn').last();
       await exactBtn.click();
       await page.waitForTimeout(300);
       const exactVal = await tenderedInput.inputValue();
-      console.log(`  [diag] tendered after Exact: "${exactVal}"`);
       if (!exactVal || Number(exactVal.replace(/[^0-9.]/g, '')) < 1000) {
         await tenderedInput.click();
         await tenderedInput.pressSequentially('9999999', { delay: 50 });
         await page.waitForTimeout(300);
-        console.log(`  [diag] tendered after 2nd type: "${await tenderedInput.inputValue()}"`);
       }
     }
 

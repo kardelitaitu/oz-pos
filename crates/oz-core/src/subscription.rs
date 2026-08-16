@@ -854,4 +854,193 @@ mod tests {
         assert_eq!(CLOCK_SKEW_TOLERANCE_SECONDS, 30);
         assert_eq!(OFFLINE_GRACE_DAYS, 14);
     }
+
+    // ── SubscriptionTier feature-flag coverage ─────────────────────────
+
+    #[test]
+    fn max_warehouses_per_tier() {
+        // Free/OneTime/Standard: 1 warehouse
+        assert_eq!(SubscriptionTier::Free.max_warehouses(), Some(1));
+        assert_eq!(SubscriptionTier::OneTime.max_warehouses(), Some(1));
+        assert_eq!(SubscriptionTier::Standard.max_warehouses(), Some(1));
+        // Pro/Premium/Enterprise: unlimited
+        assert_eq!(SubscriptionTier::Pro.max_warehouses(), None);
+        assert_eq!(SubscriptionTier::Premium.max_warehouses(), None);
+        assert_eq!(SubscriptionTier::Enterprise.max_warehouses(), None);
+    }
+
+    #[test]
+    fn supports_cloud_sync_per_tier() {
+        assert!(!SubscriptionTier::Free.supports_cloud_sync());
+        assert!(!SubscriptionTier::OneTime.supports_cloud_sync());
+        assert!(SubscriptionTier::Standard.supports_cloud_sync());
+        assert!(SubscriptionTier::Pro.supports_cloud_sync());
+        assert!(SubscriptionTier::Premium.supports_cloud_sync());
+        assert!(SubscriptionTier::Enterprise.supports_cloud_sync());
+    }
+
+    #[test]
+    fn supports_qris_per_tier() {
+        assert!(!SubscriptionTier::Free.supports_qris());
+        assert!(!SubscriptionTier::OneTime.supports_qris());
+        assert!(SubscriptionTier::Standard.supports_qris());
+        assert!(SubscriptionTier::Pro.supports_qris());
+        assert!(SubscriptionTier::Premium.supports_qris());
+        assert!(SubscriptionTier::Enterprise.supports_qris());
+    }
+
+    #[test]
+    fn supports_stripe_per_tier() {
+        assert!(!SubscriptionTier::Free.supports_stripe());
+        assert!(!SubscriptionTier::OneTime.supports_stripe());
+        assert!(!SubscriptionTier::Standard.supports_stripe());
+        assert!(SubscriptionTier::Pro.supports_stripe());
+        assert!(SubscriptionTier::Premium.supports_stripe());
+        assert!(SubscriptionTier::Enterprise.supports_stripe());
+    }
+
+    #[test]
+    fn supports_lua_engine_per_tier() {
+        assert!(!SubscriptionTier::Free.supports_lua_engine());
+        assert!(!SubscriptionTier::OneTime.supports_lua_engine());
+        assert!(!SubscriptionTier::Standard.supports_lua_engine());
+        assert!(SubscriptionTier::Pro.supports_lua_engine());
+        assert!(SubscriptionTier::Premium.supports_lua_engine());
+        assert!(SubscriptionTier::Enterprise.supports_lua_engine());
+    }
+
+    #[test]
+    fn supports_multi_warehouse_fallback_per_tier() {
+        assert!(!SubscriptionTier::Free.supports_multi_warehouse_fallback());
+        assert!(!SubscriptionTier::OneTime.supports_multi_warehouse_fallback());
+        assert!(!SubscriptionTier::Standard.supports_multi_warehouse_fallback());
+        assert!(SubscriptionTier::Pro.supports_multi_warehouse_fallback());
+        assert!(SubscriptionTier::Premium.supports_multi_warehouse_fallback());
+        assert!(SubscriptionTier::Enterprise.supports_multi_warehouse_fallback());
+    }
+
+    #[test]
+    fn supports_regional_zones_only_enterprise() {
+        assert!(!SubscriptionTier::Free.supports_regional_zones());
+        assert!(!SubscriptionTier::OneTime.supports_regional_zones());
+        assert!(!SubscriptionTier::Standard.supports_regional_zones());
+        assert!(!SubscriptionTier::Pro.supports_regional_zones());
+        assert!(!SubscriptionTier::Premium.supports_regional_zones());
+        assert!(SubscriptionTier::Enterprise.supports_regional_zones());
+    }
+
+    #[test]
+    fn max_stores_per_tier() {
+        assert_eq!(SubscriptionTier::Free.max_stores(), Some(1));
+        assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
+        assert_eq!(SubscriptionTier::Standard.max_stores(), Some(1));
+        assert_eq!(SubscriptionTier::Pro.max_stores(), None);
+        assert_eq!(SubscriptionTier::Premium.max_stores(), None);
+        assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
+    }
+
+    #[test]
+    fn max_pos_instances_per_tier() {
+        assert_eq!(SubscriptionTier::Free.max_pos_instances(), Some(1));
+        assert_eq!(SubscriptionTier::OneTime.max_pos_instances(), Some(1));
+        assert_eq!(SubscriptionTier::Standard.max_pos_instances(), Some(2));
+        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), None);
+        assert_eq!(SubscriptionTier::Premium.max_pos_instances(), None);
+        assert_eq!(SubscriptionTier::Enterprise.max_pos_instances(), None);
+    }
+
+    #[test]
+    fn allows_workspace_type_free_tier() {
+        let tier = SubscriptionTier::Free;
+        assert!(tier.allows_workspace_type("store-pos"));
+        assert!(tier.allows_workspace_type("restaurant-pos"));
+        assert!(tier.allows_workspace_type("admin"));
+        assert!(!tier.allows_workspace_type("warehouse"));
+        assert!(!tier.allows_workspace_type("kds"));
+        assert!(!tier.allows_workspace_type("custom-plugin"));
+    }
+
+    #[test]
+    fn allows_workspace_type_standard_tier() {
+        let tier = SubscriptionTier::Standard;
+        assert!(tier.allows_workspace_type("store-pos"));
+        assert!(tier.allows_workspace_type("restaurant-pos"));
+        assert!(tier.allows_workspace_type("admin"));
+        assert!(tier.allows_workspace_type("warehouse"));
+        assert!(tier.allows_workspace_type("kds"));
+        assert!(!tier.allows_workspace_type("custom-plugin"));
+    }
+
+    #[test]
+    fn allows_workspace_type_pro_tier_allows_all() {
+        for tier in [
+            SubscriptionTier::Pro,
+            SubscriptionTier::Premium,
+            SubscriptionTier::Enterprise,
+        ] {
+            assert!(tier.allows_workspace_type("store-pos"));
+            assert!(tier.allows_workspace_type("restaurant-pos"));
+            assert!(tier.allows_workspace_type("warehouse"));
+            assert!(tier.allows_workspace_type("kds"));
+            assert!(tier.allows_workspace_type("admin"));
+            assert!(tier.allows_workspace_type("custom-plugin"));
+            assert!(tier.allows_workspace_type("anything"));
+        }
+    }
+
+    #[test]
+    fn from_db_aliases() {
+        assert_eq!(SubscriptionTier::from_db("free"), SubscriptionTier::Free);
+        assert_eq!(SubscriptionTier::from_db("trial"), SubscriptionTier::Free);
+        assert_eq!(SubscriptionTier::from_db("FREE"), SubscriptionTier::Free);
+        assert_eq!(
+            SubscriptionTier::from_db("one_time"),
+            SubscriptionTier::OneTime
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("perpetual"),
+            SubscriptionTier::OneTime
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("one-time"),
+            SubscriptionTier::OneTime
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("onetime"),
+            SubscriptionTier::OneTime
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("standard"),
+            SubscriptionTier::Standard
+        );
+        assert_eq!(SubscriptionTier::from_db("pro"), SubscriptionTier::Pro);
+        assert_eq!(
+            SubscriptionTier::from_db("premium"),
+            SubscriptionTier::Premium
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("enterprise"),
+            SubscriptionTier::Enterprise
+        );
+    }
+
+    #[test]
+    fn from_db_unknown_defaults_to_free() {
+        assert_eq!(SubscriptionTier::from_db("unknown"), SubscriptionTier::Free);
+        assert_eq!(SubscriptionTier::from_db(""), SubscriptionTier::Free);
+        assert_eq!(
+            SubscriptionTier::from_db("ENTREPRISE"),
+            SubscriptionTier::Free
+        ); // case-sensitive after to_lowercase
+    }
+
+    #[test]
+    fn tier_names() {
+        assert_eq!(SubscriptionTier::Free.name(), "Free Trial");
+        assert_eq!(SubscriptionTier::OneTime.name(), "1-Time Perpetual");
+        assert_eq!(SubscriptionTier::Standard.name(), "Standard");
+        assert_eq!(SubscriptionTier::Pro.name(), "Pro");
+        assert_eq!(SubscriptionTier::Premium.name(), "Premium (Pro)");
+        assert_eq!(SubscriptionTier::Enterprise.name(), "Enterprise");
+    }
 }

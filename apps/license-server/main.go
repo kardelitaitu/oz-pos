@@ -94,6 +94,14 @@ func main() {
 		if err := ensureCollections(app); err != nil {
 			return err
 		}
+		// Add the api_key_lookup field to existing deployments that predate
+		// api_key hashing. Fresh boots get it from the embedded pb_schema.json;
+		// this is the idempotent in-place upgrade for already-provisioned
+		// pb_data volumes, so the SHA-256 lookup index used by
+		// findTenantByAPIKey exists on every boot.
+		if err := ensureAPIKeyLookupField(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -109,6 +117,20 @@ func main() {
 		// credential out of URLs (which would otherwise leak it to webserver
 		// access logs, CDN logs, browser history, and Referer headers).
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
+		// Public website support form → Discord channel (see contact.go).
+		se.Router.POST("/api/v1/web/contact", handleContact(app))
+		// Website tenant-email OTP auth + account dashboard (see web_otp.go).
+		// request-otp / verify-otp are the login flow; /me reads the session;
+		// logout invalidates it. All four enforce the CORS allowlist from
+		// OZ_WEB_ALLOWED_ORIGINS and per-email/IP rate limits in-handler.
+		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
+		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.GET("/api/v1/web/me", handleMe(app))
+		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		// Paddle Billing webhook — signature-verified, server-to-server (see
+		// paddle_webhook.go). NOT behind the web CORS allowlist: Paddle sends
+		// no Origin, and the Paddle-Signature header is the gate.
+		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
 		// P8-4: /api/health is now served by PocketBase's built-in endpoint (v0.39.6+).
@@ -144,6 +166,32 @@ func ensureCollections(app core.App) error {
 		}
 		return nil
 	}
+	return nil
+}
+
+// ensureAPIKeyLookupField adds the `api_key_lookup` field (and its unique
+// partial index) to the tenants collection if it doesn't exist yet.
+//
+// Fresh deployments receive the field via the embedded pb_schema.json. This
+// migration covers pb_data volumes created before api_key hashing, so the
+// deterministic lookup column used by findTenantByAPIKey is always present.
+// The index is partial (excluding empty values) so legacy rows that haven't
+// been lazily migrated yet don't collide on the empty string.
+func ensureAPIKeyLookupField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		return fmt.Errorf("tenants collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("api_key_lookup") != nil {
+		return nil
+	}
+	collection.Fields.Add(&core.TextField{Name: "api_key_lookup", Hidden: true})
+	collection.Indexes = append(collection.Indexes,
+		"CREATE UNIQUE INDEX idx_tenants_api_key_lookup ON tenants (api_key_lookup) WHERE api_key_lookup IS NOT NULL AND api_key_lookup != ''")
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add api_key_lookup field: %w", err)
+	}
+	log.Println("migrated tenants collection: added api_key_lookup field + unique partial index")
 	return nil
 }
 

@@ -64,7 +64,7 @@ async function selectWorkspaceForce(page: Page, typeKey: string): Promise<void> 
 test.describe('Performance smoke (PERF-10)', () => {
   test('startup to interactive POS within budget', async ({ page }) => {
     const t0 = Date.now();
-    await loginAs(page, 'kasir', '1234');
+    await loginAs(page, 'staff', '1234');
     await selectWorkspaceForce(page, WORKSPACES.STORE_POS);
     // Interactive = catalog rendered with at least one add-to-cart button.
     await expect(page.locator('.retail-product-btn').first()).toBeVisible({ timeout: 10_000 });
@@ -85,7 +85,7 @@ test.describe('Performance smoke (PERF-10)', () => {
   });
 
   test('product search within budget', async ({ page }) => {
-    await loginAs(page, 'kasir', '1234');
+    await loginAs(page, 'staff', '1234');
     await selectWorkspaceForce(page, WORKSPACES.STORE_POS);
     await expect(page.locator('.retail-search-input')).toBeVisible({ timeout: 10_000 });
     const ms = await timeStep(page, async () => {
@@ -99,7 +99,7 @@ test.describe('Performance smoke (PERF-10)', () => {
   });
 
   test('add-to-cart within budget', async ({ page }) => {
-    await loginAs(page, 'kasir', '1234');
+    await loginAs(page, 'staff', '1234');
     await selectWorkspaceForce(page, WORKSPACES.STORE_POS);
     await expect(page.locator('.retail-product-btn').first()).toBeVisible({ timeout: 10_000 });
     const ms = await timeStep(page, async () => {
@@ -112,7 +112,7 @@ test.describe('Performance smoke (PERF-10)', () => {
   });
 
   test('checkout open within budget', async ({ page }) => {
-    await loginAs(page, 'kasir', '1234');
+    await loginAs(page, 'staff', '1234');
     await selectWorkspaceForce(page, WORKSPACES.STORE_POS);
     await expect(page.locator('.retail-product-btn').first()).toBeVisible({ timeout: 10_000 });
     await page.locator('.retail-product-btn').first().click();
@@ -127,7 +127,7 @@ test.describe('Performance smoke (PERF-10)', () => {
   });
 
   test('KDS refresh within budget', async ({ page }) => {
-    // Admin role — same login as kds.spec.ts (kasir does not reach the board).
+    // Admin role — same login as kds.spec.ts (staff does not reach the board).
     await loginAs(page, 'admin', '9999');
     const ms = await timeStep(page, async () => {
       await selectWorkspaceForce(page, WORKSPACES.KDS);

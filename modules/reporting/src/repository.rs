@@ -1,5 +1,6 @@
 //! Reporting Repository — database query layer for reports.
 
+use crate::error::ReportingError;
 use crate::models::DailyReport;
 use foundation::{Currency, Money};
 use rusqlite::Connection;
@@ -16,7 +17,7 @@ impl<'a> ReportingRepository<'a> {
     }
 
     /// Generate daily report for date.
-    pub fn generate_daily_report(&self, date: &str) -> Result<DailyReport, anyhow::Error> {
+    pub fn generate_daily_report(&self, date: &str) -> Result<DailyReport, ReportingError> {
         let mut stmt = self.conn.prepare(
             "SELECT COUNT(*), COALESCE(SUM(total_minor), 0), COALESCE(SUM(tax_minor), 0)
              FROM sales WHERE strftime('%Y-%m-%d', created_at) = ?1 AND status = 'completed'",

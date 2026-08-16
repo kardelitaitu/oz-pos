@@ -225,3 +225,8 @@ See `docs/specs/_active/p1-sync-batching-compression-retention.md` for full acce
 - `platform/sync/` — Cross-store sync layer
 - `platform/sync/tests/integration_test.rs` — 19 cross-terminal integration tests
 - `ui/src/components/FastPINOverlay.tsx` ✅
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit; Phase 4 ADR Deep Audit
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+> status: ACCURATE (verified against actual codebase)

@@ -31,6 +31,7 @@ export default function KioskScreen() {
   const sessionToken = rawToken || '';
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [checkout, setCheckout] = useState(false);
@@ -43,12 +44,21 @@ export default function KioskScreen() {
     idleTimer.current = setTimeout(() => setIdle(true), IDLE_TIMEOUT_MS);
   }, [idle]);
 
+  const loadMenu = useCallback(() => {
+    setLoadError(false);
+    listProductsScoped(sessionToken)
+      .then(setProducts)
+      .catch(() => setLoadError(true));
+    listCategories()
+      .then(setCategories)
+      .catch(() => setLoadError(true));
+  }, [sessionToken]);
+
   useEffect(() => {
-    listProductsScoped(sessionToken).then(setProducts);
-    listCategories().then(setCategories);
+    loadMenu();
     idleTimer.current = setTimeout(() => setIdle(true), IDLE_TIMEOUT_MS);
     return () => clearTimeout(idleTimer.current);
-  }, [sessionToken]);
+  }, [loadMenu]);
 
   useEffect(() => {
     const handler = () => resetIdle();
@@ -124,7 +134,7 @@ export default function KioskScreen() {
           <span>{formatMoney({ minor_units: totalMinor, currency })}</span>
         </div>
         <button type="button" className="kiosk-checkout-pay" onClick={() => {
-          addToast({ message: 'Payment processed! (simulated)', type: 'success' });
+          addToast({ message: l10n.getString('kiosk-pay-success'), type: 'success' });
           setCart([]);
           setCheckout(false);
         }} aria-label={l10n.getString('kiosk-pay')}>
@@ -161,6 +171,15 @@ export default function KioskScreen() {
         ))}
       </div>
 
+      {loadError && (
+        <div className="kiosk-load-error" role="alert">
+          <p><Localized id="kiosk-load-error">Failed to load the menu</Localized></p>
+          <button type="button" onClick={loadMenu} aria-label={l10n.getString('kiosk-retry')}>
+            <Localized id="kiosk-retry">Retry</Localized>
+          </button>
+        </div>
+      )}
+
       <div className="kiosk-grid" role="list" aria-label={l10n.getString('kiosk-section-products')}>
         {filtered.map((p) => (
           <button type="button"
@@ -169,7 +188,7 @@ export default function KioskScreen() {
             onClick={() => addToCart(p)}
             aria-label={l10n.getString('kiosk-product-label', { name: p.name, price: formatMoney({ minor_units: p.price.minor_units, currency }) })}
           >
-            {isPriceRecent(p) && <span className="kiosk-price-volatility-hint" title="Price changed recently" />}
+            {isPriceRecent(p) && <span className="kiosk-price-volatility-hint" title={l10n.getString('kiosk-price-volatility-title')} />}
             <span className="kiosk-product-name">{p.name}</span>
             <span className="kiosk-product-price">{formatMoney({ minor_units: p.price.minor_units, currency })}</span>
             {p.stock_qty !== null && p.stock_qty <= 5 && (

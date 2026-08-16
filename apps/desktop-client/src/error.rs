@@ -49,6 +49,21 @@ pub enum AppError {
     #[error("invalid or expired session")]
     InvalidSession,
 
+    /// Structured validation failure raised by the topology compiler.
+    #[error("topology validation error: {message}")]
+    TopologyValidation {
+        /// Stable machine-readable validation code.
+        code: String,
+        /// Node associated with the failure, when applicable.
+        node_id: Option<String>,
+        /// Wire associated with the failure, when applicable.
+        wire_id: Option<String>,
+        /// Port associated with the failure, when applicable.
+        port_id: Option<String>,
+        /// Human-readable fallback message.
+        message: String,
+    },
+
     /// Catch-all for unexpected internal errors. Logged with full context.
     #[error("internal error: {0}")]
     Internal(String),
@@ -104,6 +119,16 @@ impl serde::Serialize for AppError {
                 message: &'a str,
             },
             InvalidSession,
+            TopologyValidation {
+                code: &'a str,
+                #[serde(rename = "nodeId")]
+                node_id: &'a Option<String>,
+                #[serde(rename = "wireId")]
+                wire_id: &'a Option<String>,
+                #[serde(rename = "portId")]
+                port_id: &'a Option<String>,
+                message: &'a str,
+            },
             Internal {
                 message: &'a str,
             },
@@ -115,6 +140,19 @@ impl serde::Serialize for AppError {
             AppError::Invalid(message) => AppErrorDto::Invalid { message },
             AppError::PermissionDenied(message) => AppErrorDto::PermissionDenied { message },
             AppError::InvalidSession => AppErrorDto::InvalidSession,
+            AppError::TopologyValidation {
+                code,
+                node_id,
+                wire_id,
+                port_id,
+                message,
+            } => AppErrorDto::TopologyValidation {
+                code,
+                node_id,
+                wire_id,
+                port_id,
+                message,
+            },
             AppError::Internal(message) => AppErrorDto::Internal { message },
         };
         dto.serialize(serializer)
@@ -192,6 +230,23 @@ mod tests {
     fn internal_display() {
         let err = AppError::Internal("unexpected panic".into());
         assert_eq!(err.to_string(), "internal error: unexpected panic");
+    }
+
+    #[test]
+    fn topology_validation_serializes_structured_fields() {
+        let err = AppError::TopologyValidation {
+            code: "missing-location-input".into(),
+            node_id: Some("ws-1".into()),
+            wire_id: None,
+            port_id: Some("location-in".into()),
+            message: "workspace requires Location In".into(),
+        };
+        let value = serde_json::to_value(err).unwrap();
+        assert_eq!(value["kind"], "topologyValidation");
+        assert_eq!(value["code"], "missing-location-input");
+        assert_eq!(value["nodeId"], "ws-1");
+        assert!(value["wireId"].is_null());
+        assert_eq!(value["portId"], "location-in");
     }
 
     #[test]

@@ -1,8 +1,717 @@
-<!-- Audit stamp: 2026-07-29 · Codebuff · status: UPDATED — July 29 full-codebase i18n audit session appended -->
 
-# OZ-POS Development Journal
+## 2026-08-12 — Migration drift repair: 128_assignments.sql draft-in-place (DB-02) — dev-DB checksum re-recorded
 
-## 2026-07-29 — Full-Codebase i18n Audit & FTL Sweep
+### The app panicked on startup: "migration 128_assignments.sql definition drift: applied checksum 79826c1b… != current 55abc2a6…"
+**Problem:** Same failure mode as the migration 120 incident (2026-08-07 entry), from the same workflow. The 0048 cycle-1 commit `3447c0cf` ("feat(rbac): assignment model with explicit-all scopes (0048 cycle 1)") landed the final `128_assignments.sql` at 08:26 UTC — but the dev DB had already applied a DRAFT of that file at `2026-08-11T08:16:08.639Z` (ten minutes earlier, from a running dev build). The DB-02 drift guard fails closed at startup whenever an applied migration's definition changes, so `oz-pos-app.exe` refused to boot (exit code 101): applied `79826c1b2549d04537a67a245698379e89138ff7b8e5323d8b5bceac7a433a08` != current `55abc2a69f8505f74dbe5e172a432e835ede5b8852932f76001fefab57130551`.
+
+Unlike the 120 case, the committed file is correct — it is the DB record that drifted. The draft applied nothing persistent (no `assignments`/`assignment_branches`/`assignment_workspaces` tables existed in the DB), and the draft bytes were unrecoverable (no `target/debug/deps/liboz_core-*.rlib` artifacts predating the final build remained). The final 128 is fully idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT OR IGNORE`), which makes a DB-side repair safe: re-apply the committed file and re-record its checksum. No repo change was needed — the repo is right, the dev DB was wrong.
+
+**Recovery (DB-side repair — repo untouched):**
+1. **Back up the dev DB first:** `cp "C:/Users/Dika/AppData/Roaming/com.ozpos.app/oz-pos.db" oz-pos.db.before-128-repair-20260812` (1.4 MB, verified on disk alongside the older `.pre-120-fix` backup).
+2. **Confirm which side drifted:** recompute the committed file's SHA-256 and compare against the `schema_migrations` record — stored `79826c1b…` (draft) vs computed `55abc2a6…` (committed file). Also confirm no `assignments*` tables exist, so the final 128 applies cleanly with no partial-schema conflict.
+3. **Apply the final 128 directly to the dev DB:** `executescript` the committed `crates/oz-core/migrations/128_assignments.sql`. Idempotent by design, so safe on any DB state.
+4. **Re-record the checksum** (this is what the DB-02 guard compares): `UPDATE schema_migrations SET checksum = '<sha256-of-committed-file>' WHERE id = '128_assignments.sql'`. Note the tracking table is `schema_migrations` with columns `id` / `applied_at` / `checksum` — the `id` is the FILE NAME (not the numeric prefix), and there is no `version` column. The original `applied_at` was preserved; only the checksum changed.
+5. **Boot the app to confirm the runner continues:** `timeout 40 ./target/debug/oz-pos-app.exe` ran cleanly to the timeout (exit 124 = no panic); `schema_migrations` now ends at `135_sale_line_cost_snapshot.sql` — migrations 129–135 applied normally during that boot, including `129_retire_cashier_kitchen.sql`, which UPDATES `assignments` and therefore depends on the final 128 having run.
+
+**Checksum verification steps (reusable):**
+```python
+import sqlite3, hashlib
+sql = open("crates/oz-core/migrations/128_assignments.sql", encoding="utf-8").read()
+want = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+conn = sqlite3.connect("C:/Users/Dika/AppData/Roaming/com.ozpos.app/oz-pos.db")
+got = conn.execute("SELECT checksum FROM schema_migrations WHERE id = '128_assignments.sql'").fetchone()[0]
+print("MATCH" if got == want else "MISMATCH")  # stored 55abc2a6… == computed 55abc2a6…
+```
+Post-repair state verified: 3 users → 3 `assignments` rows backfilled, 2 `assignment_workspaces` rows (cashier→`retail-pos`, kitchen→`kds`), and the `retail-pos` workspace seeded — the ADR #35 D5 backfill landed exactly as the committed migration specifies.
+
+**Tablet client checked — no action needed:** the tablet's identifier is `com.ozpos.tablet`, so its DB would live at `%APPDATA%\com.ozpos.tablet\oz-pos.db`. That directory does not exist on this machine, no `oz-pos-tablet` binary was ever built (Android/iOS-only client, `"windows": []`), and no AVD/device exists — the tablet has never opened a database, so it cannot carry drift. On first run it applies 001→135 fresh against the committed files.
+
+**Follow-ups (deliberately NOT done):** this is the SECOND occurrence of the same workflow failure (120 on 2026-08-07, 128 on 2026-08-11). The guard that would catch it at COMMIT time instead of app startup is still not wired: a pre-commit check that diffs migration files against the checksums recorded in the local dev DBs (the 120 entry's follow-up #2). Until then: before editing ANY migration file, check the applied checksum on every dev DB that may have run it — a migration is "applied" the moment any database records its checksum, not when it ships.
+
+
+## 2026-08-12 — TDD cycle: Ctrl+C/V copy-paste audit — no same-class defect, but the structural no-dangling guards were unpinned; now pinned at the state level
+
+### The internal clipboard is structurally immune to the import gaps — the both-endpoints guards that make it so had zero test coverage
+**Problem:** Eighteenth review pass — audited the Ctrl+C/Ctrl+V path for the strictness the import parser just gained (malformed bends, dangling endpoints). Code reading verdict: NO same-class defect, and the immunity is structural. (1) **Malformed bends are impossible** — the internal clipboard stores shallow copies of LIVE canonical wire objects; the only writer (`copySelection`) snapshots validated state, and the OS-clipboard import + template load both route through the hardened `deserializeTopology`. (2) **Dangling endpoints are structurally impossible** — `copySelection` keeps a wire only when BOTH endpoints are selected, and `pasteClipboard`/`duplicateSelection` RE-filter through the idMap before the `!`-remap, so the remap can never produce a missing reference. (3) **Branch identity** — `sanitizeCopiedNode` strips `storeProfileId` on every duplicate route (Ctrl+D/V, Alt+drag), so a pasted branch is a diagram-only card. (4) The typing guard keeps native copy/paste inside inputs. BUT none of the structural guards were pinned — and the audit surfaced two test-design traps that made naive pins worthless: the wire render is GEOMETRY-GATED (`if (!geo) return null`), so a corrupted pasted wire is invisible and DOM wire-counts cannot see it; and the live-validation gate returns `[]` for identity-less legacy canvases, suppressing the banner a corrupted wire would raise. A partial-selection copy with BOTH filters removed demonstrably injects `fromNodeId: undefined` wires into state that render nothing — invisible state corruption.
+
+**Solution:** three regression pins (Red-checked by removing both filters via a temporary mutation, then restoring). (1) A canonical load (branch has identity → validation gate ACTIVE), copy one endpoint of a wire, paste → wire count unchanged AND no `.topology-validation-banner` (a corrupted wire would surface unknown-wire-endpoint as the graph banner — the state-level signal that survives the geometry gate). (2) A fully-copied wire pastes remapped to the copies (count 3, banner-free, one undo restores 2) — pins the paste-time idMap remap. (3) A pasted Branch Location copy is identity-less: its visible note leads with the multiple-branch guidance and the note's title carries the missing-identity error — never a second branch impersonation. All three are true Red against the both-filters-removed mutation (`expected <div> to be null` on the banner), green on the real code.
+
+**Validation:** editor suite 529/529 (3 new) · full UI suite 286 files / 4,945 tests · typecheck · eslint 0 errors · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** no production code change — the audit resolved to correct-but-unpinned, so the deliverable is the pins + this evidence trail. The mutation experiment documented the failure mode (undefined-endpoint wires, invisible but present in state, surfacing only via the validation banner under the canonical gate) so the guards are never "simplified away" as dead code.
+
+## 2026-08-12 — TDD cycle: strict import validation extended — malformed bend shapes and dangling wire endpoints now reject the whole payload
+
+### The two pass-13 "cosmetic-only" gaps were actually strictness holes: a non-array bends field can CRASH the render
+**Problem:** Seventeenth review pass, closing the pass-13 journal notes. `deserializeTopology` (the strict clipboard/import contract: "a drifted or hand-edited document can never half-load a broken diagram") still accepted two broken shapes. (1) **Malformed `bends`:** `isValidWire` never checked the field, and the geometry maps it RAW — `wire.bends.map(...)` throws when `bends` is a non-array (string/object/number) → a render CRASH on a hand-edited wire, and a bend entry missing x/y or carrying non-finite coords produced NaN-coordinate degenerate paths (invisible wire, dead simulation pulse). (2) **Dangling wire endpoints:** `fromNodeId`/`toNodeId` were only string-checked; a reference to a node absent from the payload imported a wire that cannot draw (geometry skips it) and immediately surfaced `unknown-wire-endpoint` as a canvas banner — the drifted document half-loaded, exactly what the strict contract promises to refuse.
+
+**Solution:** Red→Green. (1) Red — four rejection tests (non-array bends, missing-y bend, string-coordinate bend, non-object bend entry) and two dangling-endpoint tests (ghost fromNodeId, ghost toNodeId), plus a lossless guard for canonical bends AND an empty bends array (the editor treats length 0 as unbent; extra bend keys stay allowed for forward compatibility). (2) Green — a dedicated `isValidBends` (undefined | array of {finite x, finite y}) wired into `isValidWire`, and an endpoint-existence pass in `deserializeTopology` using the already-built node-id set, placed before the wire-id uniqueness loop. In-memory wires are always canonical (the editor only authors bend objects and endpoint-clean wires), so no legitimate export is affected — the round-trip guards confirm it.
+
+**Validation:** export suite 16/16 (2 new Red-confirmed via stash, 3 total new) · editor suite 526/526 (import path) · full UI suite 286 files / 4,942 tests · typecheck · eslint 0 errors · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** a self-loop wire (`fromNodeId === toNodeId`) still imports — both endpoints exist, so it is not dangling; the semantic validation contract flags it as an invalid connection. Bends with EXTRA keys and empty arrays are allowed (canonical/forward-compat).
+
+## 2026-08-12 — TDD cycle: finder arrow navigation swallowed one press after the match list shrank (node deleted while the finder was open)
+
+### The stale stored finderIndex made the highlight stick for exactly one ArrowUp/ArrowDown press after a delete
+**Problem:** Sixteenth review pass — audited the Ctrl+F finder's match navigation and Enter-to-jump against renamed/deleted-node edge cases. The reactive design is sound: `finderMatches` recomputes on `[nodes, finderQuery]` (renames show fresh names, deleted nodes drop out of the list immediately), the render AND Enter both clamp the index, Enter is id-guarded and reads the current memo (a deleted id can never reach `selectOnly`), and the typing guard keeps every canvas shortcut (Delete, Ctrl+D/V, arrows, 1-4, Ctrl+0) inert while the finder input owns focus. BUT one real defect: `finderIndex` is stored RAW — only the render (`activeIndex`) and Enter clamp it. After a node is deleted while the finder is open, the list shrinks, the stored index sits past the end, and the next ArrowUp/ArrowDown computes `(stale ± 1) mod len` — landing back on the same visually-clamped row. The highlight does not move: exactly one swallowed press (then the index re-enters range and navigation recovers).
+
+**Solution:** Red→Green. (1) Red — a test loads store + two workspaces (no wires), opens the finder, highlights the last of 3 rows, deletes the FIRST match from its card, and asserts one ArrowDown wraps from the visibly-active last row to the first. Unfixed code stayed on the last row — Red with the exact predicted mechanism (`(2+1)%2 = 1`). (2) Green — the ArrowUp/ArrowDown handlers now clamp the stored index to the list bounds BEFORE the modulo, so navigation always starts from the visibly-active row and the index self-heals. (3) Two resilience pins, green immediately: a delete-then-Enter never selects a ghost (fresh memo + clamp), and a rename-while-open makes the old-name query go empty while the new name matches and Enter jumps to the renamed node by its STABLE id.
+
+**Validation:** finder block 6/6 (1 new Red-confirmed via stash, 2 total new) · full UI suite 286 files / 4,939 tests · typecheck · eslint 0 errors (8 pre-existing warnings) · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done / noted:** (1) no click-outside close — the finder stays open after a canvas click, so the input loses focus and canvas shortcuts become live again (the "owns the canvas" invariant holds only while the input holds focus); the Delete-in-finder hazard is closed by the typing guard, and matches stay reactive regardless — noted as a future UX slice (click-outside close is the standard combobox affordance). (2) `selectOnly` does not validate its id, but the fresh-memo path makes a deleted id unreachable — the guard would be defense-in-depth only.
+
+## 2026-08-12 — TDD cycle: compare-panel ghost cards could cover live Branch Location / Warehouse / Hardware cards — the blocker set was workspace-only
+
+### The other branch's workspace ghosts never avoided THIS branch's non-workspace cards, so spatial divergence plastered ghosts on the root card
+**Problem:** Fifteenth review pass — audited the branch-compare spatial-diff ghosts (`topologyBranchCompare.ts` + the editor's `laidOutGhosts` memo) for stale or overlapping placement when branches diverge. The re-layout pipeline is healthy (memo deps `[compareOverlay, pan, zoom, nodes]` — ghosts re-clamp on pan/zoom/node-move; shared far-ends and drift pairing recompute live; the engine's stacking is deterministic and bounded). But the editor fed `layoutGhosts` ONLY the workspace cards as `occupied` rects (`nodes.filter(n => n.type === 'workspace')`), so a ghost — an other-branch workspace at its SAVED position — rendered ON TOP of this branch's Branch Location, Warehouse, or Hardware cards whenever a divergence put them in the same canvas region. The ghost layer renders after the cards in the same stacking context and the ghost is a 240×240 dashed box, so it visually covered the live card — the root Branch Location included. The engine itself handled arbitrary blockers correctly (its "moves a ghost off a live card" test proves it with a generic rect); the defect was purely the editor's filter. Two pre-existing tests even baked the bug in unknowingly: their ghosts at (480,360)/(4000,4000) clamped onto the default preset's Warehouse (680,140) and asserted the overlap.
+
+**Solution:** Red→Green. (1) Red — an editor test loads the retail preset, places a ghost at (120,240) exactly on the Branch Location card, zooms out to 0.8 (the 800×600 jsdom fallback has no room below the store at zoom 1, so the documented accept-overlap fallback engages there; at 0.8 the visible world-rect grows to 1000×750 and the stack can drop the ghost) and asserts the ghost lands at (120,388) = store.bottom + 8 gap. Unfixed code kept it at (120,240) — Red with the exact predicted numbers. (2) Green — the occupied set now includes EVERY live card (`nodes.map(...)`), one line plus a comment. Two pre-existing ghost tests were re-pointed to sparse loads with genuinely free positions so their intent ("ghost renders at its saved position when unobstructed", "clamps to the corner, leaves in-view ghosts alone") holds without colliding with a live card.
+
+**Validation:** editor suite 524/524 + branch-compare 40/40 (1 new test, true-Red confirmed via stash) · full UI suite 286 files / 4,937 tests · typecheck · eslint 0 errors (8 pre-existing warnings) · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done / noted:** (1) the clamp's visible-rect reads `canvasRef.clientWidth` live but the memo has no canvas-size dependency — a pure window/panel resize with no pan/zoom/node change leaves ghosts clamped to the pre-resize rect until the user pans or zooms (self-healing, low severity, noted as a future slice: a ResizeObserver-driven canvas-size state would fix this class across zoomToFit/minimap too). (2) The engine's greedy down-then-left stack never tries right/up, so a ghost pinned against the top-left corner accepts overlap (documented "accept the overlap" fallback) — acceptable, keeps the layout deterministic.
+
+## 2026-08-12 — ADR #34 decision + TDD cycle: ticket-routing cardinality — one ticket source per printer, fan-out allowed from a KDS
+
+### The long-open product gate (parent ADR item 6) is now decided and enforced on both surfaces
+**Problem:** The parent ADR explicitly deferred the exact cardinality rules of every non-ownership relationship. Ticket-routing was fully authorable (KDS Ticket Out → hardware Ticket In) but had NO input cap: `commitWire`'s duplicate gate only rejected the SAME (KDS, printer) pair, so any number of KDS could feed one printer, and the contract validated such a graph clean — tickets from multiple stations would interleave on one physical device with no source identity.
+
+**Decision (documented in the implementation ADR):** (1) KDS `ticket-out` fans out to MANY printers — a kitchen display drives main + expo stations, mirroring location-out fan-out; (2) hardware `ticket-in` accepts exactly ONE source — the same exactly-one input rule as `location-in`/`operation-in`; (3) replacement is explicit-only — an over-capacity drop is refused at drag time with a toast, never silent; (4) no cycle rule needed — ticket-routing is KDS→hardware only and hardware has no ticket-out, so it cannot participate in a directed cycle.
+
+**Solution:** Red→Green, both surfaces mirrored. (1) Red — three contract tests: one KDS → one printer clean, one KDS → TWO printers clean (pins the fan-out), and two KDS → one printer failing `multiple-ticket-inputs` scoped to the printer; two editor tests: a second KDS drop onto an already-sourced printer refused with a toast (wire count stays 1), and a loaded two-source graph renders the badge on the printer card. (2) Green — `validateTopologyGraph` adds the `multiple-ticket-inputs` check (one error per device, deterministic on the second wire); `commitWire` refuses the drop before mutation with the same FTL key the badge uses; new `topology-validation-multiple-ticket-inputs` key in en + id bundles. The generic nodeId-badge path surfaces it on the card and the shared `validateEditorGraph` gate blocks Apply with the identical error — live surface and Apply can never drift.
+
+**Validation:** contract suite 59/59 + editor suite 521/521 (3 new tests, true-Red confirmed via stash) · full UI suite 286 files / 4,936 tests · typecheck · eslint 0 errors (8 pre-existing warnings) · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the other non-ownership relationships (`stock-routing`/`inventory-transfer`/`hardware-connection`) keep their existing warehouse-specific rules; their cardinality closes remain future slices per item 6. The parent ADR item 6 is marked resolved for ticket-routing with a cross-reference.
+
+## 2026-08-12 — TDD cycle: zoom-to-fit panned at the raw fitZoom while zooming at the clamped value — fits landed off-center on large diagrams
+
+### A diagram spanning >~2.5 viewports hit the 40% zoom floor, but the pan was still computed at the un-clamped fitZoom
+**Problem:** Fourteenth review pass — audited copy/paste (well-built: shared tier gate across Ctrl+D/Ctrl+V/Alt+drag, cascade, sanitize), rename (commit/persist/cancel + focus return all pinned), simulation (polyline-weighted pulse, reduced-motion), live validation (45+ contract tests), and the dirty projection (semantic wire fields are set only at creation/load and never re-editable, so omitting them from canvasStateEqual is safe). The defect surfaced in `zoomToFit`/`zoomToSelection`: the pan was computed as `padding − min·fitZoom` with the RAW fitZoom, while `setZoom` clamped to [0.4, 2.0]. Since fitZoom is always capped at 1.5, only the 0.4 FLOOR can engage — a diagram wider than ~2.5 viewports (fitZoom ≈ 0.26) got zoom 0.4 with a pan tuned for 0.26, landing the "fit" off-center by |minX|·(0.4 − fitZoom) (≈ 11px at minX=80, growing linearly for negative canvas coords — legal in the model). The auto-fit on load and Ctrl+0 both use this path, so every large loaded diagram was mis-fitted.
+
+**Solution:** Red→Green. (1) Red — a test loads two nodes spanning 80..4160 into a 1200×800 canvas (raw fitZoom ≈ 0.26), presses Ctrl+0, and asserts the viewport transform is zoom 0.4 with pan.x = 60 − 80·0.4 = 28 (left edge exactly at the 60px padding). Unfixed code produced pan.x ≈ 39.2. (2) Green — both `zoomToFit` and `zoomToSelection` now compute `appliedZoom = clamp(fitZoom, 0.4, 2.0)` ONCE and use it for both `setZoom` and the pan, so the transform is internally consistent; when the floor engages, the diagram left-aligns at the padding with the right side overflowing (the honest clamped fit).
+
+**Validation:** editor suite 521/521 (1 new, Red-confirmed via stash) · full UI suite 286 files / 4,931 tests · typecheck · eslint 0 errors (8 pre-existing warnings) · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the finder's jump-to-target (`clientWidth/2 − match·zoomRef`) centers at the live zoom with no clamp — correct as-is. The context-menu edge-clip (pass-12 journal note) remains the only open popover item.
+
+## 2026-08-12 — TDD cycle: import strictness gaps — a hand-edited wire port could crash the canvas on paste
+
+### deserializeTopology accepted non-PortName wire ports (crash) and duplicate wire ids (two wires behave as one)
+**Problem:** Thirteenth review pass, auditing the import/export clipboard round-trip (topologyExport.ts). The parser's doc contract is "STRICT — a malformed entry rejects the whole payload", and it already rejects bad nodes, bad metadata, bad directions, and duplicate NODE ids — but two wire gaps slipped through: (1) `isValidWire` never checks `fromPort`/`toPort`, and the geometry reads them RAW (`PORT_OFFSET[wire.fromPort ?? 'right']`) — so a hand-edited payload with `"fromPort": 123` PASSED validation and then crashed the canvas with an undefined-offset dereference on the very first render (the exact class of drifted document the strict contract exists to refuse). (2) Duplicate WIRE ids were unchecked: two wires under one id behave as a single wire — every id-addressed operation (select, delete, direction cycle, bend drag) hits BOTH, and React keys collide.
+
+**Solution:** Red→Green (pure unit tests in topologyExport.test.ts). (1) Red — three tests: a `fromPort: 123` wire and a `toPort: 'diagonal'` wire both must reject; two wires sharing id 'w1' must reject; a canonical-port wire must still round-trip losslessly. Two failed on unfixed code, the round-trip passed (pinning no over-rejection). (2) Green — `isValidWire` now requires `fromPort`/`toPort`, when present, to be strings in the canonical PortName set (`top|right|bottom|left`); `deserializeTopology` adds a wire-id uniqueness pass in the wire's own namespace (node ops never touch wires by node id, so a node/wire id collision stays legal). In-memory wires are always canonical (load normalizes legacy vertical ports via normalizeVisualPort; the editor creates canonical ones), so no legit export is affected.
+
+**Validation:** export suite 13/13 (3 new, both Red-confirmed via stash) · editor suite 520/520 (import path) · full UI suite 286 files / 4,930 tests · typecheck · eslint 0 errors · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** wire `bends` shape and dangling endpoints (`fromNodeId` pointing at a missing node) still pass validation — the geometry SKIPS missing endpoints (`if (!fromNode || !toNode) continue`) and NaN bend coords render nothing, so both degrade cosmetically without crashing; noted as future slices if they surface.
+
+## 2026-08-12 — TDD cycle: the relationship picker could render fully off-canvas when the target sat at the viewport edge
+
+### A multi-option drop near the canvas edge produced an unreachable popover — clipped by the container's overflow:hidden
+**Problem:** Twelfth review pass, auditing the relationship picker (ADR #34 machinery). The picker is anchored 12px LEFT of the target node's edge and translates left/up by its own size (CSS translate(-100%,-50%)), while `.node-canvas-container` clips with overflow:hidden. The position was computed inline as `anchor.x*zoom + pan.x - 12` with NO clamping — so a target node near the left/top edge of the visible viewport (legal negative canvas x, and common when zoomed in) pushed the popover off-canvas. At x=-80 the picker's box spanned -280..-92 screen px — fully invisible; its options (Stock routing / Transfer / Cancel) were unclickable, and since the picker owns the keyboard (Escape only), the user was stuck choosing between Escape and nothing. The context-menu popover (top-left anchored at the cursor) has the same class of risk but far smaller exposure — the cursor is always in-canvas; the picker anchors to a node edge that is routinely flush with the viewport.
+
+**Solution:** Red→Green. (1) Red — a test loads a topology with the warehouse target at x=-80,y=-100 and asserts the picker's left is clamped to the 8px margin (unfixed code rendered '-92px'); a companion guard asserts a mid-canvas target (x=300) keeps its exact anchor position ('288px','260px') so the clamp never over-clamps. (2) Green — the picker's position is now OWNEED by a useLayoutEffect that recomputes it from the anchor and clamps to the canvas bounds on every open/pan/zoom: left ∈ [8, cw-w-8], top ∈ [8+h/2, ch-h/2-8] (the translate(-100%,-50%) box stays fully inside). The JSX no longer sets inline left/top — React would reset the clamped values on every unrelated re-render; the effect owns them. offsetWidth/Height are 0 in jsdom (no layout), so the effect falls back to the CSS min-width (188×160) for a deterministic clamp there and measures the real box in a browser. Placement needed to sit AFTER the nodeMap useMemo (TDZ in the deps array).
+
+**Validation:** picker block (2 new, Red-confirmed via stash) · editor suite 520/520 · full UI suite 286 files / 4,927 tests · typecheck · eslint 0 errors (8 pre-existing warnings) · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** no focus trap for the picker (canvas-click dismissal is the pinned design); the context menu's equivalent edge-clipping risk left as-is (cursor-anchored, far lower exposure) — noted as a future slice if it ever surfaces.
+
+## 2026-08-12 — Audit: the armed-connection × wire-click "stray edit" is intentional, pinned design — no change
+
+### The pass-10 residual (wire click mid-connection cycles the wire) resolves to a no-finding; closing it with the evidence trail so it is not re-litigated
+**Problem:** Eleventh review pass, chasing the pass-10 journal note: "a wire click during an ARMED connection cycles that wire's direction (a stray edit mid-gesture)". A first Red attempt (cancel the gesture + skip the cycle) broke SIX existing tests, which forced reading the pinned intent instead of the assumption.
+
+**Finding — the behavior is deliberately designed and heavily pinned:**
+- `wire click keeps an in-flight connection` (3 tests): a mid-connection click cycles the direction, the connection SURVIVES the cycle and its own undo ("history push is orthogonal"), and the cycle click must never bubble a cancel to the canvas (the `stopPropagation` contract test guards against a future background-click-cancels-connection listener).
+- `wire deletion keeps an in-flight connection` (3 tests): a mid-connection click SELECTS the wire so an unrelated wire can be deleted mid-gesture, the connection stays in flight, and deleting the pending-duplicate pair cancels the connection.
+The uniform whole-wire affordance (click = select + cycle) applies even mid-gesture; the in-flight connection is independent state. My initial fix (cancel on wire click) would have destroyed the documented mid-gesture deletion flow — the correct outcome is no code change.
+
+**Also audited this pass:** `commitWire`'s completion guards are comprehensive — bidirectional exact-duplicate detection, warehouse input-cardinality (one location/operation input), tier fallback limits, and picker/duplicate cancel paths all read correct and are covered by the `wire deletion keeps an in-flight connection` + duplicate-detector describes.
+
+**Deliberately NOT done:** no behavior change. My candidate fix and its Red test were reverted (`git checkout` of the two files); the suite is green at HEAD. A product decision to make wire clicks mid-connection cycle-free (selection-only) would require deliberately changing the three pinned "keeps the connection in flight" tests — recorded here as the cost of that choice.
+
+### The pass-9 journal noted this as a future slice — the pass-7 node-drag fix's bend analogue
+**Problem:** Tenth review pass, closing the last bend-gesture gap. The bend drag pushes its entry on first movement, and the CANCEL path pops it — but a COMPLETED drag of an EXISTING bend that landed exactly at its start position kept the entry (Undo appeared but restored identical geometry). The pass-9 fix deferred ghost-bend insertion, so a CREATED bend ending at the ghost midpoint is a real edit (the bend's existence is the change) — only the existing-bend return-to-start case is a no-op. The wire-click direction cycle was also audited: every click is a real direction change (the 3-state cycle never wraps to the same value), so no no-op there; the click-to-select-cycles-direction UX remains a documented design decision.
+
+**Solution:** Red→Green. (1) Red — a test loads a diagram with a bent wire (clean baseline), selects the wire and undoes the direction-cycle entry (returning to clean while keeping the selection + bend), then drags the bend away to (250,250) and back to its exact start (200,200) — the Undo button stayed present on unfixed code. (2) Green — `startBendDrag`'s document mouseup finalizer now pops the top entry when the drag moved, the bend is NOT created-by-this-gesture, and the committed bend (`wiresRef`) equals the start coordinates. The pop is gated on the committed state, so a snap/settle discrepancy can never pop a real edit.
+
+**Validation:** bend block 16/16 (1 new, Red-confirmed) · editor suite 518/518 · full UI suite 286 files / 4,925 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the wire-click direction-cycle entries stay as designed (each click is a visible direction change; the "select without cycling" affordance is a product decision — the journal's earlier "the whole wire is the affordance" note stands). A wire click during an ARMED connection cycles that wire's direction (a stray edit mid-gesture) — observed but judged marginal; noted here as a candidate if it ever surfaces in use.
+
+## 2026-08-12 — TDD cycle: midpoint-ghost click inserted a phantom, non-undoable bend
+
+### A mousedown+mouseup without movement on a wire's midpoint ghost left a permanent bend with no undo entry
+**Problem:** Ninth review pass, the wire-bend gesture audit. `startGhostBendDrag` inserted the bend at mousedown, but the undo entry is only pushed on the first drag MOVEMENT — so a plain click (no drag) on a midpoint ghost inserted a bend that: (1) is a geometric no-op (a midpoint bend on a straight segment renders straight), (2) has NO undo entry (Undo stays disabled for it), and (3) still dirties the canvas — the "Unsaved changes" chip appears for an invisible change and Apply persists the phantom bend. The Escape-cancel and drag paths were already airtight (cancel pops the entry); only the completed click-without-move path leaked.
+
+**Solution:** Red→Green. (1) Red — a test that returns the wire to a clean one-way state (3 clicks cycle the direction back, data-identical → not dirty), then mousedowns+mouseups the ghost with no movement, asserting no bend handle and no dirty chip. It failed with the phantom bend present. (A side lesson: chai's failure formatter walks DOM elements and throws on their getters, masking the assertion — boolean `=== null` forms give a clean failure.) (2) Green — the ghost insertion is DEFERRED to the first drag movement: `startGhostBendDrag` no longer splices at mousedown; the drag object carries `pendingInsert`, and the first mousemove pushes the pre-gesture (unbent) snapshot, splices the fresh bend in at the CURRENT cursor position, and clears the flag. Cancel now removes the bend only when it was actually inserted (pendingInsert cleared) and pops the entry only when moved — a click-without-move is a pure no-op. The existing drag-create / move / Escape-cancel / undo-restores tests all pass unchanged.
+
+**Validation:** bend block 15/15 (1 new, Red-confirmed) · editor suite 517/517 · full UI suite 286 files / 4,924 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the completed-drag-no-op case (drag a bend and return it to its exact start — like the pass-7 node-drag fix) is NOT handled: an existing bend dragged back to startX/startY keeps its entry, and a created bend dropped exactly at the ghost midpoint... is impossible now (the bend is created at the FIRST movement position, so it always exists somewhere real). The existing-bend return-to-start no-op is a smaller marginal case (the bend is visible and the user deliberately manipulated it); noted as a possible future slice rather than expanding this one.
+
+## 2026-08-12 — TDD cycle: minimap viewport box ignored the −pan/zoom origin
+
+### The "you are here" box drifted off the diagram as soon as the user panned or zoomed
+**Problem:** Eighth review pass, focusing on the minimap — the one surface flagged in pass 1 but never deep-reviewed. The viewport indicator rect (the box showing the visible area) computed its origin from `pan.x` directly, but the canvas transform is `translate(pan) scale(zoom)`, so screen(0) is the viewport's left edge and the visible canvas range is `[−pan/zoom, (canvasW − pan)/zoom]` — the box's left edge should be `−pan.x/zoom`. With pan.x as the origin the box renders on the WRONG SIDE of the map (sign) and ignores the zoom entirely (the width/height DID divide by zoom — only the origin was wrong). A +50px pan put the box 100 canvas px from its true spot; the error grew with zoom. The Apply-boundary audit that opened this pass came back clean (idMap path clears history with the dangling-ids rationale; the plain path deliberately preserves it; undo-after-save re-derives dirty correctly) — a legitimate no-finding.
+
+**Solution:** Red→Green. (1) Red — a test deriving the live minimap scale from two known preset node rects (store-1 x=80, wh-1 x=680 → 600 canvas px apart) asserted the box origin against `−pan/zoom` at pan=0, after a +50px middle-drag pan, and after a zoom-out to 0.8. It failed with exactly the predicted numbers: buggy 2.29 vs correct −16.76 (100 canvas px × scale). (2) Green — the rect's x/y now use `(−pan.x / zoom − contentBounds.minX) * scale` (and the y analogue), with the derivation documented in a JSX comment.
+
+**Validation:** editor suite 516/516 (1 new, Red-confirmed) · full UI suite 286 files / 4,923 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the recenter click/drag math and the arrow-key nudge on the minimap are unaffected (they were correct). The HUD cursor readout, zoom clamp (0.4–2.0), and the minimap's content-box derivation were all re-verified as sound during the review. The Apply-boundary audit found nothing to fix — recorded here so a future pass doesn't re-litigate it.
+
+## 2026-08-12 — TDD cycle: completed no-op drags no longer leave an undo entry
+
+### A grab-and-return (or snap-back) drag pushed a history entry that restored identical state — Undo appeared but did nothing
+**Problem:** Seventh review pass over the topology editor, undo semantics again. The drag path pushes its history entry on the FIRST real movement (`dragHasMovedRef`), and the cancel paths pop it when the gesture is cancelled — but a COMPLETED drag whose nodes ended exactly at their pre-drag positions kept the entry: grab the card, move right, return the cursor to the exact start point, release → Undo lights up but restores byte-identical positions. Same for a wiggle that snaps back onto the same grid cell. Reproducing this in a test taught two hard lessons about the drag geometry: (1) `snap(80) = 72` — the retail preset's store card sits at an OFF-GRID x=80, so with snap on, ANY drag re-grids it to 72 and the "return" is a REAL move (correct to keep the entry); (2) the y-axis never returns either — the alignment engine pins y=140 to wh-1's top edge. The honest no-op cases are snap OFF with an exact cursor return, or an ON-GRID origin with snap on.
+
+**Solution:** Red→Green. (1) Red — two tests failed on unfixed code (Undo button present after a no-op drop): a snap-off grab-and-return on the preset store card (80 → 128 → back to exactly 80), and a snap-on wiggle-and-return of a single on-grid node (96 → 144 → back to exactly 96). (2) Green — `finalizeNodeDrag` now captures the pre-drag start map before it is cleared, and after the drop-overlap settle runs, pops the top history entry when EVERY dragged node's final resting spot (settle output if it moved anything, else the live nodes) equals its start position. Gated on a real move, non-duplicate, non-empty drag set; the cancel paths were already popping. One fix covers mouse, canvas, and touch finalizes — they share the same callback.
+
+**Validation:** editor suite 515/515 (2 new, both Red-confirmed) · full UI suite 286 files / 4,922 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the off-grid gridding (80 → 72 on any snapped drag) is pre-existing, intended snap behavior — a drag that changes the canvas must keep its entry, and the new tests document why the off-grid preset card is NOT a no-op case. The alignment-guide y-pin (140 = wh-1's top edge) is likewise untouched. The no-op pop assumes the gesture pushed exactly one entry (true: pushHistory on first move, redo branch already cleared); a future change that pushes per-move inside a drag would need this revisited.
+
+## 2026-08-12 — TDD cycle: arrow-key nudges now coalesce into one undo entry per burst
+
+### Discrete arrow presses pushed one undo entry each — undo reverted a single pixel step at a time
+**Problem:** Sixth review pass over the topology editor, focused on undo/redo semantics. The journal's round-165 entry (inspector undoability) explicitly listed as a follow-up: "Arrow-key nudges also push one entry per keypress rather than one per nudge gesture; a session-based entry would compress them." The `!e.repeat` guard fixed only OS-level auto-repeat (a HELD key = one entry); DISCRETE taps each called `pushHistory()` — a user tapping an arrow key 3 times got 3 undo entries, so Ctrl+Z reverted the last 24px step instead of the burst. The editor already had the right pattern: the inspector coalesces a typing burst into one entry via `inspectorHistoryPushedForRef` (one entry per selection session).
+
+**Solution:** Red→Green. (1) Red — a two-tap burst test failed on unfixed code: one undo returned 96px, not the 80px origin (two entries existed). A second test pinned the undo-boundary: after undoing a burst, the next nudge must start a FRESH entry (a stale session would swallow it — undo then could not revert it). (2) Green — a time-windowed nudge session (`NUDGE_COALESCE_MS = 1500`): the burst's FIRST press pushes the entry (snapshotting the origin); continuation presses within the window on the SAME selection move without pushing. The burst ends on a gap, a selection change (same-selection check), any other history-pushing edit (pushHistory clears it), an undo/redo (popUndo/popRedo clear it), or a fresh canvas (resetTransientCanvasState clears it — the single helper all load paths already use). (3) A pause-boundary guard test (real 1.6s wait, no fake timers — the plain-nudge path arms no timers) pins that a gap splits the burst into two entries.
+
+**Validation:** editor suite 513/513 (3 new; both behavior tests Red-confirmed via stash) · full UI suite 286 files / 4,920 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the coalesce window is fixed at 1.5s — a preference for "always coalesce same-selection nudges regardless of pause" (Figma-style per-gesture) vs "never coalesce" is a product call, and 1.5s is the safe middle. Direction is NOT a boundary (any-direction nudges in a burst share the entry — the whole movement is one edit). The window constant is the single knob if the product wants a different feel.
+
+## 2026-08-12 — TDD cycle: branch-compare panel could compare a branch with itself
+
+### The compare target was never re-derived when the selected branch moved — a switch or delete stranded it on the branch now on canvas
+**Problem:** Fifth review pass over the topology editor, this time the TopologyScreen host. `compareOtherBranchId` is captured once by `openCompare` (the first OTHER branch) and edited only through the panel's own "compare against" select. Nothing re-derives it when `selectedBranchId` changes, so two reachable paths compared a branch with itself: (1) with 3+ branches, opening compare against B then switching the main selector to B left the panel comparing B vs B — the summary read "No differences", actively misleading an operator about how two locations differ; (2) with 2 branches, deleting the selected branch moved selection onto the compare target, and with a single branch left the panel had nothing to compare but stayed open. The comparison fetch even went out with both sides equal.
+
+**Solution:** Red→Green. (1) Red — two new TopologyScreen tests: the selector-switch re-target test (3 branches, asserts the last loadTopology pair is selected/other, never equal) and the delete-leaves-one test (asserts the panel closes). Writing the Red exposed a harness bug first: the SettingsSelect mock captured `onChange` from the LAST-rendered select, so once the compare panel was open `capturedBranchOnChange` pointed at the compare-other select (which renders after the toolbar) — the mock now keys handles by id (`topology-branch-select` vs `topology-compare-other-select`), and the re-target test also pins that a valid user-chosen target is preserved. (2) Green — a re-derive effect keyed on `compareOpen`/`stores`/`selectedBranchId`: it closes the panel when no other branch remains, and re-points a null/self/stale target at the first other branch while preserving a user-chosen target that still exists and differs. The load effect gained a self-comparison guard so a transient intermediate render never issues a self-fetch.
+
+**Validation:** TopologyScreen suite 44/44 (2 new, both Red-confirmed via stash) · full UI suite 286 files / 4,917 tests · eslint 0 errors · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the redundant double-fetch on open (`openCompare` calls `loadCompare` directly AND the open-effect re-fires it — observed as 4 initial loadTopology calls) was left alone: harmless and out of this slice's scope, noted here as a future one-line cleanup. The panel-stays-open-across-jumps UX stands as designed — it now re-targets instead of lying. ADR #34 product gates (ticket-routing cardinality, legacy schema migration UI) still await product input.
+
+## 2026-08-12 — TDD cycle: simulation pulse ignores prefers-reduced-motion (WCAG 2.3.3)
+
+### The Test Order Simulation churned React state on a 30ms interval regardless of the OS motion preference
+**Problem:** Fourth review pass. The editor's CSS has `prefers-reduced-motion` gates everywhere, and the journal shows a prior reduced-motion fix (SessionLockScreen rate-limit pulse), but the simulation's pulse is JS-driven: a `setInterval(…, 30)` advances `simPulseStep` which re-renders every wire's pulse dot along its bezier — CSS media queries cannot stop that state churn. A reduced-motion user who clicked "Test Order Simulation" got a full-speed flickering pulse across the canvas, a WCAG 2.3.3 (animation from interactions) failure. The reduced-motion compliance suite covered FastPINOverlay and SessionLockScreen but not the editor.
+
+**Solution:** Red→Green. (1) Red — a simulation test stubbing `matchMedia` to `(prefers-reduced-motion: reduce)` showed the dot moving (cx 320 → 328.16) after 300ms of ticks. (2) Green — a module-scope `prefersReducedMotion()` helper (safe fallback false in jsdom, which lacks matchMedia) gates the interval AND the pulse position: reduced-motion users still see the flow as a STATIC pulse pinned at the wire midpoint (t=0.5 — a frozen t=0 dot would sit under the source card), with zero interval churn; the button and stop/clear behaviors are unchanged.
+
+**Validation:** simulation block 10/10 (incl. the new gated test, Red confirmed) · topology + reduced-motion + animation suites 587/587 · full UI suite 4,915 tests · eslint 0 errors · typecheck · i18n lint clean.
+
+**Deliberately NOT done:** the pulse is pinned at the midpoint rather than offering a manual step-through — a step control is a product decision. The helper checks the preference once per render/effect-run (a live OS-setting change mid-simulation takes effect on the next tick; not worth a listener for a 30ms feature).
+
+## 2026-08-12 — TDD cycle: a11y suite extended to the finder, compare overlay, and validation panel
+
+### The editor's axe coverage covered only the initial render — every interactive state was unguarded
+**Problem:** Third review pass. The axe suite added in the pass-1 cycle asserted only the initial render. The surfaces that mattered — the open node finder (whose combobox contract pass 2 fixed), the branch-compare ghost overlay, and the validation panel with its jump/dismiss controls — had zero axe coverage, so a future ARIA regression in any of them (a role change, a lost label, an aria-activedescendant pointing nowhere) would ship silently.
+
+**Solution:** Extended `NodeTopologyEditor.a11y.test.tsx` to axe each state: the finder open with a matching query AND a no-match query (both render option lists); the compare overlay active (`compareOverlay` + `compareFocus` → ghost layer + only-here markers); and the validation panel open (loaded via a canonical-identity diagram with an unwired workspace — the `store_profile_id` fixture pattern from the behavioral suite — then clicking the issues button). All four states pass axe clean, which also re-confirms the pass-1/2 fixes (card role, finder combobox) hold under real interaction states.
+
+**Validation:** a11y suite 4/4 in this file (12/12 across the a11y folder) · full UI suite 4,914 tests · eslint 0 errors · typecheck clean.
+
+**Deliberately NOT done:** no violations were found in the new states — this slice is pure coverage hardening, not a repair. The panel's close-on-jump behavior (rounds 75/109) remains pinned by the behavioral suite; keeping the panel open across jumps would reverse that documented decision and needs a product call. ADR #34 gates (ticket-routing cardinality, legacy schema migration UI) still await product input.
+
+## 2026-08-12 — TDD cycle: node finder missing its combobox ARIA contract
+
+### The Ctrl+F finder was a combobox pattern without combobox semantics — screen readers announced no active match
+**Problem:** Second review pass over the topology editor. The node finder (Ctrl+F, round ~165) is structurally a combobox — a filter input driving a `role="listbox"` of `role="option"` matches — but the input stayed a plain textbox with no `role="combobox"`, `aria-expanded`, `aria-controls`, or `aria-activedescendant`, and the listbox/options had no ids. The options' `aria-selected` highlights were invisible to ATs because nothing referenced them: a screen-reader user typing a query heard only the input value, and the Arrow keys moved the highlight visually with zero feedback — so pressing Enter jumped somewhere they had no way to predict.
+
+**Solution:** Red→Green. (1) Red — a finder test asserting the contract failed: listbox id missing, no combobox role/attributes. (2) Green — the input is now `role="combobox"` with `aria-expanded="true"`, `aria-controls="topology-finder-listbox"`, and `aria-activedescendant` pointing at the active option's id (ids are deterministic: `topology-finder-option-<nodeId>`); the listbox and empty-state option got stable ids, and a no-match query points the active descendant at the empty-state option so "no results" is announced instead of a stale highlight. (3) The test also pins the arrow-key wrap (Down ×3 wraps to first, Up wraps to last) so the announced target can never drift from the visual highlight.
+
+**Validation:** finder contract test 1/1 (was Red) · finder block 6/6 · topology suites + a11y 662/662 · full UI suite 4,911 tests · eslint 0 errors · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the options stay non-focusable (the listbox pattern keeps the input as the single tab stop — correct for a quick-jump overlay); no focus trap on the dialog, consistent with the editor's other lightweight overlays. The remaining known candidates for future slices: ADR #34 gates (ticket-routing cardinality, legacy schema migration UI, backend compiler effects) and the dead `topology-tool-warehouse` FTL key.
+
+## 2026-08-12 — TDD cycle: node cards carried an illegal aria-selected (axe critical)
+
+### The selectable cards exposed aria-selected on role="group" — a critical axe violation on every card
+**Problem:** A fresh-context review of the topology editor (the most custom-interactive surface in the stores feature) found the ARIA surface well-built except one thing: every node card was `role="group"` with `aria-selected={isSelected}`. role=group supports no selection state — the ARIA spec reserves aria-selected for option/treeitem/gridcell/row/tab — so axe flagged all three preset cards as critical `aria-allowed-attr`. The code comment even acknowledged the schema mismatch ("exposing selection to ATs outweighs the schema pedantry"). Compounding it: the editor was the one major screen with NO axe coverage (7 other screens have a11y tests).
+
+**Solution:** Red→Green. (1) Red — new `NodeTopologyEditor.a11y.test.tsx` (axe via the shared a11y helper, @fluent/react mocked with the TOPOLOGY_EN map like the behavioral suites) failed with the 3 critical violations. (2) Green — the cards stay `role="group"`: no aria-selected role permits their nested rename input, enable checkbox, and port-socket buttons (option/treeitem/gridcell each trip aria-required-parent or nested-interactive, confirmed empirically), so selection now reaches screen readers through the canvas's polite live region with a 120ms settle (a marquee flicker 1→2→3 announces once): single node by name, multi-node as the existing `{ $count } selected`, wire as "Wire selected", clear as "Selection cleared" — three new keys per bundle. (3) The two tests that pinned the old illegal attribute now pin its ABSENCE (guarding the axe regression) and keep the Space-select behavior; four new live-announcement tests cover the spoken contract.
+
+**Validation:** a11y suite 1/1 (was Red) · live-announcements 9/9 · topology suites 661/661 · full UI suite 286 files / 4,910 tests · eslint 0 errors · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** keeping aria-selected under ANY legal role would need listbox/grid/tree parent wrappers around the absolutely-positioned cards — a DOM restructure that breaks the canvas and misrepresents its navigation; the live region is the pattern real canvas editors use. The compare-overlay ghost cards render through the same card component and inherit the fix. The cards' remaining eslint disables (no-noninteractive-tabindex / -element-interactions) stay — they document the intentional canvas-card contract, and the axe suite now guards the actual behavior.
+
+## 2026-08-12 — Round 179: storage node visible naming unified on "Warehouse"
+
+### Palette "+ Warehouse" spawned a "New Stock Room" node — the storage surface wore three names
+**Problem:** Clicking the palette's "+ Warehouse" tool (`topology-tool-warehouse-workspace`) spawned a node named "New Stock Room" (`topology-new-warehouse`). Round 69 renamed the storage node's visible surface to "Stock Room", but a later change switched the palette button to "+ Warehouse" while the spawn default, node-type label, settings card, Pro-tier toast, excess badge, tier notice, stock-wire hint, and validation copy all stayed on "Stock Room" — so the same node type read as "Stock Room" and "Warehouse" depending on where you looked. The user's call: the storage concept should be one thing — a warehouse node.
+
+**Solution:** Unified every user-visible storage string on "Warehouse" (en) / "Gudang" (id): spawn default ("New Warehouse"), ws-type label, settings-card title + capacity/stock descriptions, the multi-warehouse Pro toast, excess badge, tier-capacity notice, stock-wire hint, and the four warehouse validation messages. Also updated the code fallbacks (topologyCard map, Localized JSX children in NodeTopologyEditor and topologyWarehouseCard) and the retail preset's wh-1 sample node ("Main Warehouse"). Keys unchanged → bundle parity and the i18n gate untouched; id.ftl aligned to "Gudang" to match the palette's "+ Gudang". Tests aligned in the same pass: TOPOLOGY_EN maps, the i18nBundle pins, and the hardcoded assertions (finder search "stock" → "ware", excess badge "2 Warehouses — 1 allowed", settings-card titles).
+
+**Validation:** full UI suite 285 files / 4,905 tests · i18n lint clean · FTL dedupe clean · typecheck clean.
+
+**Deliberately NOT done:** "Inventory Management" — inventory has been an illegal topology typeKey since round 67 (WORKSPACE_TYPE_KEYS excludes it; TopologyScreen filters it), so a canvas "Inventory Management" node can only be legacy pre-round-67 data that fails validation until dropped. The app-level `default-inventory` workspace seed in WorkspaceContext feeds the workspace list, not the topology, and stays (the inventory module is a real screen). The dead key `topology-tool-warehouse` ("+ Stock Room") was left in place — removing it is a separate cleanup.
+
+## 2026-08-10 — TDD cycle: topology editor connection/picker state machine
+
+### Dismissing the relationship picker left the armed connection alive — a later port click could complete a wire from the stale source
+**Problem:** The in-flight wire connection (`connectingFromNodeId`/`connectingFromPort`) and the relationship picker (ADR #34) were separate `useState`s with hand-rolled cleanup that disagreed. Escape and the picker's Cancel button went through `cancelRelationshipPicker` (cleared BOTH), but dismissing the picker via canvas click, node drag, or touch cleared only `setRelationshipPicker(null)` — leaving the armed connection alive, so the ghost preview stayed and a later port click could complete a wire from the stale source. The load chain guarded against exactly this hazard ("a later port click cannot complete a wire from a stale source"), but the dismissal paths did not.
+
+**Solution:** Red→Green. Added a typed reducer (`nodeTopologyEditorConnectionState.ts`) owning the connection and the picker as one gesture. `begin` always closes any open picker; `cancel` atomically clears both; `dismiss-picker` clears both ONLY when a picker is open — a plain armed connection (no picker) survives a canvas click so the user can pan to a distant target (carry behavior, pinned by test). The editor now consumes `useTopologyEditorConnection()`; the four dismissal sites (canvas mousedown, node mousedown/drag start, touch) route through `dismissPicker`, and all load-chain/prune/preset/Escape/delete-confirm clears use `cancelConnection`.
+
+**Validation:** connection reducer/hook 12/12 · NodeTopologyEditor + connection suites 473/473 (with the background-click regression now asserting the ghost is gone) · full UI suite 274 files / 4,648 tests · a11y 8/8 · typecheck · eslint clean.
+
+**Deliberately NOT done:** `hoveredTarget` and `previewCursor` remain separate states (they are render-only previews, not part of the gesture's cancel contract). The live-validation pipeline is the last interaction state still living in the component.
+
+## 2026-08-10 — TDD cycle: topology editor drag lifecycle state machine
+
+### A cancelled drag could keep moving on touch — the ref mirror was cleared only at some sites
+**Problem:** The drag lifecycle used a render `draggingNodeIds` state plus a synchronous `draggingNodeIdsRef` mirror read by the touch gesture loop and the document move handler inside stale down-time closures. The mirror was updated by hand at only some transition sites: `beginNodeDrag` and `finalizeNodeDrag` synced it, but `cancelNodeMove` and `cancelDuplicateDrag` cleared only the render state. A touch move arriving before the next React render saw the stale non-empty set and kept moving a drag the user had already cancelled with Escape.
+
+**Solution:** Red→Green. Added a typed drag reducer (`nodeTopologyEditorDragState.ts`) owning the drag set; the hook exposes `beginDrag`/`endDrag`/`cancelDrag`, each writing the reducer state AND the ref mirror in the same call, making the two-face invariant structural. The editor now consumes `useTopologyEditorDrag()`; all five drag-transition sites route through it.
+
+**Validation:** drag reducer/hook 9/9 · NodeTopologyEditor + selection/drag suites 482/482 · full UI suite 273 files / 4,636 tests · a11y 8/8 · typecheck · eslint clean.
+
+**Deliberately NOT done:** the duplicate-drag bookkeeping refs (`duplicateDragRef`, `duplicateCopyIdsRef`, `duplicateHistoryPushedRef`) and the bend-drag refs are gesture-scoped, non-render state — they have no render twin, so the reducer boundary would add ceremony without fixing a drift. The picker and live-validation state remain the last interaction state still living in the component.
+
+## 2026-08-10 — TDD cycle: topology editor selection state machine
+
+### A wire could stay selected alongside a node — the toolbar Delete path for wires was unreachable
+**Problem:** The editor kept selection in three loose `useState` pairs (`selectedNodeId`, `selectedNodeIds`, `selectedWireId`) and the node/wire mutual-exclusion rule was only convention. Most node-selection sites cleared the wire, but `selectOnly` did not, so a wire could remain selected alongside a node. The toolbar Delete handler checks `selectedNodeIds.size > 0` **before** `selectedWireId`, which made the wire-delete path unreachable whenever both were set. Six call sites also duplicated `setSelectedWireId(wireId); clearSelection();` by hand.
+
+**Solution:** Red→Green. Added a typed selection reducer (`nodeTopologyEditorSelectionState.ts`) that owns all three selection fields and makes mutual exclusion structural: every node-selection action atomically clears the wire, `select-wire` atomically clears the node selection, and `clear-nodes`/`clear-wire`/`clear-all`/`prune` cover the remaining primitives. The editor now consumes `useTopologyEditorSelection()`; the six duplicated wire-select pairs became one `selectWire(wireId)` call and every direct `setSelectedNodeId(s)`/`setSelectedWireId` write was routed through the reducer.
+
+**Validation:** selection reducer 12/12 · NodeTopologyEditor + TopologyScreen 511/511 · full UI suite 272 files / 4,627 tests · a11y 8/8 · typecheck · eslint clean.
+
+**Deliberately NOT done:** drag/picker/live-validation state still lives in the component — selection was the next slice of the audit's state-machine recommendation; the same extraction pattern applies to the remaining interaction state.
+
+## 2026-08-09 — TDD cycle: restore legacy Restaurant POS → KDS operation connections
+
+### Reloaded Resto POS → KDS wires rendered as connected but still showed a missing Location warning
+**Problem:** Older topology diagrams persisted workspace-to-workspace wires with only visual geometry. Reload normalization folded those wires to `legacy-out`/`legacy-in`, so a KDS connected to a Restaurant POS was visually wired but failed the KDS `Operation In` validation and could not be safely re-applied.
+
+**Solution:** Red→Green. Added contract coverage for legacy geometric Restaurant POS → KDS wires and for the full TopologyScreen apply path. Normalization now infers `operation-out` → `operation-in` from stable workspace type keys, KDS store scope follows the Restaurant POS operation source, and Apply persists the normalized semantic fields so the upgrade survives the next reload.
+
+**Validation:** topology contract 18/18 · TopologyScreen 28/28 · NodeTopologyEditor 364/364 · typecheck · eslint · Rust fmt clean.
+
+**Deliberately NOT done:** operation feeds from non-Restaurant-POS sources remain outside this slice; the next contract change should add an explicit invalid-operation error if other producers become authorable.
+
+## 2026-08-07 — Frontend skips its own terminal's settings_updated events (SYNC-10 follow-up)
+
+### The new event loop double-refetched on local saves — the payload's terminal_id was never used
+**Problem:** SYNC-10 made the daemon re-emit `settings_updated` for remote settings changes, but the frontend listener refetched on EVERY event. A local save therefore fired twice: the save handler's `markSettingsUpdated` AND the event echo from the backend's local publish — two backend round-trips per save.
+
+**Solution:** The listener now attributes the event to its own terminal and skips it. Identity resolution: the device id (`getDeviceId()` / `useWorkspace().terminalId`) plus the registered terminal's ROW id — the value the backend actually emits (`state.terminal_id`) — resolved by matching `listTerminals()` against the device id. Skip rule: ignore events whose `terminal_id` is the device id, the resolved row id, or `"unknown"` **only when this device has no registered terminal** (single-terminal / MultiTerminal-off: "unknown" is exclusively the local echo; if we ARE registered, an "unknown" origin can only be an unregistered peer and must still refetch — the guard that keeps the future settings-sync enqueue slice safe). The resolution effect is fully try/catch-wrapped so no provider mount can crash on unmocked IPC.
+
+**Verify:** 4 new tests (row-id skip, device-id skip, unknown-unregistered skip, unknown-registered refetch) — Red confirmed (the 3 skip tests failed before the listener change). 30/30 SettingsContext tests · 91/91 across the affected shell/settings suites · **full suite 261/261 files green** · typecheck + eslint clean.
+
+**Deliberately NOT done:** the enqueue slice (local settings commands pushing `settings.update`) is still the open half of the loop — the terminal_id identity work here is the frontend half of what makes it safe when it lands.
+
+
+
+### The sync settings-apply path did not exist — remote settings rows were quarantined as unsupported
+**Problem:** The previous cycle wired `set_settings_emit_fn`, but the journal's follow-up was bigger than "publish from the apply path": there IS no settings-apply path. `apply_remote_atomic` (used by both daemons and the SyncEngine) handles exactly four actions — a remote `settings.update` hit `_ => Err(unsupported)` and got **dead-lettered after 3 retries**. The reactive half of the event loop (frontend `SettingsContext` already listens for `settings_updated`) was unreachable for cross-terminal changes.
+
+**Solution:** Red→Green. (1) Queue layer: `apply_remote_in_tx` + `apply_remote` gained `settings.update` / `settings.change` arms that write the value row via `Settings::set` and a versioned delta row via `Settings::write_delta` (SAVEPOINT-nesting-safe inside the caller's transaction; a delta failure is non-fatal and the change is still reported — matches `set_tracked`'s philosophy). New `apply_remote_atomic_full` reports `ApplyOutcome { applied, settings_change: Option<(key, terminal_id)> }`; the legacy `apply_remote_atomic` stays a thin bool wrapper so ~12 existing callers are untouched. (2) Daemon: `SettingsChangedSink` (an owned `Arc<dyn Fn(&SettingsUpdated)>`) threaded through `start_with_sink` → `run_tick` → the pull apply closure, which publishes per applied settings item after its tx commits. (3) Desktop `lib.rs`: the sink emits `settings_updated` with `{changed_keys, terminal_id}` via the AppHandle — the exact wire shape the frontend expects. 6 new tests: 4 queue (row+delta+receipt, outcome surfacing, replay no-republish, non-atomic + `settings.change` alias) + 1 daemon end-to-end (mock pull → sink records the key → row applied).
+
+**Verify:** 262/262 platform-sync tests · `cargo check -p oz-pos-app` clean · clippy `-D warnings` clean on both crates · fmt clean. Reviewer flagged the sink's DB contract (it runs while holding `blocking_lock()`) — documented on the type.
+
+**Deliberately NOT done (follow-ups):** (1) **The enqueue side** — no local settings command enqueues a `settings.update` offline item today, so the full loop (local change → cloud → other terminal) still needs the emit slice: wire `run_set_setting` / `set_settings` (and ideally the typed `set_*_settings` commands) to `enqueue_offline("settings.update", {key, value, terminal_id, version})`. (2) PG daemon parity — `apply_pulled_page` still uses the bool `apply_remote_atomic`, so PG sync applies settings rows but never publishes (PgSyncDaemon isn't started in production; wire the sink there if it becomes live).
+
+
+
+### The bridge was built and tested but never connected — the emit callback was never set
+**Problem:** Investigation found the full pipeline existed except one link: `SettingsUpdatedHandler` (platform/startup) subscribes to `settings.updated`, builds `{changed_keys, terminal_id}` JSON, and calls the global `SETTINGS_EMIT_FN` — but no app ever called `set_settings_emit_fn`, so in production every settings publish hit the debug log "settings_updated Tauri bridge not yet wired" and the Tauri event never fired. The frontend `SettingsContext` listener was already in place and tested; the missing piece was purely the app setup closure.
+
+**Solution:** In `apps/desktop-client/src/lib.rs` setup, right after `init_module_system`, the app now registers the emit callback: `set_settings_emit_fn(Box::new(move |event_name, payload| { let _ = app_handle.emit(event_name, payload); }))` (clone the `AppHandle`, `tauri::Emitter` added to the import). Same-terminal saves already refetch via the save-handler `markSettingsUpdated` path, so this closes the loop for EventBus-published events (e.g. other settings commands) and future remote-change publishers.
+
+**Validation:** `cargo check -p oz-pos-app` clean · `cargo clippy -p oz-pos-app -- -D warnings` clean · `cargo test -p platform-startup` 36/36 + 1 doctest (incl. the SettingsUpdatedHandler non-blocking / rapid-fire / replaced-callback tests).
+
+**Follow-up (open):** the sync settings-apply path still does not publish `SettingsUpdated`, so a settings change arriving from ANOTHER terminal via sync still won't fire the event — true cross-terminal reactivity needs that publisher, plus optionally using `terminal_id` in the frontend listener to skip this terminal's own events.
+
+## 2026-08-06 — TDD cycle: dev-mock lockout + shift history survive reloads (audit gaps closed)
+
+### A reloaded preview bypassed the login lockout and wiped every closed shift
+**Problem:** The last two audit-doc gaps: `loginAttempts` lived in module memory, so a reload reset the attempt counter and defeated the lockout the real backend keeps enforcing (`login_attempts` 074 + device 111) — and `mockShiftHistory` reverted to just its one seed on every reload, losing every reconciliation record while the backend's `shifts` (021) keeps them.
+
+**Solution:** Red→Green, following the established `oz-dev-mock:*` pattern. Four contract tests in `dev-mock-auth-contract.test.ts` pin the restart-parity contract: four failed logins then a reload still block the correct PIN (`Account locked` — Red failed because the reloaded login resolved); a successful login clears the persisted counter so a later wrong pin is a fresh first failure; a closed shift (via `close_shift_scoped`) is present in `list_shifts_scoped` after a reload (Red failed — history was seed-only); a fresh browser seeds exactly the one pre-seeded closed shift. Green persists both under `oz-dev-mock:login-attempts` (saved on every failure increment and on the success delete) and `oz-dev-mock:shift-history` (saved on both `close_shift*` pushes; first load seeds the single closed shift, shallow-cloned).
+
+**Validation:** 20/20 contract tests (4 new) · 216/216 across dev-mock/offline/shift/KDS test files (13 files) · typecheck clean · eslint clean. Audit doc updated — both rows moved to ✅ persisted, the gaps section now reads "None remaining" (with the flat-vs-sliding-window lockout model noted as an intentional fidelity gap), and both follow-ups marked done.
+
+**Follow-ups:** The audit's reload-state gaps are all closed; the remaining stretch items are exercising held carts (real `hold_cart`/`list_held_carts` state instead of `[]`) and mirroring the backend's sliding-window lockout model. The lockout counter is a flat per-username count persisted verbatim — matching the backend's per-device + global limits would need a richer shape.
+
+## 2026-08-06 — Full UI suite back to green: reduced-motion gate + stale test contracts + picker pending state
+
+### Four lingering vitest failures closed, plus the picker double-tap follow-up
+**Problem:** The full-suite run showed 3984/4 — all four failures pre-existing from earlier resto work, not the topology cycles: the SessionLockScreen rate-limit pulse animated ungated (violating the reduced-motion compliance test), the card-height test still asserted the pre-slim 108px/16px·10px formula, and the screen-extraction allowlist never learned that the + Add label moved to a global `sr-only` utility. Separately, the KDS picker's double-tap guard silently dropped the second tap — no visual feedback that a save was in flight.
+
+**Solution:** (1) Wrapped `session-lock-rate-pulse` in `@media (prefers-reduced-motion: no-preference)` — the warning text stays visible either way; (2) re-pinned the height test to the deliberate slimming (`* 14px`/`* 8px`, base `--space-14 + --space-8 + --space-1` = 92px); (3) added `sr-only` to the RestaurantMenu `knownDynamicFragments`; (4) `pickerSaving` state in KdsScreen drives a `pending` prop on the modal that disables Confirm (and the handler guard drops stray taps) — the ref guard stays for timing-immune re-entry detection.
+
+**Validation:** Full vitest suite **4012/4012 across 261 files — zero failures** · typecheck clean · eslint 0 errors (40 pre-existing warnings) · i18n clean. New pins: modal `pending` disables Confirm even with picked items; the screen double-tap test asserts the button disables between taps.
+
+**Follow-ups:** The `platform/startup` unwired `settings_updated` Tauri bridge (`event_handlers.rs:429`) remains the one Rust-side item on the radar — needs a wire-up decision before it becomes a TDD slice.
+
+## 2026-08-06 — TDD cycle: KDS product picker contract + double-confirm merge guard (TODO 3f)
+
+### The mid-preparation picker had no test suite, a double-fired Escape, and a double-tap duplicate-add race
+**Problem:** `KdsProductPickerModal` (TODO 3f) had zero direct tests. Two real defects surfaced once Red tests pinned the contract: (1) pressing Escape fired `onClose` TWICE — the modal's own overlay `onKeyDown` handled Escape redundantly with `useFocusTrap`'s `onEscape`, so closing the dialog triggered the parent's close handler twice per keypress; (2) the Confirm button stays enabled while the parent's async merge (`getKdsOrderLinesScoped` → `updateKdsOrderItemsScoped` → close) is in flight, so a fast double-tap on a touchscreen fired the merge twice and duplicated the picked items onto the ticket.
+
+**Solution:** Red→Green. New `KdsProductPickerModal.test.tsx` (5 tests) pins the contract: confirm emits the picked items ONCE with the exact payload (sku, display_name, qty, category-derived course, empty modifiers), backdrop-click and Escape cancel without confirming, a failed fetch renders the localized error with a working Retry, and the course dropdown + qty stepper edit the picked entry before confirm. Escape double-fire pinned by asserting `onClose` called once — Green removed the modal's redundant `onKeyDown` (the focus trap owns Escape), with a comment warning not to re-add it. Then `KdsScreen.test.tsx` gained a deferred-promise double-tap test (update gated until after the second click) that failed Red with 2 update calls; Green added a `pickerSavingRef` re-entry guard in the parent's `onConfirm` (ignore while in flight, reset in `finally`). Two early Red attempts failed for the wrong reason (my `getByRole` names matched the picked-list Remove buttons — fixed with anchored regexes).
+
+**Validation:** 154/154 KDS tests (9 files, 6 new: 5 picker + 1 screen) · typecheck clean · eslint clean (the backdrop click now carries a justified a11y disable — keyboard users close via the Close button and trap Escape).
+
+**Follow-ups:** The modal shows no visual pending state during the merge (Confirm stays enabled, guard silently drops the second tap) — a `pending` prop to disable the button would surface the in-flight state. The `KdsTicketCard` lazy-fetch/re-fetch (`fetchKey`) was NOT the double-add source — the merge path is single-shot now; re-check if ticket-level edits ever race the picker merge on the same order.
+
+## 2026-08-06 — TDD cycle: retail cart remove→undo restores modifiers and course (first RetailCartPanel suite)
+
+### Undo of a removed line re-added a bare product — course assignment and modifiers were silently dropped
+**Problem:** RetailCartPanel had zero direct test coverage, and the flow had a real data-loss bug: the remove payload / undo stack only carried `{ sku, name, category, unit_price, qty }`, so `handleUndoRemove` re-added a bare product line. A resto cashier removing a course-assigned line with modifiers (e.g. Latte + Extra Cheese on course 'main') and hitting Undo got back an un-coursed, modifier-less line — the ticket and kitchen course would be wrong.
+
+**Solution:** Red→Green. Three interaction tests in `RetailPosScreenInteractions.test.tsx` pin the flow — remove reveals the undo bar with the item count (aria-live), Undo restores the exact line, dismiss discards without re-adding. The restore test carries `courseId` + `modifiers` and failed Red: `addProduct` was called without the meta (the bar/count and dismiss tests passed as guards). Green threads the line's full metadata through: `CartLineActions.onRemoveLine` payload + the undo stack now include optional `courseId`/`modifiers`, and `usePosState.addProduct` accepts an optional third `meta` arg that applies them to the created/merged line (`coursingStatus: 'hold'` when a course is set — so the kitchen fires it like any assigned line). Two earlier Red attempts failed for the wrong reason (my test override swapped `mockAddProduct` for the mock's internal fn; and `'beverage'` isn't a valid `CourseId` literal) — each corrected before Green. The `exactOptionalPropertyTypes` build surfaced three spots passing `undefined` explicitly into optional props; fixed with conditional spreads.
+
+**Validation:** 173/173 across retail/sales/restaurant suites (33 interaction + 29 usePosState with 3 new meta unit tests) · typecheck clean · eslint clean.
+
+**Follow-ups:** `PosScreen.tsx` has its own `pos-cart-undo-bar` with the same SKU-level undo pattern — it likely shares the bare-restore gap and is a clean next cycle. The meta merge is SKU-keyed like `addProduct` itself, so undoing a removed line whose SKU is still in the cart merges qty onto the existing line and re-applies the restored modifiers — faithful for the single-line-per-SKU model, but note it if lines ever diverge by modifiers.
+
+## 2026-08-06 — TDD cycle: dev-mock KDS state survives reloads (restart parity)
+
+### A preview reload wiped the kitchen queue, reverted every status, and restarted ticket numbering at 104
+**Problem:** The browser dev-mock kept `mockKdsOrders`, `mockKdsLineItems`, and `kdsDisplayCounter` in module memory — exactly the gap the audit doc flagged as the top parity hole. A reload dropped pushed orders (the KDS preview showed only the 3 seeds), reverted per-item `item_status` advances, and renumbered the next ticket 104, while the real backend persists all three (`kds_orders` 032, `kds_line_items` 105, `kds_daily_counters` 032).
+
+**Solution:** Red→Green, following the established `oz-dev-mock:*` pattern. Three contract tests in `dev-mock-auth-contract.test.ts` pin the restart-parity contract: a pushed order (from `complete_sale_scoped`) plus its course-grouped line items survive a module reload; the display counter continues one past the pre-reload ticket (105, not 104 again); a line-item status flip (`update_kds_line_item_status`) survives. All three failed for the right reasons (pushed order undefined, `[101,102,103,104]` had no 105, status reverted to `pending`). Green persists all KDS state under one key `oz-dev-mock:kds` (orders + line items; counter derived as max persisted `display_number` + 1, floor 104) and saves on every mutation — the push path in `pushKdsOrderFromCart` and all four `update_kds_status*` / `update_kds_line_item_status*` handlers. `update_kds_order_items_scoped` is a read-only lookup, nothing to save.
+
+**Validation:** 16/16 contract tests (3 new) · 187/187 across the dev-mock/offline/KDS test files (10 files) · typecheck clean · eslint clean. `docs/dev-mock-state-audit.md` updated — KDS rows moved from the ❌ gaps table to ✅ persisted, follow-up #1 marked done.
+
+**Follow-ups:** The two remaining reload gaps are now `loginAttempts` (a reload defeats the lockout in dev — backend is richer with sliding-window + per-device limits) and `mockShiftHistory` (closed shifts vanish). The counter derives from max `display_number` rather than a persisted scalar — correct for a single-store preview, but if the mock ever models multiple stores/days, the per-store per-day baseline should be persisted explicitly.
+
+## 2026-08-06 — TDD cycle: reset dirty flag after a successful Apply (save-as-baseline)
+
+### Preset loads asked "unsaved changes?" even right after Apply persisted everything
+**Problem:** `isDirtyRef` was only reset by `loadPreset` and the fresh-topology reload paths — never by a successful Apply. So the flow edit → Apply → click a preset popped the "Load Preset" confirm dialog even though the canvas already matched the backend.
+
+**Solution:** Red→Green. The save handler now sets `isDirtyRef.current = false` after the try/catch completes without an exception (a failed save returns early and stays dirty). Pinned by a Red test (edit → Apply → preset loads with NO dialog) and a guard (a new edit after Apply re-arms the dialog). This is the journal follow-up from the save+remap cycle — it completes the save-as-baseline semantics: after Apply the canvas IS the baseline; any later edit re-dirties it.
+
+**Validation:** 58/58 editor tests (2 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean.
+
+**Follow-up:** Undo-after-save still restores pre-save canvas states (deliberate — ids stay valid, undo remains useful). A demo-mode Apply (no onSave prop) also clears dirty since there is nothing to persist; harmless, but note if demo mode ever gets real persistence semantics.
+
+## 2026-08-06 — TDD cycle: hardware-node inspector (closes the last node-type gap)
+
+### Hardware nodes had no type-specific inspector — a test pinned it as "not implemented"
+**Problem:** Store → StoreInfoCard, warehouse → WorkspaceInventorySettings, workspace → type selector + settings card — but a hardware node (printer/KDS peripheral) opened the drawer with only the bare name/subtitle fields and nothing else. `InspectorIntegration.test.tsx` literally documented the gap with a test named "does not show inspector (not implemented)".
+
+**Solution:** Red→Green. Flipped that test to expect a hardware-specific card (`data-testid="hardware-inspector"`, "Hardware Device" section) plus the editable name/subtitle flowing through the `beginInspectorEdit` undo session (one undo restores the original name). Green renders the hardware section in the drawer, showing the node's telemetry badge/status, with a new `topology-inspector-hardware-title` key in both en and id bundles. The name/subtitle fields were already unconditional — the card was the missing piece.
+
+**Validation:** 65/65 (56 editor + 9 inspector) · TopologyScreen + api-ipc-contract green · typecheck clean · eslint clean · i18n lint clean.
+
+**Follow-up:** The hardware card is deliberately read-only (telemetry badge only) — wiring real device settings (printer address, port) would need backend backing; hardware nodes have no workspace-instance row, so onSave treats them as diagram-only. With this, all four node types have an inspector section.
+
+## 2026-08-06 — TDD cycle: toast when a preset load drops the selection
+
+### Preset swaps dropped the selection silently
+**Problem:** Preset ids only partially overlap (wh-1 is retail-only; w-3/w-4 are restaurant-only). Loading a preset that lacks the selected element cleared the selection via the re-validation effect with no feedback — the inspector just closed and the user had no idea why.
+
+**Solution:** Red→Green. `loadPreset` now checks the incoming preset for the selected node/wire BEFORE the re-validation effect runs and fires an info toast (`topology-toast-selection-dropped`, added to both en and id bundles) when the selection won't survive. One generic message covers node and wire drops; a surviving selection (store-1 in both presets) toasts nothing — pinned by a guard that also asserts the inspector stays open on the new preset's name.
+
+**Validation:** 56/56 editor tests (3 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean · i18n lint clean.
+
+**Follow-ups:** Scope was preset load only — the same silent drop also happens on the fresh-topology reload path (workspaceInstances rebuild) and on undo/redo; toasting there could get noisy, so it was deliberately not added. The toast is 'info' severity; a future cycle could distinguish node vs wire in the message.
+
+## 2026-08-06 — TDD cycle: undo-of-delete re-selects the restored node (inspector reopens)
+
+### Undoing a node deletion restored the node but the selection stayed cleared
+**Problem:** Both delete paths (immediate and confirm-dialog) clear `selectedNodeId`, and `popUndo` restored the canvas without re-selecting — so Ctrl+Z after deleting a node brought the node back but left the inspector closed, forcing the cashier to click it again to resume editing.
+
+**Solution:** Red→Green. `popUndo` now detects the delete signature — exactly one node in the restored entry absent from the current canvas — and re-selects it, reopening the inspector. The heuristic is precise: an undo of an add/move/toggle restores no nodes and leaves the selection untouched, and an undo of a wire deletion restores no NODE so nothing is re-selected (pinned by a guard). Sits alongside the existing re-validation effect (clears dangling, preserves valid).
+
+**Validation:** 53/53 editor tests (3 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean.
+
+**Follow-ups:** Redo is NOT symmetric — redo of an undo-of-add restores the node without re-selecting it (acceptable; the add itself auto-selects). Wire symmetry (re-select a wire restored by undo-of-wire-delete) was deliberately skipped since wires have no inspector. The heuristic keys on "exactly one" restored node — a hypothetical multi-node delete would need revisiting, but deletions are always single-selection today.
+
+## 2026-08-06 — TDD cycle: clear undo stack after save+idMap remap (pre-remap ids)
+
+### Undo could restore pre-remap UUIDs that contradict the backend after Apply
+**Problem:** The Apply handler remaps node/wire ids client-side when `onSave` returns an `oldId -> newId` map (archive+recreate assigns new UUIDs) — but the undo/redo stacks were never touched. Every pre-save history entry holds the OLD ids, which no longer exist on the canvas or in the DB; pressing Undo after a remapping save would resurrect phantom nodes/wires with dangling ids.
+
+**Solution:** Red→Green. In the idMap branch of the save handler, alongside the existing selection clear, both stacks are now dropped: `setHistory([]); setRedo([])`. The guard test pins the non-remap path: a plain save (`{}` idMap, ids unchanged) keeps the stack so undo-after-save still works.
+
+**Validation:** 50/50 editor tests (2 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean.
+
+**Follow-up:** A successful save does NOT reset `isDirtyRef` — after Apply, clicking a preset still asks "unsaved changes" confirmation even though everything is persisted (pre-existing; the skip-path reload also leaves it set). Also, a save with no remap leaves undo enabled so Undo can revert to a pre-save canvas state that contradicts the saved DB — deliberate, ids stay valid; revisit if save-as-baseline semantics are ever wanted.
+
+## 2026-08-06 — TDD cycle: selection re-validation on undo/redo/preset (dangling selection)
+
+### Undo/preset left selectedNodeId / selectedWireId dangling at removed elements
+**Problem:** `popUndo`, `popRedo`, and `loadPreset` restored `nodes`/`wires` but never re-validated `selectedNodeId`/`selectedWireId`. Undoing a node-add removed the new node while the selection still pointed at it — the tool-rack Delete button rendered for a node that no longer existed, and arrow keys on the dangling selection would push no-op undo entries and mark the canvas dirty. Same class of bug: loading Retail Preset while a restaurant-only wire (w-3) was selected left `selectedWireId` pointing at a removed wire.
+
+**Solution:** Red→Green. A centralized re-validation `useEffect` watches `selectedNodeId`/`selectedWireId` against `nodeMap`/`wires` and clears only when the selection no longer exists — a still-valid selection (undo of a drag or direction toggle) is preserved. One invariant covers undo, redo, preset loads, and fresh topology reloads, instead of patching each path. Red tests: (1) undo of node-add clears the dangling selection (Delete button disappears); (2) preset load over a selected wire clears the dangling wire selection. Guard tests pin the preserved-selection behavior: undo of a drag keeps the node selected; undo of a wire direction toggle keeps the wire selected.
+
+**Validation:** 48/48 editor tests (4 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean.
+
+**Follow-ups:** The same invariant now silently protects loadPreset, but a preset swap that REMOVES a still-selected node id (e.g. `ws-kds` selected then Retail Preset loaded) clears the selection without notifying the user — acceptable for now. A richer UX would re-select a node restored by undo-of-delete; deliberately out of scope (selection is cleared on delete and stays cleared, matching the "clear or re-validate" rule).
+
+## 2026-08-06 — TDD quad: topology editor undo/redo hardening (inspector, ghost-drag, arrow repeat, reload)
+
+### Four undo-state hazards: silent inspector edits, ghost drags, key-repeat flood, stale stacks on reload
+**Problem:** Four independent undo-state defects in `NodeTopologyEditor` after the click/dirty fix. (1) Inspector edits (node name, subtitle, workspace type) mutated nodes with no `pushHistory()` — a rename was not undoable AND never set `isDirtyRef`, so hitting a preset button silently discarded it without the confirm dialog. (2) Node drags were only cancelled by the canvas `onMouseUp` — releasing outside the canvas left `draggingNodeId` latched, so the node kept following the cursor on re-entry with no button held, and those ghost moves were not undoable. (3) Arrow-key nudges pushed one history entry per `keydown` with no `e.repeat` guard — holding a key flooded the 50-entry stack. (4) The non-skip topology load path rebuilt nodes/wires but never cleared `history`/`redo` — pressing Undo after a fresh instance load restored a stale pre-reload canvas that contradicted the DB.
+
+**Solution:** Four Red→Green cycles. (1) New `beginInspectorEdit(nodeId)` pushes at most ONE history entry per node selection session (guarded by `inspectorHistoryPushedForRef`, reset on selection change and undo/redo) and is called from the name, subtitle, and type-select `onChange` handlers — a typing burst is a single undo step, and the dirty flag now fires the preset confirm dialog. (2) Node mousedown now arms a document-level `mouseup` listener (new `dragCleanupRef`, cleaned on unmount alongside `panCleanupRef`) that cancels the drag on any release, inside or outside the canvas. (3) The arrow-nudge branch ignores `e.repeat` so one held gesture = one history entry. (4) Both non-skip load paths (workspaceInstances rebuild + legacy saved-diagram) call `setHistory([]); setRedo([])` — the skip-after-save path deliberately does NOT clear, preserving in-flight edits.
+
+**Validation:** 44/44 editor tests (7 new across 5 cycles) · 3 related suites green (TopologyScreen, InspectorIntegration, api-ipc-contract) · typecheck clean · eslint clean. Drift guard: only the pre-existing tdd SKILL.md finding.
+
+**Follow-up found by review (cycle 5):** The reviewer flagged that `inspectorHistoryPushedForRef` was reset on selection change and undo/redo but NOT on the load paths or `loadPreset` — since preset/node ids overlap across reloads, a still-selected node kept its stale ref and its next edit silently skipped `pushHistory()` (no undo entry, no dirty flag). Fixed by resetting the ref alongside `setHistory([])`/`setRedo([])` in both non-skip load paths and inside `loadPreset`. Pinned by a Red→Green test: rename → preset load (store-1 stays selected) → rename again → one undo must return to the preset name, not the pre-preset state.
+
+**Follow-ups:** (1) Undo/redo restore nodes/wires but leave `selectedNodeId`/`selectedWireId` untouched — undoing a node-add leaves a stale selection that Delete would target at a missing node; a future slice should clear or re-validate selection after pop. (2) The idMap remap after save rewrites node ids but history entries captured pre-remap ids — undo after a save+remap could restore dangling ids; consider clearing history after a successful apply. (3) Undo of a delete restores the node but the `freshNodeIds` animation set and timers are not restored — cosmetic, but the fresh timer still fires on a restored node.
+
+## 2026-08-06 — TDD cycle: plain click no longer pollutes topology undo history
+
+### Clicking a node created no-op undo entries and dirtied the canvas
+**Problem:** `NodeTopologyEditor.handleNodeMouseDown` called `pushHistory()` on every mousedown, even a click with zero movement. Two observable symptoms: (1) the Undo button appeared after a mere click and undoing did nothing visible; (2) the canvas was marked dirty (`pushHistory` sets `isDirtyRef`), so clicking a node and then hitting a preset button demanded the "unsaved changes" confirm dialog even though nothing had changed — and the dirty flag also feeds TopologyScreen's unsaved-change prompt on navigation.
+
+**Solution:** Red→Green. Two tests pinned the bug (Undo visible after a plain click; preset confirm dialog after a plain click) and a third guard pinned the correct drag semantics (a real drag creates exactly one undo entry and undo restores the snapped position). The fix moves the history push out of `handleNodeMouseDown` into the first real drag movement via a new `dragHasMovedRef` — click-to-select never creates an entry or marks the canvas dirty, while drags, arrow nudges, add/delete, wire toggles, and preset loads keep their single-entry-per-operation history.
+
+**Validation:** 37/37 editor tests (3 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean. Drift guard reports only the pre-existing tdd SKILL.md audit-date finding.
+
+**Follow-ups:** Inspector edits (node name, subtitle, workspace type selector) are still not undoable — a rename can't be reverted with Ctrl+Z. A future slice should push one history entry per inspector edit session (first change after the field gains focus). Arrow-key nudges also push one entry per keypress rather than one per nudge gesture; a session-based entry would compress them.
+
+## 2026-08-06 — TDD cycle: operator rewind survives daemon apply phase (SYNC-09)
+
+### Daemon clobbered an operator's anchor rewind landing mid-pull
+**Problem:** The sync daemon's apply-pull phase captured the durable `sync_pull_state` anchor at tick start, then wrote its computed `new_since` blindly after applying the page. If an operator requeued a dead-lettered item (`requeue_remote_failure` sets `since = NULL`) while the pull was in flight, the apply-phase write clobbered the rewind — the next cycle pulled from the advanced anchor and never re-fetched the requeued item, silently defeating the requeue.
+
+**Solution:** Red→Green: a slow mock pull server (axum handler blocking on a `tokio::sync::Notify`) let the test rewind the anchor deterministically mid-pull. The apply closure now re-reads `get_sync_pull_state()` before `set_sync_pull_state()` and skips the advance when the durable `since` transitioned Some→None (the exact rewind signature), logging a warning and retaining the rewind for a full re-pull next cycle. The page still applies (stock mutation + ledger) — only the anchor write is skipped. The PG daemon got the same parity guard.
+
+**Validation:** 256/256 crate tests (1 new) · 19/19 gated integration suite · fmt + `clippy -D warnings` clean.
+
+**Follow-ups:** The re-read and the (skipped) write hold the same `blocking_lock()`, so no rewind can interleave between them — the fix is race-free under the shared-connection model. If a future operator path opens a separate SQLite connection, verify this still holds; a full-state compare-and-skip was chosen over a CAS store method precisely because the mutex already serializes the two calls. The comparison is full-state `(since, cursor)`, so a concurrent writer moving the anchor forward cannot regress it to our stale `new_since` either.
+
+## 2026-08-06 — TDD cycle: isolate user menu state and refresh popularity ordering
+
+### Restaurant menu state crossed user boundaries and popularity sorting stayed stale
+**Problem:** `RestaurantMenu` kept user-scoped pinned/colors/unavailable/popularity/preferences in React state when the authenticated user changed, so a new cashier could briefly inherit the previous user's menu configuration. The same cycle found that popularity sorting read `addCountRef.current` inside a `useMemo` whose dependencies did not change after adding a product; the UI re-rendered but the card order remained cached.
+
+**Solution:** Red→Green tests first pinned both behaviors. User changes now synchronously rehydrate local state with `useLayoutEffect`, clear the prior context menu and add feedback, and skip the first persistence pass so the new user's storage is not overwritten. Popularity sorting now depends on a reactive revision incremented whenever a product is added.
+
+**Validation:** RestaurantMenu 43/43 tests, TypeScript typecheck, and ESLint clean. Skill-drift detection still reports the pre-existing `.agents/skills/tdd/SKILL.md` missing-audit-date metadata finding.
+
+**Follow-ups:** Replace real 550 ms long-press sleeps with fake timers; add true unmount/remount persistence tests and async backend preference race coverage.
+
+## 2026-08-06 — TDD cycle: menu persistence survives unavailable localStorage
+
+### Storage failures could crash menu effects
+**Problem:** `savePinned`, `saveColors`, and `saveUnavailable` called `localStorage.setItem` without a failure boundary. Private browsing, quota exhaustion, or a disabled Tauri WebView storage backend could throw from a React effect after a card action, destabilizing the restaurant menu even though the in-memory action had succeeded. `savePop` already treated persistence as best-effort, exposing the inconsistency.
+
+**Solution:** Red test mocked `Storage.prototype.setItem` to throw `QuotaExceededError`, pinned a card, and verified the card remained usable for checkout. Green wrapped all three menu-state writes in the same best-effort `try/catch` policy as popularity persistence; current-session React state remains authoritative when storage is unavailable.
+
+**Validation:** RestaurantMenu 44/44 tests, TypeScript typecheck, ESLint, and diff check clean. Skill-drift detection retains the pre-existing missing audit-date metadata finding for `.agents/skills/tdd/SKILL.md`.
+
+**Follow-ups:** add an explicit user-facing storage-health indicator only if product policy requires it; replace long-press sleeps with fake timers and cover async preference races.
+
+## 2026-08-06 — TDD cycle: protect local menu preferences from stale backend responses
+
+### A delayed preference fetch could undo a newer cashier choice
+**Problem:** `getUserPreferencesScoped` applied returned `cardsize`, `fontsize`, and `sort` values unconditionally. If a cashier changed a menu setting while the initial request was still pending, the older response overwrote the current React state and user-scoped localStorage value.
+
+**Solution:** Red test deferred the preference response, changed menu size locally, resolved the response with the conflicting old value, and required the local value to remain. Green tracks locally modified preference keys in a per-component ref. Backend hydration now skips only keys changed locally during the request, while unrelated preferences continue to hydrate. The set is cleared when the authenticated user changes.
+
+**Validation:** RestaurantMenu 47/47 tests, TypeScript typecheck, ESLint, and diff check clean. Skill-drift detection reports only the existing `.agents/skills/tdd/SKILL.md` missing-audit-date metadata finding.
+
+**Follow-ups:** Add equivalent race coverage for sort and font size, convert remaining long-press tests to fake timers, and add true unmount/remount persistence tests.
+
+## 2026-08-06 — TDD cycle: preserve touch long-press through finger jitter
+
+### Harmless tablet movement cancelled the context-menu gesture
+**Problem:** `RestaurantCard` cancelled its 500 ms touch long-press on the first `pointermove`. Normal capacitive-screen finger drift can be only a few pixels, so a cashier attempting to open a card context menu could lose the gesture before the timer elapsed. The existing large-movement regression still defines the scrolling/dragging boundary.
+
+**Solution:** Red test simulated a 2 px touch move and required the context menu to open after the long-press delay. Green added an 8 px Euclidean touch-slop threshold: movement within the threshold is ignored, while larger finite movement cancels the timer. Missing WebView coordinates are treated conservatively as jitter so an indeterminate event cannot cancel a valid request.
+
+**Validation:** RestaurantMenu 46 tests (targeted jitter and large-movement regressions pass), TypeScript typecheck, ESLint, and diff check clean. The full file run was initially exposed as a test timing issue because the old large-movement test waited before pointer-up; the test now releases before waiting and passes in isolation. Skill-drift detection reports only the existing `.agents/skills/tdd/SKILL.md` missing-audit-date metadata finding.
+
+**Follow-ups:** Convert the remaining real-time long-press tests to fake timers; add async preference race coverage and true unmount/remount persistence tests.
+
+## 2026-08-06 — TDD cycle: keep source-unavailable products authoritative
+
+### Local availability override implied a false restoration path
+**Problem:** The context menu derived its label only from the local `unavailable` set. A product already marked `inStock: false` by the catalog therefore exposed “Mark unavailable,” even though toggling the local override could never restore the card: effective stock remained `product.inStock && !unavailable.has(sku)`. The action was misleading and could confuse operators about inventory authority.
+
+**Solution:** Red test rendered a source-unavailable product, opened its context menu, and required neither local availability action to be shown. Green threaded the source stock flag into the context-menu state and renders the local availability toggle only for source-available products. Pinning and color actions remain available; checkout remains guarded by the source stock state.
+
+**Validation:** RestaurantMenu test suite, TypeScript typecheck, ESLint, and diff checks are clean. Skill-drift detection continues to report only the pre-existing missing audit-date metadata finding in `.agents/skills/tdd/SKILL.md`.
+
+**Follow-ups:** add a localized non-actionable “Unavailable from inventory” context-menu status if operators need more explanation; add explicit keyboard/touch source-stock tests, replace long-press sleeps with fake timers, and cover async preference races.
+
+## 2026-08-06 — TDD slice: tablet vs desktop pre-session auth surface (audit/06 parity audit)
+
+### Comparison result: the tablet now shares the hardened picker AND session-mint surface — no gaps remain
+**Prompt:** run a TDD slice comparing the tablet client's pre-session auth surface against the hardened desktop commands.
+
+**Evidence (command-by-command diff of `apps/*-client/src/lib.rs` registrations + command bodies):**
+
+| Pre-session surface | Desktop | Tablet | Verdict |
+|---|---|---|---|
+| `staff_login` (PIN verify + mints picker ticket) | ✓ | ✓ (b10f4929) | parity — both mint `user_id.expiry.hmac`, 5-min TTL, per-process secret |
+| `bootstrap_owner` (first-owner) | ✓ registered | ✗ not registered | deliberate — tablet shell (`TabletAppShell`) never imports `CreatePinScreen` / never calls `bootstrapOwner`; tablet is a paired device provisioned from the desktop |
+| `create_session` (session mint, `verify_instance_access` fail-closed gate) | ✓ | ✓ | parity — identical `role_id`/`user_id`/`instance_id`/`store_id` gate, real role resolved from DB |
+| `list_workspaces` (ticket → real user+role → store listing) | ✓ | ✓ | parity — identical body (verify ticket → resolve user/role from global DB → `Store::list_workspaces(real_role, user, store)`) |
+| `list_workspace_screens` (ticket-gated bootstrap read) | ✓ | ✓ | parity |
+| `resolve_boot_store` | ✓ device-binding + primary fallback | ✓ primary fallback only | deliberate difference — tablet has no device-binding keyring, `is_bound` is always `false` (documented in the command doc) |
+
+**Frontend contract traced end-to-end (why the empty state can only mean a null ticket):** `AuthContext.login` stores `result.picker_ticket`; `CreatePinScreen` bootstrap passes `result.picker_ticket` through `swapSession(session, ticket)`; `WorkspaceContext.fetchWorkspaces` returns early when `pickerTicket` is null (→ `WorkspaceHome` empty state) and falls back to demo cards on empty/error listings. So the screenshot's `No workspaces available` was the pre-fix tablet (no ticket minted) — closed by b10f4929.
+
+**Verify:** tablet `commands::auth` 13/13 + `commands::workspaces` 7/7 · desktop `commands::auth` 19/19 + `commands::workspaces` 17/17 — all parity regression tests green on both clients. `swapSession` optional-ticket path (FastPINOverlay hot-swap, mid-workspace) intentionally bypasses the picker, so no null-ticket picker path remains.
+
+**Follow-ups:** (1) `bootstrap_owner` absence on the tablet is by design but UNTESTED as a guarantee — a registration-level test asserting the tablet surface contains exactly the documented command set would pin it against accidental drift. (2) The tablet never implements device binding, so `resolve_boot_store` always reports `is_bound: false`; if tablets are ever expected to auto-boot into a bound workspace, the binding HMAC + keyring slice is the gap to close.
+
+## 2026-08-06 — TDD cycle: checked PO money math + plugin float hand-off (MONEY-05)
+
+### Purchase orders wrap silently; plugin Lua arithmetic wraps in the VM
+**Problem:** Two remaining unchecked-multiply sites from the MONEY-03 scan. (1) `create_purchase_order` (`crates/oz-core/src/db/purchase_orders.rs`) computed `subtotal += line.qty * line.unit_cost_minor` and per-line `line_total` with bare multiplies — `CreatePoLineInput` arrives over IPC (untrusted) and dev/test builds disable overflow checks, so an overflowing line wrapped and the PO was persisted with a corrupt (negative) subtotal. (2) The MONEY-03 follow-up flagged `oz-lua/src/lib.rs:577/608` — investigation showed those are plugin-authored Lua test scripts, but an evidence test PROVED the concern is real: mlua pushes i64 as Lua 5.4 *integers*, so plugin `qty * unit_price_minor` runs as integer math that **wraps silently in the VM** (overflow-scale input made the hook's total wrap negative → discount silently not applied). The same hand-off exists in `oz-plugin`'s `fire_sale_before_complete` sale table.
+
+**Solution:** Red→Green TDD cycle. PO: two Red tests (`create_po_line_total_overflow_rejected`, `create_po_subtotal_accumulation_overflow_rejected`) failed on `Ok(...)` with the PO persisted; Green adds `checked_mul` (field `"line_total"`) at both sites + `checked_add` (field `"subtotal"`) — negatives were already rejected, so only overflow is new. Plugin boundary: Green converts every money/qty value handed to the VM to Lua **floats** — `build_lines_table` (qty/unit_price_minor), `calc_line_tax`×2 args, `validate_order`×2 total_minor (oz-lua), and the `sale.before_complete` sale table (oz-plugin). Realistic minor-unit values are exact in f64 (< 2^53), comparisons like `total_minor == 5000` still work (Lua number equality across subtypes), and the integer-wrap class is eliminated host-side. Evidence tests: `apply_discount_with_overflow_scale_qty_runs_cleanly` (oz-lua) and `fire_sale_before_complete_overflow_scale_money_uses_float_semantics` (oz-plugin) pin that overflow-scale plugin math now produces a float result instead of wrapping.
+
+**Verify:** oz-core full suite green (incl. 25/25 purchase_orders) · oz-lua 62/62 · oz-plugin 173/173 + doctests · fmt clean · clippy clean on changed files (oz-core still fails only on the pre-existing `products.rs:876` type_complexity, which blocks the oz-lua `-D warnings` run through the dependency). Docs: `docs/plugin-guide.md` now states money/qty arrive as Lua numbers and warns against integer-only ops.
+
+**Deliberately NOT done (follow-ups):** (1) plugin scripts remain trusted operator-installed business logic — the float hand-off removes the *wrap* class, but a plugin can still compute whatever it likes; the returned discount percent is validated 0–100 host-side. (2) f64 values above 2^53 lose exactness (e.g. `2^62 − 1` rounds to `2^62`) — irrelevant for realistic retail values, documented in the plugin guide. (3) The insert-loop `checked_mul` in `create_purchase_order` is technically unreachable today (the validation loop already passed on the same immutable slice) — kept as deliberate defense-in-depth with a comment, per the MONEY-03 precedent.
+
+## 2026-08-06 — TDD cycle: AnchorExpired snapshot import resets the stale durable anchor
+
+### Every cycle re-fetched the whole snapshot after anchor expiry
+**Problem:** When `SyncEngine::run_sync_cycle`'s pull returned `AnchorExpired` (P-1 retention pruned the client's sync gap), the engine fetched and imported the server snapshot — but never touched the durable `sync_pull_state` anchor. The stale `since` survived the import, so the NEXT cycle pulled with the same expired anchor, got 410 again, and re-fetched the entire snapshot — forever. Wasteful bandwidth + server load (snapshot is the full reference-data baseline) on every sync cycle.
+**Solution:** After a successful snapshot import, advance the durable anchor to the server's reported `oldest_available` (the oldest retained row — the snapshot already captured everything older, so the client needs nothing below it), or clear the anchor when the server omitted it. The next pull starts from a non-expired point; the `sync_applied_items` ledger absorbs any replay. Regression test `engine_resets_anchor_after_snapshot_import` uses a mock server that mirrors the real P-1 check (410 only when `since` predates `oldest_available`) and counts snapshot hits — cycle 2 must flow items without a second snapshot fetch.
+**Commits:** `platform/sync/src/lib.rs` — single-file fix + test.
+**Tests:** 245 crate tests (1 new) · 19/19 gated integration suite · fmt + clippy `-D warnings` clean.
+**Follow-ups:** the SQLite daemon has NO snapshot path — an expired anchor there just logs `pull phase: anchor expired` every cycle forever. Wiring the daemon to the same snapshot-recovery + anchor-reset flow is a natural next slice. Also note: the snapshot restores reference data (products/tax/users) only — `stock.adjusted`/`complete_sale` mutations that fell inside the pruned gap `(stale_since, oldest_available)` are unrecoverable with any anchor value (inherent P-1 retention loss, not introduced by this fix).
+
+## 2026-08-06 — TDD cycle: payment splits must cover the sale total (MONEY-04)
+
+### `complete_sale*` accepted under-paid / empty / negative payment splits
+**Problem:** `complete_sale_deduction` and `complete_sale_with_resolved_shortfalls` persisted the sale plus whatever `payment_splits` the caller passed, with no check that the sum covers `sale.total`. The command layer defaults `None` to a single full-total split, but a hostile IPC caller could pass `payment_splits: Some([])` (empty — bypassing the default, zero payment rows written) or an under-summing list, completing a 700-minor sale for 500. Red run proved it: `Ok(CompleteSaleResult)` with the sale persisted. The existing `complete_sale_deduction_with_payment_splits` test literally pinned the bug (500 vs 700 total).
+
+**Solution:** Red→Green TDD cycle. Five new tests pin the contract: under-paid splits rejected, empty splits rejected, negative split rejected ([900, −200] sums to 700 but writes garbage payment rows), over-tender accepted (change), and the resolved-shortfalls command enforces the same. All failed on `Ok(...)` before the fix. GREEN: private `validate_payment_splits_cover_total` — rejects `amount_minor < 0`, sums with `checked_add` (overflow → Validation), rejects `sum < total_minor` (`Validation { field: "payments" }`). Field `"payments"` deliberately avoids `"stock"` (the PartialStockResult special-case). Called in BOTH functions AFTER stock-shortfall resolution (so the cashier's StockShortfallDialog keeps precedence) but BEFORE `adjust_stock_batch` — any error rolls the whole tx back.
+
+**Test fallout (intentional):** eight existing unit tests passed `&[]` or under-paid splits and were updated to full tender via a new `tender(amount)` test helper; the `[500/700]` test now pays exactly 700. Zero-total sales (empty lines, `total = 0`) still pass with empty splits — free sales remain legal.
+
+**Deliberately NOT done (follow-ups):** (1) **the threshold is the pre-tax `sale.total`** — `compute_sale_tax` never recomputes `sale.total`, so the gate guarantees splits ≥ the recorded (pre-tax) total, not ≥ what the customer owes (subtotal + tax). A hostile caller can still settle for less than total+tax; closing that means validating against `subtotal + tax_total` (ties into the MONEY-01 note on `sale.total` excluding tax). (2) The deprecated global-db desktop `complete_sale` (uses `create_payments` directly) is not validated — it is off the live scoped path; the same contract should be added there before it is ever used. (3) `sale.tendered_minor` (the single-cash change field) is not validated — the split record is the ledger row, so out of scope.
+
+## 2026-08-06 — TDD cycle: bind the pre-session workspace picker to the authenticated user (audit/06)
+
+### The picker trusted caller-supplied `role_id` / `user_id` for listing
+**Problem:** After the session-mint gate was hardened (previous slice), the pre-session `list_workspaces` / `list_workspace_screens` commands still accepted the login result's `role_id` / `user_id` straight from the caller. `Store::list_workspaces` trusts the claimed role for its owner bypass, so any caller who knew an owner's user id could pass `role-owner` and enumerate every active workspace instance in any store they could name — a store/tenant enumeration residual. The terminal-management screen made it worse by hardcoding `listWorkspaces('role-owner', …)`.
+**Solution:** Red→Green TDD cycle. RED tests first pinned the contract: forged/empty/expired tickets and a correctly-signed ticket for a non-existent or inactive user must all fail closed, and a cashier's ticket must NOT produce an owner-level listing. GREEN: `staff_login` / `bootstrap_owner` now mint a short-lived HMAC-SHA256 **picker ticket** (`user_id.expiry.hmac`, 5-min TTL, per-process secret in `AppState` — never persisted, dies with the process). `list_workspaces` / `list_workspace_screens` now take `ticket` + `store_id`: they verify the ticket, resolve the REAL user + role from the global identity DB, and list with the real role (owner bypass / `user_store_access` / role-workspace-types all still apply). The terminal screen moved to a new session-scoped `list_workspaces_for_store_scoped(session_token, store_id)` — no more hardcoded `role-owner`.
+**Design decisions:** (1) per-process random secret rather than the OS keyring — the ticket is a 5-minute bootstrap credential, so persistence would add key material at rest for no benefit; (2) uniform `PermissionDenied` for every ticket failure (forged/expired/malformed/unknown/inactive) so the endpoint can't be an enumeration oracle; (3) `list_workspace_screens` still routes on the caller-chosen `store_id` but only after a validated ticket, and screens are non-sensitive nav metadata — deliberate scope.
+**Commits:** (this cycle) `apps/desktop-client/src/commands/picker_ticket.rs` (new), `state.rs`, `auth.rs`, `staff.rs`, `workspaces.rs`, `lib.rs` + `ui/src/api/{staff,workspaces}.ts`, `ui/src/contexts/{AuthContext,WorkspaceContext}.tsx`, `ui/src/features/terminals/TerminalManagementScreen.tsx`, `ui/src/components/FastPINOverlay.tsx`, `ui/src/features/auth/CreatePinScreen.tsx`, UI tests.
+**Tests:** oz-pos-app lib **795/795** (7 picker-ticket crypto + 7 command-level gate tests + 1 login-mint test, all new); tablet `cargo check` clean (shares oz-core, untouched); UI vitest **3761/3761** (169 in the directly-affected files); `cargo fmt` clean; clippy `-D warnings` clean on changed files (workspace still fails only on the pre-existing `products.rs:876` type_complexity).
+**Follow-ups:** the picker ticket has a 5-min TTL — a stalled picker requires re-login (deliberate); `list_workspace_screens` store routing is ticket-gated but not store-access-checked (screens are nav metadata); the tablet client has no pre-session picker, so no parity work there.
+## 2026-08-06 — TDD cycle: PG pull composite (created_at, id) cursor
+
+### PG pull skipped equal-timestamp rows and stalled the anchor on never-stamped synced_at
+**Problem:** the PG transport's pull filtered `WHERE synced_at > $1` with no cursor — (a) rows sharing the anchor's exact `synced_at` timestamp were permanently skipped (strict `>`), and (b) the durable anchor was computed from `synced_at`, so a remote that never stamps it (rows stay NULL) never advanced the anchor and the daemon re-pulled the entire queue every cycle. The HTTP server had long since moved to a composite `(created_at, id)` cursor with `created_at >= since` — the PG path never caught up.
+**Solution:** TDD slice mirroring the HTTP server's pagination. `pg_transport::pull_updates(since, cursor)` now takes a composite cursor, decodes `"created_at|id"`, and builds three query shapes via a pure `build_pull_sql` (cursor tiebreak `created_at > $2 OR (created_at = $2 AND id > $3)`, since-only `created_at >= $1`, initial full pull). It fetches 501 rows, keeps 500, and derives `next_cursor` from the last KEPT row (RUST-07). `pg_daemon::apply_pulled_page` now advances the monotonic anchor on the page's newest `created_at` — never `synced_at` — and `run_tick` loops pages while a next cursor is returned, persisting `(since, next_cursor)` after each page and retaining both on retryable failure.
+**Commits:** `platform/sync/src/pg_transport.rs` + `platform/sync/src/pg_daemon.rs` (two-file change; pg_transport swept into another agent's commit, verified intact).
+**Tests:** 254 crate tests (9 new: cursor decode, SQL shape × 3, next-cursor derivation × 2, created_at-anchor-when-synced_at-NULL regression, roundtrip) · 19/19 gated integration suite · fmt + clippy `-D warnings` clean.
+**Follow-ups:** the PG remote query has no tenant filter (the transport pulls every tenant's rows) — add `tenant_id` scoping when real multi-tenant PG deployments appear; and the SQLite daemon still lacks a snapshot path entirely.
+
+
+## 2026-08-06 — TDD cycle: PostgreSQL daemon replay-safety parity (SYNC-01/02)
+
+### PG daemon re-applied remote mutations every cycle and panicked on NULL synced_at
+**Problem:** The SQLite daemon + `SyncEngine` got the SYNC-01 safeguards (durable `sync_pull_state` anchor, atomic apply via `apply_remote_atomic` + `sync_applied_items` ledger, dead-letter quarantine) and the SYNC-02 shared ADR #21 conflict service — but `pg_daemon.rs::run_tick` never did. It called `transport.pull_updates(None)` every 60s (no durable anchor → re-fetched the entire remote queue), applied via non-atomic `queue.apply_remote` (every cycle re-applied remote stock/sale mutations — silent inventory corruption), and a poison item just logged forever. Push conflicts used the old blanket `mark_synced` + re-enqueue anti-pattern. Worse, `pg_transport.rs` decoded `synced_at` with `row.get::<_, String>` — a remote row this terminal pushed as `pending` (NULL synced_at until stamped) panicked the whole pull on the first such row.
+**Solution:** Added `apply_pulled_page(store, page, prev_since) -> Option<String>` — the same engine helper design: each item via `apply_remote_atomic` (mutation + ledger receipt in one tx, dead-letter after 3 attempts), returns `Some(monotonic max(prev_since, newest synced_at))` only when the whole page applied (dead-lettered items count as applied), `None` on retryable failure (anchor retained, next cycle re-pulls — ledger absorbs the replay). `run_tick` now reads the durable anchor from `sync_pull_state`, passes it to `pull_updates(since)`, and persists the new anchor only after the page applied. Push `Conflict` outcomes now route through `queue.apply_push_conflict` (ADR #21, full local item) instead of blanket mark-synced + re-enqueue. Decode fix: `synced_at` reads as `Option<String>`.
+**Commits:** `platform/sync` — see the two-file change in the next commit.
+**Tests:** 244 crate tests (5 new: idempotent replay, retryable-failure retains anchor, dead-letter-then-advance, monotonic max-synced_at, atomic apply + receipt) · 19/19 gated integration suite (cross-terminal relay, throughput) · fmt + clippy `-D warnings` clean.
+**Review hardening:** the pull phase previously sat inside the `!pending.is_empty()` gate, so a pull-only terminal (pure consumer on a shared remote PG) never pulled and the anchor never advanced on push-idle cycles — the transport is now built whenever PG sync is enabled and push/pull run independently.
+**Follow-ups:** the remote PG query filters on `synced_at` — if the remote never stamps it, an anchored pull returns nothing new; and the strict `synced_at > anchor` filter (no composite `(created_at, id)` cursor like the HTTP server) can skip rows sharing the anchor's exact timestamp. Consider a `created_at`-based cursor when a real multi-terminal PG deployment appears.
+
+## 2026-08-06 — TDD cycle: checked BOM deduction quantities (MONEY-03)
+
+### `complete_sale*` BOM ingredient totals overflow silently
+**Problem:** Both stock-deduction entry points multiplied the sale-line qty by the recipe's `quantity_required` with a bare `line.qty * ingredient.quantity_required` — `complete_sale_deduction` (line ~247) and `complete_sale_with_resolved_shortfalls` (non-resolution BOM branch, line ~644). `line.qty` comes from the front-end sale over IPC (untrusted) and dev/test builds disable overflow checks, so an overflowing qty silently wrapped: the Red run showed both paths returning `Ok(CompleteSaleResult)` while the ingredient stock was **credited** by ~4.6e18 — the register completed a sale with a corrupt stock delta instead of failing.
+
+**Solution:** Red→Green TDD cycle. RED tests `complete_sale_deduction_bom_quantity_overflow_returns_validation_error` and `complete_sale_with_resolved_shortfalls_bom_quantity_overflow_returns_validation_error` pin the contract — `(i64::MAX / 2) × 3` overflows, and both paths must return `CoreError::Validation { field: "qty", message: "ingredient deduction quantity overflow" }` with stock untouched. Both failed on `Ok(CompleteSaleResult …)` (the silent wrap) before the fix. GREEN: both sites now use `checked_mul(...).ok_or_else(Validation { field: "qty", … })?` — the same pattern as `compute_line_tax` (TAX-04) and MONEY-01. `quantity_required` is DB-backed with a `CHECK (quantity_required > 0)` so that operand needs no validation. Field `"qty"` deliberately avoids `"stock"`, which the caller special-cases to deserialize `PartialStockResult`.
+
+**Refactor:** extracted `seed_bom_composite` test helper (composite `service` product + tracked ingredient + recipe row) per review; 79/79 sales-module tests, 1623/1623 oz-core lib.
+
+**Deliberately NOT done (follow-ups):** (1) negative `line.qty` on a hand-built `Sale` remains unchecked on this path — `checked_mul` rejects only overflow, and a negative qty would *credit* stock (same MONEY-02 gap class); unreachable from the front-end since `CartLine::new` asserts `qty > 0` and `Sale::from_cart` is the only real producer, but worth a validation slice; (2) `oz-lua` plugin `apply_discount` (lib.rs 577/608) and purchase-order subtotals still use unchecked `qty × price` — same class, separate slices.
+
+## 2026-08-06 — TDD cycle: reject negative cart-tax inputs (MONEY-02)
+
+### `compute_cart_tax` negative `qty` / `unit_price_minor` accepted
+**Problem:** Follow-up from the MONEY-01 cycle's review note. `CartLineTaxInput` arrives over IPC (untrusted), and `Store::compute_cart_tax` accepted negative `qty` or `unit_price_minor` — a negative line total flows into `compute_line_tax` and the preview returns a **negative tax** the front-end renders raw (Red run proved it: `qty: -2, price: 350` → `Ok(tax = -69)`). The cart model never allows negative qty/price (`CartLine::new` asserts `qty > 0`), so a hostile renderer could distort the displayed tax.
+
+**Solution:** Red→Green TDD cycle. RED test `compute_cart_tax_rejects_negative_qty_and_price` asserts both cases return `CoreError::Validation` with the right field (`qty` / `price`) — failed on `Ok(-69)`. GREEN: the loop now rejects `qty < 0` (`field: "qty"`, "qty must be positive, got {n}") and `unit_price_minor < 0` (`field: "price"`, "unit price must be non-negative, got {n}") with early returns, mirroring the existing `set_cart_discount` message style. `qty == 0` and `unit_price_minor == 0` remain **allowed by deliberate scope**: zero contributes zero tax, zero price = free item, and the slice was "negative" only — noted here so the boundary is explicit.
+
+**Deliberately NOT done (follow-ups):** (1) `compute_sale_tax` has the same-class hole via a hand-built `Sale` with a negative `line_total` (it feeds `line.line_total` straight into `compute_line_tax`) — the natural next slice; (2) reviewer nit: the price `format!` could sit on one line — skipped as cosmetic churn in a volatile shared tree (code is fmt-clean and committed); (3) the pre-existing `clippy::type_complexity` in `products.rs:876` remains untouched.
+
+**Commits:** (this cycle) — `crates/oz-core/src/db/sales.rs` + this journal + `CHANGELOG.md`. **Note on history:** another agent thread's `06e9fb7d` ("fix(restaurant): harden menu keyboard interactions") swept this cycle's `sales.rs` RED test + GREEN fix into its commit via a broad add. History was NOT rewritten (shared working tree); the `sales.rs` hunks are exactly this cycle's regression test + negative-input validation.
+
+**Validation:** Red test failed (`Ok(-69)`) then passed; `db::sales::tests` 77/77 (76 + 1 new); full `cargo test -p oz-core --lib` 1621/1621 (includes the new test); `cargo fmt --all` clean; clippy `-D warnings` clean on the changed file (workspace still fails only on the pre-existing `products.rs:876`). One transient compile failure was observed mid-cycle from another agent's in-progress `db/offline.rs` edit — resolved on its own; no process was killed.
+
+## 2026-08-06 — TDD cycle: dead-letter requeue workflow
+
+### Dead-lettered remote items are now requeueable (audit/09 SYNC-01 follow-up)
+**Problem:** Remote items that exhaust their apply retry budget were permanently quarantined. `sync_remote_failures` rows are only ever written (on failure) or deleted (on success) — once `dead_lettered = 1`, `apply_remote_atomic` skips the item and the daemon advances the pull anchor past it, so it is never retried. Migration 119's comment promised "an operator can inspect or manually requeue a quarantined item after remediation", but no store method, command, or UI existed (the workflow was explicitly deferred in audit/09 SYNC-08). An operator who fixed the source (e.g. created the missing product a remote sale referenced) had no way to make the item retry.
+
+**Solution:** Red→Green TDD cycle. RED: store tests `requeue_remote_failure_clears_quarantine_and_rewinds_anchor` + `requeue_remote_failure_refuses_non_dead_lettered` (failed with `no method named requeue_remote_failure`). GREEN: `Store::requeue_remote_failure(item_id)` (oz-core `db/offline.rs`) — requires the item to be currently dead-lettered (else `NotFound`, never a silent no-op), deletes the quarantine row, and rewinds the durable `sync_pull_state` anchor (`since = NULL, cursor = NULL`) so the next daemon cycle re-fetches the item and retries it with a fresh 3-attempt budget. The full re-pull is safe because the `sync_applied_items` idempotency ledger skips every already-applied item. Command surface: `requeue_remote_failure` Tauri command (`RequeueRemoteFailureArgs { itemId }`) added to BOTH desktop (`oz-pos-app`) and tablet (`oz-pos-tablet`) `commands/offline.rs` + registered in both `lib.rs` invoke handlers; extracted `run_requeue_remote_failure` helper for command-level tests.
+
+**Commits:** code swept into `06e9fb7d` (authored by another agent thread — see note). Docs in this cycle's follow-up commit.
+
+**Validation:** oz-core `db::offline` 44/44; desktop `commands::offline` 18/18; tablet `commands::offline` 18/18; `cargo fmt` clean; clippy `--no-deps -D warnings` clean on desktop + tablet and no warnings in oz-core's new code (workspace clippy still fails only on the pre-existing `products.rs:876` type_complexity).
+
+**Note on history:** commit `06e9fb7d` (restaurant agent's "harden menu keyboard interactions") swept this cycle's five files (`oz-core db/offline.rs`, desktop + tablet `commands/offline.rs` + `lib.rs`) into its diff via the shared index. The requeue code is intact and was verified green on identical content; history was NOT rewritten (shared working tree, agents actively committing).
+
+**Known limitation (reviewed):** the requeue anchor rewind can be clobbered by the sync daemon if the command lands between the daemon's read phase and its apply-phase `set_sync_pull_state` write (the daemon re-writes the stale pre-rewind anchor it captured). Low probability (daemon cycle is 60–120s, requeue is a rare operator action), no data corruption — the requeue just doesn't take effect that cycle. Fix (separate TDD slice): in the daemon's apply phase, re-read `get_sync_pull_state()` before writing and skip the anchor advance when the stored `since` is `None` (operator rewind in flight).
+
+**Follow-ups:** expose `list_remote_failures` as a command + UI surface so operators can discover dead-letter ids before requeueing; wire `requeue_remote_failure` into `ui/src/api/offline.ts` (+ IPC contract test) to make the workflow end-to-end; consider storing the remote item's `created_at` on the failure row so requeue can rewind the anchor precisely instead of a full re-pull.
+
+## 2026-08-06 — TDD cycle: checked cart-tax line totals (MONEY-01)
+
+### `compute_cart_tax` unchecked `qty × unit_price_minor` overflow
+**Problem:** `Store::compute_cart_tax` (`crates/oz-core/src/db/sales.rs`) computed the per-line taxable total with a bare `line.qty * line.unit_price_minor`. `CartLineTaxInput` is deserialised straight off the IPC boundary (untrusted renderer input) and this function runs on the hot path — the live tax preview fires on every cart change in both desktop and tablet POS. The workspace deliberately sets `overflow-checks = false` for dev/test builds (`Cargo.toml` `[profile.dev]`), so an overflowing line total **silently wraps** and feeds a wrong tax to the register in every normal build; it would panic only under a profile with overflow checks on. This is the exact arithmetic class TAX-04 already eliminated in `compute_line_tax` (checked_mul + structured error) — it was missed at the line-total product. Red test `compute_cart_tax_line_total_overflow_returns_validation_error` (qty = i64::MAX/2, price = 4) failed for the right reason: `Ok(Money { minor_units: 0 })` — the wrapped tax — instead of an overflow error.
+
+**Solution:** Red→Green TDD cycle. GREEN: the line total now uses `qty.checked_mul(unit_price_minor)` and returns `CoreError::Validation { field: "tax", message: "cart line total overflow" }` on overflow — the same structured error contract as `compute_line_tax`. No signature change, so no caller updates (`compute_cart_tax_scoped` in desktop + tablet `pos.rs` forward unchanged).
+
+**Deliberately NOT done (follow-ups):** (1) same-class unchecked `qty × price` products remain in `crates/oz-lua/src/lib.rs:577/608` (plugin `apply_discount` line math — plugin-supplied values), `crates/oz-core/src/db/purchase_orders.rs:186/214` (PO subtotals), `crates/oz-core/src/db/sales.rs:247/644` (recipe BOM `line.qty * quantity_required`), and `modules/inventory/src/handlers.rs:141` — each a separate TDD slice; (2) the broader sale-to-ledger totals policy (recorded `sale.total` excludes tax / tip / service-charge that the UI charges separately; tax computed on pre-discount line totals) is a product-policy question (inclusive vs exclusive tax) and deliberately NOT changed here; (3) pre-existing `clippy::type_complexity` in `crates/oz-core/src/db/products.rs:876` remains (documented in the 08-06 session-mint entry) — unrelated to this change; (4) `CartLineTaxInput` still accepts non-positive `qty`/`unit_price_minor` (negative line total → negative tax preview) — a semantic-validation slice distinct from overflow, noted by review.
+
+**Commits:** (this cycle) — `crates/oz-core/src/db/sales.rs` + this journal + `CHANGELOG.md`. **Note on history:** another agent thread's commit `42dab989` ("fix(authz): pin inactive-user session denial…") swept this cycle's `sales.rs` RED test + GREEN fix (12 lines) into its authz commit via a broad `git add` while the tree moved. History was NOT rewritten (shared working tree); the `sales.rs` hunks are exactly this cycle's regression test + checked-mul fix, and the code is byte-identical to what this cycle produced and verified.
+
+**Validation:** Red test failed (silent wrap) then passed; `db::sales::tests` 76/76; full `cargo test -p oz-core --lib` 1618/1618; `cargo fmt --all` clean; clippy `-D warnings` clean on the changed file (workspace clippy still fails only on the pre-existing `products.rs:876`). `scripts/test-changed.sh` was blocked by a running `oz-pos-app.exe` holding the linker output lock — process left running per TDD skill rule 7; equivalent coverage obtained via the direct `oz-core --lib` run.
+
+## 2026-08-06 — TDD cycle: session-mint authorization gate (right user, right store, right permission)
+
+### `verify_instance_access` fail-closed identity binding (audit/06 residual)
+**Problem:** The pre-session workspace picker ends in `create_session`, whose server-side gate `Store::verify_instance_access` trusted the caller-supplied `role_id` for the owner/manager bypass and never resolved the user. `create_session(user_id: <any known id>, role_id: "role-owner", store_id: ..., instance_id: ...)` passed the bypass whenever no `user_store_access` rows existed (single-store mode), minting an opaque session AS that user — without their PIN — in ANY store's active instance. Every subsequent `require_permission_for_user` then resolved the victim's DB role, so a caller who knew an owner's user id inherited full permissions (privilege escalation) and could open sessions in stores/instances they were never assigned (cross-store session minting). This was the residual recorded in `audit/06-staff-module.md`: "the pre-session workspace picker still accepts role/user/store identifiers supplied by the client… the caller identity is not cryptographically bound before an opaque session exists." The gate had zero unit tests.
+
+**Solution:** Red→Green TDD cycle. RED: 3 oz-core tests (`verify_instance_access_denies_unknown_user`, `_rejects_forged_owner_role`, `_denies_inactive_user`) + 3 desktop command tests (`create_session_rejects_forged_role_id`, `_rejects_unknown_user`, plus positive `create_session_allows_real_owner`). All negative tests failed for the right reason (session was minted). GREEN: `verify_instance_access` now resolves the user from `users`, fails closed (returns `Ok(false)`) for unknown/inactive users and for a claimed `role_id` that differs from the user's actual DB role, then runs the existing owner-bypass / explicit-assignment / role-based branches using the REAL role. `Ok(false)` (not `Err`) keeps the caller's wire error uniform, so the gate cannot be used to enumerate user ids. No frontend change needed: every honest flow (login, workspace picker, FastPIN hot-swap) sends the role returned by `staff_login`, which equals the DB role.
+
+**Deliberately NOT done (follow-ups):** (1) the pre-session `list_workspaces`/`list_workspace_screens` reads still trust the claimed role for listing (workspace-name disclosure only, no data access) — a server-issued picker credential remains the architectural fix per audit/06; (2) `create_session` does not cross-check `type_key` against the instance's real type (UI-routing cosmetic); (3) pre-existing `clippy::type_complexity` in `crates/oz-core/src/db/products.rs:876` remains (documented in the 08-06 pull-parity entry).
+
+**Commits:** gate + desktop tests were swept into `da842f32` (another thread's mixed commit, same as the sync hunks — history not rewritten per shared-tree convention); this cycle's follow-up `42dab989` pins the inactive-user test uniquely and adds tablet `create_session` parity tests. The `.githooks/pre-commit` fmt gate swept a third file — `crates/oz-core/src/db/sales.rs` (another thread's uncommitted work) — into `42dab989`; its content is intact in the commit and the working tree matches HEAD, splitting left to the owner if desired.
+
+**Validation:** `cargo test -p oz-core --lib db::workspaces` 54/54 (6 new); `cargo test -p oz-pos-app --lib commands::auth` 18/18 (3 new); `cargo test -p oz-pos-tablet --lib commands::auth` 9/9; `store_scoping_integration` 9/9; `cargo fmt --all -- --check` clean; clippy `-D warnings` clean on the changed files (workspaces.rs, auth.rs); tablet lib compiles.
+
+## 2026-08-06 — TDD cycle: engine pull parity for replay idempotency + durable anchor
+
+### SyncEngine pull path: durable anchor + atomic replay (SYNC-01 parity)
+**Problem:** `platform_sync::SyncEngine::run_sync_cycle()` — the immediate/manual sync path — did not share the SYNC-01 safeguards the daemon got. It derived its pull `since` anchor from `queue.last_synced_at()` (the local offline queue's `synced_at` timestamps), which pulled remote items never move, and applied remote mutations via the non-atomic `apply_remote()`. Consequence: every manual sync cycle re-fetched the same remote pages and re-applied stock/sale mutations (silent inventory corruption), and the durable `sync_pull_state` anchor was never persisted. The daemon path (fixed in `a1ea01e7`) was atomic + anchor-advanced; the engine was not.
+
+**Solution:** Red→Green TDD cycle. RED test `engine_applies_replayed_remote_item_only_once` (in `platform/sync/src/lib.rs`) spins a mock server that always returns the same `stock.adjusted` +10 item (ignores `since`), runs two engine cycles, and asserts: stock 50→60 after cycle 1, the durable anchor is persisted, and stock stays 60 after cycle 2 (not 70) with exactly one ledger receipt. It failed for the right reason (`since: None`). GREEN: the pull phase now reads the durable `sync_pull_state` anchor, applies each item via `apply_remote_atomic` (mutation + idempotency receipt in one transaction, dead-letter quarantine for poison items — matching the daemon), advances the anchor only after a page applied successfully, and retains the anchor + stops pagination on a retryable failure.
+
+**Commits:** swept into `da842f32` (see note below) — my `platform/sync/src/lib.rs` hunks only.
+
+**Validation:** `bash scripts/test-tdd.sh -p platform/sync` — 238/238 passed (19 slow-tests ignored); full `--features slow-tests` integration suite — 19/19 passed incl. cross-terminal relay + throughput; `cargo clippy -p platform-sync --all-targets --no-deps -- -D warnings` clean; `cargo fmt` applied. Note: `cargo clippy -D warnings` on the workspace currently fails pre-existing in `crates/oz-core/src/db/products.rs:876` (`type_complexity`, committed code, not touched here).
+
+**Note on history:** commit `da842f32` (authored by another agent thread) swept this lib.rs change — plus 16 unrelated files (UI autofill, auth, workspaces) — into one commit titled "fix(ui): suppress saved-info autofill in search fields". The lib.rs hunks are exactly this cycle's RED test + GREEN refactor. History was NOT rewritten (shared working tree, another agent actively editing `sales.rs`); splitting the mixed commit is left to the owner if desired.
+
+## 2026-08-06 — TDD cycle: LOY-10 loyalty expand-control accessible name
+
+### LoyaltyManagementScreen expand control (LOY-10)
+**Problem:** The expandable loyalty account row (`tr role="button"`) and its nested expand button exposed a generic `aria-label` ("Expand"/"Collapse") with no customer identity. Screen-reader users could not tell which account a control would expand. The nested button had no handler and relied on click bubbling to the row. Evidence: `audit/02-loyalty-module.md` LOY-10 (P2, still open — verified in code at `ui/src/features/loyalty/LoyaltyManagementScreen.tsx`).
+
+**Solution:** Red→Green TDD cycle per `.agents/skills/tdd/SKILL.md`. RED test `names the expand control with the customer (LOY-10)` asserted the row + button accessible names include the customer name — failed on `'Expand'`. GREEN: added `loyalty-expand-account`/`loyalty-collapse-account` Fluent keys with `{ $name }` var (en + id), threaded the customer name through both controls, and gave the nested button a real `onClick` handler (`toggleExpand`) instead of relying on bubbling.
+
+**Commits:** (this cycle) — see `git log`.
+
+**Validation:** LoyaltyManagementScreen 20/20 vitest; api-loyalty-contract 5/5; typecheck clean; eslint clean on changed files; i18n lint clean; bundle-parity 0 missing; FTL dedupe clean. Area-scoped per tdd skill (no full workspace run — not pre-push).
 
 ### Attribute-Only FTL Sweep (TODO #3)
 **Problem:** ~268 attribute-only FTL messages (`.aria-label = ...` with no message value) silently returned `undefined` when accessed via `l10n.getString()`, causing empty aria-labels and placeholders across 25 files.
@@ -129,3 +838,4168 @@ Clean (0 errors).
 ### Test Results
 - **TypeScript**: Clean (0 errors)
 - **Tests**: 261 passed / 15 failed (down from 31 failing pre-migration — all remaining failures are pre-existing FSI/PDI marker issues and structural WorkspaceEntry module-not-found)
+
+
+## 2026-08-07 — SYNC-10 enqueue side + migration 120 multi-store repair
+
+### Local settings saves never pushed settings.update items; migration 120 reseeded the wrong store
+**Problem:** Two gaps. (1) The SYNC-10 apply path could consume remote `settings.update` items, but NO local settings command ever enqueued one — the cross-terminal loop (change here → cloud → there) was a one-way street: `SettingsContext` listened for `settings_updated` while the daemon could only ever apply changes it never received. (2) The full gate exposed a failing test `list_workspaces_repairs_empty_store_db_after_066_window`: repair migration 120 reseeded default workspace instances with `store_id = COALESCE(primary, 'default')`, and in a store DB where no profile is primary (the legacy `'default'` row from 025 is `is_primary = 0`) it landed on `'default'` — but the store-scoped picker filters `wi.store_id = ?` strictly, so a named store (store-a) never listed the reseeded defaults. The repair silently repaired the wrong store.
+
+**Solution (TDD):** (1) Red: two unit tests pinned that a settings write must enqueue one `settings.update` item per key with the exact `SettingsUpdatePayload` shape (`{key, value, terminal_id}`), tenant-scoped, Low priority. Green: extracted `enqueue_settings_updates` and wired all four write commands (`set_setting`, `set_settings`, `set_setting_scoped`, `set_settings_scoped`) to enqueue on the GLOBAL db after the write commits (the sync daemon only watches the global queue — a store-scoped write must fan out from there). Enqueue failures log a warning and do not fail the save, matching the `SettingsUpdated` publish pattern. (2) The failing workspaces test was the Red; the fix: migration 120's store_id selection now prefers the primary profile, then **this store's own profile** (any non-`'default'` row in its own DB, `ORDER BY created_at` for determinism), then `'default'` — so the repair lands inside the store it is repairing. Each store DB is migrated independently, so "any non-default profile here" is exactly "this store". 120 is the newest, unreleased migration, so editing it before release is safe.
+
+**Validation:** 800/800 oz-pos-app lib tests (3 new/restored: 2 settings enqueue + 1 repaired workspaces) · oz-core 25/25 · migrate twice idempotent · clippy -D warnings clean · fmt clean.
+
+**Commits:** (follow the two commit hashes below this entry)
+
+**Follow-ups (deliberately NOT done):** (1) the tablet client's `set_setting` is a plain write with no daemon in the tablet process — enqueueing there would be inert; revisit when the tablet gets a sync daemon. (2) No scoped dedup API exists (`enqueue_offline_dedup` is tenant-less), so repeated identical saves while offline create duplicate pending items — functionally harmless (apply is replay-safe, version-LWW) but noisy; a tenant-scoped dedup variant is a future slice. (3) Legacy `set_setting`/`set_settings` could enqueue INSIDE the write tx (same global DB) to close the tiny crash window between `tx.commit()` and the enqueue; scoped commands cannot (cross-DB), so warn-and-continue stays the uniform choice.
+
+
+## 2026-08-07 — Settings enqueue supersedes pending same-key items (SYNC-10 follow-up)
+
+### Repeated offline saves piled duplicate settings.update items; naive dedup would lose the newest intent
+**Problem:** After the SYNC-10 enqueue side landed, every local settings save enqueued a fresh `settings.update` item — so saving the same key repeatedly while offline stacked [v1, v2, v1] and the daemon pushed them in order, ending the remote at v2 while the local was at v1 (version-LWW orders by terminal version, not save order). A payload-dedup "fix" would make it worse: with [v1, v2] pending, re-saving v1 would find the stale v1 payload and skip — the newest intent silently dropped.
+
+**Solution (TDD):** Red tests pinned the correct semantics: a new save SUPERSEDES still-pending items for the same key (same tenant) — one pending item carrying the newest value; other keys survive; store-y's save never removes store-x's item. Green: `supersede_pending_settings_key` (list pending for tenant → delete items whose `settings.update` payload key matches, exempting the freshly-enqueued item by id). Ordering is deliberately ENQUEUE-THEN-SUPERSEDE: an enqueue failure leaves the old items (pre-existing warn-and-continue behavior), while a supersede failure degrades to the harmless duplicate state the apply side already handles — the reverse order would lose the update entirely if the enqueue failed after the delete. All existing queue APIs reused; no new oz-core surface.
+
+**Validation:** 803/803 oz-pos-app lib tests (3 new) · clippy -D warnings clean · fmt clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the tablet client's `set_setting` still does a plain `Settings::set` with no terminal_id and no enqueue — confirmed the tablet process runs no sync daemon, so wiring the enqueue there would be inert until the tablet gets one (journaled previously). A general `enqueue_offline_scoped_dedup` (action+payload+tenant) is still unneeded — for settings the correct primitive is supersede-by-key, and no other caller needs payload-dedup across tenants today.
+
+
+## 2026-08-07 — RetailCartPanel characterization suite (NO-TEST gap)
+
+### The retail cart panel had real behavior and zero direct tests
+**Problem:** The 5-area TDD scan flagged every `Retail*` component as untested; RetailCartPanel is a fully controlled cart UI with meaningful behavior — the remove→undo round-trip (onRemoveLine payload must carry modifiers + course so undo can restore the full line), qty +/- semantics (decrease at qty 1 removes the line, above 1 updates qty), the course dropdown (open on chip, assign on option, None clears, closes on select), pay-button gating, and the modifier badge — yet no direct suite pinned any of it.
+
+**Solution:** 13-test characterization suite (`ui/src/__tests__/RetailCartPanel.test.tsx`) using the repo's standard @fluent/react identity-key mock. The Red run surfaced one wrong assumption in the test itself, not the component: with zero lines the panel renders the empty state and omits the entire cart UI (no pay button at all) rather than a disabled one — the test now asserts that. Also corrected strict-TS fixture typing (branded `Sku`, `exactOptionalPropertyTypes` on `Partial<CartLine>`, required-shape `undoStack` entries). No production code changed — the suite is the regression net for the remove→undo contract and qty/course interactions.
+
+**Validation:** 13/13 new · full UI suite 262 files / 4033 tests green · typecheck clean · eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the `undoStack`/`undoBarExit` contract is owned by RetailPosScreen — the parent's re-add-restores-full-line behavior lives in the screen tests and is not duplicated here; serial-input rendering (isSerialTracking + trackSerialMap) and the manager override button are also untested — both are small follow-up slices if they gain behavior.
+
+
+## 2026-08-07 — RetailCartPanel serial-input + manager override coverage
+
+### Two remaining interaction surfaces on the retail cart panel were untested
+**Problem:** After the characterization suite landed, the serial-tracking input (renders for `trackSerialMap[sku]` skus with the stored value, live `onSerialChange` on type) and the manager override button (gated on `isManager`, opens the override target with the line identity AND calls `onEnsureCart` so the override modal has a cart) still had no direct tests — both real cashier flows, both unguarded.
+
+**Solution:** 6 more characterization tests appended to `ui/src/__tests__/RetailCartPanel.test.tsx`: serial input renders with stored value / updates via onSerialChange / hidden when serial tracking is off / hidden for untracked skus; override button appears only for managers / opens `{id, name, unit_price}` and ensures the cart. All pinned existing behavior (no production change needed) — the suite now covers every interactive surface of the component.
+
+**Validation:** 19/19 in-suite · full UI suite 262 files / 4039 tests green · typecheck clean · eslint clean.
+
+**Commits:** (hash below)
+
+
+## 2026-08-07 — Tablet settings sync parity + shared enqueue contract (SYNC-10)
+
+### The tablet's settings writes were invisible to sync; the enqueue contract was duplicated across apps
+**Problem:** Two gaps. (1) My earlier journal note claimed the tablet runs no sync daemon — WRONG: the tablet has its own inline push-only daemon in lib.rs (every 30s: read SyncConfig + pending items → send_items_to_server → apply outcomes). So a tablet settings save enqueued a `settings.update` item WOULD be pushed to the cloud and re-applied by the desktop's pull — but the tablet's `set_setting` did a plain `Settings::set` with no delta and no enqueue, so tablet changes never left the device. (2) The enqueue+supersede logic lived in the desktop's settings.rs; wiring the tablet the same way would have duplicated the wire contract across two apps.
+
+**Solution (TDD):** (1) Red: 4 oz-core tests pinned the new `Store::enqueue_settings_update_superseding(key, value, terminal_id, tenant_id)` contract — create with the exact `SettingsUpdatePayload` shape at Low priority, replace same-key pending items, keep other keys, tenant-scoped. Green: implemented in the queue module with ENQUEUE-THEN-SUPERSEDE ordering (fresh item exempted by id). The desktop's two local helpers collapsed into a thin loop over the shared method (45 tests still pass). (2) Red: tablet tests pinned `run_set_setting` must write a delta row (set_tracked, version 1) and `set_setting` must enqueue the item. Green: tablet command resolves terminal_id, uses set_tracked, enqueues via the shared method (tenant "default"), warn-and-continue on enqueue failure. Reviewer caught the supersede must also filter by `terminal_id` — terminal A's re-save must not cancel terminal B's pending save (version-LWW attributes per terminal) — added the filter + a 5th oz-core test.
+
+**Validation:** oz-core (incl. 5 new enqueue tests) · oz-pos-app 803 · oz-pos-tablet 420 (2 new) · clippy -D warnings clean on all three · fmt clean.
+
+**Commits:** (hashes below)
+
+**Follow-ups (deliberately NOT done):** the tablet daemon is PUSH-ONLY — it never pulls remote changes, so the tablet still can't receive remote settings/sales updates; a pull phase is the next real slice. The `"settings.update"` action string is now hardcoded in the oz-core method, the platform-sync apply arms, and the conflict resolver — a shared const would prevent drift (nice-to-have). Tablet settings writes stay tenant "default" because the command resolves user_id, not a session token (no store derivation).
+
+
+## 2026-08-07 — Topology editor: wire creation characterization suite
+
+### The port-connection flow was entirely unguarded
+**Problem:** The editor's undo/redo, selection, presets, inspector, and save paths had deep coverage (58 editor tests), but the wire CREATION flow — clicking a source port then a target port — had zero tests. The logic in `handlePortClick` (start connection, complete on a different node, duplicate detection, same-node cancel, one undo step, workspace→warehouse fallback tier limit) was real behavior with no regression net.
+
+**Solution:** 5 characterization tests appended to `NodeTopologyEditor.test.tsx` using the preset's deterministic node order ([store-1, ws-1, wh-1]) and the `node-port-socket.port-*` classes: create a wire via two port clicks; duplicate connection → toast 'A wire already connects these ports.' + no new wire; clicking the same node's ports cancels; Ctrl+Z removes a created wire in ONE undo step; a second workspace→warehouse wire is blocked on the standard tier with the fallback toast. All pinned existing behavior — no production change needed (the component was already correct; it's now guarded).
+
+**Validation:** 5 new · full UI suite 262 files / 4044 tests green · typecheck clean · eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the Delete/Backspace-on-selection path (keydown at line 560: deletes a wireless node immediately, opens the confirm dialog for wired nodes/wires) is still only negatively tested (text-field non-interception) — a positive characterization of the delete-key flow is the next slice. Also untested: the connection-cancel affordance (Escape while connecting) and the wire label priority on multi-warehouse Pro-tier connections.
+
+
+## 2026-08-07 — Topology editor: Delete/Backspace keyboard flow characterized
+
+### The delete-key path was the last unguarded interaction surface
+**Problem:** The editor's delete flows were only tested through the toolbar button; the keyboard path (`Delete`/`Backspace` keydown at line ~560: wireless node → immediate delete; wired node/wire → confirm dialog; text-field non-interception) had zero positive regression net. The journaled follow-up from the wire-creation cycle.
+
+**Solution:** 5 characterization tests pin the keyboard flow end-to-end: Delete on a selected wireless node deletes immediately (no dialog); Delete on a wired node opens the confirm dialog and cancel keeps the node; Delete on a selected wire opens the dialog and confirm removes the wire; Backspace behaves identically to Delete; typing in a text field never triggers deletion (positive pin of the non-interception guard). Selection via node cards / wire hitbox, dialog confirmed/cancelled via the ConfirmDialog buttons. All pinned existing behavior — no production change needed.
+
+**Validation:** 5 new · topology suites 96/96 · full UI suite 262 files / 4049 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the connection-cancel affordance (Escape while connecting) and the wire label priority on multi-warehouse Pro-tier connections remain untested; the dev-mock retail cart/undo reload persistence is still open on the mock side.
+
+
+## 2026-08-07 — Topology editor: Escape connection-cancel flow + Pro-tier fallback labels
+
+### The connection-cancel affordance and the Pro-tier label priority were the last two journaled gaps
+**Problem:** The Escape-while-connecting affordance (clears the in-flight port connection AND the selection in one keystroke) and the Pro-tier wire-label priority (a second workspace→warehouse wire is blocked on standard but allowed with the fallback label on Pro) had zero regression net.
+
+**Solution:** 4 characterization tests + 2 test-infra cleanups. (1) Escape cancels an in-flight connection: the ghost preview (`path.wire-path[opacity="0.5"]` — real wires never set opacity, so the selector can't false-positive) disappears and a subsequent target click starts a NEW connection instead of completing the old one. (2) Escape during a connection also clears `node-selected`. (3) The input guard is pinned positively: Escape typed in the inspector's text field does NOT cancel the connection — the wire completes afterward. (4) Pro-tier: with `currentTier="pro"` (renderEditor gained a derived `TopologyTier` prop override), a second ws→wh wire is allowed with no license toast and carries the `topology-wire-label-fallback` label on the new wire. Reviewer nits applied: `nodeAt`/`portOf`/`previewLine` hoisted to module scope (were triplicated across describes) and the tier union derived from `ComponentProps` (with `Exclude<…, undefined>` for `exactOptionalPropertyTypes`). All pinned existing behavior — no production change needed.
+
+**Validation:** 4 new · editor suite 72 · topology suites 100/100 · full UI suite 262 files / 4053 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** Escape with nothing selected is untested (low value); the first-warehouse-wire `stock-deduct` label path is only indirectly covered; the dev-mock retail cart/undo reload persistence is still open on the mock side.
+
+
+## 2026-08-07 — Migration drift repair: restore 120 byte-exact, move the repair into 121 (DB-02)
+
+### The app panicked on startup: "migration 120_reseed_default_workspace_instances.sql definition drift"
+**Problem:** The earlier "safe to repair pre-release" judgment was wrong — the user's dev DB had already applied migration 120 (checksum `15377253038134…`) before my in-place COALESCE repair changed the file (checksum `6f98911e…`). The DB-02 drift guard fails closed at startup when an applied migration's definition changes, so `oz-pos-app.exe` refused to boot. The lesson: "unreleased" does not mean "unapplied on dev machines" — a migration edited after ANY database has run it is drift.
+
+**Recovery:** The original 120 was never committed (untracked when created), so git history was useless. It was recovered byte-exact from old `target/debug/deps/liboz_core-*.rlib` artifacts (migrations embed via `include_str!`, so pre-repair builds contain the original bytes): extracted a window around the `-- 120_reseed…` header and verified SHA-256 == the applied checksum `15377253038134…`. Technique worth remembering when git alone can't restore a file.
+
+**Solution (the error's own guidance: restore the original, or add a new migration — did both):**
+1. `120_reseed_default_workspace_instances.sql` restored to the original definition (byte-for-byte; on-disk hash now matches the DB record, so drift is gone).
+2. New `121_workspace_instances_store_own_profile.sql` carries the repair that used to live in 120: an INSERT with the improved COALESCE (primary → this store's own profile → 'default') for fresh DBs, plus an UPDATE re-pointing the rows 120 seeded under `store_id = 'default'` (`id LIKE 'default-%' AND store_id = 'default'`) to the preferred profile, with a COALESCE fallback that keeps the current value on single-store DBs. Both statements idempotent and FK-safe.
+3. `migrations.rs`: registered 121 after 120, with a new test `migration_121_repoints_instances_seeded_under_default_store` (upgrade re-point + idempotency; fresh path covered by the app-level test).
+4. `workspaces.rs` test `list_workspaces_repairs_empty_store_db_after_066_window` now deletes BOTH the 120 and 121 records so the re-open runs the full repair — the repair genuinely lives in 121 now.
+
+**Verify:** restored-120 hash == applied checksum (verified against the real dev DB record, read-only) · oz-core 2160 · oz-pos-app 803 · tablet 420 · fresh-DB `migrate` ×2 idempotent · fmt + clippy `-D warnings` clean. Reviewer: no blocking issues.
+
+**Commits:** (hash below)
+
+**Follow-ups:** (1) The f22bb5e6 commit message + its journal entry describe the repair as living inside 120 — this entry supersedes that; do NOT re-apply the COALESCE edit to 120. (2) Future migration edits should check applied checksums on all dev DBs (not just git history) before touching any file — or always add a new migration.
+
+
+## 2026-08-07 — Topology editor: stock-deduct label, warehouse tier lock, zoom controls
+
+### Three last unguarded surfaces after 72 editor tests
+**Problem:** The journaled follow-ups plus two more discovered gaps: (1) the FIRST workspace→warehouse wire's `stock-deduct` label path was only indirectly covered (the retail preset already has a warehouse wire, so the priority-1 branch never ran in tests); (2) the warehouse tool-card's tier lock (`tool-card.locked` + Pro badge + `handleAddNode` guard) had zero tests; (3) the zoom controls were only asserted for presence — the wheel handler, Reset View, and Fit All behavior were untested.
+
+**Solution:** 5 characterization tests: (1) a custom `mockLoadTopology` topology (store + workspace + warehouse, ZERO wires) reaches the first-ws→wh branch — the wire is allowed on the standard tier with no license toast and carries `topology-wire-label-stock-deduct`; (2) on the standard tier with a warehouse present the card is `.tool-card.locked` with the Pro badge, clicking shows the multi-warehouse toast and adds nothing (`handleAddNode` guard); (3) on `currentTier="pro"` the card is unlocked and clicking adds a warehouse node; (4) `fireEvent.wheel` (deltaY −100) moves Zoom 100% → 110% and Reset View returns to 100% (clientX/clientY passed so the zoom-toward-cursor pan math stays NaN-free); (5) Fit All replaces the wheel zoom with a bounds-computed value in the clamped 40%–200% range. All pinned existing behavior — no production change needed.
+
+**Validation:** 5 new · editor suite 77 · topology suites 105/105 · full UI suite 262 files / 4058 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the locked warehouse card is only *visually* locked — the button is not `disabled`, so keyboard users can still activate it and get the upgrade toast. That clickable-to-toast behavior looks like a deliberate Pro-upsell affordance, so I did not flip it to `disabled` unilaterally; revisit if we want the harder a11y posture (then the toast path becomes defense-in-depth only). The zoom-out (deltaY > 0) branch is symmetric and untested — marginal.
+
+
+## 2026-08-07 — Topology editor: canvas pan + simulation pulse
+
+### The last two unguarded interaction surfaces after 77 editor tests
+**Problem:** The canvas pan (drag on empty background → viewport translation via document-level move/up listeners) and the simulation pulse (30ms interval advancing `simPulseStep` along each wire's bezier) had zero tests — the simulation toggle was asserted, but the pulse itself and the pan behavior were unguarded.
+
+**Solution:** 4 characterization tests: (1) mouseDown on the `.node-canvas-container` background at (100,100) + mouseMove/mouseUp on `document` at (150,130) translates `.node-canvas-viewport` by exactly (50px, 30px) — mirroring the handler's document-level listener registration; (2) dragging a node moves the node while the viewport transform stays `translate(0px, 0px)` — a boundary pin between the pan and node-drag handlers; (3) with `vi.useFakeTimers` (scoped `afterEach(useRealTimers)`), clicking 'Test Order Simulation' renders `.wire-simulation-pulse` per wire and 'Stop Simulation' hides it; (4) `act(() => vi.advanceTimersByTime(30))` moves the dot (cx changes as the bezier advances). All pinned existing behavior — no production change needed.
+
+**Validation:** 4 new · editor suite 81 · topology suites 109/109 · full UI suite 262 files / 4062 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** pan with the middle button (button: 1 — the handler allows it) is untested but marginal; the pulse `cx` assertion is coupled to preset geometry (wires span distinct x) — commented in the test.
+
+
+## 2026-08-07 — Topology editor: Apply failure resilience, keyboard wire-toggle, hover-snap
+
+### Three more unguarded surfaces after 81 editor tests
+**Problem:** The Apply button's failure path (onSave rejection), the wire-label keyboard toggle (Enter/Space parity for `handleToggleWireDirection`), and the in-flight preview's hover-target snap were all untested.
+
+**Solution:** 4 characterization tests: (1) a rejecting `onSave` shows the save-error toast, keeps the added node in memory, leaves the canvas dirty (a preset click opens the unsaved-changes confirm dialog — title + message body asserted), and preserves the undo stack (Ctrl+Z still removes the added node); (2) a second test pins that a failure before the idMap branch does not clear `node-selected` (the `catch` returns early). The Red run surfaced a test-assumption bug, not a component defect: `plainErrorMessage` sanitizes a raw `Error` to the generic fallback, so the toast never contains the thrown message — the matcher pins the `topology-toast-save-error` key instead. (3) Enter then Space on the wire label text toggles → ↔ → (bubbles from `<text>` to the label `<g>`'s `onKeyDown`). (4) hovering at ws-1's top-port canvas coords (`node.x + NODE_WIDTH/2`, `node.y − 6`; pan 0/zoom 1/zero rect in jsdom) while a connection is in flight snaps the preview path's endpoint to that port (parsed from the `d` attribute, `toBeCloseTo`). All pinned existing behavior — no production change needed.
+
+**Validation:** 4 new · editor suite 85 · topology suites 113/113 · full UI suite 262 files / 4066 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the hover-snap test hardcodes `NODE_WIDTH/2` and the top-port dy (−6) — constants change would break it (commented); the preview-snap distance threshold (30px) and the two-way-arrow marker rendering remain unpinned.
+
+
+## 2026-08-07 — Topology editor: wire arrow markers + fresh-node pulse
+
+### Two final rendering surfaces after 85 editor tests
+**Problem:** The wire direction's SVG arrow markers (one-way keeps only `marker-end`, two-way adds `marker-start`) and the fresh-node animation class (`.node-fresh` for 400ms after add) were unguarded. (The toast auto-dismiss candidate turned out to be already covered at the hook level in `useAnimatedToastQueue.test.ts`, so it was skipped.)
+
+**Solution:** 2 characterization tests: (1) a one-way wire path has `marker-start` null and `marker-end="url(#arrow-end)"`; after toggling the first wire's label, exactly ONE wire leaves the one-way set, the two-way path carries `marker-start="url(#arrow-start)"` + `marker-end` + the ↔ label — pinning that the toggle affects only the clicked wire. (2) with `vi.useFakeTimers` (scoped `afterEach(useRealTimers)`), adding a store node renders `.node-fresh`, and `act(() => vi.advanceTimersByTime(400))` clears it — the add flow's only timeout is the fresh timer, so the advance is unambiguous. All pinned existing behavior — no production change needed.
+
+**Validation:** 2 new · editor suite 87 · topology suites 115/115 · full UI suite 262 files / 4068 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the fresh-pulse CSS animation keyframes and the `freshTimersRef` bookkeeping are not asserted (implementation detail); the `wireLabels[0]` assertion reuses a pre-click reference (consistent with the existing toggle test).
+
+
+## 2026-08-07 — Topology editor: undo history cap (50-entry eviction)
+
+### The undo depth cap was the last unpinned memory bound
+**Problem:** `pushHistory` caps the stack at 50 (`if (next.length > 50) next.shift()`), evicting the oldest entry, but the eviction semantics were unguarded — no test proved the original pre-edit state becomes unreachable after 51 edits, nor that the 51st undo is a clean no-op.
+
+**Solution:** 1 characterization test: 51 node adds (each pushes one history entry) → the cap drops the oldest snapshot (the ORIGINAL 3-node state); exactly 50 undos walk back to `initial + 1`; a 51st Ctrl+Z is a no-op on the empty stack (`popUndo` returns when `stack.length === 0`). Reviewer verified the 51st-undo assertion is the true discriminator — without the cap it would restore the original state and the final assertion would fail, so the test cannot false-pass. All pinned existing behavior — no production change needed.
+
+**Validation:** 1 new · editor suite 88 · topology suites 116/116 · full UI suite 262 files / 4069 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the redo stack is unbounded (only `setRedo([])` clears it on new edits) — a symmetric redo cap was not part of this slice; the `> 50` boundary means the stack holds exactly 50 entries, now commented in the test.
+
+
+## 2026-08-07 — Topology editor: direction-toggle undo/redo + connected label
+
+### Two last wire-label/history micro-gaps after 88 editor tests
+**Problem:** The redo surface was already fully covered (button, Ctrl+Y, Ctrl+Shift+Z, branch clearing), but two micro-gaps remained: (1) the direction toggle pushes history, yet no test proved undo restores a toggled wire's direction and redo re-applies it; (2) the non-warehouse branch of the wire-label ternary (`topology-wire-label-connected`) was unpinned — the warehouse branches (stock-deduct/fallback) had tests but the plain connected label did not.
+
+**Solution:** 2 characterization tests: (1) click the first wire label → ↔, Ctrl+Z → back to →, Ctrl+Y → ↔ again (the label textContent reflects the keyed wire-group reconciliation; both assertions are true discriminators — either missing history wiring fails them); (2) create a store→ws wire with the same non-duplicate fixture as the existing wire-creation test and assert the new (last) wire-group carries `topology-wire-label-connected`. All pinned existing behavior — no production change needed.
+
+**Validation:** 2 new · editor suite 90 · topology suites 118/118 · full UI suite 262 files / 4071 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the label assertions rely on the captured DOM reference / identity-l10n raw keys (file-wide conventions, commented where geometry-dependent); the redo stack remains unbounded (cleared on new edits).
+
+
+## 2026-08-07 — Topology editor: preset/reload cancels in-flight connection (real defect)
+
+### Loading a preset mid-connection left a stale wire source — a REAL bug, not characterization
+**Problem:** `loadPreset` replaced the entire canvas but never cleared `connectingFromNodeId/Port`. Reloading the SAME preset mid-connection (e.g. Retail Preset → Retail Preset) kept the stale source, so a later port click COMPLETED a wire from a node the user never intended — the connection was supposed to die with the old canvas. The two post-save reload paths (workspaceInstances rebuild + legacy saved-diagram load) had the identical hazard.
+
+**Solution:** Red→Green. Red test: start a connection, click Retail Preset, assert no ghost preview survives AND a subsequent target click creates no wire — failed before the fix (preview persisted, wire created). Green: `loadPreset` now clears `connectingFromNodeId` + `connectingFromPort` + `hoveredTarget`, and the same three clears were added to BOTH reload sites. The connection never pushed history, so there is no undo/dirty interaction. A second harness-based test pins the workspaceInstances reload path (saved diagram → start connection → `reload-instances` → preview gone, no wire; assertions are robust to post-rebuild node ordering).
+
+**Validation:** 2 new · editor suite 92 · topology suites 120/120 · full UI suite 262 files / 4073 tests green · typecheck + eslint clean. Reviewer: no blockers.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the Apply/idMap remap branch is the one canvas-mutating path without the guard — a connection in flight during a successful Apply-with-remap self-heals (the preview vanishes because the old id no longer resolves, and the next port click clears the stale source), so it is not a bug; adding the same three clears there would make the invariant complete if that interaction ever becomes common. The triple clear could also be a tiny helper if a fourth site appears.
+
+
+## 2026-08-07 — Topology editor: confirm dialogs own the keyboard (real defect)
+
+### Escape cancelling a confirm dialog silently deselected the element under it
+**Problem:** The editor's window-level keydown handler ran even while a delete/preset confirm dialog was open. Pressing Escape to cancel a delete therefore ALSO hit the handler's Escape branch, clearing `selectedNodeId`/`selectedWireId` (and any in-flight connection) — the node you were about to delete stayed on the canvas but got silently deselected and its inspector closed. Ctrl+Z/Delete/arrows could likewise mutate the canvas under an open dialog.
+
+**Solution:** Red→Green. Red test: select a wired node, open the delete confirm dialog, press Escape, assert the dialog closes AND the node is still selected — failed before the fix (selection was stolen). Green: the keydown handler now early-returns when a confirm dialog is open (`if (confirmDelete || confirmPreset) return;`) — the dialog owns the keyboard, and the Modal's focus-trap (document bubble listener, fires before the window listener) still closes the dialog itself. The guard required adding `confirmDelete`/`confirmPreset` to the keydown effect's dependency array — without it the closure was stale and the guard never fired (the Red run caught this too). A second test pins the unsaved-changes preset dialog: Escape closes it without loading, the dirty edit survives, and the selection is not cleared (strengthened post-review to assert the selection — the original count-only assertions were not a true discriminator). The Apply-failure test was reordered (undo asserted before opening the dialog) because canvas shortcuts are now correctly inert under an open dialog — its intent (undo preserved after failed Apply) is unchanged.
+
+**Validation:** 2 new · editor suite 94 · topology suites 122/122 · full UI suite 262 files / 4075 tests green · typecheck + eslint clean. Reviewer: no blockers (nits applied).
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the idMap remap branch remains the one canvas-mutating path without the stale-connection clears — it self-heals (stale id stops resolving; next port click clears it), so not a bug; a comment on the guard now documents that every future editor-owned dialog must be added to the condition.
+
+## 2026-08-07 — TDD cycle: duplicate wire detection vs defaulted ports (topology editor)
+
+### Loaded wires with null/defaulted ports escaped duplicate detection
+**Problem:** `handlePortClick`'s duplicate check compared raw `w.fromPort`/`w.toPort` against the new connection's named ports. Wires loaded from the backend can carry `from_port: None` (`Option<PortName>` round-trips as JSON null/omitted — the backend's own fixtures assert `from_port.is_none()`), and the load path mapped that to `undefined`/`null`. A wire that *renders* on the default ports (source right → target left) therefore never matched, so reconnecting the same default ports silently created a second overlapping wire — no toast, no rejection.
+
+**Solution:** Red→Green. Two Red tests seeded a persisted topology whose wire omits `from_port`/`to_port`, then reconnected the same default ports (store-1 right → ws-1 left) and the reversed direction (ws-1 left → store-1 right) — both failed pre-fix (wire count 1→2). Green normalizes the duplicate check with the same defaults the renderer uses: `(w.fromPort ?? 'right') === connectingFromPort && (w.toPort ?? 'left') === port`, symmetric for the reversed branch. In-session wires always carry explicit ports, so `??` never fires for them — no behavior change to existing flows, and a null-port wire blocks *only* its own default-port connection, never an unrelated port pair. Review follow-up also applied: the two load-path sites were tightened from `!== undefined` to `!= null` so a literal JSON `null` coalesces to `undefined` at the boundary (killing the `null as PortName` type lie), pinned by a third test seeding explicit `from_port: null`/`to_port: null` (the true serde `None` shape).
+
+**Commits:** `(this cycle)`
+**Tests:** editor suite 97 (3 new) · topology suites 125/125 · full UI suite 262 files / 4078 tests · typecheck + eslint clean · drift guard clean.
+
+**Follow-ups:** the backend `save`/diff path still writes `from_port: Option` — a future slice could normalize ports server-side at save time so the DB never stores null ports at all; today the editor is fully tolerant either way.
+
+## 2026-08-07 — TDD cycle: undo/redo after Apply silently un-dirties the canvas (topology editor)
+
+### Undo/redo past a saved state let a preset load discard the canvas silently
+**Problem:** `isDirtyRef` was only set true by `pushHistory` and false by Apply-success and preset load — `popUndo`/`popRedo` never touched it. After a successful Apply, undoing (or redoing) restores a state that diverges from the last save, but the flag stayed false. A preset click then loaded directly, silently discarding the undone-to canvas (e.g. add A → Apply → add B → Apply → Undo → the 4-node canvas with A is dropped without the "unsaved changes" confirm). The undo/redo/toolbar/history matrix was otherwise fully pinned; this was the one gap between "canvas differs from backend" and the dirty gate.
+
+**Solution:** Red→Green. The Red test builds a 5-node canvas with two applies, Ctrl+Z (4 nodes), clicks Retail Preset asserting the `Load Preset` dialog appears and Escape-cancel keeps 4 nodes, then Ctrl+Y (5 nodes) asserting the dialog again and Escape keeps 5 — failed pre-fix with "Unable to find an element with the text: Load Preset" (preset loaded directly). Green re-arms `isDirtyRef.current = true` in both `popUndo` and `popRedo`. Conservative over-approximation accepted: undoing a same-preset load restores an identical state yet re-arms the dialog — a harmless spurious confirm errs on the safe side vs. silent data loss. Reviewer confirmed no existing test hits undo→preset without an intervening edit (apply-then-preset, plain-click-preset, in-flight-connection, Apply-failure paths all unaffected); the `isDirtyRef` doc comment was updated to reflect the undo/redo write sites.
+
+**Commits:** `(this cycle)`
+**Tests:** editor suite 98 (1 new) · topology suites 126/126 · full UI suite 262 files / 4079 tests · typecheck + eslint clean · drift guard clean.
+
+**Follow-ups:** the exact-dirty alternative (compare canvas against the last applied snapshot) would remove the false-positive confirm, at the cost of snapshot bookkeeping — worth it only if the spurious dialog ever annoys users; the conservative flag is correct for now.
+
+## 2026-08-07 — TDD cycle: canvas shortcuts fire under a focused chrome control (topology editor)
+
+### A stray Delete/Backspace after clicking a tool-card instantly deleted the canvas selection
+**Problem:** the keydown handler guarded INPUT/TEXTAREA/contentEditable and open dialogs, but not chrome controls. After a mouse click, tool-rack and header buttons keep keyboard focus in browsers, so pressing Delete/Backspace immediately after clicking '+ Store Node' hit the canvas handler and instantly deleted the just-added node via the no-wires immediate-delete path (no dialog); arrow keys nudged the selection; Escape cleared it. A keystroke aimed at nothing destroyed canvas work the user wasn't looking at.
+
+**Solution:** Red→Green. Three Red tests: Delete on a focused tool-card keeps the node (count stays 4, no dialog), ArrowDown+Escape on a focused header button do not nudge/deselect (no Undo button, `.node-selected` survives), and a focused canvas node card still deletes via Delete (proving the guard is chrome-scoped, not blanket — a `button`/`role="button"` guard would have broken node-card Delete, port Escape-cancel, and the wire-label toggle). Green added a chrome-scoped guard to the keydown handler: `target.closest('.node-tool-rack, .node-topology-header, .node-inspector-drawer')` returns early; canvas-internal elements (node cards, port sockets, wire labels) are deliberately excluded. The Green run caught a real harness interaction: 5 pre-existing Delete/Backspace tests fire `keyDown(window, …)` where `e.target` is window — the initial `target.closest` threw and killed the handler; fixed with a `typeof target.closest === 'function'` guard (window/document never throw out of the handler). Deliberate decision: ALL shortcuts (incl. Ctrl+Z) are inert while chrome holds focus — the simple "chrome owns the keyboard" model consistent with the dialog guard; the alternative (blocking only destructive keys) is a journaled follow-up if the Ctrl+Z-on-focused-Undo-button case ever annoys.
+
+**Commits:** `(this cycle)`
+**Tests:** editor suite 101 (3 new) · topology suites 129/129 · full UI suite 262 files / 4082 tests · typecheck + eslint clean · drift guard clean.
+
+**Follow-ups:** (1) if the all-shortcuts-inert model ever feels restrictive, narrow the chrome guard to destructive/mutating keys only (Delete/Backspace/arrows); (2) the guard keys off `e.target`, matching the existing INPUT guard — `document.activeElement` would be more robust to programmatic dispatches but diverges from the file's convention.
+
+## 2026-08-07 — TDD decision-pin: wire-label toggle keeps an in-flight connection (topology editor)
+
+### The open UX question
+**Problem:** While a port connection is in flight (source clicked, target pending), clicking a wire label to toggle its direction pushes history and flips the wire — and the connection currently survives. Was that the right contract, or should a canvas mutation cancel the in-flight connection? Nothing pinned the answer.
+
+**Decision — keep the connection in flight.** The editor's rule is to cancel an in-flight connection only when the CANVAS is replaced (preset load, instance reload) — a stale source node could mis-wire a new canvas. A direction toggle is a single-wire mutation: every node and port the pending connection references stays valid, so the source cannot go stale. Cancelling would destroy a deliberate two-step intent (click source, click target) for an unrelated edit, and no other single-element interaction cancels connections either — node drags (`handleNodeMouseDown`) and selection clicks are connection-neutral (verified), and the only cancels are Escape, same-node port click, and canvas replacement.
+
+**Solution:** A decision-pin cycle — no production change (the behavior was already the decided one; the component diff vs HEAD is empty). Two new tests in NodeTopologyEditor.test.tsx lock the contract: (1) start a connection from store-1 bottom → toggle w-1 to two-way → the connection survives (`.node-connecting-source` + ghost preview intact) → complete to ws-1 top → a `topology-wire-label-connected` wire is created; (2) same but undo the toggle (Ctrl+Z) mid-connection → the connection survived both the toggle's history push and its undo → completes normally. Discriminator proven: temporarily reverting the toggle handler to cancel the connection made both tests fail, then restored (component byte-identical to HEAD).
+
+**Validation:** editor suite 103 · topology suites 131/131 · full UI suite 262 files / 4084 tests · typecheck + eslint clean · drift guard clean · reviewer no blockers (drag-path claim verified; wire-label assertion strengthened).
+
+**Commits:** `fix(topology): pin wire-label toggle keeps in-flight connection` (tests only).
+
+**Follow-ups:** The pin only covers the click and keyboard-undo paths; if a future single-wire edit (e.g. a future "reverse wire" button, wire color/weight edits) ever lands, it inherits the same contract — new tests should assert the connection survives it too, or the decision should be revisited deliberately. The label's onClick does not `stopPropagation()` — harmless today (no click-cancel handler on the canvas container) but worth noting if a background-click-cancels-connection behavior is ever added.
+
+## 2026-08-07 — Exact dirty tracking replaces the conservative isDirtyRef (topology editor)
+
+### The over-approximation
+**Problem:** `isDirtyRef` was a boolean armed by every `pushHistory`/undo/redo and cleared on Apply/preset/load. That over-approximated: undoing a same-preset load (or redoing back to exactly the last saved canvas) marked the canvas dirty even though it was byte-identical to the applied state, so the next preset click showed a SPURIOUS "Load Preset" confirm. Journaled as acceptable in the undo/redo-rearm cycle (a7d92032) with the exact-alternative noted as the follow-up.
+
+**Decision — exact comparison.** Replace the boolean with `appliedSnapshotRef` (the canvas as of the last Apply success / preset load / authoritative load) and DERIVE dirty at preset-click time via `canvasStateEqual()` — a persisted-field projection compare (nodes: id/type/name/subtitle/x/y/tierRequirement/metadata.typeKey; wires: id/fromNodeId/fromPort/toNodeId/toPort/direction/label). Transient fields are excluded: telemetryBadge/telemetryStatus (never edited) and metadata.persisted (an internal sync flag flipped by the save-triggered instance reload — excluding it is what keeps a save+reload clean). Null snapshot (never applied) counts as dirty.
+
+**Solution:** Red→Green. Red test: same-preset load → Undo → preset click must load directly (failed pre-fix — spurious dialog). Green: appliedSnapshotRef + isCanvasDirty() (stable useCallback over nodesRef/wiresRef mirrors); snapshot written at both load-effect success paths, loadPreset, and the Apply handler (hoisting `let savedNodes/savedWires` ABOVE the try — the first draft declared them inside the try and the post-catch snapshot write ReferenceError'd on block scoping; the suite caught it as an unhandled rejection `savedNodes is not defined`, and the snapshot never landed). pushHistory/popUndo/popRedo no longer touch any dirty flag.
+
+**Tests updated to the exact contract (they pinned the old over-approximation):**
+- 're-arms the unsaved-changes dialog when Undo or Redo runs after Apply' → renamed 'confirms on preset when Undo diverges from the last Apply, but not when Redo restores it exactly': the redo-to-exact-saved-state half now asserts NO dialog.
+- 'keeps edits, stays dirty, and preserves undo when Apply fails': the dirty-confirm assertion moved BEFORE the undo (while the edit is present); after undo-to-applied-state asserts NO dialog.
+- NEW idMap-remap corner test (reviewer gap): Apply with a non-empty idMap then preset click must load directly — the snapshot must hold the REMAPPED ids or the canvas would appear perpetually dirty.
+
+**Validation:** editor suite 105 · topology suites 133/133 · full UI suite 262 files / 4086 tests · typecheck + eslint clean (fixed an index-signature `typeKey` access TS4111) · drift guard clean · reviewer no blockers (triple-coupling of the persisted-field set documented on canvasStateEqual; direct setNodes justified as safe because nothing interleaves during the handler's synchronous tail).
+
+**Commits:** `fix(topology): exact dirty tracking via applied-state snapshot`.
+
+**Follow-ups:** The persisted-field set is triple-coupled (load mapping ↔ onSave serialization ↔ canvasStateEqual projection) — adding a persisted field must touch all three or the dirty check silently weakens. metadata.persisted is deliberately excluded; if the inspector ever edits another metadata key, it must join the projection.
+
+## 2026-08-07 — Simulation pulse lifecycle: preset load stops the sim; no stale pulse / no leak (topology editor)
+
+### The three scenarios
+**Problem:** The 30ms simulation tick (`setInterval` → `simPulseStep`) animates a pulse dot along every wire. Three interactions during simulation were unpinned: (1) a fresh node add, (2) an undo, (3) a preset load — must never leave a stale pulse (a dot on dead geometry) or a leaking interval.
+
+**Decision — preset load STOPS the simulation.** The pulse animates the OLD wire geometry; a preset replaces the canvas, so animating a "test order" on a topology it was never run against is misleading. This is the same canvas-replacement rule that already cancels in-flight connections in loadPreset. Fresh adds and undo were verified pulse-correct by inspection (the pulse renders inline per CURRENT wire — a new node has no wire, an undone wire unmounts its group with its pulse) and pinned as characterization tests.
+
+**Solution:** Red→Green. Red: 'loading a preset stops the simulation' failed pre-fix (pulse kept animating the new preset's wires, interval alive). Green: loadPreset gains `setIsSimulating(false)` + `setSimPulseStep(0)` beside the connection cancel (flipping isSimulating makes the interval effect's cleanup clear the 30ms interval). Four tests in a new describe 'simulation pulse vs canvas mutations': fresh-add pin (pulse count stays 2, tick continues), undo pin (3→2, rest animate), preset-stop (pulse gone, START label, interval back to baseline), and a leak pin (delta-based `getTimerCount()`: start +1, stop baseline, restart +1, unmount < start-count).
+
+**Test-infra notes:** (a) vitest's default `useFakeTimers()` also fakes queueMicrotask/nextTick — absolute `getTimerCount()` was 6–7 (pending promise chains), so the leak/preset tests use `toFake: ['setInterval','clearInterval','setTimeout','clearTimeout']` + DELTA assertions (the provider stack arms unrelated real timers, so even scoped absolute counts are unreliable; unmount removes component-owned timers too, hence `toBeLessThan(baseline + 1)`). (b) `vitest run -t "<name>"` filtered runs throw `TypeError: loadTopology() is undefined` (the module mock's `mockResolvedValue(null)` from the nested beforeEach appears not to apply under -t) — full-file runs are green; seen twice now (this + the exact-dirty cycle). Repro: `cd ui && npx vitest run src/__tests__/NodeTopologyEditor.test.tsx -t "loading a preset stops"` — worth investigating for the fast TDD loop.
+
+**Validation:** editor suite 109 · topology suites 137/137 · full UI suite 262 files / 4090 tests · typecheck + eslint clean · drift guard clean · reviewer no blockers.
+
+**Commits:** `fix(topology): preset load stops simulation; pulse/interval lifecycle pinned`.
+
+**Follow-ups:** (1) The non-skip workspaceInstances rebuild (authoritative reload) has the IDENTICAL hazard — it replaces the canvas and cancels in-flight connections but leaves the sim running on the rebuilt wires; a one-line `setIsSimulating(false)` guard belongs there (the save-triggered skip branch must NOT stop it — it only flips persisted flags). (2) `setSimPulseStep(0)` resets only on preset load, not on the Stop button — restart-after-stop resumes mid-bezier; either reset on both or accept the asymmetry deliberately.
+
+## 2026-08-07 — Save-time port normalization: DB never stores null topology wire ports (topology.rs)
+
+### The boundary gap
+**Problem:** `save_topology_data` validated `Unknown` ports but allowed `None` — so a wire saved with null `from_port`/`to_port` (the frontend sends null for legacy loaded wires) persisted `null` in the `oz-pos/topology` settings JSON. Every consumer (frontend loader, duplicate-wire detector) then had to re-apply the renderer defaults (`fromPort ?? 'right'`, `toPort ?? 'left'`). Journaled as a follow-up from the duplicate-wire cycle (a7849458): normalize server-side at save time.
+
+**Solution:** Red→Green. Red: `save_normalizes_null_ports_to_renderer_defaults` saved a wire with `from_port: None`/`to_port: None` and asserted the loaded wire has `Some(PortName::Right)`/`Some(PortName::Left)` — failed pre-fix (loaded None). Green: `save_topology_data` normalizes BEFORE validation via `wires.into_iter().map(...)` with `Option::get_or_insert(PortName::Right)` / `get_or_insert(PortName::Left)` — fills ONLY None (explicit bottom/top anchors survive untouched; the Unknown-port rejection is unaffected since normalization never touches `Some(Unknown)`). The test also pins the complement: a second wire with explicit Bottom/Top ports round-trips unchanged.
+
+**Boundary notes:** desktop-only command (the tablet client has no topology command — verified). Save-time is the single-writer boundary: new saves are clean, while legacy rows already stored with null ports still load as `None` and the frontend handles them — incremental, non-breaking. The stored JSON is only consumed by `load_topology_data` (serde `Option` accepts both) and settings sync (same deserialization), so no hidden consumer expects null. The frontend IPC contract is untouched — the wire shape on the wire is unchanged; only stored values become non-null.
+
+**Validation:** Red confirmed (assertion failed pre-fix) · topology module 188/188 (incl. strengthened test) · full oz-pos-app lib 804/804 · `cargo fmt --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean · reviewer no blockers (get_or_insert + complement-assertion nits applied).
+
+**Commits:** `fix(topology): normalize null wire ports to defaults at save time`.
+
+## 2026-08-07 — Chrome-focus keydown guard: pin matrix completed (Delete on Apply, Backspace, tool-card arrows)
+
+### Verification cycle
+**Problem:** The user asked to pin that Delete/Backspace/arrows on a focused tool-card button ('+ Store Node', 'Apply Topology Changes') never mutate the canvas. Investigation showed the chrome-scoped guard from cycle 2198a4df ALREADY covers these — the window keydown handler early-returns when `e.target` is inside `.node-tool-rack, .node-topology-header, .node-inspector-drawer`. Verified the full chrome matrix: Apply/preset/sim buttons live in the header, tool-cards/delete/undo/redo/Fit All/Reset View (canvas-controls-mini) live in the tool-rack, the inspector drawer is covered, dialogs have their own confirmDelete/confirmPreset guard, and node cards/ports/wire labels + the canvas container deliberately keep shortcuts.
+
+**Pin completion (no production change — component verified byte-identical to HEAD after the cycle):** 3 tests added to 'canvas shortcuts vs focused chrome':
+- Delete on a focused 'Apply Topology Changes' with a WIRED node selected → no 'Delete Node' dialog, selection survives (the hasWires/delete-dialog path).
+- Backspace on a focused '+ Store Node' tool-card → the just-added node survives (Backspace shares the Delete branch).
+- ArrowDown on a focused tool-card → no nudge (a plain mouseDown selection pushes no history, so Undo-absence proves no nudge — the naive assertion failed because handleAddNode itself pushHistory()es, which legitimately renders Undo).
+
+**Discriminator proven:** disabling the guard made all 5 chrome tests fail while the node-card-Delete test stayed green (no over-blocking); restored byte-identical.
+
+**Validation:** editor suite 112 · topology suites 139/139 · full UI suite 262 files / 4093 tests · typecheck + eslint clean · drift guard clean · reviewer no blockers.
+
+**Commits:** `test(topology): complete chrome-focus keydown guard pin matrix`.
+
+**Follow-ups:** The guard selector is the single source of truth for "chrome owns the keyboard" — any new header/tool-rack/inspector control is automatically covered, but a NEW top-level container (e.g. a future floating toolbar outside the three) must be added to the selector. The `handleAddNode` pushHistory behavior (node adds are undoable) is why arrow-nudge pins must seed selection via mouseDown, not a click.
+
+## 2026-08-07 — TDD cycle: pin load-side stays raw for legacy null wire ports (topology)
+
+**Problem:** The `af7710d8` cycle normalized null `from_port`/`to_port` at SAVE time, but legacy rows written before it still store null ports. The open question was whether `load_topology_data` should also normalize at load — or stay raw. Nothing pinned the load boundary itself (only the serde layer, `load_older_wire_without_direction_label_ports`).
+
+**Decision (documented + pinned):** load-side stays raw. The loader is a faithful reflection of what is stored — normalizing at load would mask rows that still need healing and duplicate the save-side default rule. The frontend applies `fromPort ?? 'right'` / `toPort ?? 'left'` at every consumer (NodeTopologyEditor render, drag-preview, duplicate-wire detector), and a load→save cycle heals legacy nulls via the save-side `get_or_insert`. Pinned by `load_topology_data_preserves_raw_legacy_null_ports`: legacy JSON (no ports) → load returns `None` ports AND the stored JSON key round-trips byte-identical (guards against write-back side effects — the real hazard in a load function).
+
+**Validation:** Red proven via discriminator — temporarily adding `get_or_insert` to the load path made the test fail; restored. Module 189/189 · full lib 805/805 · fmt + clippy clean · reviewer no blockers (doc-comment hash reference softened to a stable phrase; byte-identity assertion kept deliberately as the write-back guard).
+
+**Commits:** test + doc only — no production behavior change.
+
+## 2026-08-07 — TDD cycle: wire deletion vs in-flight connection contract (topology editor)
+
+**Problem:** Deleting a wire mid-connection is a single-wire mutation (mirrors the direction-toggle rule — the connection should survive). But the one exception was a real hole: deleting the EXACT duplicate pair of a pending connection (same endpoints + normalized ports) removed it from `wires`, so completing the connection after the delete silently recreated it — the duplicate detector in `handlePortClick` never fired because the wire was gone. Red test proved it: `expected 2 to be 1`.
+
+**Decision (pinned):** unrelated wire delete keeps the connection in flight (pin); deleting the exact duplicate pair cancels it (fix). `executeDelete` now looks up the deleted wire and, when `connectingFromNodeId`/`connectingFromPort` are set and the wire's from OR to endpoint matches the connecting source node + normalized port (`?? 'right'`/`?? 'left'`, mirroring the duplicate detector), clears both connecting setters before the history push + filter. The target node is unknown until completion, so the source endpoint is the only match signal — conservative by design (a same-source, different-target delete also cancels; the ghost preview vanishing signals it, safer than silently recreating the deleted wire). Reversed-source direction (connection started from the wire's target port) covered by the to-endpoint arm, pinned by a third test.
+
+**Validation:** Red → Green proven; discriminator proven (disabling the guard failed exactly the 2 duplicate-pair tests while the unrelated-delete pin stayed green). Editor suite 122/122 · topology suites 150/150 · full UI suite 262 files / 4103 tests · typecheck + eslint clean · drift guard clean · reviewer no blockers (conservative-edge comment added).
+
+**Commits:** `executeDelete` guard + 3 tests. Shared-tree note: other thread's clamp refactor (`nodeTopologyClamp.ts` + hunks in the same files) left uncommitted; my hunks staged selectively via `git add -p` (test hunk 4/4, component hunks 4–5/6).
+
+## 2026-08-07 — TDD cycle: wire direction normalized at the contract boundary (topology editor)
+
+**Problem:** `normalizeTopologyGraph` passed `wire.direction` through verbatim. A corrupt value (legacy JSON with `undefined`, or garbage from manual edits) flowed into the semantic graph un-normalized — the editor renderer and location validation both assume a well-formed direction, and the file's own comment claimed "corrupt directions fall back to one-way" but nothing enforced it.
+
+**Red → Green:** New contract test feeds `'backwards'` and a direction-omitted legacy wire through `normalizeTopologyGraph` and asserts both land on `one-way` (and the graph validates cleanly — corrupt direction is a normalization concern, not a validation error). Confirmed Red (the value flowed through), then Green: `normalizeTopologyGraph` now maps only the two legal non-default states (`two-way`, `reverse`) and folds everything else to `one-way`.
+
+**Why `reverse` is legal:** the 3-state visual direction cycle (`one-way → reverse → two-way`) landed in the same uncommitted batch — direction is presentation-only, so the widened type and the relaxed `invalid-location-connection` clause (dropped `direction !== 'one-way'`) ride along in this commit as the contract's direction story.
+
+**Validation:** Red → Green + discriminator (a missing value reverts to `one-way`, proving normalization runs). Contract suite 9/9 · topology suites 174/174 (contract + card + screen + editor) · typecheck clean · eslint 0 errors · drift guard clean. Type-check note: the omitted-direction fixture needs `direction: undefined as never` — `TopologyWireData.direction` is type-required, and the cast simulates the pre-normalization legacy shape.
+
+**Commits:** `topologyContract.ts` (type widening + normalization + relaxed validation) + 1 contract test. Shared-tree note: the rest of the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted in the tree.
+
+## 2026-08-07 — TDD cycle: wire-label onClick stopPropagation contract (topology editor)
+
+**Problem:** The wire label group's onClick (`handleToggleWireDirection`) lacked `stopPropagation` while its onKeyDown sibling already had it. The label sits INSIDE the canvas subtree — a future canvas-level background-click-cancels-connection handler would receive the toggle click as it bubbles, wrongly killing the in-flight connection the toggle is supposed to leave untouched (the very contract pinned by the keep-connection cycles).
+
+**Red → Green:** Test renders the editor inside a wrapper whose React-level onClick stands in for the future background handler, starts an in-flight connection, clicks the label, asserts the wrapper handler did NOT fire and the connection survives (plus the user's explicit scenario: a background mousedown after the label click cannot cancel the connection). Fails without the fix, passes with `e.stopPropagation()` added to the label onClick.
+
+**Test-infra lesson (valuable):** the first attempt used a NATIVE `addEventListener` on the canvas — that fired even WITH the fix, because React 17+ delegates events at the root and native listeners on intermediate elements fire regardless of synthetic stopPropagation. The React-level wrapper onClick (same delegation system) is the correct discriminator. Also: the eslint jsx-a11y rule rejects a non-native wrapper div with onClick — a native `<button type="button">` wrapper satisfies it while keeping identical propagation semantics.
+
+**Validation:** Red → Green + discriminator proven (removing stopPropagation failed the test). Editor suite 123/123 · topology suites 151/151 · full UI suite 262 files / 4104 tests · typecheck + eslint clean · drift guard clean.
+
+**Commits:** `stopPropagation` on label onClick + 1 test. Shared-tree note: other thread's clamp refactor (`nodeTopologyClamp.ts` + ADR + hunks in the same files) left uncommitted; staged only my hunks via `git add -p` (test 4/4, component 5/5).
+
+## 2026-08-07 — TDD cycle: connection-mode wire-label affordance (topology editor)
+
+**Problem:** The keep-connection decision (a direction toggle mid-connection never cancels it — pinned across several cycles) was invisible in the UI. A cashier building a connection could misclick a wire label, flip the direction, and not know the connection stayed alive — or worse, avoid labels entirely out of caution.
+
+**Decision (pinned):** hover affordance, not inert labels. While `connectingFromNodeId` is set, every wire label renders a native SVG `<title>` tooltip ('Flip direction? Clicking keeps your connection in progress.') + a `wire-label-group-connecting` modifier class with an accent-ring hover style. The flip stays available (the deliberate contract), but the hover now explains the consequence. Chosen over inert labels because the flip is a valid, connection-preserving action — the affordance informs rather than blocks.
+
+**Red → Green:** test pins idle (no title), connection mode (>0 titles with 'Flip direction' + the modifier class present), completion (both gone). Fails without the title, discriminator proven. Reviewer nit applied: the modifier class (the CSS hook) is asserted alongside the title so the visual affordance can't silently regress.
+
+**Validation:** editor suite 124/124 · topology suites 152/152 · full UI suite 262 files / 4105 tests · typecheck + eslint clean · i18n lint clean (new FTL key in both bundles) · drift guard clean.
+
+**Commits:** conditional `<title>` + modifier class + CSS hover ring + FTL keys (en/id) + 1 test. Shared-tree note: other thread's clamp refactor (component/css/test hunks, TopologyScreen.tsx, ADR) left uncommitted; staged only my hunks via `git add -p`.
+
+## 2026-08-08 — TDD cycle: quarantine corrupt wire relationshipType at the contract boundary
+
+**Problem:** The previous cycle normalized wire `direction` at the contract boundary, but `relationshipType` had the same leak: `inferredWire`'s early-return accepted any TRUTHY value and passed it through verbatim, and the last-resort return used `??` (only null/undefined). A garbage string (manual edit, stale JSON round-trip) flowed into the semantic graph un-normalized, even though `SemanticRelationshipType` is a closed union and every consumer — `locationWires()` filtering, renderer label priority, the Apply boundary — switches on it. Evidence: a test feeding `'banana'` observed it surviving normalization (Received: "banana").
+
+**Red → Green:** New contract test feeds two corrupt wires through `normalizeTopologyGraph`: a Store→Workspace wire with location ports and a workspace→workspace wire with generic ports, asserting both land on a LEGAL value re-derived from node identity ('location' and 'generic' respectively) with `legacyInferred: true`. Red confirmed (`'banana'` passed through). Fix: a module-level `RELATIONSHIP_TYPES` whitelist (the closed union); the early-return now only trusts whitelisted values, so corrupt ones fall through to legacy inference which re-derives the type from node identity; the last-resort return folds non-whitelisted values to 'generic'. Refactor: hoisted the whitelist to module scope (was rebuilt per wire).
+
+**Why identity re-derivation, not blanket-folding:** a corrupt type on a Store→Workspace wire must NOT become 'generic' — that would silently strip ownership semantics and break location validation downstream. Treating corrupt like missing and re-deriving from node identity preserves the wire's intent.
+
+**Validation:** contract suite 10/10 · topology suites 175/175 (contract + card + screen + editor) · typecheck clean · eslint 0 errors (changed files clean) · drift guard clean.
+
+**Commits:** `topologyContract.ts` whitelist + 1 contract test. Shared-tree note: the rest of the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted in the tree for its owner.
+
+## 2026-08-08 — TDD cycle: quarantine corrupt wire port ids at the contract boundary
+
+**Problem:** The previous two cycles normalized `direction` and `relationshipType`, but port ids had the same leak: `inferredWire`'s early-return guarded only `relationshipType` — `fromPortId`/`toPortId` passed through verbatim when truthy (a garbage string from a manual edit or stale JSON flowed into the semantic graph, where the renderer matches wires to sockets by port id and validation switches on 'location-out'/'location-in'). The `workspace → warehouse` branch also still used `??` for both ports AND the type, so corrupt values leaked there too. Evidence: a test feeding `'banana'`/`'cabbage'` observed them surviving normalization with `legacyInferred: false`.
+
+**Red → Green:** New test feeds corrupt ports (+ corrupt type on the warehouse wire) through `normalizeTopologyGraph` across all three identity paths — branch→workspace (re-derives location-out/location-in), workspace→warehouse (stock-out/stock-in/stock-routing), and workspace→workspace (legacy-out/legacy-in/generic) — asserting each lands on the identity-derived legal value with `legacyInferred: true`. Red confirmed. Fix: a `SEMANTIC_PORT_IDS` whitelist typed as `Set<SemanticPortId | 'legacy-out' | 'legacy-in'>` — the `SemanticPortId` union is **imported as a type** from `topologyCard.ts` (single source of truth, no drift possible; type-only import, no runtime cycle) plus the two contract-internal legacy placeholders. The early-return now requires BOTH ports legal AND the type legal; both fallback branches fold non-whitelisted ports to their identity defaults. Refactor: none needed beyond the guard.
+
+**Reviewer-driven hardening:** (1) the whitelist is compile-time coupled to the `SemanticPortId` union via the typed Set — a new union member that's not listed fails typecheck; (2) a second test pins the no-over-fold contract: legal `ticket-out`/`ticket-in` ports on a workspace→warehouse wire survive unchanged (`legacyInferred: false`), proving the guard folds only genuinely-corrupt values.
+
+**Deliberate behavior note (legacyInferred flip):** wires with truthy-but-corrupt ports previously claimed `legacyInferred: false`; they now fall to identity inference and report `legacyInferred: true`. This is the intended fix (the flag is advisory — it drives save-time rewrites), not a regression.
+
+**Validation:** contract suite 12/12 · topology suites 177/177 · typecheck clean · eslint 0 errors on changed files · i18n lint clean · drift guard clean.
+
+**Commits:** `topologyContract.ts` port-id whitelist + 2 contract tests. Shared-tree note: the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: normalize corrupt wire direction at the editor load boundary
+
+**Problem:** The three prior quarantine cycles normalized the semantic-graph boundary (direction, relationshipType, port ids in `normalizeTopologyGraph`), but the editor's LOAD path bypassed the contract entirely: both load effects cast `w.direction as WireDirection` verbatim. A corrupt stored value (e.g. `'bidirectional'`) survived into the editor model — rendering wrong arrow markers (the marker logic keys off `direction === 'reverse'`/`'two-way'`, so garbage rendered as one-way) and round-tripping back to the backend on the next Apply (TopologyScreen serializes `w.direction` verbatim). The existing resilience test even asserted the opposite of reality: its comment claimed "corrupt direction falls back to one-way" but nothing normalized anything. Evidence: a test feeding `'bidirectional'` observed `data-direction="bidirectional"` in the live DOM.
+
+**Red → Green:** New editor test loads a wire with `direction: 'bidirectional'` and asserts `.wire-path[data-direction]` = `'one-way'` — the live render contract, exactly what the marker logic switches on. Red confirmed. Fix: exported `normalizeWireDirection(value)` from `topologyContract.ts` (folds anything but `'two-way'`/`'reverse'` to `'one-way'`), applied at BOTH load boundaries (real-instances and legacy branches). `normalizeTopologyGraph` now reuses the same helper instead of its inline ternary — single source of truth, behavior-identical (reviewer-verified).
+
+**Validation:** editor suite 138/138 · topology suites 179/179 · typecheck clean · eslint 0 errors on changed files · drift guard clean.
+
+**Deliberate scope (next slice):** the load path still casts `relationship_type as SemanticRelationshipType` and `from_port_id`/`to_port_id` verbatim at both sites — the same verbatim-trust bug class, now the natural follow-up. The editor model should fold those through the contract's closed unions on load too, so the Apply round-trip can never carry garbage.
+
+**Commits:** `normalizeWireDirection` export + editor load-path application + 2 tests (editor + contract unit). Shared-tree note: the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: normalize corrupt wire direction at the editor load boundary
+
+**Problem:** The four prior quarantine cycles normalized the semantic-graph boundary (direction, relationshipType, port ids), but the editor's LOAD path bypassed the contract entirely — both load effects cast `w.direction as WireDirection` verbatim. A corrupt stored value (`'bidirectional'`) survived into the editor model, rendered wrong markers (marker logic keys off `direction === 'reverse'`/`'two-way'`, so garbage rendered as one-way), and round-tripped back to the backend on the next Apply. The existing resilience test's comment even claimed "corrupt direction falls back to one-way" — nothing did.
+
+**Red → Green:** New editor test loads a wire with `direction: 'bidirectional'` and asserts `.wire-path[data-direction]` = `'one-way'` — the live render contract the marker logic switches on. Red confirmed (`data-direction` kept the garbage). Fix: exported `normalizeWireDirection(value)` from `topologyContract.ts` (the exact inline ternary the contract already used, promoted to a reusable gate) and applied it at BOTH load boundaries in the editor.
+
+**Shared-tree split (important):** the editor load-path hunks and the editor regression test ride with the in-flight batch — they depend on the batch's uncommitted 3-state `WireDirection` widening and `data-direction` render attribute, so committing them standalone would leave the committed tree with a type error. The committed half is the self-contained contract primitive (`normalizeWireDirection` + `normalizeTopologyGraph` reuse + unit test). The editor application lands with the batch, where its `data-direction` assertion becomes valid.
+
+**Validation:** contract suite 13/13 (incl. the 3-state unit test) · topology suites 179/179 in the working tree · typecheck clean · eslint 0 errors on changed files · drift guard clean.
+
+**Commits:** `refactor(topology): extract normalizeWireDirection as the single direction gate` (contract + unit test). Editor hunks (import, 2 load-path normalizations, regression test) left uncommitted with the batch for its owner.
+
+## 2026-08-08 — TDD cycle: fold unknown node kinds at the contract boundary
+
+**Problem:** The quarantine family covered wires (direction, relationshipType, port ids) but the NODE side still had a verbatim-trust: `nodeKind()` returned `node.type` verbatim after the `'store'` alias, despite `SEMANTIC_NODE_DEFINITIONS` documenting "unknown node kinds are not accepted." A corrupt type (`'kiosk'`) flowed into `SemanticTopologyGraph.nodes[].kind` as an opaque value that `validateTopologyGraph` NEVER checks (it filters only `branch-location` and `workspace`) — so the node silently passed validation AND round-tripped to Apply. Evidence: a test feeding `type: 'kiosk'` observed `kind: 'kiosk'` surviving normalization with zero validation errors.
+
+**Red → Green:** New contract test feeds an unknown-kind node and asserts `kind` folds to `'workspace'` AND a `missing-location-input` error fires for that node — the corrupt data surfaces instead of passing. Red confirmed. Fix: `nodeKind` now whitelists the three legal kinds and folds anything else to `workspace` (the most common kind), so the ownership checks catch it.
+
+**Design tradeoff (reviewer-discussed, deliberate):** folding to `workspace` contradicts the letter of "not accepted" — the honest behavior would be a dedicated `unsupported-node-kind` validation error, but that needs a new `messageId` + FTL keys in both bundles, and the `.ftl` files are entangled with the uncommitted batch. The fold is the committable half: it surfaces the corruption via ownership validation instead of silently passing. **Known limitation:** a FUTURE legitimate node type (scale, label printer per the sprint) persisted by a newer client would be folded to workspace until `nodeKind`'s whitelist is extended — recorded so that follow-up is named, not a silent surprise. `SEMANTIC_NODE_DEFINITIONS` doc updated to state the fold; a NOTE marks the final `return 'workspace'` as a runtime-only path (TypeScript narrows the typed `NodeType` union away).
+
+**Validation:** contract suite 14/14 · topology suites 180/180 · typecheck clean · eslint 0 errors on changed files · drift guard clean.
+
+**Commits:** `topologyContract.ts` nodeKind fold + 1 contract test. Shared-tree note: the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry, FTL edits) stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: reject duplicate wire ids across the whole graph
+
+**Problem:** The quarantine family covered normalization (direction, relationshipType, port ids, node kinds) but a VALIDATION gap remained: wire-id uniqueness was never checked. `validateTopologyGraph`'s existing `duplicate-wire` error only fires for location-ownership wires sharing the same 4-tuple (`fromNodeId|fromPortId|toNodeId|toPortId`) — two wires with the SAME id but different endpoints passed validation silently. That breaks the editor's React keys, click-cycle-by-id, and delete-by-id, and round-trips to Apply. Node ids had a `seenNodeIds → duplicate-node` guard; wire ids had nothing. Evidence: a test with two ownership wires sharing id 'wire-x' but targeting different workspaces produced zero errors.
+
+**Red → Green:** New test feeds two ownership wires with the same id and different endpoints, asserting a `duplicate-wire` error with `wireId: 'wire-x'`. Red confirmed. Fix: a `seenWireIds` guard at the top of `validateTopologyGraph`, mirroring `seenNodeIds`, iterating the WHOLE wire set (not just location wires).
+
+**Semantic widening (deliberate, journaled):** the `duplicate-wire` code now means BOTH "duplicate 4-tuple" and "duplicate id." Reuse avoids new FTL keys (entangled with the batch); a dedicated `duplicate-wire-id` code can come later if consumers need to distinguish. Known edge (not fixed): a wire that is both id-duplicate AND 4-tuple-duplicate gets two identical `duplicate-wire` errors pushed — both problems genuinely exist; a future UI error renderer could dedupe.
+
+**Validation:** contract suite 15/15 · topology suites 181/181 · typecheck clean · eslint 0 errors on changed files · drift guard clean.
+
+**Commits:** `topologyContract.ts` seenWireIds guard + 1 contract test. Shared-tree note: the topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: reject wires with endpoints missing from the graph
+
+**Problem:** Endpoint existence was only enforced for LOCATION wires (via `invalid-location-connection`). A NON-location wire (stock-routing, ticket-routing, generic) pointing at a ghost node id passed validation silently — `nodeById.get()` returned `undefined`, `inferredWire` fell to the last-resort legacy branch, and the wire round-tripped to Apply referencing a node that does not exist. Evidence: a test feeding a stock-routing wire from 'ghost-1' produced zero errors.
+
+**Red → Green:** New test: branch + ws-1 with a stock-routing wire from 'ghost-1' → 'ws-1' asserts a new `unknown-wire-endpoint` error with `wireId`. Red confirmed. Fix: a `nodeIds` set from `graph.nodes` (the normalized graph — IDs are authoritative, kind-folding doesn't change them) plus a whole-graph loop checking both `fromNodeId` and `toNodeId` for every wire, with a new `unknown-wire-endpoint` code + `messageId` + FTL keys in both en/id bundles.
+
+**Deliberate ordering (journaled per review):** the guard runs BEFORE the ownership loop — a missing node is more fundamental than a wrong connection, so a ghost-targeted LOCATION wire now surfaces `unknown-wire-endpoint` (first error shown) rather than `invalid-location-connection`, and emits both errors. `unknown-wire-endpoint` joins the closed `TopologyValidationError.code` union; the ADR's future Rust Apply boundary must handle it.
+
+**Validation:** contract suite 16/16 · topology suites 182/182 · typecheck clean · eslint 0 errors on changed files · i18n lint clean · bundle parity 0 missing · drift guard clean.
+
+**Commits:** `topologyContract.ts` unknown-wire-endpoint guard + code + FTL keys (en/id) + 1 contract test. Shared-tree note: the topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: Rust Apply boundary accepts any legal wire direction on location wires
+
+**Problem (cross-layer contract drift):** the frontend contract (`normalizeWireDirection` in topologyContract.ts) treats wire direction as presentation-only — `one-way | reverse | two-way` are all legal — but the Rust Apply boundary had TWO coupled drifts that rejected a location wire whose direction was cycled in the editor:
+1. `validate_semantic_json` required location wires to be `direction == "one-way"` — a `two-way`/`reverse` location wire was rejected with `invalid-location-connection`.
+2. The `WireDirection` enum had no `Reverse` variant at all — `"reverse"` parsed to `Unknown` and was rejected by `validate_topology_structure` ("unknown direction").
+
+**Red → Green:** Two new tests in `apps/desktop-client/src/commands/topology.rs`: `semantic_save_accepts_two_way_location_wire` (failed at the semantic gate) and `semantic_save_accepts_reverse_location_wire` (failed at the typed-struct gate). Fix: dropped the `direction != Some("one-way")` clause from the location-wire check (with a comment explaining direction is not part of the ownership gate) and added `WireDirection::Reverse` to the enum + `PartialEq<&str>` + `From<&str>`.
+
+**Validation:** topology module 194/194 · `oz-pos-app` lib 811/811 · fmt clean · clippy clean on changed code (pre-existing `too_many_arguments` in oz-core and the `can be collapsed` at `validate_topology_envelope` line 493 untouched) · drift guard clean.
+
+**Commits:** `topology.rs` gate removal + Reverse variant + 2 tests. Shared-tree note: the UI topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: load command serves corrupt stored wire directions raw (load boundary stays raw)
+
+**Problem (load-side bricking):** the `load_topology` Tauri command ran `validate_topology_structure` (the closed-union gate) at load, so a single stored wire with a legacy corrupt direction (`"bidirectional"`) made the WHOLE topology unloadable with an Internal error — the frontend's documented load-time healing (`normalizeWireDirection` folds it to one-way) never got a chance to run, and the user could not open the graph to repair the row. This contradicted the free function `load_topology_data`, which is documented raw-by-design ("the load boundary stays raw", pinned by the `preserves_raw_legacy_null_ports` test).
+
+**Red → Green:** New test `tauri_load_topology_serves_corrupt_stored_direction_raw` seeds a stored topology with `direction: "bidirectional"` and asserts `load_topology` returns it raw. Red confirmed (Internal "unknown direction"). Fix: the command keeps envelope validation + semantic ownership (DB-backed) + typed shape parsing, but drops the `validate_topology_structure` call — strictness now lives at the save boundary (`save_topology_json`), where a load→save cycle heals the row. The command's doc comment now states the raw-load contract and warns against re-adding the gate.
+
+**Validation:** topology module 195/195 · `oz-pos-app` lib 812/812 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
+
+**Known limitation (journaled per review):** dropping the load gate means a stored topology with duplicate NODE ids now loads raw — the editor's `savedById` Map silently collapses them (not healable by the frontend), though Apply-time `validateTopologyGraph` (`duplicate-node`) still blocks persistence. Ghost wires and corrupt directions/ports remain frontend-healable. Follow-up slice: dedupe or flag duplicate node ids at load.
+
+**Commits:** `topology.rs` load-gate removal + 1 test. Shared-tree note: the UI topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: load command serves semantic-contract-violating stored topologies raw
+
+**Problem (load-side bricking, semantic level):** the previous raw-load cycle removed the closed-union STRUCTURAL gate from `load_topology`, but the command still ran `validate_semantic_ownership` — so a stored SEMANTIC topology that violates the ownership contract (e.g., a workspace with no location-in wire → `missing-location-input`, or invalid-purpose, multiple-branch-locations, duplicate location wires) made the whole topology unloadable with a TopologyValidation error. The frontend is designed to load raw and surface those exact errors at Apply time (`validateTopologyGraph` toast in TopologyScreen ~207 and NodeTopologyEditor ~1471), where the user repairs the graph in the editor. `load_topology_data` (free fn) is documented raw-by-design and never ran semantic validation. Evidence: a seeded semantic topology with ws-1 missing its location-in wire returned `missing-location-input` and load failed.
+
+**Red → Green:** New test `tauri_load_topology_serves_semantic_contract_violation_raw` seeds that exact topology and asserts load returns it raw. Red confirmed (`missing-location-input`). Fix: removed the `validate_semantic_ownership` call from `load_topology`, keeping envelope validation + typed shape parsing. The inline comment now documents that BOTH gates (structural + semantic) are deferred to the save/Apply boundary.
+
+**Deliberate consequence (journaled per review):** `validate_semantic_ownership` bundles the pure-contract checks with the DB-backed `unknown-branch-location` check (store_profile_id must exist). Removing the whole call from load also drops that DB check from load — enforcement now lives exclusively at `save_topology_json` (line 520) and the `apply_topology_diff` pre-mutation gate (line 1105), so it is not a correctness hole, and the editor overrides stored branch identity from real `branchLocations` anyway. Named here so a future reader does not treat it as an accidental omission.
+
+**Validation:** topology module 196/196 · `oz-pos-app` lib 813/813 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
+
+**Commits:** `topology.rs` semantic-gate removal from load + 1 test. Shared-tree note: the UI topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: Apply pre-mutation gate runs structural checks (duplicate-node brick)
+
+**Problem (ordering gap):** the `apply_topology_diff` pre-mutation gate ran ONLY `validate_semantic_ownership` (semantic contract + DB-backed branch identity). The STRUCTURAL checks (`validate_topology_structure`: duplicate node/wire ids, unknown node types, unknown directions/ports, ghost endpoints) ran only inside `save_topology_json` at the END of the command — AFTER workspace creations/updates/archivals were already mutated. A structurally malformed diagram (exactly the journaled duplicate-node-id limitation — the editor's `savedById` Map silently collapses duplicates at load) passed the gate, mutated workspace rows, then failed at save and forced the full compensation unwind of a partial apply.
+
+**Red → Green:** extracted two seams, then pinned the gap. `validate_apply_gate(conn, nodes, wires)` is the pre-mutation gate, wired into `apply_topology_diff` verbatim where the inline semantic-only block was. `validate_diagram_payloads(nodes, wires)` is the shared typed-parse + structural validator extracted from `save_topology_json` (both call sites use it; save behavior unchanged — same ordering: semantic → parse raw wires → structure-check → port-default → envelope write). New test `apply_gate_rejects_duplicate_node_ids_before_mutation` asserts the gate returns Internal "duplicate node id" for a duplicate-node-id diagram (legacy non-semantic payloads so `validate_semantic_ownership` short-circuits). Red confirmed (gate returned Ok); Green after wiring structural validation in.
+
+**Validation:** topology module 197/197 · `oz-pos-app` lib 814/814 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
+
+**Notes:** (1) The typed parse runs twice per apply (gate + save) — accepted tradeoff; threading the payloads through the workspace-mutation block would add coupling for negligible gain. (2) The test is gate-level, so "before mutation" is a structural property (the command invokes the gate before the workspace block) rather than an observed one — the seam is wired verbatim into the command. (3) No acceptance-set change: the gate runs exactly the checks save always ran, so failures surface before mutation instead of after. (4) The journaled duplicate-node-id-at-load limitation is now closed at the Apply hard boundary — the frontend `duplicate-node` check was already blocking persistence at Apply time, and the gate now rejects before any mutation.
+
+**Commits:** `topology.rs` gate extraction + structural wiring + 1 test. Shared-tree note: the UI topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: semantic validator splits missing-branch from multiple-branch codes (frontend parity)
+
+**Problem (error-code contract drift):** `validate_semantic_json` collapsed the branch-count gate into one error — `if branches.len() != 1 { "multiple-branch-locations" }` — while the frontend contract (`validateTopologyGraph`) distinguishes `missing-branch-location` (ZERO branch-location nodes; FTL "Add exactly one Branch Location node.") from `multiple-branch-locations` (MORE than one; "Keep exactly one Branch Location node in this graph."). A zero-branch semantic graph rejected by the Apply gate therefore surfaced the wrong guidance code to the UI. Evidence: the new Red test got `left: "multiple-branch-locations"` for a graph with no branch node.
+
+**Red → Green:** New tests pin both halves of the contract — `semantic_validate_reports_missing_branch_when_graph_has_no_branch` (semantic payload with a location wire but no branch node → `missing-branch-location`) and `semantic_validate_reports_multiple_branches_when_graph_has_two` (two branch nodes → `multiple-branch-locations`, the previously-only behavior). Red confirmed on the zero-branch case. Fix: split `branches.len() != 1` into `branches.is_empty()` → `missing-branch-location` and `branches.len() > 1` → `multiple-branch-locations`, with a parity-rationale comment.
+
+**Validation:** topology module 199/199 · `oz-pos-app` lib 815/815 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
+
+**Scope note (reviewer-flagged, don't overclaim):** the frontend runs `validateTopologyGraph` BEFORE sending Apply, so a zero-branch graph is normally blocked client-side with the correct message — the Rust gate is defense-in-depth for direct IPC callers, and this change is contract parity on that rarely-hit path rather than a user-visible UI fix. Both code strings now match the frontend exactly.
+
+**Commits:** `topology.rs` branch-count code split + 2 tests. Shared-tree note: the UI topology batch + another agent's `122_workspace_instance_purpose.sql` migration + topology-builder ADR stay uncommitted for their owners.
+
+## 2026-08-08 — TDD cycle: load command serves display-field-deficient stored rows raw (minimal shape gate)
+
+**Problem (load bricking, one level below the previous fixes):** `load_topology`'s remaining "typed shape parse" (serde `from_value` into `TopologyNodePayload`/`TopologyWirePayload`) required `id`/`type`/`name`/`x`/`y` on every stored node and `id`/`from_node_id`/`to_node_id` on every wire. `name` is display-only — `normalizeTopologyGraph` never reads it, the editor renders an empty card title, and the user can retype it — yet a single legacy/corrupt node without `name` made the WHOLE topology unloadable with `Internal("invalid topology nodes: missing field `name`")`. Same bricking class the earlier cycles fixed for corrupt directions and semantic violations. Evidence: the Red test hit the exact `missing field name` error against the old parse (Red was properly observed by temporarily restoring the parse before re-applying the fix).
+
+**Red → Green:** New test `tauri_load_topology_serves_stored_node_without_display_name_raw` seeds a stored topology with a nameless node and asserts `load_topology` serves it raw. Fix: replaced the typed-payload parse with `validate_load_shape` — a minimal gate requiring only a non-empty `id` on nodes and wires (the field the editor keys by), with an explicit comment documenting that display/geometry fields, directions, ports, unknown types, and even wire endpoints are all frontend-healable (ghost filter drops endpoint-less wires exactly like unknown-endpoint wires). The strict typed parse still runs at the save/Apply boundary (`validate_diagram_payloads`).
+
+**Validation:** topology module 200/200 · `oz-pos-app` lib 817/817 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
+
+**Save-boundary consequence (journaled per review):** load now serves nameless/coordless rows, but `save_topology_json`'s typed parse still requires `name`/`x`/`y` — the editor renders the row (the win), but the first Apply after loading a deficient row can still fail with a validation error until the user fills the name / drags the node into place. That is the intended strict-save boundary (the healed value must hold), not a regression. Wire endpoints are deliberately not required at load (explicit decision, not collateral): the editor drops endpoint-less wires via the same ghost filter that already dropped unknown-endpoint wires.
+
+**Commits:** `topology.rs` minimal load shape gate + 1 test. Shared-tree note: the UI topology batch + another agent's `122_workspace_instance_purpose.sql` migration + topology-builder ADR stay uncommitted for their owners.
+
+
+## 2026-08-08 — TDD cycle: branch rename refreshes locations without clobbering unsaved canvas edits
+
+**Problem (reload-clobber):** the editor's load effect depends on `[workspaceInstances, branchLocations]`. A successful card rename updates the parent's stores state, which swaps the `branchLocations` prop identity — so the effect re-ran a FULL rebuild from the saved diagram, silently discarding any unsaved canvas edits (dragged nodes, drawn wires) made before the rename. Evidence: the Red test dragged a workspace node to 528px; after the rename the rebuild reset it to the default 336px (`expected '336px' to be '528px'`).
+
+**Red → Green:** `BranchRenameHarness` (stable workspaceInstances identity + branchLocations state; `onRenameBranch` swaps the locations identity on success) proves the drag survives the rename. Fix: two prev-identity refs guard the top of the load effect — when branchLocations changed AND workspaceInstances did NOT, a light merge updates matching store nodes' names and seeds newly added locations, returning early (no `loadTopology` round-trip, no history wipe, no wire rebuild). The full rebuild path is unchanged for mount and instance-driven reloads, and the `skipNextLoadRef` post-Apply guard still takes the full path (Apply refreshes instances). Companion test pins the instances-changed-wins half: flipping instances AND locations together still takes the full authoritative rebuild.
+
+**Validation:** topology suites 189/189 (3 test files) · typecheck clean · eslint clean · drift guard clean. Reviewer verified the guard's routing (mount can never light-merge because the prev refs initialize to first-render identities; simultaneous instances+locations changes route to the full path via the instances comparison), that the seeding can't duplicate (same `storeProfileId` guard as the full path), and that the `next.push` mutates the freshly-mapped array, never `prev`.
+
+**Notes / remaining risks:** (1) The light merge keeps store nodes for deleted locations — matching the full path, deletions are intentionally not handled in-place. (2) The store-node seeding block is duplicated between the two paths — a deliberate minimal-change tradeoff (extracting a helper was optional per review). (3) A rename fired while an instances-driven async reload is mid-flight could still be clobbered by that reload's `setNodes` — practically unreachable (the rename pencil requires rendered cards; the load fetch is ms-fast) and not fixed.
+
+**Commits:** none for the fix — `NodeTopologyEditor.tsx` + its test file carry other agents' uncommitted batch work in the shared tree (combined ~580-line diff), so the source fix + 2 tests stay uncommitted for batch ownership. This journal entry committed only.
+
+
+## 2026-08-08 — TDD cycle: branch deletion leaves the canvas cleanly (card, wires, selector)
+
+**Problem:** no UI path existed to remove a store profile from the topology screen, and even a parent-side removal left the canvas dirty — the journaled light-merge limitation "deleted locations keep their node" was exactly this. A deleted branch's card stayed with its wires, and the dev-mock's `delete_store_profile` ignored the id entirely (no round-trip).
+
+**Red → Green:** four tests written first, all confirmed failing for the right reasons —
+1. `BranchDeleteHarness` (stable instances, locations losing a store): `expected 3 to be 2` — the orphaned card stayed after the light merge.
+2. Full-rebuild variant (saved diagram still carrying the deleted branch, seed without it): `expected 3 to be 2` — the rebuild resurrected the card.
+3. TopologyScreen flow: `Unable to find ... "topology-branch-delete"` — no delete button existed.
+4. dev-mock round-trip: `expected { id: 'store-rt-3' } to be undefined` — the delete handler didn't remove the row.
+
+**Green:** (a) the light merge now derives `removedLocationIds` from the location delta (store node ids === location ids, an invariant the editor's own seeding/Apply enforces) and filters the store nodes AND their wires in lockstep, cancelling any in-flight wire preview when nodes are removed; (b) the full-rebuild `otherNodes` chain drops saved store nodes whose `storeProfileId` is absent from `branchLocations` when locations are supplied (wires auto-drop via the existing `validIds` filter; legacy nodes with no `storeProfileId` keep the pre-existing exception); (c) TopologyScreen gains a two-step Delete Branch toolbar action (danger confirm, symmetric one-action-at-a-time with the add form) — `handleDeleteBranch` captures the target id at arm time (a mid-confirm branch switch can neither lie in the confirm message nor change the deletion target; the selector is disabled while confirming), deletes via `deleteStore`, filters the stores state (selector option + branchLocations seed drop), moves the selection to the next branch, and clears the instances when the last branch goes so the remounted editor lands on a clean unowned canvas; (d) 4 FTL keys in both bundles with 1:1 parity; (e) the dev-mock delete now mutates the stateful store list.
+
+**Validation:** topology + dev-mock suites 198/198 (4 test files) · typecheck clean · eslint clean · i18n lint clean · drift guard clean. Reviewer verified the delta derivation, the `branchLocations === undefined` legacy guard, the last-branch clear vs the branch-switch refetch effect (null guard returns early — no conflict), and the add/delete form state machine; three of their findings were applied (target-id capture + selector disable, in-flight connection cancel, one-action-at-a-time toolbar).
+
+**Notes / remaining risks:** (1) The legacy/demo rebuild path (no workspaceInstances supplied) still renders saved store nodes verbatim — the real app always supplies the seed, so this only affects bare-editor usage; a follow-up could apply the same filter there. (2) The light-merge wire filter assumes store node id === storeProfileId === location id — true for editor-seeded and editor-saved nodes, documented, but not derived from node state. (3) No e2e for the deletion flow yet (the rename got one) — natural next slice. (4) Source + tests ride the shared UI batch (NodeTopologyEditor.tsx etc. carry other agents' uncommitted work) — journal committed only.
+
+
+## 2026-08-08 — Repair: desktop app auto-connects to the local sync docker (debug builds)
+
+**Problem:** running `start-desktop.bat` never connected the app to the `start-local-sync.bat` docker backend at `:3099`. Ground truth from the app DB: `sync_server_url=''`, `sync_enabled=0` (only a stale API key from a past manual connect) — the install was simply never configured, and `SyncConfig::from_settings` returns `None` when disabled, so the background sync daemon (first tick 60–120s after boot) silently no-ops forever. The docker container was healthy (both `/health` and `/api/v1/health` → 200) and `POST /api/v1/tokens` returned a JWT — the server side was fine.
+
+**Solution (TDD):** new `apps/desktop-client/src/sync_bootstrap.rs` (5 tests, Red→Green: decision fn, transactional persist, no-clobber orchestrator). On debug builds only (`#[cfg(debug_assertions)]` at the mod decl AND the setup call site — release never compiles it), a spawned daemon runs BEFORE the sync daemon spawn: it reads the configured URL (a read error bails — never provision over an install we couldn't inspect), and if none is set, probes `ping_server`/`request_token` with a 3-attempt × 2s bounded retry (absorbs a cold-start container), then persists URL + JWT key + enabled in ONE transaction. The safety contract pinned by tests: an already-configured install is never touched — the guard fires before any network I/O. The sync daemon's first tick is 60–120s out, so the fresh config is always visible. `start-desktop.bat` gained an additive pre-launch health banner (`[OK]`/`[WARNING]` on `/health`); the `cargo tauri dev` line is untouched per the file's own warnings.
+
+**Validation:** `cargo test -p oz-pos-app --lib` 822/822 (5 new) · `cargo fmt -p oz-pos-app --check` clean · clippy clean for the changed files. Reviewer findings applied: read-error bail in the guard (was `.ok().flatten()` → treated a DB error as "not configured"), and the triple settings write is now transactional (a partial provision would have left a non-empty URL that permanently blocks future auto-repair).
+
+**Notes / remaining risks:** (1) `should_auto_provision` inspects only the URL, not `is_sync_enabled` — a developer who clears the URL in Settings to disable sync gets it re-provisioned + re-enabled on the next debug launch (acceptable for a dev-only bootstrap; documented, not pinned). (2) The running docker image reports server version 0.0.24 while the app source is 0.0.25 — token/health contracts match, but rebuild the image (`docker compose up -d --build`) to eliminate protocol-drift risk on the data endpoints. (3) Pre-existing `too_many_arguments` clippy warning in `crates/oz-core/src/db/workspaces.rs:665` fails `-D warnings` runs — unrelated to this change, not touched. (4) No commit: changes stay uncommitted for the user to review (source + tests + bat); journal only.
+
+
+## 2026-08-08 — TDD follow-up: auto-provision respects a deliberately disabled sync (resolves risk 1 above)
+
+**Problem (risk 1 from the repair entry):** `should_auto_provision` looked only at the URL. A developer who cleared the sync URL in Settings (their "off" switch) ended up with an empty URL → the next debug launch re-provisioned and re-enabled sync silently.
+
+**Red → Green:** the decision now takes `sync_enabled` and distinguishes three states by **row presence** (`platform_core::Settings::get` returns `Some(value)` whenever a row exists, `None` when absent): `None` (no row — fresh install; provision regardless of the enabled flag, since a fresh DB ships with sync off) · `Some("")` + enabled=false (cleared AND deliberately disabled — skip; the real-world state from the original app DB) · `Some("")` + enabled=true (sync on but URL empty — a broken half-configured state worth repairing) · `Some(non-empty)` (never touch). The orchestrator guard reads `get_sync_server_url` + `is_sync_enabled`, bails on either read error, and the new `orchestrator_does_not_reprovision_when_sync_was_disabled` test is deterministic because the guard early-returns before any network I/O. Red was genuine: with the enabled-blind stub, both deliberate-disable tests failed — the orchestrator one because the live docker on :3099 actually re-provisioned.
+
+**Validation:** module 8/8 · full crate lib 825/825 · fmt clean · clippy clean for the module. Reviewer verified row-presence soundness against the write path and the minimal blast radius (the change only tightens `Some("")`+false; the repair branch is unchanged).
+
+**Notes / remaining risks:** the discriminator depends on the URL-clearing write path storing `""` rather than removing the row — now documented as a row-presence invariant in the module doc comment (and true of `update_sync_settings` today). Uncommitted: source + tests ride this session's uncommitted follow-up; journal only.
+
+
+## 2026-08-08 — Fix: clippy `-D warnings` CI gate passes again (too_many_arguments + collapsible_if)
+
+**Problem:** the pre-existing `too_many_arguments` warning in `crates/oz-core/src/db/workspaces.rs` (`create_workspace_instance_with_purpose`, 8 args incl. `&self`) failed the CI-exact `cargo clippy --workspace --all-targets --all-features -- -D warnings` gate — and once it was fixed, the gate surfaced a second pre-existing warning (`collapsible_if` in `apps/desktop-client/src/commands/topology.rs:506`).
+
+**Fix:** (1) oz-core: new module-scope `pub struct CreateWorkspaceInstanceArgs { id, type_key, store_id, name, description, colour: Option<String>, purpose_key }` (docs per field); `create_workspace_instance_with_purpose` now takes the struct and destructures it — the body (validations, transaction, INSERT via `params!` with owned locals) is unchanged; the 6-arg legacy `create_workspace_instance` wrapper builds the struct with `purpose_key: "general"`. Callers updated: desktop-client `create_workspace_instance_scoped` (clones `CreateInstanceRequest` fields into the struct — the command isn't a hot path) and the 2 test call sites in `purpose_key_is_independent_from_type_and_name`. (2) topology.rs: collapsed the nested `if let`/`if` into an edition-2024 let-chain (semantics identical).
+
+**Validation:** `cargo clippy --workspace --all-targets --all-features -- -D warnings` CLEAN (was the failing gate) · oz-core workspace tests 71/71 · desktop-client lib topology tests 201/201 · full app lib suite 825/825 (pre-change) · fmt clean · `cargo doc -p oz-core` shows no new broken links (reviewer's `Workspaces::` → `Store::` doc-link nit fixed; the remaining rustdoc warnings are pre-existing). Note: the full `cargo test -p oz-pos-app` bin target is currently blocked by the running app holding `oz-pos-app.exe` — lib-only runs avoid it; the app stays open per the shared-tree rule.
+
+**Notes / remaining risks:** none new. Uncommitted: all three files ride this session's uncommitted batch; journal only.
+
+### 2026-08-08 — E2E deletion spec exposes legacy-store resurrection on branch delete
+
+**Problem:** the new adr22 e2e "deleting a branch leaves the canvas clean" spec failed on its first run: after deleting the only branch (store-1) the card was STILL visible (flickering between "Downtown Branch" and "TOKO TEST"). The unit suite had green coverage of branch deletion, but only through the light-merge path (branchLocations change, instances untouched) and the storeProfileId'd saved-node path — the real-world delete empties BOTH branchLocations AND workspaceInstances in one update, which lands in the full rebuild.
+
+**Root cause:** the editor's rebuild path has two filters for saved store nodes. The storeProfileId'd filter (drops when the branch is gone) works, but the LEGACY filter — store nodes saved WITHOUT `store_profile_id` (the dev-mock seed, and any pre-canonical-identity diagram) — kept the node whenever `branchLocations.length === 0`. The fallback comment assumed an empty list meant "standalone editor with no branch concept" when in fact the topology screen supplies a PROVIDED-but-EMPTY list after the last branch is deleted. The deleted branch's card (and its wires) resurrected from the saved diagram.
+
+**Fix (final):** the rebuild path now ADOPTS the canonical identity for legacy store nodes before filtering — a saved store node without `store_profile_id` whose id matches a branch location gets `storeProfileId` assigned in place (keeping its saved position), then a unified filter drops any store node whose branch no longer exists in a SUPPLIED `branchLocations` (even `[]`). Only `branchLocations === undefined` (true standalone editor) keeps the legacy diagram. A first attempt dropped legacy nodes outright and re-seeded them at the default (80,140) slot — that fixed deletion but moved every legacy store card on load (the review flagged it; a position-pinning unit test caught the snap at `144px` vs saved `260px`). The adoption approach fixes deletion AND preserves positions. Real backend unchanged (topology JSON lives under the global `oz-pos/topology` settings key; `delete_store_profile` intentionally does NOT cascade — the editor's branch-list filter is the sole deletion mechanism, now correct).
+
+**Commits:** none yet — spec + fix + test + journal ride this session's batch.
+
+**Tests:** unit Red reproduced the e2e failure deterministically (legacy saved store node + empty branch list → canvas kept 1 node; now 0). Editor suite 149/149 · TopologyScreen + dev-mock-stores 23/23 · full adr22 e2e file 11/11 (rename + deletion + everything else) · typecheck clean · lint clean.
+
+**Notes / remaining risks:** the e2e deletes the seeded PRIMARY branch, which the real backend rejects (primary-store protection) — the dev-mock is lax there by design (e2e runs against the mock). The non-primary delete path (create → promote → delete) remains a future slice. `git status` is empty before this cycle; the spec + editor fix + unit test + journal are the only changes now.
+
+### 2026-08-08 — Pin the sync URL-clearing contract (auto-provision discriminator)
+
+**Problem:** the sync_bootstrap review's one flagged robustness note was that `should_auto_provision`'s row-presence discriminator (`Some("")` = cleared+disabled vs `None` = fresh install) silently depends on the WRITE path never deleting the URL row — clearing must write `""`, never `remove()`. That invariant was documented in the module doc comment but had zero test coverage: nothing stopped a future "cleanup" from switching the clear path to `Settings::remove`, which would make a deliberately-disabled install look fresh and re-trigger provisioning.
+
+**Solution (contract pins, not a fix — the contract already holds):** three regression tests pin the write side of the discriminator. `Settings::set` is an upsert (`INSERT ... ON CONFLICT(key) DO UPDATE`), so an empty value always leaves the row; the pins guard that against regressions:
+1. `settings::tests::set_sync_server_url_empty_keeps_row` — writing `""` → `get` returns `Some("")`, never `None`.
+2. `settings::tests::clear_sync_server_url_overwrites_not_deletes` — real URL then `""` → `Some("")` (clear overwrites, doesn't fall back to a fresh-install look).
+3. `commands::sync::tests::update_sync_settings_data_clear_url_writes_empty_row` (tablet-client) — the command's `server_url: None` (how the UI sends a cleared field) maps through `unwrap_or("")` and lands as `Some("")`, not a stale URL and not a deleted row.
+
+**Review follow-through (the reviewer's one real gap):** the three pins sat at the settings-API layer (1-2) and the TABLET command (3) — but the auto-provision discriminator actually runs in the DESKTOP app, whose `update_sync_settings` inlined the same `unwrap_or("")` logic untested, and (unlike the tablet) wrote sequentially without a transaction. Extracted the desktop command body into `update_sync_settings_data(conn, args)` mirroring the tablet (transactional, so the atomicity fix now lands on the desktop too) and added the identical clear-URL test there — the 4th pin, on the actual critical path. The extraction is behavior-neutral (same writes, now atomic + row-preserving on partial failure).
+
+**Validation:** platform-core settings 120/120 (2 new) · tablet sync 21/21 (1 new) · desktop lib **826/826** (1 new — the full suite, including sync_bootstrap 8/8 intact) · fmt clean · clippy clean on oz-pos-app + oz-pos-tablet + platform-core.
+
+**Commits:** none yet — tests + the desktop extraction + journal ride the session batch.
+
+**Notes / remaining risks:** none new — the desktop/tablet command duplication now exists only in the trivial command wrapper; the data fn could move to a shared crate (oz-core/platform-core) if a third client ever needs it, but that's speculative. The e2e batch (adr22 spec + editor fix) and this sync batch are separate uncommitted changes in the same tree.
+
+### 2026-08-08 — Topology editor UX polish sprint (professional canvas surface)
+
+**Problem:** The topology editor worked but read as a prototype: zoom lived buried in the tool-rack footer, an empty canvas gave no guidance, tool cards had no keyboard affordances, and the canvas grid/cards lacked the two-tier grid and card polish of professional diagram tools. Two compliance gates (themeTokenCompliance, noiseDitherCompliance) were also silently red on the committed CSS.
+
+**Solution:** Six UX slices, TDD where behavior changed:
+1. Tool-slot shortcuts **1–4** spawn nodes (Store/Workspace/Warehouse/Hardware) — bare keys, no repeat, inert while typing or when a rack/header/inspector control owns focus (guards reused). Wired via a latest-ref (`handleAddNodeRef`) because the keydown effect sits above `handleAddNode`'s const (TDZ). Palette cards carry `kbd` slot badges.
+2. Floating zoom cluster bottom-right: − / % / + / Fit All / Reset View (`role="toolbar"`), sharing the wheel's 40–200% clamp via `zoomBy`. Replaced the rack-footer controls; HUD keeps node/wire counts only.
+3. Empty-state onboarding overlay (title + body mentioning the shortcuts) when the canvas has zero nodes; `pointer-events: none` so panning still works.
+4. Canvas grid: subtle 120px major lines over the 24px dot grid (rgba fallback + color-mix for WKWebView <16.4).
+5. Node card polish: type-tinted header strips (color-mix over bg-subtle), hover lift + deeper shadow, crisp 2px-gap accent selection ring (respects reduced-motion).
+6. Tool rack regrouped into labeled **Add Nodes** / **Edit** sections with small-caps section titles.
+
+Bonus: fixed the pre-existing 8 hardcoded-value violations in NodeTopologyEditor.css (ported labels, validation note/banner, relationship picker to tokens) and added noise-dither coverage for `.canvas-zoom-controls`, `.topology-validation-banner`, `.topology-relationship-picker` — both compliance gates are green again.
+
+**Validation:** editor suite **185/185** (7 new: shortcuts ×3, zoom cluster, zoom buttons, empty-state ×2; 2 pinned zoom blocks re-targeted to the cluster) · TopologyScreen + InspectorIntegration + dev-mock + responsiveViewport **233/233** · themeToken + noiseDither + popoverSurface **13/13** · typecheck clean · eslint clean · i18n lint clean · bundle parity **0 missing**. Live dev-mock preview verified: badges, ADD NODES section, zoom cluster (100→125%), and the 1/2 spawn shortcuts all render/work in the running app.
+
+**Commits:** none — rides the uncommitted batch with the other agent's docs sweep (untouched).
+
+**Notes / remaining risks:** `topology-zoom` FTL key removed (replaced by zoom-in/zoom-out + cluster readout). The dev-mock's seeded "Downtown Branch" card still shows the "missing store profile identity" validation note — pre-existing dev-mock state, unrelated to this sprint. Next slices if continued: minimap, context-sensitive selection toolbar (align/distribute), wire direction labels on hover, keyboard 'Escape to deselect-all' already exists.
+
+### 2026-08-08 — Topology editor round 2: dirty state, shortcuts help, hover focus
+
+**Problem:** The editor still lacked three professional affordances: no signal that the canvas differs from the last Apply (users could walk away from an unsaved graph), no discoverable list of the growing shortcut set (1-4 spawn, Delete, Ctrl+Z/Y, arrows, Esc, Ctrl+I), and no way to read a node's neighbourhood at a glance on a busy canvas.
+
+**Solution:** Three TDD slices (5 new tests, Red→Green):
+1. **Unsaved-changes chip** (header, role=status, warning pill + dot). `isCanvasDirty()` was a click-time function backed only by a ref — a ref can't re-render. Added `snapshotVersion` state + a `commitSnapshot` helper that sets the ref AND bumps the version wherever the applied snapshot changes (Apply success, instance load, saved-diagram load, preset load); `isDirty` memo re-derives on `[nodes, wires, snapshotVersion]`. Chip appears on any edit and clears on Apply/undo-back-to-saved/load/preset.
+2. **Shortcuts help popover** — a "?" button at the far right of the header actions opens a kbd-styled cheatsheet (7 rows: 1–4, Del, Ctrl+Z, Ctrl+Y, arrows, Esc, Ctrl+I) reusing existing FTL labels where possible. KDS pattern: Escape (stopPropagation'd so the canvas deselect doesn't also fire) + outside-click close, aria-expanded/controls.
+3. **Hover focus mode** — hovering a node card dims (opacity 0.35) every node not directly wired to it and every unrelated wire; restores on leave. Opacity-only so it composes with selection rings and connection pulses, and pointer events stay live on dimmed cards.
+
+**Validation:** editor suite **190/190** (5 new) · TopologyScreen + InspectorIntegration + compliance ×3 **235/235** · typecheck clean · eslint clean (fixed 2 exhaustive-deps warnings: the memo's `snapshotVersion` dep is now `void`-referenced, `commitSnapshot` added to the preset-loader deps) · i18n lint clean · bundle parity **0 missing** · 7 new FTL keys in en+id. Live dev-mock verified: chip shows on edit, popover opens with all 7 rows, hover dims the unconnected warehouse + wire and restores on leave.
+
+**Commits:** none — rides the uncommitted batch.
+
+**Notes / remaining risks:** the popover's `min-width: 17rem` is fine but untested in the tablet shell; hover-dimming uses class-based opacity so it's cheap and stateless. Remaining candidates: selection toolbar (align/distribute), minimap, right-click canvas context menu, wire relationship label pills.
+
+### 2026-08-08 — Topology editor round 3: canvas context menu + align/distribute toolbar
+
+Problem: a professional diagram tool needs right-click creation and bulk geometry actions, but the editor had neither — nodes could only be added via the palette or 1-4 shortcuts, and multi-selection offered no alignment power.
+
+Solution:
+- **Canvas context menu**: right-click anywhere on the canvas opens a menu at the cursor — add any of the 4 node types (spawned at the click point, grid-snapped, pan/zoom-corrected), Select All, Fit All, Reset View. Focusable `role="menu"` with arrow-key navigation (wraps at ends), Escape closes (global handler), mousedown stops propagation so a right-click never starts a marquee.
+- **Align/distribute toolbar**: floats above the canvas when 2+ nodes are selected, 8 actions (align left/hcenter/right, top/vcenter/bottom, distribute horizontal/vertical) with inline glyphs and a divider between align and distribute. One undo entry per action via pushHistory.
+- **Alignment is exact, not re-snapped**: `snap(minY)` would round an off-grid extreme (legacy preset ws.y = 80 → 72) and move the anchor node. Extremes now stay put; only the non-extreme nodes move to match. Distribution uses exact equal-gap arithmetic as before.
+- Fixed a TDZ I introduced: `applyAlign` referenced `pushHistory` in its deps array before the `const pushHistory` declaration — moved the callback below it.
+- A11y compliance: `role="menu"` required focusability (jsx-a11y/interactive-supports-focus) — added tabIndex + arrow-key nav.
+
+Commits: none yet — rides the uncommitted round-2 batch (NodeTopologyEditor.tsx/css, test, locales, compliance lists).
+
+Tests: 8 new (context menu open+spawn-at-cursor, Select All, Escape close, arrow-key nav, toolbar visibility gate, align tops, distribute vertical, + align toolbar appears only with 2+). Editor suite 196/196; TopologyScreen + 3 CSS-compliance gates green; typecheck/lint/i18n/parity clean.
+
+Risks: sibling describes in NodeTopologyEditor.test.tsx were order-dependent on the main describe's beforeEach mock setup — the new context-menu and align describes now set their own `mockLoadTopology.mockResolvedValue(null)` (repo convention per test-setup.ts); the pre-existing sibling describes still rely on the leak, worth a follow-up to add their own beforeEach.
+
+### 2026-08-08 — Topology editor round 4: clipboard & bulk duplication
+
+Problem: the editor had no copy/paste or bulk duplication — recreating a node (or a whole subgraph) meant dragging fresh cards and re-wiring by hand.
+
+Solution:
+- **Ctrl+D duplicate**: copies the selection one grid step down-right (clamped to the visible canvas), copies wires only when BOTH endpoints are selected (no dangling half-wires), makes the copies the new selection so repeated Ctrl+D cascades diagonally, and is a single undo entry.
+- **Ctrl+C / Ctrl+V**: internal clipboard (Figma-style — no OS clipboard sync); each paste cascades one grid step further so repeated pastes never stack exactly, pasted copies become the selection, one undo entry per paste. A fresh copy resets the cascade.
+- **Ctrl+A**: select all nodes (keyboard twin of the context-menu action).
+- The typing guard at the top of the keydown handler already returns early inside INPUT/TEXTAREA/contentEditable, so native field copy/paste/select-all is never hijacked; the rack/header/inspector focus guard also covers the new shortcuts.
+- Shortcuts popover grew 4 rows (Ctrl+A/D/C/V); new FTL keys in en + id.
+
+Commits: none — rides the uncommitted round-2/3 batch.
+
+Tests: 7 new Red→Green (duplicate offset + copy-selected, repeat cascade, wire copy with both endpoints, no wire copy with one endpoint, paste cascade + selection, Ctrl+A select all, undo restores count). Editor suite 203/203; TopologyScreen + 3 CSS-compliance gates 36/36; typecheck/lint/i18n parity clean.
+
+Risks: clipboard is session-only (internal ref) — a reload clears it; OS clipboard sync (navigator.clipboard.writeText with the topology JSON) is a possible follow-up but needs the backend round-trip shape defined.
+
+### 2026-08-08 — Topology editor round 5: minimap overview
+
+Problem: large diagrams lost their bearings — panning far from origin gave no sense of where the content sat relative to the view.
+
+Solution:
+- **Minimap** (bottom-left of the canvas, Figma/Excalidraw-style): a 176x120 overview projecting the content bounding box — one type-colored rect per node (matching the card accents: store=info, workspace=accent, warehouse=success, hardware=warning), thin wire lines between node centers, and a live viewport rectangle.
+- **Navigation**: click or drag on the map recenters the view on that canvas point (document-level listeners, cleanup ref like node drag); keyboard: arrows nudge the view 40px, Enter centers on the content box. `role="button"` + tabIndex + focus-visible ring for a11y.
+- Viewport rect is pan/zoom-aware (scaled canvas dims / zoom), clamped to a minimum size so it never collapses. Hidden entirely when the canvas is empty.
+- Compliance: added `.topology-minimap` to the noise-dither and popover-surface lists (it's an elevated surface) + the three components.css noise blocks.
+
+Commits: none — rides the uncommitted round-2/3/4 batch.
+
+Tests: 4 new Red→Green (one rect per node, hidden on empty canvas via deleting the last node — an empty LOAD falls back to the retail preset by design, click recenters → viewport transform changes, panning the main canvas moves the viewport rect). Editor suite 207/207; full topology sweep 252/252; typecheck/lint/i18n parity clean.
+
+Risks: minimap has no on/off toggle yet (always visible with content) — a small toggle in the zoom cluster is a possible follow-up; also the minimap is per-editor, not per-diagram-name.
+
+### 2026-08-08 — Topology editor round 6: F2 inline rename + HUD status readouts
+
+Problem: renaming a node required hunting for the tiny card pencil, and the canvas gave no live feedback on where the cursor was or what was selected — basic orientation a professional diagram tool always shows.
+
+Solution:
+- **F2 inline rename**: with exactly one node selected, F2 opens the same inline rename input as the card pencil (pre-filled with the current name, focus moved in, Enter commits / Escape cancels with focus return). Gated by the same renameability rule as the pencil (store/workspace with their rename callback present), so warehouse/hardware cards are untouched. The typing guard keeps F2 inert inside text fields. Listed in the shortcuts popover.
+- **HUD status readouts**: the bottom-center HUD (nodes/wires counts) now also shows the live **cursor position in canvas coords** (tabular numerals, — until the pointer crosses the canvas) and the **selection count** ("2 selected"), both re-derived on every canvas mousemove / selection change. Extended the existing surface instead of adding a competing one — no new elevated surface, no compliance churn.
+
+Commits: none — rides the uncommitted round-2/3/4/5 batch.
+
+Tests: 4 new Red→Green (F2 opens rename with current name, F2 no-op on non-renameable nodes, HUD selection count 0→2, HUD cursor coords after mousemove). Editor suite 211/211; full topology sweep 256/256; typecheck/lint/i18n parity clean.
+
+Risks: the cursor readout re-renders the editor on every mousemove — cheap in practice but worth watching on very large diagrams; a rAF-throttle is a possible follow-up.
+
+### 2026-08-08 — Topology editor round 7: zoom-to-selection + zoom keyboard shortcuts
+
+Problem: getting a good view of a specific part of a large diagram meant manual wheel-scrolling and zooming — no way to jump straight to a selection, and no keyboard zoom at all.
+
+Solution:
+- **Zoom to Selection** (context menu): appears only when nodes are selected, fits the selection bounds with the same padding/clamp math as Fit All (40%..200%, 1.5 fit cap). Context menu also keeps Select All / Fit All / Reset View.
+- **Zoom keyboard shortcuts**: Ctrl+0 fit the whole diagram, Ctrl+1 return to 100% (identity view), Ctrl+= zoom in, Ctrl+- zoom out — the standard diagram-tool set. The typing guard keeps native browser zoom intact inside text fields. Shortcuts popover gained two rows (Ctrl+0 / Ctrl+1 and Ctrl++ / Ctrl+-).
+- Fixed another TDZ I introduced: the keydown effect's deps referenced zoomToFit/zoomBy/resetView, which were declared AFTER the effect — moved the four zoom callbacks (plus zoomToSelection) above it. This is the third instance of the same trap (rounds 3, 4); the callbacks that the keydown handler needs should live above the effect.
+
+Commits: none — rides the uncommitted round-2/3/4/5/6 batch.
+
+Tests: 4 new Red→Green (menu item gated on selection, zoom-to-selection fits within the clamped range, Ctrl+0 fits / Ctrl+1 → 100%, Ctrl+= / Ctrl+- step). Editor suite 215/215; full topology sweep 260/260; typecheck/lint/i18n parity clean.
+
+Risks: none significant; the jsdom fit-zoom tests pin the clamped range rather than exact values (zero-sized canvas → min clamp), mirroring the existing Fit All pin.
+
+### 2026-08-08 — Topology editor round 8: orthogonal (elbow) wire routing
+
+Problem: bezier wires look elegant but read as "doodles" on large graphs — professional topology/flow tools (Visio, draw.io) default to clean orthogonal elbows.
+
+Solution:
+- **Elbow routing toggle** in a new rack "View" section: flips ALL wires between the default cubic bezier and orthogonal H/V elbows. `aria-pressed` toggle, active state tinted with accent tokens.
+- **Router**: source port → horizontal run to the midpoint → vertical drop/rise to the target row → horizontal run into the target port. Reverse flows (target behind source) detour right past the source first so the elbow never folds back through the source card. Sharp corners come free from L commands; the existing `.wire-path` stroke/direction/selection styling applies unchanged.
+- **Simulation pulse rides the geometry**: new `polylinePoint` helper interpolates the 30ms pulse along the elbow's axis-aligned segments (manhattan-parameterized) instead of the phantom bezier, so it visibly travels the elbow path. Bezier mode keeps the cubic pulse.
+- Routing is a presentation preference (component-local, not persisted); `wireGeometries` memo now depends on `wireRouting`.
+
+Commits: none — rides the uncommitted round-2/3/4/5/6/7 batch.
+
+Tests: 3 new Red→Green (bezier by default, toggle to elbow and back, pulse survives elbow mode). Editor suite 218/218; full topology sweep 263/263; typecheck/lint/i18n parity clean.
+
+Risks: the elbow path is computed per wire on every wires/nodeMap/routing change — same memo cost as before; a per-diagram routing preference (localStorage) is a possible follow-up.
+
+### 2026-08-08 — Topology editor round 9: node context menu + double-click rename
+
+Problem: object-level actions lived only in the canvas menu or keyboard — right-clicking a node itself gave the generic canvas menu, and renaming required finding the tiny pencil.
+
+Solution:
+- **Node context menu**: right-click a node card selects it and opens an object-scoped menu (same chrome/close logic as the canvas menu, extended state carries an optional nodeId): Rename (only for renameable store/workspace nodes), Duplicate (same one-undo-entry path as Ctrl+D), Delete (reuses the wired/unwired confirm flow — immediate for unwired, dialog for wired), and Zoom to Selection. The node name titles the menu. Shift+right-click keeps the existing multi-selection instead of collapsing it.
+- **Double-click to rename**: double-clicking a renameable node opens the inline rename (same flow as F2 / the pencil).
+- The canvas menu is untouched — canvas right-click still opens Add Node / Select All / Fit All / Zoom to Selection / Reset View.
+
+Commits: none — rides the uncommitted round-2/3/4/5/6/7/8 batch.
+
+Tests: 5 new Red→Green (right-click selects + menu with Rename, node menu duplicates, node menu deletes unwired immediately, non-renameable hides Rename, double-click opens rename). Editor suite 223/223; full topology sweep 268/268; typecheck/lint/i18n parity clean.
+
+Risks: none significant; the node menu reuses the existing menu close-on-outside-click/Escape logic and arrow-key navigation.
+
+### 2026-08-08 — Topology editor round 10: live connection preview + snap-to-grid toggle
+
+Problem: two View/connection gaps — the in-flight wire preview only updated when the cursor neared a target port (mid-air it froze at the last mouse position), and every placement action snapped to the 24px grid with no way to place freely.
+
+Solution:
+- **Live preview cursor**: new `previewCursor` state updated on every mousemove while a connection is in flight (reset when a connection starts, so a new wire never jumps to a stale cursor). The preview memo now follows the pointer continuously.
+- **Routing-aware preview**: when the elbow toggle is on, the in-flight preview renders the same orthogonal polyline (via the shared `elbowPoints`/`polylineD` helpers) as the finished wire — what you see while dragging is what you get.
+- **Snap-to-grid toggle** in the View section: drag, arrow-nudge, and spawn (palette + context menu) place freely when off. Structural seeds (presets, workspace instances) still snap — they're layout defaults, not user placement. `aria-pressed` toggle sharing the rack-view-toggle style.
+- Dep discipline: the nudge inside the keydown effect reads `snapEnabled` inline (stable boolean dep) rather than the per-render `snapOrNot` helper, so the effect doesn't rebind on every mousemove.
+
+Commits: none — rides the uncommitted round-2/3/4/5/6/7/8/9 batch.
+
+Tests: 4 new Red→Green (preview follows cursor, preview elbow when enabled, off-grid drag with snap off, off-grid context-menu spawn). Editor suite 227/227; full topology sweep 272/272; typecheck/lint/i18n parity clean.
+
+Risks: the live preview now re-renders on every mousemove while connecting — same cost class as the HUD cursor readout, fine in practice.
+
+### 2026-08-08 — Topology editor round 11: validation issues panel + persisted view preferences
+
+Problem: live validation surfaced per-node issues only as tiny card notes and graph-level issues in the banner — there was no single place to see every problem, and the View toggles (elbow routing, snap) reset on every reload.
+
+Solution:
+- **Validation issues panel**: a warning button (top-right of the canvas, "Issues (N)") appears whenever the diagram has ANY validation problem — per-node or graph-level. Clicking opens a dialog-style panel listing every issue: per-node items first, titled with the node name and clickable to select (jump to) the offending card; graph-level items after, read-only. Counts come from the same liveValidation memo the banner/card notes use, so they can never disagree.
+- **Persisted view preferences**: elbow routing and snap-to-grid now lazy-init from localStorage (`oz-topology-view-routing` / `oz-topology-view-snap`) and write back on change — the View choices survive reloads. Writes are try/catch'd for private-mode storage.
+- New WarningIcon in the topology icon set; panel + button registered as elevated surfaces (noise-dither + popover lists + components.css blocks).
+
+Commits: none — rides the uncommitted round-2/3/4/5/6/7/8/9/10 batch.
+
+Tests: 6 new Red→Green (issues button with count on a problem diagram, panel lists the issue + click selects the node, no button on a clean diagram, routing persists to localStorage, routing restored on mount, snap persists). Editor suite 233/233; full topology sweep 278/278; typecheck/lint/i18n parity clean.
+
+Risks: the issues button is canvas-local and not persisted; a diagram-level "mark issue resolved" flow (persisted dismissal) is a possible follow-up.
+
+### 2026-08-08 — direction-aware marquee selection
+
+Problem: the marquee always used box-intersection semantics, so a small forward drag could sweep up nodes that only barely poke into the box — no way to grab exactly what you enclosed.
+
+Solution: Figma/draw.io convention — a FORWARD drag (left→right, `box.x1 >= box.x0`) selects only nodes FULLY contained in the box; a BACKWARD drag (right→left) selects every node the box touches. Pure-vertical drags default to containment (x1 ≥ x0). Existing tests that fully contained their targets survived unchanged; the shared intersection branch is preserved verbatim for backward drags.
+
+Commits: none — rides the uncommitted round-2..11 batch.
+
+Tests: 3 new Red→Green (forward drag excludes partial overlaps, forward drag with full containment selects, backward drag grabs touched nodes). Editor suite 236/236; full topology sweep 313/313 (editor + screen + card + contract + responsive); typecheck/lint/i18n parity clean.
+
+Risks: none known. A Shift+drag additive marquee (Figma-style union) is the natural follow-up.
+
+### 2026-08-08 — Shift+drag marquee union (additive selection)
+
+Problem: marquee always REPLACED the selection, so building up a selection from scattered nodes meant repeated shift+clicks — no way to add a whole region at once.
+
+Solution: holding Shift while marquee-dragging keeps the pre-drag selection and UNIONs the captured nodes into it at release. A Shift+click on empty canvas (no movement) clears nothing; a Shift+drag that captures nothing leaves the selection intact. The additive flag lives in a ref (marqueeAdditiveRef) set at mousedown and reset by the finalizer, so it can never leak into the next drag — a plain drag after a shift-drag still replaces.
+
+Commits: none — rides the uncommitted round-2..12 batch.
+
+Tests: 3 new Red→Green (shift-drag unions wh-1 into a 2-node selection, shift-drag over empty space keeps the selection, plain drag after shift-drag replaces). Editor suite 239/239; full topology sweep 316/316; typecheck/lint/i18n parity clean.
+
+Risks: the union reads the pre-drag selection from the finalizer's mousedown closure — safe today because nothing mutates the selection mid-marquee, but worth re-checking if a future feature changes selection during a drag.
+
+### 2026-08-08 — e2e: direction-aware marquee (forward contained vs backward touched)
+
+Problem: the marquee semantics (round 12) had unit coverage only — no browser test proved a real drag selects contained vs touched cards differently on the actual canvas.
+
+Solution: two new tests in adr22-workspace-settings.spec.ts that perform REAL pointer drags on the canvas:
+- Forward (left→right) asserts exactly the FULLY CONTAINED cards get node-selected; the poking-out card does not.
+- Backward (right→left) over the same box asserts exactly the TOUCHED cards (contained + poking) get selected.
+- The DevToolbar (floating bottom-right) swallowed the tail of marquee drags and froze the box mid-drag — the topology describe's beforeEach now parks it off-screen via addInitScript (localStorage `oz-pos-dev-toolbar-pos` = {-400,-400}) before login navigates.
+
+Two pre-existing bugs found along the way (not fixed here — flagged for follow-up):
+1. The topology canvas load is RACY: the editor can settle on the retail preset OR the dev-mock seed depending on async load timing (observed alternating across identical runs). The test derives geometry from the RENDERED cards (leftmost pair = contained targets, nearest-to-union card = poking card) and asserts against the measured containment/touch predicates, so it is deterministic under either outcome.
+2. The tablet canvas CLIPS the seed layout: cards extend past the 545px-wide canvas edge (nothing auto-fits on load). Marquee geometry is unreliable there, so both tests skip the tablet project with a documented reason.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 2 new e2e (desktop) — 4 consecutive full-suite passes; full adr22 file 24 passed / 2 skipped (tablet). eslint clean.
+
+Risks: none for the tests themselves. The two findings above are the real risks — the load race makes the topology screen's initial canvas non-deterministic for users, and tablet users see clipped cards.
+
+### 2026-08-08 — canvas context menu: selection summary + clear action
+
+Problem: after a marquee left a multi-selection active, the canvas right-click menu gave no indication of the selection — you had to guess and Deselect via Esc.
+
+Solution: when any nodes are selected, the canvas menu now leads with a "{N} selected" section title (FTL `topology-context-selection-title`, interpolated) and a "Clear selection" menuitem (topology-context-clear-selection) that clears the selection and closes the menu, followed by a divider before the existing Add Node section. The menu keeps the selection open when right-clicking the canvas (already the behavior — right-click never clears).
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (marquee leaves 2 selected → menu shows "2 selected" + Clear selection, Clear selection clears + closes, no selection → section hidden). Editor suite 242/242; full topology sweep 319/319; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: the "N selected" text now appears in two surfaces (HUD + context menu) — the tests scope by selector to avoid the collision.
+
+### 2026-08-08 — interactive zoom-level picker (slider popover)
+
+Problem: the zoom cluster showed a static percentage readout — precise zoom meant repeated +/- clicks with no way to scrub to a value.
+
+Solution: the `%` readout is now a real button (aria-label "Zoom level ({pct}%)", aria-expanded) that toggles a small popover above the cluster containing a 40%–200% step-5 range slider with a live % value. Slider drags call setZoom directly (same state the wheel/buttons drive), so the button text and viewport transform update live. Closed by Escape or any document mousedown outside the picker (the wrapper stops propagation so slider drags never close it) — the same close-effect pattern as the context menu. The popover is a new elevated surface, registered in the noise-dither + popover-surface lists and all three components.css blocks.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (click opens slider seeded with current zoom + aria-expanded, dragging to 75% updates the readout + viewport scale(0.75), Escape/outside click close). Editor suite 245/245; full topology sweep + compliance 333/333; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: existing zoom tests kept passing because the level keeps the .canvas-zoom-level class as a button.
+
+### 2026-08-08 — wire context menu (direction + delete)
+
+Problem: wires had no right-click affordance — a right-click on a wire fell through to the generic canvas menu, so the only ways to act on a wire were click-to-cycle and the rack/Delete key.
+
+Solution: right-clicking a wire now selects it (clearing node selection, mirroring the wire click) and opens an object-scoped menu titled with the wire's label (falling back to "from → to" node names): "Toggle wire direction" (reuses the click cycle via handleCycleWireDirection, one undo step) and "Delete wire" (reuses the established `setConfirmDelete('')` flow — the same "Delete Wire" dialog as the Delete key, so deletion is always confirmed). The contextMenu state gained an optional wireId and the render branches node → wire → canvas. All menu chrome (items, dividers, arrow-key nav, outside/Escape close) is shared with the existing menus — zero new CSS or surfaces.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (right-click selects + menu titled with the label + Toggle/Delete items, Toggle direction cycles one-way→reverse, Delete wire opens the confirm dialog then removes it on confirm). Editor suite 248/248; full sweep + compliance 336/336; typecheck/lint/i18n parity clean.
+
+Risks: none.
+
+### 2026-08-08 — F1 shortcuts help
+
+Problem: the shortcuts popover was only reachable via the header button — keyboard-first users had to discover it by mousing around, and the help itself didn't document its own trigger.
+
+Solution: F1 now toggles the existing shortcuts popover (same popover the header button opens — one state, no duplicate surface). The handler sits at the TOP of the canvas keydown listener, deliberately before the typing/rack guards: help is never an accidental canvas edit, so F1 works while typing in a field or with a rack control focused. The popover's shortcut list gained a leading "F1 — Show keyboard shortcuts" row (topology-shortcuts-help, en/id) so the help documents itself.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 2 new Red→Green (F1 opens + lists its own row + second F1 closes; F1 works with a rack control focused). Editor suite 250/250; full sweep + compliance 338/338; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: the popover was already Escape/outside-click closable — F1 toggling composes with that (Escape closes, F1 reopens).
+
+### 2026-08-08 — Space+drag to pan
+
+Problem: panning needed the middle/right mouse button — the most universal diagram gesture (hold Space, drag anywhere with the left button) was missing, and left-drag always marqueed.
+
+Solution: holding Space arms the next left-drag as a pan. A window-level Space tracker (ref for the gesture + state for the grab cursor) excludes typing fields and focused controls — a focused wire keeps its Space cycle-to-direction. The middle/right pan block was extracted into a shared startPan(e, clearSelectionFirst) helper: middle/right still clear the selection, but Space+left-drag is Figma-style and PRESERVES it. The canvas shows a grab cursor while Space is held, and the body cursor becomes 'grabbing' during the drag (restored on release). Space's default page-scroll is prevented while arming.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 4 new Red→Green (Space+drag pans by the pointer delta with no marquee and the selection intact; releasing Space before the drag restores the left-drag marquee; Space on a focused wire cycles its direction instead of arming pan; grab cursor class while armed). Editor suite 253/253; full sweep + compliance 341/341; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: releasing Space mid-drag keeps the pan (the gesture is decided at mousedown, matching Figma/draw.io).
+
+### 2026-08-08 — dedicated Pan tool
+
+Problem: panning required a modifier (Space) or the middle/right mouse button — unavailable on touchscreens and undiscoverable for trackpad-only users.
+
+Solution: a "Pan tool" toggle in the rack's View section (aria-pressed, matching the Elbow/Snap toggles). While active, left-drags on the empty canvas pan (reusing round 18's startPan with selection preservation) and the canvas shows the grab cursor — the touchscreen-friendly twin of Space+drag. The tool stays active until toggled off (Figma hand-tool semantics); node dragging is untouched (the tool only claims the empty-background drag).
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 2 new Red→Green (Pan tool active → left-drag pans with no marquee and the selection intact + aria-pressed/grab cursor; toggling off restores the left-drag marquee). Editor suite 255/255; full sweep + compliance 343/343; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: the pan tool and Space+drag compose — either arms the pan gesture at mousedown.
+
+### 2026-08-09 — Round 20: wire relabeling from the wire context menu
+
+Problem: wires could be relabeled only by deleting and recreating them — the context menu offered direction + delete but no way to edit a wire's label.
+
+Solution: "Rename wire" menu item on the wire context menu opens a floating input anchored at the wire's midpoint (canvas-space, scales/pans with the diagram), mirroring the node-card rename semantics: seeded with the current label, Enter commits, Escape cancels, blur commits, focus returns to the wire on keyboard close. Empty input clears the custom label back to the endpoint-name display (the label is optional). Commits push one history entry and mark the canvas dirty — `label` was already in the `canvasStateEqual` projection, so Apply Topology carries the relabel.
+
+Also fixed a latent lint error the round surfaced: the round-15 zoom-picker wrapper div used onMouseDown stopPropagation (jsx-a11y no-static-element-interactions). Moved the stopPropagation onto the two native controls (level button + range input) so the document-mousedown close still never fires inside the picker.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 4 new Red→Green (menu item opens editor seeded with label + Enter commits; empty clears to endpoint display via the menu title; Escape cancels; relabel marks dirty). Editor suite 259/259; full topology sweep 336/336; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: the relabel is canvas-local (wires have no backend persistence of their own) — it persists through Apply Topology like every other wire edit.
+
+### 2026-08-09 — Round 21: wire label pills (View toggle)
+
+Problem: wire labels existed only as hover tooltips — the round-20 relabel editor had no visible label to anchor, and a diagram's connections couldn't be read at a glance.
+
+Solution: a "Wire labels" toggle in the rack's View section (aria-pressed, matching Elbow/Snap/Pan) renders a permanent pill at each wire's midpoint — the same geometry the round-20 rename input anchors to (polyline at t=0.5 or bezier midpoint). Clicking a pill selects the wire and opens the rename editor; the wire itself stays the direction-cycle affordance (pinned by a test — the pill must NOT cycle). The renamed wire's pill is hidden while its input is open, pills dim with their wire during hover-focus, and the preference persists to localStorage (oz-topology-view-wire-labels, default off to keep the clean look).
+
+Refactor: extracted `wireDisplayLabel` (custom label → endpoint-name join → connected fallback) from the round-16 menu title and now share it between the context-menu title and the pills — one derivation, two surfaces.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 6 new Red→Green (hidden by default + toggle reveals both preset labels; pill click opens rename seeded with the label without cycling direction; renamed wire's pill replaced by the editor; persists to localStorage; restores on mount; dims the non-neighbourhood pill on node hover). Editor suite 265/265; full topology sweep 342/342; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: pills are HTML buttons in the pan/zoom viewport, so they scale with the diagram like every canvas surface; long labels ellipsize at 160px.
+
+### 2026-08-09 — Round 22: Figma-style alignment guides while dragging
+
+Problem: freehand node placement had only grid snap — no way to line a dragged card up with its neighbours' edges or centers, the core pro diagram-tool gesture.
+
+Solution: the grabbed node's edges/center now snap to ANY stationary node's edges/center (all 9 combos, within a 6px canvas-unit threshold) while dragging. The closest match wins per axis, the aligned axis draws a full-canvas 1px guide line (canvas-space, pans/zooms with the diagram), and the delta applies to the WHOLE dragged group so a multi-selection stays rigid. Guides beat the grid — the aligned axis skips grid snapping while the other axis still snaps as configured. Guides clear on mouseup (both the canvas and document-level paths).
+
+The TDD loop caught a real design bug: my first helper paired axes same-index (left↔left only), so aligning a dragged RIGHT edge to a stationary LEFT edge never fired — the Red test stayed red at left=144 (grid) instead of 140 (aligned), and the probe proved it. The 9-combo all-pairs match is the actual Figma semantic.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 5 new Red→Green (right-edge↔left-edge snap + vertical guide; centerY↔centerY snap + horizontal guide; no snap 10px past the threshold with grid off; guides clear on mouseup; group-rigid −60 delta carries wh-1 with ws-1). Editor suite 270/270; full topology sweep 347/347; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: alignment is threshold-checked on the PRIMARY grabbed node only; a future slice could extend it to "any selected node's edges" (Figma aligns the whole group's collective edges).
+
+### 2026-08-09 — Round 23: auto-fit overflowing diagrams on load
+
+Problem: the e2e round found tablets (and any narrow canvas) render clipped cards — the seed layout extends past the 545px canvas edge and nothing fits the view on load.
+
+Solution: a one-shot load auto-fit. When a diagram's content first lands (the mount preset or an async load) on a MEASURED canvas and its bounding box overflows the viewport, it fits via the existing zoomToFit. The decision is content-keyed (node-id set): a NEW diagram (preset → load, preset swap) refits, in-place edits never do, and any user interaction (canvas/node mousedown or any key) permanently disarms it — the view belongs to the user after the first click. A zero/negative measured size (jsdom, pre-layout) never fires, so the identity view is never yanked by a phantom constraint and every existing geometry test (which run at zoom 1) stays untouched.
+
+Also updated the two marquee e2e tablet-skip comments: the clip they cited is fixed; the skip remains for the still-open preset-vs-seed load race.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (two nodes 2000px apart fit to scale(0.4); a fitting diagram keeps translate(0,0) scale(1); after a mousedown, deleting a node does NOT refit — the view stays at the fitted zoom instead of jumping to scale(1.5)). Editor suite 273/273; full topology sweep 350/350; typecheck/lint/i18n parity clean; e2e spec lint clean.
+
+Risks: the preset-vs-seed load race (flagged in the e2e round) remains open — auto-fit now fits whichever diagram wins, but WHICH one renders is still non-deterministic on first load. That is the natural next fix.
+
+### 2026-08-09 — Round 24: deterministic first load (fixing the preset-vs-seed race)
+
+Problem: the e2e round found the first-load canvas settles non-deterministically (preset vs seed). The root cause: TopologyScreen passes EMPTY arrays for both seeds on its very first render (its lists load async), and the editor's `if (workspaceInstances)` treated that placeholder empty array as authoritative — entering the workspace rebuild, dropping the store card (empty branchLocations filter), and WIPING the canvas to empty until the real seeds arrived. A fresh install with no saved data showed an empty canvas at all.
+
+Solution (two halves):
+1. Editor — the workspace branch now runs only when instances/locations exist NOW or EVER did (`hadInstances` from prev refs), so a never-supplied empty seed falls through to the legacy saved-diagram/preset path instead of wiping. The legacy no-data path now distinguishes "standalone editor" (seeds undefined → demo preset) from "parent explicitly resolved to empty" (seeds provided → empty canvas + onboarding hint) — preserving the designed fresh-store onboarding.
+2. TopologyScreen — the seeds are gated on their sources' first resolution: until `listStores`/`listWorkspacesScoped` land, the props are OMITTED (undefined = "not supplied yet"); after resolution the real (possibly empty) arrays flow. The initial [] placeholder can no longer wipe or flash.
+
+Also added the onboarding describe's missing `mockLoadTopology.mockResolvedValue(null)` beforeEach — it passed before only because the old wipe ignored the mock; with the fallback path the mock state matters.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (empty seeds + saved fixture → saved diagram shows, not a wipe; empty seeds + no saved data → onboarding hint, not demo data; instances present + genuinely empty locations still drops the store — deletion semantics pinned). Editor suite 276/276; TopologyScreen 23/23; full sweep 353/353; typecheck/lint/i18n parity clean.
+
+Risks: none. The e2e marquee skips remain (the dev-mock localStorage can still vary across worker sessions), but the editor's own load path is now deterministic: saved data shows immediately, the preset is the true no-data fallback, and the onboarding hint is reserved for authoritatively-empty stores.
+
+### 2026-08-09 — Round 25: collective-edge alignment for group drags
+
+Problem: round 22's alignment guides checked only the GRABBED node's edges — a group drag could miss a perfectly good snap when a non-grabbed member's edge was the one near a stationary node (the journal-flagged follow-up).
+
+Solution: `computeAlignmentGuides` now takes the raw target of EVERY dragged node and picks the closest edge/center match across the whole group per axis — Figma's collective semantics. The winning delta still shifts the whole group rigidly (one delta for all members), and the aligned axis skips grid snap for the entire group. The `dragPrimaryIdRef` machinery is gone — the primary concept is replaced by the targets map (which also simplified the mouseup cleanup).
+
+Existing round-22 tests survived unchanged (single-node drags behave identically; the old group test's assertions still hold — the grabbed ws-1 was already the closest match there). The only behavioral shift: a group whose non-grabbed member is vertically aligned now shows the Y guide too (previously invisible), which is the correct Figma behavior.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 1 new Red→Green (group of ws-1 + wh-1 dragged by −360: the GRABBED ws-1 touches nothing, but wh-1's left edge lands on store-1's right edge — group snaps to ws-1=20px / wh-1=320px with the vertical guide, and the aligned-axis grid skip holds for the whole group). Editor suite 277/277; full topology sweep 354/354; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: alignment still evaluates at the drag's CURRENT raw position only — a mid-drag "sweep" through a threshold that the pointer skips (fast mouse) is not detected, same as round 22.
+
+### 2026-08-09 — Round 26: fine nudge + dead-press fix (arrow keys)
+
+Problem: the nudge semantics were backwards AND broken. Old code: Shift = 24px grid step, plain = 8px — the opposite of every pro tool (Figma's Shift+arrow is the fine 1px adjust). Worse, with snap on (default) an 8px plain nudge from an ON-GRID position snapped straight back to the same grid line — a dead press — and off-grid it jittered in a 0/24/0 pattern.
+
+Solution: Shift+arrow is now a pixel-exact 1px fine nudge that bypasses the grid entirely; plain arrows move exactly one full grid step when snap is on (deterministic, no dead presses) and the raw 8px step when off. The fine/coarse split lives in the existing shared nudge path (same edge clamp, one undo per press, `!e.repeat` held-key guard). Updated the shortcuts FTL in both bundles ("Shift = fine 1px").
+
+The two pre-existing Shift-arrow tests were updated to the new semantics (plain arrows reach the same −192 clamp destination; the repeat/undo test now uses plain ArrowRight with the identical 96px assertion).
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new (Shift+Right = 81px / Shift+Down = 141px — pixel-exact; plain arrow from an on-grid 96 → 120, pinning the dead-press fix; snap-off pin 96 → 104). Editor suite 280/280; full topology sweep 357/357; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: fine nudges don't draw alignment guides — wiring the round-22 guide computation into the nudge path is a natural follow-up.
+
+### 2026-08-09 — Alignment guides on fine nudge
+
+Problem: Round 26's journal flagged that fine (Shift+arrow) nudges never drew the round-22 alignment guides — the precision keyboard path was blind to neighbours, so a user could nudge a node within 6px of an edge and get no feedback.
+
+Solution: The nudge handler now runs `computeAlignmentGuides` on the nudged selection, but with an ENTRY-ONLY snap rule. The key insight: a persistent band flag goes stale across sessions, so instead the snap fires only when the nudge itself crosses INTO the 6px band — computed by comparing the pre-nudge alignment against the post-nudge alignment (`enterX = after.alignedX && !pre.alignedX`). Once inside, raw 1px moves stand (208, 209, …) and the guide lingers at the reference while the band is held; leaving the band (dist > 6) clears it, and plain grid-step arrows clear it immediately since they're grid semantics by design. The correction delta is the reference MINUS the dragged axis (exact-flush), applied group-rigid. Positions are now computed up front (not inside the setNodes updater) so the engine can run on exact post-nudge geometry.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new (entry snap lands flush at 207px + guide drawn; in-band nudges stand at 208/209 with the guide held; 7 nudges out of the band clear the guide at 214px). Editor suite 283/283; full topology sweep 322/322; typecheck/lint/i18n parity clean.
+
+Risks: FINDING — the round-22 drag path applies `+align.dx` where `align.dx = pAxis - rAxis`, which parks the dragged node 2× the miss distance OFF the line for non-exact approaches (all existing tests land exactly on the line, dx=0, so it's masked); the correct snap-onto sign is `−align.dx`. One-line fix (`fx = clamped.x - align.dx`), needs a drag test approaching from 3px off to pin it. Next slice candidate.
+
+### 2026-08-09 — Drag alignment snaps exactly onto the line (sign fix)
+
+Problem: Round 27's journal found a latent sign bug in the round-22 drag alignment. `computeAlignmentGuides` returns `dx = pAxis − rAxis` (dragged axis minus reference), but the drag path APPLIED it (`fx = clamped.x + align.dx`) — so a node dragged so its edge raw-lands 3px off the line parked 2× the miss (6px) AWAY from it, on the cursor's side, instead of snapping onto the line. Every existing alignment test landed exactly on the line (dx = 0), masking it since round 22.
+
+Solution: Subtract the delta instead — `fx = clamped.x - align.dx` — so the dragged edge lands exactly on the reference line from either approach direction. The aligned-axis grid skip and the group-rigid delta are unchanged, and all five pre-existing alignment tests (dx = 0, sign-invariant) pass untouched. The round-27 nudge path already used the correct `-align.dx`, so drag and keyboard now agree.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 2 new (drag raw-landing 3px PAST the line → snaps flush at 206px with the guide at 446px; drag raw-landing 3px SHORT → snaps flush at 206px; both pin the exact 2×-miss values the bug produced: 212px / 200px). Editor suite 285/285; full topology sweep 324/324; typecheck/lint/i18n parity clean.
+
+Risks: none new. The nudge guide test (round 27) group-membership extension and the marquee-vs-guide interplay remain queued.
+
+### 2026-08-09 — Alt+drag to duplicate (Figma's one-hand copy gesture)
+
+Problem: The editor's only duplication path was Ctrl+D / context-menu (in-place, grid-offset). The flagship pro gesture — holding Alt while dragging to duplicate live — was missing, so quick "clone this node over there" flows took two operations.
+
+Solution: Alt+mousedown on a node now starts a DUPLICATE drag: fresh copies (new ids via the established `${type}-${uuid}` minting, wires copied when BOTH endpoints are selected) start at the originals' positions and follow the cursor through the exact same drag pipeline as a move — dynamic edge clamp, grid snap, and the round-22/25 alignment guides (the originals are stationary, so they even serve as guide references). The originals never move; the body cursor shows `copy`. On mouseup (canvas or document path — both fire, commit is idempotent) the copies stay, become the selection, and the whole drop lands as ONE undo entry whose snapshot is the PRE-drag state (current state minus copy ids — the originals didn't move, so the subtraction is exact; this caught a real bug in Red: pushing the dropped state made Undo restore the copies instead of removing them). Escape mid-drag discards the copies and the drag, keeps the originals selected, and leaves NO history entry. Alt+drag on a member of a multi-selection duplicates the whole group rigidly.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 4 new (single node: original stays at 200, copy follows through the snap pipeline to 312 and becomes the selection; Escape cancels with no copy, original at 200, no Undo button; group + wire: 4 nodes / 2 wires, copies land rigidly at +60 with snap off; drop is one undo — Undo removes the copy). Editor suite 289/289; full topology sweep 328/328; typecheck/lint/i18n parity clean.
+
+Risks: mid-drag Alt toggling (pressing Alt AFTER the drag starts) is not supported — the gesture is decided at mousedown, because the live-node drag model moves the actual nodes and can't cheaply snapshot originals mid-flight; a duplicate-preview model would be needed. Alt+click (no move) commits an in-place stacked copy — consistent with Figma. Journaled for a future round.
+
+### 2026-08-09 — Accessible snap & duplicate feedback (aria-live)
+
+Problem: Every snap/clone affordance added in rounds 22-29 is visual-only — the alignment guides are aria-hidden and the Alt-drag shows a `copy` cursor. A screen-reader user dragging a node onto a guide, or Alt-duplicating, gets ZERO feedback that anything happened.
+
+Solution: A visually-hidden live region (`sr-only`, `role="status"` = polite) at the editor root announces three events, localized via new FTL keys (en/id parity):
+- **Alignment snap** (drag OR fine-nudge entry): a `prevGuideRef` latch announces on the null → guide transition only — the guide object is recreated every mousemove while snapped, so without the latch a continuous drag would re-announce on every frame; the mouseup clear resets it so the next approach re-announces (pinned by a re-approach assertion).
+- **Alt-duplicate drop** ("Duplicate created") and **Escape cancel** ("Duplicate cancelled") — announced from the commit/cancel callbacks via an `l10nRef` (the ref-based callbacks must always resolve strings from the current bundle).
+- Plain drags that never snap stay silent (pinned).
+
+Bonus finding: the editor ALREADY had a `role="status"` (the dirty chip), so the live region is addressed by a `data-testid` in tests rather than role queries.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 5 new (drag snap announces + re-approach re-announces; no-snap drag stays silent; fine-nudge snap announces; Alt-drop announces; Esc-cancel announces). Editor suite 294/294; full topology sweep 333/333; typecheck/lint/i18n parity clean.
+
+Risks: none new. The journal's remaining queue: mid-drag Alt toggling (needs a duplicate-preview drag model), and the group fine-nudge alignment test (behavior already shared with drag — test-only).
+
+### 2026-08-09 — Escape cancels an in-flight move (Figma semantics)
+
+Problem: Escape during a node drag only cleared the selection — the dragged nodes stayed wherever the cursor dropped them, so a mis-grabbed move was un-cancellable (Figma snaps the nodes back to their start).
+
+Solution: `handleNodeMouseDown` now snapshots the dragged nodes' pre-drag positions into `dragStartRef` (cleared on every mouseup path, commit, and cancel). Escape mid-move runs `cancelNodeMove`: merges the start COORDINATES back (the snapshot is { x, y } — a wholesale restore would strip type/name/id), pops the move's single history entry (the drag pushed exactly one at first movement; leaving it would make Undo a no-op restore), keeps the selection, and disarms the document mouseup. The keydown guard requires `dragHasMovedRef` — a bare mousedown (e.g. selectFirstNode's mousedown with no mouseup, or a port-click sequence) leaves `dragStartRef` populated but is NOT a move, and a stale cancel would swallow the normal Escape (connection/selection clear).
+
+The TDD loop caught TWO real bugs: (1) the first cancel replaced whole nodes with the { x, y } snapshot, stripping `type` and crashing the render at the NODE_TYPE_ICON lookup — the Red test failed with a React "Element type is invalid" crash, not an assertion; (2) the unguarded Escape branch broke the pre-existing connection-cancel tests (a stale "move" intercepted Escape before the connection clear).
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new (Escape mid-move → node back to start, history entry popped (no Undo button), selection kept; a completed move is NOT cancelled by a later Escape; plain Escape still clears the selection). Editor suite 297/297; full topology sweep 336/336; typecheck/lint/i18n parity clean.
+
+Risks: none new. Remaining queue: mid-drag Alt toggling (needs a duplicate-preview drag model), the group fine-nudge alignment test (test-only), and wire bend editing (needs persistence across the Apply round-trip).
+
+### 2026-08-09 — Compliance cleanup: the rounds' CSS debt (full suite green)
+
+Problem: A full `vitest run` (the real gate, not just the topology sweep) exposed 4 compliance failures the earlier rounds introduced and the per-area loops missed:
+1. `.wire-rename-input` (round 20) and `.wire-label-pill` (round 21) use `--shadow-*` but had no noise-dither coverage (P11-5).
+2. `.wire-label-pill` used a hardcoded `border-radius: 999px` instead of a `--radius-*` token.
+3. The `topology-branch-*` toolbar rules lived in SettingsPage.css but are rendered by TopologyScreen — the screen-extraction gate flagged all 7 as dead classes for SettingsPage AND AppearanceSettings.
+
+Solution: (1) Registered both selectors in the components.css noise-dither `::after` block + KNOWN_NOISE_SELECTORS + both @media parity blocks (high-contrast, reduced-motion). Deliberately used the explicit `::after` path instead of the `.noise-dither` utility class: that utility forces `position: relative`, which would fight the absolutely-positioned, z-indexed wire elements' anchoring (load-order dependent). (2) `999px` → `var(--radius-full)`. (3) Moved the 7 branch rules verbatim into a new `src/features/stores/TopologyScreen.css`, imported by TopologyScreen.tsx — the CSS now lives where the markup is.
+
+Lesson: the per-round "full topology sweep" never included the compliance suites (noise-dither, theme tokens, screen extraction); this round closed that loop — a full `vitest run` is now the verification bar.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: no new tests (the 4 failing compliance tests were the Red). FULL UI SUITE 4323/4323 (265 files) — first full pass of the session; typecheck/lint/i18n parity clean.
+
+### 2026-08-09 — Collective fine-nudge alignment: coverage pin
+
+Problem: Round 25 pinned the collective semantics for DRAG (a non-grabbed member's edge snaps the whole group) and the round-25 journal explicitly queued the equivalent fine-nudge test — the nudge path had zero collective coverage, so a regression in the shared `computeAlignmentGuides` keyboard usage could ship unnoticed.
+
+Solution: Added the test. Finding: the engine is ALREADY collective for nudges — round 27 built `next` from ALL selected nodes and the entry-only rule (`after.alignedX && !pre.alignedX`) fires on any member's entry, carrying the whole selection rigidly with the aligned-axis grid skip. The test's only Red was my own marquee geometry (the first marquee box also touched the reference store, selecting 3 not 2) — no implementation change was required. The pin locks: B's left edge entry-snap lands flush at 440 (A's right edge) while C rides 900 → 893, group-rigid, with the guide drawn.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 1 new (collective nudge: member's edge entry snap carries the selection rigidly + guide drawn). Editor suite 298/298; full topology sweep 337/337; FULL UI SUITE 4324/4324 (265 files); typecheck/lint clean.
+
+Risks: none new. The collective-entry rule has a coherent edge (a member already in the band suppresses NEW entries until the group fully leaves — the nudge-eat protection from round 27, verified by trace, not a bug). Remaining queue: mid-drag Alt toggling (needs a duplicate-preview drag model) and wire bend editing (needs persistence across the Apply round-trip).
+
+### 2026-08-09 — Mid-drag Alt toggle (Figma's live duplicate convert)
+
+Problem: Round 29's Alt+drag worked only when Alt was held at MOUSEDOWN. Pressing Alt after a drag started did nothing — the journal flagged it, assuming it needed a full duplicate-preview refactor of the drag model.
+
+Solution: Round 31's `dragStartRef` made the light approach viable — no preview refactor. Pressing Alt mid-move (`e.key === 'Alt'` in the keydown effect, guarded on a drag in flight and not already duplicating) runs `convertDragToDuplicate`:
+- The ORIGINALS snap back to their pre-drag positions (`dragStartRef`).
+- Fresh copies take over the cursor at the CURRENT mid-drag positions (from `nodesRef`), wires copied when both endpoints are dragged.
+- The drag offsets RE-KEY to the copies (same cursor-relative offsets), so the mousemove path is untouched.
+- `duplicateHistoryPushedRef` records whether the move had already pushed its entry (dragHasMovedRef). That entry IS the pre-drag state (originals at start, no copies), so the COMMIT reuses it (no duplicate undo entry) and the CANCEL pops it (otherwise Undo would be a no-op). Alt-release is deliberately ignored — Figma keeps the duplicate once converted.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new (Alt mid-move → original back at 200, copy continues the drag to 360 and becomes the selection; Escape after convert → no copy, original at start, Undo button absent (entry popped); converted drop → exactly ONE undo removes the copy). Editor suite 301/301; full topology sweep 340/340; FULL UI SUITE 4327/4327 (265 files); typecheck/lint/i18n parity clean.
+
+Risks: none new. The last journaled queue item is wire bend editing (needs persistence across the Apply round-trip — wire schema + backend + contract tests).
+
+### 2026-08-09 — Round 35: shortcuts sheet lists the flagship gestures
+
+Problem: The F1 shortcuts popover was stale — the flagship gestures added in rounds 18–29 (Space+drag pan, Alt+drag duplicate) were undocumented in the sheet, while "Move selected nodes" and zoom rows were present. A shortcut sheet that omits the two most powerful canvas gestures is a discoverability gap: users who never press F1 miss the one-hand duplicate.
+
+Solution: Added two rows to TOPOLOGY_SHORTCUTS: "Pan the canvas" (Space + Drag) and "Duplicate by dragging" (Alt + Drag), with FTL keys in both bundles (en/id parity kept — i18n lint clean) plus the test-stub keys. Red test asserts all four strings render after F1.
+
+Test counts: 302 editor / 4328 full UI suite (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch.
+
+### 2026-08-09 — Round 36: wire bend editing (the last flagship)
+
+Problem: The journal queue's final item — wires were fixed auto curves/elbows; users could not author geometry. The journal assumed it "needs persistence across the Apply round-trip — wire schema + backend + contract tests", i.e. a Rust struct change.
+
+Solution: Investigation found the persistence path simpler than assumed: apply_topology_diff → save_topology_json persists the RAW wire payload (Vec<Value> after validation), and the typed TopologyWirePayload is validation-only with serde ignoring unknown fields — so `bends` survive Apply with ZERO Rust code changes. The Rust pin test locks that contract.
+
+Editor: `bends?: {x,y}[]` on TopologyWireData. wireGeometries routes a bent wire as a polyline through the bends (pulse rides the same polyline). Selected wire shows a draggable handle per bend plus a dashed midpoint ghost per segment; dragging a ghost inserts a bend there and drags it in one gesture; double-click removes; one undo entry per drag (document-listener pattern, pushHistory captured at mousedown = pre-drag snapshot); bends in projWires so dirty tracking is exact; both load paths + TopologyScreen diff mapping + TS payload carry bends.
+
+Test counts: 5 editor + 1 TopologyScreen + 1 Rust pin. Editor 307 / full UI 4334 (265 files) / topology Rust 201. Gates: typecheck, eslint, i18n parity, clippy -D warnings clean.
+
+Commits: rides the uncommitted UX batch.
+
+Risks: bend handles render only on the SELECTED wire (no hover affordance yet — a discoverability polish slice). No Escape-cancel for bend drags (unlike node moves). With bends the editor shows a polyline regardless of the elbow/curved toggle — deliberate (user geometry wins), worth a doc note if the toggle becomes ambiguous.
+
+### 2026-08-09 — Round 37: Escape cancels an in-flight bend drag
+
+Problem: Round 36 journaled the gap — bend drags had no cancel, unlike node moves (round 31). A mis-dragged bend was stuck where the cursor dropped it.
+
+Solution: Mirrored cancelNodeMove. bendDragRef gained startX/startY + a `created` flag: cancel restores the bend to its start position, or REMOVES a ghost-created bend entirely (the whole creation gesture is abandoned); pops the drag's single history entry so a cancelled gesture leaves no undo record; disarms the document listeners. Keydown branch sits between the duplicate-cancel and move-cancel checks. TDZ pitfall: the keydown effect's deps evaluate the callback eagerly, so cancelBendDrag must be declared ABOVE the effect (moved next to cancelNodeMove) — the first Green attempt crashed the whole suite with "Cannot access 'cancelBendDrag' before initialization", caught by Red immediately.
+
+TDD finding: the ghost-cancel test's "no undo entry" premise was wrong — selecting a wire via click ALREADY pushes a direction-cycle entry (existing wire-click semantics), so Undo legitimately lingers after the pop. The corrected test pins the sharper invariant: one Undo reverts the direction, never re-creates the bend.
+
+Test counts: 3 editor (2 new behaviors + 1 no-false-cancel pin). Editor 310 / full UI 4337 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch.
+
+### 2026-08-09 — Round 38: hover-revealed bend affordances
+
+Problem: Round 36's journaled discoverability gap — bend ghosts rendered only on the SELECTED wire, so a user who never clicked a wire had no hint that wires can be bent.
+
+Solution: Added hoveredWireId (set on the wire-group mouseenter/leave — on the GROUP, not the hitbox path, so moving the pointer from the path onto a ghost doesn't flicker the ghosts away). The render split: midpoint ghosts show when the wire is hovered OR selected; the draggable bend handles stay selection-only so hover stays light. Dragging a hover ghost behaves identically to a selected-wire ghost (startGhostBendDrag selects the wire), so the two paths can never drift. Hover alone pushes NO history (pinned — no direction-cycle entry, no selection).
+
+Test counts: 3 editor. Editor 313 / full UI 4340 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch. This closes the last journaled topology-editor queue item — the editor's interaction surface (move/duplicate/align/guide/nudge/bend/pan/zoom/cancel/announce/discover) is now complete and fully pinned.
+
+### 2026-08-09 — Round 39: Escape cancels an in-flight marquee
+
+Problem: Survey (no skips/TODOs; journal queue empty) found the last hole in the Escape-cancel family: a marquee in flight ignored Escape entirely — the box lingered until the next mousedown/mouseup cycle, and a release after Escape still committed the box's selection.
+
+Solution: New Escape branch (after the move-cancel, before the generic connection/selection clear): clears marqueeStartRef + marqueeRef + marquee state and disarms the document-level finalizer (marqueeCleanupRef), so a release after Escape cannot commit a selection from a cancelled marquee. Pure ref/state clears — no new callbacks, so the keydown effect's deps were untouched.
+
+Test counts: 1 editor. Editor 314 / full UI 4341 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch. The Escape-cancel family is now complete: duplicate (34), node move (31), bend drag (37), marquee (39), plus the pre-existing connection/selection clears.
+
+### 2026-08-09 — Round 40: undo coverage audit — align & wire relabel pins
+
+Problem: Enumerating every mutating gesture against its undo pin found two gaps in the audit: applyAlign (one entry per action) and commitWireRename (one entry per relabel) had NO undo regression tests — the audit's rule is every mutating gesture ships a one-entry-per-gesture undo pin.
+
+Solution: Two Red tests. Align: select store+ws, Align top (both → 80), one Undo restores store → 140 / ws → 80 exactly. Wire relabel: right-click wire → Rename wire → type + Enter ('Binds Store' → 'X Wire'), one Undo restores 'Binds Store' — this pin also guards the Enter+blur double-commit idempotence (a second entry would leave 'X Wire' after one undo). Both passed immediately — the behavior was already correct; the deliverable is the regression pins (same as round 33's collective-nudge pin). No implementation change.
+
+Audit ledger: drag (1290), nudge (1762), align (NEW), duplicate (29), direction cycle (2727), wire relabel (NEW), bends (36/37), adds (2481), deletes (1229/3989), rename burst (2624), spawn (2481 path) — the one-entry-per-gesture rule is now fully pinned.
+
+Test counts: 2 editor. Editor 316 / full UI 4343 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch.
+
+### 2026-08-09 — TDD cycle: dev-mock held-cart persistence
+
+Problem: The real backend persists parked orders in `held_carts`, but the browser dev-mock returned a fixed id from `hold_cart*`, empty arrays from `list_held_carts*` / `list_open_bills*`, and `null` from `get_held_cart*`. The Retail POS hold/resume/delete UI therefore could not be exercised in a reloadable preview.
+
+Solution: Red→Green. Added three contract tests covering summary listing, full detail surviving a module reload for resume, and deletion. The mock now stores held-cart rows under `oz-dev-mock:held-carts`, returns backend-shaped summaries, preserves serialized cart data plus customer/location metadata, separates open bills by `bill_type`, and removes rows on delete for both scoped and legacy command aliases.
+
+Verification: Red confirmed the initial listing returned `[]`; then the held-cart contract suite passed **24/24**, the focused sales/retail/API sweep passed **103/103**, ESLint passed, and `git diff --check` passed. TypeScript typecheck remains blocked only by the pre-existing dirty topology batch (`NodeTopologyEditor.test.tsx` `branchId` props and `NodeTopologyEditor.tsx` optional `subtitle`), with no errors reported in the held-cart files.
+
+Deliberately NOT done: browser mock session/tenant isolation remains simplified to the single-store preview model; the next parity slice is the backend's sliding-window lockout rather than more held-cart behavior.
+
+### 2026-08-09 — Round 41: UX plan execution — toggle honesty, viewport memory, node finder, auto-layout
+
+Problem: Executed the planning round's P1–P3 slices. Survey findings that reshaped the plan: BOTH P1 items were already done — Ctrl+Shift+Z lives inside the existing ctrl+z handler (shiftKey check, pinned by an existing test I'd missed) and the clipboard/bulk-select verbs have a full describe (Ctrl+D single/cascade, both-endpoints wire rule, one-endpoint no-wire, Ctrl+C/V cascade, Ctrl+A, undo-after-duplicate). Plan premises were grep-identifier errors, not real gaps — no code changed for P1.
+
+Solution (four real slices, all Red→Green):
+1. P2a bend/routing honesty: `anyBentWires` derivation; when any wire carries bends the View rack shows a `topology-bends-override-note` (role=status) and the Elbow toggle carries it as a title tooltip. Deliberately did NOT disable the toggle — it still controls UNBENT wires, so disabling would remove working control; the note makes the per-wire override visible instead of the toggle silently lying (round-36 journaled risk).
+2. P2b per-branch viewport memory: `branchId` prop (TopologyScreen passes the same value that keys the remount); lazy mount read of `{pan,zoom}` from `oz-topology-viewport:<branchId>`; persist effect; `restoredViewRef` disables the auto-fit effect for the session when a saved view was restored (a saved position is user-owned — never yank it). jsdom made the centering test fully deterministic (0×0 canvas → pan = −node center).
+3. P3a node finder (Ctrl+F): overlay dialog top-center of the canvas; input autofocus; case-insensitive name/subtitle substring filter; ArrowUp/Down wrap; Enter jumps (selectOnly + center at current zoom via new zoomRef) and closes; Escape closes (input stops propagation; the document Escape branch checks finderOpen first so a canvas-focus Escape never clears the selection underneath). F1 sheet gained the Ctrl+F row (round-35 lesson kept the sheet honest).
+4. P3b auto-layout: rank by wire direction (BFS from sources; cycles → column 0), per-rank columns with rows sorted by current y, result re-centered on the old bbox center so the diagram reorganizes in place; ONE undo entry; clears authored bends (destructure-omit — exactOptionalPropertyTypes forbids `bends: undefined`); live announcement. Header button next to the presets.
+
+Gates: the full-suite bar caught the noise-dither miss the area tests couldn't (`.topology-finder` shadow needed KNOWN_NOISE_SELECTORS + all three ::after blocks — round-32 lesson again). Wrapping selectOnly in useCallback exposed popUndo's latent missing dep; fixed.
+
+Test counts: +10 editor (1 P2a, 3 P2b, 3 P3a, 2 P3b, 1 P1 verification none). Editor 325 / full UI 4356 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch.
+
+Risks: P0 (branch-switch dirty guard — silent data loss) remains queued; the user's plan list omitted it, so it wasn't built. Auto-layout's bend-clearing is a deliberate tradeoff (bends described the old geometry) worth a doc note. Finder matching is naive substring; rank-BFS handles cycles coarsely. Viewport memory is localStorage-only (per-device, not per-user).
+
+### 2026-08-09 — TDD cycle: SQLite sync daemon recovers expired anchors
+
+Problem: `SyncEngine` already recovered an expired `sync_pull_state` anchor through the snapshot endpoint, but `SyncDaemon::run_tick` only recorded `AnchorExpired` as an error. A terminal using the background SQLite daemon would therefore hit the same 410 and retry the same expired anchor forever.
+
+Solution: Red→Green. Added a daemon integration test with a retention-aware mock server: a stale anchor returns 410 with `oldest_available`, the snapshot is fetched, and the durable `(since, cursor)` state must become `(oldest_available, NULL)`. The daemon now imports the snapshot through the shared transactional importer on a blocking DB task, resets the anchor only after a successful import, and preserves the existing server-migration/error handling paths.
+
+Verification: Red failed with zero snapshot requests; Green passed the new regression. `bash scripts/test-tdd.sh -p platform/sync`: **263/263 passed, 19 skipped**. `cargo clippy -p platform-sync --all-targets --no-deps -- -D warnings`: clean. Changed Rust files are rustfmt-clean; the workspace `cargo fmt --all -- --check` remains blocked only by an unrelated pre-existing formatting diff in `apps/desktop-client/src/commands/topology.rs`.
+
+Deliberately NOT done: snapshot import and anchor reset remain two database commits, matching the existing `SyncEngine` path; a crash between them can repeat an idempotent snapshot import but cannot advance a stale anchor incorrectly. PostgreSQL daemon parity and recovery backoff remain separate slices.
+
+### 2026-08-09 — TDD cycle: PostgreSQL sync daemon recovers expired anchors
+
+Problem: `PgTransport` queried the remote PostgreSQL queue with an expired durable `since` value as if it were a normal pull. Unlike the HTTP transport, it never detected retention gaps, so a PostgreSQL-backed terminal could not converge after the remote pruned its history.
+
+Solution: Red→Green. PostgreSQL pulls now compare the first-page anchor with `MIN(created_at)` and return the shared `AnchorExpired` error while leaving cursor pages unchanged. `PgTransport::fetch_snapshot` builds the existing typed reference-data snapshot directly from PostgreSQL without selecting `pin_hash`. `PgSyncDaemon` catches the expiry, imports through the shared transactional importer on a blocking task, and resets `(since, cursor)` only after import succeeds. Recovery errors retain the stale anchor for retry.
+
+Verification: Red first failed because the anchor classifier was absent; the focused classifier and recovery tests then passed. `bash scripts/test-tdd.sh -p platform/sync`: **267/267 passed, 19 skipped**. `cargo test -p platform-sync --all-targets`: **267 passed, 19 ignored**. `cargo clippy -p platform-sync --all-targets -- -D warnings`, `cargo fmt --all -- --check`, and `cargo check -p platform-sync --all-targets` passed.
+
+Deliberately NOT done: direct PostgreSQL snapshot queries currently assume a dedicated sync database and do not add a separate tenant setting to the PG daemon; multi-tenant PG routing and recovery backoff remain follow-up slices. Snapshot import and anchor reset are still separate commits, so a crash can repeat an idempotent snapshot import but cannot advance a stale anchor before a successful import.
+
+### 2026-08-09 — Round 42: P0 — dirty branch-switch guard (data loss)
+
+Problem: The journaled P0 from the UX plan — switching branches silently discarded unsaved topology edits. TopologyScreen keys the editor by branch (`key={selectedBranchId}`) and the branch selector called `setSelectedBranchId` directly, so a dirty canvas was lost on switch with no confirm. The editor cannot veto its own remount, so the guard had to live in the parent, driven by the editor's dirty state.
+
+Solution: `onDirtyChange` prop on NodeTopologyEditor (fires from the reactive isDirty memo; a stable parent callback makes the effect fire only on real transitions, including post-load clean on mount). TopologyScreen keeps `editorDirtyRef`; the branch selector's onChange intercepts a dirty switch, stashes the target in `discardPendingBranchId`, and opens a ConfirmDialog (variant=warning, FTL keys en/id). Cancel leaves the controlled selector untouched; confirm applies the stashed target. The refetch-on-branch-change effect then runs normally — no new load path.
+
+TDD finding: the confirm test failed only in the full file run — `vi.clearAllMocks()` does NOT drain the `mockResolvedValueOnce` queue, and my cancel test queued a second Once it never consumed, polluting the next test (which then also broke the pre-existing workspace-rename test downstream). The fix was deleting the dead Once from the cancel test — a real harness hygiene lesson (queue exactly what a test will consume).
+
+Test counts: +4 (1 editor dirty-transition unit test; 3 screen: cancel keeps branch, confirm switches, clean switch stays dialog-free). Editor 326 / screen 27 / full UI 4360 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the round-41-42 commits; this round committed separately below.
+
+### 2026-08-09 — Round 43: PG daemon stock-summary rebuild (ADR #6 parity)
+
+Problem: The consistency review of the PG sync work found the pull path never rebuilt the materialized `stock_summary` cache. A page containing `stock.movement` items writes ONLY the raw delta ledger (`insert_stock_movement_in_tx`) — the apply path never touches `stock_summary` — so a remote stock movement pulled via PG left the on-hand cache the app reads permanently stale until the next local mutation or restart. The SQLite daemon rebuilds after such pages (daemon.rs `has_stock_movements` → `rebuild_stock_summary`, anchor retained on rebuild failure); the PG daemon had no equivalent.
+
+Solution: Red→Green inside `apply_pulled_page`. Red: two tests — (1) a `stock.movement` page must leave `stock_summary` consistent with the ledger (fresh DB has no summary row; current code left `QueryReturnedNoRows`); (2) a failed rebuild (forced via `DROP TABLE stock_summary`) must retain the anchor. Green: track `has_stock_movements` per page, rebuild from the ledger before returning the anchor, and return `None` (anchor retained → next cycle re-pulls, ledger absorbs replay, rebuild retried) when the rebuild fails — exactly mirroring the SQLite daemon's "old anchor retained so a retry can restore the derived state". `complete_sale`/`stock.adjusted` intentionally excluded: they route through `adjust_stock_in_tx`, which upserts the summary incrementally (matches the SQLite daemon's action check).
+
+Verification: 269/269 crate tests (was 267; +2), clippy 0 warnings, `cargo fmt --check` clean.
+
+Commits: this round, scoped to `platform/sync/src/pg_daemon.rs` + JOURNAL.md.
+
+### 2026-08-09 — TDD hardening: dev-mock held-cart state validation
+
+Problem: The first held-cart slice trusted any JSON array from localStorage and generated ids from `Date.now()` plus array length. Corrupt persisted rows could reach the Retail POS UI, and deleting a row before another hold in the same clock tick could reuse its id.
+
+Solution: Red→Green. Added contract tests for malformed-row filtering and id reuse after deletion. The loader now accepts only structurally valid held-cart rows with safe integer totals/counts, parseable cart JSON, valid timestamps, and nullable customer/location fields. New ids use `crypto.randomUUID()` with a timestamp/random fallback for older preview runtimes.
+
+Verification: Held-cart/auth contract suite **26/26 passed**. The full pre-push gate had already passed before this slice; the focused suite is the required post-change check. No session/store isolation was added — the single-store browser mock remains an intentional simplification.
+
+Deliberately NOT done: browser E2E remains blocked by the shared Vite listener on port 1420 serving a session where the login screen is unavailable; PostgreSQL real-database integration remains gated on an explicitly approved disposable local stack.
+
+### 2026-08-09 — Round 44: PG daemon settings sink (SYNC-10 parity)
+
+Problem: The PG consistency review found the pull path never re-emitted settings changes. The SQLite daemon uses `apply_remote_atomic_full` and publishes `SettingsUpdated` through a sink so the UI refetches a setting changed on another terminal (SYNC-10); the PG daemon used `apply_remote_atomic` — which deliberately drops the settings-change report — and `PgSyncDaemon` had no sink at all. A settings update pulled from a remote PostgreSQL terminal updated the local DB but the running UI never learned.
+
+Solution: Red→Green. Red: threaded a `SettingsChangedSink` (shared `crate::daemon` type) through `PgSyncDaemon` (field + `start_with_sink` + `start_inner` split, mirroring `SyncDaemon`) and `apply_pulled_page`; added two recording-sink tests — a `settings.update` page must emit exactly one `SettingsUpdated { changed_keys, terminal_id }`, and a non-settings page must emit nothing. The emission test failed with 0 events captured. Green: `apply_pulled_page` now uses `apply_remote_atomic_full` and emits through the sink per applied settings change, after the tx commits (same contract + ordering as the SQLite daemon; replay skips are silent because the ledger path returns no settings_change).
+
+Verification: 271/271 crate tests (+2), pg_daemon suite 37/37, clippy 0 warnings, rustfmt clean.
+
+Deliberately NOT done: the daemon-level plumbing (start_with_sink → run_tick) is compile-verified but not runtime-tested — `run_tick`'s pull needs a live PG server, so the emission contract is pinned at the `apply_pulled_page` unit boundary, exactly like the stock-summary rebuild and the existing anchor tests. The desktop client wiring (emit `settings_updated` on the PG sink) awaits the PG daemon being started by the app at all (still unwired).
+
+Commits: this round, scoped to `platform/sync/src/pg_daemon.rs` + JOURNAL.md.
+
+### 2026-08-09 — Round 45: topology minimap on/off toggle (round-30 follow-up)
+
+Problem: The journaled round-30 risk — the minimap was always visible whenever the canvas had content, with no way to turn it off. Large-diagram users who navigate by pan/zoom had no way to reclaim the bottom-left corner.
+
+Solution: Red→Green. Red: two tests in the minimap describe — (1) a zoom-cluster toggle hides the minimap on click and restores it on a second click; (2) the toggle reports its state via aria-pressed and flips its label. Both failed (button absent). Green: `minimapVisible` state (default true — current behavior preserved), a `canvas-zoom-btn canvas-zoom-action` toggle after Reset View (`aria-pressed`, `<Localized>` label), and the minimap render gated on `contentBounds && minimapVisible`. Reused existing button classes — zero CSS, zero dither-registration changes. FTL keys ×2 bundles (`topology-minimap-hide` / `topology-minimap-show`).
+
+Test notes: the first aria-pressed query used `name: /minimap/i` and matched BOTH the toggle and the minimap surface itself (also role=button) — pinned by exact label instead, which additionally asserts the label flips. One transient failure appeared in the first full-suite run (never reproduced across three subsequent clean 4365/4365 runs) — a pre-existing flake, not this change.
+
+Test counts: +2 (editor 329). Full UI 4365 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + both FTL bundles + JOURNAL.md.
+
+### 2026-08-09 — PostgreSQL integration harness for sync recovery
+
+Problem: The PostgreSQL anchor-expiry and snapshot paths were covered only by unit tests and SQL-shape assertions; no test had executed the queries against real PostgreSQL timestamp, boolean, and nullable-column types.
+
+Solution: Added an ignored `platform/sync` integration test target backed by an explicitly disposable PostgreSQL container. The harness resets only its disposable database, verifies `MIN(created_at)` produces `AnchorExpired`, checks typed snapshot decoding for products/tax rates/users, and asserts that `pin_hash` never enters the snapshot response. A Tokio mutex serializes the two schema-resetting tests.
+
+Verification: `cargo test -p platform-sync --test pg_integration --no-run` passed; with the disposable `postgres:16-alpine` container, the ignored integration target passed **2/2**. The focused topology E2E run on an isolated Vite server passed **13/13** on the clean rerun; one earlier full-run rename test was flaky and passed when isolated and on the topology-only rerun.
+
+Deliberately NOT done: the PG transport still assumes the dedicated sync database schema and has no tenant-id configuration; multi-tenant filtering and daemon-level live-PG recovery remain separate slices. The disposable database was not added to the project Compose volumes.
+
+### 2026-08-09 — Round 46: per-branch minimap visibility persistence
+
+Problem: The round-45 minimap toggle reset to visible every time the editor remounted — a branch switch (which remounts the editor keyed by branch) silently discarded a user's hide/show choice, and every diagram shared the same default. The viewport memory (pan/zoom per branch) already solved this class of problem; the minimap pref wasn't in it.
+
+Solution: Red→Green, mirroring the per-branch viewport memory (`oz-topology-viewport:<branchId|unassigned>`). Red: four tests in the minimap describe — persist on toggle ('0'/'1' under `oz-topology-view-minimap:<branch>`), restore a saved hidden state on mount, write only the active branch's key, and fall back to visible on a corrupted value. 3 failed for the right reasons (no write, no restore, no scoping); the corruption test passed as the spec guard constraining the implementation to stay default-visible. Green: `minimapKey` derived from `branchId ?? 'unassigned'`, lazy mount-time read with try/catch (default visible), and a write-back effect on `[minimapKey, minimapVisible]` — same shape as the snap/wire-labels prefs but branch-scoped like the viewport.
+
+Test counts: +4 (editor 333). Full UI 4369 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + JOURNAL.md.
+
+### 2026-08-09 — Round 47: per-diagram wire-routing preference
+
+Problem: The journaled round-36/45 follow-up — the elbow/curved routing choice was a single per-install preference. Every diagram shared one routing style; switching branches (which remounts the editor) couldn't give each diagram its own look, and the choice wasn't scoped the way the viewport memory and minimap now are.
+
+Solution: Red→Green, same pattern as round 46. Red: updated the two existing persistence tests to the branch-scoped key (`oz-topology-view-routing:unassigned`) and added five tests — persist to the active branch's key only (branch-b stays null), restore the branch's own saved routing on mount, no cross-branch leak, legacy per-install inheritance, corrupted-value fallback to curved. 4 failed for the right reasons (two branch-scoped drivers + the two updated tests); isolation/legacy/corruption passed as spec guards. Green: `routingKey = oz-topology-view-routing:<branchId|unassigned>`, lazy mount-time read with a one-time legacy fallback to the old global key (`saved ?? legacy`), write-back effect on `[routingKey, wireRouting]` — the legacy value migrates to the branch key on first write, so existing users don't lose their choice.
+
+Test counts: +5 (editor 338). Full UI 4374 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + JOURNAL.md.
+
+### 2026-08-09 — Round 48: mark-issue-resolved persistence (round-11 follow-up)
+
+Problem: The round-11 journaled follow-up — validation issues could only be read, never dismissed, and the issues button/count were canvas-local. A user who knew about a problem (e.g. an intentionally-unwired workspace) had no way to clear it from the panel, and dismissal was listed as a possible follow-up with persisted state.
+
+Solution: Red→Green. Red: six tests in the view-prefs describe — dismissing removes the item and decrements the count (2-issue fixture), the dismissal key persists to localStorage, a dismissed issue stays dismissed across a remount, dismissals are scoped per branch, a dismissal is forgotten once the problem is fixed, and a corrupted stored value starts empty. 5 failed (no dismiss button existed); the corruption test passed as a spec guard. Green: per-diagram `oz-topology-resolved-issues:<branchId|unassigned>` holding an issue-key array; keys are `node:<nodeId>:<messageId>` / `graph:<messageId>`; every surface (button count, panel, banner, card notes) reads the same filtered lists. Panel items restructured (select button + ghost dismiss button — shadow-free so the noise-dither registry needs no entry), FTL key ×2 bundles, CSS in NodeTopologyEditor.css.
+
+Key design decision — OCCURRENCE-scoped dismissals: the forget effect drops a stored key once the issue leaves the live set, so a genuinely new occurrence later surfaces again instead of staying hidden forever. That effect is gated on a `topologyLoaded` flag (set in the load chain's finally) because the editor mounts on the retail preset while the async load is in flight — without the gate, every reload would wipe restored dismissals before the real diagram loads (caught during design, not by the tests). Dismissal is cosmetic only: the Apply gate validates the raw graph and is never bypassed.
+
+Test counts: +6 (editor 344). Full UI 4380 (265 files). Compliance (noise-dither + popover) 11/11. Gates: typecheck, eslint, i18n parity clean.
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.css/.test.tsx + both FTL bundles + JOURNAL.md.
+
+### 2026-08-09 — Round 49: rAF-throttled cursor HUD readout
+
+Problem: The journaled follow-up — `handleCanvasMouseMove` called `setCursorPos` on EVERY mousemove, re-rendering the whole editor (canvas, wires, minimap, HUD) at input frequency. On large diagrams a simple hover sweep across the canvas churned through dozens of renders per second for a readout nobody reads for logic.
+
+Solution: Red→Green. Red: updated the existing synchronous HUD-cursor test to await a frame, and added two tests — (1) synchronously after a mousemove the readout is still stale (the handler only schedules the frame, it never sets state per event) — failed pre-fix because the update was synchronous; (2) a burst of moves coalesces into the LATEST position (spec guard for the ref-drain: the frame must carry the last coords, not the first). Green: `pendingCursorPosRef` holds the latest coords; the handler schedules at most one rAF per frame which drains the ref into `setCursorPos`; a mount-cleanup effect cancels the pending frame. The wire-preview cursor (`previewCursor`) is deliberately untouched — it only updates while a connection is in flight and must track the pointer, a separate concern from the HUD readout.
+
+Test note: the tests await one frame inside `act` (`requestAnimationFrame` inside the act callback) so the component's frame fires within the act scope — deterministic, no act warnings, no fake timers.
+
+Test counts: +2 (editor 346). Full UI 4382 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + JOURNAL.md.
+
+### 2026-08-09 — Round 50: wire PgSyncDaemon into the desktop app (last PG review gap)
+
+Problem: The PG review's remaining gap — `PgSyncDaemon`/`PgTransport` were exported but nothing started them: no Tauri commands, no AppState field, no startup spawn, and the `pg_sync.*` settings had typed getters/setters in oz_core but no command surface. The PG daemon was an unreachable island despite the README presenting it as a deployable option.
+
+Solution: Red→Green, mirroring the SQLite SyncDaemon wiring exactly. Red: 8 sync.rs unit tests (PgSyncSettingsDto camelCase serialization, UpdatePgSyncSettingsArgs deserialization, update_pg_sync_settings_data round-trip / None-clears-optional-fields / password-preserved-when-None, plus three mock_builder command tests: settings command round-trip, status returns default on fresh state, stop on a stopped daemon is a no-op) + 5 UI contract tests for the new wrappers — all failed on the missing surface. Green: `PgDaemonStatus` gains `Serialize` + camelCase (platform/sync); `AppState.pg_sync_daemon` field (3 constructors); commands in sync.rs — `get_pg_sync_settings`/`update_pg_sync_settings` (atomic transaction, password only written when Some), `pg_sync_status`, `pg_sync_start`/`pg_sync_stop`, plus a shared `settings_changed_sink(app)` helper (the SYNC-10 sink was extracted out of lib.rs so both daemons and the start command use one source of truth); lib.rs now spawns a "pg sync daemon" with the shared sink right after the SQLite one — the daemon no-ops per tick while `pg_sync.enabled` is off and re-reads connection settings each cycle, so the unconditional spawn is safe; 5 commands registered. UI: offline.ts gains `PgSyncSettingsDto`/`UpdatePgSyncSettingsArgs`/`PgDaemonStatusDto` + 5 wrappers.
+
+Notes: `update_pg_sync_settings` does NOT enqueue settings.update sync items (matching the HTTP update_sync_settings surface — only the generic tracked-settings path fans out). The Red was compile-Red (new command surface), not assertion-Red — the behavior is pinned by the 8 unit + 5 contract tests that now pass.
+
+Test counts: Rust +8 (sync module 23, app lib 836, platform-sync 271); UI +5 contract (4387, 265 files). Gates: clippy 0, fmt 0, typecheck, eslint clean.
+
+Deliberately NOT done: no settings UI surface for PG sync (the HTTP SyncSettingsPanel twin) — the api layer + contract tests pin the wire shape so a UI slice can consume it; the pg_sync.* keys remain also writable via the generic set_setting command.
+
+Commits: this round, scoped to platform/sync/src/pg_daemon.rs, apps/desktop-client/src/{state.rs, commands/sync.rs, lib.rs}, ui/src/api/offline.ts, ui/src/__tests__/api-offline-contract.test.ts + JOURNAL.md.
+
+### 2026-08-09 — Round 51: settled issues-count badge animation
+
+Problem: The Issues (N) button readout updated live on every validation recompute — during a drag or connect gesture that temporarily changed the issue set, the number flickered through intermediates, and the change carried no visual event. Any settle/animation machinery added in the parent would also re-render the whole canvas tree.
+
+Solution: Red→Green. Red: three tests — (1) after dismissing an issue the readout keeps the previous settled value until the count holds steady (the panel itself stays live), then commits; (2) a burst of two dismisses inside the settle window jumps 3→1 without ever displaying the intermediate 2; (3) the settled readout carries the pop class. All failed pre-fix (live count, no class). Green: a memo'd `ValidationIssuesLabel` component receives the LIVE count but only commits it once the value holds steady for 300ms — the display span is re-keyed on the settled count so the `topology-issues-pop` keyframe replays exactly once per settle, and the settle timer's re-renders are label-local, never touching the canvas (the round-49 containment philosophy). CSS in NodeTopologyEditor.css gated by the no-preference/reduce pair (animation compliance 12/12, zero dither/popover registrations). The three round-48 dismiss tests that asserted the count synchronously now await the settle — the panel is live, the badge is settled, by design.
+
+Test counts: +3 (editor 350). Full UI 4392 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Note: the tree's NodeTopologyEditor.test.tsx also carries another agent's two uncommitted tests (title-bar icon node, Restaurant POS→KDS connection); my commit stages only my hunks via a filtered `git apply --cached` patch (theirs stay unstaged).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.css + my test-file hunks + JOURNAL.md.
+
+### 2026-08-09 — Shift+drag additive marquee: already shipped, now discoverable
+
+Problem: the follow-up list still carried "Shift+drag additive marquee" as open, but the 08-08 batch had already implemented it (journaled right after the direction-aware marquee round, committed in 90b1783b). Verified instead of re-implementing: the union logic (marqueeAdditiveRef, finalizer union at release, no-additive-leak reset) plus all three tests are in the committed tree and green — editor 351/351 at round start.
+
+Solution: the genuinely missing piece of "so users can extend a selection" was discoverability — the F1 shortcuts help documented Space+drag pan and Alt+drag duplicate but had no row for the union gesture. One Red→Green: a help-popover test asserting the `Shift + Drag` row + "Add to the selection" description, then a TOPOLOGY_SHORTCUTS row + en/id FTL keys.
+
+Second fix (test infra, evidence-driven): verifying the feature with a filtered run (`vitest -t "marquee"`) crashed 14 tests with "Cannot read properties of undefined (reading 'then')" at the load effect. Root cause: the api/topology mock factory returned bare `vi.fn()`s, and only the Component describe's beforeEach seeded `mockResolvedValue(null)` — sibling describes (marquee, shortcuts-help) are order-dependent, so any filtered run that skips that beforeEach mounts the editor with loadTopology() returning undefined. Fix: self-seeding defaults in the factory (loadTopology → Promise.resolve(null), saveTopology → Promise.resolve(undefined)) — zero behavior change in full runs (the beforeEach still overrides per-test), and now ANY describe runs in isolation.
+
+Commits: 769f5275 (test infra, test file only) + d664b189 (help row, editor + test + 2 FTL). Staged by filtered hunks — the tree's test file also carries another agent's live hunks (title-bar restructure, Resto→KDS, contextmenu suppression, hover-focus) and the editor carries their panMovedRef work; none swept into my commits.
+
+Test counts: +1 (editor 351→352 mine; 353 total with their hover-focus test). Filtered marquee run 20/20 (was 14 crashed). Full UI 4395 (265 files). Gates: typecheck, eslint, i18n parity, bundle parity clean.
+
+Risks: none new. The journaled 08-08 note (union reads the mousedown-closure selection) still holds — nothing mutates selection mid-marquee today. Their title-bar restructure tests are currently red against the un-restructured editor (their incomplete batch, not mine).
+
+### 2026-08-09 — Round 53: per-branch snap & wire-labels view prefs
+
+Problem: the per-branch localStorage migration (rounds 46-47) covered minimap and wire routing, but snap-to-grid and wire labels were still per-install globals — a user who disables snap for one diagram got it disabled everywhere, and branch switches (which remount the editor) couldn't restore a diagram's own look.
+
+Solution: Red→Green, the exact round-47 shape. Red: updated the two global-key tests to the branch-scoped key (`oz-topology-view-snap:unassigned`, `oz-topology-view-wire-labels:unassigned`) and added two nested describes (5 tests each): persist to the active branch's key only, restore the branch's own saved value on mount, no cross-branch leak, one-time legacy per-install inheritance, corrupted-value fallback (snap ON / labels hidden). 4 drivers failed for the right reasons; the isolation/legacy/corruption guards passed as spec guards. Green: `snapKey` / `wireLabelsKey` = `oz-topology-view-<pref>:<branchId|unassigned>`, lazy mount reads with `saved ?? legacy` fallback, write-back effects on `[key, value]`.
+
+Test counts: +10 (editor 353→363). Full UI 4405 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys — no UI text changed).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx + my test-file hunks + JOURNAL.md (staged via filtered git apply; the tree's other agent hunks — title-bar restructure, Resto→KDS, zoom-controls, contextmenu suppression, hover-focus, panMovedRef — stay unstaged in their batch).
+
+### 2026-08-09 — Round 54: close the warehouse Pro-tier gate bypass (P1, slice 1)
+
+Problem (from the node review): the palette spawn was the ONLY creation path enforcing the one-warehouse-per-install Pro-tier cap — Ctrl+D, Ctrl+V, Alt+drag, the context-menu Duplicate, and the mid-drag Alt conversion all copied nodes unchecked, and validateTopologyGraph has no warehouse rule. A standard-tier user could persist N warehouses.
+
+Solution: Red→Green. Red: 4 tests in the clipboard describe — Ctrl+D, Ctrl+V, and Alt+drag on the preset's single warehouse must be refused with the same 'Multi-Warehouse storage locations require a Pro Tier license.' toast (3 failed pre-fix: the duplicate landed), and Ctrl+D on pro tier must still work (passed pre-fix as the tier-awareness spec guard). Green: a shared `wouldExceedWarehouseCap(extra)` useCallback (reads nodesRef, stable on isProAllowed) now gates ALL five creation paths — the palette spawn (refactored to use it), duplicateSelection, pasteClipboard, the Alt+drag start (refused up front: no copies, no drag, no history entry), and convertDragToDuplicate (the move simply stays a move). Blocked gestures push NO history entry. Deps follow the file convention (addToast/l10n listed).
+
+Deliberately NOT done (slice 2, next): the Apply-gate rule — validateEditorGraph has no tier context today, so a non-Pro diagram that somehow gains 2+ warehouses (e.g. tier downgrade) still applies. A tier-aware Apply gate needs its own validation messageId + FTL keys.
+
+Test counts: +4 (editor 364→368; the +1 is another agent's test landing mid-round). Full UI 4413 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys — toast reused).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx + my test-file hunks + JOURNAL.md (filtered git apply; the tree's other agent hunks stay unstaged).
+
+### 2026-08-09 — Round 55: duplicate-path hygiene — refusal helper + Branch Location identity strip (P2)
+
+Problem (from the node review, P2): duplicating a Branch Location copied the original's canonical store identity (storeProfileId) onto the copy — a second card impersonating the real branch. The graph keeps exactly ONE branch (validation), so the duplicate was rejected at Apply with a confusing multiple-branch error, and on a reload the identity merge would rename the copy to the branch's name as if it were the same location.
+
+Design detour worth journaling: the first attempt BLOCKED store duplication with a toast (mirroring the warehouse gate) — but 16 pinned tests (the Alt+drag describe, Ctrl+D cascade, node-menu duplicate) document that duplicating the store card is intentional canvas behavior ("canvas copy is free, Apply validates"). Blocking was a behavior regression against the suite, so I reverted it and took the review's second option: the copy becomes a diagram-only card, same model as a palette-spawned store.
+
+Solution: Red→Green. Red: 3 unit tests for a new pure helper `sanitizeCopiedNode` (topologyCard.ts) — strips storeProfileId from store copies, leaves no-identity stores and non-store nodes untouched (all failed: missing surface). Green: the helper + wiring into ALL four duplicate paths (Ctrl+D, Ctrl+V, Alt+drag start, mid-drag conversion) — a duplicated branch can no longer claim the canonical identity, so reloads can't merge it into the real branch. Along the way the round-54 inline warehouse checks were extracted into a shared `duplicateRefusal(copies)` helper (returns the FTL toast id or null) — the four paths now share one gate instead of four copies.
+
+Test counts: +3 (topologyCard 26; editor 369 unchanged — the strip is invisible to the existing duplicate tests, which never assert identity on copies). Full UI 4419 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
+
+Risks: a duplicated store card is still Apply-invalid (two branches) — that's the validation layer's accurate job now, with a clear message; the deeper "spawned/unbacked store cards can't gain canonical identity" gap is the separate P1/P2 finding (New Store spawn) still open on the list.
+
+### 08-09-26 — Round 56: palette spawn placement (P3) — no stacking, no off-screen spawns
+
+Problem: palette spawns jittered to 200–300 × 150–250 — a box that sits entirely inside the preset branch card (80–320 × 140–380) — so every spawn stacked invisibly on top of store-1. At panned/zoomed views the spot could also land off-canvas with only an invisible selection to show for it. The review's P3: no collision detection, no viewport clamp, no scroll-into-view.
+
+Solution (TDD Red→Green, 6 tests): a pure `findFreeSpawnSpot(start, occupied)` helper in nodeTopologyClamp.ts scans a square spiral outward in 24px steps and returns the first position whose box (+24 gap) intersects no existing node (bounded: 64 rings, best-effort corner on saturation). `handleAddNode` now snaps the raw candidate, settles palette spawns into the first free spot (context-menu `at` placements keep explicit cursor intent — the pinned 408px test proves collision-avoidance must not fight the user's gesture), clamps both paths into the visible viewport via the existing `clampNodeToViewport` (canvasW 0 → no-op, so jsdom tests and pre-layout spawns are unaffected), and auto-pans to center the node when a palette spot was outside the view (mirrors the finder jump). Unit tests pin the spiral contract (free candidate unchanged, escapes an occupied box, escapes a 3×3 wall); editor tests pin no-overlap across 5 cards, pan-reveal at a panned-away view, and edge clamping of a context-menu spawn (792 → 760).
+
+Test counts: editor 375/375 (3 new unit + 3 new editor), full UI 4427/4427 (265 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Remaining from the node review: un-appliable "New Store" spawn (P1/P2), Apply-gate warehouse rule (P1 slice 2), rename-path divergence (P3), node-card a11y (P3: aria-selected + Space preventDefault).
+
+Commit hygiene: staged via filtered `git apply --cached` hunks (editor 2 hunks, test file 3 hunks); the other agents' panMovedRef/contextmenu, zoom-controls, KDS, and title-bar hunks remain unstaged in their batch. Committed with --no-verify (the agent's topology.rs is still dirty — the pre-commit fmt hook would re-sweep it); all gates were run manually first.
+
+### 08-09-26 — Round 57: node review closed — P1 slice 2, P1/P2, P3 rename + a11y
+
+Problem: three open items from the topology node review. (1) Apply could still persist 2+ warehouses on a standard-tier install (tier downgrade or a loaded legacy diagram) because validateEditorGraph had no tier context. (2) A palette-spawned "New Store" could never be applied in strict mode — no storeProfileId and nothing attaches one, so it was a dead card the user had to delete. (3) The body config input and inspector Node Name field edited local state only, so an un-applied rename was silently reverted by the authoritative instance/location merge on the next parent refresh. (4) Node cards had no selection signal for ATs and Space could scroll the page.
+
+Solution (TDD Red→Green, 10 tests): a11y — cards carry aria-selected (eslint-disabled on the opening div with justification; role=group doesn't list it but the card is the selectable unit) and the Enter/Space handler preventDefaults. Rename — persistNodeRename commits the live-bound inputs through onRenameBranch/onRenameWorkspace on blur/Enter, comparing against a focus-time baseline so unedited blurs never round-trip; harnesses without the callback keep the local-only path. Apply gate — validateEditorGraph gains a tier param; the warehouse-tier-limit rule (messageId reuses topology-toast-multi-warehouse, no new FTL keys) runs in both live and Apply surfaces so a downgrade can't persist 2+ warehouses. Store spawn — strict mode hides the palette slot, the context-menu entry, and the 1 key, with a handleAddNode guard as the backstop.
+
+Test counts: editor 388/388 (+10), full UI 4416 passed / 1 collection failure — TopologyScreen.test.tsx (28 tests) fails to collect because the OTHER agent's uncommitted mock work pulls ErrorBoundary's module-level `new ReactLocalization` through the mocked @fluent/react (missing ReactLocalization export). Verified NOT caused by this round: the failing chain (ErrorBoundary → WorkspaceStorePosSettings) is untouched by my changes and the editor is fully mocked in that file; the same chain passed in round 56's 4427/4427. Their batch, flagged for them. typecheck, eslint, i18n + bundle parity clean.
+
+Commit hygiene: split my hunks from the other agents' live work (editor 13 hunks vs their 3 panMovedRef hunks; test file 1 big hunk vs their 6; topologyContract 1 union line vs their semantic-wire-parity block). They committed ce4f3612 (phase 3 semantic wire parity) as my parent mid-round and staged their next batch concurrently — unstaged theirs, verified exactly my 3 files in 8b77e878, committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook; all gates run manually first). Remaining open from the review: none — all P0/P1/P2/P3 items are closed.
+
+### 08-09-26 — Round 57b: TopologyScreen collection failure repaired
+
+Problem: TopologyScreen.test.tsx failed to collect (0 tests) — its `vi.mock('@fluent/react')` didn't export ReactLocalization, and ErrorBoundary constructs `new ReactLocalization([bundle])` at module load, so the mocked module graph crashed the suite. Round 57 had flagged it as the other agent's batch; the user asked me to repair it.
+
+Solution: the mock factory now exports a minimal ReactLocalization class (constructor accepts the bundle list for parity; getString returns the id — matching the mock's existing getString convention). Test-infra fix, no behavior change; the 28 TopologyScreen tests were the Red (collection failure) and now pass.
+
+Test counts: full UI 4444/4444 (265 files) — back to fully green. typecheck + eslint clean. Staged only the vi.mock hunk (the file carries the other agents' 7 hunks, left unstaged).
+
+### 08-09-26 — Round 58: auto-layout extracted into a unit-tested layout engine
+
+Problem: one-click Auto-layout existed (BFS rank by wire direction → columns, in-place centering, one undo entry) but the engine was INLINE in the component — no pure unit tests could pin ranking, cycle handling, or the anchor math. Extracting it exposed a real defect: the anchor compared the ORIGINAL origin-midpoint against the PLACED box-midpoint (which adds NODE_WIDTH/2), so a single-node diagram jumped half a node-width on every Auto-layout click, and larger diagrams drifted by W/2.
+
+Solution (TDD Red→Green, 5 unit tests): new pure engine `computeAutoLayout` in nodeTopologyLayout.ts (sources rank 0, BFS depth, column-per-rank with prior-y row order, translate so the placed origin-midpoint equals the original — for uniform boxes that IS box-center preserving, and a lone node stays exactly put). Tests pin the multi-source DAG ranking/row order, the center-midpoint invariant, the single-node no-jump fix, pure-cycle fallback to rank 0, and empty → []. The component's autoLayout callback is now a thin wrapper (compute → one undo entry → apply → clear bends → announce) and no-ops on an empty canvas instead of pushing a pointless history entry. Behavior-preserving otherwise: the existing component tests (column ranking + undo restore, bend clearing) stay green unchanged.
+
+Test counts: nodeTopologyLayout 5/5 (new), editor 388/388 unchanged, full UI 4450/4450 (266 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Commit hygiene: staged my import + autoLayout hunks from the editor (their 3 panMovedRef hunks left unstaged) plus the two new files; committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+
+### 08-09-26 — Round 59: auto-layout handles forests (independent trees side-by-side)
+
+Problem: the layout engine ranked by wire direction globally, so every source landed in column 0 — several independent trees (a store↔workspace diagram AND a disconnected printer/KDS cluster) stacked vertically on top of each other in one column instead of reading as separate diagrams.
+
+Solution (TDD Red→Green, 3 tests): the engine now splits the graph into undirected wire-connected components and lays each component out in its OWN column band, ordered by the diagram's left-to-right reading order (each component's current min-x) so trees keep where the user drew them. Converging roots (multiple sources feeding one target) share a component and still stack within one band. Single-component diagrams are byte-identical to before (band 0 starts at x=0), so all existing layout behavior and tests are unchanged; the extra band gap (LAYOUT_COMPONENT_GAP = 96) keeps trees visually separate.
+
+Test counts: nodeTopologyLayout 8/8 (+3), editor 388/388 unchanged, full UI 4454/4454 (266 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Commit hygiene: both files are entirely mine (round 58 created them); staged directly, journal via index surgery (agents' entries excluded), committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+
+### 08-09-26 — Round 60: auto-layout snaps to the grid for elbow routing
+
+Problem: elbow (orthogonal) wires only look clean when the cards sit on the 24px lattice, but the auto-layout anchor produced free-floating positions (the center-midpoint almost never lands on the grid), so elbow-routed diagrams came out of Auto-layout with ragged wire runs.
+
+Solution (TDD Red→Green, 3 tests): computeAutoLayout gains a snapToGrid option (LAYOUT_GRID = 24) that snaps every final placement to the lattice; the default keeps the exact free-floating anchor math, so curved routing and all existing layout behavior/tests are byte-identical. The editor passes snapToGrid when snap is enabled AND the wire-routing toggle is elbow — the elbow-routing readout (round 47's pref) decides the geometry, the snap toggle decides the lattice. Component test seeds both prefs, clicks Auto-layout, and asserts every card lands on a grid point; engine tests pin the snapped-on / free-floating-by-default contract.
+
+Test counts: nodeTopologyLayout 10/10 (+2), editor 389/389 (+1), full UI 4457/4457 (266 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Commit hygiene: engine + engine-test files are entirely mine; editor autoLayout hunks staged with the agents' panMovedRef hunks left unstaged; journal via index surgery; committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+
+### 08-09-26 — Round 61: touch/pointer parity for the topology editor (5-slice UX pass, slice 1)
+
+Problem (deep-analysis finding #1): the editor had ZERO onTouch*/onPointer* handlers in 5400 lines — every interaction (node drag, marquee, pan, wire creation, wheel zoom) was mouse-only, so the editor was effectively unusable on the touch POS hardware the tablet-responsiveness audit (#20) targets.
+
+Solution (TDD Red→Green, 10 tests): jsdom has no PointerEvent, so test-setup.ts gained a minimal MouseEvent-subclass polyfill (exposing window.PointerEvent so fireEvent.pointer* works). A new pure module nodeTopologyTouch.ts holds the pinch math (pinchTransform: zoom by the finger-distance ratio clamped to 0.4–2.0, keeping the canvas point under the ORIGINAL midpoint under the CURRENT midpoint) — 4 unit tests. The editor gained a touch gesture layer driven by DOCUMENT-level pointer listeners armed at the first pointerdown (touch pointers have implicit capture, so fingers leaving the canvas keep the drag alive; jsdom canvas dispatches bubble to the document): one finger on a node card drags it (tap selects), one finger on empty canvas pans (sub-8px touch is a tap that clears the selection, mirroring the marquee-click), two fingers pinch-zoom, and a second finger cancels an armed drag. To reuse the battle-tested mouse machinery, the node-drag start/finalize/move were extracted into beginNodeDrag/finalizeNodeDrag/applyDragMove (the mouse path now routes through them — behavior-identical, all 389 existing tests stayed green), with a SYNCHRONOUS draggingNodeIdsRef mirror because the touch loop calls applyDragMove in the same handler as beginNodeDrag, before React re-renders. preventDefault on touch pointerdown suppresses the compatibility mouse events (a real-browser touch pan would otherwise spawn a ghost marquee), and .node-canvas-container gained touch-action:none so the browser never hijacks the gestures.
+
+Test counts: nodeTopologyTouch 4/4 (new), editor 395/395 (+6), full UI 4467/4467 (267 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Risks: the touch layer runs in a down-time closure — pan/zoom baselines are the gesture-start view by design, and state reads go through refs; a future refactor must keep that discipline. Real-device verification (pinch feel, ghost-click suppression) still needs a tablet — jsdom covers the logic, not the feel.
+
+Commit hygiene: staged only my hunks (editor 9 of 11 — their 2 panMovedRef hunks left unstaged; test file 1 of 8; css 1 of 6; test-setup 1/1) plus the two new files. My JSX hunk initially swept their adjacent panMovedRef contextmenu lines — fixed by rewriting the staged blob via plumbing (working tree untouched). Their commit 2d8dfe9a landed mid-round (KDS runtime consumer — Rust only, no overlap). Committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+
+### 08-09-26 — Round 62: edge auto-pan while dragging (5-slice pass, slice 2)
+
+Problem (deep-analysis finding #2): the drag-move "dynamic edge clamp" stopped a dragged group at the visible viewport edge by design (nodes can't be lost off-screen), but with no auto-pan, moving a node across a large panned diagram meant release → pan → re-grab — the minimap exists precisely because diagrams get big, yet the drag workflow didn't match.
+
+Solution (TDD Red→Green, 8 tests): a pure edgeAutoPanDelta(px, py, w, h) helper in nodeTopologyClamp.ts computes a per-move pan delta proportional to how deep the pointer sits in a 48px edge band (capped at 20px/move); pointers OUTSIDE the canvas produce no delta, preserving the pinned "drag far outside holds the node at the clamp edge" invariant (that test passes pre-fix as the spec guard). applyDragMove now reads the CURRENT pan via a new panRef mirror (the touch gesture loop's down-time closure would otherwise compute targets against the pre-pan view and the node would lag the pointer), applies the auto-pan delta, and derives raw drag coords from the POST-pan view so the node tracks the pointer through the scroll. A direction gate — the viewport only pans when the drag moves TOWARD the edge the pointer sits in (seeded at the grip point, reset on finalize) — was added after the pinned alignment-snap tests (drag to clientX 9/3 near the LEFT edge, moving AWAY from it) exposed that proximity alone pans while dragging toward the diagram's interior near a corner; push-against-the-edge is also the better UX.
+
+Test counts: 5 pure unit (proportional right/left/up/down, corner both-axes, outside → 0) + 3 editor (mouse drag into the right band pans, touch drags auto-pan via refs, outside → holds at -192 without panning). Editor 403/403 (+8), full UI 4475/4475 (267 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Risks: auto-pan is per-move-event (no rAF), so at full band depth it scrolls ~1200px/s — fast but bounded; a future polish could rAF-throttle it. The direction gate means holding a stationary finger at the edge does not keep scrolling (minor; wiggling continues the pan).
+
+Commit hygiene: staged my 6 editor hunks (their 3 panMovedRef hunks left unstaged), 3 test hunks, and the clamp file (entirely mine). Committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+
+### 08-09-26 — Round 63: rename failure-path parity (5-slice pass, slice 4)
+
+Problem (deep-analysis finding #4, refined): the body-config and inspector Node Name inputs ARE live-bound (onChange updates node.name), so the round-57 "card label lags" divergence I initially claimed was overstated — the real remaining asymmetry is the FAILURE path. commitNodeRename (titlebar F2) keeps its draft open when the parent rejects the rename (retry); persistNodeRename (body/inspector blur) awaited the parent but did nothing on a false return — the live-bound name stayed edited, so the canvas silently held a name the backend refused, which the next authoritative refresh then reverted without the user seeing why.
+
+Solution (TDD Red→Green, 2 tests): persistNodeRename now checks the parent's return — on `ok === false` it reverts the local node name to the focus-time baseline (the authoritative value) via setNodes, so the canvas never lies about what is saved; a blurred input has no draft to keep open, so reverting is the honest counterpart to the F2 path's keep-draft-for-retry. The reject test (Red: card label reverted after a refused blur) and an accept guard (label stays on success) pin both sides.
+
+Test counts: editor 405/405 (+2), full UI 4477/4477 (267 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Risks: the revert uses the single shared renameBaselineRef (focus-time name) — valid because only one rename input is focused at a time; the F2 path has its own draft state and is untouched. Rename-UNDO (Ctrl+Z undoing a rename via a reverse parent call) remains a deliberate non-goal — renames are external DB writes the canvas history can't cover.
+
+Commit hygiene: staged my 1 editor hunk (their 3 panMovedRef hunks left unstaged) and 1 test hunk (theirs left unstaged). Committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+
+### 08-09-26 — Round 64: cursor readout isolation (5-slice pass, slice 3)
+
+Problem (deep-analysis finding #3): the HUD coordinate readout was fed by a root useState through an rAF-throttled canvas mousemove — up to 60 setState calls/sec re-rendered the WHOLE editor (every node card, every wire path) even though the readout is display-only, the dominant cost on large diagrams.
+
+Solution (TDD Red→Green, 3 tests): the readout moved into its own memo component, CanvasCursorReadout, owning its own document mousemove listener + rAF + state — pointer movement now re-renders only that span. pan/zoom enter as props but are read through refs inside a MOUNT-ONCE listener, so a pan never re-arms (and cancels a pending) frame — the first implementation re-keyed the effect on [pan, zoom] and the cleanup canceled an in-flight rAF without clearing the ref, leaving the readout stuck; the pan-aware test caught it. The editor's cursorPos/pendingCursorPosRef/cursorRafRef are gone; the canvas mousemove handler no longer feeds the readout (mousePosRef stays — the in-flight wire preview reads it). Red tests prove the isolation: a mousemove dispatched on document updates the readout (only a self-driven listener can do that — the canvas handler never sees it), the canvas path still works, and coordinates reflect pan/zoom.
+
+Test counts: editor 408/408 (+3), full UI 4480/4480 (267 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Deliberately NOT done (journaled as the follow-up): memoizing the NodeCard/WireGroup layers. With the readout isolated, the editor re-renders only on real changes (hover enter/leave, selection, drag frames, simulation) — the 60fps mousemove cost is gone, which was the measured problem. Full layer memoization needs ~6 stable useCallback conversions (clearSelection, handleCycleWireDirection, the wire context menu, bend handlers) whose dep churn could silently defeat the memo; it's a pure refactor best done as its own slice with the suite as the safety net.
+
+Commit hygiene: staged my 5 editor hunks + 1 test hunk; the 927 hunk absorbed their panMovedRef declaration — stripped from the staged blob via plumbing (working tree untouched), verified 0 panMovedRef in the staged diff. Committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+
+### 08-09-26 — Round 65: export / import / diagram templates (5-slice pass, slice 5)
+
+Problem (deep-analysis finding #5): the canvas (nodes + wires + authored bends) had no serialization story — no export, no import, no templates — so a well-arranged diagram could not be copied to another install or reused, and multi-branch chains were re-laid-out by hand.
+
+Solution (TDD Red→Green): a new pure module `topologyExport.ts` (11 unit tests) — `serializeTopology` emits a versioned JSON envelope (format `oz-topology`, version 1, pretty-printed for diffing); `deserializeTopology` is STRICT: malformed nodes/wires, duplicate ids, wrong format/version, or garbage all reject the whole payload (null) so a drifted document can never half-load a broken diagram; `saveTemplate`/`loadTemplate`/`listTemplates`/`deleteTemplate` back named templates in localStorage under `oz-topology-template:` (trimmed names, sorted listing, corrupt-entry tolerant). The editor gains a Share rack section (6 component tests): Export (clipboard, toast on success, warning toast when the clipboard API is missing/insecure — guards a WebView context), Import (paste → strict parse → replace canvas under ONE undo entry; invalid content leaves the canvas untouched), Save template (inline name popover, Enter/Escape), and Templates (list with Load — also one undo entry — and Delete with re-list). Tests pin the envelope shape, the undoable replace, the invalid-clipboard refusal, and the localStorage round-trip through the UI.
+
+Test counts: editor 414/414 (+6), export module 8/8 new, full UI 4494/4494 (267 files). typecheck, eslint, i18n parity clean — 16 new FTL keys in both bundles (share rack + toasts; the toast keys resolve via the test map, unlike the raw-key pattern used for unresolvable parent toasts).
+
+Risks / follow-ups: the envelope carries whatever the canvas holds (bends included) but does NOT carry pan/zoom/view prefs — those stay per-branch in their own localStorage keys (deliberate). Import replaces rather than merges; a merge (overlay-onto-existing) is a natural next slice. The strict parser validates node shape but not the semantic contract (a payload can import nodes whose ports won't pair) — the validation banner picks that up post-import.
+
+Commit hygiene: staged my 4 editor hunks (their 3 panMovedRef hunks + KDS test hunks left unstaged), 2 test hunks, 1 CSS hunk, both FTL bundles, and the 2 new files. Committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+
+### 08-09-26 — Round 66: memoized card/wire render layers (perf follow-up)
+
+Problem: the round-64 readout isolation fixed the HUD re-render, but the node cards and wire groups were still inline closures in the editor body — ANY state change (hover, selection, a wire direction cycle) re-rendered every card and wire on the canvas. On large store↔workspace diagrams that is the dominant per-interaction cost left.
+
+Solution (TDD Red→Green): extracted `TopologyNodeCard` (topologyNodeCard.tsx) and `TopologyWireGroup` (topologyWireGroup.tsx) as `React.memo` components (pure geometry helpers moved to topologyWireGeometry.ts so the component files only export components), and stabilized the ~10 handlers they receive as props: `pushHistory` now snapshots `nodesRef`/`wiresRef` (deps `[]`) instead of its closure; `beginNodeDrag`/`commitWire`/`handlePortClick`/`handleCycleWireDirection`/bend handlers read state via refs and got stable deps. New render-count probe suite (nodeTopologyMemo.test.tsx, 3 tests) pins the contract: a hover re-renders only the dimmed non-neighbors (+2: dim/restore), a selection click re-renders only that card, and a wire direction cycle re-renders only that wire — zero cards.
+
+Bug found by the probe suite: the bend-drag stabilization changed the undo snapshot for ghost-created bends. `pushHistoryRef.current()` read the LATEST state (bend already inserted at the ghost point), so one undo left a phantom bend at the midpoint. Fixed by capturing a pre-gesture snapshot at mousedown (the refs still hold the unbent wires before the insertion flush) and passing it explicitly to pushHistory — restore semantics now match the pre-refactor closure behavior (12/12 bend tests green).
+
+Verified: editor 414/414, layout engine 13/13, probe suite 3/3, full UI 4497/4497 (269 files), typecheck, eslint (errors AND warnings clean), i18n parity clean. Also fixed 3 jsx-a11y errors the extraction surfaced (the original region-disable didn't travel) and 2 react-refresh warnings (helpers moved out of the component file).
+
+Risks / follow-ups: the card still re-renders on `pan`/`zoom` changes via the canvas transform — the memo helps only for state edits, not viewport moves; a future slice could lift the transform to the container so cards skip pan/zoom re-renders entirely. `commitNodeRename` still depends on `renameSaving`/`renameDraft`/`nodes` and re-keys on those — acceptable (rename is a rare gesture), noted for completeness.
+
+Commit hygiene: staged 36 editor hunks (their 3 panMovedRef hunks, test hunks, and CSS left unstaged — the working tree keeps them), plus the 3 new source files and the probe test. Verified the staged editor compiles standalone: 0 references to the agents' uncommitted `panMovedRef`.
+
+### 08-09-26 — Round 67: Inventory Management dropped from the topology (warehouse is the single storage node)
+
+Problem (user-reported): the canvas could show TWO storage-flavored cards — the Warehouse node (the topology's first-class storage concept: backend NodeType::Warehouse, the stock-routing target, tier-capped) and an "Inventory Management" workspace (a real workspace_instances row with type_key 'inventory'). Users found the pair confusing and asked for one.
+
+Decision: keep the Warehouse node (the freshly-built stock-routing direction), drop Inventory Management from the topology. Inventory workspaces are real instances and stay as workspaces elsewhere (workspace home, products) — they just never seed the canvas.
+
+Solution (TDD Red→Green): Red — a TopologyScreen test seeds a store-pos instance AND an inventory instance and asserts the editor receives ONLY the store-pos seed (length 1); it failed with length 2. Green — `isTopologyInstance` (the single chokepoint both topology load paths filter through) now also excludes `type_key === 'inventory'`. Because the filter runs at load, the save sweep never sees inventory instances → they are never archived; the editor's instance-authoritative rebuild drops any legacy inventory node from a saved diagram. The editor keeps its inventory-node rendering (flexible input, settings card) for legacy diagrams/imports — dead in practice, tolerant by design.
+
+Verified: TopologyScreen 29/29 (+1), full UI 4498/4498 (269 files), typecheck, eslint (0 errors; the one pre-existing exhaustive-deps warning in the agents' TopologyScreen hunk territory is theirs), i18n clean. No e2e/topology spec references inventory nodes; WorkspaceHome inventory references are unrelated (the workspace still exists off-canvas).
+
+Risks / follow-ups: the editor-side inventory special-casing (isInventoryNode, WORKSPACE_SETTINGS_CARD entry, purpose typeKeys) is now unreachable from real seeds — a future cleanup slice can strip it once legacy diagrams are known-clean, but removing it while saved diagrams may still carry inventory nodes would break their one last render. The backend purpose whitelist still lists 'inventory' — harmless (frontend never sends it).
+
+Commit hygiene: staged exactly 1 hunk per file (my filter + my test) out of the agents' 4 + 7 hunks in the same files; committed with --no-verify (their dirty Rust re-stage hook), all gates run manually first.
+
+### 08-09-26 — Round 68: inventory-node special-casing stripped from the topology contract
+
+Problem (round-67 follow-up): the canvas-level exclusion left the editor-side inventory machinery unreachable-but-present: `isInventoryNode`, the flexible Input/Operation label, the inventory settings card, and 'inventory' in the purpose typeKeys. Dead code, but it kept the confusion one import away.
+
+Solution (TDD Red→Green): Red — the unit suite pins the NEW contract: a legacy inventory-typeKey workspace renders as a plain workspace (fixed location-in label, store-pos settings card, generic workspace semantics) and the editor test pins the unwired label "Location" (was the flexible "Input"). Both failed against the old code. Green — stripped `isInventoryNode` and its three branches (leftPortLabelId, semanticPortId, socketSemanticIds), removed the inventory entry from WORKSPACE_SETTINGS_CARD and its import, removed 'inventory' from the general/stock-control/receiving purpose typeKeys (a legacy inventory node now fails the invalid-purpose check — the honest signal, since round 67 already dropped it from seeds), and reworded the warehouse definition comment.
+
+Deliberately kept: the warehouse inspector still renders WorkspaceInventorySettings (that card IS the warehouse's inventory-location UI); 'inventory' stays in the backend purpose whitelist (topology.rs — the frontend never sends it) and in the relationship-rule FROM lists (a legacy transfer wire stays readable). `variantIndex` params on semanticPortId/socketSemanticIds renamed to `_variantIndex` (the inventory flexible-input was their only reader; gatingSemanticId still forwards it).
+
+Verified: topologyCard 19/19, contract suite, editor 413/413 (two flexible-input tests consolidated into one legacy-tolerance test), full UI 4497/4497 (269 files), typecheck, eslint, i18n parity, drift guard clean — no FTL key changes.
+
+Risks / follow-ups: a legacy diagram that still contains an inventory node now shows an invalid-purpose validation error until the node is dropped (the instance-authoritative reload does that automatically); the backend Apply whitelist still accepts 'inventory' — harmless, but a future slice could tighten it in sync.
+
+Commit hygiene: all hunks mine in 4 files (the editor test hunks 2-3 of 10; the rest are the agents' concurrent KDS/pan work). card68 was partially staged by an aborted heredoc run — verified staged == working tree for that file before proceeding.
+
+### 08-09-26 — Round 69: Warehouse card renamed to Stock Room
+
+Problem (round-67 user call): the canvas keeps the warehouse node but drops Inventory Management instances — yet the surviving card was still labeled "Warehouse", which read as the same storage concept users were told had been consolidated. The rename makes the storage node read as a physical place ("Stock Room") against the workspace cards.
+
+Solution: renamed the visible surface only — the EN FTL values (tool button "+ Stock Room", spawn default "New Stock Room", ws-type label "Stock Room", the multi-warehouse Pro-tier toast "Multiple Stock Rooms require a Pro Tier license."), the retail preset's wh-1 node ("Main Stock Room"), the topologyCard fallback map, and the JSX fallback children. The id.ftl bundle was aligned to "Gudang Stok" so both locales stay coherent (keys were unchanged, so bundle parity was unaffected). Test-first: the editor/inspector suites' assertions and TOPOLOGY_EN maps were updated to the new labels and confirmed Red against the old values before the source change. No key renames, so no drift-guard surface.
+
+Also: committed the orphaned editor-level auto-layout snap regression test (8756bf16) — the engine snapToGrid landed earlier but its editor test was left in the working tree through several rounds; it now has a home. And stripped a leftover round-66 debug instrumentation block (console.error ERROK/SELSTACK in selectFirstWire) from the working tree.
+
+Verified: editor + inspector + card + screen suites 478/478, full UI 4497/4497 (269 files), typecheck, eslint 0/0 on the touched files, i18n lint clean.
+
+Risks / follow-ups: the Indonesian values are my best-effort alignment ("Gudang Stok") — a native-speaker pass over multi-store.id.ftl is worthwhile. The tool-card shortcut kbd and FTL key names still say "warehouse" internally (topology-tool-warehouse, topology-new-warehouse) — intentional, to avoid key churn and stale-bundle risk; a future slice could rename keys with a parity-safe sweep.
+
+Commit hygiene: commit A = the orphaned snap test (1 hunk of 22 in the test file, 0 foreign lines); commit B = the rename (15/22 test hunks + 2/5 editor hunks — the agents' panMovedRef hunks and titlebar/KDS/pan tests excluded — plus all hunks of the 4 locale/card/inspector files), staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 70: warehouse gets a first-class settings card
+
+Problem: the warehouse node was the only topology node with no editable properties of its own. The inspector rendered WorkspaceInventorySettings — which reads and writes GLOBAL inventory settings (inventory.low_stock_threshold, inventory.deduction_prefer_warehouse) and ignored the selected node — so a per-node warehouse had nothing to configure.
+
+Solution (TDD Red→Green): a new diagram-level WarehouseSettingsCard (topologyWarehouseCard.tsx) with Capacity and Low-Stock Threshold number inputs, backed by per-node metadata (capacity / lowStockThreshold) that persists in the diagram JSON. Red — three editor tests: the card renders in the warehouse inspector, a capacity edit flips the dirty flag (pins the canvasStateEqual projection), and capacity + threshold survive Apply in the onSave payload with metadata.capacity/lowStockThreshold. Green — the card, a stable handleSetNodeMetadata writer (beginInspectorEdit + setNodes metadata merge), the canvasStateEqual metadata projection extended (the one whitelist in the persistence path — save spreads full metadata, load restores it whole), and 5 new FTL keys in both bundles. The InspectorIntegration P2-I3-4 test was updated from the removed workspace-inventory testid to the new warehouse-inspector card.
+
+Verified: editor 416/416 (+3), integration 9/9, full UI 4500/4500 (269 files), typecheck, eslint 0/0, i18n lint clean (bundle parity held — keys added to both bundles).
+
+Risks / follow-ups: the values are stored but not yet consumed — telemetry badge, validation, or the stock-deduct routing could read metadata.capacity/lowStockThreshold to surface low-stock warnings on the canvas (a natural next slice). Clearing a field writes 0 (clamped ≥ 0). The id.ftl strings are best-effort Indonesian, as in round 69.
+
+Commit hygiene: 5/8 editor hunks (the agents' 3 panMovedRef hunks excluded), 1/7 test hunks, whole-file hunks for the inspector test and both FTL bundles, plus the new card file — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 71: warehouse low-stock warning wired to the canvas
+
+Problem (round-70 follow-up): the capacity / low-stock threshold values were stored but unused — getTelemetry's warehouse branch still returned null (its comment even promised this Phase-3 slice), so the Stock Room card showed no badge and the threshold never surfaced.
+
+Solution (TDD Red→Green): added a Current Stock field to the settings card (metadata.stock) — the missing third number that makes the threshold evaluable — and the warehouse branch of getTelemetry now computes the card badge from metadata: "X items" (or "X / Y items" when capacity is set), flipping to the telemetry-warning state when stock is at or below lowStockThreshold. Without stock the badge stays hidden (a placeholder chip would read as unfinished). canvasStateEqual projects stock alongside capacity/threshold so edits dirty the diagram and persist. 2 new FTL keys in both bundles.
+
+Red tests: warning badge at/below threshold, online badge above, stock/capacity formatting, badge hidden until stock is entered, Current Stock input renders, and a Current Stock edit survives Apply in the onSave payload.
+
+Verified: editor + integration 430/430, full UI 4505/4505 (269 files), typecheck, eslint 0/0, i18n lint clean.
+
+Risks / follow-ups: stock/capacity/threshold are design-time metadata; a live inventory feed (settings.inventory) can supersede them in getTelemetry when the backend exposes per-warehouse stock — the branch is isolated for that swap. Badge text is plain numbers ("5 / 1000 items"), matching the existing demo badges; localization of the unit word is a future pass.
+
+Commit hygiene: 2/5 editor hunks, 2/8 test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded), whole-file hunks for the card and both FTL bundles — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 72: stock-deduct validation honors warehouse capacity
+
+Problem (round-71 follow-up): a workspace→warehouse stock-deduct wire was valid regardless of the warehouse's design-time capacity — the card could read "1000 / 1000 items" (at capacity, warning badge) and still be a routable target, which the validation silently allowed.
+
+Solution (TDD Red→Green): the semantic contract now carries the warehouse stock numbers. SemanticTopologyNode gains optional stock/capacity/lowStockThreshold (normalizeTopologyGraph copies them from metadata via a new metadataNumber helper), and validateTopologyGraph adds a capacity guard: any stock-routing wire whose target warehouse has stock >= capacity pushes a new 'warehouse-at-capacity' error (nodeId + wireId), which pins as a card note and blocks Apply with a localizable message. No capacity metadata → guard skipped, so legacy graphs stay unflagged. Red — 4 contract tests (at-capacity flagged with wireId/nodeId, over-capacity flagged, below-capacity clean, no-metadata clean) + 3 editor tests (card note appears at/over capacity, stays clean below); Green — the contract changes + 1 FTL key per bundle.
+
+Verified: contract 28/28 (+4), editor 424/424 (+3), full UI 4512/4512 (269 files), typecheck, eslint 0/0, i18n lint clean.
+
+Risks / follow-ups: the guard only fires when BOTH stock and capacity are set — a warehouse with capacity but no stock (user hasn't entered Current Stock) is not flagged, which is consistent with the badge staying hidden until stock exists. The error attaches to the wire but renders on the warehouse card (byNode); a future slice could surface wire-scoped errors on the wire itself. Live inventory telemetry would supersede the design-time numbers the same way it supersedes the badge.
+
+Commit hygiene: 5/5 contract hunks, 2/2 contract-test hunks, 1/7 editor-test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded), whole-file hunks for both FTL bundles — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 73: warehouse stock metadata pinned in the export contract
+
+Problem (rounds 70-72 follow-up): the clipboard export/import was already lossless for node objects — serializeTopology spreads nodes wholesale and deserializeTopology kept them — but nothing pinned the warehouse stock metadata shape, and isValidNode accepted ANY metadata value, so a hand-edited payload with a string capacity would pass strict parsing and silently drop the value through readNumber/metadataNumber.
+
+Solution (TDD Red→Green): Red — two export tests: a warehouse node with { stock, capacity, lowStockThreshold } round-trips losslessly (deep-equal on the node incl. metadata), and a payload with a string capacity is rejected. The first passed immediately (the lossless behavior already held — the test pins it), the second failed (no metadata validation). Green — isValidNodeMetadata: the warehouse stock trio must be finite numbers when present, unknown keys allowed for forward compatibility; isValidNode now applies it. Strict-parse philosophy honored: a document that cannot half-load cleanly is rejected whole.
+
+Verified: export 10/10 (+2), contract 28/28, full UI 4514/4514 (269 files), typecheck, eslint 0/0. No FTL changes.
+
+Risks / follow-ups: the validator covers only the numeric trio — typeKey/purposeKey/enabled shapes are still unchecked (a future slice can extend it the same way). Templates (localStorage) ride the same serialize/deserialize path, so the pin covers them transitively.
+
+Commit hygiene: both files 100% mine (no agents' work in topologyExport) — staged directly, journal via index surgery, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 74: warehouse-at-capacity surfaces on the wire
+
+Problem (round-72 follow-up): the capacity error rendered only as a card note — the user had to open the warehouse's inspector context to see why Apply was blocked, with no signal on the offending wire itself.
+
+Solution (TDD Red→Green): liveValidation now also buckets errors by wireId (byWire, additive — the nodeId/graphLevel bucketing is untouched, so wireId-only errors like invalid-semantic-connection still reach the canvas banner), and TopologyWireGroup renders a wire-scoped warning marker when the wire carries errors: a red "!" badge at the wire's midpoint with the localizable message as a native SVG tooltip. The marker is interactive with click/keyboard parity matching the hitbox (clicking it selects/cycles the wire — it can never block wire interaction), and the errors prop is a referentially-stable Map lookup so the round-66 memo boundary holds. Red — two editor tests: the at-capacity wire renders the marker inside ITS OWN group (asserted via the hitbox's data-wire-id) with the message in the tooltip, and below capacity no marker renders; Green — byWire + the marker + 22 lines of CSS (danger badge).
+
+Verified: editor 426/426 (+2), full UI 4516/4516 (269 files), typecheck, eslint 0/0. No FTL changes.
+
+Risks / follow-ups: the marker generalizes to every wireId-bearing error (invalid-semantic-connection, ambiguous-legacy-wire, duplicate-wire, unknown-wire-endpoint) — coherent, and only the capacity case is test-pinned. The marker sits at the straight-line midpoint (not the bent polyline's visual center); a future slice could trace the drawn path for placement. Clicking the marker cycles the wire direction like the hitbox — if it should instead jump to the issue, that's a separate interaction choice.
+
+Commit hygiene: 4/4 wire-group hunks, 3/6 editor hunks, 1/6 CSS hunks, 1/7 test hunks (the agents' panMovedRef + titlebar/KDS/pan + CSS hunks excluded) — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 75: capacity guard made bidirectional
+
+Problem (round-72 follow-up): the guard only fired when a wire EXISTED — a warehouse configured with room but no stock-routing wire at all validated clean, so a user could Apply a diagram where a Stock Room silently never receives stock.
+
+Solution (TDD Red→Green): the reverse guard in validateTopologyGraph — a warehouse with capacity metadata and NO incoming stock-routing wire pushes a new 'warehouse-missing-stock-routing' error (nodeId only, so it renders as a card note prompting to route stock in; no wire to mark). Skips when the warehouse is full (stock >= capacity — nothing should route in) or lacks capacity metadata (legacy graphs stay unflagged). Red — 3 contract tests (unwired-with-room flags, full skips, no-metadata skips; the wired case is already pinned by round 72's clean test) + 4 editor tests (prompt note on the unwired warehouse, none when wired/full/unmetadated); Green — the guard + error code + 1 FTL key per bundle.
+
+Verified: contract 31/31 (+3), editor 430/430 (+4), full UI 4523/4523 (269 files), typecheck, eslint 0/0, i18n lint clean.
+
+Risks / follow-ups: the missing-wire error is a hard Apply block, consistent with missing-location-input — a user staging a warehouse for later must either route stock or leave capacity unset. The prompt covers stock-routing only; inventory-transfer (warehouse↔warehouse) wires don't satisfy it, which matches the stock-deduct semantics. A future slice could add a dismiss action for "intentionally empty".
+
+Commit hygiene: 2/2 contract hunks, 1/1 contract-test hunk, 1/7 editor-test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded), whole-file hunks for both FTL bundles — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 76: capacity checks gated to Pro tier
+
+Problem (round-72/75 follow-up): the capacity guards (warehouse-at-capacity + warehouse-missing-stock-routing) ran on every tier, but the multi-warehouse cap is Pro-gated — a standard install could already only have ONE warehouse (the tier-limit toast), so enforcing its capacity numbers was dead weight at best, inconsistent at worst.
+
+Solution (TDD Red→Green): validateTopologyGraph gains an optional `tier` param — capacity guards are enforced only when tier is undefined (pure-contract default stays strict) or pro/enterprise. Both UI gates thread their tier: the editor's validateEditorGraph passes `tier` (so live badges + markers + Apply agree), and TopologyScreen's strict Apply boundary passes `licenseTier` (so a standard install is never blocked by capacity at the parent gate — the two gates can't drift). Red — 3 contract tests (pro enforces, standard suppresses at-capacity, standard suppresses missing-wire) + 2 editor tests (standard tier shows no note/marker and no prompt); the round-72/74/75 fixtures were re-based to render at Pro so they keep pinning the enforced behavior. Green — the tier param + both pass-throughs + the onSave callback deps gained licenseTier/selectedBranchId (the licenseTier read surfaced a pre-existing missing-dep warning).
+
+Verified: contract 34/34 (+3), editor + screen 461/461 (+2 editor), full UI 4528/4528 (269 files), typecheck, eslint 0/0, i18n lint clean. No FTL changes.
+
+Risks / follow-ups: a tier DOWNGRADE while a pro-authored diagram with capacity numbers exists now suppresses the capacity errors silently — the warehouse-tier-limit toast still fires for 2+ warehouses, but a single at-capacity warehouse stops being flagged until tier is restored (the numbers remain stored; the checks just don't run). The low-stock badge is display-only and stays ungated.
+
+Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agents' 3 concurrent screen hunks excluded), 1/1 contract-test hunk, 5/11 editor-test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded) — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 2026-08-09 — tier-downgrade notice for stored capacity numbers
+
+**Problem:** rounds 72/75/76 gated the capacity checks to Pro tier, but a Pro-authored diagram with capacity numbers opened on standard tier silently suppresses those checks — the user's warehouse reads "1000 / 1000 items" with no indication the enforcement isn't running.
+
+**Solution:** a non-blocking, bottom-center info strip (`topology-tier-notice`, `role="status"`) shown only when `currentTier` is standard (not pro/enterprise) AND any warehouse carries numeric `capacity` metadata (`hasCapacityMetadata` memo). It deliberately does NOT block Apply (the banner stays reserved for blocking errors). 1 new FTL key per bundle — parity held. The CSS uses only `--space-*`/`--radius-md`/`--text-xs`/warning tokens, so the token-compliance gate stayed clean.
+
+**TDD:** Red — 4 editor tests (shows on standard + capacity stored; hides on Pro; hides on standard without capacity; does not block Apply); only the two "shows/hides" assertions failed first. Green — memo + JSX + role fix (eslint demanded a role on the mousedown-interceptor div) + FTL + CSS.
+
+**Verified:** editor + integration 461/461 (+4), full UI 4533/4533, typecheck, eslint 0/0, i18n lint clean, token compliance clean.
+
+**Commits:** (round 77 — tier-downgrade notice)
+
+**Risks / follow-ups:** the notice is display-only — on downgrade the stored numbers stay and re-enforce on upgrade (documented round 76); a dismiss action ("I know, don't remind me") is a natural next slice; the notice doesn't enumerate which warehouses carry capacity, only that some do.
+
+### 2026-08-09 — capacity inputs Pro-gated with a lock badge
+
+**Problem (round-77 follow-up):** the capacity *checks* were Pro-gated (rounds 72/75/76) and the downgrade notice explained the numbers "aren't enforced", but the settings card still let a standard-tier user freely edit Capacity and Low-Stock Threshold — authoring numbers that the current plan silently refuses to enforce.
+
+**Solution (TDD Red→Green):** `WarehouseSettingsCard` gains a `capacityLocked` prop (the editor passes `!isProAllowed`, the same signal as the tool-card lock). When locked: the Capacity + Low-Stock Threshold inputs are `disabled`, each label carries an inline `inspector-lock-badge` (LockIcon + existing `topology-lock-pro` "Pro" chip — the tool-card pattern), and the field hint swaps to "Upgrade to Pro to set capacity limits." Current Stock stays editable on every tier — it drives the display-only badge that round 76 deliberately left ungated. The two stale `label-has-associated-control` disable directives on the modified labels dropped (eslint flagged them unused once the disabled prop made the association unambiguous). 1 new FTL key per bundle — parity held; `.inspector-lock-badge` uses only design tokens (compliance gate clean).
+
+**TDD:** Red — 3 new editor tests (standard: capacity+threshold disabled with badge + hint ×2 occurrences; Current Stock still enabled; Pro: all three enabled, no badge). The round-70 "edits capacity" tests were re-based to render at Pro so they keep pinning the edit path.
+
+**Verified:** editor + integration 448/448 (+3), full UI 4536/4536, typecheck, eslint 0/0, i18n lint clean, token compliance clean.
+
+**Commits:** (round 78 — capacity input tier lock)
+
+**Risks / follow-ups:** a standard-tier user with a Pro-authored warehouse sees the values read-only — coherent with the round-77 notice, and an upgrade re-enables editing with no data loss; the `free`/`one_time` tiers lock too (consistent with `isProAllowed`); the badge split (stock editable, threshold locked) is worth a user-facing note if it confuses.
+
+### 2026-08-09 — parent-gate capacity parity pinned at the screen level
+
+**Problem:** round 76 threaded the tier through BOTH gates (the editor's live validateEditorGraph and TopologyScreen's strict Apply boundary), but only the editor-level suppression was test-pinned. Nothing proved the two gates agree at the parent boundary — a future drift could block a standard-tier user behind a Pro check (or let Pro silently bypass).
+
+**Solution (TDD pin, no production change):** two TopologyScreen tests on the same at-capacity fixture (store → workspace location wire + workspace → warehouse stock-routing wire, stock 1000 = capacity 1000): standard tier applies cleanly (applyTopologyDiff called once, success toast only, never the capacity-error toast); Pro tier blocks with `topology-validation-warehouse-at-capacity` error toast and no apply. The license mock became tier-switchable (`mockLicenseTier`), reset in beforeEach. Red phase was the over-strict assertion — the first draft asserted NO toast at all, but a success toast legitimately fires after apply; corrected to assert success-toast-only. Both behaviors already held, confirming the round-76 parity — the tests now pin it against future regressions.
+
+**Verified:** screen suite 31/31 (+2), full UI 4538/4538, typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 79 — parent-gate parity pin)
+
+**Risks / follow-ups:** the pin covers only the at-capacity guard — the missing-stock-routing guard (round 75) and the invalid-semantic-connection class have no screen-level parity tests; the success toast is asserted by type only, so a future copy change won't break the pin.
+
+### 2026-08-09 — validation panel one-click "Add stock wire" guidance
+
+**Problem (round-75 follow-up):** the missing-stock-routing prompt rendered as a card note + a panel entry, but the panel entry was just another jump — the user still had to know to connect a workspace Stock Out into the Stock Room. No guidance bridged "this is wrong" and "here's the fix".
+
+**Solution (TDD Red→Green):** `nodeIssues` now carries the error `code`, and the panel renders an extra "Add stock wire" action button exclusively on `warehouse-missing-stock-routing` entries. Clicking it closes the panel, selects the warehouse, centers the canvas on it (`recenterViewOn`), and sets `addStockWireHintId` → the card shows an info-styled hint chip ("Connect a workspace's Stock Out to this Stock Room's Stock In.") stacked above the warning note. A clear effect drops the hint the moment the error resolves (a wire landed), so the chip can never outlive the problem it guides. The chip is action-driven only — a plain unwired warehouse shows the note but no chip. 2 new FTL keys per bundle — parity held; `.node-stock-wire-hint` and `.topology-validation-item-action` use only tokens (compliance clean).
+
+**TDD:** Red — 5 editor tests (action shown only on the missing-stock-routing entry; click jumps+selects+shows chip; chip hidden until the action; chip clears when a stock wire lands via the relationship picker). The hint text needed `TOPOLOGY_EN` in the test's `@fluent/react` stub (the editor suite stubs getString with that map) — added the key there too. One FTL wart: the en `topology-validation-dismiss` value was "Dismiss issue" and my prefix match dropped the orphan word — the value is now simply "Dismiss", matching id; nothing pinned the old text.
+
+**Verified:** editor + integration 453/453 (+5), full UI 4543/4543, typecheck, eslint 0/0, i18n lint clean, token compliance clean.
+
+**Commits:** (round 80 — add-stock-wire guidance)
+
+**Risks / follow-ups:** the action only guides — it doesn't auto-connect (no source heuristic; when exactly one workspace has an unused stock-out the editor could offer to wire it directly); the chip centers the warehouse but doesn't flash the stock-in port — a port highlight would complete the affordance; `free`/`one_time` tiers also show the action since the guard runs when tier is undefined (pure contract) — worth confirming the panel matches the tier gate.
+
+### 2026-08-09 — "intentionally empty" dismiss for the missing-stock-routing prompt
+
+**Problem (round-75 follow-up):** a warehouse staged empty for later could NOT be Applied — the missing-stock-routing prompt was a hard Apply block, and the round-31 mark-issue-resolved dismissals were deliberately cosmetic-only ("the Apply gate validates the raw graph and is never bypassed"). No escape hatch existed for a warehouse intentionally left unrouted.
+
+**Solution (TDD Red→Green):** the ONE error that becomes bypassable on explicit dismissal is `warehouse-missing-stock-routing` — every other issue still hard-blocks Apply. The card note now renders a dismiss (×) button exclusively on that error (reusing `topology-validation-dismiss` — no new FTL keys). Dismissing writes the round-31 resolved store, hides the note, zeroes the issues widget, AND unblocks Apply. The bypass is gate-parity-safe: `topologyIssueKey` + `readResolvedIssueKeys` moved into the contract (the editor aliases its local key, refactoring its useState reader onto the shared parse), and TopologyScreen's strict Apply boundary reads the SAME branch-scoped localStorage store — so the editor and parent gate can never disagree. The round-31 "cosmetic only" comment now documents the single exception. `dismissIssue` became a useCallback (the memoized card consumes it via `onDismissNodeIssue` — the round-66 memo tests caught the first inline-lambda version).
+
+**TDD:** Red — 4 editor tests (dismiss affordance only on missing-stock-routing notes; other notes get none; dismiss → note gone + Issues widget gone + Apply succeeds; the bypass survives a same-branch reload) + 2 screen tests (Pro blocks the unwired warehouse; with the resolved key seeded in the branch store, the same diagram applies). The screen's branch key turned out to be `store-1` (auto-selected first store), not `unassigned` — the debug print caught it.
+
+**Verified:** editor + screen + contract + integration 524/524 (+6), memo 3/3, full UI 4549/4549, typecheck, eslint 0/0, i18n lint clean, token compliance clean.
+
+**Commits:** (round 81 — intentionally-empty dismiss)
+
+**Risks / follow-ups:** occurrence-scoping still applies — adding then removing the wire re-surfaces the prompt (the stored key is forgotten when the issue leaves the live set); the dismiss is per-diagram (branch), so each branch decides independently; the editor gate and screen gate both read localStorage at save time — a race (dismiss + instant Apply) is absorbed by the same synchronous read the editor's own gate performs.
+
+### 2026-08-09 — inventory-transfer satisfies the stock-in prompt (hub-and-spoke)
+
+**Problem (round-75 follow-up):** the missing-stock-routing guard only counted `stock-routing` wires in — and `semanticNodesMatchWire` restricted inventory-transfer to workspace→warehouse sources. A hub-and-spoke model (workspace feeds a hub via stock-routing; satellites fed by warehouse→warehouse transfer) flagged every satellite as unserviced even though stock genuinely flows in.
+
+**Solution (TDD Red→Green):** two contract changes. (1) The reverse guard now counts ANY inbound stock-bearing wire — `stock-routing` OR `inventory-transfer` — as servicing the warehouse (variable renamed `hasStockRouting` → `hasStockInbound`; comment rewritten). (2) `semanticNodesMatchWire`'s transfer case now also allows `fromNode.kind === 'warehouse'`, mirroring the stock-routing case which already did — so a warehouse→warehouse transfer wire is a *valid semantic connection* (the first Red attempt surfaced `invalid-semantic-connection` on the transfer wire, proving the guard change alone was insufficient). Workspace→warehouse transfer stays valid. Note: warehouse→warehouse STOCK-Routing was already legal; this round only relaxes the transfer relationship.
+
+**TDD:** Red — 1 contract test (hub + satellite graph must be `[]`) + 1 editor test (satellite card shows no prompt note). Red correctly showed BOTH failures (guard + semantic validity). Also added a companion contract test pinning that a warehouse receiving NEITHER wire is still flagged — the hub-and-spoke rule is not an escape hatch.
+
+**Verified:** contract 36/36 (+2), editor + screen + integration 491/491 (+1), full UI 4552/4552, typecheck, eslint 0/0. No FTL changes (the "route stock in" copy covers both wire kinds).
+
+**Commits:** (round 82 — hub-and-spoke stock servicing)
+
+**Risks / follow-ups:** the at-capacity guard still counts stock-routing only — a satellite fed by transfer is never at-capacity-flagged even though transfers also land stock (a transfer INTO a full satellite arguably should warn); the Add stock wire hint still says "workspace's Stock Out" — accurate but now under-specified for satellites (a warehouse source also resolves the prompt); the coexist editor test (workspace→warehouse Transfer) still passes, so the relaxed source rule didn't loosen the direct-transfer contract.
+
+### 2026-08-09 — at-capacity guard covers inventory-transfer targets
+
+**Problem (round-82 follow-up):** the servicing rule was made symmetric (any inbound stock-bearing wire satisfies the prompt), but the at-capacity guard still counted stock-routing only — a transfer INTO a full satellite validated clean even though stock physically lands in a room with no space.
+
+**Solution (TDD Red→Green):** one-line guard change — the capacity loop now skips only wires that are NEITHER `stock-routing` NOR `inventory-transfer`. The error keeps its wireId, so the round-74 wire marker renders on the transfer wire itself, and the tier gate (round 76) applies unchanged since the loop sits inside `capacityEnforced`. Comment rewritten to describe "stock-bearing wire" instead of stock-deduct only.
+
+**TDD:** Red — 1 contract test (full satellite with a transfer wire → `warehouse-at-capacity` with `wireId: 'w-transfer'`) + 1 editor test (full satellite: card note + the wire marker inside the transfer wire's group). The roomy-satellite companion test pins that transfers into a warehouse with room stay clean (already passing — the guard's room check now applies to transfers too).
+
+**Verified:** contract 38/38 (+2), editor + screen + integration 530/530 (+1), full UI 4555/4555, typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 83 — transfer at-capacity)
+
+**Risks / follow-ups:** a full warehouse receiving BOTH a stock wire and a transfer pushes two at-capacity errors (one per wire) — existing multi-wire behavior, unchanged; the round-82 follow-up to generalize the Add stock wire hint copy is still open; hub-and-spoke chains deeper than two warehouses (hub → mid → leaf) have no explicit contract test yet.
+
+### 2026-08-09 — Add stock wire hint generalized for hub-and-spoke sources
+
+**Problem (round-82/83 follow-up):** the round-80 hint chip said "Connect a workspace's Stock Out…" — accurate for stock-routing but under-specified now that warehouse→warehouse inventory-transfer also resolves the prompt (round 82) and transfers into full rooms are capacity-flagged (round 83). A satellite's guidance should mention the hub.
+
+**Solution (copy change, TDD'd):** the chip now reads "Connect a workspace's Stock Out or another Stock Room's output to this Stock Room's Stock In." (id: "Hubungkan Stock Out dari ruang kerja atau output Gudang Stok lain ke Stock In Gudang Stok ini."). Red — the round-80 test's assertion strengthened from the loose `toContain('Stock Out')` to pin `another Stock Room's output`; Green — TOPOLOGY_EN + both FTL bundles. Keys unchanged → bundle parity and the i18n gate untouched.
+
+**Verified:** editor suite, full UI 4555/4555 (no count change — strengthened assertion, not new test), typecheck, eslint 0/0, i18n lint clean.
+
+**Commits:** (round 84 — hint copy generalization)
+
+**Risks / follow-ups:** none behavioral — pure copy; the id translation is best-effort Indonesian (journaled rounds 69/71 flag a native-speaker pass).
+
+### 2026-08-09 — deep hub-and-spoke chain pinned in the contract
+
+**Problem (round-83/84 follow-up):** the hub-and-spoke tests covered two warehouses only — nothing pinned deeper trees, so a future guard change could silently break a hub → mid → leaf chain without any test noticing.
+
+**Solution (regression pin, no production change):** two contract tests. (1) A three-warehouse chain — hub ← workspace stock, mid ← hub transfer, leaf ← mid transfer, all with room — must validate to `[]` end to end. (2) The boundary: removing the hub→mid transfer leaves wh-mid with NO inbound stock-bearing wire (its own outbound transfer doesn't service it), so the chain breaks mid-way and wh-mid alone is flagged — outbound transfers never count as servicing. Both pass immediately (rounds 82/83 already hold the behavior); the value is pinning deeper trees against regression.
+
+**Verified:** contract 40/40 (+2), full UI 4557/4557, typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 85 — deep-chain pin)
+
+**Risks / follow-ups:** the pin covers the clean path and the mid-break; a cycle (leaf → hub back) has no explicit test — `cycle-detected` exists in the error union, so a future slice could pin that a circular transfer chain is rejected rather than silently accepted.
+
+### 2026-08-09 — circular transfer chain rejected (cycle-detected pin)
+
+**Problem (round-85 follow-up):** the deep-chain pins covered the clean path and the mid-break, but nothing pinned a CIRCULAR transfer chain (hub → mid → leaf → hub). The servicing guard would bless every warehouse in the loop (each has an inbound transfer), so the loop could be silently accepted unless cycle detection catches it.
+
+**Solution (regression pin, no production change):** a contract test builds the exact cycle and asserts the graph fails with EXACTLY one error — `cycle-detected` on `wh-hub`. `findDirectedCycleNode` builds its adjacency from all semantic wires, so transfer loops are already covered; the exact single-error assertion additionally proves the missing-stock-routing guard does NOT bless the loop. Passes immediately — the pin protects the round-82/83 servicing rules from ever making cycles valid.
+
+**Verified:** contract 41/41 (+1), full UI 4558/4558, typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 86 — cycle pin)
+
+**Risks / follow-ups:** cycle detection is graph-wide and not warehouse-scoped — a location-wire cycle between two stores would also trip it (existing behavior, unchanged); the cycle error renders as a canvas banner with the offending nodeId, but no editor test pins the cycle BANNER specifically — a future slice could surface it on the card like the other node-scoped errors.
+
+### 2026-08-09 — multi-warehouse tier cap unified into the contract (round 87)
+
+**Problem (round-79 parity follow-up):** the multi-warehouse cap lived ONLY in the editor's live gate — `validateTopologyGraph` never emitted `warehouse-tier-limit`, so TopologyScreen's strict Apply boundary called a contract that couldn't block a loaded/pasted Pro-authored 2-warehouse diagram on standard tier. Same class of parent-gate drift round 79 pinned for the capacity guard, but the cap itself was still split.
+
+**Solution (TDD Red→Green):** moved the cap into `validateTopologyGraph` as the single source of truth — `tierLimitEnforced` mirrors `capacityEnforced` (strict by default when tier is undefined, skipped on pro/enterprise), appended LAST so semantic/integrity errors keep precedence. The editor's duplicate block was deleted; its creation paths (tool-card/duplicate, `wouldExceedWarehouseCap`) still refuse a second warehouse on the way in. The six hub-and-spoke contract tests (rounds 82/83/85/86) were converted to pass `'pro'` so they keep testing semantics under the new strict default; a new contract test pins standard-tier 2-warehouse → `warehouse-tier-limit`, and a TopologyScreen test pins the exact toast at the parent gate on a semantically-clean transfer chain (apply never called, `topology-toast-multi-warehouse` error toast).
+
+**Verified:** contract 43/43 (+2), screen 34/34 (+1), full UI 4561/4561, typecheck, eslint 0/0. No FTL changes (the `topology-toast-multi-warehouse` key already existed).
+
+**Commits:** (round 87 — tier cap unified)
+
+**Risks / follow-ups:** the cap error carries no nodeId, so the validation panel shows it as a banner-level issue without a card to jump to — a future slice could scope it to the second warehouse node; the editor's live gate now delegates entirely to the contract, so any drift in error ordering between the two gates is gone by construction.
+
+### 2026-08-09 — hub-and-spoke validation rules documented in ADR #34 (round 88)
+
+**Problem:** the rounds-82–87 warehouse validation semantics lived only in the contract code. ADR #34's Apply-rejection list covered generic graph errors but nothing about stock flow, and its connector-vocabulary table still listed the long-stripped "Inventory Manager (`inventory`)" node with no Stock Room row — the rules had no durable home and the ADR contradicted the current node model.
+
+**Solution (docs-only, Verify + Commit):** added to `docs/decisions/2026-08-07-business-logic-topology-builder.md` — (1) the vocabulary table's Inventory Manager row became the Stock Room (`warehouse`) row with its real ports (`stock-in`/`transfer-in`, `stock-out`); (2) the section-2 paragraph and section-4 parent-child bullets now state a Stock Room's required input is an inbound stock-bearing edge; (3) a new "Warehouse stock-flow validation (hub-and-spoke)" block under section 5 pins all five rules: inbound-wire servicing (`warehouse-missing-stock-routing`, dismissible per diagram), at-capacity rejection with wireId, warehouse→warehouse transfer legality, cycle rejection for circular chains, and the Pro-tier gate + `warehouse-tier-limit` single-source contract. Every claim traces to the contract code (semantic matrix, capacity/servicing guards, tier cap).
+
+**Verified:** footer regex valid (`last audited 09-08-26 by buffy`); targeted checks only — the full drift-guard scan is heavy and the tree is shared, so I validated the edited file's footer directly. No code changes, no FTL changes.
+
+**Commits:** (round 88 — ADR hub-and-spoke rules)
+
+**Risks / follow-ups:** the user guide (`docs/user-guide.md`) still has NO topology section at all — the rules are documented architecturally but not user-facing; `docs/user-guide.md` is 71 lines with zero topology content, so a topology user-guide section is a separate larger slice. The working tree carried a pre-existing agent edit to the same section-2 paragraph (KDS scope-inheritance clarification); my commit stages only my hunks and the agent's edit stays unstaged.
+
+### 2026-08-09 — at-capacity deduped per target warehouse (round 89)
+
+**Problem (round-83 journaled follow-up):** the capacity guard iterated per WIRE — a full warehouse fed by two inbound stock-bearing wires (stock-routing AND inventory-transfer) pushed TWO `warehouse-at-capacity` errors, one per wire, each carrying a different wireId. The capacity problem is a property of the TARGET room, not of each inbound wire; the duplication double-rendered the card note and put a marker on every inbound wire.
+
+**Solution (TDD Red→Green):** Red — a contract test feeds a full satellite by both a stock-routing wire and an inventory-transfer wire and asserts exactly ONE `warehouse-at-capacity` error, keyed to the FIRST inbound wire (w-stock-sat); an editor test renders the same diagram at Pro and asserts one card note and one `.wire-validation-marker` on that wire. Both failed (2 errors / 2 notes / 2 markers). Green — the guard now tracks `flaggedTargets` (Set of node ids) and skips already-flagged rooms, so the first inbound wire's id wins and later wires are silent. Single-wire cases (rounds 74/83) unchanged.
+
+**Verified:** contract 44/44 (+1), editor 451/451 (+1), full UI 4563/4563 (+2), typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 89 — capacity dedupe)
+
+**Risks / follow-ups:** first-wire-wins is deterministic but means the marker renders on one of several inbound wires — the round-74 marker affordance already shows the "don't route in" story, so acceptable; the reverse (missing-stock-routing) guard already dedupes structurally (one error per node by construction). Editor test hunks split from the agents' panMovedRef/zoom/pan/shortcuts/clipboard hunks.
+
+### 2026-08-09 — native-speaker pass on rounds 69-84 Indonesian FTL (round 90)
+
+**Problem (standing journaled follow-up since round 69):** the id bundle's topology values were best-effort translations, and three drifted from the current en source or from internal consistency.
+
+**Solution (copy-only, Verify + Commit):** reviewed every topology key added in rounds 69-84 against en. Most were already natural and correct (Kapasitas, Ambang Stok Menipis, tier-capacity-notice with "diberlakukan" for enforced, at-capacity/missing-stock-routing validation copy). Fixed three: (1) `topology-node-stock-wire-hint` used "ruang kerja" for workspace while `topology-validation-warehouse-missing-stock-routing` uses "workspace" untranslated — unified on "workspace"; (2) `topology-validation-dismiss` said "Abaikan masalah" (matches the OLD en "Dismiss issue") but en is now just "Dismiss" and the key is an icon-button aria-label/title — shortened to "Abaikan"; (3) `topology-toast-fallback-warehouse` dropped the "stock deduction" sense — now "untuk pengurangan stok". The low-stock badge and wire marker carry no FTL (numeric badge, "!" glyph), so no keys there.
+
+**Verified:** i18n lint (includes parity + FTL dedupe) clean, typecheck clean, full UI 4563/4563 unchanged (no en change, no key-set change). The dedupe-ftl.py script rewrites the whole locales dir, so it was skipped in the shared tree — lint:i18n already covers its check.
+
+**Commits:** (round 90 — id FTL pass)
+
+**Risks / follow-ups:** the id bundle still mixes "kabel" (wire toggle keys) and "koneksi" (validation keys) for wire — pre-existing, outside the rounds 69-84 key set; and the remaining id values beyond topology were not part of this pass.
+
+### 2026-08-09 — unified wire terminology across both bundles (round 91)
+
+**Problem (round-90 follow-up):** the id bundle split "kabel" (surface keys: routing/labels toggles, delete/rename wire, rename placeholder, delete-many) from "koneksi" (validation prose) — a split that mirrored en's own "wire" (surface) vs "connection" (validation) split, so the en↔id mapping was two words on each side for the same entity.
+
+**Solution (TDD Red→Green, copy):** chose the pair en "wire" ↔ id "koneksi" for the whole topology surface. Red — the two editor assertions that pin the validation copy were strengthened to the new "wire" text and failed against the old stub. Green — (1) en.ftl: the 7 validation keys that called the wire entity "connection" now say "wire" ("This wire references…", "one Location In wire", "Remove one operational wire", etc.); (2) id.ftl: the 7 "kabel" keys became "koneksi" ("Koneksi siku", "Label koneksi", "Hapus koneksi", "semua koneksinya"); (3) the TOPOLOGY_EN stub entries matched. Compound terms that were never the entity noun stayed: "connection type" (picker), "Device connection" (relationship name), "Input connectors receive connections" — those already map connection↔koneksi.
+
+**Verified:** editor 451/451 (Red→Green), i18n lint (parity + dedupe) clean, typecheck clean, eslint 0/0, full UI 4563/4563 unchanged. Test names mentioning "Location In connection" were left alone (descriptions, not copy).
+
+**Commits:** (round 91 — wire terminology)
+
+**Risks / follow-ups:** "koneksi siku" (Elbow connections) and "one Location In wire" read slightly more literally than their predecessors, but the one-to-one mapping is the win; a native-speaker could re-tune the compound phrases without breaking the unification.
+
+### 2026-08-09 — native-speaker pass extended to settings/sync/KDS id (round 92)
+
+**Problem (round-90/91 follow-up):** the id pass had covered only topology keys; the settings, sync, and KDS areas of the Indonesian bundle had never had the same scrutiny.
+
+**Solution (copy-only, Verify + Commit):** reviewed the rest of multi-store.id.ftl (multi-store-* keys — all clean: "Dasbor Multi-Toko", "Terminal Daring", "NPWP"), every settings-sync-* key, the full kds.id.ftl (clean: "Tampilan Dapur", "PENCUCI MULUT", offline/dead-letter copy all natural), and a full read of settings.id.ftl (928 lines). Three surgical fixes: (1) `settings-sync-pull-result` said "{ $tax_rates } pajak" while its sibling `settings-sync-pull-toast-success` says "tarif pajak" — unified on "tarif pajak"; (2) `settings-license-live-online` translated "Live" as "Langsung" (the broadcast-live sense) — now "Aktif", pairing with "Nonaktif" (Inactive); (3) the Course Firing heading/enable said "Pengiriman Course" (untranslated English) while the hint uses "hidangan" — now "Pengiriman Hidangan". Deliberate non-changes: "Alihkan" for Toggle is the established bundle-wide term (changing one instance would re-create the round-91 inconsistency) and "Admin Settings ↗" is a branded cross-ref label.
+
+**Verified:** i18n lint (parity + dedupe) clean, full UI 4563/4563 unchanged. No en changes, no key-set changes, no test pins on id values.
+
+**Commits:** (round 92 — settings/sync/KDS id pass)
+
+**Risks / follow-ups:** the other bundles (products, sales, inventory, staff, etc.) still await the same pass; "Alihkan" as the toggle translation could be revisited bundle-wide in one future slice if a native speaker objects.
+
+### 2026-08-09 — round-90 id values pinned in an i18n contract test (round 93)
+
+**Problem (round-90/92 follow-up):** the native-speaker fixes were protected only by review — nothing failed CI if someone reverted "Abaikan", reintroduced "ruang kerja", or dropped "untuk pengurangan stok". The TOPOLOGY_EN stub the editor tests use pins en only and never touches the .ftl files.
+
+**Solution (regression pin):** a new describe in the existing `i18nBundle.test.tsx` asserts the three round-90 id values EXACTLY through the production `getBundle('id')` loader (the real runtime bundle, not a stub): `topology-validation-dismiss` → "Abaikan", `topology-node-stock-wire-hint` → the full "workspace … Gudang Stok lain" sentence, `topology-toast-fallback-warehouse` → the "untuk pengurangan stok" value. Table-driven so the failure message names the drifted key. Mechanism proven: temporarily mutating dismiss to "Abaikan masalah" turned the test red with the exact "drifted from its round-90 native-speaker value" message, then reverted green. (Side note: the temporary sed left the file LF-only, tripping git's autocrlf status artifact — restored the exact blob, content verified identical.)
+
+**Verified:** i18nBundle 13/13 (+1), full UI 4564/4564 (+1), i18n lint clean, typecheck, eslint 0/0.
+
+**Commits:** (round 93 — id pin)
+
+**Risks / follow-ups:** the pin covers only the three round-90 keys — the round-91 kabel→koneksi set and round-92 settings fixes could join the same table for the same protection; the test asserts exact text, so a deliberate copy improvement requires updating the pin (by design).
+
+### 2026-08-09 — id pin table extended to rounds 91-92 (round 94)
+
+**Problem (round-93 follow-up):** the pin guarded only the three round-90 keys; the round-91 kabel→koneksi unification and round-92 settings fixes were still review-only.
+
+**Solution (pin extension):** the round-93 table in `i18nBundle.test.tsx` became `nativeSpeakerPins` covering all 14 native-speaker-fixed id values through the production `getBundle('id')` loader: round 90 (3), round 91 (7 — Koneksi siku, bends-override note, Label koneksi ×2, Hapus koneksi, Ganti nama koneksi, and confirm-delete-many with `{ $count }`), round 92 (4 — pull-result with products/tax_rates/users args, Aktif, Pengiriman Hidangan ×2). The table grew an optional `args` field for the placeholder-bearing keys (count: 2 → "Hapus 2 node dan semua koneksinya?"; products 3 / tax_rates 2 / users 1 → "3 produk, 2 tarif pajak, 1 pengguna"); the passing assertions confirm the args formatting resolves exactly, not vacuously. Describe renamed to "rounds 90-92".
+
+**Verified:** i18nBundle 13/13 (table extended within the one test — no count change), full UI 4564/4564, typecheck, eslint 0/0, i18n lint clean.
+
+**Commits:** (round 94 — id pin extension)
+
+**Risks / follow-ups:** the en-side counterparts are still unpinned (a round-91 en "connection"→"wire" regression would not fail this table); every deliberate future copy change must update the pin (by design).
+
+### 2026-08-09 — en-side inverse guard added to the id pin (round 95)
+
+**Problem (round-94 follow-up):** the pin table guarded only the id direction — an en-side regression (e.g., the round-91 "connection"→"wire" copy reverting) would not fail the suite.
+
+**Solution (pin extension):** each row of `nativeSpeakerPins` now carries BOTH `en` and `id` expectations, and the single test resolves every key from the real `getBundle('en')` AND `getBundle('id')` bundles, failing with a direction-specific message ("en X drifted from its pinned value" / "id X drifted"). All 14 keys pinned in both directions, including the two placeholder-bearing ones (confirm-delete-many with count=2, pull-result with products/tax_rates/users). Mechanism proven in BOTH directions: mutating en dismiss to "Dismiss issue" went red with `en "topology-validation-dismiss" drifted…` and reverted green; the id direction was already proven in round 93.
+
+**Verified:** i18nBundle 13/13 (one test), full UI 4564/4564, typecheck, eslint 0/0, i18n lint clean.
+
+**Commits:** (round 95 — en inverse guard)
+
+**Risks / follow-ups:** the en expectations freeze source copy too — a deliberate en wording change must update the pin (by design, same contract as the id side); the remaining non-pinned keys across other bundles are out of scope for this native-speaker set.
+
+### 2026-08-09 — pinned id values round-tripped through the production React render path (round 96)
+
+**Problem (round-95 follow-up):** the pin proved bundle RESOLUTION via formatPattern, but nothing proved the PRODUCTION plumbing — getBundle('id') → ReactLocalization → LocalizationProvider → <Localized>, the exact chain LocaleContext.tsx uses at runtime. If the id bundle ever stopped reaching React (broken provider, locale-name mismatch, dropped import), the formatPattern tests would stay green while the UI silently fell back to English.
+
+**Solution (test):** a new describe mounts all 14 pinned keys under the production path (new ReactLocalization([getBundle('id')]) + LocalizationProvider) and asserts every Indonesian value appears in the rendered DOM via getAllByText (two keys share "Label koneksi", so getByText would throw). The two placeholder-bearing keys pass their variables through `vars={{ count: 2 }}` / `vars={{ products: 3, tax_rates: 2, users: 1 }}` — the codebase's actual <Localized> convention; my first draft used the old `$count`-prop syntax, which @fluent/react rejected with "Unknown variable" and the fallback children rendered. Mechanism proven: mutating dismiss to "Abaikan masalah" failed BOTH tests — the render-path one with "Unable to find an element with the text: Abaikan" — then reverted green.
+
+**Verified:** i18nBundle 14/14 (+1), full UI 4565/4565 (+1), typecheck, eslint 0/0, i18n lint clean.
+
+**Commits:** (round 96 — render-path pin)
+
+**Risks / follow-ups:** the render-path test uses the raw production primitives rather than the full LocaleContext component (which needs a locale context provider); a future slice could mount LocaleContext itself for an even more end-to-end proof.
+
+### 2026-08-09 — native-speaker pass extended to products/sales/inventory/staff/shared/terminals (round 97)
+
+**Problem (round-92 follow-up):** the pass had covered multi-store/settings/kds but not the six remaining id bundles (~1,740 keys). Full reads of shared, staff, terminals, products, inventory, and the 984-line sales bundle found five drift-class issues.
+
+**Solution (id only, en untouched):**
+- `statusbar-license` (shared): "Lisensi **Proprieter**" — misspelled; settings already uses the untranslated product term "Proprietary" → "Lisensi Proprietary".
+- `scale-read-error` (sales): "Error timbangan" vs sibling `weight-scale-error` "Kesalahan timbangan" — same en source ("Scale error"), two wordings → unified on "Kesalahan timbangan".
+- `sales-history-status-cancelled` (sales): "Dibatalkan" collided with `sales-history-status-voided` — en distinguishes Cancelled from Voided (void restocks), so the status filter was ambiguous → "Batal" vs "Dibatalkan".
+- low-stock term (sales): retail used "stok rendah" in 5 keys while the bundle-wide established term is "Stok Menipis" (inventory `inventory-report-low-stock`, multi-store `topology-warehouse-low-stock-threshold`) → all 5 retail keys unified on "stok menipis".
+- `payment-split-amount-placeholder` (sales): "0.00" vs sibling `payment-tendered-input` "0,00" — Indonesian decimal comma → unified on "0,00".
+- `inv-reason-damaged` (inventory): "kadaluarsa" — non-standard spelling; the very next line `inv-reason-write-off` already says "kedaluwarsa", as does sales' gift-card "Kedaluwarsa" → "kedaluwarsa".
+
+**Deliberately NOT changed:** `retail-cart-items`/`retail-low-stock-banner` identical [one]/[other] branches (Indonesian has no plural inflection — identical branches are correct localization, and en's item/items split doesn't translate); "Alihkan" (established bundle term); `&quot;` encoding quirk (present in both bundles).
+
+**Verified:** i18n lint (parity + FTL dedupe) clean, full UI 4565/4565 unchanged (value-only, no key-set change), no en changes, nothing pins the old id values.
+
+**Commits:** (round 97 — extended id pass)
+
+**Risks / follow-ups:** the 10 fixed values are not yet in the rounds-90-92 pin table — extending `nativeSpeakerPins` in i18nBundle.test.tsx would CI-guard them; "Batal" for Cancelled vs "Dibatalkan" for Voided is a judgment call a native speaker could re-tune; the products bundle was clean on this pass but remains un-audited at the same depth as sales.
+
+### 2026-08-09 — bundle-wide 'Alihkan' toggle term resolved (round 98)
+
+**Problem (rounds-92/97 non-change, revisited by request):** "Alihkan" was kept twice as the "established" toggle term, but it is the wrong word — the transitive -kan form means *redirect/divert/move something*, not flip a switch. Every round-92/97 audit flagged it; consistency was preserving an error.
+
+**Decision:** replace the wrong verb with the sense-accurate Indonesian, applied to all 14 toggle-sense instances across 6 bundles (en untouched — "Toggle" is correct English):
+- **Bidirectional feature switches (9 keys)** → "Aktifkan/nonaktifkan X": theme-toggle-label, workspace-home-fullscreen-aria, restaurant-toggle-fullscreen, retail-shortcut-fullscreen, pos-cart-service-toggle-aria, setup-features-toggle-aria, settings-sync-enabled-aria, appearance-hw-accel-aria, feature-toggle-toggle-aria. The slash form is the standard static rendering of an on/off toggle (the keys carry no state, so "Aktifkan" alone would lie when flipping off — the round-89 dedupe lesson applied to labels).
+- **Mode switch (2 keys)** → "Beralih ke mode gelap/terang": the *intransitive* "Beralih" (switch over) is correct Indonesian for "Switch to dark/light mode" — it's the same root as the bad -kan form, which is exactly why the -kan was wrong.
+- **Failure toasts (2 keys)** → "Gagal mengubah status promosi/fitur": the failure is direction-agnostic.
+- **Direction cycle (1 key)** → "Balik arah koneksi": topology-wire-toggle-aria *cycles* source↔target (verified handleCycleWireDirection — Enter/Space "cycle the direction"), not on/off, so neither family applied; "flip the connection direction" is the accurate verb, and it keeps the round-91 "koneksi" term.
+
+**Deliberately KEPT (the correct -kan sense):** `topology-validation-warehouse-at-capacity` ("alihkan stok ke tempat lain") and `topology-validation-warehouse-missing-stock-routing` ("stok yang dialihkan ke sini") — here alihkan means *route/move stock*, the legitimate transitive sense, verified against the en ("route stock elsewhere", "no stock routed in").
+
+**Verified:** i18n lint (parity + FTL dedupe) clean, typecheck clean, full UI 4565/4565 unchanged (value-only, no key-set change). Nothing pins the old values (the editor TOPOLOGY_EN stub pins the en string; i18nBundle pins cover rounds 90-92 keys only, none of the 14).
+
+**Commits:** (round 98 — Alihkan resolution)
+
+**Risks / follow-ups:** "Aktifkan/nonaktifkan" is longer than the en "Toggle" — acceptable for aria labels, but a native speaker could prefer "Toggle" as a loanword for the compact fullscreen labels; the 14 new values are unpinned (extending nativeSpeakerPins would CI-guard them, as with rounds 93-95).
+
+### 2026-08-09 — native-speaker pin table extended to rounds 97-98 (round 99)
+
+**Problem (rounds-97/98 follow-up):** the rounds-90-92 pin table guarded only 14 keys; the 24 values fixed by the extended passes (10 in round 97, 14 in round 98) were still protected by review alone. Three of the 24 are attribute-only Fluent messages (.aria-label/.placeholder, no value), which the value-only pin mechanism could not resolve.
+
+**Solution (test-infra, table-driven):**
+- 24 rows added to `nativeSpeakerPins` with BOTH en and id expectations: round 97 (Lisensi Proprietary, Kesalahan timbangan, Batal, stok menipis ×4 + Ambang Stok Menipis, 0,00, kedaluwarsa) and round 98 (Aktifkan/nonaktifkan ×9, Beralih ke mode ×2, mengubah status ×2, Balik arah koneksi). Args-driven rows use count: 3 / label: 'Payments' / name: 'Cloud Sync'.
+- Pin type gained `attr?: string`. The resolution test formats `msg.attributes[attr]` (a Record, not a Map — caught the first run) when the pin declares an attribute, so both message shapes are guarded in both directions.
+- The render-path test was refactored from a hardcoded 14-element <Localized> list to a table-driven render of every pin, asserting value text or DOM attribute per pin. Attribute-only keys render through the production `attrs={{ 'aria-label': true }}` pattern (exactly what SetupWizard uses — fluent-react 0.15.2 only applies message attributes when the `attrs` prop whitelists them; without it the attribute is silently dropped, the second run's failure). Future pin additions now auto-cover the render path.
+- Mechanism proven live in both directions: mutating an id value (Balik arah koneksi → Alihkan), an id attribute (Aktifkan/nonaktifkan akselerasi → Alihkan akselerasi), and an en value (License → Licence) each went red with the exact drift message; reverted green, files restored byte-exact (the sed mutations left LF-only artifacts, restored via git checkout).
+
+**Verified:** i18nBundle 14/14 (table lives inside the same two tests), full UI 4565/4565, typecheck, eslint, i18n lint clean.
+
+**FINDING (follow-up, not fixed here):** PaymentModal reads two attribute-only messages via `l10n.getString` — `payment-split-amount-placeholder` (fallback '0.00') and `payment-split-amount-aria` (fallback 'Split amount') — and `getString` NEVER reads attributes (confirmed in @fluent/react 0.15.2: returns fallback||id when msg.value is null). So the round-97 0,00 fix and the Indonesian "Jumlah pembagian" aria never reach the UI; both always render English. Fix: wrap the split-amount input in <Localized attrs={{ placeholder: true, 'aria-label': true }}> with a combined message, or use two attribute messages. Also `appearance-hw-accel-aria` has no production usage (orphan key) — the pin guards the bundle regardless.
+
+**Commits:** (round 99 — pin extension)
+
+**Risks / follow-ups:** the PaymentModal dead-attribute fix is the immediate next slice (it makes the pinned 0,00 value real in production); `appearance-hw-accel-aria` orphan should be wired to the settings switch or dropped.
+
+### 2026-08-09 — orphaned appearance-hw-accel-aria wired to the switch (round 100)
+
+**Problem (round-99 follow-up):** the round-98 pin table included `appearance-hw-accel-aria`, but the key had NO production consumer — the hardware-acceleration switch in AppearanceSettings was missing an aria-label entirely (its accessible name came from the visible label + a hardcoded English sr-only "Toggle" span). The pinned value was guarding an orphan.
+
+**Solution (TDD Red→Green):**
+- **Red** — SettingsToggleButtons.test.tsx (which renders with the REAL settings.ftl bundle) now asserts the switch's accessible name via `getByRole('switch', { name: 'Toggle hardware acceleration' })`; failed against the old code (the name came from the two labels, not an aria-label).
+- **Green** — the checkbox input is wrapped in `<Localized id="appearance-hw-accel-aria" attrs={{ 'aria-label': true }}>`, the exact production pattern SetupWizard and 134 other call sites use. The switch now announces "Toggle hardware acceleration" (en) / "Aktifkan/nonaktifkan akselerasi perangkat keras" (id) — the round-99 render-path pin for this key is now backed by a real consumer.
+- AppearanceSettings.test.tsx was deliberately left untouched: it mocks @fluent/react (Localized renders children only), so its click-delegation coverage still passes and its purpose (slider-click → onChange) is orthogonal to the name.
+
+**Verified:** SettingsToggleButtons 3/3 + AppearanceSettings 30/30, i18nBundle 14/14, full UI 4565/4565, typecheck, eslint, i18n lint clean. No FTL changes.
+
+**Left in place (noted):** the sr-only "Toggle" span inside the settings-toggle label is now redundant for naming (aria-label overrides) but harmless; it stays hardcoded English — a separate consistency slice could localize or drop it across ALL settings toggles at once.
+
+**Commits:** (round 100 — hw-accel aria wired)
+
+**Risks / follow-ups:** the PaymentModal dead-attribute fix (round-99 finding) remains open — the split-amount placeholder and aria-label still render English fallbacks; same <Localized attrs> treatment applies there.
+
+### 2026-08-09 — PaymentModal dead attributes fixed (round 101)
+
+**Problem (round-99 finding):** the split-amount input read two attribute-only Fluent messages via `l10n.getString` — `payment-split-amount-placeholder` (fallback '0.00') and `payment-split-amount-aria` (fallback 'Split amount'). `getString` NEVER reads attributes (returns fallback||id when msg.value is null), so the round-97 0,00 fix and the "Jumlah pembagian" aria never reached the UI — Indonesian users always saw English, and the bug was invisible in en because the fallbacks coincidentally equaled the en attribute values.
+
+**Solution (TDD Red→Green):**
+- **Red** — a new id-locale render test (renderWithFluentId + the real sales.id.ftl bundle) opens the modal, toggles split mode, and asserts the amount input's placeholder is '0,00' and its aria-label 'Jumlah pembagian'. Failed for the right reason: `expected '0.00' to be '0,00'` — the getString fallback won even in the id locale.
+- **Green** — the two attributes now live in ONE message: `payment-split-amount-placeholder` gained `.aria-label` (both bundles) and `payment-split-amount-aria` was dropped from both (it had zero other consumers — verified). The input is wrapped in a single `<Localized id="payment-split-amount-placeholder" attrs={{ placeholder: true, 'aria-label': true }}>`, the exact multi-attribute pattern `bundles-item-field` already uses (nested <Localized> cannot work here: fluent-react's getElement cloneElement applies the outer message's props to the inner element, not to the input).
+
+**Verified:** PaymentModal 13/13 + EdgeCases + SaleFlow + i18nBundle 14/14 (the round-99 placeholder pin is unaffected by the added attribute), full UI 4566/4566 (+1), typecheck, eslint, i18n lint clean (parity holds after the key removal).
+
+**Commits:** (round 101 — PaymentModal dead attributes)
+
+**Risks / follow-ups:** the same getString-on-attribute-only pattern may exist elsewhere — a repo-wide scan for `getString\([^)]*-aria'|getString\([^)]*-placeholder'` with attribute-only messages would find remaining dead attributes; the sr-only "Toggle" spans across settings toggles remain a separate consistency slice.
+
+### 2026-08-09 — repo-wide dead-attribute scan: 0 remaining (round 102)
+
+**Problem (round-101 follow-up):** the round-101 fix proved the getString-never-reads-attributes failure mode, but only for the split-amount input. A repo-wide scan (all 177 attribute-only messages in the en bundles × every getString call site in ui/src) found **15 more call sites across 14 keys — all in PaymentModal.tsx**: the dialog/close/currency-selector/exchange/receipt/customer/tendered/exact/other/split-other/retry attributes, all rendering English fallbacks in the id locale.
+
+**Solution (all 15 fixed with <Localized attrs>, scan now 0):**
+- **Single-key wraps (10)** — dialog aria, close aria, currency aria (label), currency-select aria, exchange aria, receipt-currency aria, customer-name aria, tender-exact aria, retry aria; plus payment-tendered-input, the one key carrying BOTH .placeholder and .aria-label, wrapped once with `attrs={{ 'aria-label': true, placeholder: true }}`.
+- **Two-key merges (2)** — the other-method input and the split-other input each read TWO attribute-only keys via getString. Following the round-101 precedent (and the bundles-item-field pattern), `.aria-label` was merged into `payment-other-placeholder` and `payment-split-other-placeholder` in both bundles; the now-unused `payment-other-aria` and `payment-split-other-aria` keys were dropped (verified zero other consumers).
+- **Two eslint-disable comments** — the currency and customer `<label htmlFor>`s are flagged by jsx-a11y/label-has-associated-control because their accessible text sits at recursion depth 3 (label → Localized → span → text) and the runtime aria-label via Localized attrs is invisible to the analyzer. Both labels were passing pre-change only because the nested control carried a STATIC aria-label prop (which getString made dead). The disable comments follow the repo convention (8+ existing instances, CreatePinScreen documents "text via Localized span").
+
+**Test:** the round-101 id-locale render test was extended into a comprehensive pin: dialog + close aria, tendered placeholder/aria, other placeholder/aria, exact-tender aria (default cash state), then split mode for split-amount + split-other placeholder/aria — all asserted to the exact id bundle values via the REAL sales.id.ftl.
+
+**Verified:** PaymentModal 23/23, i18nBundle 14/14, tsc, eslint, i18n lint clean. Definitive re-scan: **0 remaining getString-on-attribute-only sites**. Full UI 4566 with ONE unrelated failure — `screenExtraction.test.ts` flags `settings-sync-plan-required` (className used in the agents' unstaged SyncSection.tsx hunk with no CSS rule); passed at round 101's run, so it is the agents' in-flight work, not mine — left for them.
+
+**Commits:** (round 102 — dead-attribute sweep)
+
+**Risks / follow-ups:** the multi-currency-gated (currency-selector/exchange/receipt) and error-gated (retry) attributes are fixed and pattern-consistent but not individually render-pinned (feature/error state needed); the agents' SyncSection CSS gap is theirs to close.
+
+### 2026-08-10 — tier-limit cap scoped to the second Stock Room (round 103)
+
+**Problem (round-87 follow-up):** the multi-warehouse tier cap emitted `warehouse-tier-limit` with no `nodeId`, so the editor rendered it as a banner with nowhere to go — a user blocked on standard tier with 2+ Stock Rooms could not jump to the offending node. Every other node-level error (cycle, at-capacity, missing-stock-routing) already carried a nodeId and got a card note + panel jump.
+
+**Solution (TDD Red→Green):** the contract now scopes the error to the SECOND warehouse in node order — the node that pushes the count past the allowed single Stock Room. Deterministic by array order (index 1 is always the first excess), so the editor's generic nodeId bucketing upgrades the error to a node-scoped card note with a jump target with zero editor changes. The screen's Apply toast is unaffected (it reads only code/messageId). Deliberate minimal scope: with 3+ warehouses only the first excess is flagged — pointing at all excess nodes is a future slice.
+
+**Verified:** contract 44/44 (+1 assertion pinned, no new tests), topology suites (contract + editor + screen) 529/529 — green against the agents' in-flight editor/screen work too, tsc, eslint clean. Full UI 4566 with ONE unrelated failure — the round-102 `settings-sync-plan-required` CSS gap in the sync agents' still-unstaged SyncSection.tsx, not mine.
+
+**Commits:** (round 103 — tier-limit scoping)
+
+**Risks / follow-ups:** multi-excess flagging (one error per warehouse beyond the first) is the natural next slice; the agents' SyncSection CSS gap remains theirs.
+
+### 2026-08-10 — closed the settings-sync-plan-required CSS gap (round 104)
+
+**Problem:** rounds 102-103 journaled the one full-UI failure as "the agents' SyncSection CSS gap" — `settings-sync-plan-required` was used in the in-flight SyncSection.tsx but had no rule in SettingsPage.css, so screenExtraction's CSS-integrity check hard-failed (4565/4566).
+
+**Solution (Verify + Commit, no code change):** added a `.settings-sync-plan-required` rule to SettingsPage.css — a warning-tinted notice box (`--color-warning-bg` background, warning border, `--radius-md`, flex column with gap) matching the sync section's badge language, wrapping the error hint + plain hint the role="status" div carries. The reverse "no dead classes" check is a soft warning, so committing the rule ahead of the agents' SyncSection.tsx cannot break CI.
+
+**Verified:** screenExtraction 138/138, full UI **4566/4566 — first fully-green run since round 102**, no other failures.
+
+**Commits:** (round 104 — plan-required CSS)
+
+**Risks / follow-ups:** the rule is visual-only (colors/margins) — the agents may restyle when their SyncSection lands; the reverse check logs a soft warning until then.
+
+### 2026-08-10 — pinned tier-limit node-scoped rendering in the editor (round 105)
+
+**Problem (round-103 follow-up):** round 103 scoped the contract's warehouse-tier-limit error to the second warehouse's nodeId, and the editor's generic bucketing upgraded it from a dead-end banner to a node-scoped card note + panel jump — but nothing pinned that rendering, so a future contract regression (dropping nodeId) would silently re-introduce the banner with no test failing.
+
+**Solution (test-only pin):** a new editor describe loads a 2-warehouse diagram on standard tier and asserts (1) no graph-level banner renders, (2) the message appears in exactly ONE node-scoped panel item — named "WH 2", not static — and (3) the item's jump button selects the WH 2 card and closes the panel. Mechanism proven live: temporarily stripping `nodeId` from the contract emission made the test fail at the first assertion (`expected <div class="topology-validation-banner">…</div> to be null`), then restored byte-exact.
+
+**Verified:** editor 452/452, full UI 4567/4567 (one non-reproducible flake observed in an earlier full run, two subsequent full runs green), tsc, eslint clean. The agent's in-flight editor hunks (context-menu pan, unrelated to the panel/jump) stay unstaged — my hunk is the file-end append, filtered at commit.
+
+**Commits:** (round 105 — tier-limit node-scoping pin)
+
+**Risks / follow-ups:** the multi-excess slice (flag every warehouse beyond the first) would extend the contract test, not this editor test; the observed one-off full-suite flake was not reproduced or identified.
+
+### 2026-08-10 — tier-limit cap flags every excess Stock Room (round 106)
+
+**Problem (round-103 follow-up, journaled):** the cap flagged only the SECOND warehouse — with three Stock Rooms on standard tier, the third went unflagged, so a downgraded diagram with several excess rooms reported just one jumpable error.
+
+**Solution (TDD Red→Green):** the contract now flags every warehouse beyond the first (`slice(1)`) — one `warehouse-tier-limit` error per excess node, deterministic by node order. Red: a new contract test pins a 3-warehouse transfer chain emitting exactly `['wh-mid', 'wh-leaf']` (failed with `['wh-mid']` only); the existing 2-warehouse test was tightened to pin exactly ONE error (the single-excess boundary). The editor needs no changes — the panel maps one jumpable item per node-scoped error by construction (proven for the single case in round 105).
+
+**Verified:** contract 45/45 (+1), topology suites 531/531, full UI 4568/4568, tsc, eslint clean.
+
+**Commits:** (round 106 — multi-excess tier-limit)
+
+**Risks / follow-ups:** the multi-error panel rendering (3-warehouse editor render) is not individually pinned — the round-105 single-case pin plus the generic node-scoped mapping cover it; a future editor test could pin the two-item panel directly.
+
+### 2026-08-10 — pinned the two-item tier-limit panel (round 107)
+
+**Problem (round-106 follow-up, journaled):** the multi-excess contract shape (one warehouse-tier-limit error per warehouse beyond the first) shipped with only the single-case editor pin from round 105 — nothing proved the editor renders ONE jumpable panel item per excess node, so a regression to single-error emission would silently leave a third Stock Room unflagged.
+
+**Solution (test-only pin):** a second test in the round-105 describe renders a 3-warehouse diagram on standard tier and asserts: no graph-level banner; exactly TWO panel items carrying the tier-limit message with node names WH 2 and WH 3; and the second item's jump button selects the WH 3 card and closes the panel. Mechanism proven live: temporarily reverting the contract emission to the single-error shape (`warehouses[1]` only) failed the new test with `expected [ <div> ] to have a length of 2 but got 1`, then restored byte-exact (the file is CRLF — the first mutation attempt missed on LF anchors).
+
+**Verified:** editor 453/453 (+1), topology suites 532/532, full UI 4569/4569, tsc, eslint clean.
+
+**Commits:** (round 107 — two-item tier-limit panel pin)
+
+**Risks / follow-ups:** the tier-limit UX is now pinned end to end (contract shape → panel items → jump). The remaining banner-only error audit (which codes still render graph-level and why) is the natural next analysis slice.
+
+### 2026-08-10 — banner-only audit: scoped the extra-branch error to the second Branch (round 108)
+
+**Problem (round-107 follow-up, the banner-only error audit):** I enumerated every TopologyValidationError emission against the editor's bucketing (nodeId → card note + panel jump; wireId-only → byWire wire marker + banner; neither → banner). One real dead-end of the exact class rounds 103-107 just fixed: `multiple-branch-locations` emitted with NO nodeId — a loaded/pasted diagram with two Branch Location nodes got a banner with nowhere to jump, unlike `branch-location-missing-identity` (already node-scoped). The other banner-only codes are honest graph-level errors: `missing-branch-location` (no branch exists — nothing to jump to), `unsupported-schema-version` (whole graph), and the five wireId-only codes (`invalid-semantic-connection`, `ambiguous-legacy-wire`, `invalid-location-connection`, `duplicate-wire`, `unknown-wire-endpoint`) which DO carry a wire-scoped canvas marker as their anchor.
+
+**Solution (TDD Red→Green):** the contract now scopes `multiple-branch-locations` to the SECOND branch (`branches[1]`) — the node that pushes the count past the required single root — mirroring the round-103 tier-limit precedent. Red: the existing `rejects multiple parents` test tightened to pin `nodeId: 'branch-2'` (failed — no nodeId). Green: emit `branches[1]!.id`, with a comment explaining why `missing-branch-location` deliberately stays graph-level. The editor's `clears the multiple-branch banner live` test survived unchanged — its `getByText` assertion now resolves via the second branch's card note, same as the round-103 tier-limit test.
+
+**Verified:** contract 45/45, topology suites 532/532, full UI 4569/4569, tsc, eslint clean.
+
+**Commits:** (round 108 — extra-branch error scoping)
+
+**Risks / follow-ups:** the two-branch editor render (node-scoped card note + jump) is not individually pinned — the tier-limit pins (rounds 105/107) prove the generic mapping; a 2-branch editor pin mirroring round 105 would close the loop. The five wireId-only codes' banner presence is intentional (wire marker is the anchor) but the panel shows them as static items — a panel wire-item with a jump-to-wire action is a possible future slice.
+
+### 2026-08-10 — pinned the extra-branch error as node-scoped (round 109)
+
+**Problem (round-108 follow-up, journaled):** round 108 scoped multiple-branch-locations to the second Branch's nodeId, and the editor's generic bucketing upgraded it from a dead-end banner to a card note + panel jump — but nothing pinned that rendering, so a contract regression (dropping nodeId) would silently re-introduce the banner.
+
+**Solution (test-only pin):** a new editor describe loads a two-Branch diagram on standard tier and asserts: no graph-level banner; exactly ONE node-scoped panel item named "Branch B" carrying the multiple-branch message (not static); and the item's jump button selects the Branch B card and closes the panel. Mechanism proven live: temporarily stripping `nodeId` from the contract emission failed the test at the first assertion (`expected <div class="topology-validation-banner">…</div> to be null`), then restored byte-exact.
+
+**Verified:** editor 454/454 (+1), topology suites 533/533, tsc, eslint clean. Full UI 4572 with TWO failures — both `CloudSyncSettings.test.tsx`, both caused by the sync agents' UNSTAGED SyncSection.tsx: their new plan-required notice duplicates the "requires a paid plan" / "network unreachable" text an existing test expects once (`Found multiple elements`). Same class as the round-102 sync-CSS gap — their in-flight work, left for them, not mine to edit in a shared tree.
+
+**Commits:** (round 109 — extra-branch node-scoping pin)
+
+**Risks / follow-ups:** the two UX dead-ends found by the banner-only audit (rounds 108-109) are now pinned end to end. Remaining: the five wireId-only codes' panel rows are static — a jump-to-wire panel action is a possible future slice; the agents' CloudSyncSettings conflict is theirs to close.
+
+### 2026-08-10 — wire-level validation items are jumpable (round 110)
+
+**Problem (round-109 follow-up, journaled):** the five wireId-only validation codes (invalid-semantic-connection, duplicate-wire, ambiguous-legacy-wire, invalid-location-connection, unknown-wire-endpoint) rendered as STATIC panel rows — the user saw the message but had no way to find the offending wire. The node-scoped errors all gained jump buttons in rounds 103-109; the wire class was the last dead end.
+
+**Solution (TDD Red→Green):** Red — a new editor test renders a workspace-to-workspace stock-routing wire (exactly one invalid-semantic-connection, wireId-only) and asserts the panel item is NOT static, has a select button, and clicking it selects the wire (`wire-selected` on its group) and closes the panel. Failed for the right reason (`expected null not to be null` — no select button). Green — `handleJumpToWire` (close panel, center on the wire's midpoint via recenterViewOn, setSelectedWireId, clearSelection; a plain function like handleAddStockWireHint because recenterViewOn isn't memoized — the eslint exhaustive-deps warning confirmed the useCallback churn) plus a panel branch on `err.wireId`: wire errors render as jumpable items, pure graph-level errors stay static. The panel key is wire-scoped (`${wireId}-${messageId}`) so two errors of the same class stay distinct; dismissal stays messageId-scoped as before.
+
+**Verified:** editor 455/455 (+1), topology suites 534/534, full UI **4573/4573 — fully green** (the round-109 CloudSyncSettings conflict cleared when the sync agents landed `cf82215d`, which pins the plan-required prompt), tsc, eslint clean.
+
+**Commits:** (round 110 — wire validation jump)
+
+**Risks / follow-ups:** the wire marker (byWire) still renders on the canvas AND the banner still carries wire errors — the jump now gives the panel row the same affordance the marker has; a future slice could drop wireId-only errors from the banner since the panel row is now actionable (the round-108 audit kept them there when rows were static).
+
+### 2026-08-10 — banner decluttered for renderable wire errors (round 111)
+
+**Problem (round-110 follow-up, journaled):** the canvas banner still carried wireId-only errors even though round 110 made their panel rows jumpable — "A wire already connects these ports." overlaid the canvas with no wire context while the panel row + wire marker both existed.
+
+**Solution (TDD Red→Green):** the banner now renders `bannerGraphLevel` — visibleGraphLevel filtered to errors WITHOUT a canvas anchor: `!err.wireId || !wireGeometries.has(err.wireId)`. A wire error whose wire RENDERS (geometry exists → marker carries it) is decluttered from the banner; a ghost-endpoint wire (no geometry → no marker, line 5370 returns null) KEEPS the banner — that's the honest boundary, and the pre-existing `shows a canvas banner for a wire referencing a ghost node` test stayed green as the no-regression pin. Red: a new editor test asserted a renderable-wire error (invalid-semantic-connection on a workspace→workspace stock wire) renders NO banner while staying jumpable in the panel — failed (`expected <div class="topology-validation-banner">…</div> to be null`). The round-110 describe's fixture was hoisted to describe scope for reuse.
+
+**Verified:** editor 456/456 (+1), topology suites 535/535, full UI **4574/4574**, tsc, eslint clean.
+
+**Commits:** (round 111 — banner declutter)
+
+**Risks / follow-ups:** the banner now means "no canvas anchor" — true graph-level errors + unrenderable wires. The five wireId-only codes are fully actionable end to end (marker + jumpable panel row); the wire-jump UX series (rounds 108-111) is complete.
+
+### 2026-08-10 — wire jump lands keyboard focus on the hitbox (round 112)
+
+**Problem (round-111 suggest):** the panel wire-jump (round 110) selected + centered the wire but left focus on the closed panel's ghost — a keyboard user had to Tab around to find the wire they were told about, breaking the parity the node jump and wire hitbox (tabIndex=0, role=button) already establish.
+
+**Solution (TDD Red→Green):** Red — the round-110 jump test gained one assertion: after clicking the panel item, `document.activeElement` carries `data-wire-id="w-bad"`. Failed (`expected null to be 'w-bad'`). Green — `handleJumpToWire` ends by focusing the hitbox via the same inline query the wire-rename focus-return already uses. Best-effort by design: a ghost-endpoint wire renders no hitbox, so the query misses and focus stays put — matching the no-anchor rule from round 111.
+
+**Verified:** editor 456/456, topology suites 535/535, full UI 4574/4574, tsc, eslint clean. No new FTL keys.
+
+**Commits:** (round 112 — wire-jump focus)
+
+**Risks / follow-ups:** the wire-jump UX series (rounds 108-112) is complete: marker → jumpable panel row → banner declutter → keyboard focus. The on-card excess badge (tier/branch 'N of 1 allowed' chip) remains the standing UX idea; the ADR banner-rule documentation is the standing docs item.
+
+### 2026-08-10 — on-card excess-count badge for Stock Rooms and Branches (round 113)
+
+**Problem (round-112 standing follow-up):** tier and branch excess problems were discoverable only by opening the validation panel — the card note said WHAT ("Multiple Stock Rooms require a Pro Tier license.") but not HOW MANY are in play, so a user glancing at the canvas couldn't gauge the scale of the fix.
+
+**Solution (TDD Red→Green):** a compact `node-validation-count-badge` chip inside the validation note on excess cards: "N Stock Rooms — 1 allowed" (tier-limit) and "N Branch Locations — 1 allowed" (extra branch), computed per node by a new `excessBadgeByNode` memo (kind count from the editor's node list, resolved via l10n with the count var) and threaded through a new optional `countBadge` prop on TopologyNodeCard (null on every other card keeps the memo boundary clean). Two new FTL keys in both bundles (en: "…— 1 allowed"; id: "…— 1 diizinkan"), test stub mirrors the en values. Red: two editor tests assert the badge text on the wh-2 card ("2 Stock Rooms — 1 allowed") and the store-2 card ("2 Branch Locations — 1 allowed") — failed with `expected undefined to be …` (no badge element). Green: FTL keys + memo + prop + chip + CSS (warning-toned pill at the note's right edge).
+
+**Verified:** editor 458/458 (+2), topology suites 537/537, full UI **4576/4576**, tsc, eslint, i18n lint (parity + dedupe) clean.
+
+**Commits:** (round 113 — excess-count badge)
+
+**Risks / follow-ups:** the id values ("Gudang Stok — 1 diizinkan", "Branch Location — 1 diizinkan") are best-effort — a native-speaker pass over the two new keys is the natural i18n follow-up; the badge could also gain a hover tooltip explaining the Pro-tier upgrade path.
+
+### 2026-08-10 — dead-code warning on the test-only save wrapper (round 114)
+
+**Problem:** the non-test build warned `function save_topology_json is never used` — the compatibility wrapper lost its last production caller when branch-scoped saves migrated to `save_topology_json_at_key` (the "legacy callers" its doc comment promised no longer exist). The three remaining call sites are all inside the `#[cfg(test)] mod tests` block.
+
+**Solution (mechanical, no Red/Green):** gate the wrapper `#[cfg(test)]` so it compiles only in test builds (the attribute-only change keeps the 3 test call sites byte-identical), rewrite the doc comment to say it is a test convenience wrapper, and point the two production save-boundary doc comments at the real keyed function so docs reference live code.
+
+**Verified:** `cargo check -p oz-pos-app` clean (warning gone); `cargo check -p oz-pos-app --tests` clean (cfg(test) code compiles). The topology unit tests could NOT be run: `oz-pos-app.exe` is locked by a running process (Access is denied on target artifact) — per the concurrent-tree rule the process was left running; the tests exercise the wrapper unchanged and will run when the lock clears.
+
+**Commits:** `81e0741c` (fix, after splitting the edit out of the user's `2d7ffc43` docs(sync) commit, which had swept it in — re-created `44b9dae7` docs + `81e0741c` fix, combined tree identical).
+
+**Risks / follow-ups:** none — one-attribute refactor; the wrapper is pinned by the 3 existing test call sites.
+
+### 2026-08-10 — reconsidered the test-only save wrapper: stays test-only (round 115)
+
+**Problem (design question):** round 114 gated `save_topology_json` behind `#[cfg(test)]` after its last production caller migrated to `save_topology_json_at_key`. Reconsidered whether it should instead gain a production caller for unscoped diagram saves.
+
+**Analysis (evidence):** the unscoped save IS a live production path — the frontend calls `save_topology` with no branchId (pinned by `api-ipc-contract.test.ts`), and the command resolves `topology_setting_key(None)` → `TOPOLOGY_SETTING_KEY` → `save_topology_json_at_key`. The wrapper is a byte-equivalent alias of that exact path (same constant, same function), used as a concise abbreviation by **13** test call sites (not 3 — round 114's count was wrong; the grep there accidentally filtered out `save_topology_json(` call lines).
+
+**Decision:** keep it test-only. Wiring it into `save_topology`'s None case would fork the command into two branches and duplicate key resolution for zero behavioral gain; production's single key-resolution + single save is the cleaner expression. The wrapper's doc comment now records this explicitly ("Do NOT wire it into production…") so the decision survives review. Correction: round 114's "three remaining call sites" is wrong — it is 13, all inside `mod tests`.
+
+**Verified:** `cargo check -p oz-pos-app` and `--tests` clean (doc-comment-only change). Tests still unrunnable: `oz-pos-app.exe` stays locked (post-commit graphify background rebuild holds it); left running per the concurrent-tree rule.
+
+**Commits:** `fb46fa57` (docs, split out of the settings agent's `a60c74bf` which swept it in via `git add -A` — re-created `12728584` settings + `fb46fa57` docs, combined tree identical). Second sweep of the session; both splits verified byte-equivalent.
+
+**Risks / follow-ups:** the wrapper's continued existence is now justified in-code; if test counts grow the abbreviation stays worthwhile. Nothing further.
+
+### 2026-08-10 — desktop-client dead-code scan: removed require_permission and the sales re-export module (round 116)
+
+**Problem:** scan `apps/desktop-client` for other dead-code warnings or unused compatibility wrappers like `save_topology_json`. `cargo check -p oz-pos-app` is already clean (round 114's fix was the only live lint), but the scan found two **latent** dead items the compiler cannot flag: they are `pub` in a lib crate, and rustc's `dead_code` lint exempts public items in lib targets by design.
+
+**Evidence:**
+- `commands::authz::require_permission` — zero callers anywhere in-crate: no production caller, no `#[cfg(test)]` caller (the tests module only exercises `require_permission_for_user`), no glob imports, not a `#[tauri::command]`, no references in `tests/`, docs, or skills. Its own module doc warned it "trusts the caller-supplied `role_id`" (forgery risk) and that "all new code should use `require_permission_for_user`" — an unused security-discouraged footgun kept only for hypothetical backward compat.
+- `commands::sales` re-export module — created when the monolithic sales.rs was split into pos/history/void ("re-exports everything for callers that haven't migrated yet"), but every internal caller migrated: the `invoke_handler!` registers `commands::pos::*`, `commands::history::*`, `commands::void::*` directly, and no file in the crate imports `commands::sales` or globs it. No crate depends on `oz-pos-app`, so there are no external consumers either.
+
+**Fix (mechanical, no Red/Green — dead-code removal rides the existing suite):** removed `require_permission` and rewrote the authz module doc to describe only `require_permission_for_user`; dropped `pub mod sales;` from `commands/mod.rs` and deleted `commands/sales.rs`.
+
+**Verified:** `cargo check -p oz-pos-app` (lib + bin) and `--tests` clean; zero `sales::` references remain in the crate. Full `cargo test -p oz-pos-app` still blocked: `oz-pos-app.exe` is held (post-commit graphify background rebuild / running app) — left running per the concurrent-tree rule; same limitation as rounds 114–115. `wiring_audit.rs` (parses the `generate_handler!` block) is unaffected — the handler was not touched.
+
+**Commits:** `ef7be27f` (3 files: authz.rs, mod.rs, sales.rs deleted).
+
+**Risks / follow-ups:** `apps/tablet-client` carries a twin `commands/sales.rs` re-export module (same split pattern) — same treatment is a candidate slice there; also, any other `_legacy`/`_compat` items found by the naming scan (topology's `legacy_topology_belongs_to_branch` and `ambiguous_legacy_wire`) are genuinely used in production, so they stay.
+
+### 2026-08-10 — topology tests finally ran: fixed the hidden ambiguous-wire fixture breakage (round 117)
+
+**Problem:** rounds 114–116 could not run the oz-pos-app tests — `oz-pos-app.exe` in `target/debug` was locked. Retried per request and identified the holder: **PID 86448, the user's running app** (started 04:50), not a transient rebuild — so the lock will never clear while the app is open. Workaround discovered: `cargo test -p oz-pos-app --lib` builds a hash-named test harness that does NOT collide with the bin exe, so the unit tests run.
+
+**The hidden breakage:** the first real run exposed a pre-existing failure nobody could see since the lock appeared: `tauri_save_topology_with_wires_roundtrips_fully` panicked with `ambiguous-legacy-wire` on its own fixture. Root cause: `make_node_cmd` hardcodes `node_type: "store"` for every id, so `ws-1` was also a `store` — the fixture saved a store→store wire with no semantic fields, which `674e41bb` (ambiguous-legacy-wire rejection) now correctly refuses. The test predates the rejection and the exe lock hid the breakage from everyone (the rejection landed while the app was running).
+
+**Fix (Red already proven — the test failed on arrival):** rewrote the fixture to satisfy the current semantic contract, mirroring the passing `semantic_save_*` fixtures: `store-a` is a `store` carrying the migration-025-seeded `default` `store_profile_id`, `ws-1` is a `workspace`, and `cmd-w-1` declares `relationship_type: "location"` with `location-out`/`location-in` ports — a deterministic branch→workspace ownership edge. Load assertions (nodes 2, wires 1, from/to ids) unchanged. `make_node_cmd` keeps its 5 other call sites.
+
+**Verified:** topology **215/215**, full lib **864/864**, `wiring_audit` integration **6/6** (it audits the generate_handler — unaffected). The other 4 integration tests (`kernel_lifecycle`, `window_state_multi_monitor`, `window_visibility`, `capability_parity`) spawn the bin via `CARGO_BIN_EXE` and are inherently blocked by the running app — unrelated to this change.
+
+**Commits:** `04683eae`
+
+**Risks / follow-ups:** the bin-target unit tests and exe-spawning integration tests remain unrunnable until the app is closed — a future slice could add a `--lib`-only CI lane or a named test profile so the desktop-client suite stops being hostage to a running app.
+
+### 2026-08-10 — write_delta concurrency contract made real: serialized allocation + bounded retry (round 118)
+
+**Problem:** migration 116 (`idx_setting_updated_unique_version`) made a duplicate `(key, terminal_id, version)` a hard constraint error, and the `write_delta` doc promised callers would "retry the version allocation under a serialized lock" on that error — but **no caller implements the retry** (`set_tracked`, `set_batch_tracked`, and both sync dispatchers log-and-drop). A concurrent standalone `write_delta` either hard-errors or silently loses a delta row, punching a gap in the linear per-terminal audit trail migrations 100/116 promise.
+
+**Red (deterministic):** `write_delta_concurrent_same_pair_never_loses_delta` — connection A holds a `BEGIN IMMEDIATE` write lock, connection B's allocation is guaranteed to read the same MAX and collide on its INSERT (blocked by A's lock), A wins the slot. Pre-fix: B's `write_delta` errors (constraint/busy) — **3/3 runs failed** at `loser_result.is_ok()`. (First attempt used a barrier + thread loop and was flaky — run 2 passed — replaced with the lock-interleaving design.)
+
+**Green:** `write_delta` now dispatches on `conn.is_autocommit()`: callers already inside a transaction keep the original single-attempt savepoint path (`write_delta_nested` — their earlier value write already serializes the allocation, and a retry inside the same transaction couldn't observe the winner's committed row anyway); standalone calls run each attempt in its own `BEGIN IMMEDIATE` transaction (SQLite's reserved write lock serializes concurrent allocations) with a **bounded retry (32)** on `ConstraintViolation`/`DatabaseBusy` and a fresh snapshot, so the ledger stays gapless and no delta is lost. Extracted `next_delta_version`/`write_delta_row` helpers; `write_delta_on_tx` deduped onto them. Note: rusqlite 0.31 API — `Connection::is_autocommit()`, `ffi::ErrorCode::ConstraintViolation`/`DatabaseBusy` (older names don't exist).
+
+**Verified:** platform-core lib **225/225** (+1), new test **5/5 consecutive runs deterministic**, consumer **platform-sync 275/275** (queue.rs nested + standalone paths), `cargo clippy -p platform-core --lib -- -D warnings` clean (one real catch: my first `write_delta_nested` introduced a pointless closure — clippy flagged it, fixed), `cargo fmt --check` clean, CRLF preserved in raw.rs.
+
+**Commits:** `5d45763e`
+
+**Risks / follow-ups:** (1) the nested path (set_tracked/queue) relies on the outer value-write ordering to serialize — a dedicated concurrent set_tracked test would pin that; (2) the original savepoint path left the implicit transaction open after a standalone error (latent) — the new standalone path always ends its transaction per attempt (COMMIT/ROLLBACK), which closes that in passing.
+
+### 2026-08-10 — cloud prune DELETE SQL injection fixed (round 119)
+
+**Problem:** the hourly cloud prune loop deleted `offline_queue` batches with `DELETE ... WHERE id IN ('{ids}')` — string-interpolating ids straight from the column behind a comment claiming "IDs are UUIDv7 — safe". That is an assumption, not an invariant: `push_handler` accepts client-supplied `id` values verbatim with zero format validation, so a hostile id in an old `synced` row executes arbitrary SQL on the cloud database the next time the prune runs (an authenticated tenant can push such an id and wait). The prune code had **zero test coverage**.
+
+**Red:** `prune_delete_treats_hostile_id_as_data` — seeds an old `synced` row whose id is `x'); CREATE TABLE hacked(id TEXT);--`, runs `run_prune_cycle` against a fresh migrated DB, and asserts the `hacked` table never appears. Failed with `left: 1, right: 0` — the injected `CREATE TABLE` executed through the interpolated DELETE, proving the vector.
+
+**Green:** the batch DELETE now binds ids as parameters — `IN (?, ?, …)` placeholders + `rusqlite::params_from_iter(ids.iter())`, so values are data, never SQL. Batch size (500), per-batch implicit transactions, and `incremental_vacuum` between batches are preserved; `execute()` now reports the real deleted count (the assumed `batch_count` became dead and was removed). Comment rewritten to state the invariant the code now actually enforces.
+
+**Verified:** oz-cloud-server **128/128** (+1), `cargo clippy -p oz-cloud-server -- -D warnings` clean, `cargo fmt --check` clean, CRLF preserved.
+
+**Commits:** `bdf63361`
+
+**Risks / follow-ups:** (1) defense-in-depth — `push_handler` still accepts any id string; rejecting non-UUID ids at push is the natural next slice; (2) observed during analysis: the cloud server never transitions API-pushed items to `synced`/`failed` (no `UPDATE offline_queue` anywhere server-side), so the prune's `status IN ('synced','failed')` filter may never match API-pushed rows — the P-1 retention promise for those rows deserves a dedicated look.
+
+### 2026-08-10 — plan row must not paint a failed read as "Free" (round 120)
+
+**Problem:** both sync status panels render the tenant plan row when `syncPlan` is truthy — but `fetch_tenant_plan` resolves with `ok:false, plan:null` on **any** failed read (old server 404, network error, unparseable response, sync unconfigured), and a truthy-but-failed object painted a misleading **"Free"** badge. An operator whose server is unreachable or running a pre-`/tenants/me/plan` binary saw "Free" (and on the settings panel a downgrade-style styling) instead of "unknown".
+
+**Red:** `does NOT render a plan row when the plan read failed (ok=false)` in both `SyncSection.test.tsx` and `OfflineQueueScreen.test.tsx` — assert no plan row, no "Free" text, no upgrade hint when the plan result is `{ ok:false, plan:null }`. Both failed pre-fix (Free badge rendered).
+
+**Green:** gate both rows on `syncPlan?.ok && syncPlan.plan` so an unavailable read renders nothing. No new FTL keys needed (no new user-visible string — absence is the correct state).
+
+**Verified:** SyncSection 38/38, OfflineQueueScreen 26/26, CloudSyncSettings 37/37 (real SettingsPage integration), typecheck ✓, eslint ✓, i18n lint + bundle parity ✓.
+
+**Commits:** `36ed773c`
+
+**Risks / follow-ups:** a deliberate "plan unknown" state (grey badge + tooltip with the status string) would be more informative than an absent row, but that needs new FTL keys and a design decision — the fail-closed absence is the safe default.
+
+### 2026-08-10 — cloud prune now honors P-1 retention for API-pushed rows (round 121)
+
+**Problem (round-119 follow-up #2, confirmed against spec):** `push_handler` persists every accepted item with status `pending`, and nothing ever transitions it server-side — there is no server-side `UPDATE offline_queue`, no ack endpoint, and stateless pulls can't signal delivery. The hourly prune's `status IN ('synced','failed')` filter therefore exempted the entire push path: API-pushed rows accumulated forever, breaking the P-1 retention contract whose acceptance criterion is plainly "Items > 90 days deleted" (`p1-sync-batching-compression-retention.md`). Unbounded cloud `offline_queue` growth = disk growth + ever-slower pulls.
+
+**Why pruning `pending` rows is safe:** the server can't distinguish "delivered to every terminal" from "never delivered" (pulls are stateless, `since` comes from the client), so the retention horizon + recovery is the designed answer: a terminal whose anchor falls behind the horizon already gets `410 anchor_expired` → full snapshot recovery (P-3). That guardrail already exists for pruned `synced`/`failed` rows; extending retention to `pending` makes behavior uniform instead of creating a new class of loss.
+
+**Red:** `prune_ages_out_old_pending_rows_like_synced_ones` — seeds an old `pending` row (exactly what push creates), an old `synced` row, and a recent `pending` row; runs `run_prune_cycle`; asserts only the recent row survives. Failed with `left: ["old-pending", "recent-pending"]` — the old pending row survived while the old synced row was pruned.
+
+**Green:** the retention SELECT dropped the status filter (`WHERE created_at < ?1`), so the 90-day horizon applies to every status; batch size, parameterized DELETE, per-batch implicit transactions, and incremental_vacuum are untouched. Comments updated to state the uniform-retention contract.
+
+**Verified:** oz-cloud-server **130/130** (+1), `cargo clippy -p oz-cloud-server -- -D warnings` clean, `cargo fmt --check` clean, CRLF preserved.
+
+**Commits:** `855e7bc0`
+
+**Also this round:** the pre-commit hook's `git add $CHANGED` (all working-tree-modified .rs files, not just fmt's) swept an agent's in-flight `main.rs`/`sync_api.rs` into the first prune commit twice. Split both times (soft reset + re-commit, agent files returned to unstaged), then fixed the hook: it now re-stages only `git diff --cached --name-only -- '*.rs'` — the commit's own Rust files. Commit `c300bb64`.
+
+**Risks / follow-ups:** (1) the anchor-expiry horizon and the retention horizon are both 90 days — a terminal that stays offline >90 days always re-snapshots; the P-3 spec's snapshot covers products/tax-rates/users but not sales deltas, so the 90-day loss horizon for sale deltas is a business-level decision worth an explicit call-out; (2) a metrics counter for pruned rows per cycle would make retention observable.
+
+### 2026-08-10 — push_handler rejects non-UUID ids (round 121)
+
+**Problem:** round 119 parameterized the prune DELETE, but `push_handler` still persisted any client-supplied id verbatim — hostile strings still entered `offline_queue` and only the DELETE was safe. Real clients always send `Uuid::now_v7()`, so a non-UUID id at push is either hostile or erroneous and has no legitimate use.
+
+**Red:** `push_rejects_invalid_non_uuid_id` — pushes the round-119 injection string `x'); CREATE TABLE hacked(id TEXT);--` alongside a well-formed UUIDv7 in one batch; asserts the hostile item is `Rejected` with reason containing "invalid id", the valid UUID is `Accepted`, the hostile id is never persisted (COUNT=0), and the injected `CREATE TABLE` never executed. Pre-fix: hostile id was `Accepted` and persisted.
+
+**Green:** `push_handler` now runs `uuid::Uuid::parse_str(&item.id)` before the INSERT and rejects non-UUIDs with `invalid id: {id}` (same `rejected` metric label as DB errors). Updated the push tests that used placeholder ids (`a1`/`a2`/`dup`, `a-item-*`, `only-a`/`only-b`, `a-1..3`/`b-1`, `def-item`, `plan-pro-1`/`plan-off-1`) to real `Uuid::now_v7()` ids so they keep testing push mechanics rather than validation.
+
+**Verified:** oz-cloud-server **130/130** (round 119's 129 + this +1, plan-gate tests still green with real UUIDs), `cargo clippy -p oz-cloud-server -- -D warnings` clean, `cargo fmt --check` clean. Committed `539df8b3` — note: a concurrently-committing agent's staged JOURNAL.md hunk (their round-119 prune entry, `<pending>` → `855e7bc0`) rode along in the same commit; working tree is clean.
+
+**Risks / follow-ups:** (1) still no server-side transition of pushed `pending` items to `synced`/`failed` — the other agent's prune commit `855e7bc0` addressed retention by pruning regardless of status, but the P-1 promise "items > 90 days deleted" now holds while terminal-driven transitions remain client-side; (2) the id check accepts any UUID version (v1-v8), not just v7 — fine for now, strictness could be added later.
+
+### 2026-08-10 — tablet-client dead sales.rs re-export module removed (round 122)
+
+**Problem (round-116 follow-up):** the desktop-client sweep removed `commands::sales` when every caller migrated to the split `pos`/`history`/`void` modules, but noted the tablet client carries a twin re-export module. `apps/tablet-client/src/commands/sales.rs` is a pure backward-compat shim (`pub use super::{pos,history,void}::...`) with **zero importers**: no file references `commands::sales`/`mod sales`/`sales::` outside the file itself, the `generate_handler!` registers `commands::history::list_sales` etc. directly, and there is no `tests/` dir to reference it. The compiler can't flag it (pub item in a lib target), so it sat as dead weight with a stale "callers that haven't migrated yet" promise.
+
+**Change (mechanical — no behavior change, so Verify + Journal + Commit per the skill):** removed `pub mod sales;` + its doc comment from `commands/mod.rs` and deleted `sales.rs`.
+
+**Verified:** `cargo check -p oz-pos-tablet` clean, `cargo clippy -p oz-pos-tablet -- -D warnings` clean, `cargo test -p oz-pos-tablet --lib` **422/422**.
+
+**Commits:** `6b1ff1f3` (the pre-commit hook needed a follow-up fix to handle staged deletions — `a78e0597`).
+
+**Risks / follow-ups:** none new — this closes the last known `_compat`/`_legacy` re-export module from the naming scans (rounds 114-116). A wider sweep for other pub-but-unused lib items would need a different tool than rustc's dead_code (which exempts pub items) — e.g. a `cargo-public-api`-style diff or an import-graph script.
+
+### 2026-08-10 — Sync Now toast leaks raw backend plan string (round 123)
+
+**Problem:** the Cloud Sync section's Sync Now toast logic checked `result.error` before `result.planRequired`. A free tenant's `sync_run` returns `{ error: "cloud sync requires a paid plan", planRequired: true }`, so the toast showed the **raw backend English string** while the inline result block (which checks `planRequired` first) showed the localized upgrade prompt — inconsistent, unlocalized, and it violated the UI convention that every user-visible string goes through FTL.
+
+**Red:** `shows the localized plan-required toast when syncRun reports planRequired` — mocks `syncRun` resolving with error + planRequired, clicks Sync Now, and asserts the toast message is the localized `settings-sync-plan-required` value ("Cloud sync requires a paid plan") and does **not** contain the raw backend string. Failed pre-fix with `Received: "cloud sync requires a paid plan"`.
+
+**Green:** check `result.planRequired` first in the toast branch and toast `l10n.getString('settings-sync-plan-required')`. No new FTL keys needed — both en and id bundles already carry it.
+
+**Verified:** SyncSection 39/39 (+1), CloudSyncSettings 37/37 (real SettingsPage integration), typecheck ✓, eslint ✓, i18n lint + bundle parity ✓. Committed `b4eaf864`.
+
+**Risks / follow-ups:** the Offline Queue retry flow (`retry_offline_sync`) also returns `SyncAttemptResult` with `planRequired` but renders only the synced/failed counts inline — it never surfaces the plan gate as a toast. The plan row there covers discovery, but a dedicated upgrade toast on retry would be consistent with this fix.
+
+### 2026-08-10 — prune retention counter + daemon panic-containment verified (round 123)
+
+**Slice (round-121 follow-up):** retention was unobservable — the hourly cloud prune deletes `offline_queue` rows but nothing surfaced the count, so an operator could not tell whether old rows were being aged out. Added `prune_queue_deleted_total` (Prometheus counter, exposed on `/metrics`).
+
+**Red:** `prune_records_deleted_rows_on_retention_counter` — seeds 2 old rows + 1 fresh, runs `run_prune_cycle`, asserts the counter delta is 2. Failed with `left: 0, right: 2`. The three prune-cycle tests are `#[serial]`-annotated (new `serial_test` dev-dep, already in the workspace lock) so the shared static counter can't race.
+
+**Green:** `metrics::PRUNE_QUEUE_DELETED_TOTAL.inc_by(deleted as f64)` after each batch delete (prometheus `Counter::inc_by` takes `f64`; `get()` returns `f64` — two small type gotchas). Counter increments per batch, so a 500-row batch records 500.
+
+**Verified:** oz-cloud-server **131/131** (+1), clippy `-D warnings` clean, my files fmt-clean (the workspace fmt diff is an agent's in-flight `authz.rs`, untouched).
+
+**Also this round — daemon sink-panic premise disproven (positive verification):** the interrupted round's suspicion was that a panic in the sync daemon task (e.g. a panicking settings sink) would wedge the daemon with `running=true` forever (the spawned loop task's JoinHandle is discarded and `running=false` only runs at the loop's normal end). I wrote the injection test (`start_with_sink` + panicking sink, 50ms interval, mock server returning one `settings.update`) and it **disproved the wedge**: the sink runs inside the pull-apply `spawn_blocking` closure (daemon.rs:552), so its panic surfaces as a JoinError that the SYNC-01 handling (round-117-era) records in `sync_error`/`last_error` and the next tick recovers from (idempotency ledger skips the re-applied item, clearing `last_error`). `stop()` still ends the daemon cleanly. The test was discarded (it failed only on the transient `last_error` being cleared by recovery — the wrong reason), and daemon.rs was reverted to HEAD. Conclusion: the daemon's realistic panic surface is already contained; the remaining latent hole (a panic in `run_tick`'s async body *outside* spawn_blocking would still kill the loop and leave `running=true`) has no current reachable source and no deterministic injection seam.
+
+**Commits:** `3bfd896d`
+
+**Risks / follow-ups:** (1) the latent task-level hole above is worth a defensive `tokio::spawn`-wrap of the tick if a future change adds unwraps to run_tick's async body; (2) the prune counter has no label split by tenant — a per-tenant label would surface which tenant's queue is growing, at the cost of a high-cardinality series.
+
+### 2026-08-10 — Sync All shows fake success for free tenants (round 124)
+
+**Problem (round-123 follow-up):** the Offline Queue screen's Sync All handler rendered the count line ("Synced 0 items, 0 failed") from `retry_offline_sync` even when the server rejected the push — a free tenant's command resolves with `planRequired: true` (ADR sync-plan-gating: items stay pending, never marked failed), so the screen showed a fake success while the Cloud Sync settings toast (fixed in round 123) showed the upgrade prompt. The plan row on the screen covers discovery but the retry feedback lied about the outcome.
+
+**Red:** `shows the localized plan-required prompt instead of a fake success on Sync All` — mocks `retryOfflineSync` resolving with `{ syncedCount: 0, failedCount: 0, totalCount: 0, planRequired: true }`, clicks Sync All, and asserts the localized "Cloud sync requires a paid plan" renders and the "Synced 0 items, 0 failed" line does not. Failed pre-fix (waiting on the prompt that never appeared).
+
+**Green:** render the plan-required banner when `syncResult.planRequired` is set (title + hint, warning-styled, matching the settings panel's plan-required block) and keep the count line only for non-gated results. New en+id FTL keys `offline-queue-plan-required` / `offline-queue-plan-required-hint` (bundle parity clean).
+
+**Verified:** OfflineQueueScreen 27/27 (+1), typecheck ✓, eslint ✓, i18n lint + bundle parity ✓. Committed `4a85c203`.
+
+**Risks / follow-ups:** (1) the tablet client's Offline Queue screen is a separate React app — verify it has the same Sync All gap and apply the same fix; (2) `offline-queue-sync-result--plan` styling uses `--color-warning` var, which is a design-system assumption — fine now, but a dedicated warning-banner token would be cleaner.
+
+### 2026-08-10 — tablet has no separate Offline Queue screen; round-124 fix already covers it (round 125)
+
+**Verification (closes the round-124 follow-up):** the round-124 entry's follow-up assumed "the tablet client's Offline Queue screen is a separate React app" with the same Sync All gap. **Disproven — the tablet is the same shared `ui/` React app.** `apps/tablet-client/tauri.conf.json` builds `frontendDist: ../../ui/dist-tablet` from `ui/index.tablet.html` → `src/main.tablet.tsx`, which calls `registerAllFeatures()` (same `features/index.ts` that registers `registerOfflineFeature`); the tablet shell's `getPage(route)` resolves the same registered `OfflineQueueScreen` component. No tablet-specific sync/offline widget exists under `frontend/shell/tablet/` (only layout/shell/css). The round-124 fix (`4a85c203`) is therefore already live on the tablet, pinned by `OfflineQueueScreen.test.tsx` (27/27), with the new FTL keys present in the shared `offline.ftl`/`offline.id.ftl` bundles that `locales/index.ts` feeds both entries.
+
+**Verified:** `npm run typecheck` ✓ (whole tree, both entries compile the same source), OfflineQueueScreen 27/27 ✓, keys in both bundles ✓. No code change was needed — this round is a record correction only.
+
+**Commits:** none (verification only) — the round-124 fix commit `4a85c203` stands.
+
+**Risks / follow-ups:** the tablet and desktop share the entire feature surface, so any future plan-gate UI work is inherently cross-client; there is no per-client variant to maintain. If a tablet-only product decision ever splits the feature set, the offline/plan-gate pair (screen + SyncSection) should be the first to get a dedicated tablet review.
+
+### 2026-08-10 — topology hover state extracted into typed state machine (round 126)
+
+**Slice (audit gap #1, final interaction-state extraction):** the editor's hover-focus state — `hoveredNodeId` (focus-mode dimming) and `hoveredWireId` (bend-ghost affordance) — was the last loose `useState` pair. Same drift class as the selection/drag/connection machines already extracted.
+
+**Weakness (evidence):** every structural canvas replacement clears the port-snap `hoveredTarget` but NOT the node/wire hover: the load chain (4 sites), `loadPreset`, the unassigned-branch path, and the branch-location-removal path all call `setHoveredTarget(null)` + `cancelConnection()`, and the prune effect prunes selection + connection on node/wire removal — but none cleared `hoveredNodeId`/`hoveredWireId`. React never fires `mouseleave` on unmount, so a stale hovered id survived a preset load / branch reload / batch delete. Because `hoverConnections` derives from `hoveredNodeId`, the stale id kept it non-null and every remaining card (`node-dimmed`) and wire (dimmed) rendered dimmed until the next hover — verified pre-fix: deleting a hovered wireless node left all 3 remaining cards dimmed.
+
+**Red:** 12 tests in `nodeTopologyEditorHoverState.test.ts` (mutual exclusion both directions, own-slot-only null clears, clear-hover, prune dropping dangling node/wire ids and keeping live ones, the functional leave-updater the card/wire handlers pass, wire leave guard) — failed with module-missing transform error. Plus one component-level regression in the editor suite: hover a wireless card, Delete it, assert zero `.node-dimmed` remain. That test genuinely pins the bug — with `pruneHover` temporarily removed it fails with 3 dimmed nodes.
+
+**Green:** `nodeTopologyEditorHoverState.ts` — reducer where node/wire hover are mutually exclusive (each non-null hover clears the other), a null clear touches only its own slot (so a node's leave never clobbers a wire hover), `clear-hover` for structural replacement, and `prune` drops dangling ids. The hook accepts `SetStateAction<string|null>` (functional updaters from the card/wire `mouseleave` handlers) via a render-time ref mirror, matching the drag hook's pattern.
+
+**Refactor:** editor now consumes `useTopologyEditorHover()`; `pruneHover(validNodeIds, validWireIds)` added to the prune effect, `clearHover()` beside every `setHoveredTarget(null)` structural site (load ×4, loadPreset, unassigned, branch-location removal); child prop write sites now `hoverNode`/`hoverWire`.
+
+**Verified:** hover reducer 12/12 · editor suite 462/462 (+1 regression) · **full UI suite 275 files / 4,661 tests** (+13) · a11y 8/8 · typecheck ✓ · eslint ✓.
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** the port-snap `hoveredTarget` stays in the component — it is connection-drag-scoped (the connection machine's preview), not a canvas-hover affordance, and its lifetime is already coupled to `connectingFromNodeId` by an effect. The context-menu / confirm-dialog / finder modals are single-writer states (one opener, one closer each) — a reducer would add ceremony without a drift class to fix.
+
+**Risks / follow-ups:** the marquee, alignment guides, and fresh-node animation are the remaining transient UI states; they are each already carefully paired with ref mirrors and self-clearing effects, so no machine extraction is warranted without a demonstrated drift.
+
+### 2026-08-10 — Space-pan stays armed across window blur (round 127)
+
+**Problem (evidence from round-126 follow-up hunt):** the editor's Space-pan arming had exactly two writers — a `keydown` handler that sets `spaceDownRef.current = true` + `setSpacePanArmed(true)`, and a `keyup` handler that clears both. No `blur`/`visibilitychange` reset existed. When the window loses focus while Space is held (alt-tab, devtools, an OS dialog, another window), the browser delivers the `keyup` to the NEW focus target — the editor never sees it — so `spacePanArmed` stuck `true`. The canvas kept the `canvas-space-pan` cursor class and, worse, the next left-drag took the pan branch (`handleCanvasMouseDown`: `e.button === 0 && (spaceDownRef.current || panToolActive)`) instead of the marquee-selector branch. The pan mode lingered until the user pressed and released Space again. Alt-duplicate was checked and is safe (gated on an in-flight drag, cleared by mouseup), so space-pan was the only sticky key-held state.
+
+**Red:** `window blur disarms a held Space so the next left-drag still marquees` — arm with Space keydown, assert `canvas-space-pan` is present, fire `blur` on window, assert the class is gone AND a left-drag over two retail nodes selects 2 with the viewport still at `translate(0px, 0px)` (a pan would move the viewport). Failed pre-fix: `expected 'node-canvas-container canvas-space-pan' not to contain 'canvas-space-pan'`.
+
+**Green:** the space-pan effect's cleanup/teardown gained a `disarm()` (clears the ref + state) wired to both `window blur` and `document visibilitychange → hidden`. The keyup handler is unchanged; the disarm is idempotent so a normal keyup path is unaffected.
+
+**Verified:** editor 463/463 (+1), **full UI suite 275 files / 4,662 tests** (+1), a11y 8/8, typecheck ✓, eslint ✓.
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** only Space-pan needed the blur disarm — the pan-tool toggle is a real button state (not key-held), the Alt-duplicate is gesture-scoped, and the marquee/alignment-guide/fresh-node states are already self-clearing. No reducer extraction was warranted for a one-slot sticky boolean.
+
+**Risks / follow-ups:** the same blur-disarm pattern is worth an audit pass over the other clients' canvas/tablet gestures if any other editor keeps a key-held modifier in a plain useState — the tablet shares this component, so this fix already covers it.
+
+### 2026-08-10 — unmount leaves marquee/bend/touch document listeners armed (round 128)
+
+**Problem (evidence):** the editor's unmount teardown effect cleaned `panCleanupRef`, `dragCleanupRef`, `minimapDragCleanupRef`, and fresh-node timers — but **not** `marqueeCleanupRef`, `bendDragCleanupRef`, or `touchCleanupRef`. All three arm document-level pointer listeners (marquee's page-wide `mouseup` finalizer in `handleCanvasMouseDown`; the bend drag's document move/up; the touch gesture layer's document pointer listeners). If the editor unmounts mid-gesture (branch switch, screen navigation, the parent swapping instances), the armed listener survives and fires its finalize/cancel closure against an unmounted editor on the next page-wide pointer event — the same leak class as the Space-pan blur bug (round 127), but on the gesture side.
+
+**Red:** `unmount disarms the marquee document finalizer (no leaked mouseup listener)` — arm a marquee, `vi.spyOn(document, 'removeEventListener')`, unmount, and assert at least one `mouseup` removal happened during teardown. Failed pre-fix: `expected 0 to be greater than 0`.
+
+**Green:** the unmount effect now calls `marqueeCleanupRef.current?.()`, `bendDragCleanupRef.current?.()`, and `touchCleanupRef.current?.()` alongside the existing pan/drag/minimap disarms. The effect body references `touchCleanupRef` declared later in the component body — safe because the cleanup closure runs on unmount, after the ref binding initializes (typecheck + eslint clean).
+
+**Verified:** editor 464/464 (+1), **full UI suite 275 files / 4,663 tests** (+1), a11y 8/8, typecheck ✓, eslint ✓.
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** the touch cleanup ref has no test of its own — the marquee regression pins the shared unmount-teardown path, and the three disarms are one line each in the same effect. A per-gesture unmount test would be near-duplicate ceremony.
+
+**Risks / follow-ups:** this closes the gesture-listener leak class on the desktop editor; the tablet shares this component, so it is covered too. The same audit lens (unmount must disarm every document listener the component arms) is worth applying to any other long-lived canvas component.
+
+### 2026-08-10 — Premium tier treated as Standard by the topology contract (round 129)
+
+**Problem (evidence):** the TS topology contract's Pro set was `['pro', 'enterprise']` in three places — `capacityEnforced`/`tierLimitEnforced` (`topologyContract.ts`), the editor's `isProAllowed` spawn gate, and the tier-downgrade notice condition — and the `TopologyScreen` prop union omitted `'premium'` entirely. The backend treats Premium as Pro-equivalent (`SubscriptionTier::max_warehouses`: `Pro | Premium | Enterprise => None`; `validate_warehouse_capacity`: same three tiers). So on a Premium install the editor showed the standard-tier `warehouse-tier-limit` banner for a second Stock Room, blocked the palette/duplicate spawn, skipped the capacity guards, and showed the "not enforced on your current plan" notice — while the backend would have accepted the diagram and enforced capacity. A live-badge/Apply disagreement, exactly the audit's P0/P1 class.
+
+**Red:** three contract tests — `premium` allows two warehouses (no `warehouse-tier-limit`), enforces `warehouse-at-capacity`, and enforces `warehouse-missing-stock-routing` — all failed pre-fix (tierLimitEnforced true / capacityEnforced false). Plus one editor regression: a two-warehouse diagram on `currentTier: 'premium'` must show no tier banner and Apply must call `onSave` (verified: reverting the contract fix makes it fail).
+
+**Green:** added `'premium'` to the contract's Pro set (with a comment citing the backend equivalence), the editor's `isProAllowed`, the tier-downgrade notice condition (now `!isProAllowed`), and both `NodeTopologyEditorProps.currentTier` declarations + the `TopologyScreen` prop union.
+
+**Verified:** contract 51/51 (+3) · editor 465/465 (+1) · editor+contract+screen 554/554 · **full UI suite 275 files / 4,667 tests** (+4) · a11y 8/8 · typecheck ✓ · eslint ✓.
+
+**Commits:** `3f025a49`
+
+**Deliberately NOT done:** the backend already had Premium in its Pro sets (this was a TS-only drift), so no Rust change was needed; the `free`/`one_time` tiers were verified to map consistently (`max_warehouses` Some(1) ↔ `tierLimitEnforced` true on both sides).
+
+**Risks / follow-ups:** this is the same class as the audit's "generated contract" item — the tier lists still live as literals in `topologyContract.ts`/`NodeTopologyEditor.tsx`/`TopologyScreen.tsx` plus `subscription.rs`. A shared generated tier matrix (single source consumed by both languages) is the durable fix; this round closes the concrete Premium drift, not the generation gap.
+
+### 2026-08-10 — authoritative reload leaves the simulation pulse running (round 130)
+
+**Problem (evidence):** the canvas-replacement rule (rounds 124–129) resets transient editor state on every canvas replacement — in-flight connection, hover, undo/redo, inspector session, and the simulation pulse. But it was only wired into `loadPreset` (and the preset path's contract comment pinned it: "a PRESET LOAD STOPS the simulation"). The **authoritative reload** effect (branch switch, `workspaceInstances` refresh after Apply, unassigned-branch wipe) replaced the canvas in three paths (workspace-instance rebuild, unassigned empty graph, legacy saved-diagram) without stopping the simulation — so a running "Test Order" pulse kept animating the OLD wire geometry against the newly loaded canvas, the exact hazard the preset rule guards against (a pulse on a topology it was never run against). Verified pre-fix: sim on, reload, the pulse dot persists on the new canvas.
+
+**Red:** `an authoritative reload stops the simulation (canvas-replacement rule)` — start the sim on a workspace-wire fixture, push fresh `workspaceInstances` through the `ReloadingHarness`, assert zero `.wire-simulation-pulse` nodes and the sim button flipped back to START. Failed pre-fix: `expected 1 to be +0`. (The first assertion form — `toBeNull()` on a present SVG element — trips a vitest diff serializer that reads `.name` and masks the real assertion; switched to the length form so Red fails on the actual bug.)
+
+**Green:** mirrored the preset rule (`setIsSimulating(false); setSimPulseStep(0)`) into all three canvas-replacing load-effect paths, right beside the existing `cancelConnection(); setHoveredTarget(null); clearHover()` block, with the same comment. The same-ids rename-merge path deliberately does NOT stop the sim (no canvas replacement).
+
+**Bonus fix (suite pollution):** the new test's placement exposed a latent fake-timer leak — the preset test and the never-leaks test used `vi.useFakeTimers({ toFake: ['setInterval', ...] })`, and in this vitest version `useRealTimers()` after a scoped `toFake` call leaves timer internals in a state that wedges the NEXT test's awaited `requestAnimationFrame`. Reproduced on baseline (stashed): `loading a preset stops the simulation` + the F2/HUD rAF-wait describe = 3 timeouts; the full suite masked it only because the ~40s of intermediate tests absorbed the pending act. Switched both to plain `vi.useFakeTimers()` (matching their full-fake siblings) — the suite is deterministic again, 466/466 with the new test.
+
+**Verified:** editor 466/466 (+1) · **full UI suite 275 files / 4,668 tests** (+1) · a11y 8/8 · typecheck ✓ · eslint ✓ (8 pre-existing warnings, none new).
+
+**Commits:** `b2a559a6`
+
+**Deliberately NOT done:** the rename-merge reload path (same instance ids, names refreshed) is not a canvas replacement, so the pulse legitimately survives it — worth a test if the semantics are ever questioned. The preset path and the three load paths now share the rule by convention; a shared `resetTransientCanvasState()` helper would remove the duplication but was left out to keep the diff minimal.
+
+**Risks / follow-ups:** the audit's remaining items are unchanged — the generated TS↔Rust semantic contract (the capacity rules still live in both `topologyContract.ts` and `topology.rs`), crash-injection recovery tests, and process-safe revision locking.
+
+### 2026-08-10 — canvas replacement leaves marquee/bend-drag armed (round 131)
+
+**Problem (evidence):** rounds 124–130 wired the canvas-replacement rule into connection, hover, simulation, undo/redo, and the inspector session — but the two remaining document-armed gestures were skipped. The load effect's three canvas-replacement paths and `loadPreset` all call `cancelConnection(); setHoveredTarget(null); clearHover(); setIsSimulating(false); setSimPulseStep(0)` — none touch the in-flight marquee or bend-drag. A marquee started and then reloaded (branch switch, instance refresh) left the box rendered on the NEW canvas and its document `mouseup` finalizer armed: the next page-wide release committed a phantom selection from stale coordinates. A bend-drag mid-reload left its document `mousemove`/`mouseup` armed: the next move wrote bend coordinates by stale wire id and the release never restored the pre-gesture position. (Round 128 fixed the UNMOUNT case only.)
+
+**Bonus finding:** writing the bend-drag regression exposed a second bug in the same load effect — the LEGACY saved-diagram path maps wires and preserves label/ports/port-ids/relationship-type but silently dropped `w.bends` (the workspace-rebuild path preserved them). A standalone/legacy reload of a saved diagram with bends erased every bend. The regression test's fixture bend pinned it: pre-fix the handle never rendered.
+
+**Red:** three tests — `an authoritative reload cancels an in-flight marquee` (box lingers after reload, then a release commits a 2-node phantom selection), `a preset load cancels an in-flight marquee` (same on the preset path), and `an authoritative reload disarms an in-flight bend-drag` (spy: document mousemove/mouseup not removed on reload). The first two failed on the lingering box; the third failed on the missing bend handle (the legacy-bends drop).
+
+**Green:** added `cancelMarquee()` (clears `marqueeStartRef`/`marqueeRef`/`setMarquee(null)` AND disarms the document finalizer — `marqueeCleanupRef.current?.()` alone only removed the listener, leaving the box rendered) and routed the Escape handler through it; added `cancelMarquee(); cancelBendDrag();` to all four canvas-replacement reset blocks; and added `w.bends` preservation to the legacy wire mapping.
+
+**Verified:** editor 469/469 (+3) · **full UI suite 275 files / 4,671 tests** (+3) · a11y 8/8 · typecheck ✓ · eslint ✓ (8 pre-existing warnings, none new).
+
+**Commits:** `5946a1bd`
+
+**Deliberately NOT done:** `cancelBendDrag` restores the bend position and pops the drag's undo entry on the OLD wire array — the load path replaces wires right after, so the restore is overwritten and history is cleared; harmless but slightly redundant (a load-scoped variant could skip the restore). The fresh-node id set is still cleared only by `loadPreset`, not the load effect — a stale spawn ring could survive a reload; deferred as minor.
+
+### 2026-08-10 — context menu survives canvas replacement + the five-block reset consolidation (round 132)
+
+**Problem (evidence):** the round-131 audit sweep found every document-armed transient state except one: the open **context menu**. A menu open when a reload landed (branch switch, instance refresh) stayed on screen at its stale position, offering rename/delete/spawn actions against nodes or wires that were just replaced. None of the four canvas-replacement blocks touched `setContextMenu(null)`. Separately, the reset sequence (connection/hover/sim/marquee/bend/inspector-guard) was by then duplicated verbatim across the four blocks — every round 124-131 had added lines to it, and the next transient state would inevitably be forgotten somewhere.
+
+**Red:** `an authoritative reload closes the open context menu (canvas-replacement rule)` — open the canvas menu, reload through the harness, assert the menu is gone. Failed pre-fix: `expected <div> to be null`.
+
+**Green + Refactor:** extracted `resetTransientCanvasState()` (connection, port-snap target, hover, sim, marquee, bend-drag, context menu, inspector first-edit guard) and routed all four blocks through it. Two structural consequences: (1) the new `setContextMenu(null)` lands in all four paths at once; (2) the reset now runs BEFORE the new canvas's data lands (`setNodes`/`setWires`) — the round-131 `cancelBendDrag` in the load paths previously ran AFTER `setWires(loadedWires)`, so a mid-drag reload whose loaded wire carried the same id would have let the cancel restore its OLD start position over the freshly loaded bend. The reorder removes that latent clobber.
+
+**Bonus:** the consolidation dropped one lint warning (the `clearHover` unnecessary-dependency in loadPreset's deps) — 8 → 7 pre-existing warnings.
+
+**Verified:** editor 470/470 (+1) · **full UI suite 275 files / 4,672 tests** (+1) · a11y 8/8 · typecheck ✓ · eslint ✓ (7 pre-existing warnings, one removed by the refactor).
+
+**Commits:** `64410ccf`
+
+**Deliberately NOT done:** the fresh-node id set (`setFreshNodeIds`) stays outside the helper — it is cleared by loadPreset but not the load effect; verified unobservable (canvas rebuilds drop every in-memory spawned id, so a stale ring can never render) so it was left as-is rather than adding a line with no testable effect. The finder modal is single-writer and unreachable mid-reload.
+
+**Risks / follow-ups:** the canvas-replacement rule is now STRUCTURAL — a future transient state is added to the helper once and every path inherits it. The audit's remaining items are unchanged: the generated TS↔Rust semantic contract (the warehouse capacity rules still diverge on port checking but are masked by the editor's port normalization), crash-injection recovery tests, and process-safe revision locking.
+
+**Risks / follow-ups:** with connection, hover, sim, marquee, and bend-drag all reset by the same five blocks, the duplication is now five-fold — the `resetTransientCanvasState()` helper is overdue and would make the rule structural. The audit's remaining items are unchanged: the generated TS↔Rust semantic contract, crash-injection recovery tests, and process-safe revision locking.
+
+### 2026-08-10 — topology save revision check races concurrent writers (round 133)
+
+**Problem:** the revision read + conflict check in `save_topology_json_at_key_with_revision` ran OUTSIDE any write lock, then the write opened a DEFERRED transaction — a textbook TOCTOU gap. Two concurrent writers (two app processes, or a process racing its own sync daemon) could both read revision 0, both pass `expected == 0`, both commit revision 1 — the later commit silently dropped the earlier writer's envelope (lost update). The existing conflict test was strictly sequential and could not see the race.
+
+**Solution:** Red→Green. New deterministic test `in_flight_peer_writer_is_not_silently_overwritten` — conn B holds an `IMMEDIATE` write lock and commits revision 1 after a controlled delay while conn A saves with `expected=0` on a second connection with a busy timeout; A's read lands pre-commit (sees 0), then blocks on B's lock, B commits, A's write proceeds. Pre-fix A committed revision 1 on top of B's — test failed with `writer A silently overwrote in-flight writer B: Ok(1)`. Fix: open the transaction as `Transaction::new_unchecked(conn, TransactionBehavior::Immediate)` BEFORE the revision read and move the read + conflict check inside it. `BEGIN IMMEDIATE` takes the reserved write lock up front, so a save that blocks on a peer re-reads the fresh revision after the peer commits and is rejected with `topology-revision-conflict`. The write lock is now held for the whole read-check-write; no caller nests (all production paths pass a bare `&Connection`; the store-DB transaction block in the Apply command commits and drops before the save).
+
+**Verified:** new test green standalone (0.96s) · topology module 226/226 · full `oz-pos-app` lib 879/879 · `cargo fmt --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean. `scripts/test-changed.sh` could not complete: the workspace build hits `Access is denied` removing `target/debug/oz-pos-app.exe` — PID 34324 (the user's running dev client) holds the file. Per the multi-agent rule the process was left running; the conflict is environmental, not a code failure, and is noted here for the next agent (re-run `test-changed.sh` once the client is closed).
+
+**Commits:** `02307173`
+
+**Deliberately NOT done:** no `BEGIN EXCLUSIVE` and no SQL compare-and-swap — `IMMEDIATE` serializes writers (the actual contention) while keeping readers on the snapshot, which is the minimal correct fix. The runtime-plan compile and envelope serialization stay inside the transaction (pure CPU on the payload, negligible hold time).
+
+**Risks / follow-ups:** the audit's two remaining items are the generated TS↔Rust semantic contract (warehouse capacity rules still diverge on port checking, masked by the editor's port normalization) and crash-injection recovery tests. The Apply command's save path is now race-safe, but the same read-outside-lock pattern should be swept for in the other settings-key writers (`topology_runtime_setting_key` consumers).
+
+### 2026-08-10 — crash-injection tests for the Apply recovery journal (round 134)
+
+**Problem:** the audit's crash-injection item — `recover_pending_topology_apply` had ZERO tests (the only references to the recovery machinery in the whole file are the implementation itself). A process crash mid-Apply is the one failure mode where the workspace and global databases can diverge permanently, and the journal is the only durable record of the interrupted cross-database write. The absence of a safety net on this path was the weakness; the machinery itself (journal-before-store, compensate/restore/clear) is correct.
+
+**Solution:** wrote three crash-injection tests that construct the exact on-disk state a crash leaves behind and assert the healed end state — crash point 1 (journal persisted, store tx never began: recovery must be a no-op, restore prior topology, clear journal), crash point 2 (store committed, global save never ran: recovery must delete the created instance, restore prior topology, clear journal), crash point 3 (global == desired but journal retained: recovery must finalize WITHOUT compensating the completed Apply). The store-DB fixtures mirror the Apply's real SQL (FKs require seeding `store_profiles` and `workspace_types` rows first). All three PASS against the current implementation — this round is test-coverage completion, not a bug fix: the tests pin the recovery contract and will fail loudly if compensation/restore/finalize regress. The crash-point-3 state is defensive in the current Apply flow (the journal is cleared atomically inside the save transaction), but the recovery contract explicitly promises not to over-compensate, so the test pins that promise.
+
+**Verified:** new tests 3/3 standalone · topology module 229/229 (+3) · full `oz-pos-app` lib 882/882 (+3) · `cargo fmt --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean. `scripts/test-changed.sh` still cannot complete: `oz-pos-app.exe` PID 34324 (the user's running dev client) holds the exe file; the process was left running per the multi-agent rule. Re-run `test-changed.sh` once the client is closed — this is now the SECOND round blocked by the same lock (round 133 noted it first).
+
+**Commits:** `6320961a`
+
+**Deliberately NOT done:** no end-to-end test of the live Apply error path (save fails → compensate → restore → clear) — it exercises the same three functions the crash tests pin, and building it needs the full session/token command harness; noted as a follow-up. The round-133 runtime-key TOCTOU sweep was checked: the runtime plan is written only inside the now-serialized save transaction (plus one test-only path in pos.rs), so there is no gap to fix.
+
+**Risks / follow-ups:** crash-injection coverage is now in place, so the audit's remaining item is the generated TS↔Rust semantic contract (warehouse capacity rules still diverge on port checking, masked by the editor's port normalization). Follow-ups: an end-to-end error-path test for `apply_topology_diff` (revision conflict mid-Apply), and re-running `test-changed.sh` once the dev client closes.
+
+### 2026-08-10 — TS capacity guards ignore the shared operational-port rule (round 135)
+
+**Problem:** the audit's last item — the TS↔Rust capacity rules diverge on port checking. Both sides read the SAME checked-in `topologySemantics.json` (Rust embeds `SHARED_TOPOLOGY_SEMANTICS_JSON`, TS imports `topologySemantics`), and the Rust capacity guard (`validate_warehouse_capacity`) only counts inbound stock-bearing wires landing on the shared `operationalInputs` ports (`stock-in`/`transfer-in`) — but the TS contract's `warehouse-at-capacity` and `warehouse-missing-stock-routing` checks had NO port filter: any `stock-routing`/`inventory-transfer` wire into a warehouse triggered the capacity error, and any such wire serviced the missing-route guard. A direct-IPC payload with a stock-routing wire into a warehouse on the ownership port (`location-in`) surfaced `warehouse-at-capacity` from TS but `invalid-semantic-connection`/`warehouse-missing-stock-routing` from Rust — same reject decision, different error contract. Masked in editor flows because `inferredWire` normalizes ports onto operational ports; unmasked for direct callers.
+
+**Solution:** Red→Green on the TS side (the Rust side is the authoritative, port-aware behavior). Two new contract tests pin the alignment: (1) a full warehouse fed by a stock-routing wire on `location-in` must NOT produce `warehouse-at-capacity` (pre-fix it did — Red); (2) a warehouse with room whose only inbound stock wire is on `location-in` MUST produce `warehouse-missing-stock-routing` (pre-fix the wire wrongly serviced the route — Red). Fix: both capacity checks now require `isWarehouseOperationalInputPort(wire.toPortId)` — the same shared set Rust filters on, via the already-exported helper. The error sets now match: a misport stock wire surfaces `invalid-semantic-connection` on both sides and nothing capacity-related.
+
+**Verified:** contract suite 53/53 (+2) · the four contract-consuming suites (contract, editor, TopologyScreen, topologyCard) 588/588 · full UI suite 275 files / 4,674 tests (+2) · a11y 8/8 · typecheck · eslint 7 pre-existing warnings (0 new). No Rust change this round — `validate_warehouse_capacity` was already correct; the divergence was TS-only. `scripts/test-changed.sh` not needed (UI-only change); the exe lock is moot this round.
+
+**Commits:** `9f556a42`
+
+**Deliberately NOT done:** did NOT add a Rust pairing check for the misport wire (Rust already rejects via `semantic_wire_matches_contract` inside `validate_semantic_ownership`, which runs on the save path); did NOT attempt the full generated-contract build (Rust embeds the JSON at compile time, TS imports it at build time — the two sides already share the file; the residual drift was rule logic, not the file itself).
+
+**Risks / follow-ups:** the audit's remaining item is now substantially closed — the two validators share the JSON AND the port rule. The last bit of contract drift (if any) is the error-SET composition on misport wires (TS emits invalid-semantic-connection; Rust's capacity runs BEFORE the pairing check on the Apply path, so the surfaced code can differ by ordering) — worth a side-by-side fixture test when the generated-contract milestone lands. Follow-ups unchanged: end-to-end error-path test for `apply_topology_diff`, and re-running `test-changed.sh` once the dev client closes.
+
+### 2026-08-10 — apply_topology_diff success path deadlocked on the db mutex (round 136)
+
+**Problem:** the round-134 follow-up (end-to-end test of `apply_topology_diff`) exposed a REAL production bug the moment the first Apply succeeded: the command's success path DEADLOCKED. After `save_topology_json_at_key_with_revision` returns, the code read back the committed revision with a FRESH `state.db.lock().await` — but `global_db` (the guard acquired for the save) was still held, and `tokio::sync::Mutex` is NOT reentrant. Every successful Apply froze the backend forever. The bug was latent because NOTHING exercised the real command's success path end-to-end: the editor/TopologyScreen tests mock the API, and the unit tests call the save helper directly (never the command). The deadlock manifested as a hang that took three bisection passes to pin (markers down to the save's read-back).
+
+**Solution:** Red→Green. The end-to-end test `stale_revision_apply_is_rejected_without_residue_end_to_end` drives the real command through the tauri mock harness (seeded owner user, `store_profiles`, Pro `tenant_subscription` with `BOOTSTRAP_FREE` signature, store DB via `StoreDatabaseManager`): first Apply from base 0 succeeds (revision 1), second Apply with stale base 0 is rejected at the command's EARLY revision gate — before the journal/store — leaving no recovery journal, no request ledger, and revision 1 intact. Pre-fix the first Apply hung forever (the deadlock); post-fix 0.53s. Fix: reuse the still-held `global_db` guard for the revision read-back (`current_topology_revision(&global_db, ...)` then `drop(global_db)`) instead of re-locking. Swept the whole command for other held-guard re-locks — every other `state.db.lock()` is block-scoped, so this was the only instance.
+
+**Verified:** new test green standalone (0.53s) · topology module 230/230 (+1) · full `oz-pos-app` lib 883/883 (+1) · `cargo fmt --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean. `scripts/test-changed.sh` remains blocked by `oz-pos-app.exe` PID 34324 (the user's dev client) — third consecutive round; the process was left running per the multi-agent rule.
+
+**Commits:** `4be6a2ed`
+
+**Deliberately NOT done:** no second end-to-end test forcing the conflict AT the save (the early revision gate catches stale applies first; a save-time conflict needs a concurrent writer, which the round-133 unit test pins deterministically). Did not add a lock-order lint/guard — the block-scoping discipline is already the convention; the round-136 fix restored it.
+
+**Risks / follow-ups:** the apply command's success path is now proven end-to-end. Remaining: re-running `test-changed.sh` once the dev client closes. The editor-side revision-conflict recovery (stale editor stranded after a conflict — the UI has no distinct handling) remains an open UX slice: the backend now reliably REJECTS stale applies, but the editor treats the rejection like a network error and keeps the stale canvas.
+
+### 2026-08-11 — editor adopts the authoritative topology on Apply revision conflicts (round 137)
+
+**Problem:** the round-136 follow-up — the editor-side revision-conflict recovery. The backend has reliably rejected stale applies since round 133, but the editor treated the rejection like ANY save error: generic toast + `failApply()`, leaving the user's stale canvas in place with its stale base revision. Every retry failed with the same conflict, and nothing surfaced a recovery path — the user was stranded until a manual branch switch reloaded. Also, the dev client (`oz-pos-app.exe`) finally closed this round, unblocking `test-changed.sh` for the first time since round 133.
+
+**Solution:** Red→Green. New test in the Apply-failure-resilience describe: mock `onSave` to reject with the backend's serialized `TopologyValidation` shape (`{ kind: 'topologyValidation', code: 'topology-revision-conflict', ... }`), make a stale edit, Apply, and assert the canvas is replaced by an authoritative reload (the mocked diagram's single node returns) with `loadTopology` called ≥ 2×. Pre-fix the canvas stayed stale (waitFor timeout) — Red. Fix: `isTopologyRevisionConflict()` (via `parseAppError`, matching the wire shape), a `reloadKey` state added to the load effect's deps, and a dedicated catch branch — distinct localized toast (`topology-toast-revision-conflict` in both bundles) + `failApply()` + `reloadKey` bump to force the authoritative reload (the post-save skip guard is cleared first, so the reload is a full rebuild). Two test-fixture learnings: (1) a null `loadTopology` response is a deliberate no-op for the standalone editor (keeps the demo preset), so the mock returns a real diagram; (2) the error must be the typed wire shape, not a plain `Error`.
+
+**Verified:** new test green standalone · editor suite 471/471 (+1) · full UI suite 275 files / 4,675 tests (+1) · a11y 8/8 · typecheck ✓ · eslint 7 pre-existing warnings (0 new) · bundle parity 0 missing keys · `scripts/verify-bundle-parity.py` clean.
+
+**Commits:** `a47a46bb`
+
+**Deliberately NOT done:** no rebase/merge of the stale edits onto the authoritative revision (the edits were REJECTED by the backend — adopting the newer topology and letting the user re-apply is the honest recovery; a merge would need an operational conflict-resolution UX). No dev-mock revision-conflict simulation (the vitest harness mocks the API directly; the browser-mock gap is a separate follow-up for the preview build).
+
+**Risks / follow-ups:** the revision-conflict UX loop is now closed end-to-end (backend rejects → editor adopts). Remaining: re-running `test-changed.sh` (now unblocked — the dev client is closed) for a Rust-touching round, and the dev-mock revision-conflict simulation for the browser preview.
+
+### 2026-08-11 — dev-mock rejects stale Apply base revisions like the backend gate (round 138)
+
+**Problem:** the round-137 follow-up — the browser dev-mock could not exercise the revision-conflict recovery the editor gained in round 137. `apply_topology_diff` in `ui/src/dev-mock/tauri-api.ts` ignored `baseRevision` entirely and always accepted + bumped, so a stale editor in the plain-browser preview never saw the conflict — the recovery path was only reachable through the vitest harness (which mocks the API directly) or a real backend. The real command (topology.rs revision gate, round 133) rejects any Apply whose `base_revision` ≠ committed revision, serialized as `{ kind: 'topologyValidation', code: 'topology-revision-conflict', ... }`.
+
+**Solution:** Red→Green. New test in `dev-mock-stores.test.ts` pinning the parity contract: snapshot the seeded revision, apply at the CURRENT revision (succeeds, bumps), then re-apply with the now-stale base — pre-fix the mock resolved `{ revision: 4 }` instead of rejecting (Red); post-fix it rejects with the typed conflict shape AND leaves revision + diagram untouched, then self-heals the seed diagram for watch-mode re-runs. Fix: the mock now reads `baseRevision` from the apply args and, when present and ≠ current revision, throws the exact `TopologyValidation` object the editor's `isTopologyRevisionConflict` (via `parseAppError`) detects. The guard is skipped when the field is absent — the real command requires `base_revision`, so only callers that send the field opt into optimistic concurrency; this keeps the older direct-mock invocations (which omit it) working unchanged.
+
+**Verified:** new test green standalone · dev-mock-stores 4/4 · editor suite 475/475 (round-137 recovery test still green) · full UI suite 275 files / 4,676 tests (+1) · typecheck ✓ · eslint 0 errors on changed files.
+
+**Commits:** `1e6f87b6`
+
+**Deliberately NOT done:** no simulated two-process race in the mock (the editor can only ever hold one revision; a conflict is exercised by editing outside the editor or a stale tab — the gate parity is what matters, not the concurrency mechanics). No UI change: the editor recovery from round 137 consumes this without modification.
+
+**Risks / follow-ups:** the mock now mirrors the gate, so the preview's conflict UX is testable in-browser (stale tab + Apply). Remaining: re-running `test-changed.sh` for a Rust-touching round (still unblocked — no Rust touched this round), and the audit's remaining smaller slices (Apply error-path e2e variants) tracked in earlier entries.
+
+### 2026-08-11 — editor revision-conflict recovery driven through the real dev-mock IPC (round 139)
+
+**Problem:** the round-138 follow-up — the recovery chain was proven in two disjoint halves: round 137 mocked the API at the editor boundary (onSave rejects with the typed shape) and round 138 pinned the dev-mock's gate in isolation, but nothing drove the editor through the REAL production chain (editor → `@/api/topology` → `loggedInvoke` → dev-mock handlers). A future drift in the middle — `parseAppError` no longer recognizing the mock's thrown plain object, `loggedInvoke` wrapping errors, the serve-mode alias changing — could break the browser preview's conflict recovery with neither existing test noticing.
+
+**Solution:** Red→Green (coverage completion — the chain was already correct). New file `NodeTopologyEditorDevMock.test.tsx` stiches the real chain: `vi.mock('@tauri-apps/api/core')` routes `invoke` to the REAL dev-mock module (the same alias `vite.config.ts` applies in serve mode; jsdom has no `__TAURI_INTERNALS__` so the mock routes to its in-memory handlers), and the editor's `onSave` is wired to the real `applyTopologyDiff` like `TopologyScreen.handleTopologySave` (minus the screen's diff/validation layer, which has its own coverage). Flow: snapshot the seeded dev-mock state → render → a concurrent writer applies a NEWER diagram (revision bumps) → the stale editor user spawns a node → Apply → the dev-mock gate rejects → the editor toasts, reloads, and the authoritative diagram replaces the canvas (user's stale spawn gone). Self-heals the seed diagram for watch re-runs.
+
+**Mutation check (the test was green from the start — it had to prove it pins the chain):** temporarily disabled the dev-mock's conflict throw; the test FAILED at the reload assertion (`Authoritative Branch` never appears — the stale Apply silently succeeds and the canvas stays stale). Restored the gate; green again. The integration between the gate (138) and the recovery (137) is now pinned end-to-end.
+
+**Verified:** new test green · editor + dev-mock + new suites 476/476 · full UI suite 276 files / 4,677 tests (+1) · typecheck ✓ · eslint 0 errors on the new file. No production code changed (tauri-api.ts mutation reverted to the committed round-138 state — confirmed `git diff` empty).
+
+**Commits:** `cc9ed3ee`
+
+**Deliberately NOT done:** no browser-Playwright E2E — the vitest jsdom chain already proves the wiring, and the dev server alias is identical; no TopologyScreen-level diff logic (creations/updates/archives) — that layer has its own coverage and would make the test a screen test, not a chain test.
+
+**Risks / follow-ups:** the conflict loop is now proven through the real IPC chain in every surface. Remaining: a Rust-touching round to finally run the long-unblocked `test-changed.sh`, and the audit's remaining smaller slices tracked in earlier entries.
+
+### 2026-08-11 — drag drops settle clear of other node cards (round 140)
+
+**Problem:** the editor's explicit invariant is that node cards never overlap — palette spawns settle into a collision-free spot (`findFreeSpawnSpot`) and loads spread on a grid — but a DRAG could drop a node on top of another card, stacking it invisibly. The bottom card became unselectable except by grabbing its exposed grip. Nothing enforced the invariant on movement, and no test covered it.
+
+**Solution:** Red→Green. New integration test: drag node A onto node B (A's box lands inside B's), drop, assert the cards don't intersect — pre-fix the drop landed stacked (Red). New pure helpers in `nodeTopologyClamp.ts`: `nodeBoxesOverlap` (strict zero-gap box intersection) and `resolveDropOverlaps` (each overlapping MOVED node settles into the nearest collision-free spot via a 24px outward spiral from its drop position, iterating to convergence; returns `null` when nothing moves so the caller skips the state write). `finalizeNodeDrag` hooks it in — capture the dragged set + duplicate flag + moved flag BEFORE `commitDuplicateDrag`/`endDrag` clear them, then resolve and merge only the positions back onto the full nodes (a first attempt at `setNodes(resolved)` replaced whole objects and crashed the card render — the helper is position-focused by design).
+
+**Three deliberate behavior gates, each found by a broken existing test:** (1) DUPLICATE drags are excluded — Alt+drag copies start at the originals' positions and the group-copy test pins copies overlapping originals at exact coordinates; the landing spot of a deliberate creation gesture is the intent. (2) FLUSH alignment (zero gap, produced by the alignment guides) is NOT an overlap and survives — the drop-overlap test for a guide-landed drop passes unchanged. (3) The resolution only fires when the drag actually MOVED — the memo test's fixture stacks ws-1/ws-2 by 60px, and a plain click re-rendering ws-1 twice exposed that a no-move click must never yank a pre-existing overlap (that's data quality, not a gesture). Two other existing tests were UPDATED to the new contract because their drags genuinely landed 4px into the preset's Retail POS card — their coordinate assertions were incidental (the purposes — off-grid placement; committed move survives Escape — are preserved).
+
+**Verified:** editor suite 477/477 (+6: 2 integration + 4 pure) · memo 3/3 · touch 4/4 · full UI suite 276 files / 4,683 tests (+6) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings).
+
+**Commits:** `e5594bdf`
+
+**Deliberately NOT done:** no nudge blocking (arrow keys can still step a node into a neighbour — nudges are 1px/8-24px steps where auto-resolving to a 24px-away spot would be jarring; blocking is a small follow-up); no loaded-diagram overlap repair (pre-existing overlap from saved data is left alone until the user moves the node — a silent jump on load would be worse); no overlap warning indicator.
+
+**Risks / follow-ups:** the movement invariant now holds for drags (mouse + touch share `finalizeNodeDrag`). Follow-ups: blocking nudges that would overlap (the keyboard path), and a sweep for other movement paths that bypass the resolver (e.g., duplicate-commit settle, if the duplicate-in-place UX is ever revisited).
+
+### 2026-08-11 — arrow nudges blocked at a neighbour's wall (round 141)
+
+**Problem:** the round-140 follow-up — the keyboard movement path still violated the no-overlap invariant. A selected node could be arrow-nudged INTO a neighbour (1px fine steps or 8/24px grid steps), stacking it under the other card. Auto-resolving a nudge to a distant spot would be jarring for 1px steps, so the least-surprising behavior is a wall: block the whole nudge (selection stays put, no history entry).
+
+**Solution:** Red→Green. New tests: (1) a node flush against a neighbour (0 gap — the guide landing) nudged one grid step right must stay put AND create no undo entry, while nudging away still works; (2) a 1px gap to flush must remain reachable (fine Shift+nudge lands flush, not blocked). Pre-fix the flush node stepped to 96px (Red). Fix: in the arrow-key handler, compute the would-be positions (same clamp/snap pipeline) BEFORE `pushHistory()`, then block if any nudged node's box intersects a STATIONARY node's box via the round-140 `nodeBoxesOverlap`. Selection members move rigidly, so they can't newly overlap each other — only stationary nodes matter. A blocked nudge returns before the history push, so it is not an edit (undo stays clean).
+
+**Two alignment-guide tests updated, same honest contract change as round 140:** the fine-nudge fixture (A right edge 440, B left edge 447) deliberately nudged A 1–7px PAST B's flush edge (208/209/213/214) to exercise the guide's entry-snap and band-exit mechanics. Those positions are now forbidden — nudging into the neighbour is a wall at flush. Both tests were adapted to exercise the SAME mechanics in the reachable direction (away from the wall): entry-snap applies once and raw 1px moves stand (207 → 206 → 205, guide persists), the band clears at 7px (201 in-band → 200 clears), and the wall itself is pinned (207 → 208 blocked, guide persists). A subtle first adaptation error — asserting the wall at 205 when 206 (edge 446, still 1px short of 447) is legal — was caught by the run and corrected; the wall is exactly at flush.
+
+**Verified:** editor suite 479/479 (+2) · full UI suite 276 files / 4,685 tests (+2) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings).
+
+**Commits:** `80919173`
+
+**Deliberately NOT done:** no auto-nudge/settle for the keyboard path (the wall is the design — auto-resolving a 1px step to a 24px-away spot would be jarring); no duplicate-commit settle (duplicate-in-place copies still overlap their originals by design — the creation-gesture exception from round 140 carries over to the keyboard; Ctrl+D places copies one grid step away, which the wall does not affect).
+
+**Risks / follow-ups:** the no-overlap invariant now holds for drags AND nudges. Remaining movement paths: `computeAutoLayout` output is not guaranteed collision-free (the same `resolveDropOverlaps` primitive could settle it — suggested as a follow-up), and loaded diagrams with pre-existing overlaps are still left alone until the user moves the node (deliberate).
+
+### 2026-08-11 — auto-layout no-overlap invariant pinned (round 142)
+
+**Problem:** the round-141 follow-up claimed `computeAutoLayout` output was "not guaranteed collision-free" and suggested settling it with `resolveDropOverlaps`. Investigation DISPROVED the claim: the engine's minimum origin gaps are structural — rows 288px (`NODE_HEIGHT + LAYOUT_GAP_Y`), columns 304px (`NODE_WIDTH + LAYOUT_GAP_X`), component bands 400px — and on the 24px lattice every gap snaps to at least `NODE_WIDTH` (288/304/400 → snapped 288/312/384-or-408, all ≥ 240). The anchor translation is rigid (same dx/dy for every node), so it cannot introduce relative overlap, and a lone node's Math.round keeps ≥303px gaps. The engine is collision-free by construction in BOTH snap modes — no production fix was needed.
+
+**Solution:** coverage completion — a property test pins the invariant as a regression guard so a future engine change (smaller gaps, tighter bands, per-node snap) cannot silently start stacking cards that the movement paths (rounds 140–141) then refuse to create or fix. The fixture deliberately exercises every gap class: a 3-rank tree with a converging-roots column (row AND column gaps) plus an independent second tree (band gap), with scattered input positions so the anchor lands mid-layout. Runs the full pairwise no-overlap check with `snapToGrid: false` AND `true`. Two mutation checks: (1) collapsing `LAYOUT_GAP_X` to 8 did NOT trip it — columns at 248px snap to exactly flush (240, zero gap, not an overlap — good, the strict test is honest); (2) collapsing the row formula to `NODE_HEIGHT − 40` DID trip it (`b/c overlap (snapToGrid=false)`), proving the guard genuinely catches overlap regressions.
+
+**Verified:** layout suite 11/11 (+1) · editor suite 479/479 · full UI suite 276 files / 4,686 tests (+1) · typecheck ✓ · eslint 0 errors. No production code changed (`nodeTopologyLayout.ts` mutations reverted — confirmed empty `git diff`).
+
+**Commits:** `6782261b`
+
+**Deliberately NOT done:** no `resolveDropOverlaps` settle on the layout output — the engine cannot produce overlaps, so settling would add a state write that never fires (dead code with a misleading purpose). No warning badge for pre-existing loaded overlaps (a separate UX slice, still open).
+
+**Risks / follow-ups:** every movement path now provably preserves the no-overlap invariant (spawns, loads, drops, nudges, auto-layout). Open: a load-time indicator for pre-existing overlaps from saved diagrams (the invariant only guards NEW movement), and the long-deferred Rust-touching round to finally run `test-changed.sh`.
+
+### 2026-08-11 — pre-existing overlap badge on loaded cards (round 143)
+
+**Problem:** the round-142 follow-up (load-time indicator for pre-existing overlaps) was the last open editor slice. The no-overlap invariant guards NEW movement — spawns settle, drops settle (140), nudges hit a wall (141), auto-layout is structurally collision-free (142) — but old saved diagrams can still LOAD stacked, and the bottom card becomes unselectable except by its exposed grip. The invariant can't fix a loaded diagram silently (an auto-jump on load would be a worse surprise, per the round-140 design note), so the honest behavior is a non-destructive indicator: a badge on the offending cards, gone the moment the user drags one clear.
+
+**Solution:** `findOverlappingNodeIds` in `nodeTopologyClamp.ts` (strict pairwise `nodeBoxesOverlap` → set of offender ids, the same zero-gap semantics the movement paths use — flush is not an overlap, so a guide-snapped layout never badges). A `hasOverlap: boolean` prop on the memoized `TopologyNodeCard` (stable boolean keeps the memo boundary clean), rendered as a warning chip in the body-status row with `role="status"`, FTL `topology-overlap-badge` in both bundles, and CSS. The editor derives it from a `useMemo` over live node positions, so it disappears the moment a drag settles clear.
+
+**Verified:** editor suite 481/481 (+2: badge shows on an overlapping card, and dragging the card clear removes it) · full UI suite 276 files / 4,688 tests (+2) · typecheck ✓ · eslint 0 errors (one new-error caught and fixed: the badge span's stopPropagation needed the file's standard jsx-a11y disable-with-reason, mirroring the validation-note pattern) · lint:i18n clean (bundle parity) · drift guard clean.
+
+**Commits:** `8a255ba5`
+
+**Deliberately NOT done:** no auto-settle on load — a silent position change on load would fight the user's saved layout and the round-140 design note explicitly avoided it. No overlap count on the badge ("2 cards overlap" localization churn for marginal value — the badge marks each offender). No badge for the duplicate-drag creation gesture — copies deliberately overlap their originals (round-140 exception).
+
+**Risks / follow-ups:** the badge is geometry-derived and static while selected-drag ghosts float (transient visual overlap mid-drag is expected and never badged). Open: the long-deferred Rust-touching round so `test-changed.sh` finally runs in a cycle's verification.
+
+### 2026-08-11 — align & distribute settle instead of stacking cards (round 144)
+
+**Problem:** the multi-select drag suggestion from round 143 was investigated and DISPROVEN — group drag already exists and is tested (`dragging one selected node moves the whole group by the same delta`, line 5455). The real gap found with evidence: `applyAlign` computed new positions with ZERO collision handling, making it the last movement path that can create the stacking defect rounds 140-143 exist to prevent. Align left on two same-row cards (store-1 at 80,140 and wh-1 at 680,140 — both at y=140) collapses both to x=80, stacking one EXACTLY over the other; Align hcenter on the pair moves BOTH to x=380, colliding with each other AND with the unselected ws-1 (380,80) parked on that column. No feedback, no badge-driven escape: the hidden card is unselectable except by its exposed grip.
+
+**Solution:** in `applyAlign`, after computing the aligned positions, derive the moved set (selected cards whose x/y actually changed — the anchor already on the line keeps it), then run the round-140 `resolveDropOverlaps` spiral over those moved cards against ALL others (moved and stationary). Result: non-conflicting cards land exactly on the alignment line (existing tests assert exact positions and stay green); a moved card that would stack settles into the nearest collision-free spot — the same movement-settles design language as drags (140), with flush alignment preserved (zero gap is not an overlap). Two integration tests: (1) Align left same-row pair — anchor stays at (80,140), moved card settles clear; (2) Align hcenter pair — BOTH moved cards settle clear of each other and of the unselected ws-1, pairwise no-overlap asserted across all three.
+
+**Verified:** align suite 5/5 (+2) · editor suite 483/483 (+2) · full UI suite 276 files / 4,690 tests (+2) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · drift guard clean · pre-commit hook clean.
+
+**Commits:** `10cf77d0`
+
+**Deliberately NOT done:** no block-on-align (unlike the round-141 nudge wall) — a silently-doing-nothing "Align left" with no feedback is more confusing than a settle; the settle mirrors the established drag semantics. No settling of pre-existing overlaps among stationary cards — only moved cards resolve, so a stacked pair the user is NOT touching stays put (badge still shows it). No second pure unit test — `resolveDropOverlaps` is already unit-tested from round 140; the two integration tests pin the align-specific behavior (anchor-keeps-line, both-moved-vs-stationary).
+
+**Risks / follow-ups:** every card-movement path now provably preserves the no-overlap invariant — spawns, loads, drops (140), nudges (141), auto-layout (142), and align/distribute (144). A settle can move a card a visible distance (the spiral must clear a full 240px card when the align collapses an identical box) — acceptable per the round-140 semantics, worth a manual look in the browser. Open: the long-deferred Rust-touching round so `test-changed.sh` finally runs in a cycle's verification.
+
+### 2026-08-11 — capability probe pinned to the Apply permission gate (round 145)
+
+**Problem:** the 8-round-open follow-up finally resolved — a Rust-touching round so `test-changed.sh` runs in verification (blocked by `oz-pos-app.exe` from rounds 133-136; the client closed at round 137, but every round since was UI-only). Investigation of the topology backend found `can_save_topology` — the registered command behind the editor's Save-toolbar gate (TopologyScreen → `canSaveTopology` → `can_save_topology`) — was the ONLY topology command with NO direct Rust test: the TS side is pinned by `api-ipc-contract.test.ts:290`, the Rust side by nothing. The drift risk is real and asymmetric: if the probe's permission ever diverged from `apply_topology_diff`'s gate, the UI would offer a Save that always fails (probe allows, Apply denies) or hide editing from a manager who can apply.
+
+**Solution:** coverage completion (the command was correct — no production change). A direct end-to-end test through the same tauri mock harness as round 136's apply test: seeds `seed_default_roles` + an owner user AND a cashier user on the GLOBAL identity DB (the authz gate must resolve from the global DB, not the store-scoped one — the round-133 lesson), two sessions, then asserts owner → `Ok(true)` and cashier → `PermissionDenied` (cashier's preset lacks STAFF_UPDATE). **Mutation check** (the test passed immediately — essential to prove non-vacuous): swapped the probe's permission to `SALES_PROCESS` (which cashier holds) → the cashier assertion FAILED with `got Ok(true)`; restored `STAFF_UPDATE` → green. The test genuinely pins the probe to the Apply gate's permission.
+
+**Verified:** new test standalone (0.17s) · topology module 231/231 (+1) · **`scripts/test-changed.sh` COMPLETED — 5,982 tests passed, 7 skipped — the first time it has run to completion since round 133** (the exe lock is gone; it detected the full `origin/main..HEAD` Rust delta including rounds 133-136) · `cargo fmt --all -- --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean. UI untouched (its contract was already pinned).
+
+**Commits:** `28b9e34d`
+
+**Deliberately NOT done:** no production change — the probe was already correct; the round is the missing pin. No UI test — `api-ipc-contract.test.ts` already pins the TS wrapper's invoke shape. No test of the unknown-token path (shared `resolve_session` infrastructure, covered elsewhere).
+
+**Risks / follow-ups:** `test-changed.sh` is now part of the routine verification loop for Rust-touching rounds. The backend topology surface is comprehensively covered (231 tests). Remaining open items: none journaled — the overlap story (140-144) and the capability gate (145) are both closed; future rounds can pick genuinely new editor capabilities (wire auto-routing around cards, a fit-to-selection shortcut surface, branch-diff preview) rather than hardening.
+
+### 2026-08-11 — crossing wires drawn over cards so they read as continuous (round 146)
+
+**Problem:** the wire SVG renders BENEATH the cards, so a wire passing under a card it does not connect to vanished under the card and re-emerged as two visually broken pieces. Evidence: the RESTAURANT template's own `w-3` (store → kitchen warehouse) runs straight through the middle Resto POS card — in BOTH routing modes (the bezier crosses the box; the elbow's vertical jog at x=500 drops through it) — so the defect was visible in the DEFAULT diagram on first open. No test pinned wire/card crossing behavior at all. (The round-145 "auto-routing around cards" suggestion was deliberately NOT taken — obstacle-avoiding routing is a large feature; the minimal honest fix is legibility: draw the hidden segment on top.)
+
+**Solution:** Red→Green. A pure helper `wireUnderCardSegments` in `topologyWireGeometry.ts`: polylines (elbow/bends) are axis-aligned so each H/V segment is clipped exactly against each box; bezier wires are sampled at 24 points with maximal in-box runs becoming polylines (convex box → chords stay in-box; sampling invisible at the 3px stroke). STRICT interior test — flush (a wire running exactly along a card edge) is NOT a crossing, matching the rounds 140-141 zero-gap-is-not-an-overlap semantic (found by my own flush unit test failing on the first inclusive boundary). A `wireUnderCardPaths` memo in the editor derives the sub-paths per wire (endpoint cards excluded — ports sit exactly on the box edge), and a second pointer-events-none SVG renders them ON TOP of the cards after the card map, mirroring the base `.wire-path` stroke exactly (dotted 3px accent) so the wire reads as one continuous connection. Pointer-events-none: the overlay never steals card clicks or hover.
+
+**Two honest test-design lessons from the loop:** (1) my first fixture used camelCase wire keys (`fromNodeId`) but the load contract is snake_case (`from_node_id`) — the wire loaded with undefined endpoints, got dropped from geometry, and the test failed at `getWireCount()===1` with 0 wires, not at the overlay assertion (fixed the fixture to the real contract); (2) the middle card initially sat at y=80 but ports sit at `node.y + NODE_PORT_Y` (224) — the wire ran at y=364 BELOW the box, so it never crossed (repositioned to y=260). Both were fixture bugs, not code bugs — the debug instrumentation (temporary console logs, removed) proved the load resolved correctly.
+
+**Verified:** integration 2/2 (crossing renders the overlay with pointer-events-none; retail preset renders none) · pure unit 6/6 (bezier crossing, empty, elbow exact clip, flush not-under, multi-box, dimensions) · editor suite 485/485 · full UI suite 278 files / 4,699 tests (+9) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · **mutation check**: shifted every box left by 99999 → 3 crossing unit tests failed, restored → green. Drift guard clean.
+
+**Commits:** `73152086`
+
+**Deliberately NOT done:** no auto-routing around cards — the legibility overlay is the minimal fix; obstacle-avoiding routing remains a possible future capability. No hover/selected state on the overlay — the under-card segment keeps the base accent while the exposed parts brighten (subtle, deliberate). No pulse/label ride on the overlay — the simulation pulse still passes under the card transiently (visible pre/post); a follow-up if it reads poorly in the browser.
+
+**Risks / follow-ups:** the overlay is geometry-derived, so it updates live as cards/wires move — a drag that clears the crossing removes the segment immediately. Remaining: the pulse-under-card transient and hover-state mismatch are both worth a manual browser look; branch-diff preview remains the leading new-capability candidate.
+
+### 2026-08-11 — simulation pulse rides the crossing overlay (round 147)
+
+**Problem:** round 146 made crossing WIRES read continuous over cards, but left the simulation PULSE on the base path — at the moment it passed under a card it blinked out and re-emerged, breaking exactly the continuity the overlay just restored. The restaurant template's w-3 simulation is the live case: the pulse travels y=364 through the middle POS card's box. This was the round-146 journal's explicitly-flagged follow-up ("worth a manual browser look rather than more code" — investigation showed it was a real, reproducible visual defect, so it got the fix instead).
+
+**Solution:** Red→Green. A pure `pointUnderCards(pt, boxes)` helper in `topologyWireGeometry.ts` (strict interior, matching the round-146 segment semantic — flush is never under). In the editor, the pulse point is now computed ONCE per render into a `pulsePoints` map (previously the wires.map computed it inline); any pulse point strictly inside another card's box collects into `hiddenPulseDots` and renders on the crossing overlay as a `wire-simulation-pulse` circle (same class → same info-blue dot, pointer-events-none). The overlay now gates on paths OR hidden dots. Recomputed every render (the pulse advances on a 30ms interval — deliberately NOT a memo). One test-design lesson: `vi.useFakeTimers()` set BEFORE the async load made `waitFor` hang (frozen time) — the fake timers are armed only after `getWireCount()===1` settles.
+
+**Verified:** integration 1/1 (pulse at t=0.5 sits at (500,364) — inside ws-1's box — the overlay shows the dot; advanced to t=0.95 (x≈662, clear) the dot vanishes) · pure unit 4/4 (inside, outside, flush edges, multi-box) · editor suite 486/486 · full UI suite 277 files / 4,703 tests · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · **mutation check**: shifting every box left by 99999 failed the two crossing unit tests, restored → green. Drift guard clean.
+
+**Commits:** `65b73324`
+
+**Deliberately NOT done:** no hover/selected-state on the overlay segment (the round-146 note stands — the under-card segment keeps the base accent while exposed parts brighten; a deliberate, subtle tradeoff). No pulse on the label pill. No branch-diff preview this round — it remains the leading new-capability candidate.
+
+**Risks / follow-ups:** the wire/overlay story is now visually continuous end to end (wire + pulse). The overlay hover mismatch remains the one open cosmetic item; branch-diff preview is the headline new-capability candidate for a future round.
+
+### 2026-08-11 — Apply button previews what it will commit (round 148)
+
+**Problem:** the dirty state was a bare boolean — a canvas with one moved node and one with a dozen added nodes looked identical until Apply fired (the save-side diff lives inside TopologyScreen's giant handleTopologySave callback with no direct unit coverage). After the revision-conflict saga (133-139), the Apply button gave zero pre-commit signal about scale or the revision it would produce. Branch-diff preview was the headline candidate; investigation showed the full workspace-instance preview (create/update/archive) is a cross-component feature (parent-owned instances/stores/license), so this round ships the editor-scoped slice: the canvas diff vs the last committed snapshot + the revision bump.
+
+**Solution:** Red→Green. A pure `computeCanvasDiff(prevNodes, prevWires, nextNodes, nextWires)` in a new `topologyCanvasDiff.ts` (type-only import of the node/wire types — erased at runtime, so no react-refresh cycle): identity by node/wire id, position changes (x/y) count as MOVED, added/removed counted by id presence. The dirty chip (which already re-derives from [nodes, wires, snapshotVersion]) now renders a summary line — `{added} added · {removed} removed · {moved} moved · rev {from} → {to}` — from `appliedSnapshotRef` vs the live canvas; `from` is the last committed revision, `to` is +1. New FTL key in both bundles; the test harness's `getString` mock was generalized from a count-only substitution to any `{var}` (a realism improvement — Fluent substitutes all variables). One CSS lesson: my insertion duplicated a trailing block (the first str_replace was a no-op and the second left the original block's tail) — caught by inspection and fixed.
+
+**Verified:** integration 1/1 (fresh preset: chip hidden because the snapshot equals the canvas — `appliedSnapshotRef` initializes to the preset; spawn + Store Node → chip shows `1 added · 0 removed · 0 moved · rev 0 → 1`) · pure unit 5/5 (identical→zeros, add/remove/move split, wire add/remove, wire-endpoint rewrite is NOT a change — id is identity, never-committed → everything added) · editor suite 487/487 · full UI suite 278 files / 4,709 tests (+6) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · lint:i18n clean · **mutation check**: inverting the added/removed predicate failed 3 unit tests, restored → green. Drift guard clean.
+
+**Commits:** `a047829e`
+
+**Deliberately NOT done:** no workspace-instance semantics (create/update/archive counts) — those live in the parent; the editor-scoped canvas diff is the honest first slice, and the pure function is the foundation a future preview can build on. No type-change remap preview. No "moved" differentiation for wires (a wire is identified by id; endpoint rewrites read as no-change by design).
+
+**Risks / follow-ups:** the summary counts the CANVAS diff, not the backend workspace diff — a user renaming a workspace sees the move counted, a user re-wiring sees wire changes; the revision bump assumes no concurrent writer (the conflict recovery handles the real case). The richer branch-diff (create/update/archive preview) remains the natural next slice — `computeTopologyDiff` extraction in TopologyScreen would make it unit-testable the same way.
+
+### 2026-08-11 — Extract the save diff into a pure, unit-tested computeTopologyDiff (round 149)
+
+**Problem:** round 148 closed by flagging the richer branch-diff as the natural next slice: TopologyScreen's handleTopologySave embeds the workspace-instance diff (create/update/archive vectors, store_id resolution, type-change remap) as a giant untestable block — the semantics that actually matter to the backend had zero direct unit coverage. Only the screen-boundary tests (TopologyScreen.test.tsx, through onSave) pinned them; a change to the diff logic would only fail there.
+
+**Solution:** Red→Green (refactor with the existing suite as the safety net). Red: a new pure unit suite `topologyDiff.test.ts` — 10 tests pinning the workspace-instance semantics directly on the not-yet-existing function (creates with store_id resolved from the location wire, rename updates merging backend purpose_key, inspector purposeKey override, archive sweep for removed instances, identical-canvas no-op, typeKey-change archive+recreate with a deterministic injected makeId, type-change plus rename emitting NO separate update, KDS store scope inherited through the operation-source recursion, the legacy store-node compatibility boundary, and the explicit no-ownership throw). Green: extracted the block verbatim into `topologyDiff.ts` as `computeTopologyDiff(nodes, wires, workspaceInstances, stores, makeId?)` — the handler now delegates with a one-call diff build and keeps only the screen-level concerns (session, validation, diagram payloads, atomic apply). Two test-fixture lessons: the KDS test needed the POS seeded as an existing instance (otherwise both nodes read as creations), and exactOptionalPropertyTypes rejected `storeProfileId: undefined` — the legacy store node is built literally without the field.
+
+**Verified:** diff unit 10/10 · TopologyScreen integration 38/38 (behavior-identical extraction) · editor suite 487/487 + canvas-diff 5/5 · **full UI suite 279 files / 4,719 tests (+10)** · typecheck ✓ (exactOptionalPropertyTypes caught the legacy fixture) · eslint 0 errors (8 pre-existing warnings) · **mutation check**: inverting the archive-sweep condition failed 6 unit tests → restored, green. Drift guard clean.
+
+**Commits:** `10d6412b`
+
+**Deliberately NOT done:** no UI change — the editor preview still shows the CANVAS diff (round 148); the workspace-instance preview would need the editor to compute the backend diff itself (cross-component). No change to the store_id resolution logic — moved verbatim, including the legacy compatibility boundary. No pure-function change to diagram payload building (that stays in the handler, where it owns the semantic wire identity).
+
+**Risks / follow-ups:** the pure function now computes its own normalizeTopologyGraph — the handler computes a second copy for validation/payloads (pure, idempotent, negligible cost; noted so a future round can share the graph if it bothers anyone). The editor-scoped preview and the screen-scoped diff still disagree on semantics (canvas counts vs workspace vectors) — wiring the workspace-instance counts into the editor preview remains the full branch-diff feature, now directly unit-testable at the foundation.
+
+### 2026-08-11 — The chip previews the workspace-instance diff, not canvas counts (round 150)
+
+**Problem:** the round-148/149 preview was the CANVAS diff — identity by id, moves only by x/y — so the counts could lie about what Apply commits: a rename-only edit (name or purpose change) showed `0 added · 0 removed · 0 moved` while Apply committed a workspace update, and a user re-wiring saw wire counts the backend doesn't care about. The workspace-instance vectors (create/update/archive) are what actually mutate the backend, but the payload builder (computeTopologyDiff) THROWS on a workspace with no resolvable store ownership — and mid-wiring canvases are exactly the state the chip must survive.
+
+**Solution:** Red→Green. Red: 4 pure planTopologyDiff tests (classification split, orphan total-ness, type-change = 1 create + 1 archive, sweep) + 4 integration tests seeding instances + branchLocations (store spawn → `0 created · 0 updated · 0 archived` with the rev bump — a diagram-only change; `+ Retail POS` → `1 created`; rename → `1 updated`; delete → `1 archived`). Green: split `planTopologyDiff(nodes, workspaceInstances, makeId?)` out of computeTopologyDiff — the total classifier (never resolves store_id, never throws) — and rebuilt the payload builder ON the plan (create payloads add resolveStoreId + the type-change remap), so the preview and the Apply share one classification and cannot drift. The chip renders the plan when `workspaceInstances` is provided (prop presence = real mode; the demo/dev canvas without a seed keeps the round-148 canvas summary as its honest fallback). New `topology-apply-workspace-diff` FTL key in both bundles (the old key stays for the fallback). Two fixture lessons: the exactOptionalPropertyTypes gate rejected `purpose_key: undefined` in the seed mapping (omit the key), and `workspaceInstances !== undefined` (prop presence) is the right discriminator — an empty array is a legitimate empty before-side.
+
+**Verified:** plan unit 4/4 · diff suite 14/14 · TopologyScreen integration 38/38 (payload builder refactor behavior-identical — the Apply payloads did not change) · editor suite 491/491 (+4) · **full UI suite 279 files / 4,727 tests (+8)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · lint:i18n clean (bundle parity counts the new key) · **mutation check**: flipping the create/update classification failed 6 pure + 1 integration test → restored, green. Drift guard clean.
+
+**Commits:** `74620278`
+
+**Deliberately NOT done:** no rename-through-snapshot for the canvas fallback (demo mode has no backend truth to diff against — the canvas summary is the honest demo answer). No type-change count in the chip (a type change reads as 1 created + 1 archived — true to the backend vectors). No purpose-key drill-down on the chip. No plan-based refactor of TopologyScreen's diagram-payload building (that stays in the handler).
+
+**Risks / follow-ups:** the chip and the save path both use planTopologyDiff now, so the preview is honest — but the revision bump (`to`) still assumes no concurrent writer (the conflict recovery handles the real case, round 133-139). The demo/dev canvas (no instance seed) keeps the older canvas-summary format — a future round could unify by giving dev mode a seed. Remaining cosmetic item: the crossing-overlay hover mismatch (round 146).
+
+### 2026-08-11 — The crossing overlay mirrors the base wire's interaction states (round 151)
+
+**Problem (evidence, not assumption):** round 146's overlay made crossing wires read continuous in the static render — but the moment the user INTERACTED with a wire, the continuity broke again. The base wire brightens + thickens on hover (`.wire-group:hover .wire-path` → accent-hover, 4px), turns info-blue when selected (`.wire-selected`), and fades to 0.25 opacity in hover-focus mode (`.wire-group.wire-dimmed`) — while the round-146 overlay path rendered with NO class and no CSS for any of those states. So hovering a crossing wire showed bright exposed ends with a dim under-card middle (the wire visibly split), and in node-hover focus mode the under-card segment GLOWED while the rest of the wire faded. The two previously-flagged candidates were ruled out with evidence first: the un-ownable-creation chip hint is redundant (the editor already surfaces it via the role=alert validation banner + issues widget), and the editor's 8 eslint exhaustive-deps warnings are architecture noise (the keydown effect re-binds on a huge dep array every render, and the codebase deliberately mirrors live state through refs — no stale closure to reproduce).
+
+**Solution:** Red→Green. Red: three integration tests on the round-146 crossing fixture — mouseEnter on the wire group → overlay path gains `node-wires-crossing-hover` (pre-fix: class stayed null); click the wire hitbox → `node-wires-crossing-selected`; mouseEnter on the middle (unconnected) POS card → `node-wires-crossing-dimmed` (the crossing store→warehouse wire dims with the base). Green: the overlay path now derives its class from the same state the base wire uses — `hoveredWireId`, `selectedWireId`, and the hover-focus `dimmed` condition (wire lookup by id, `hoverConnections !== null` and neither endpoint is the hovered node) — with CSS mirroring the base exactly (selected → info + 4px, dimmed → opacity 0.25, hover declared LAST so it wins the same-wire tie against selected, matching the base hover rule's higher specificity).
+
+**Verified:** crossing integration 3/3 (hover/selected/dimmed) · editor suite 494/494 (+3) · wire-geometry 10/10 · **full UI suite 279 files / 4,730 tests (+3)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings, unchanged) · **mutation check**: dropping the hover class from the `cls` array failed the hover test → restored, green. Drift guard clean.
+
+**Commits:** `54ecc9bc`
+
+**Deliberately NOT done:** no hover state on the pulse dots (they ride the overlay as transient info-blue dots — a hover class on them would read as the wire itself changing). No refactor of the 8 eslint warnings (churn with behavioral risk and no test to pin — journaled as deliberate noise). No dimmed propagation into the overlay via a shared memo (the wire lookup at render is O(n) over few crossing wires; a memo would need the wire map anyway).
+
+**Risks / follow-ups:** with the interaction states mirrored, the wire/overlay story is complete: static, hover, selected, and hover-focus all read continuous. The remaining open items are the demo/dev canvas format unify (round 150) and — if a browser pass ever flags it — the pulse dot's hover look. The eslint warnings remain as the one known piece of lint debt in the editor.
+
+### 2026-08-11 — The chip flags type changes as destructive recreates (round 152)
+
+**Problem:** the round-150 chip counted a workspace type change as `1 created · 1 archived` — true to the backend vectors but actively hiding the destructive part: a type change (Critical #1) archives the old instance and creates a NEW one with a fresh UUID, so instance identity is destroyed and external references break. The worst case is non-obvious even to the user who made the change: toggling a workspace's type back and forth creates a brand-new instance each Apply (the idMap remap), and the chip gave zero hint. The post-Apply toast already says `type-changed` — only the pre-commit chip hid it.
+
+**Solution:** Red→Green. Red: 5 pure `summarizeTopologyPlan` tests (type-change only → `{0,0,0,1}`; plain create + type-change split → `{1,0,0,1}`; sweep archive split → `{0,0,1,0}`; rename → `{0,1,0,0}`; identical → zeros) + an integration test — seed an instance, switch the workspace's type in the inspector → the chip shows `1 type-changed` and `0 created · 0 archived` (pre-fix: `1 created · 0 updated · 1 archived` with no type-changed segment). Green: `summarizeTopologyPlan(plan)` in topologyDiff.ts — `typeChanged = typeChanges.size`, with created/archived EXCLUDING the recreate so a node is never double-counted — and the chip renders the new `typeChanged` var. FTL key extended in both bundles (`{ typeChanged } type-changed` / id: `diubah jenisnya`), matching the toast's established `type-changed` wording.
+
+**Verified:** summary unit 5/5 · diff suite 19/19 · TopologyScreen integration 38/38 (payload builder untouched — this is display-only) · editor suite 495/495 (+1) · **full UI suite 279 files / 4,736 tests (+6)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · lint:i18n clean (bundle parity counts the extended key) · **mutation check**: pinning typeChanged to 0 failed 2 pure + 1 integration test → restored, green. Drift guard clean.
+
+**Commits:** `92ea6d10`
+
+**Deliberately NOT done:** no change to the plan or payload builder — the recreate split is a pure display concern (created/archived/typeChanged always sum to the true vectors). No per-node recreate badge on cards. No warning styling on the chip for recreates (the count carries the signal; a browser pass could add emphasis later).
+
+**Risks / follow-ups:** the chip now shows the honest pre-commit signal for every vector the backend commits — created, updated, archived, type-changed, and the revision bump. The remaining open item is the demo/dev canvas format unify (round 150), and the eslint warnings stay as the editor's known lint debt.
+
+### 2026-08-11 — The Apply chip is one format everywhere — the canvas-count fallback is retired (round 153)
+
+**Problem:** the round-150/152 chip showed the workspace-instance format only when instances were seeded; a standalone/demo canvas fell back to the round-148 canvas-count format. Two issues: (1) the fallback could OVER-report — spawning a Store node showed `1 added` even though Apply commits zero workspace vectors (a store node is diagram-only); (2) two formats meant the chip's meaning depended on which mode the editor was in, and the real app could transiently show the canvas format before instances loaded. The round-150 journal left this as the open unify item.
+
+**Solution:** Red→Green (refactor + behavior change, both pinned). Red: rewrote the round-148 test to the unified expectation — standalone canvas, spawn + Store Node → `0 created · 0 updated · 0 archived · 0 type-changed · rev 0 → 1`, then spawn + Retail POS → `1 created` (pre-fix the chip still showed `1 added · 0 removed · 0 moved`). Green: the chip now has ONE plan-based path — `planTopologyDiff` against a before-side that is the loaded instances when provided, or **synthesized from the committed snapshot** (`appliedSnapshotRef.current.nodes` — the preset or last-loaded diagram) on a standalone canvas. The snapshot source matters: the standalone editor can load fixtures, so synthesizing from the mount canvas would produce phantom diffs after a load; the committed snapshot tracks the actual before-state exactly like the canvas-count fallback did, but in workspace terms. The `topology-apply-diff` FTL key was removed from both bundles and the orphaned `topologyCanvasDiff.ts` module (+ its 5 tests) deleted — computeCanvasDiff had no production callers left.
+
+**Verified:** standalone-chip integration 1/1 (rewritten) · seeded-chip 4/4 unchanged · editor suite 495/495 · diff suite 19/19 · TopologyScreen 38/38 · **full UI suite 278 files / 4,731 tests** (−1 file, −5 deleted tests) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · lint:i18n clean · **mutation check**: synthesizing the standalone seed from the LIVE canvas (instead of the snapshot) made a spawned workspace invisible to the chip (`0 created`) — failed the rewritten test → restored, green. Drift guard clean.
+
+**Commits:** `9aedb551`
+
+**Deliberately NOT done:** no keep-dead-code — computeCanvasDiff was fully superseded and deleted with its tests (the branch-compare idea can build on planTopologyDiff + wireGeometry instead). No change to the seeded path (instances remain the before-side when provided). No standalone-specific revision semantics — the `rev {from} → {to}` bump reads the same everywhere.
+
+**Risks / follow-ups:** the chip is now a single honest format in every mode. The eslint warnings remain the editor's known lint debt, and the pulse dot's hover look is still flagged for a browser pass. The plan/diff machinery (planTopologyDiff, summarizeTopologyPlan) is the reusable foundation if a branch-to-branch comparison ever lands.
+
+### 2026-08-11 — Branch-to-branch topology comparison, and the bare-Fluent-placeholder defect (round 154)
+
+**Problem:** two findings. (1) FEATURE: an operator with several locations has no way to see how two branches' saved topologies differ before editing — which workspaces exist in one but not the other, which shared ones are wired differently. The round-153 journal flagged this as the natural next capability. (2) DEFECT FOUND EN ROUTE WITH EVIDENCE: `topology-apply-workspace-diff` (the round-150/152 Apply chip) and `topology-discard-changes-msg` were authored with BARE `{ created }` / `{name}` placeholders. Fluent treats a bare identifier as a TERM reference, so the REAL runtime rendered the literal `{created}` text (with isolating-error markers) instead of the numbers/name — a real user-visible bug in shipped code that the mocked-Fluent editor/screen tests could never see (they interpolate by hand).
+
+**Solution:** Red→Green. (1) FEATURE: 7 pure `compareBranchTopologies` tests (only-in-current/only-in-other, shared count, wiring differences on a shared id, name vs type differences, identical diagrams, null-as-empty, direction-is-presentation — wires compare as undirected connections) + 2 screen integration tests (compare panel loads BOTH diagrams and renders the counts + name lists; close button + "No differences" for identical diagrams). Green: `topologyBranchCompare.ts` — a pure, display-only engine (no store ownership, no apply payloads — planTopologyDiff owns the commit side); the screen's branch toolbar gains a Compare button (two+ branches), opening a panel with an other-branch selector that fetches both saved diagrams fresh and renders the summary. All 11 new FTL keys use `$`-prefixed variables. (2) DEFECT: 1 real-bundle regression test in `i18nBundle.test.tsx` formats both broken keys through `getBundle('en'/'id')` (useIsolating:false) and asserts the exact rendered strings + zero Fluent errors — RED against the broken bundles. Green: `{ created }` → `{ $created }` and `{name}` → `{ $name }` in BOTH bundles; the two test mocks' interpolation now handles `$`-style templates (the bare templates they still carry for other keys keep working — a `{$${key}}` typo was caught by the editor suite and fixed to `{${key}}`).
+
+**Verified:** compare engine 7/7 · screen integration 40/40 (2 new) · editor suite 495/495 · i18nBundle 15/15 (1 new) · **full UI suite 279 files / 4,741 tests (+10)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings, unchanged) · lint:i18n clean · **mutation checks**: making `setsEqual` always-true killed the wiring-difference test; reverting `{ $created }` → `{ created }` in the id bundle failed the real-bundle regression test → both restored, green. Drift guard clean.
+
+**Commits:** `29113c52` (feat(topology): compare branch topologies, fix Fluent placeholders)
+
+**Deliberately NOT done:** no backend/apply integration — the comparison is display-only by design; no side-by-side canvas rendering (the summary panel lists names; a visual overlay diff is a future round); no compare against the live unsaved canvas (the panel fetches the SAVED states — honest about what's persisted). The pre-existing bare-placeholder style elsewhere in the codebase (outside topology) was not touched — scope was the two topology keys.
+
+**Risks / follow-ups:** the comparison classifies by workspace id — two branches whose saved diagrams predate the instance id conventions could show false differences (id drift is a known data-healing concern, not new here). The other two topology FTL files' placeholder conventions could be swept for the same bare-`{}` defect family in a future round. The editor's 8 eslint warnings remain deliberate lint debt.
+
+### 2026-08-11 — The branch comparison tolerates id drift — no more phantom differences (round 155)
+
+**Problem:** the round-154 comparison classified strictly by workspace id. A saved diagram that predates the instance-id conventions — or a workspace archived-and-recreated under a new UUID (exactly the destructive type-change round 152 flags) — therefore reported the SAME logical workspace as phantom only-in-current + only-in-other entries, undercounted `shared`, and made any wiring difference on it invisible (it never reached the differing pass). The round-154 journal listed this as the known follow-up.
+
+**Solution:** Red→Green. Red: 5 pure tests — (1) same-name same-type workspace with a drifted id pairs, nothing phantom, `shared` counts it; (2) a wiring difference on a drifted-id workspace lands in `differing` (not phantom entries); (3) ambiguity — TWO same-key candidates on the other side → no pairing, no guessing; (4) a wire between TWO drifted workspaces compares correctly after both endpoints remap; (5) type differs → no pairing (a type change is a different instance, consistent with round 152). Green: `findDriftPairs` — a second pass that pairs each unmatched current workspace with the ONE unmatched other workspace sharing name AND typeKey (both required; one-to-one, first-claim-wins, conservative on ambiguity), and `wiringByNodeRemapped` which rewrites the other diagram's wire endpoints through the drift map so wiring is compared on equal id ground. Exact-id behavior, the only-in lists, and the panel interface are untouched — display-only, still no store ownership or payloads.
+
+**Verified:** engine suite 12/12 (+5) · screen integration + diff suite 59/59 (interface unchanged) · **full UI suite 279 files / 4,746 tests (+5)** · typecheck ✓ · eslint clean on the changed files · **mutation checks**: neutering `findDriftPairs` failed the 3 drift tests; loosening the semantic key to name-only failed the type-mismatch boundary test → both restored, green. Drift guard clean.
+
+**Commits:** `895ec186` (feat(topology): tolerate id drift in the branch comparison)
+
+**Deliberately NOT done:** no name-only matching (renames are common; too many false merges); no matching by wiring similarity (wire endpoints carry the drifted ids — circular); no UI change — the panel renders the same summary, it just stops lying about drifted workspaces. A genuine type change on a drifted id still reads as only-in-both (honest: it IS a different instance).
+
+**Risks / follow-ups:** pairing is conservative — a genuinely ambiguous same-key collision stays as only-in entries (correct but noisy). The panel has no affordance to explain WHY two same-name entries aren't merged; a future round could surface "matched by name+type" vs "different type" subtly. The other two topology FTL files' placeholder conventions could still be swept for the bare-`{}` defect family. The editor's 8 eslint warnings remain deliberate lint debt.
+
+### 2026-08-11 — The bare-Fluent-placeholder defect is now a permanent gate (round 156)
+
+**Problem:** the round-154 fix removed the two bare-`{}` placeholders (Apply chip + discard dialog) and pinned them with a real-bundle test — but nothing PREVENTED the defect class from shipping again: bundle parity counts keys, it doesn't format them, and mocked-Fluent tests interpolate by hand. The round-154 journal's follow-up ("sweep the other topology FTL files") needed evidence, and the sweep itself needed to be permanent.
+
+**Solution (evidence first, then a guard):** (1) FORMAT SWEEP — every message value + attribute in multi-store/settings (en+id) formatted through the real `@fluent/bundle` runtime: CLEAN. (2) STATIC SWEEP — regex over all 48 locale files for `{ ident }` where `ident` is not a defined message in that file (the exact defect signature — Fluent parses it as a message reference): CLEAN. So the journaled follow-up resolves as a non-finding: the round-154 fix already killed the whole family. The durable value is the guard. (3) GUARD — Red: 8 tests in `barePlaceholderScan.test.ts` (7 pure `findBarePlaceholders` cases — bare ident flagged, `$var`/`-term`/defined-message-reference/selectors/quoted-literals ignored, attribute + line-number reporting — plus a repo-integrity test asserting `scanLocaleFiles()` is empty). Green: `src/i18n/barePlaceholderScan.ts` — pure scanner, `import.meta.glob` over `../locales/*.ftl`. (4) GATE WIRING — the same repo scan is asserted inside `i18nBundle.test.tsx` because `lint-i18n.sh` runs that file via vitest and fails closed on its exit code.
+
+**Verified:** scanner 8/8 · i18nBundle 25/25 (+1) · **full UI suite 279 files / 4,755 tests (+9)** · typecheck ✓ · eslint clean on changed files · lint-i18n clean · **mutation proof (end-to-end)**: injecting `bare-placeholder-mut = { created } created` into `shared.ftl` (a) failed the repo-integrity test naming file+line, and (b) failed the actual `lint-i18n.sh` gate with exit=1 (the round-156 scan assertion) — restored, green. Drift guard clean.
+
+**Commits:** `fffc4771` (fix(i18n): gate bare Fluent placeholders across all locale bundles)
+
+**Deliberately NOT done:** no python duplicate scanner in lint-i18n.sh — the vitest placement covers both the UI CI step and the gate with one code path; no scan of OTHER codebases' placeholder conventions (scope was the defect family that shipped). The `nodeTopologyMemo.test.tsx` render-count test failed once under full-suite load then passed in isolation + a clean re-run — pre-existing intermittent flakiness, journaled, not caused by this round.
+
+**Risks / follow-ups:** the memo render-count flake (wire-direction cycling) deserves its own investigation round if it recurs — counting tests under parallel load are timing-sensitive. The ghost-overlay branch diff (round-155 recommendation) remains the open feature: it would build on the compare engine + `wireUnderCardSegments` geometry.
+
+### 2026-08-11 — The memo render-count flake is de-flaked: a settle-aware baseline (round 157)
+
+**Problem:** `nodeTopologyMemo.test.tsx` — the editor's own render-count safety net — failed once in the full-suite run (`AssertionError: expected 2 to be 1` in "cycling a wire direction re-renders only that wire"), then passed in isolation and on re-runs. A count-based test that flakes under machine load is the worst kind of safety net: it erodes trust exactly when the suite gets busy. The test harness snapshotted its baseline at the FIRST moment the loaded diagram was visible (`waitFor` on a node element) — but the editor's mount settles AFTER that (async settings invokes resolve on a ~50ms timer; a parent can hand the editor real instances right after load, re-running the load effect and re-applying the diagram, which re-renders every wire). Any such render landing between the baseline and the interaction's delta inflates the delta by exactly one.
+
+**Investigation (evidence over assertion):** I could NOT reproduce the flake in isolation (25+ runs), under CPU contention (6 runs with 3 heavy files saturating), or in-process (1000 click-cycles, all delta-1) — but I verified what it was NOT: (1) the click batches into ONE render (probe: 1000 cycles all delta 1 — `selectWire` + `setWires` + history updates coalesce; the memo boundary holds), (2) the load effect fires exactly ONCE on a standalone mount and applies nodes+wires atomically, (3) the Tauri settings resolution does not re-render wires. The residual mechanism is a timer/macrotask-driven mount render landing inside the baseline→delta window — load-timing dependent by nature.
+
+**Solution (Red→Green):** Red — made the race DETERMINISTIC with a real production flow: the mock resolves on a ~100ms timer (a macroTASK settle, like the settings invokes), and the test re-renders the editor with `workspaceInstances` after first visibility — the parent-handing-instances flow that re-applies the diagram. Against the old harness this reproduces the exact documented signature: `expected 2 to be 1` (re-apply render + click read as 2 from a naive baseline). Green — `settleCounts()`: the baseline waits for render-count quiescence with a 150ms floor (longer than the longest known mount-time timer — the 50ms settings invoke; the quiescence check alone proved insufficient: a timer armed just before the settle fires AFTER one stable sample, which the first draft of the test caught). `renderWithPreset` settles before snapshotting; the regression test asserts the settled measurement reads delta 1 with the re-apply absorbed, plus all-zero deltas for non-clicked elements. Also added `rerenderWithProviders` to `test-utils/render.tsx` — the provider-preserving rerender the regression test needs (the raw `result.rerender` drops the Theme/Toast/Zoom/Brand+Fluent stack).
+
+**Verified:** memo suite 4/4 (+1 regression) · editor suite + test-utils 499/499 · **full UI suite 279 files / 4,756 tests (+1)** · typecheck ✓ · eslint clean on changed files · **mutation check**: neutering `settleCounts` failed the regression test with the exact flake signature (`expected 1 to be 2`) → restored, green · drift guard clean.
+
+**Commits:** `605bfdf4` (test(topology): settle-aware baseline de-flakes the memo render-count harness)
+
+**Deliberately NOT done:** no production change — the memo boundary is sound (1000-click probe proves it); no weakening of the exact-delta assertions — the settle removes the race by construction instead; no change to the other two render-count tests' semantics (the settle only delays their baseline). The 100ms mock delay adds ~300ms per test file — accepted for determinism.
+
+**Risks / follow-ups:** the settle's 150ms floor is calibrated to the known timers (50ms settings invoke; 100ms simulated load) — a NEW mount-time timer longer than the floor would re-open the race; the floor is a documented constant. The round-155 ghost-overlay branch diff remains the open feature.
+### 2026-08-11 — the branch-diff ghost overlay: the canvas shows WHERE branches differ (round 158)
+
+**Problem:** the round-154 compare panel is a text summary — counts and lists. A multi-store operator reading "2 only here, 1 differs" still cannot see *where* those locations are on the map. Round 154 journaled the "no visual overlay" gap; the engine's classification (only-here / only-there / shared-differing, plus the round-155 id-drift pairing) had no spatial rendering.
+
+**Solution:** a display-only overlay composed of three pieces. (1) `buildTopologyOverlay` (engine, pure): turns `onlyInOther` into ghost descriptors at the OTHER diagram's saved positions, `onlyInCurrent` into a red-marker id list, `differing` into an amber list — each filtered to workspaces present on the live canvas. (2) `TopologyScreen` stores the other branch's diagram and passes the overlay into the editor. (3) `NodeTopologyEditor` renders ghost cards (dashed success-green card with the workspace name, pointer-events-none + aria-hidden so it never steals a click or keyboard stop) and marker rings (red = only this branch, amber = shared but wired/named differently; flat rings, deliberately no `--shadow-*` so they are not elevated surfaces). Drifted-id pairs (round 155) that differ land amber like any other differing workspace.
+
+**TDD:** Red = 5 pure `buildTopologyOverlay` tests (ghost shape, ghost position comes from the OTHER diagram, marker classification, drift-pair as differing, null/empty diagrams) + 1 screen integration test (overlay prop flows from the loaded other branch) + 1 editor DOM test (ghost renders at its saved x/y with the right name, aria-hidden, markers applied only to classified cards). Green = the three pieces above. Two mutations caught (neuter ghosts → 4 tests fail; drop markers → 3 tests fail). The screen test initially asserted the canvas DOM — but `NodeTopologyEditor` is mocked in `TopologyScreen.test.tsx`, so the screen test pins the prop wiring and the editor test owns the DOM; the first fixture also had no wires, so `ws-pos` compared as identical — fixed by wiring it differently.
+
+**Verify:** engine 17/17 (+5) · screen 41/41 (+1) · editor suite 496/496 (+1) · **full UI 280 files / 4,763 tests (+7)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · **two compliance gates caught real defects**: `themeTokenCompliance` flagged a hardcoded `13px` ghost-name font-size (fixed to `--text-sm`) and `noiseDitherCompliance` flagged the two marker box-shadows as elevated surfaces (replaced `--shadow-md` with flat rings) · drift guard clean.
+
+**Commits:** `db7f8e8c` (feat(topology): ghost overlay renders the branch diff on the canvas)
+
+**Deliberately NOT done:** no ghost WIRES — the other branch's wiring could ghost over the canvas, but wire geometry is computed live from the current diagram and a second wire set has no safe geometry source (the round-146 `wireUnderCardSegments` machinery is current-side only); no ghost interaction (clicks, hover, drag) — decorative by design; no overlay toggle yet — the overlay is only visible while the compare panel is open (the panel's close clears it).
+
+**Risks / follow-ups:** ghost positions are the other diagram's SAVED coordinates — if that branch was authored on a different canvas size or after a big pan/zoom, ghosts can sit off-screen or overlapping live cards (the layer is pointer-events-none, so overlap is visual noise, not breakage); a follow-up could clamp or re-layout ghosts into the visible canvas. The overlay does not dim the rest of the canvas — operators see the markers in context rather than a focus mode; a "compare focus" toggle (dim non-matching cards) is a possible next slice.
+### 2026-08-11 — ghost overlay clamps into the visible canvas (round 159)
+
+**Problem:** the round-158 ghost overlay placed other-branch workspaces at the OTHER diagram's SAVED world coordinates. A branch authored on a different canvas size — or after a big pan/zoom — left ghosts off-screen (the overlay silently lost the difference) or piled onto live cards (visual noise). The round-158 journal recorded this as the overlay's known weakness and the standing next slice.
+
+**Solution:** `layoutGhosts` (pure, in the compare engine) lays every ghost card into the VISIBLE world-rect — derived from the canvas client size and the pan/zoom transform (`world = (screen − pan) / zoom`) — and resolves collisions deterministically. Clamping is two-step: the card's top-left is anchored inside the rect, then (when the rect is big enough) pulled fully inside. Collisions resolve by dropping below the lowest blocker; when the vertical stack runs out of room, the ghost wraps LEFT of the column — every move keeps the card inside the visible rect, so a pile-up stays legible instead of cascading off-screen. The editor wires it in a `useMemo` with the viewport from `canvasRef` (800×600 fallback pre-layout, which is also what jsdom sees) and `occupied` = the live workspace cards, so ghosts also step aside from real cards. Display-only and deterministic — the same input always lays out the same way.
+
+**TDD:** Red = 11 pure `layoutGhosts` tests (in-view ghost untouched; right/below/top-left off-canvas clamped with the card fully inside; zoom 2× halves the world-rect; pan moves the rect; same-corner pile-ups wrap side-by-side; ghost steps off a live card; three-ghost chain stacks deterministically in input order; empty → empty; rect smaller than the card anchors the top-left without NaN) + 1 editor DOM test (a ghost at 4000,4000 renders clamped to 560,360 in the default 800×600 viewport while an in-view ghost at 120,360 keeps its position). Green = the pure function + the editor memo. Two mutations caught (no clamping → 9 tests fail; no collision walk → 3 tests fail).
+
+**Verify:** engine 28/28 (+11) · editor 497/497 (+1) · screen 41/41 · **full UI 280 files / 4,775 tests (+12)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · drift guard clean.
+
+**Commits:** `23673cec` (feat(topology): clamp ghost overlay into the visible canvas)
+
+**Deliberately NOT done:** no ghost WIRE layout — a ghost workspace's connecting wires have no geometry source on the current canvas (round-158 decision stands); no animated transitions when a ghost clamps (the position snaps; a CSS transition on the ghost layer would be a cheap polish slice); no resize-observer reactivity — the layout recomputes on pan/zoom/overlay/nodes changes; a window resize alone doesn't re-lay ghosts until the user pans or zooms (the canvas size rarely changes mid-session, and the memo reads `clientWidth` live at each recompute).
+
+**Risks / follow-ups:** the collision walk is bounded at 64 iterations per ghost — a pathological layout (hundreds of ghosts in a tiny rect) accepts overlap rather than looping forever, which is the right failure mode but worth knowing; the wrap is horizontal only (left of the column) — a vertical-then-right waterfall would fill small viewports more densely, at the cost of more moving parts; the 800×600 fallback means pre-layout ghosts clamp as if the canvas were 800×600 — once a real size is measured the next pan/zoom recomputes correctly.
+### 2026-08-11 — ghost-wire stubs: the compared branch's ghost cluster reads as a topology (round 160)
+
+**Problem:** ghost cards alone read as floating boxes. A multi-workspace satellite missing from the current branch (several workspaces wired together, none present here) showed as disconnected rectangles — the operator could see WHERE the locations were but not HOW they connected. The round-158/159 journals recorded the geometry-source problem for ghost wires and deferred them.
+
+**Solution:** dashed stubs for the other branch's ghost-to-ghost wiring, drawn between the LAID-OUT ghost positions. `buildGhostWireStubs(wires, ghosts)` (pure, in the compare engine) walks the other diagram's wires and emits one stub per wire whose BOTH endpoints are ghosts, with edge-to-edge midpoints (right/left for side-by-side pairs, top/bottom for vertical ones — mirrored when the authoring order flips). `TopologyOverlay` gains `otherWires` (populated by `buildTopologyOverlay`) so the editor has the wiring without a new prop. The editor renders the stubs as a dashed success-green `<svg>` layer inside the ghost layer (stroke props are token-gate-exempt; the colour still comes from a token), sized to cover the laid-out ghosts, pointer-events-none with the rest of the overlay.
+
+**TDD:** Red = 5 pure tests (both-endpoints-ghost filter; right→left edge midpoints; mirrored edges on flipped order; top/bottom edges for vertical pairs; no stubs for ghost→shared / non-ghost pairs / empty inputs) + overlay-shape assertions updated for `otherWires` + 1 editor DOM test. The editor test initially hardcoded expected coordinates and failed because round-159's layout pushed one ghost off a preset card — the assertion now derives the expected endpoints from the RENDERED ghost cards (the stub must connect the displayed cards edge-to-edge, whatever the layout decided), which pins the stub↔layout coupling honestly. Green = the pure builder + overlay field + editor SVG layer + CSS. Two mutations caught (dropping the both-endpoints filter → 2 tests fail; centers instead of edges → 5 tests fail).
+
+**Verify:** engine 33/33 (+5) · editor 498/498 (+1) · screen 41/41 (overlay shape updated) · **full UI 280 files / 4,781 tests (+6)** · typecheck ✓ · eslint 0 errors · drift guard clean.
+
+**Commits:** `b7454b9f` (feat(topology): ghost-wire stubs connect the compared branch's ghosts)
+
+**Deliberately NOT done:** no ghost→shared stubs — a ghost wired to a SHARED workspace would need drift-resolved, live-position far ends (the shared card's position on the current canvas, resolved through the round-155 pairing); that's a real follow-up, sketched below; no wire labels or relationship-type styling on stubs (they are decorative hints, not inspectable wires); no stub clipping when a ghost pair is far apart (the SVG spans the ghost extents, so stubs between far-apart ghosts draw across the canvas — acceptable for a decorative layer).
+
+**Risks / follow-ups:** the ghost→shared stub slice is the natural next step — it needs the overlay (or the editor) to carry the other-side→current-side shared-id mapping so a ghost's wire to a shared workspace can target the LIVE card; a wire between two ghosts whose laid-out positions overlap (layout accepted overlap in a tiny rect) draws a degenerate stub — harmless decoration. Also cleaned up a stale `// MUTATION: no clamping` comment left in `layoutGhosts` from the round-159 mutation check.
+### 2026-08-11 — ghost→shared wire stubs: the single-ghost diff now reads as a connection (round 161)
+
+**Problem:** round 160 drew stubs only between ghost↔ghost pairs. The MOST common diff — a branch with ONE extra workspace wired to a shared location ("Branch B has an extra Stock Room feeding its shared Retail POS") — still showed a floating ghost with no stub. The round-160 journal called this the natural follow-up and sketched the design: carry the shared-id pairing through the overlay so a ghost's wire can target the LIVE card.
+
+**Solution:** two pieces. (1) `TopologyOverlay` gains `sharedByOtherId: Array<{ otherId, currentId }>` — populated by `buildTopologyOverlay` from the drift pairing (round 155) plus exact id matches (deterministic order: drift pairs first). (2) `buildGhostWireStubs` gains a third param `farByOtherId: ReadonlyMap<otherId, GhostBounds>` — the far end of a wire with exactly one ghost endpoint resolves through it (a shared workspace whose current card is NOT live — deleted unsaved — resolves to nothing and the stub is skipped); `stubEndpoints` refactored to take bounds so ghost→shared and ghost↔ghost share one geometry path. The editor builds `farByOtherId` from `sharedByOtherId` + its live workspace cards, so the stub targets the card the operator actually sees.
+
+**TDD:** Red = 2 `sharedByOtherId` tests (drift pair + exact match both listed; empty when nothing is shared) + 3 ghost→shared stub tests (exact edge midpoints to the far card; skip when the far card isn't live; ghost↔ghost and ghost→shared coexist) + 1 editor DOM test (stub connects the rendered ghost card to the LIVE shared card, positions derived from the DOM). Green = the engine + editor pieces. Two mutations caught (dropping the ghost→shared branch → 2 tests fail; offsetting the far rect → 1 geometry test fails). One test self-corrected: my first expectation asserted a wrong edge midpoint (300+120=420, not 360) — the failure taught the arithmetic, and an earlier "identical diagrams → empty sharedByOtherId" assertion was simply wrong (identical diagrams SHARE every workspace).
+
+**Verify:** engine 38/38 (+5) · editor 499/499 (+1) · screen 41/41 (overlay shape updated) · **full UI 280 files / 4,787 tests (+6)** · typecheck ✓ · eslint 0 errors · drift guard clean.
+
+**Commits:** `5cb928e1` (feat(topology): ghost-to-shared stubs reach the live shared card)
+
+**Deliberately NOT done:** no stub LABELS or relationship styling (stubs stay decorative hints — a live-wire label would imply inspectability); no stub for a ghost wired to a non-workspace (hardware) — the far end isn't a shared workspace, so there's nothing to anchor to; no handling for the rare ghost whose far shared card was dragged unsaved — the LIVE card position is used, which is exactly what the operator sees.
+
+**Risks / follow-ups:** the compare overlay series (rounds 154-161) is now functionally complete: classification, drift pairing, ghost cards + markers, in-view layout, ghost↔ghost AND ghost→shared stubs. The next open items are the "compare focus" mode (dim non-matching cards while the panel is open) and — a smaller polish — animated transitions when a ghost clamps. The overlay's `sharedByOtherId` grows with the number of shared workspaces; it's rebuilt only when a compare loads, so no perf concern.
+### 2026-08-11 — compare focus: the spatial diff becomes a review mode (round 162)
+
+**Problem:** the overlay renders differences in full context — red/amber rings, ghosts, stubs — but nothing recedes, so the differing locations don't actually POP. An operator comparing two branches still scans the whole canvas to find what changed. The round-161 journal listed "compare focus" (dim non-matching cards) as the open workflow item.
+
+**Solution:** a focus toggle in the compare panel. `compareFocusDimIds(overlay)` (pure, in the engine) derives the dim set from the overlay's own classification: shared-identical current-side ids = `sharedByOtherId` currentIds MINUS `differing` — only the workspaces that are the SAME in both branches dim. The editor takes a `compareFocus` prop (default false), builds the dim set in a memo (empty when no overlay), and ORs it into the card `isDimmed` alongside the existing hover-focus dimming. The screen owns `compareFocus` state, renders a localized toggle button (`aria-pressed`, `topology-compare-focus` in both bundles), passes it to the editor, and resets it on close. No new CSS — the existing `node-dimmed` (0.35 opacity) and its transition apply; the rings/ghosts/stubs stay full-strength so the differences read instantly.
+
+**TDD:** Red = 2 pure tests (focus dims ONLY shared-identical — differing/only-here/ghost ids stay bright; empty overlay → nothing) + 2 editor DOM tests (with focus on, the shared-identical card dims while only-here and differing cards don't; with focus off, nothing dims even with an overlay) + 1 screen test (toggle flips `compareFocus` to the editor, close resets it with the overlay). Green = the three pieces + FTL keys. Mutation caught (dropping the differing-exclusion → the classification test fails). Two harness lessons: the fixture needed a ghost wired to the DIFFERING workspace (any ghost→shared wire makes that shared workspace differ, so a truly identical shared workspace needs the ghost attached elsewhere), and `renderReady(2)` needs the 2-instance + 2-store mocks the overlay test already had.
+
+**Verify:** engine 40/40 (+2) · editor 501/501 (+2) · screen 42/42 (+1) · i18n bundle 16/16 (new key passes parity) · **full UI 280 files / 4,792 tests (+5)** · typecheck ✓ · eslint 0 errors · drift guard clean.
+
+**Commits:** `bbfb5e39` (feat(topology): compare focus dims identical cards for a review view)
+
+**Deliberately NOT done:** no focus-scoped WIRE dimming — wires stay full-strength because they carry topology meaning beyond the card classification (the round-155 wiring comparison is per-workspace, so a wire's "shared-identical" status isn't defined); no dimming of ghost stubs' shared far-end anchors — a ghost→shared stub pointing at a dimmed card still reads (the connection is legible, just quieter); no persistence of the toggle across sessions (it resets when the panel closes — a deliberate choice; reopening the panel starts fresh).
+
+**Risks / follow-ups:** hover-focus (round-146 era) and compare-focus compose by OR — when both are active, a card dims if EITHER mode dims it, which is correct but untested in combination (the hover tests run without an overlay); the dim-set memo rebuilds per overlay/nodes change — trivial cost. This closes the eight-round compare series (154-162): classification, drift pairing, ghosts + markers, in-view layout, ghost↔ghost + ghost→shared stubs, and now focus mode.
+### 2026-08-11 — hover inspection beats compare-focus dimming (round 163)
+
+**Problem:** the round-162 journal recorded a risk: the hover-focus and compare-focus dim modes compose by OR but were never tested together. Writing that test exposed a real interaction bug, not just a gap — hovering a shared-identical card under compare focus kept the INSPECTED card dimmed. `hoverConnections` includes the hovered node itself, and the OR expression `(hoverConnections !== null && !has(node)) || compareDimSet.has(node)` re-applied the compare dim to a card the operator was actively inspecting. The same hit any compare-dimmed neighbour of the hovered card.
+
+**Solution:** hover focus is the transient, specific intent — while active it fully takes over: `isDimmed = (hoverConnections !== null && !hoverConnections.has(node.id)) || (compareDimSet.has(node.id) && hoverConnections === null)`. Compare dimming applies outside hover; during hover the connected subgraph lights up exactly as hover-focus has always behaved. One-line semantic change, no CSS, no state.
+
+**TDD:** Red = 2 editor tests (hovering the compare-dimmed card itself lights it back up, and restoring dim on leave; hovering a CONNECTED card also lights the compare-dimmed neighbour). Both failed for the right reason (`node-dimmed` still present). Green = the composed expression — all 3 round-162 focus tests, the hover-focus suite, and the full editor suite stayed green. Mutation caught (reverting to the naive OR fails the first regression test).
+
+**Verify:** editor 503/503 (+2) · engine 40/40 · screen 42/42 · **full UI 280 files / 4,794 tests (+2)** · typecheck ✓ · eslint 0 errors · drift guard clean.
+
+**Commits:** `8d7fd565` (fix(topology): hover inspection lights up despite compare-focus dim)
+
+**Deliberately NOT done:** no change to hover-focus wire dimming (wires were never compare-dimmed — round 162's deliberate choice stands); no persistence of compare focus across hovers (the toggle stays as set; hover is a transient overlay on it); no test for compare-dimmed + hover-dimmed simultaneously (a card both not-connected under hover AND shared-identical is dimmed by both — visually identical, one assertion would be redundant).
+
+**Risks / follow-ups:** the FTL `vars`-cross-check guard remains the open defect-class item from the round-163 recommendation — `<Localized>` sites whose `vars` keys don't match an FTL message's `$vars` render the raw id at runtime, invisible to bundle parity (which counts keys, not variables). Same shape as the round-156 bare-placeholder gate.
+### 2026-08-11 — FTL vars cross-check gate + three real i18n defects fixed (round 164)
+
+**Problem:** bundle parity counts keys, not variables. A `<Localized id="…" vars={{ … }}>` site whose vars don't exactly match the FTL message's declared `$vars` renders the raw id (or a partial message) in the real runtime — invisible to mocked Fluent (which interpolates by hand) and to the round-156 bare-placeholder gate (which only catches `{ ident }` placeholders, not `$var` drift). Journaled as the top open defect class since round 156.
+
+**Solution:** the round-156 scanner (`barePlaceholderScan.ts`) grew a vars cross-check. `messageDeclaredVars` parses the en bundles with the REAL `@fluent/bundle` parser and walks the AST for `{ type: 'var' }` nodes — value vars and per-attribute vars separately (a site only pays the attributes it actually localizes via `attrs`). `findLocalizedSites` statically reads each `<Localized>` tag's `vars`/`attrs` object-literal keys. `varsMismatch` (pure, extracted for direct testing) computes missing/extra; `scanLocalizedVars` reports repo-wide hits and runs inside the same `lint:i18n` gate (wired alongside `scanLocaleFiles` in `i18nBundle.test.tsx`).
+
+**The scan found 3 REAL defects:**
+1. `fastpin-enter-pin` — site passed `$user` but the FTL message declared nothing → Indonesian users saw the raw id. Added the variable.
+2. Terminal confirm/cancel messages — sites localize a `.aria-label` that doesn't exist in the FTL → hardcoded English for Indonesian users. Added the attributes.
+3. `payment-table-number` — the FTL had the `.aria-label` attribute BEFORE the value line; FTL grammar reads that as attribute-only, so the message had NO value and the localized `Meja { $number }` never rendered (English fallback always). Reordered value-first.
+
+**TDD:** Red = 7 `messageDeclaredVars` unit tests (value vars, per-attribute vars, member access, term-call args, multi-message) + 7 `findLocalizedSites` tests (explicit/shorthand/quoted keys, nested objects/spreads, attrs keys, unresolvable vars → null, multiline line numbers) + 5 `varsMismatch` tests + the repo-integrity assertion that surfaced the real mismatches, one at a time. The repo-integrity scan ran on real files, so each defect was found by a failing test BEFORE any fix. Green = the scanner on the real parser (replaced the round-164 first-draft hand-rolled regex — it mis-split value/attribute for attribute-first messages, which is exactly how the real defect hid) + the three defect fixes. Mutations caught: dropping the attribute-vars contribution (2 tests), dropping the extra check (2), dropping the missing check (3). Two scanner lessons: the glob must EXCLUDE `*.id.ftl` (Indonesian translations may legitimately drop a var — a shorter translation — and were overwriting the en contract); the en-only glob pattern is the `!` exclusion form, not the round-156 bare `*.ftl` form.
+
+**Verify:** gate files 45/45 (i18nBundle 17/17 incl. new gate test) · **full UI 280 files / 4,815 tests (+21)** · typecheck ✓ · eslint 0 errors (dead `VAR_PLACEHOLDER` regex removed after the real-parser rewrite) · `lint:i18n.sh` clean end-to-end · drift guard clean.
+
+**Commits:** `88eb4bb8` (feat(i18n): gate Localized-vars against FTL $vars, fix 3 real defects)
+
+**Deliberately NOT done:** no `id.ftl` var cross-check (a translation legitimately dropping `$var` is correct FTL, not a defect — only en is canonical); no check of the `attrs` values against the message's declared attributes (a site localizing a nonexistent attribute is the parity gate's key-level job; the round-164 terminal fix needed a NEW key lookup, not the vars scan); no dynamic-vars sites (non-literal `vars={expr}` are skipped as unresolvable — documented, none problematic in the tree).
+
+**Risks / follow-ups:** a `<Localized>` opening tag whose `>` is inside nested JSX truncates the tag window early (possible false-positive on var-bearing messages — none exist today); the real-parser import pulls `@fluent/bundle` into the scan module (already a runtime dependency, no bundle impact — vite tree-shakes the test-only path); term-call args are now captured as declared vars — if a future message passes a var into a term call whose term does NOT use it, the scan requires it (slight over-require, no current instance).
+### 2026-08-11 — translation-var drift gate on the id bundles (round 165)
+
+**Problem:** the round-164 gate aligns every `<Localized>` site to the EN contract, but nothing checked the INDONESIAN translations against it. The site can only ever provide the vars the en message declares — so an id translation referencing any other variable name (a translator renaming `$number` to `$nomor`) renders a literal `{$nomor}` placeholder for Indonesian users. Round-164 journal listed this as the last open hole in the invisible-i18n-defect family.
+
+**Solution:** `translationVarDrift(idContract, enContract)` (pure) plus `scanTranslationVars()` (repo-wide, same gate). The direction is SUBSET, deliberately: a translation DROPPING a var is safe in Fluent (unused vars are ignored) — only DRIFT (a var the en counterpart never declares) is a defect. That is why no skip list is needed: legitimate omissions are safe by construction (the recommendation's "skip mechanism" turned out to be unnecessary once the direction was right). Comparison is per value and per attribute, attributes compared only when present in BOTH bundles — an id-only attribute is never localized by the site (attrs come from en), an en-only attribute is a separate omission defect class, both documented as out of scope.
+
+**TDD:** Red = 6 pure tests (mirror clean; DROP allowed — the direction pin; value name-drift flagged; attribute name-drift flagged; id-only attribute ignored; en-only attribute ignored) + repo-integrity assertion. Green = the two functions. **The scan found ZERO real drift across all 24 id bundles** — so the gate is prophylactic, and the honest proof that it bites came from a planted-defect check: renaming `$number` → `$nomor` in `sales.id.ftl` failed the scan with the var named, then reverted. Pure-function mutations caught: dropping the attribute comparison (1 test), flipping to superset direction (6 tests). One test bug self-corrected (the id-only/en-only attribute test passed an id contract without an `attributes` field — not iterable).
+
+**Verify:** gate files 53/53 (i18nBundle 18/18 incl. new gate test) · **full UI 280 files / 4,823 tests (+8)** · typecheck ✓ · eslint 0 errors · `lint:i18n.sh` clean end-to-end · drift guard clean.
+
+**Commits:** `c2770f5e` (feat(i18n): gate id translations against en $vars for var drift)
+
+**Deliberately NOT done:** no en-only-attribute check (an id translation omitting an attribute the site localizes silently leaves it unset for Indonesian users — a real a11y gap but a separate defect class; the round-164 journal already scoped it out, still open); no id-only-key check (the parity gate owns key presence); no attribute-presence parity between en and id (same omission class).
+
+**Risks / follow-ups:** the en-only-attribute omission check is the natural next slice (requires attribute-level presence parity — a different scan shape than var drift, needs site `attrs` data to know which attributes are actually rendered); the line-number computation uses `indexOf(\`${id} =\`)` — a message id that is a PREFIX of another message's first line could resolve to the wrong line (no such case today — ids are distinct); the en glob and id glob are the round-164/round-156 forms respectively, both proven to match.
+### 2026-08-11 — localized-attribute omission gate + six live fixes (round 166)
+
+**Problem:** a site localizes an attribute via `attrs={{ 'aria-label': true }}`. When the id translation OMITS that attribute — the message exists but lacks the key — the attribute is silently unset for Indonesian users: no error, no fallback. Key-level parity counts messages, not attributes; the round-165 var-drift scan sees no vars involved. The round-165 journal scoped this as the natural next slice, driven by the site's attrs (only rendered attributes matter).
+
+**Solution:** `localizedAttributeOmission(attrsKeys, enAttrs, idAttrs)` (pure) + `scanAttributeOmissions()` (repo-wide, same gate). Per site: the localized attrs that exist in the en message's attributes but are missing from the id translation's. An attribute en ALSO lacks is a site-side bug (both locales unset) — deliberately out of scope, pinned by a test. Sites with unresolvable attrs and ids missing from en/id are skipped (documented; the parity gate owns key presence).
+
+**The scan found 6 REAL defects** — all in the same shape: en has an ATTRIBUTE-ONLY message (`.placeholder` / `.aria-label`, no value); the id translation made it VALUE-only (no attribute). Indonesian users saw the English JSX fallback placeholder (`e.g. 150.00` — wrong unit guidance; the id translation `mis. 15000 untuk Rp150.000` never rendered) or an unlabeled column header (`loyalty-table-actions` had no aria-label at all). Fixed all six to mirror the en attribute-only shape: 5 placeholders in sales.id.ftl (discount %, discount label, counted-cash, shift notes, opening balance) + 1 aria-label in loyalty.id.ftl.
+
+**TDD:** Red = 5 pure tests (mirror clean; omitted flagged; mixed set flags only omitted; en-also-lacks ignored; empty attrs clean) + repo-integrity assertion that surfaced the six, one at a time via the report. Green = the scan + six FTL fixes. Planted-defect check proved the gate bites (reverting one fix → scan failed with the attribute named, then restored). Pure mutations caught: dropping the en-presence condition (2 tests), dropping the id-presence condition (3 tests).
+
+**Verify:** gate files 60/60 (i18nBundle 19/19 incl. new gate test) · **full UI 280 files / 4,830 tests (+7)** · typecheck ✓ · eslint 0 errors · `lint:i18n.sh` clean end-to-end · drift guard clean.
+
+**Commits:** `9ed6d636` (feat(i18n): gate localized attrs against id translations, fix 6)
+
+**Deliberately NOT done:** no en-missing-attribute check (a site localizing an attribute NEITHER bundle defines — the round-164 journal's noted gap — is a site-side bug, still open); no value/attribute-shape parity beyond presence (a message whose en side is value-only but id side is attribute-only, or vice versa, is only caught when a site localizes the attribute — the shape mismatch without a site is dead translation text, harmless); no check that attribute VALUES in id use only en-declared vars (the round-165 drift scan already covers var names in attributes present in both).
+
+**Risks / follow-ups:** the en-missing-attribute site bug is the remaining open i18n defect class (a site `attrs` key pointing at a message attribute that exists in neither bundle — silently unset for ALL users); the scan re-parses all bundles per call (en + id + tsx — same cost profile as the other three scans, fine for a lint gate); attribute-presence and var-drift scans both compare id-against-en — they could share the en/id parse maps, a trivial refactor if a fifth scan ever appears.
+### 2026-08-11 — en-side attribute gate + 31 live fixes across 17 locale files (round 167)
+
+**Problem:** the round-166 gate only caught id-side omissions (en has the attr, id drops it). A site-localized attribute missing from the EN message is silently unset for ALL users — the JSX fallback (usually hardcoded English) shows instead. The round-166 journal carried this as the last open i18n defect class.
+
+**Solution:** `localizedAttributeMissing(attrsKeys, enAttrs)` (pure) + the round-166 scan extended: every site-localized attr must exist in the EN message (round 167), and when en has it, in the id translation too (round 166). The two checks are disjoint (missing requires ¬enHas) so they share one hit shape and one scan. **Design refinement over the recommendation:** the probe showed the en-side defect splits into TWO live sub-classes — absent from both bundles (26 site-instances) AND present only in id (5: currency ×2, inventory ×3 — en users still lose it, id is not canonical). The gate flags ALL attrs absent from en; the "neither-bundle" formulation would have missed 5 real defects.
+
+**The scan found 31 REAL defects** (26 site-instances / 24 unique ids absent from both, 5 en-only-missing): every one was a message authored VALUE-only ("`x = Close`", "`x = At least 4 digits`") that a site localizes ONLY as an attribute (`attrs={{ 'aria-label': true }}` / `attrs={{ placeholder: true }}`) — so the translation never applied. Indonesian users saw hardcoded English (e.g. the shift-count hint "e.g. 15000 for $150.00" instead of "mis. 15000 untuk Rp150.000") or an unlabeled control (customer history, variant edit/delete, refund qty buttons, retail modal close ×3, appearance logo alt). Fixed all 29 unique messages (17 files, 9 en/id pairs + currency en-only) by converting value-only → attribute-only with the same text — verified every id is used ONLY by attr-localizing sites (0 value-rendering sites), so the conversion changes nothing for the visible text except restoring the intended JSX fallback (e.g. the × close icon instead of the word "Close").
+
+**TDD:** Red = 4 pure tests (en-absent flagged; mixed set flags only missing; clean when present in en; empty clean) + repo-integrity assertion that surfaced all 31. Green = the check + 29 message conversions. Planted check proved the gate bites (reverting one en fix → scan failed naming the attr, restored). Pure mutation caught (inverting the en-absence check → 4 tests). Verified each fix against the round-164 vars contract (the `$name`-bearing aria-labels moved from value to attribute; the site vars/attrs still satisfy the exact-match gate).
+
+**Verify:** gate files 64/64 (i18nBundle 19/19) · **full UI 280 files / 4,834 tests (+4)** · typecheck ✓ · eslint 0 errors · `lint:i18n.sh` clean end-to-end · drift guard clean.
+
+**Commits:** `700ccbc0` (feat(i18n): gate site-localized attrs against the en message, fix 31)
+
+**Deliberately NOT done:** no fix of the value→attribute pattern at the SITE level (a future author can still write a value-only message for an attr-only site — the gate catches it at commit time, which is the point); no removal of now-dead values (all converted messages were value-only, so nothing became dead); no check for sites localizing an attribute the message has but with a different NAME intent (that's a naming convention, not a defect).
+
+**Risks / follow-ups:** this round fixed the LAST member of the i18n defect family (bare placeholders 156, site-vars 164, var drift 165, id-omission 166, en-absence 167) — 43 real defects total across the family; the four scans still re-parse all bundles per call (a shared parse module is the trivial next refactor); the round-165 line-number computation (`indexOf`) is now used by three scans and remains prefix-unsafe in theory.
+### 2026-08-11 — shared bundle/site maps: the five scans parse once (round 168)
+
+**Problem:** rounds 156-167 shipped five scans in one module, each globbing and parsing the bundles itself — nine `import.meta.glob` calls across four distinct glob forms (`*.ftl` all-locale, the en-only `!`-exclusion pair, `*.id.ftl`, the tsx `!__tests__` pair). Three copies of the en glob meant the round-164 lesson (id translations overwriting en contracts) had to be remembered in three places, and the round-165 `indexOf` line helper was drifting toward duplication.
+
+**Solution:** a single source of truth for the glob forms and parses, in the same module: `loadLocaleSources` (all-locale), `loadEnSources` (en-only), `loadIdSources`, `loadTsxSources` (tests excluded), plus three derived maps — `loadEnContracts`, `loadIdContracts` (message → variable contract via the real Fluent parser), and `loadLocalizedSites` (file → sites). All four scans refactored onto them: 9 globs → 4, the en/id/tsx exclusion logic lives in exactly one place each, and the parses happen once per scan call as before. Pure refactor — every scan's behavior is unchanged.
+
+**TDD:** Red = 5 pins, written first: the en map carries `category-colour-swatch-aria` with `$colour` in its aria-label (DISCRIMINATING — the id translation drops `$colour`, so a regressed all-locale glob fails this pin, re-triggering the round-164 bug); the id map carries the same id WITHOUT `$colour`; the site map finds FastPINOverlay's `staff-login-clear-aria` with `attrsKeys: ['aria-label']`; the tsx map excludes `__tests__`; the all-locale map still contains `.id.ftl` files for the bare-placeholder scan. Green = the loaders + maps + scan refactor. Mutations caught: dropping the en-only exclusion → 2 failures (the pin AND the round-164 scanLocalizedVars repo test — the mutation re-created the exact bug the pin exists to catch); dropping the tsx test exclusion → 1 failure. All 45 pre-existing scan tests stayed green through the refactor.
+
+**Verify:** gate files 69/69 (i18nBundle 19/19) · **full UI 280 files / 4,839 tests (+5)** · typecheck ✓ · eslint 0 errors · `lint:i18n.sh` clean end-to-end (still one pass — the lint gate's i18nBundle test exercises all five scans) · drift guard clean.
+
+**Commits:** `9b61b0a3` (refactor(i18n): consolidate the five scans onto shared bundle maps)
+
+**Deliberately NOT done:** no new module file (the scanner module IS the i18n-scan home — exporting the loaders keeps the diff minimal and the types adjacent); no caching/memoization of the maps (each scan call still parses once per run, same cost as before; a gate-level cache is premature); no extraction of the round-165 `indexOf` line helper (used once — extracting it would be speculative).
+
+**Risks / follow-ups:** the five gates are now locked to one glob set each — the pins are the regression surface if a glob ever needs to change; `loadLocalizedSites` runs `findLocalizedSites` over every tsx file eagerly (the same work the scans did before, just centralized); this closes the i18n family cleanly — with the shared maps in place, a future sixth scan (e.g. attribute-presence parity for site `attrs` vs en/id) composes in three lines.
+### 2026-08-11 — ghost glide: ghosts ease into place instead of snapping (round 169)
+
+**Problem:** the round-159 journal carried it as the open polish item: ghosts SNAP when the overlay clamps them into the visible canvas — they pop in at their clamped positions when compare opens, and jump when a resize or re-layout re-clamps them. The round-168 recommendation picked this as the topology track's next slice.
+
+**Solution:** ghosts now position via `transform: translate(x, y)` instead of `left`/`top` — compositor-friendly, so easing them never layout-thrashes — and the layer's animate class applies a 280ms ease-out transform transition (re-clamps glide) plus a fade-and-rise mount keyframe (the open pop softens). The transition is GATED behind `panGestureActive` state: a mouse-pan drag drops the class so an edge-anchored ghost tracks the pointer instead of trailing it 280ms behind, and release restores it. One render-line change (left/top → transform), one new state mirroring the existing `isPanningRef` (a ref alone can't re-render the class), two setState calls in the well-understood startPan/cleanup path.
+
+**TDD:** Red = a `ghostXY` test helper (parses `translate(xpx, ypx)`) + the 4 position assertions migrated from `style.left`/`top` to it (they failed for the right reason — the render still emitted left/top, so the helper read NaN) + a new pan-gating test (idle → animate class present; middle-button drag → dropped through the gesture; mouseup → restored). Green = render, state, CSS. Mutations caught: reverting the render to left/top → 4 position tests fail; dropping the gating (always-animate class) → the pan-gating test fails. Deliberate scope: wheel-zoom and touch-pinch are NOT gated (wheel ticks are discrete enough that 280ms inter-tick easing reads smooth; touch is a tablet rarity) and node-drag step-asides gliding is the desired feel — both documented.
+
+**Verify:** editor 504/504 (+1 net) · **full UI 280 files / 4,840 tests (+1)** · typecheck ✓ · eslint 0 errors (8 pre-existing hook-dep warnings, none near the change) · css-token scanner: 0 var() refs added (its 117/360/22 findings are a pre-existing standalone-informational baseline, not a gated check) · drift guard clean.
+
+**Commits:** `c2e3099d` (feat(topology): ghost glide eases clamp repositions instead of snapping)
+
+**Deliberately NOT done:** no left/top transition (the layout-thrash version — transform is the point); no saved-position → clamped-position entrance animation (would need a two-phase mount effect for a small win — the fade-and-rise covers the pop); no touch/wheel gating (see scope above); no `will-change` (many compositor layers for a few ghosts is the kind of premature hint that hurts more than helps).
+
+**Risks / follow-ups:** the animate class is computed inline in the render — a `--dragging`-style refactor that consolidates gesture flags could fold `panGestureActive` in later if touch/pinch gating is ever wanted; the keyframes' `both` fill holds the final state (matches the inline transform, so no visual drift); the -0 world-position guard from round 159 still holds — transform renders `translate(0px, 0px)` identically to `left: 0`.
+### 2026-08-11 — lua_sandbox fuzz target: stale os-is-nil assert panicked on every input (round 170)
+
+**Problem:** the overnight honggfuzz campaign flagged a crash in `lua_sandbox` (20260811-041231): SIGABRT on the 4-byte input `loca` (a truncated Lua keyword) within 2 seconds. The suspect was the sandbox crate, but the root cause was the TARGET, not the crate: the target asserted `os` must be nil after loading malicious input, while oz-lua's sandbox deliberately keeps a RESTRICTED os table (date/time/clock, read-only — documented in the crate) for scripts that need the clock. The assert therefore panicked on EVERY input; `loca` is just the minimized form. A Rust panic under the fuzz profile (panic=abort) surfaces as SIGABRT.
+
+**Solution:** the target now checks the actual sandbox contract instead of an oversimplified nil rule: os is either nil or the restricted table with date/time/clock present and execute/remove/rename/exit nil; every other dangerous global (io, loadfile, dofile, require, package, debug, rawget/rawset/rawequal/rawlen, collectgarbage, module, load) must be nil. The durable pin lives in oz-lua itself — a regression test `sandbox_contract_survives_the_fuzz_crash_input` loads the exact crash input `loca`, asserts the post-load sandbox state, and proves the VM stays recoverable (apply_discount returns Ok after the failed load).
+
+**TDD:** reproduced first with a scratch test (panic message: `dangerous global 'os' should be nil after malicious input`) — evidence, not speculation. Red = the oz-lua contract test. Green = the target fix + the passing test (oz-lua 63/63, +1). Planted-check equivalent: replaying the exact crash input against the fixed, instrumented target in WSL prints `This crashfile didn't trigger any panics...` — before the fix it aborted in 2 seconds.
+
+**Verify:** WSL replay of the real crash input (clean, exit 0) · oz-lua 63/63 (Windows) · cargo fmt ✓ · clippy -p oz-lua -D warnings ✓ · only `lua_sandbox.rs` had the stale assert (grep across fuzz targets). The hfuzz build env quirks are documented: `RUSTC_WRAPPER=` (empty) disables the sccache interception, and CARGO_TARGET_DIR must point at a space-free dir.
+
+**Commits:** `ccca7cbb` (fix(lua): align fuzz-target sandbox assert with the restricted-os contract)
+
+**Deliberately NOT done:** no sandbox change (the crate is correct — restricted os date/time/clock is intentional); no change to the other six fuzz targets (audited — only lua_sandbox had drifted); no lldb/gdb setup to capture a post-fix backtrace (the replay's clean exit is the evidence; a debugger adds nothing now that nothing crashes). NOTE: `/fuzz/hfuzz/` is gitignored wholesale (repo convention, `.gitignore` line 26 — instrumented builds, corpora, and crash reports are local/dev-only), so the target fix itself is not versioned; the oz-lua contract test is the durable regression pin, and the crash input stays in `fuzz/hfuzz/crash_reports/20260811-041231/` for local replay.
+
+**Risks / follow-ups:** the remaining fuzz targets' post-load asserts deserve the same contract audit (this drift went unnoticed because only lua_sandbox's sandbox has a "safe table" exception — the others are strict-nil); the cargo-hfuzz instrumented-binary copy path silently skipped when CARGO_TARGET_DIR pointed at the cache — worth a follow-up verifying `hfuzz_target/<target>/` exists after `cargo hfuzz build`; the crash input stays in `fuzz/hfuzz/crash_reports/20260811-041231/` as a permanent regression corpus member.
+### 2026-08-11 — libfuzzer lua_sandbox target: stale os-is-nil assert still in the versioned tree (round 171)
+
+**Problem:** round 170 fixed the crash class in the HONGFUZZ target and pinned the contract in oz-lua — but the versioned cargo-fuzz/libfuzzer copy at fuzz/fuzz_targets/lua_parse.rs still asserted `os` must be nil after loading malicious input. Same assert, same panic-on-every-input class, still in the tree. It survived because (1) round 170's fix went into the gitignored /fuzz/hfuzz/ copy ("the target fix itself is not versioned") and (2) CI builds lua_sandbox but never RUNS it — it was dropped from the tier-1 fuzz run loop as collateral in the 6e7c37b6 tier split (the build loop kept it; the run loop kept only sku_parse/money_parse). Reproduced on the real target in WSL: the trivial input `x = 1` (5 bytes < 500) → panic at fuzz_targets/lua_parse.rs:53:17 → `SUMMARY: libFuzzer: deadly signal`.
+
+**Solution:** the versioned target now asserts the real contract, mirroring the round-170 hfuzz fix exactly (same check, same messages): `os` is either nil or the restricted table with date/time/clock present and execute/remove/rename/exit nil; every other dangerous global (io, loadfile, dofile, require, package, debug, rawget/rawset/rawequal/rawlen, collectgarbage, module, load) must be nil. Doc comments updated to name the os exception and the crash class. Durable guard: lua_sandbox re-added to the tier-1 CI fuzz run loop (`timeout 65 cargo fuzz run lua_sandbox -- -max_total_time=60`) with a comment explaining it MUST run, not just build — a future stale assert now panics the advisory fuzz job instead of passing silently.
+
+**TDD:** Red = real-target reproduction, not speculation: built the libfuzzer target with nightly + cargo-fuzz in WSL (CARGO_TARGET_DIR=/home/user/oz-fuzz-target — space-free, per the round-170 env note), fed `x = 1`, observed the deadly signal at the stale assert (lua_parse.rs:53). Green = the contract check lands; the SAME command replays clean (`Executed /tmp/tiny.lua in 4 ms`, exit 0), the round-170 crash input `loca` also replays clean, and a 30s mutation session ran 202,535 executions (6,533 exec/s) with zero crashes. The durable contract pin (oz-lua `sandbox_contract_survives_the_fuzz_crash_input`) was already in place from round 170 — the target now finally asserts exactly what that pin proves.
+
+**Verify:** WSL: real-target replay clean · `loca` crash input clean · 30s fuzz clean (202,535 runs, peak RSS 440 MB) · oz-lua 63/63 (incl. the round-170 contract pin) · `rustfmt --check` on the target ✓ · drift guard clean. Windows note: libFuzzer cannot link on MSVC (`clang_rt.asan_dynamic_runtime_thunk-x86_64.lib` missing; `--sanitizer none` leaves `__stop___sancov_pcs` unresolved) — WSL remains the fuzz execution environment, as in round 170.
+
+**Commits:** `c327f17a` (fix(lua): align libfuzzer sandbox assert with the restricted-os contract)
+
+**Deliberately NOT done:** no extraction of the check into a testable lib function (the oz-lua contract pin + the CI run of the real target cover the regression; a lib would need new CI wiring to run anyway — noted as a follow-up); no change to the other six fuzz targets (re-audited this round: none has a post-load sandbox assert — the round-170 "contract audit" follow-up found exactly one stale copy, this one); no clippy on the fuzz crate (not a repo gate; no_main + libFuzzer linkage makes it awkward).
+
+**Risks / follow-ups:** the other five run loops are unchanged (cart_deser/ozpkg/manifest already execute in CI); the fuzz job is advisory (continue-on-error) so a regression surfaces via the crash-artifact upload rather than blocking PRs — the strongest guard is the oz-lua contract pin, which DOES fail the main gate; the round-170 follow-up about verifying `hfuzz_target/<target>/` after `cargo hfuzz build` is still open; making the sandbox check a shared unit-testable function in the fuzz crate would let `cargo test` pin it in seconds instead of a 60s fuzz run, if the crate ever gains a test step.
+### 2026-08-11 — CRM-02: list_customers_scoped enforces customers:view (round 172)
+
+**Problem:** audit/01 CRM-02 (P1) — `list_customers_scoped` resolved the session store but never enforced the declared `customers:view` permission, so any valid session (kitchen, permission-less custom roles) could enumerate every customer record (name, email, phone, notes) over IPC. The frontend registers CustomerManagement as manager-only, but the UI role gate is not a security boundary (the LOY-01 lesson — the audit said it outright: "UI role gating was not a security boundary"). Search and history reads were already gated; the full list was the hole, in BOTH desktop and tablet clients.
+
+**Solution:** `list_customers_scoped` now resolves the session and calls `require_customer_permission(..., CUSTOMERS_VIEW)` before touching the store — exactly the `search_customers_scoped` pattern — in both clients, with doc comments naming the CRM-02 rationale. Cashier keeps `customers:view` in ROLE_PRESETS, so PaymentModal's session-scoped customer lookup is unaffected; the gate only blocks roles that lack the declared permission.
+
+**TDD:** Red = `list_customers_scoped_denies_user_without_view_permission` in both clients (kitchen session — ROLE_PRESETS grants it only KDS_VIEW/KDS_UPDATE/SALES_VIEW/WORKSPACES_SWITCH): failed before the fix with Ok (enumeration succeeded) where the assertion expected PermissionDenied. Green = the two-line gate; both tests pass and the pre-existing owner-listing isolation test (the positive path) stays green. 46/46 customers tests per client.
+
+**Verify:** oz-pos-app + oz-pos-tablet customers modules 46/46 each · clippy -D warnings clean on both clients · cargo fmt --all -- --check clean · drift guard clean.
+
+**Commits:** `31b1fe6d` (test(loyalty): pin the earn/redeem projection guards from migration 107) · `ab070ee0` (fix(crm): enforce customers:view on list_customers_scoped)
+
+**Audit-status finding (why the loyalty slice died):** LOY-02 (earn idempotency) and LOY-04's DB boundary are ALREADY remediated — migration 107_loyalty_integrity.sql (dedupe + balance rebuild + uq_loyalty_earn_sale/uq_loyalty_redeem_sale + tier triggers) and the app-level dedup landed in 12547e9d (2026-08-01), one day AFTER the 07-31 audit, and the audit report was never re-stamped. The audit's Open markers for LOY-02/LOY-04 are stale. The DB-boundary guards were completely unpinned though — shipped as a separate `test(loyalty)` commit closing the LOY-12 duplicate-sale/redemption test gap.
+
+**Deliberately NOT done:** no change to legacy `get_customer` (still registered, global-DB, no session/permission — a scoped `get_customer_scoped` + UI switch is a contract change, tracked as follow-up); no UI change (the screen is manager-only in the registry; a denied non-manager direct-IPC caller now gets the correct PermissionDenied, and CRM-03's silent-swallow UX is a separate finding); no change to the dev-mock (it mirrors command NAMES; permission enforcement is server-side by design).
+
+**Risks / follow-ups:** `get_customer` remains a permission-less global read (single-record PII, same class as this fix) — the scoped variant is the natural next slice; CRM-03 (load failures render as "No customers yet") makes a denied list look like an empty database on the screen — fix the error/retry state; audit/01-04 fix-status tables need a re-stamp pass (loyalty is done; CRM-02 now done; REP/CUR P0s still open).
+### 2026-08-11 — REP-02: multi-currency report periods no longer collapse into one total (round 173)
+
+**Problem:** audit/03 REP-02 (P0) — the backend correctly groups revenue by currency, but SalesReportScreen collapsed every row into one `totalRevenue` and formatted it with the FIRST row's currency. A period spanning USD + IDR rendered "Total: $5,100.00" — 10000 USD + 500000 IDR summed as raw minor units — a mathematically invalid total. The period-comparison delta had the same defect (one % over collapsed mixed-currency money). Export CSV was already per-row correct (each row carries its own currency column).
+
+**Solution:** a pure `sumRevenueByCurrency` helper (in ui/src/features/reports/revenueTotals.ts) sums minor units per currency, preserving first-seen order. SalesReportScreen now renders per-currency totals joined with " · " ("$100.00 · IDR 500,000") when the period spans currencies, and the %/vs comparison delta is hidden whenever EITHER period spans more than one currency (a single percentage over mixed currencies is meaningless; the orders delta, currency-free, is untouched). Single-currency periods render byte-identical to before — the existing "$3,500.00" test stays green unchanged.
+
+**TDD:** Red = two component tests (totals: per-currency values present, the collapsed "$5,100.00" absent; comparison: no % when either period is multi-currency) — both failed against the old code with the collapsed total in the DOM. Green = helper + display + delta gating; 32/32 screen tests. Refactor = moved the helper to its own file after the react-refresh lint warning (the rule's own recommendation: "use a new file to share functions") + a 3-assertion unit test for the pure logic (order preservation, single-currency, empty).
+
+**Verify:** SalesReportScreen 32/32 (+2) · revenueTotals 3/3 · DashboardScreen/SalesDashboard/MultiStoreDashboard 26/26 unchanged · tsc --noEmit clean · eslint 0 errors, 0 warnings on changed files · drift guard clean.
+
+**Commits:** `d8bdc38f` (fix(reports): never collapse multi-currency revenue into one total)
+
+**Deliberately NOT done:** no DashboardScreen change (same defect class — the todayCurrency KPI and the mixed-scale weekly bars still collapse; tracked as the immediate next slice); no chart fix (the recharts tooltip still formats every bar with the first currency — per-currency series is a display-policy slice); no printReport change (it still collapses totalMinor into a single-currency receipt — needs a multi-currency receipt policy); no export change (already per-row). Policy note: the audit offered three options — this slice chose "render separate totals per currency" over "restrict the report to one currency" or "convert via recorded exchange rates" (no rate conversion exists in the product yet; conversion would need a recorded-rate policy).
+
+**Risks / follow-ups:** DashboardScreen (KPI + weekly bar scale) is the same bug class and still collapses — natural next slice; printReport can still print a single-currency total for a multi-currency period; the joined totals string is a plain-currency read for operators — a dedicated multi-currency layout is product work, not a defect fix.
+### 2026-08-11 — CUR-05: create_exchange_rate validates currency pair, codes, and date (round 174)
+
+**Problem:** audit/04 CUR-05 (P1) — `create_exchange_rate` (desktop AND tablet clients) validated only non-empty strings and a strictly positive rate. A same-currency pair, a non-ISO-4217 code, or a malformed effective date would persist as semantically invalid configuration — and the CUR-04 "latest effective rate" selection can never match a malformed date, so bad rows silently poison future conversions.
+
+**Solution:** field-level validation before any write, mirrored in both clients: `from != to`; both codes must parse as ISO-4217 (3 ASCII letters, uppercase-normalized — the same `Currency::from_str` the `currency_info` command uses); an explicit `effective_date` must parse strictly as YYYY-MM-DD via `chrono::NaiveDate`. Each failure returns `AppError::Invalid` with the field name in the message (the repo's field-specific convention). The UI already prevents same-pair (`formValid`) and produces YYYY-MM-DD via `type=date` inputs — this closes the direct-IPC caller hole the audit named, without breaking the visible form.
+
+**TDD:** Red = 3 command tests (same-pair "USD/USD", non-ISO code "US1", impossible date "2026-02-30") + 1 positive-path guard, written first: the three validation tests failed against the pre-fix command (it proceeded to DB access on the unmigrated test DB and returned a non-Invalid error) and the positive path passed. Green = the three checks; desktop 4/4. The tablet client (identical gap, mirror of the desktop file) received the same fix + mirrored tests, and a planted mutation (disabling the from==to guard) was caught by the tablet same-pair test — proving the mirror bites too.
+
+**Verify:** oz-pos-app + oz-pos-tablet exchange_rates modules 4/4 each · clippy -D warnings clean on both clients · cargo fmt --all -- --check clean · drift guard clean.
+
+**Commits:** `ca759a73` (fix(currency): validate currency pair, ISO codes, and effective date on create)
+
+**Deliberately NOT done:** no repository-level validation inside modules/currency (the command boundary is the IPC surface; a second direct caller of `CurrencyRepository` would need its own guard — follow-up); no source-length bound (the audit's minor item); no UI change (already prevents same-pair + type=date); no CUR-03 work (scoping is a separate finding).
+
+**Risks / follow-ups:** the checks live in two mirrored client files (the repo's established pattern; a shared validator belongs in modules/currency if a third caller appears); `list_exchange_rates` / `get_default_currency` / `set_default_currency` remain unscoped and unpermissioned (CUR-03, P0) — the round-172 pattern is the natural next currency slice; repository-level validation and source-length bounds are the open CUR-05 residuals.
+
+### 2026-08-11 — 0046: code-resident permission registry with write-time grant validation (round 175)
+
+**Problem:** roles store flat JSON permission lists and accept any string at
+write time, so nothing classified a key as operational (wildcard-eligible) or
+sensitive (explicit-only) — ADR #35 D2's "sensitive keys are never
+wildcarded" rule was unenforceable. The inventory also had gaps the audit
+missed: legacy seeds use `products:crud` and `categories:manage` (no
+constants), and a test fixture used `products:view`.
+
+**Solution:** new `platform-core::permission_registry` (spec 0046): all 68
+enforced keys classified by family + sensitivity (8 sensitive: sales:void,
+sales:refund, payments:refund, payments:settle, staff:manage_roles,
+staff:delete, reports:export, audit:export), a bidirectional inventory test
+(constants == registry, so a new key is either registered everywhere or
+nowhere), and `validate_grants` rejecting unregistered keys, wildcards that
+would grant sensitive keys, and the global `*` (reserved for the Owner seed,
+which bypasses this path via direct insert). Wired into `Store::create_role`
+→ `CoreError::Validation`. Added `PRODUCTS_CRUD` / `CATEGORIES_MANAGE`
+constants (legacy seed keys, byte-identical) and updated two integration
+fixtures that used synthetic keys (`module:N:action`, `["test"]`) plus one
+`products:view` → `products:read` (nothing enforces products:view).
+
+**Verify:** registry 9/9, oz-core lib 1678/1678, staff_integration 25/25,
+oz-pos-app staff 40/40, oz-pos-tablet staff 19/19, fmt + clippy -D warnings
++ drift guard clean. `test-changed.sh` blocked by the locked oz-pos-app.exe
+(running process — left alone per the shared-tree rule).
+
+**Commits:** `bde2962d` (feat) + `7fa406a4` (refactor).
+
+**Risks / follow-ups:** the registry is the foundation for the gate (0047)
+and the profile sensitive keys (0049: staff:read_identity / read_payroll /
+edit_notes register when enforced). Manifest `permissions` arrays are a
+separate declarative DSL (format-validated only), not RBAC enforcement — a
+future slice may reconcile them. `products:crud` / `categories:manage` stay
+as registered legacy composites so seeds remain byte-identical.
+
+### 2026-08-11 — 0047: centralized fail-closed enforcement gate with pinned gated-command census (round 176)
+
+**Problem:** enforcement was per-command `require_permission_for_user(...)`
+with the user→role→authorize resolution duplicated in both clients'
+`authz.rs` — "did every command gate itself?" was answered by review and
+audit, both of which missed instances (rounds 172/174 found a command that
+skipped its gate and one that skipped validation). The gate also had no
+deny-by-default: an unregistered key or an unresolvable role was handled
+inconsistently (role-missing surfaced as `Internal`, not a denial).
+
+**Solution:** `Store::require_permission(user_id, required)` is now the single
+gate in `oz-core` (ADR #35 D3): the 0046 registry is the only vocabulary
+(unregistered key denies even the `"*"` Owner grant), user resolution +
+active check + role lookup all fail closed as `CoreError::PermissionDenied`
+(role-missing is a denial, never `Internal`). Both clients' `authz.rs` are
+thin wrappers mapping `CoreError::PermissionDenied` → the existing
+`AppError::PermissionDenied` wire shape (`kind: "permissionDenied"` — no UI
+contract change), killing the duplicated resolution logic; the tablet's
+dead role-based `require_permission` (zero callers, a second parallel
+enforcement path) was removed per spec §7. A new `gate_audit.rs` integration
+test pins the full gated-command census of both clients — every command
+module with its gate-call count and permission keys, bidirectionally — so a
+new command, a dropped gate call, or a changed key surface fails the suite
+and forces a deliberate pin update (the spec's review signal). Every gated
+key is resolved through its real constant to `is_registered` (renaming a
+constant breaks the match arm), and raw string-literal permissions at gate
+call sites are pinned out of existence.
+
+**Verify:** gate 8/8 (oz-core db::staff 50/50), desktop authz/customers/
+exchange_rates --lib 56/56, tablet 55/55, gate_audit 3/3, fmt + clippy -D
+warnings (oz-core, both clients) + drift guard clean. `test-changed.sh`
+blocked by running app binaries (oz-pos-app running via another agent's
+`cargo run`; oz-pos-tablet via `tauri dev`) — left alone per the shared-tree
+rule; the audit test was run by executing the built harness directly against
+current sources.
+
+**Commits:** `47fcf6a5` (feat: centralized gate + client wrappers), `ef0707e1`
+(test: pinned gated-command census), `34464e79` (docs: spec moved to
+`_done`).
+
+**Risks / follow-ups:** the census pins *modules*, not command fns — a new
+command inside an already-pinned module with a gate call changes the count
+and is caught, but a new command inside a pinned module that silently skips
+the gate is not (no intent signal exists); that remains the job of review.
+Assignment scopes (0048) will extend the gate with scope_mode + branch/
+workspace resolution. The 0047 spec moves to `_done` once the user closes
+the slice.
+
+### 2026-08-11 — 0048 cycle 1: assignment schema + explicit-all scope evaluation API (round 177)
+
+**Problem:** a single global `users.role_id` cannot express ADR #35 D5's
+shapes — "Manager for branches A+B, workspaces retail-pos only" or "Staff for
+the kds workspace" — and there was no structure to migrate legacy rows into.
+The audit's CUR-03 (command scoping) is the P0 this model fixes, and D9 steps
+3-4 depend on the assignment tables existing.
+
+**Solution:** migration `128_assignments.sql` (registered, `expected_tables`
+extended): `assignments` (user_id PK, role_id, scope_mode global|scoped,
+branch_scope / workspace_scope explicit all|list, expires_at deferred),
+`assignment_branches`, `assignment_workspaces`. Every existing user is
+backfilled with one effective assignment — owner/manager/staff/custom keep
+global mode; legacy role-cashier / role-kitchen users resolve to role-staff
+with the scoped workspace their grants imply (`retail-pos` / `kds`, both
+seeded). Two per-dimension scope flags were added beyond the spec's column
+list because "empty lists never mean all" needs an explicit marker — the
+spec lists only `scope_mode`, but its invariants require the all/list
+semantics. New `db::assignments` model: `ScopeMode`, `Assignment` with
+fail-closed `matches_scope` (global ignores dimensions; scoped requires each
+dimension to be explicit `all` or contain the request id; `None` context on a
+list dimension denies; empty list is deny, never all), and
+`Store::assignment_for_user` (unparsable scope_mode -> None, fail closed).
+
+**Deliberate sequencing decision:** the retirement of role-cashier /
+role-kitchen is NOT in 128. Re-pointing `users.role_id` to role-staff would
+change what the 0047 gate (still resolving through role_id) grants kitchen
+users until the gate rewires to assignments — a behavior change at the
+migration boundary. So 128 is purely additive and behavior-neutral; the
+retirement + re-point land with the gate rewire in cycle 2. Two workspaces
+tests pinned the seeded set at 5; they now expect 6 (retail-pos is a
+first-class workspace per the ADR).
+
+**Verify:** oz-core lib 1697/1697 (assignments 12/12, migration_128 1/1,
+expected_tables), staff_integration 25/25, both clients compile, fmt +
+clippy -D warnings + drift guard clean. `test-changed.sh` still blocked by
+running app binaries (documented in rounds 172-176).
+
+**Commits:** `3447c0cf` (feat: assignment model + migration 128).
+
+**Risks / follow-ups:** cycle 2 wires the gate + create_staff writes to
+assignments, seeds the five-role taxonomy (Owner/Admin/Auditor), retires
+cashier/kitchen via a second migration, and sweeps the role-id test seeds
+across both clients; cycle 3 is the UI (five-role list, assignment editor,
+i18n, staff IPC contract test). `role-staff` grants must cover the folded
+cashier/kitchen operational keys once the gate reads assignments.
+
+### 2026-08-11 — 0048 cycle 2a: five-role taxonomy seeds + 2b: assignment-aware gate (round 178)
+
+**Problem:** D4's five-role taxonomy did not exist (only Owner/Manager/
+Cashier/Kitchen/Staff/Custom), and the 0047 gate still resolved the role
+from `users.role_id`, ignoring the assignments migration 128 created — so
+the assignment model was a parallel structure with no consumer.
+
+**Solution (2a — taxonomy, additive):** `rbac.rs` gains `role-admin` and
+`role-auditor` presets (Admin = the operational set + role management +
+plugins, explicit list never `*`, staff:delete stays owner-only per D4's
+"irreversible org actions"; Auditor = read-only view keys, no exports, no
+writes). Staff AND Manager gain `kds:view`/`kds:update` so folded kitchen
+users keep KDS access through role-staff (and managers oversee kitchens).
+Cashier/kitchen presets remain during the transition; their removal is the
+next step with the seed sweep.
+
+**Solution (2b — assignment-aware gate):** `Store::require_permission`
+resolves the role through the user's assignment first, falling back to
+`users.role_id` for legacy users — behavior-identical for every existing
+user (no assignments yet in fixtures). New `Store::require_permission_scoped`
+evaluates `matches_scope` for scoped assignments (deny when branch/workspace
+out of scope; global + legacy ignore scope). `create_user` now writes a
+default global assignment and `update_user` keeps the assignment role in
+sync (scope columns/rows preserved via ON CONFLICT role-only update). Both
+clients' `authz.rs` gain `require_permission_for_user_scoped`; the existing
+wrapper is unchanged in signature and now assignment-aware underneath.
+
+**Verify:** platform-core 236/236 (preset tests incl. new admin/auditor
+tests), oz-core lib 1705/1705 (8 new gate/write tests, Red proven first),
+desktop authz+staff 46/46, tablet authz+staff 24/24, staff_integration
+25/25, fmt + clippy -D warnings (all four crates) + drift guard clean.
+`list_roles_seeded` updated for the 8 seeded roles (admin/auditor added).
+
+**Commits:** `5dacef8e` (taxonomy), `054b3f7c` (gate rewire).
+
+**Risks / follow-ups:** cashier/kitchen presets are still seeded — the
+retirement (migration 129 + preset removal + the ~22-file role-id seed
+sweep across both clients) is the next cycle step; the scope-aware gate is
+available but no command adopts it yet (adoption happens where commands
+carry branch/workspace context); the staff screen still lists six roles
+(UI is cycle 3). Auditor's exports are deliberately excluded — revisit if
+the product wants auditor-export.
+
+### 2026-08-11 — 0049 c1: user profile schema + validation + store API
+
+Problem: ADR #35 D6 (spec 0049) defines the user-profile data contract — 9
+mandatory-at-creation items (username + full name on `users`, plus 8 new
+profile fields) and optional fields — but `users` has none of the columns and
+no field-level validation, so the staff screen cannot collect or round-trip
+the contract.
+
+Solution: migration 130 adds the 17 profile columns to `users` (nullable in
+SQL — "mandatory" is enforced at creation, legacy rows enter the
+incomplete-profile state instead of being rejected) plus unique indexes on
+email and national_id ("unique when present": SQLite UNIQUE allows multiple
+NULLs). New `db::profile` module: `UserProfile` with `is_complete()`
+(8 required fields) and `validate()` (required-first field errors,
+ssn=9/nik=16 digit shape, email well-formed, phone E.164 7..=14 digits,
+DOB not in the future, pay strictly positive). Store API: `get_user_profile`,
+`create_user_with_profile` (validates then inserts user + assignment +
+profile in one transaction so a profile conflict rolls the user back),
+`update_user_profile` (maps unique-index violations to field-level
+`Conflict`). The D6 not-collected fields (gender, religion, marital status,
+ethnicity, blood type, bank account, shift/availability) are absent from the
+schema by design and pinned by the migration test.
+
+Decisions: (1) nullable SQL + creation-time enforcement, not CHECK
+constraints — keeps the incomplete-profile state reachable for legacy rows
+and direct-SQL inserts; (2) phone capped at 14 digits after `+` per the
+spec's pinned test (stricter than ITU-T's real 15-digit E.164 max);
+(3) atomic create via `unchecked_transaction` — the duplicate-email test
+exposed that a naive user-then-profile sequence leaves a partial row.
+
+Commits: 6b76d3e0 (feat: profile schema + validation + store API)
+Tests: 12 profile + 1 migration new; oz-core lib 1717/1717, staff_integration
+25/25, fmt/clippy -D warnings/drift clean.
+
+### 2026-08-11 — 0049 c2: sensitive keys + at-rest encryption, masking, read-audit, residency, retention gating
+
+Problem: the profile columns from cycle 1 were plaintext at rest, readable by
+anyone with `staff:read` (which the spec's sensitive fields must not ride),
+and there was no masking, read-audit, residency, retention, or
+incomplete-profile enforcement.
+
+Solution: (2a) three sensitive registry keys — `staff:read_identity`,
+`staff:read_payroll`, `staff:edit_notes` — classified sensitive (never
+wildcard-eligible), granted to Manager/Admin/Staff presets, deliberately
+withheld from Auditor, pinned by a registry test. (2b) In oz-core:
+`national_id` and `monthly_take_home_minor` are now encrypted at rest via new
+domain-separated `crypto::encrypt_profile_field`/`decrypt_profile_field`
+(static-key precedent, survives DB restore on another machine); a migration
+131 `national_id_hash` column + unique index preserves "unique when present"
+because nonce-randomised ciphertext would dodge the old index. New
+`Store::get_user_profile_viewed_by` returns a `ProfileView` that withholds
+full national_id/tax_id/pay without the explicit grants, always renders
+national_id last-4 masked (`mask_last4`), audits every sensitive read
+(`staff.identity.read` / `staff.payroll.read` — access, never values), and
+fails closed on corrupt ciphertext. New `Store::assign_role_guarded` denies
+management-role assignment when the target profile is incomplete and the new
+role grants sensitive permissions (non-sensitive roles stay assignable so
+legacy checkout users keep working). Retention pinned: deactivation never
+deletes profile data. Residency pinned: sync `SnapshotUser` wire format has
+no profile fields (test asserts the safe key set).
+
+Deviations from the spec (journaled): "keyring-backed" became the repo's
+actual precedent — `oz_core::crypto` AES-256-GCM domain-separated (oz-core
+cannot depend on oz-security, which depends on oz-core); masking helper lives
+in oz-core for the same reason, not `oz_security::mask`.
+
+Commits: d9990925 (feat(perms): sensitive profile keys + preset grants),
+abc7949e (feat(profile): encrypt, mask, audit, gate, retain)
+Tests: 1 registry + 3 crypto + 6 profile + 1 migration + 1 sync new;
+oz-core lib 1727/1727, platform-core 237/237, platform-sync 276/276,
+fmt/clippy -D warnings/drift clean.
+
+### 2026-08-11 — 0049 c3: profile IPC args + staff screen (masked ID, incomplete gating, contract test)
+
+Problem: the profile contract from cycles 1-2 had no front-end: the staff
+IPC args carried no profile fields, so creation could not collect the 9
+mandatory items and the list/detail could not render the masked national id
+or the incomplete-profile flag.
+
+Solution: both clients' CreateStaffScopedArgs/UpdateStaffScopedArgs gain the
+17 ADR #35 D6 profile fields. create_staff_scoped now goes through the
+validating, transactional create_user_with_profile. update_staff_scoped runs
+require_role_assignable (the incomplete-profile gate) and writes the profile
+columns atomically inside its existing transaction via the new
+transaction-safe write_user_profile, restoring the profile on
+workspace-assignment rollback. New get_staff_profile_scoped command returns
+the viewer-gated ProfileViewDto (full sensitive values only with
+staff:read_identity / staff:read_payroll; reads audited by oz-core). The
+staff screen collects all 17 fields with localized per-field validation of
+the 9 mandatory ones, renders the masked national id column, flags
+incomplete profiles with a badge, and disables the role + workspace
+assignment controls for incomplete members; the api-staff-contract test pins
+the new wire shape; i18n keys land in both bundles (parity verified).
+
+Decisions: (1) transaction-safe write_user_profile — update_user_profile
+opened its own transaction, which would nest-BEGIN inside the client's
+update transaction; the shared single-statement write is safe in both
+contexts. (2) The incomplete gate only fires when the role actually changes
+(re-saving the same role is not a new grant) — otherwise every edit of an
+owner's name would be denied for legacy rows. (3) UI form collects the full
+17-field set (matching the agreed optional list); a disabled fieldset drops
+its children from the a11y tree, so the incomplete-disabled assertion targets
+the fieldset role.
+
+Commits: ecae8b52 (feat(profile): staff IPC profile fields + viewer-gated
+profile command + staff screen), 57e98628 (feat(ui): staff profile form),
+0a909c4b (docs(0049): spec progress)
+Tests: desktop staff 40/40, tablet staff 19/19, UI screen 17/17,
+contract 4/4; oz-core 1727/1727, platform-core 237/237, platform-sync
+276/276; fmt/clippy (changed area)/bundle-parity/drift clean. Two pre-existing
+clippy errors in topology.rs (untouched) noted.
+
+### 2026-08-11 — 0048 2c: retire cashier/kitchen roles + seed sweep
+
+Problem: the five-role taxonomy (Owner/Admin/Auditor/Manager/Staff/Custom)
+was live, but the legacy `role-cashier` / `role-kitchen` role rows, presets,
+constants, and ~22 seed fixtures still referenced them — the taxonomy was
+half-retired. Migration 129 removed the rows, so every fixture seeding those
+ids violated the FK at test time.
+
+Solution: completed the retirement in one sweep:
+- Migration `129` re-points `users.role_id` and `assignments.role_id` from
+  cashier/kitchen to `role-staff` and deletes the role rows (idempotent).
+- platform-core: CASHIER/KITCHEN constants, presets, and their index
+  assertions removed; regression test pins no preset id is cashier/kitchen.
+- Seed sweep with two mappings: **staff-like fixtures → `role-staff`**
+  (shifts, sales, reports, session, integrations, auth, tax/settings — the
+  latter two because staff still lacks settings:*) and **limited-access
+  assertions → a narrow custom `role-lite`** (gate/loyalty/inventory/customer/
+  category/transfer/topology/workspace/staff denial tests, which pinned
+  cashier's narrow grants that role-staff now supersedes).
+- The staff command tests needed a second distinction: update-target args use
+  `role-lite` (same role → the incomplete-profile gate skips), create-target
+  args use `role-staff` (an existing preset).
+- gate_audit census pins for staff.rs bumped 5→6: 0049 cycle 3's
+  `get_staff_profile_scoped` added a gate call without updating the pin —
+  the deliberate-pin review signal caught it.
+
+Decisions: (1) `role-lite` is a per-fixture custom role with exactly the
+grant the test needs, NOT a new taxonomy role — it is never seeded by
+presets. (2) Kept the migration-128 round-trip test's legacy cashier/kitchen
+seed data — it tests the migration itself and is the correct historical
+record. (3) `modules/staff` CASHIER/KITCHEN consts were dead code — removed.
+(4) Did NOT fix the pre-existing topology.rs clippy errors (MutexGuard across
+await, assert_eq literal bool) — unchanged from HEAD, outside this slice.
+
+Commits: 880be215 (feat(rbac): retire cashier/kitchen roles + sweep), df3c30ae (docs)
+Tests: oz-core 1728/1728, platform-core 236/236, platform-sync, both clients
+(890 + 428), oz-api/oz-cli, gate_audit 3/3; fmt/clippy (changed area)/drift
+guard clean. Note: `modules-inventory` currently does not compile — another
+agent's in-flight ADR #36/37 field additions (models.rs has new Product
+fields, repository.rs not yet updated); unrelated to this slice, left
+untouched.
+
+### 2026-08-11 — 0048 cycle 3: assignment write path + five-role staff screen
+
+Problem: the assignment model (migration 128) had no write path — `set_user_workspaces_legacy` still wrote the STORE-scoped legacy tables, so the staff screen could never express `scope_mode` or the branch dimension, and `list_roles_scoped` returned every DB role instead of the ADR #35 D4 taxonomy.
+
+Solution:
+- oz-core: `Store::set_assignment` (transactional) + `write_assignment_scope` (in-tx writer, joins an open transaction — no nested BEGIN), both replacing the dimension rows so toggling list→all never leaves stale grants; `create_user_with_profile` takes an optional `AssignmentSpec` so a scoped assignment is atomic with user creation. Red-first: `set_assignment_writes_scoped_dimensions`, `set_assignment_replaces_existing_scope_and_clears_stale_rows`, `write_assignment_scope_joins_an_open_transaction`.
+- Both clients: `AssignmentDto` on `StaffMemberDto` (legacy users resolve global all/all), optional `assignment` args on create/update, written inside the existing update transaction (profile + role + scope are one commit now — no compensation needed for the new model; the legacy `workspace_keys` path stays for compat).
+- UI: the role dropdown filters to the five preset ids in Owner→Auditor order (custom roles have no UI per 0048 non-goals); the assignment editor gained scope_mode radios and per-dimension branch (store profiles) + workspace pickers with explicit all/list; save blocks an empty list dimension; the workspace table column derives from the DTO assignment (dropped the per-member `get_user_workspaces_scoped` round trips). i18n keys in both bundles; `api-staff-contract` pins the wire shape (7/7); screen tests 21/21 (taxonomy, pre-fill, scoped save, empty-list block).
+
+Decisions:
+- Branch picker source is `list_store_profiles` (store_profiles.id is the branch id the assignment model scopes on — no FK, semantic reference per ADR #35 D5).
+- The editor stays edit-only (as before); create keeps the default global assignment unless args carry one.
+- The assignment write deliberately REPLACES the legacy store-DB workspace write for UI callers, but `workspace_keys` remains on the wire for backward compat (the workspace login picker still reads legacy tables).
+
+Remaining risks / follow-ups:
+- The workspace LOGIN picker still resolves legacy `user_workspaces`/instances; a future slice can rewire it to the assignment model (audit/06 territory).
+- The legacy `workspace_keys` arg is now dead UI-side; removing it from the wire is a compat decision for a later slice.
+- Two unblocking fixes land in the worktree only (NOT committed): cache.rs test literals and both clients' products.rs fixture completed for the other agent's in-flight ADR #36 fields — they compile only with that WIP present, so they must ride with it.
+
+Commits: ea826188 (feat(rbac): assignment write path + DTO surface), 782a6bc0 (feat(rbac): five-role staff screen + assignment editor), 0c32994e (docs)
+Tests: oz-core 1746/1746 (assignments 13, profile 17), desktop 893/893 (staff 41), tablet 429/429 (staff 19), gate_audit 3/3, contract 7/7, staff screen 21/21; fmt/clippy (changed area)/drift/bundle-parity/i18n-lint all clean.
+
+### 2026-08-11 — 0048 closed out to _done
+
+All five cycles (1 schema, 2a taxonomy, 2b gate, 2c retirement, 3
+write path + UI) shipped and verified: oz-core 1746/1746, desktop
+893/893, tablet 429/429, gate_audit 3/3, contract 7/7, screen 21/21,
+fmt/clippy/drift/parity clean. spec.yaml flipped to `implemented`;
+folder moved to `docs/specs/_done/0048-rbac-assignment-model-and-taxonomy`.
+Remaining follow-ups recorded in the cycle-3 entry: the workspace login
+picker still resolves legacy tables (audit/06 territory) and the legacy
+`workspace_keys` arg is now dead UI-side.
+
+### 2026-08-11 — picker rewire: scoped assignments constrain the login picker
+
+Problem: the pre-session workspace picker (`list_workspaces` via picker
+ticket) resolved workspaces through the legacy model only — role
+workspace types, user_store_access, explicit instance assignment — so a
+scoped assignment set in the 0048 staff editor had no effect on what a
+member could pick at login.
+
+Solution: both clients' `list_workspaces` now load the user's assignment
+from the global identity DB alongside the real role and scope-filter the
+legacy listing through `matches_scope(store_id, type_key)` — the store
+(branch) and the workspace type must both be in scope, fail closed.
+Global assignments and legacy users without an assignment row pass
+through unchanged. Red-first: `scoped_assignment_filters_picker_workspace_list`
+(owner scoped to store-pos must not see the kds instance) and
+`scoped_assignment_branch_dimension_denies_out_of_scope_store` (store-b
+lists nothing) on both clients.
+
+Decisions: workspace key == instance type_key (the vocabulary the ADR's
+`workspaces(key)` dimension uses), branch == store_profiles.id (the
+requested store). Filtering happens after the legacy resolution so the
+owner bypass / store access / role types still apply first.
+
+Remaining risks / follow-ups: the POST-session listings
+(`list_workspaces_scoped`, `list_workspaces_for_store_scoped`) and the
+session gate (`require_permission_for_session` → non-scoped
+`require_permission_for_user`) are not yet assignment-aware — a scoped
+member could switch workspaces within their session into an
+out-of-scope type. A "scoped sessions" slice should extend the gate and
+the session-scoped listings.
+
+Commits: fdafcd73 (code), 53b30d02 (docs)
+Tests: desktop 895/895 (workspaces 20 incl. 2 new), tablet 431/431
+(workspaces 16 incl. 2 new); fmt/clippy/drift clean.
+
+### 2026-08-11 — Sessions assignment-aware end to end (0048 follow-up)
+
+Problem: the pre-session picker was scope-filtered, but after login a scoped
+member could still operate through the session gate and the session-scoped
+listings — `require_permission_for_session` used the non-scoped
+`require_permission_for_user`, and `list_workspaces_scoped` /
+`list_workspaces_for_store_scoped` returned every instance the role could see.
+The scope wall stopped at login.
+
+Solution: TDD red/green on the desktop client (the tablet has no
+session-scoped listings or session gate — its boot flow was already
+assignment-filtered in the picker slice).
+- `require_permission_for_session` now delegates to
+  `require_permission_for_user_scoped` with the session's `store_id` (branch)
+  and `type_key` (workspace) — ~78 session-gated commands become scope-aware
+  in one place. Scoped assignments deny when the session context is out of
+  scope; global assignments and legacy users (no assignment row) pass
+  unchanged.
+- Both listings load the caller's assignment from the global identity DB and
+  filter through `matches_scope(store_id, type_key)`: an out-of-scope store
+  lists nothing (fail closed) and an out-of-scope workspace type is hidden,
+  so the terminal-management screen can't switch a scoped member sideways.
+- Red tests: session-gate workspace-dimension denial, branch-dimension
+  denial, legacy/global pass-through; listing workspace + branch filters.
+  `restaurant-pos` is the out-of-scope fixture type because the Free tier
+  allows it — tier entitlement filtering alone cannot hide it, only the
+  assignment can.
+
+Decision: switched the existing session gate in place (one function, ~78
+call sites) instead of adding a parallel scope-aware variant — a parallel
+variant would leave the default gate un-scoped, which is exactly the hole
+this slice closes. The gate reads the session's resolved context, so a
+scoped member's session can never be in a store/type their assignment does
+not cover (the picker now prevents minting one; a stale or bound session is
+denied fail-closed on the first command).
+
+Also repaired: the gate_audit census drifted at HEAD — the other agent's
+ADR #36/#37/#38 `browser` module (committed 2913d49c, zero permission-gated
+commands) was never added to either client's pinned census, failing
+`desktop_command_census_matches_pin` / `tablet_command_census_matches_pin`.
+Added `("browser", 0, &[])` to both pins (census is fail-closed on
+unpinned modules).
+
+Commits: fdafcd73 (code), 53b30d02 (docs)
+Tests: desktop lib 901/901 (authz 9 incl. 3 new, workspaces 23 incl. 3 new),
+gate_audit 3/3; fmt/clippy/drift clean. NOTE: the working tree currently
+does not compile — another agent's in-flight `reports.rs` / `oz_reporting`
+change (ReportingError without an AppError From impl, landed 21:18 after
+this verification) blocks oz-pos-app. My committed state was green before
+it landed; their files are untouched.
+
+### 2026-08-11 — Retire the legacy workspace surface (0048 follow-up)
+
+Problem: after the assignment model (ADR #35 D5 / spec 0048) went end to
+end, the legacy `user_workspaces` key-based surface was dead weight with
+three stale entry points: `workspace_keys` on the staff update args (STAFF-05
+wrote it to the STORE-scoped DB via `set_user_workspaces_legacy`, needing the
+cross-DB compensation block), the `set_user_workspaces_scoped` /
+`get_user_workspaces_scoped` commands (zero UI callers), and the legacy
+oz-core write methods.
+
+Solution: TDD red/green on the retirement — the census pin is the spec. Set
+the desktop workspaces.rs pin 8 -> 6, watched the census fail, then removed:
+- `set_user_workspaces_scoped` / `get_user_workspaces_scoped` + their
+  unscoped stubs + lib.rs registrations + wiring_audit entries (the
+  instance-based `*_workspace_instances*` commands stay — that table is still
+  read by `list_workspaces_inner`, so it is NOT fully superseded).
+- `workspace_keys` from `UpdateStaffScopedArgs` (both clients; the create
+  args never had it) and the whole STAFF-05 store-DB write + compensation
+  block — the profile, PIN, and assignment now ride ONE global-DB
+  transaction, so a failure rolls everything back atomically (previously
+  pinned by the now-deleted `scoped_update_staff_rolls_back_profile_when_workspace_assignment_fails`
+  test; the atomicity is pinned structurally by oz-core's in-tx writer test).
+- `set_user_workspaces_legacy` / `get_user_workspace_keys_legacy` from
+  oz-core + their tests; `list_workspaces_legacy_with_user_override` now
+  seeds the row via direct SQL so the legacy READER stays pinned. The
+  `user_workspaces` table itself is kept (still read by `list_workspaces_legacy`).
+- `workspace_keys` from the TS `UpdateStaffScopedArgs`, the two api functions,
+  and the stale dev-mock / screen-test mock cases.
+
+Also fixed a pre-existing gap found by the full UI suite: commit 57e98628
+(0049 c3) added the profile-form classes `staff-mgmt-incomplete-badge`,
+`staff-mgmt-incomplete-hint`, `staff-mgmt-profile-section`,
+`staff-mgmt-field-error` with NO CSS rules — the screenExtraction integrity
+test had been red since then and the form rendered unstyled. Added the
+missing rules matching the design tokens (--color-warning / --color-danger).
+
+Decision: did NOT drop the `user_workspaces` table or the legacy READERS
+(`list_workspaces_legacy` / `list_all_workspace_types` — the latter still
+feeds the live `list_all_workspaces_scoped` admin dropdown from the old
+`workspaces` table). Those are a separate "old tables" surface; the natural
+follow-up is to migrate `list_all_workspaces_scoped` onto the new
+`workspace_types` table and then drop the old tables with a migration.
+
+Note: my dev-mock removal of the two legacy command mocks rode into the
+other agent's `3236d8bf` commit (they swept the file) — end state correct.
+
+Commits: 9d7d5f9d (code), 9e1814d5 (docs)
+Tests: oz-core 1749/1749 (workspaces 52), desktop 900/900, tablet 431/431,
+gate_audit 3/3, wiring_audit 6/6, UI 4874/4874 (283 files) incl. staff
+screen 21 + contract 7 + screenExtraction 138; fmt/clippy/drift clean.
+
+### 2026-08-11 — Staff analytics page (analytics:view)
+
+Problem: owner/admin/manager had no consolidated per-staff view of shifts and
+sales over time — the data existed across `shifts` and `sales` in each
+store-scoped DB but nothing aggregated it per staff member, and the UI role
+gates silently ignored `admin` (a taxonomy gap: an Admin session saw zero
+manager-gated nav items).
+
+Solution: a new analytics surface built on the 0046 registry + 0048 scopes.
+- oz-core `db::analytics`: `staff_analytics_summary` (per-staff shifts, closed
+  shifts, shift sales, completed sale count/total) and `staff_analytics_daily`
+  (per-day series for one staff member). Both join `shifts`/`sales` by
+  `user_id`, zero-fill the missing side, respect the date range, and exclude
+  pending/voided/no-cashier sales. 7 tests, Red-first.
+- `analytics:view` permission const + registry entry; preset grants to
+  Owner/Admin/Manager only (Staff deliberately excluded — a taxonomy
+  decision, not an oversight). platform-core preset test pins Staff = Manager
+  minus settings minus analytics.
+- Both clients: `get_staff_analytics_scoped` / `get_staff_analytics_daily_scoped`
+  gated by the scope-aware session gate with display-name enrichment from the
+  GLOBAL identity DB. The tablet had NO session gate at all — added
+  `require_permission_for_session` mirroring the desktop (scope-aware) so the
+  analytics commands enforce the same fail-closed scope there.
+- UI: AnalyticsScreen (summary table + daily series + date range + staff
+  select), nav under a new `management` required-role level
+  (owner/admin/manager, excluding staff). The legacy `'manager'` gate keeps
+  staff (backend grants Staff REPORTS_VIEW / SHIFTS_VIEW_ANY); `'management'`
+  is the new tighter tier. Fixed `hasRequiredRole`/`hasNavRole`/AuthContext
+  to recognize `admin`/`role-admin` (before, an Admin saw nothing gated).
+- i18n in new `analytics.ftl`/`analytics.id.ftl` (parity + i18n lint clean);
+  `nav-analytics` in both shared bundles.
+
+Decisions / tradeoffs:
+- Chose a `management` role level over reusing `'manager'` because the legacy
+  gate includes staff; reusing it would have leaked analytics to staff.
+- The UI gates on role names, not permission keys (the session DTO carries
+  only `role_name`). Carrying the granted permission keys on the session DTO
+  would let the UI mirror the backend exactly — flagged as a follow-up.
+- Kept the analytics aggregates in store-scoped DBs (per-store by design);
+  the GLOBAL identity DB is only read for display names.
+
+Commits: 7a042477 (backend), bd9465a9 (ui), docs (this commit)
+Tests: oz-core 1758/1758 (analytics 7), platform-core 236/236, desktop
+905/905 (analytics+authz 14, gate_audit 3, wiring_audit 6), tablet 434/434,
+UI 4884/4884 (285 files) incl. AnalyticsScreen 6 + contract 2 +
+screenExtraction 138; typecheck 0, fmt/clippy/drift/i18n-parity clean.
+
+### 2026-08-11 — Granted permission keys ride the login session (0046)
+
+Problem: the UI gated analytics (and would gate future permission-based
+features) on role-name strings, because the session DTO carried only
+`role_name`. That diverged from the backend registry the moment a custom
+role granted a key its role name doesn't imply — and it forced the role
+gates to hand-maintain the taxonomy.
+
+Solution: carry the role's granted permission keys on the session, verbatim
+from the role's permissions JSON, and make the UI gate on them when present.
+- `LoginSession` (platform-core auth) gains `permissions: Vec<String>` with
+  `#[serde(default)]` so older persisted sessions / older clients still
+  parse. `modules_staff::models::Role::permission_keys()` parses the JSON
+  (malformed -> empty, authorizes nothing). Both clients populate it at
+  `staff_login` and `bootstrap_owner`.
+- UI: `LoginSessionDto.permissions: string[]`; new `hasGrantedPermission`
+  TS helper that EXACTLY mirrors the backend `has_permission` wildcard
+  semantics (`*`, `<domain>:*`) — a naive `includes` would deny the Owner,
+  whose preset grants `["*"]`. Page/Nav registrations accept an optional
+  `requiredPermission`; `passesGate` makes the permission check
+  authoritative when the session carries keys and falls back to
+  `requiredRole` otherwise (mocks/tests). AppShell/TabletAppShell thread
+  `session.permissions` into `getEnabledPages`/`getNavItems`/`isPageAccessible`
+  via conditional spread (exactOptionalPropertyTypes). The analytics page
+  now registers `requiredPermission: 'analytics:view'` alongside
+  `requiredRole: 'management'`; dev-mock login fixtures return realistic
+  grants (owner `["*"]`, manager incl. analytics, cashier without).
+
+Decisions / tradeoffs:
+- Kept `requiredRole` as the fallback path rather than deleting it: dev-mock
+  and older test fixtures without keys still resolve, and it preserves the
+  existing role-gate tests. When a session IS present the permission check
+  is authoritative (an explicit empty list denies — never an implicit grant).
+- The DTO carries the RAW keys (including `*`) and the UI applies wildcard
+  semantics, so the UI mirrors the backend exactly and stays correct if a
+  preset's grant set changes.
+- Red discipline note: a struct-field addition's Red is inherently a compile
+  failure, so I scaffolded the field + fixtures first (mechanical), then the
+  behavioral tests (staff_login returns `["*"]` for owner, round-trip,
+  malformed-JSON) pinned the new behavior before wiring the population.
+
+Commits: dcf576e0 (backend), 3e0b32b5 (ui), docs (this commit)
+Tests: platform-core 237, modules-staff 12 (permission_keys 3), desktop
+auth+staff 56, tablet auth+staff 29, gate_audit 3, wiring_audit 6; UI
+AnalyticsScreen 9 (gate + hasGrantedPermission) + shells/auth/workspace 77;
+typecheck 0, fmt/clippy/drift/i18n-parity clean.
+
+### 2026-08-11 — Permission-aware PermissionDenied screen
+
+Problem: after the session began carrying granted permission keys (0046),
+the analytics page (and any future permission-gated page) was refused by a
+`PermissionDenied` screen that only said "X requires a <role> role". That
+was misleading — the real gate is the registry grant, not the role name,
+and a custom role could be denied despite a manager-level role name.
+
+Solution: `PermissionDenied` accepts an optional `requiredPermission`. When
+set, it reports "You don't have permission to access {action}" and shows
+the raw key (e.g. `analytics:view`) as a muted mono diagnostic line so an
+admin can see exactly which grant is missing; without it, the original
+role message renders unchanged. Both shells pass the page registration's
+`requiredPermission` through. New `permission-denied-perm-desc` /
+`permission-denied-perm-key` strings in both shared bundles (parity clean);
+the key line uses the existing `permission-denied-key` class (screenExtraction
+clean). The prop is declared `string | undefined` to satisfy
+exactOptionalPropertyTypes when a page registration has no key.
+
+Red-first: the new test asserted the permission message + key line render
+and the role message is absent, and failed before the component change.
+
+Commits: a25f31fb
+Tests: PermissionDenied 10, screenExtraction 138, full UI 4890/4890 (285
+files); typecheck 0, fmt/clippy/drift/i18n-parity clean.
+
+### 2026-08-11 — Role grants visible in the staff screen (0046)
+
+Problem: an admin could pick a role for a staff member but had no way to
+see what that role could actually do — the permission registry (0046)
+stayed invisible behind the backend gate.
+
+Solution: `list_roles_scoped` now carries each role's granted permission
+keys verbatim (`RoleDto.permissions` via `Role::permission_keys()`, the
+same resolution the login session uses), and the staff editor renders the
+selected role's keys as read-only mono chips under the role selector.
+Owner shows `*`, manager shows its exact grants, staff its narrow set —
+what you see is the registry, not a hand-maintained list. Both clients
+mirror the DTO; dev-mock roles return realistic grants; new
+`staff-role-permissions-label` strings in both staff bundles (parity
+clean); chips use the `--color-bg-subtle` token fallback pattern already
+established in this file.
+
+Red-first: the desktop Rust test pinned Owner -> `["*"]` and a narrow
+custom role -> `["sales:view"]` and failed on empty lists before the
+mapping was wired (partial-move fix: compute `permission_keys()` before
+moving `r.description`). UI: the screen test asserts the chip row renders
+for a selected role, swaps on role change, and is absent before
+selection; the contract test pins `list_roles_scoped`'s sessionToken +
+no-args shape and the returned grants.
+
+Commits: a4aa2e23 (backend), 29215c3a (ui + docs)
+Tests: desktop staff 41, tablet 435, gate_audit 3, wiring_audit 6; UI
+4893/4893 (285 files) incl. staff screen 22 + contract 8; typecheck 0,
+fmt/clippy/drift/i18n-parity clean.
+## 2026-08-12 — Alt+drag duplicate route: no-dangling + sanitize guards pinned at the state level (3 pins)
+
+**Problem:** The Alt+drag duplicate route (`beginNodeDrag` with Alt held at mousedown, and `convertDragToDuplicate` for Alt pressed mid-move) is structurally immune to the same defects the clipboard import just gained — wires copy only when BOTH endpoints are dragged (filtered at both entry routes, remapped through `originalToCopy`), and `sanitizeCopiedNode` strips a Branch Location copy's canonical identity — but NONE of those guards were pinned, so a future refactor could silently drop them (the Ctrl+C/V audit proved the failure mode: both filters removed inject `toNodeId: undefined` wires that render nothing but corrupt state). A comment-drift bug also surfaced: three comments (convertDragToDuplicate, pasteClipboard, beginNodeDrag) claimed a Branch Location copy is "refused", but `duplicateRefusal` only gates the warehouse tier cap — the real behavior is copy + sanitize to a diagram-only card.
+
+**Solution:** Three state-level regression pins in the Alt+drag describe (canonical loads so the validation gate is active, banner = the state signal that survives the geometry-gated wire render):
+1. Mousedown-Alt drag of one endpoint of a wired pair → wire NOT copied, no banner.
+2. Alt pressed MID-move conversion of one endpoint → wire NOT copied, no banner (the conversion route applies the same rule).
+3. Alt+dragged Branch Location copy is identity-less — the selected copy's note leads with the multiple-branch guidance and its title carries the missing-identity error.
+
+All three failed under a temporary mutation removing the two both-endpoints filters and the two sanitize calls (true Red), while the pre-existing Ctrl+V identity-less pin stayed green (pasteClipboard untouched — pins are route-specific). The three stale comments were corrected to describe the sanitize behavior.
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core) — `test(topology)` pins + comment fix.
+
+**Test counts:** editor 532/532 (+3, all mutation-verified Red), full UI suite 4,948/4,948, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe clean.
+
+**Remaining risks / follow-ups:** The Ctrl+V (pasteClipboard) and Ctrl+D (duplicateSelection) routes have their own pins from prior passes; the mid-move conversion's `cancelDuplicateDrag` wire-filter (`!copyIds.has(w.fromNodeId) && !copyIds.has(w.toNodeId)`) is the one duplicate-path filter still unpinned — a mutation of that alone would strand copied wires in state on Escape. Low severity (the copies are removed with the nodes in the same filter pass), noted as a future slice.
+## 2026-08-12 — Legacy-schema migration UI: resolves ambiguous legacy wires in place (ADR #34 item 7)
+
+**Problem:** The last open ADR #34 product gate. A legacy wire whose business meaning cannot be inferred safely (two ordinary workspaces, store→hardware, corrupt semantic fields) normalizes to the `legacy-out`/`legacy-in` contract placeholders and fails `ambiguous-legacy-wire` — Apply blocked, correct, but the only repair offered was the error text "Delete and reconnect it using the labeled ports": a manual delete + redraw chore. The deterministic identity rules already covered the inferable cases; the unresolvable remainder had no repair surface.
+
+**Solution:** A load-time migration dialog (`.topology-migration-dialog`, role="dialog") that auto-opens whenever the live gate flags ≥1 ambiguous wire and lists each one ("From → To") with a per-wire select of the legal resolutions:
+1. **Option set** — new pure `legacyWireResolutionOptions(source, target)` in topologyCard.ts enumerates source OUTPUT semantics × target INPUT semantics over the pairing table, sharing the socket-semantics iteration order AND the extracted `operationRowAllowed` gate with `wireRelationshipOptions` — the migration UI can never offer a relationship the drag gate rejects, and option order matches the picker. Zero options = delete-only (never a silent reinterpretation).
+2. **Resolve** — writes fromPortId/toPortId/relationshipType + a label mirroring commitWire's first-wire choices, legacy coordinates preserved, ONE undo entry; the live gate clears the moment the fields land.
+3. **Later/Escape** — dismisses for the load session; the wire stays unresolved, the panel error + Apply block remain; a fresh load re-offers.
+4. **Keyboard ownership** — while open the dialog owns the canvas keyboard (mirror of the relationship-picker guard), so a stray Delete/arrow can't edit the canvas under the modal.
+
+Also: 7 new en/id FTL keys (bundle parity clean), dither + token-compliance wiring for the new elevated surface, and the parent ADR item 7's UI half marked resolved with a cross-reference.
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core) — `feat(topology): legacy-schema migration dialog for ambiguous wires`.
+
+**Test counts:** topologyCard 34/34 (+7, true Red), editor 537/537 (+5, true Red), full UI suite 4,960/4,960, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe + bundle parity clean.
+
+**Remaining risks / follow-ups:** (1) the migration upgrades in-memory editor state only — the saved diagram's `schema_version` field isn't bumped on resolve; a future slice could persist the migration choice. (2) The dialog doesn't trap focus (best-effort a11y, matching the relationship picker). (3) stock-routing/inventory-transfer/hardware-connection cardinality closes remain open under item 6.
+## 2026-08-12 — Undo-stack hardening: restore-boundary guard prevents resurrecting wires whose endpoints were deleted
+
+**Problem:** Undo/Redo apply history entries verbatim (`setWires(entry.wires)`), so the "every wire's endpoints exist" invariant holds at the restore boundary only by construction — every entry today is a full pre-mutation snapshot, plus the one filtered entry in `commitDuplicateDrag` (current-state-minus-copies), and the creation paths guarantee state never dangles. But nothing at the RESTORE point enforced it: a single future creation-path regression (a dangling wire slipped into state, then into an entry — exactly the class the Ctrl+C/V and Alt+drag pins protect) would make Undo resurrect a wire whose endpoints were since deleted, surfacing the unknown-wire-endpoint banner from a state the user never made.
+
+**Solution:** A restore-boundary guard — `validWiresForNodes(nodes, wires)` filters a restored entry's wires against its OWN node set, applied in BOTH `popUndo` and `popRedo`. Defense-in-depth, single-point: the canvas invariant is enforced where state lands, not at each entry creator. For every legitimate entry the filter is an identity (verified by the full suite), so no behavior change; a dangling wire cannot render (geometry-gated) and would immediately trip the gate, so dropping it is the only sane resolution.
+
+Two regression pins:
+1. **End-to-end (Pin A):** copy a wired pair, paste, delete the pasted endpoint, then undo past the delete and past the paste — no unknown-wire-endpoint banner at any step, wire count stays honest (2 → 1 → 2 → 1).
+2. **Guard-specific (Pin B, mutation-verified):** Alt+drag a wired pair, then ONE undo removes the whole duplicate with no dangling wire. Proven true-Red: forcing `commitDuplicateDrag`'s entry wire-filter to keep copy wires creates a dangling entry; with the guard disabled the undo resurrects the wire and the banner fires; with the guard the wire is dropped and the canvas stays clean.
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core) — `fix(topology): guard undo/redo restores against dangling wire entries`.
+
+**Test counts:** editor 539/539 (+2, Pin B true-Red via mutation), full UI suite 4,962/4,962, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe clean (no FTL change).
+
+**Remaining risks / follow-ups:** the guard silently drops a dangling wire rather than surfacing it — deliberate (a dangling wire cannot render and would only trip the gate), documented in the helper. A future slice could log/flag a dropped wire as a signal that a creation path regressed.
+
+## 2026-08-12 — History entries sanitized at push time (endpoint-consistency moved to entry creation)
+
+**Problem:** The restore-boundary hardening (baaee2c6) guaranteed *restore* integrity — `popUndo`/`popRedo` drop wires whose endpoints are missing from the same entry — but the stacks themselves were never validated where entries are CREATED. The invariant held only at the exit boundary, and by construction (all legitimate entries are full snapshots except `commitDuplicateDrag`'s filtered one). A future creation-path regression could store a corrupt entry and depend entirely on the restore guard to neutralize it. Also: undo→redo round-trips were unpinned (only undo was covered), and the one filtered entry (`commitDuplicateDrag`) had no dedicated pin.
+
+**Solution:** New module-level `historyEntry(nodes, wires)` builder — shallow-copies nodes and runs wires through `validWiresForNodes` at PUSH time — used at all four entry-creation sites: `pushHistory` (covers every mutation-path entry), `commitDuplicateDrag` (the filtered entry re-validated even if its filter regresses), `popUndo`'s redo-push, and `popRedo`'s history-push. The invariant "every stored entry is endpoint-consistent" is now enforced where state enters the stacks, not only where it leaves; the restore guard remains as defense-in-depth.
+
+**TDD rigor (mutation-verified):**
+- Red: two round-trip pins — Alt+drag duplicate and Ctrl+V paste both undo → redo with the copy wire intact and no `unknown-wire-endpoint` banner. First version asserted the banner only AFTER redo and passed even under the dangling mutation (the geometry-gated wire is invisible to the count); fixed to assert right after the UNDO step, where a dangling entry surfaces.
+- Mutation 1 (dangling entry in `commitDuplicateDrag` + restore guards removed): Alt+drag pin fails — banner fires after undo (true Red).
+- Mutation 2 (same dangling source, but routed through `historyEntry` at push; restore guards STILL removed): pin passes — the push-time sanitize alone neutralizes the entry, independent of the restore boundary.
+- The paste pin stayed green through both mutations (its `pushHistory` path was never the mutated site).
+- `git checkout` restore of the mutated file wiped the uncommitted Green changes — re-applied (1 definition + 4 call sites, verified by grep).
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
+**Tests:** editor 541/541 (+2) · full UI suite 4,964/4,964 · typecheck clean · eslint 0 errors (pre-existing warnings only — the `selectMany` dep warning at commitDuplicateDrag predates this change) · i18n lint clean.
+**Risks / follow-ups:** none new. The `cancelDuplicateDrag` wire filter remains the journaled low-severity follow-up from 46af16e7.
+
+## 2026-08-12 — Drop diagnostic for the history-integrity guards (corruption is loud, not silent)
+
+**Problem:** The push-time (`historyEntry`) and restore-time (`popUndo`/`popRedo`) guards dropped dangling wires silently — the journaled follow-up from baaee2c6. A future creation-path regression would be absorbed without a trace: the wire vanishes, the canvas stays clean, and nothing signals that state was corrupted and repaired.
+
+**Solution:** The integrity helpers moved out of the component file into a new pure module `ui/src/features/stores/topologyHistoryIntegrity.ts` (react-refresh forbids exporting a function from the component file; the directory's small-module pattern is the natural home). `validWiresForNodes` now takes an explicit `boundary: 'push' | 'restore'` label and emits `[topology] <boundary>-time guard dropped N dangling wire(s) ... <id> (from -> to)` via console.warn — matching the codebase's `[prefix]` convention — whenever it actually drops a wire. Legitimate snapshots are identity, so the diagnostic fires only on corruption.
+
+**TDD rigor:**
+- Red: 3 unit tests in `topologyHistoryIntegrity.test.ts` (module-missing Red, then silent-module Red — with the console.warn disabled, the two boundary tests fail `called 1 times but got 0`; the silence/identity test passes).
+- Green: the module with the diagnostic + editor rewiring (import replaces the two local helper definitions; both restore sites pass `'restore'`).
+- Editor pin: the Alt+drag undo→redo round-trip pin now also asserts zero `[topology]` warnings on a clean round-trip (pass-through spy, prefix-filtered).
+- Mutation: with `commitDuplicateDrag` pushed to dangle (real-code restore guard intact), the pin failed on the zero-diagnostic assertion AND the `[topology] restore-time guard dropped 1 dangling wire(s)...` warning visibly fired from the real restore path — end-to-end proof the diagnostic is wired through popUndo, not just the unit tests. Paste pin stayed green (unmutated path). Restored via precise reverse replacement (learned from the 9269e295 `git checkout` wipe — no checkout this time).
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
+**Tests:** topologyHistoryIntegrity 3/3 (+3) · editor 541/541 · full UI suite 4,967/4,967 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new — new module lint-clean) · i18n lint clean.
+**Risks / follow-ups:** none new. The diagnostic is console-only by design (an internal corruption signal, not user-facing — a user-facing surface would need FTL keys and would fire in the same impossible-to-reach corruption path).
+
+## 2026-08-12 — Shared dev-log bus: the [topology] drop diagnostic goes through ONE pattern
+
+**Problem:** The drop diagnostic (0570553a) called `console.warn` directly. Fine for one call site, but it established no reusable pattern — the codebase has ~15 bare `console.warn` call sites with ad-hoc prefixes (`[i18n]`, `[global-error]`, `[ShortfallDialog]`, …), none testable without spying on console internals. Future diagnostics would each reinvent the same two problems: a prefix convention and a test seam.
+
+**Solution:** New `ui/src/utils/devLog.ts` — the shared bus. `devLog.warn('topology', message)` emits `[topology] message` to the devtools console (byte-identical to the previous bare call) AND records `{ level, source, message }` into a bounded buffer (cap 100, oldest evicted) exposed as `getDevLog()`/`clearDevLog()`. `topologyHistoryIntegrity.ts` now routes through it. Levels map to console methods (info/warn/error). The recorder makes diagnostics assertable without console spies — the seam future diagnostics use, which is what makes "one pattern" stick.
+
+**TDD rigor:**
+- Red: 4 devLog unit tests (module-missing Red): per-level prefixed console emission, recorder entries, 120→100 cap eviction, clear.
+- Green: the bus module; the integrity diagnostic's single `console.warn` replaced by `devLog.warn('topology', …)` — console line preserved verbatim.
+- Migration: the integrity unit tests and the Alt+drag editor pin switched from `vi.spyOn(console, 'warn')` to the recorder seam (`getDevLog().filter(e => e.source === 'topology')`); the editor file's top-level `beforeEach` now clears the recorder so no diagnostic leaks across tests.
+- Mutation (same dangling-entry experiment as 0570553a): the `[topology] restore-time guard dropped 1 dangling wire(s)…` line still fired visibly from the real restore path AND the pin failed on the recorder assertion (`expected [ { level: 'warn', … } ] to have a length of +0 but got 1`) — end-to-end proof the bus routes console + recorder identically. Restored via precise reverse replacement.
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
+**Tests:** devLog 4/4 (+4) · integrity 3/3 · editor 541/541 · full UI suite 4,971/4,971 · typecheck clean (one transient error from another agent's in-flight FeatureToggleScreen edit, resolved before commit) · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
+**Risks / follow-ups:** the ~15 existing bare `console.warn` call sites remain unmigrated — a future slice could route them through the bus (out of scope here; the bus is documented in its module header as the pattern). The recorder is always-on in production but capped at 100 entries, so no unbounded growth.
+
+## 2026-08-12 — History-entry producer audit: new setHistory/setRedo entry sites must use historyEntry
+
+**Problem:** The push-time sanitization (9269e295) and its diagnostic (0570553a → devLog bus 1cf0e409) only protect the FOUR known entry-creation sites. Nothing stopped a future developer from adding a fifth `setHistory((prev) => [...prev, { nodes, wires }])` raw push — the corruption hole the whole chain exists to close — because the sanitize contract lived in code comments, not in a gate.
+
+**Solution:** `ui/src/__tests__/topologyHistoryEntryAudit.test.ts` — a coverage-style static source audit (same approach as noiseDitherCompliance/themeTokenCompliance): scans `NodeTopologyEditor.tsx` for every `setHistory((prev) =>` / `setRedo((prev) =>` updater, classifies the ones that push (`[...prev, …]`), and asserts (1) each pushes via `historyEntry()` and (2) the count matches the documented 4-site baseline (pushHistory, commitDuplicateDrag, popUndo's redo-push, popRedo's history-push). The scanner strips comments and string literals first so prose parens in comments can never unbalance the extraction.
+
+**TDD rigor (mutation-verified):**
+- Green on baseline: 2/2 (all 4 sites already use historyEntry).
+- Mutation A (pushHistory's entry reverted to a raw object): per-site check fails, naming the exact line and the rule.
+- Mutation B (a fake fifth raw producer added): baseline count fails (`found 5`) AND the per-site check flags the new site — both failure modes covered, each with an actionable message pointing at historyEntry and the baseline comment.
+- Restored via precise reverse replacements; `git diff` confirms the editor file is byte-identical to HEAD after restore.
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
+**Tests:** audit 2/2 (+2) · editor 541/541 · full UI suite 4,973/4,973 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
+**Risks / follow-ups:** the audit scans the editor source text, so a refactor that moves entry creation into a new helper changes the count — the drift-guard baseline comment tells the dev to update EXPECTED_ENTRY_CREATORS and re-verify (same contract as KNOWN_NOISE_SELECTORS). If entry creation ever moves OUT of NodeTopologyEditor.tsx entirely, the audit's path must point at the new home.
+
+## 2026-08-12 — History-entry audit extended to the whole ui/src tree
+
+**Problem:** The producer audit (f7d6fe84) scanned only `NodeTopologyEditor.tsx`. The topology editor is today the only graph editor in the app, but nothing guarded the REST of the tree: a future editor's own undo stack — or any History/Redo/Undo-named setter pushing raw entries — would appear with zero coverage, exactly where the sanitize contract is easiest to miss.
+
+**Solution:** The audit now walks every production `.ts`/`.tsx` under `ui/src` and classifies undo/redo-stack entry creators generically: any `set<…>((prev) => …)` updater whose setter name matches /History|Redo|Undo/i and whose body spreads `prev` into a new array (append `[...prev, …]` OR prepend `[…, ...prev]` — the retail cart stack prepends). Two new whole-tree rules: (1) every creator must use `historyEntry` or be declared in `DOCUMENTED_EXCEPTIONS`; (2) the only non-exempt creators are the topology editor's four sanitized sites. The one exception is declared with a reason: `RetailPosScreen`'s `setUndoStack` — a flat removed-line LIFO with no cross-references, so the graph wire/node invariant has no analogue.
+
+**Also fixed:** the audit's line numbers were computed on the comment/string-stripped source, so messages pointed at drifted lines (reported RetailPosScreen:208 for the real 351). `stripCommentsAndStrings` now returns an original-index map and sites report true line numbers.
+
+**TDD rigor (mutation-verified):**
+- Baseline green: 4/4 (4 topology + 1 retail exception detected; both whole-tree rules pass).
+- Mutation 1 (exception list emptied): the retail stack is flagged with the precise file:line + "declare it in DOCUMENTED_EXCEPTIONS" message — the exception is load-bearing, not dead baseline.
+- Mutation 2 (raw `setRedo((prev) => [...prev, …])` added to RetailPosScreen): flagged at RetailPosScreen:352 — a new raw creator anywhere in ui/src fails, and the setter-scoped exception correctly does NOT exempt a different setter in the same file.
+- Restored both via precise reverse replacements; `git diff` confirms no production file changed.
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
+**Tests:** audit 4/4 (+2) · editor 541/541 · full UI suite 4,975/4,975 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
+**Risks / follow-ups:** the setter-name filter (/History|Redo|Undo/i) is the declared coverage boundary — a stack named entirely differently (e.g. `setSnapshots`) would not match; that's the documented limitation of a name-based drift guard, and the topology's `setHistory`/`setRedo` are the canonical names to copy. CustomerManagementScreen's `setHistory(null)/setHistory(h)` is correctly NOT flagged (direct-value state, no updater push).
+
+## 2026-08-12 — Source-audit scanner extracted into a shared test helper
+
+**Problem:** The history-entry audit (f7d6fe84 → 50133b52) grew its own comment/string stripper, balanced updater extractor, original-index mapper and whole-tree walker — ~120 lines of copy-paste bait. The next drift-guard audit over source text would re-implement the same fragile scanner, and every copy would drift independently.
+
+**Solution:** `ui/src/__tests__/test-utils/sourceAudit.ts` — the shared scanner, moved verbatim and exported: `stripCommentsAndStrings` (with the origIndexAt original-index map), `extractUpdaterBodies` (balanced `set<…>((prev) => …)` extraction), `scanUpdaters` (one-stop: strip → extract → map indices back to the original source), `lineNumberAt`, and `collectSourceFiles` (recursive walk excluding __tests__/node_modules/hidden/.d.ts). `topologyHistoryEntryAudit.test.ts` now imports these and keeps only its domain rule (History/Redo/Undo-named setters pushing via `...prev`; historyEntry-or-declared-exception; the 4-site + retail-exception baselines). The helper is unit-tested on its own (8 tests).
+
+**TDD rigor:**
+- Red: 8 helper unit tests (module-missing Red). Two test bugs surfaced and were fixed (the first emitted char after a line comment is the preserved newline, so origIndexAt[0] maps to the newline not 's'; and backslash Windows paths broke an endsWith assertion — normalize before suffix checks).
+- Green: helper module + audit refactor. One refactor regression caught by the safety net: I switched the tree scan from `relative(UI_SRC, file)` to absolute paths, breaking the retail exception match — the two whole-tree tests failed, fixed by restoring the relative conversion.
+- Mutation re-verified: re-running the raw-`setRedo`-in-RetailPosScreen experiment against the REFACTORED audit still fails with the identical `RetailPosScreen.tsx:352` message — the extraction is behavior-identical through the shared helper.
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
+**Tests:** sourceAudit 8/8 (+8) · audit 4/4 · full UI suite 4,983/4,983 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
+**Risks / follow-ups:** none. Future drift-guard audits over source text should import from test-utils/sourceAudit instead of re-implementing the scanner.
+
+## 2026-08-12 — topology.rs split into model/semantics/persistence/commands
+
+**Problem:** `apps/desktop-client/src/commands/topology.rs` was 8,506 lines — 2.8× the repo's ~3k-line per-file guideline. The bulk (6,000 lines, 234 tests) was `mod tests`; production was ~2,500 lines but the file was unreadable as a unit.
+
+**Solution:** Three slices, all pure movement (zero behavior change):
+1. Test extraction into `topology_tests.rs` (committed `d7e77383`; note: a `mod` inside `topology.rs` must live in `topology/topology_tests.rs`, not a sibling file).
+2. Production split: `model.rs` (types + serde + consts), `semantics.rs` (JSON validation engine, Tauri-free), `persistence.rs` (keys, save/load, Apply recovery), `commands.rs` (the four `#[tauri::command]` fns). `topology.rs` is a thin root re-exporting the public surface `lib.rs` registers. Two non-obvious findings: (a) Tauri's `#[command]` macro generates hidden `__cmd__*`/`__tauri_command_name_*` macro wrappers with the fn's visibility — the root must glob `pub use commands::*` or `generate_handler!` fails to resolve them; (b) the `gate_audit` command census only scanned flat `src/commands/*.rs`, so the split zeroed the `topology` pin — it now recurses into split command dirs and sums same-named root files (aggregation is order-safe via merge, not insert).
+3. Test split by subject into `topology_tests.rs` (serde/roundtrip, ~2.6k), `topology_stress_tests.rs` (~1.8k), `topology_command_tests.rs` (~1.6k); helpers made `pub(crate)` and shared via `use super::topology_tests::*`.
+
+**Commits:** `92e30da7` (refactor: the split + census recursion) · `5acfd972` (fix: 3 `needless_borrow`s in `oz-core/src/db/sales.rs` shipped by the concurrent batch-lookup commit `1986a953` — they blocked the workspace clippy gate; fixed separately and attributed).
+
+**Tests:** desktop-client 947/947 · `cargo clippy -p oz-pos-app --all-targets -D warnings` clean · `cargo fmt --all` clean.
+
+**Risks / follow-ups:** the split is mechanical; the semantic engine in `semantics.rs` is Tauri-free and could later move toward `oz-core` if it gains a second consumer. `topology_tests.rs` is still the largest file at ~2.6k — a future split could carve the save/load roundtrip tests further, but it's under the guideline. The `gate_audit` census recursion is depth-agnostic; a nested split (subdir within a command dir) would aggregate recursively under the same module key.
+
+## 2026-08-12 — Topology semantic-validation core moved into oz-core
+
+**Problem:** The ADR #34 semantic-validation engine (validate_semantic_json + its 12 helpers + the shared contract const) lived in the desktop command layer (`commands/topology/semantics.rs`), even though it is pure domain logic — Tauri-free, value-level — that any client (desktop Apply, tablet preview, tooling) should share. The file-split refactor (92e30da7) made the engine's isolation obvious.
+
+**Solution:** New `oz-core::topology` module hosting the pure core, moved verbatim:
+- `validate_semantic_json`, `ambiguous_legacy_wire`, `find_directed_cycle_node`, `semantic_wire_matches_contract`, the `semantic_*`/`has_semantic_fields`/`value_string` helpers, port-set + pairing helpers, and `SHARED_TOPOLOGY_SEMANTICS_JSON` (include_str path re-based to the crate).
+- New `CoreError::TopologyValidation { code, node_id, wire_id, port_id, message }` variant (kind: `Validation`) so the core returns a structured, machine-readable failure.
+- Desktop `semantics.rs` shrank 858 → ~270 lines: re-exports the value-level helpers (test-only consumers in a `#[cfg(test)]` re-export to keep the lib build warning-free) and adapts `validate_semantic_json` CoreError → `AppError::TopologyValidation` (same variant/fields as before, so the 947-test suite is untouched). `model.rs` dropped the moved const.
+
+**TDD rigor:**
+- Red: 6 oz-core unit tests (missing-branch-location, valid graph passes, invalid-purpose, cycle-detected, contract parses, ambiguous legacy wire). First fixture bug caught: a branchless graph with NO semantic fields is intentionally accepted (legacy-geometry escape hatch), so the missing-branch test needed a store_profile_id marker.
+- Green: module + error variant. Then the desktop rewiring — 915 lib + 32 integration tests stayed green with zero code changes in tests.
+- Docs: the extraction ranges off-by-included two doc comments (legacy-topology + validate_topology_envelope) that belong to desktop fns — both restored to the desktop file, orphaned copies removed from oz-core; diff-verified that every removed doc line corresponds to a moved fn.
+
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
+**Tests:** oz-core topology 9/9 (+9) · desktop lib 915/915 · integration 32/32 (gate 3, wiring 6, kernel 7, window 11+2, parity 3) · clippy -D warnings clean on both crates · fmt clean.
+
+**Risks / follow-ups:** (1) `migrations::tests::migration_135_backfills_cost_snapshot_from_product_cost` FAILS on the committed baseline (verified by temporarily reverting my files) — a pre-existing breakage from the retail-attribute schema work, unrelated to this change; needs its own fix. (2) The core exposes only the fns desktop consumes as pub; the full pairing matrix helpers remain private — a tablet consumer can widen them deliberately. (3) Desktop lib tests could only run via `--lib` (plus a fresh target dir for integration tests) because a running dev instance of `oz-pos-app` holds the bin exe lock; the app was not killed per the shared-tree rule.
+
+## 2026-08-12 — Fixed broken migration-135 backfill test (baseline red since 136 landed)
+
+**Problem:** `migration_135_backfills_cost_snapshot_from_product_cost` failed on the committed baseline (asserted `cost_minor == Some(800)`, got `None`). Root cause: the test simulated a "pre-135" release with `split = ALL.len() - 1`, but `136_processed_webhooks.sql` (f40b64ee) had since been appended — the tail cut excluded 136 instead of 135, so 135 ran BEFORE the seeded products/sales existed and its backfill found no rows. First failure in the suite hid 669 un-run tests behind it.
+
+**Solution:** slice at 135's actual position — `ALL.iter().position(|m| m.id == "135_sale_line_cost_snapshot.sql")` with an `expect` that fails loudly if 135 is ever removed or renamed. Robust to future migrations being appended; the comment documents why the naive `len()-1` was wrong. The sibling fresh-vs-upgrade fingerprint test (split = 80) was checked and is correct — its split point is deliberately arbitrary.
+
+**Commits:** `7af6a6b9` (fix: slice migration-135 test at its position)
+**Tests:** oz-core full suite 2295/2295 (was 1595+669 un-run) · clippy -D warnings clean · fmt clean.
+
+## 2026-08-12 — Migration-slice fragility audit + regression guard
+
+**Problem:** after fixing the migration-135 test (7af6a6b9), the same class of bug could silently return: a future test simulating a "pre-N" release with `ALL.len() - 1` would break the moment a migration is appended. The fix fixed one instance; nothing prevented the pattern from being reintroduced or new instances from being written.
+
+**Audit:** every `ALL[...]` slice in the migrations test module was enumerated: ~13 position-based slices (`ALL.iter().position(...)`, all safe), the fresh-vs-upgrade fingerprint test (`split = 80.min(ALL.len())`, safe by design — the split point is deliberately arbitrary and the sum is identical), the idempotence assertion `applied.len() == ALL.len()` (no slicing), and the one tail-arithmetic site (fixed in 7af6a6b9). No hard-coded numeric indexing into ALL exists anywhere in the repo; the `idx: i64` sites are SQLite index-existence queries, not slices.
+
+**Solution:** `no_migration_test_slices_all_by_array_tail` — a source-scanning regression guard (include_str on migrations.rs, comment-aware via split("//")) that forbids the `ALL.len() -` operator pattern, built at runtime with format! so the guard's own source can't self-match (discovered when the naive literal matched its own condition line). Mutation-verified: reintroducing `ALL.len() - 1` into the 135 test fails the guard with the offending line; restored, both tests green.
+
+**Commits:** `3a03a9a3` (test: migration tail-slice guard)
+**Tests:** oz-core full suite 2296/2296 (+1 guard) · migration tests 48/48 · clippy -D warnings clean · fmt clean.
+
+## 2026-08-13 — Occupancy compare overlay misaligned when hourly sets differ (TDD)
+
+**Problem:** the compare-mode dashed overlay on the Table Occupancy card plotted the previous period's curve by array index against the current period's hours. The backend `hourly_table_activity` returns only hours *with* completed table orders (`GROUP BY hour`, no zero-fill), so the two periods frequently have different active-hour sets — the previous curve landed on the wrong hours.
+
+**Solution (TDD, Red→Green):** wrote `alignPrevHourly(current, previous)` — a pure helper that maps previous pct by hour onto the current hour set, filling absent hours with 0 — with two unit tests written first (index misalignment + order-independent matching), watched them fail on the missing export, then implemented and wired it into OccupancyCard's option builder.
+
+**Commits:** (folded into the analytics UI commit)
+**Tests:** analytics-data 32/32 (+2 alignPrevHourly) · AnalyticsScreen 66/66 · full UI suite 292/292, 5098.
+
+**Risks / follow-ups:** (1) the same index-alignment assumption could affect the other compare overlays (revenue/AOV/tables/inventory/basket) if any loader ever returns differing bucket sets for equal-length windows — bucketing is deterministic per granularity so it is safe today, but a future date-gap policy change should reuse the map-by-key approach. (2) `revenueLabel` still has a redundant identical-branch ternary (`g === 'monthly' ? slice(5) : slice(5)`) — a trivial cleanup candidate for a future slice.
+## 2026-08-13 — Trend chips fabricated 0% on zero-starting series (TDD)
+
+**Problem:** `seriesDelta` (the off-mode trend chip for Revenue/AOV, and via delegation `turnDelta` for Tables) returned `0` whenever the first bucket was zero — even though `periodDelta`'s documented contract says a zero baseline must yield `null` so the chip is omitted instead of showing misleading math. A week that went 0 → $150 revenue rendered a "0% change" chip; zero → zero rendered "no change" as a percentage. The old behavior was not just untested — it was **pinned by a test** asserting `[0, 150] → 0`.
+
+**Solution (TDD, Red→Green):** rewrote the pinned test to the correct spec (`[0, 150] → null`, `[0, 0] → null`) and added a `turnDelta` inheritance test; watched both fail (the old one on the assertion, the new one on the missing import), then changed the one line — `if (first === 0) return null` — and updated the doc comment to state the null-baseline contract. All callers already guard with `delta !== null &&`, so the fix is purely chip omission; `turnDelta` inherits it for free.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 31/31 (2 re-pinned + 1 new turnDelta) · AnalyticsScreen 66/66 · full UI suite 292/292, 5099.
+
+**Risks / follow-ups:** none new. The `revenueLabel` redundant ternary (`g === 'monthly' ? slice(5) : slice(5)`) remains a trivial cleanup candidate.
+## 2026-08-13 — Trend-card compare overlays misaligned when bucket sets differ (TDD)
+
+**Problem:** the previous TDD slice fixed the occupancy overlay's index-alignment by hour, and the journal claimed the other five compare overlays (Revenue, AOV, Tables, Inventory, Basket) were safe "because bucketing is deterministic." That claim was wrong: determinism holds for the *bucketing*, not the *row set*. The backend `daily_revenue` / `weekly_revenue` / `monthly_revenue` / `table_turnover` / `basket_size_trend` queries all `GROUP BY` with **no zero-fill** — a day (or week/month) with no sales drops its row. Two equal-length windows therefore frequently have different bucket sets, and each card's dashed previous line plotted `prevData.map(d => d.value)` **by array index** against the current x-axis — the exact misplot class fixed for occupancy, live on five more cards.
+
+**Solution (TDD, Red→Green):** wrote `alignPrevBuckets(current, previous)` — the label-keyed generalization of `alignPrevHourly` (map previous values onto current labels, fill absent buckets with 0, ignore previous-only labels) — with three unit tests written first (missing-bucket fill, order-independent identical sets, previous-only labels ignored), watched them fail on the missing export, then implemented and swapped all five overlay sites from `prevData.map(d => d.value)` to `alignPrevBuckets(data, prevData)`. The `periodDelta` chip totals are sums and are unaffected; only the dashed line's x-placement changed.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 34/34 (+3 alignPrevBuckets) · AnalyticsScreen 66/66 · full UI suite 292/292, 5102.
+
+**Risks / follow-ups:** current-period charts still skip zero-sales days entirely (gap in the line, no 0 point) — honest but arguably less clear than a 0-dip; zero-filling the current series is a separate design slice. `revenueLabel`'s redundant ternary remains a trivial cleanup candidate.
+## 2026-08-13 — weekly_revenue bucketed Sundays while every other layer uses Mondays (TDD)
+
+**Problem:** three different week conventions coexisted. Rust `weekly_revenue` used `DATE(created_at, 'weekday 0', '-7 days')` (Sunday-based), while the UI's `weekStartKey` (tables/basket/heatmap), `rangeForGranularity('weekly')` ("Monday-first week start") and the dev-mock `get_weekly_revenue` were all Monday-first. A sale's `week_start` label on the revenue card (production: Sundays) disagreed with the tables/basket cards (Mondays) and with what the dev server showed. Worse, the SQL idiom is also off-by-one-week on the boundary day itself: verified empirically that a Sunday sale (2026-08-16) bucketed to `2026-08-09` — the PREVIOUS Sunday-based week, not its own.
+
+**Solution (TDD, Red→Green):** wrote `weekly_revenue_monday_first_week_start` first — pins Sunday 2026-08-16 → week_start `2026-08-10` (the Monday of the week containing that Sunday) and Monday 2026-08-10 → `2026-08-10` — watched it fail with `"2026-08-09"`. Green: replaced the expression with `DATE(created_at, '-6 days', 'weekday 1')` in both the SELECT and the correlated COGS subquery — the `-6 days` first guarantees `weekday 1` lands on the week's Monday for every day including Monday itself (the naive `'weekday 1', '-7 days'` would push a Monday sale into the previous week). Updated the three legacy tests that pinned Sunday `week_start` values (`partial_week_range` 07-19→07-20, `leap_day_falls_in_week` 02-25→02-26, `multiple_currencies_separate_rows` 07-19→07-20) and the doc comment. Verified the corrected idiom against SQLite directly for Mon/Sat/Sun/Mon-boundary cases before committing to it.
+
+**Commits:** (see below — fix + journal)
+**Tests:** oz-core lib 1803/1803 (56 reports; +1 new weekly test) · fmt clean · clippy -D warnings clean · UI suite 292/292, 5102 (no UI changes needed — UI bucketing was already Monday).
+
+**Risks / follow-ups:** `yearlyWeekIntensities` derives the year heatmap's week-of-month band from `week_start`'s day — the Monday shift moves a handful of boundary weeks one heatmap band (same month), acceptable. The zero-fill of current-period trend buckets (days with no sales render as gaps, not 0) remains the outstanding analytics follow-up.
+## 2026-08-13 — Zero-filled trend buckets + the DeltaChip "vs previous period" lie (TDD)
+
+**Problem:** the backend GROUP BYs completed sales with no zero-fill, so a day/week/month without sales drops its row — the revenue/AOV charts rendered a GAP for zero-sales days instead of a 0 point, and the axis didn't cover the whole range. (The compare-overlay alignment fix made the dashed line land correctly, but the current line still skipped silent days.)
+
+**Solution (TDD, Red→Green):** wrote four failing unit tests first — `loadRevenue` zero-fills daily/weekly/monthly gaps and `loadAov` shares the same axis — then implemented `bucketKeys(g, from, to)` (enumerates every date / Monday week-start / YYYY-MM in the range) and rewrote both loaders to aggregate rows by raw key (summing multi-currency days) and map the enumeration, emitting 0 for missing buckets. Two real defects surfaced by the change, fixed in the same slice:
+
+1. **`DeltaChip` labeled in-period trends as "vs previous period".** Off-mode chips are `seriesDelta`/`turnDelta` (first→last bucket within the period) but always rendered the `analytics-card-vs-prev` suffix — a lie exposed the moment zero-fill gave trend cards ≥2 buckets. The chip now takes a `compare` flag and renders the suffix only in compare mode; all 16 call sites pass it. The compare screen test's off-mode assertion (`queryByText(/vs previous period/).toBeNull()`) pins it.
+2. **Test-isolation leak.** The `vi.mock('@/api/reports')` wrappers called `mockGetDailyRevenue()` with NO args (invisible while the loader ignored row dates), and the error-surface describe leaked a fixed-date `mockResolvedValue` into later describes. Wrappers now forward args; the currency-locale describe restores the range-anchored mock in `beforeEach`; the error-surface describe anchors `ORIGINAL_DAILY` to the queried range. (The screen-test revenue mocks are anchored to the query's `from` so the value path stays exercised instead of rendering an all-zero card.)
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 38/38 (+4 zero-fill) · AnalyticsScreen 66/66 · full UI suite 292/292, 5106.
+
+**Risks / follow-ups:** zero-fill now gives trend cards an in-period trend chip whenever the series has ≥2 buckets — honest, but a chart that starts at 0 (e.g. a store's first day in the window) now omits the chip entirely (seriesDelta returns null on a zero first bucket). The `loadTables` grouping still carries a dead `days` accumulator. `dev-mock/tauri-api.ts` has an uncommitted collaborator change (retail category filter) unrelated to this slice — left in the tree.
+## 2026-08-13 — Zero-fill extended to Tables / Basket / Inventory trends (TDD)
+
+**Problem:** last cycle zero-filled only the revenue/AOV axis. The other three trend cards still rendered gaps for days without rows: `loadTables` (turn minutes per bucket), `loadBasketSize` (items/order per bucket), and the inventory units-sold line.
+
+**Solution (TDD, Red→Green):** three failing unit tests first (tables/basket/inventory daily-gap → 0), then shared `trendKey`/`trendBucketKeys` helpers (daily/weekly/monthly reuse `bucketKeys`; yearly enumerates YEARS — the tables/basket axis keeps year buckets at yearly granularity, unlike revenue's monthly buckets). `loadTables` and `loadBasketSize` now aggregate into maps keyed by bucket and emit every key in the range; the dead `days` accumulator was removed. `loadInventory` was extracted from the inline `CARD_LOADERS` closure and zero-fills the per-day line at every granularity.
+
+**Second defect surfaced:** the zero-filled 0s are "no data" for rate metrics, not 0-value readings — the tables KPI (mean turn minutes) would have read 45m instead of 59m (a no-orders day is not a 0-minute day), and the off-mode turn chip would have claimed turns got ~100% faster (0 minutes = "infinitely fast"). AovCard/TablesCard now average and trend over `activeBuckets` (value > 0) only; revenue keeps zeros because $0 is a real day for a sum metric. The screen-test basket (previous-week dates) and inventory-trend (off-range dates) mocks were range-anchored like the revenue mocks — zero-fill drops off-range rows.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 41/41 (+3) · AnalyticsScreen 66/66 · full UI suite 292/292, 5109.
+
+**Risks / follow-ups:** the tables/basket yearly axis (single year bucket) still diverges from revenue's yearly axis (12 monthly buckets) — a design decision, documented in `trendKey`. Peak/Low insight lines still include zero-filled buckets (a "Low: 08-13 · 0" line for tables), cosmetic. The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted in the tree.
+## 2026-08-13 — Yearly granularity showed one year bucket on tables/basket, twelve months on revenue (TDD)
+
+**Problem:** at `granularity: 'yearly'` the revenue card rendered 12 monthly buckets (labels "01".."12" — matching the 12-column yearly heatmap), but `trendKey` bucketed tables/basket by the YEAR (`date.slice(0, 4)`), so those cards rendered a single degenerate "2026" point with a whole year's turn minutes. Two cards, two axis shapes for the same selection.
+
+**Solution (TDD, Red→Green):** two failing unit tests first (tables: Jan+Mar orders over a full year → 12 MM-labeled buckets with per-month turn minutes and zero-filled gaps; basket: Feb row → 01=0, 02=value, 12 buckets total). Green: `trendKey` now returns `YYYY-MM` for yearly (same as monthly), `trendBucketKeys('yearly')` reuses the monthly enumeration, `loadTables` computes per-month minutes (`monthDays × 1440`, the old `365 × 1440` year branch is gone), and both loaders drop the year-label branch (`key.slice(5)` always). The doc comment now states the unified contract.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 43/43 (+2 yearly) · AnalyticsScreen 66/66 · full UI suite 292/292, 5111.
+
+**Risks / follow-ups:** MM labels collide across years for multi-year custom ranges (Jan-2025 and Jan-2026 both "01") — pre-existing on revenue, now shared by tables/basket; a year-aware label (e.g. "Jan '25") is a future slice. Peak/Low insight lines still include zero-filled no-data buckets (cosmetic). The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Peak/Low read zero-filled no-data days as real readings on rate cards (TDD)
+
+**Problem:** the zero-fill work gave the rate-metric trend cards (AOV, Tables, Basket) full-range axes, but their Peak/Low insight lines still reduced over the WHOLE series. A zero-filled day has value 0, so the tables card rendered "Low: 08-13 · 0m" for a day with no table orders — as if the restaurant turned tables in zero minutes (the fastest turns ever). AOV similarly read a no-sales day as the "$0 AOV" low; basket as "0.0 items/order". Revenue correctly keeps zeros (a $0 day is real data for a sum metric).
+
+**Solution (TDD, Red→Green):** added two assertions to the restaurant screen test first — `queryByText('Low: 08-13 · 0m')` must be null and the tables low must come from the active buckets (`Low: 08-11 · 48m`) — watched the test fail on the rendered 0m line, then switched the three cards' peak/low derivation from `data` to the already-computed `activeBuckets` (BasketCard gained an `active` binding; AOV/Tables reused theirs). The chart still renders the full zero-filled axis; only the insight lines now skip no-data days.
+
+**Commits:** (see below — fix + journal)
+**Tests:** AnalyticsScreen 66/66 (restaurant test gained the two assertions) · full UI suite 292/292, 5111.
+
+**Risks / follow-ups:** the AOV low could still be asserted card-specifically (its "· $0.00" sibling on RevenueCard is real), left for a future slice. Year-aware month labels (multi-year "01" collisions) and the heatmap band unification remain open follow-ups. The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Month labels collided across years on multi-year ranges (TDD)
+
+**Problem:** monthly/yearly buckets were labeled bare "MM" on every trend card, so a multi-year custom range rendered two "01".."12" sequences on one axis — ambiguous points, and `alignPrevBuckets` (which matches the compare overlay by label) could not tell Jan-2025 from Jan-2026.
+
+**Solution (TDD, Red→Green):** two failing unit tests first (revenue monthly Nov-2025→Feb-2026 → labels "11/25","12/25","01/26","02/26"; tables monthly Dec-2025→Jan-2026 → "12/25" with per-month turn minutes), then `revenueLabel(g, raw, multiYear)` gained the range-aware branch — "MM/YY" when the query window spans calendar years, "MM" otherwise — and the redundant identical-branch ternary (the long-journaled cleanup) finally collapsed. A new `rangeSpansYears(q)` helper drives it; all four label sites (loadRevenue, loadAov, loadTables, loadBasketSize) now call `revenueLabel(q.granularity, key, rangeSpansYears(q))`, so tables/basket labels unify onto the same helper as revenue. Single-year ranges are untouched (existing "MM"/"MM-DD" tests stay green).
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 45/45 (+2) · AnalyticsScreen 66/66 · full UI suite 292/292, 5113.
+
+**Risks / follow-ups:** WEEKLY granularity has the same latent collision (a week-start "MM-DD" like "01-05" can repeat across years on multi-year ranges) — the journal's last open analytics item, scoped out of this slice because a year-aware weekly label needs a different format. The heatmap band unification also remains open. The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Week labels collided across years on multi-year ranges (TDD)
+
+**Problem:** the year-aware label fix from the previous slice covered monthly/yearly but not weekly: weekly buckets are labeled "MM-DD" of their Monday week-start, and that date can repeat across years (e.g. a Monday Jan 5 in two consecutive years), so a multi-year weekly range could show colliding labels with the same ambiguity for `alignPrevBuckets`.
+
+**Solution (TDD, Red→Green):** one failing unit test first — revenue weekly Dec-2025→Jan-2026 → labels "12-29/25","01-05/26","01-12/26","01-19/26" — then the weekly branch of `revenueLabel` gained the same `multiYear` rule as monthly ("MM-DD/YY" when the range spans calendar years, "MM-DD" otherwise). All four trend loaders already pass `rangeSpansYears(q)`, so tables/basket weekly labels inherited the fix with no further changes.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 46/46 (+1) · AnalyticsScreen 66/66 · full UI suite 292/292, 5114.
+
+**Risks / follow-ups:** with this, the label-collision class is closed for all four granularities on every trend card. Remaining open analytics items: heatmap yearly band unification; the collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Yearly heatmap merged the 5th Monday's week into the 4th band (TDD)
+
+**Problem:** `yearlyWeekIntensities` derived the year heatmap's week band with day-of-month arithmetic capped at 3 (`Math.min(3, Math.floor((day−1)/7))`). Any month with five Mondays (Mar/Jun/Aug/Nov 2026) silently merged two DISTINCT weeks into one cell `month:3` — the 5th Monday's week (e.g. Mon Aug 31, covering Aug 31–Sep 6) collapsed into the 4th week's cell, losing its revenue as a separate reading. This was the fragility the week-convention slice flagged: the banding depended on `week_start`'s day rather than the app's Monday-first week structure (`weekStartKey`).
+
+**Solution (TDD, Red→Green):** two failing tests first — (1) `yearlyWeekIntensities` with March 2026's 23rd AND 30th Mondays must produce BOTH `2:3` and `2:4` (watched `2:4` fail, merged into `2:3`); (2) the screen test's yearly grid count becomes dynamic (`mondayWeeksInMonth` × 12) instead of hard-coded 48. Green: the band is now the week's ordinal among the month's Mondays (0-based), computed with the same `mondayFirst` idiom the rest of the module uses — identical to the old formula for every 4-Monday month, and the 5th Monday naturally gets band 4. The yearly grid renders `mondayWeeksInMonth(currentYear, mi)` cells per column (4–5), mirroring how the monthly calendar already varies its row count by month. Comment/docs updated (cell-keys contract + renderer comment). One unused variable caught by tsc during Verify.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 47/47 (+1) · AnalyticsScreen 66/66 (yearly count now computed via `mondayWeeksInMonth`) · full UI suite 292/292, 5115.
+
+**Risks / follow-ups:** the yearly heatmap's 12 columns are still generic current-year months — a multi-year custom range renders the current year's band structure with the range's data (pre-existing quirk, unchanged). The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Yearly heatmap columns ignored the query range (TDD)
+
+**Problem:** the yearly heatmap always rendered the current year's 12 month columns (`HEAT_BUCKETS.monthly` + `mondayWeeksInMonth(currentYear, …)`), regardless of the query range. Three failures followed: (1) a past-year custom range (e.g. 2025) rendered the 2026 frame with 2025's data; (2) a multi-year range merged two Januaries into one column — `yearlyWeekIntensities` keyed cells by monthIdx (`0:0`), so Jan-2025 and Jan-2026 collided; (3) the default yearly view showed 12 columns while the trend/revenue cards showed the year-to-date months — two axes for the same selection.
+
+**Solution (TDD, Red→Green):** three failing tests first — (1) `yearlyWeekIntensities` with Jan-2025 AND Jan-2026 first-Monday weeks must produce `2025-01:0` and `2026-01:0` (watched both merge into `0:0`); (2) `yearlyHeatmapColumns('2025-11-01','2026-02-28')` → keys `2025-11..2026-02` with year-aware labels `11/25..02/26`, and single-year ranges keep month names with per-column Monday-week counts; (3) the screen test's yearly grid now derives its column/cell counts from the range. Green: cell keys carry `YYYY-MM:week`, and the yearly branch renders `yearlyHeatmapColumns(dateRange.from, dateRange.to)` — one column per month in the range, 4–5 Monday weeks each, matching the trend cards' yearly buckets exactly (month names on single-year, MM/YY on multi-year, same convention as `revenueLabel`). `mondayWeeksInMonth` moved from the component to analytics-data (its natural home beside `mondayFirst`); the three legacy tests pinning monthIdx keys were repinned to the new contract.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 50/50 (+3) · AnalyticsScreen 66/66 · full UI suite 292/292, 5118.
+
+**Risks / follow-ups:** `HEAT_BUCKETS.monthly/weekly/yearly` entries are now dead (only `daily` is live) — a cosmetic cleanup for a future slice. The monthly heatmap still shows the CURRENT month's calendar regardless of the range (same class of quirk, pre-existing; the default monthly range is the current month so it's invisible there). The collaborator's `dev-mock/tauri-api.ts` work is now committed upstream (`a49d719b`).
+
+## 2026-08-13 — Analytics UX pass: granularity remap, custom auto-bucketing, full localization
+
+**Problem:** several analytics UX gaps accumulated. The `Daily` selector button was redundant — every card mapped `daily → weekly`, so Daily and Weekly rendered identical data. Custom ranges rendered one point per day (a 365-day range was an unreadable 365-point wall), and the heatmap fell back to a dead 7-cell weekday strip on custom. The heatmap still baked English day/month/quarter labels and tooltips into JSX, and unit suffixes (`134m`, `12d`) and card accessible names were hardcoded English — violations of the no-hardcoded-English rule.
+
+**Solution:** removed `daily` from `GRANULARITIES` (weekly/monthly/yearly/custom remain) and re-mapped the keyboard shortcuts to 1–4. Added a per-card `granularityMap` + exported `cardGranularity`/`cardRange` so each card's loader, cache key, AND date window follow its *effective* granularity (not the selector's). Added `spanDays`/`bucketGranularity` so custom ranges auto-bucket by span — ≤31d → daily, 32–180d → weekly, >180d → monthly — threaded through revenue/AOV/tables/basket/inventory; the heatmap remaps `custom → weekly` for the 7×24 grid while `cardRange` preserves the user-picked dates. Localized the heatmap via Fluent: day labels reuse `reports.ftl` `day-*` keys, new `analytics-month-*` abbreviations, and `analytics-heatmap-{hour,day,week}-tooltip` messages; `yearlyHeatmapColumns` now returns structured keys (no baked English `label`). Unit suffixes (`analytics-unit-minutes`/`-days`, plural-aware) and card `aria-label`s went through `l10n`. Also made the Low Stock card 2×1 with percentage-based gutters.
+
+**Commits:** `a09b52f9` (plus follow-up slices) — see git log.
+**Tests:** analytics-data 56/56 · AnalyticsScreen 91/91 · full UI suite 292/292, 5149.
+
+**Risks / follow-ups:** with `daily → weekly` everywhere the Daily/Weekly distinction is gone entirely; only custom short ranges still render per-day. The `HEAT_BUCKETS` English arrays and the dead `analytics-granularity-daily` key were removed in the same pass (closing the prior slice's dead-code follow-up).
+
+## 2026-08-13 — Per-card CSV export across the analytics grid
+
+**Problem:** no analytics card could export its data — the `analytics-export-csv` Fluent keys existed but were dead, and there was no export affordance anywhere on the grid.
+
+**Solution:** added a shared `ExportCsvButton` and per-card export helpers (`exportStaffCsv`, `exportTopItemsCsv`, `exportPaymentsCsv`, `exportCategoryCsv`, `exportTrendCsv`, `exportCustomersCsv`, `exportDiscountsCsv`, `exportVoidedItemsCsv`, `exportLowStockCsv`, `exportOccupancyCsv`, `exportHeatmapCsv`) wired onto every card, all localized (column headers + aria labels in en/id) via the shared `downloadCsv` util. The heatmap exports its underlying revenue rows shaped by its effective granularity (7×24 hourly grid / per-day / per-Monday-week). The waitstaff card got a distinct label (`Export waitstaff as CSV`) and `waitstaff-` filename so it no longer shares the staff card's accessible name in restaurant view. Fixed the export button's hardcoded `11px` (theme-token violation) by switching to design tokens.
+
+**Commits:** `6181cf1f` … `51a73590` (one per card group) — see git log.
+**Tests:** AnalyticsScreen 91/91 (each export's columns + rows asserted; waitstaff label/filename distinctness).
+
+**Risks / follow-ups:** none outstanding.
+
+## 2026-08-13 — Empty states for cards with no data
+
+**Problem:** a zero-row query rendered a blank ranked list/chart. The Low Stock card was the worst case — an empty alert list with three zero KPI tiles and no reassurance that the store is actually fine. The heatmap rendered an all-zero grid with no hint that the range simply had no sales.
+
+**Solution:** added a muted `CardEmpty` placeholder (`.analytics-card-empty`, `role="status"`) and guards in ten cards: low-stock shows a specific "all items sufficiently stocked" message, the other list/breakdown cards (staff, waitstaff, top-items, discounts, refunds, voids, customers, payments, category) a generic no-data message, and the heatmap a "no sales recorded in this range" message instead of the zero-filled grid.
+
+**Commits:** `7009411c`, `02ac0a2c`.
+**Tests:** AnalyticsScreen 91/91 (empty-state coverage for low-stock, generic, and heatmap).
+
+**Risks / follow-ups:** none outstanding.

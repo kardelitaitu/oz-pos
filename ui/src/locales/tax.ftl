@@ -3,7 +3,6 @@
 tax-config-title = Tax Configuration
 tax-config-add = Add Tax Rate
 tax-config-empty = No tax rates configured
-tax-config-loading = Loading tax rates…
 tax-config-col-name = Name
 tax-config-col-rate = Rate (%)
 tax-config-modal-title = { $editing ->
@@ -20,7 +19,6 @@ tax-config-col-actions =
     .aria-label = Actions
 tax-config-table-aria = Tax rates
 tax-config-cat-table-aria = Category tax rates
-tax-config-field-name-aria = Tax Name
 tax-config-col-default = Default
 tax-config-col-category = Category
 tax-config-col-assigned = Assigned Tax Rates
@@ -39,10 +37,6 @@ tax-config-no-categories = No categories available.
 tax-config-no-rates-assigned = No rates assigned
 tax-config-cat-edit-aria =
     .aria-label = Edit tax rates for { $name }
-tax-config-modal-aria = { $editing ->
-    [true] Edit tax rate
-   *[other] Add tax rate
-}
 tax-config-field-name-placeholder = e.g. Sales Tax
 tax-config-field-rate-placeholder = 825
 tax-config-rate-hint = Enter rate in basis points (e.g. 825 = 8.25%)
@@ -53,12 +47,9 @@ tax-config-type-exclusive-desc = Added at checkout
 tax-config-type-inclusive-label = Inclusive
 tax-config-type-inclusive-desc = Included in price
 tax-config-set-default = Set as default tax rate
-tax-config-cat-modal-aria = Tax rates for { $name }
 tax-config-cat-modal-title = Tax Rates &mdash; { $name }
 tax-config-cat-modal-desc = Select the tax rates that apply to all products in this category.
 tax-config-no-rates = No tax rates available. Create one first.
-tax-config-modal-close =
-    .aria-label = Close
 tax-config-save-error = Failed to save tax rate
 tax-config-delete-error = Failed to delete tax rate
 tax-config-cat-save-error = Failed to save category tax rates

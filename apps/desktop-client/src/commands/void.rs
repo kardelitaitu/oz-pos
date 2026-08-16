@@ -8,7 +8,7 @@ use tauri::State;
 
 use oz_core::permissions;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -69,6 +69,7 @@ pub async fn void_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<oz_core::Sale, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SALES_VOID).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -78,8 +79,6 @@ pub async fn void_sale_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = oz_core::db::Store::new(&db);
-
-    require_permission_for_user(&store, &session.user_id, permissions::SALES_VOID)?;
 
     let sale = store.void_sale(&args.sale_id, &session.user_id, &args.reason)?;
     drop(db);

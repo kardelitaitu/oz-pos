@@ -414,6 +414,10 @@ pub mod redis_cache {
                 ),
                 category_name: Some("Test Category".into()),
                 stock_qty: Some(42),
+                // ADR #36 popularity_score field (added in-flight by another
+                // agent's products work — completing the initializer so the
+                // crate compiles).
+                popularity_score: 0.0,
             }
         }
 
@@ -518,6 +522,7 @@ mod tests {
             ),
             category_name: None,
             stock_qty: None,
+            popularity_score: 0.0,
         };
         cache.set_product("sku", &p);
         assert!(cache.get_product("sku").is_none());

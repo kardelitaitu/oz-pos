@@ -15,8 +15,15 @@
 import { describe, it, expect } from 'vitest';
 import { renderInAct } from '@/test-utils/renderInAct';
 import { screen } from '@testing-library/react';
-import { Localized } from '@fluent/react';
+import { Localized, LocalizationProvider, ReactLocalization } from '@fluent/react';
 import { getBundle, getAvailableLocales } from '@/i18n';
+import {
+  scanLocaleFiles,
+  scanLocalizedVars,
+  scanTranslationVars,
+  scanAttributeOmissions,
+  scanAttributeOnlyGetString,
+} from '@/i18n/barePlaceholderScan';
 import { withFluentLocale } from '@/locales/test-utils';
 import sharedId from '@/locales/shared.id.ftl?raw';
 import sharedEn from '@/locales/shared.ftl?raw';
@@ -91,6 +98,193 @@ describe('i18n bundle loader', () => {
     expect(enText).not.toBe(idText);
     expect(enText).toBe('Save');
     expect(idText).toBe('Simpan');
+  });
+});
+
+// ── Native-speaker pin (rounds 90-98) ───────────────────────────
+//
+// The values fixed by the native-speaker passes:
+//   - round 90: dismiss aria, stock-wire hint, fallback toast;
+//   - round 91: the kabel → koneksi terminology unification;
+//   - round 92: settings/sync fixes (tarif pajak, Aktif, Hidangan);
+//   - round 97: extended pass (shared/sales/inventory fixes);
+//   - round 98: the Alihkan → Aktifkan/nonaktifkan toggle verbs.
+// Each row carries BOTH the English and the Indonesian expectation, and
+// the test resolves both from the REAL production bundles
+// (getBundle('en') / getBundle('id')). A drift in either direction — an
+// id value reverting, or an en value being rewritten — fails CI.
+// Unlike the TOPOLOGY_EN stub used by the editor tests (which pins en
+// only and never touches the .ftl files), these assertions exercise
+// the actual shipped bundle content.
+type Pin = { key: string; args?: Record<string, string | number>; attr?: string; en: string; id: string };
+
+const nativeSpeakerPins: Pin[] = [
+  // Round 90 — dismiss aria/title shortened to match en "Dismiss".
+  { key: 'topology-validation-dismiss', en: 'Dismiss', id: 'Abaikan' },
+  // Round 90 — hint uses "workspace" (not "ruang kerja") to match the
+  // missing-stock-routing validation key.
+  {
+    key: 'topology-node-stock-wire-hint',
+    en: "Connect a workspace's Stock Out or another Warehouse's output to this Warehouse's Stock In.",
+    id: 'Hubungkan Stock Out dari workspace atau output Gudang lain ke Stock In Gudang ini.',
+  },
+  // Round 90 — fallback toast carries the "stock deduction" sense.
+  {
+    key: 'topology-toast-fallback-warehouse',
+    en: 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.',
+    id: 'Koneksi fallback multi-gudang untuk pengurangan stok memerlukan lisensi Pro Tier.',
+  },
+  // Round 91 — kabel → koneksi unification across the wire surface.
+  { key: 'topology-wire-routing-toggle', en: 'Elbow wires', id: 'Koneksi siku' },
+  {
+    key: 'topology-bends-override-note',
+    en: 'Bends override routing on bent wires',
+    id: 'Titik tekuk menggantikan mode rute pada koneksi yang dilengkungkan',
+  },
+  { key: 'topology-wire-labels-toggle', en: 'Wire labels', id: 'Label koneksi' },
+  { key: 'topology-context-delete-wire', en: 'Delete wire', id: 'Hapus koneksi' },
+  { key: 'topology-context-rename-wire', en: 'Rename wire', id: 'Ganti nama koneksi' },
+  { key: 'topology-wire-rename-placeholder', en: 'Wire label', id: 'Label koneksi' },
+  {
+    key: 'topology-confirm-delete-many-msg',
+    args: { count: 2 },
+    en: 'Delete these 2 nodes and all of their wires? This action cannot be undone.',
+    id: 'Hapus 2 node dan semua koneksinya? Tindakan ini tidak dapat dibatalkan.',
+  },
+  // Round 92 — settings/sync fixes.
+  {
+    key: 'settings-sync-pull-result',
+    args: { products: 3, tax_rates: 2, users: 1 },
+    en: 'Last pull: 3 products, 2 tax rates, 1 users',
+    id: 'Tarik terakhir: 3 produk, 2 tarif pajak, 1 pengguna',
+  },
+  { key: 'settings-license-live-online', en: 'Live', id: 'Aktif' },
+  { key: 'workspace-resto-courses-heading', en: 'Course Firing', id: 'Pengiriman Hidangan' },
+  { key: 'workspace-resto-courses-enable', en: 'Enable Course Firing', id: 'Aktifkan Pengiriman Hidangan' },
+  // Round 97 — extended pass: shared/sales/inventory fixes.
+  { key: 'statusbar-license', en: 'Proprietary License', id: 'Lisensi Proprietary' },
+  { key: 'scale-read-error', en: 'Scale error', id: 'Kesalahan timbangan' },
+  { key: 'sales-history-status-cancelled', en: 'Cancelled', id: 'Batal' },
+  {
+    key: 'retail-reminder-low-stock-aria',
+    args: { count: 3 },
+    en: 'View 3 low-stock products',
+    id: 'Lihat 3 produk stok menipis',
+  },
+  { key: 'retail-shortcut-low-stock', en: 'Filter low-stock products', id: 'Filter produk stok menipis' },
+  {
+    key: 'retail-filtered-low-stock',
+    args: { count: 3 },
+    en: 'Filtered: 3 low-stock products',
+    id: 'Difilter: 3 produk stok menipis',
+  },
+  { key: 'retail-filter-indicator-aria', en: 'Low-stock filter active', id: 'Filter stok menipis aktif' },
+  { key: 'retail-edit-field-low-stock', en: 'Low Stock Threshold', id: 'Ambang Stok Menipis' },
+  { key: 'payment-split-amount-placeholder', attr: 'placeholder', en: '0.00', id: '0,00' },
+  { key: 'inv-reason-damaged', en: 'Damaged / spoiled', id: 'Rusak / kedaluwarsa' },
+  // Round 98 — 'Alihkan' → sense-accurate toggle verbs.
+  { key: 'theme-toggle-label', en: 'Toggle theme', id: 'Aktifkan/nonaktifkan tema' },
+  { key: 'workspace-home-fullscreen-aria', en: 'Toggle fullscreen', id: 'Aktifkan/nonaktifkan layar penuh' },
+  { key: 'restaurant-toggle-fullscreen', en: 'Toggle Fullscreen', id: 'Aktifkan/nonaktifkan layar penuh' },
+  { key: 'retail-shortcut-fullscreen', en: 'Toggle Fullscreen', id: 'Aktifkan/nonaktifkan layar penuh' },
+  { key: 'pos-cart-service-toggle-aria', en: 'Toggle service charge', id: 'Aktifkan/nonaktifkan biaya layanan' },
+  {
+    key: 'setup-features-toggle-aria',
+    attr: 'aria-label',
+    args: { label: 'Payments' },
+    en: 'Toggle Payments',
+    id: 'Aktifkan/nonaktifkan Payments',
+  },
+  { key: 'settings-sync-enabled-aria', en: 'Toggle cloud sync', id: 'Aktifkan/nonaktifkan sinkronisasi cloud' },
+  { key: 'appearance-hw-accel-aria', attr: 'aria-label', en: 'Toggle hardware acceleration', id: 'Aktifkan/nonaktifkan akselerasi perangkat keras' },
+  {
+    key: 'feature-toggle-toggle-aria',
+    args: { name: 'Cloud Sync' },
+    en: 'Toggle Cloud Sync',
+    id: 'Aktifkan/nonaktifkan Cloud Sync',
+  },
+  { key: 'settings-theme-toggle-dark-aria', en: 'Switch to dark mode', id: 'Beralih ke mode gelap' },
+  { key: 'settings-theme-toggle-light-aria', en: 'Switch to light mode', id: 'Beralih ke mode terang' },
+  { key: 'promotions-error-toggle', en: 'Failed to toggle promotion', id: 'Gagal mengubah status promosi' },
+  { key: 'feature-toggle-error-toggle', en: 'Failed to toggle feature', id: 'Gagal mengubah status fitur' },
+  { key: 'topology-wire-toggle-aria', en: 'Toggle wire direction', id: 'Balik arah koneksi' },
+];
+
+describe('i18n native-speaker pin (rounds 90-98)', () => {
+  it('resolves every pinned value exactly in BOTH the en and id production bundles', () => {
+    const en = getBundle('en');
+    const id = getBundle('id');
+    for (const { key, args, attr, en: enExpected, id: idExpected } of nativeSpeakerPins) {
+      const enMsg = en.getMessage(key);
+      expect(enMsg, `key "${key}" must exist in the en bundle`).toBeDefined();
+      // Attribute-only messages (.aria-label / .placeholder) have no
+      // value; their text lives in `attributes[attr]`. Format whichever
+      // the pin declares, so both shapes are guarded in both directions.
+      const enPattern = attr ? enMsg!.attributes[attr]! : enMsg!.value;
+      expect(enPattern, `key "${key}" must resolve in the en bundle`).toBeDefined();
+      expect(
+        en.formatPattern(enPattern!, args ?? null),
+        `en "${key}" drifted from its pinned value`,
+      ).toBe(enExpected);
+      const idMsg = id.getMessage(key);
+      expect(idMsg, `key "${key}" must exist in the id bundle`).toBeDefined();
+      const idPattern = attr ? idMsg!.attributes[attr]! : idMsg!.value;
+      expect(idPattern, `key "${key}" must resolve in the id bundle`).toBeDefined();
+      expect(
+        id.formatPattern(idPattern!, args ?? null),
+        `id "${key}" drifted from its pinned value`,
+      ).toBe(idExpected);
+    }
+  });
+});
+
+// ── Production React render path (round 95 follow-up) ─────────
+//
+// The formatPattern assertions above prove bundle RESOLUTION. This
+// test proves the full PRODUCTION render path: getBundle('id') →
+// new ReactLocalization([bundle]) → <LocalizationProvider> →
+// <Localized>, the exact plumbing `LocaleContext.tsx` uses at
+// runtime. Every pinned key must show its Indonesian text in the
+// rendered DOM — if the id bundle ever stopped reaching React (a
+// broken provider, a wrong locale name, a dropped import), these
+// would fall back to the English placeholder children instead.
+describe('i18n native-speaker pin — production render path', () => {
+  it('renders every pinned Indonesian value/attribute through getBundle + ReactLocalization + <Localized>', async () => {
+    const l10n = new ReactLocalization([getBundle('id')]);
+    let container: HTMLElement | undefined;
+    await renderInAct(
+      <LocalizationProvider l10n={l10n}>
+        <div ref={(el) => { container = el ?? undefined; }}>
+          {nativeSpeakerPins.map(({ key, args, attr }) => (
+            // <Localized> renders the message VALUE as the children and
+            // applies message ATTRIBUTES (.aria-label / .placeholder) to
+            // the wrapped element — both are asserted per-pin below, so
+            // the render path is guarded for every pinned key in the table.
+            <Localized key={key} id={key} vars={args ?? {}} attrs={attr ? { [attr]: true } : {}}>
+              <span data-pin={key}>Fallback</span>
+            </Localized>
+          ))}
+        </div>
+      </LocalizationProvider>,
+    );
+
+    for (const { key, attr, id: idExpected } of nativeSpeakerPins) {
+      const el = container!.querySelector(`[data-pin="${key}"]`);
+      expect(el, `expected a rendered <Localized> for pin "${key}"`).not.toBeNull();
+      if (attr) {
+        expect(
+          el!.getAttribute(attr),
+          `id "${key}" attribute drifted from its pinned value`,
+        ).toBe(idExpected);
+      } else {
+        // Two pinned keys share the value "Label koneksi"; per-element
+        // textContent assertions keep them distinct (getByText would throw).
+        expect(
+          el!.textContent,
+          `id "${key}" drifted from its pinned value`,
+        ).toBe(idExpected);
+      }
+    }
   });
 });
 
@@ -257,5 +451,104 @@ describe('i18n two-way key parity (en ↔ id)', () => {
       missing,
       `Indonesian bundle is missing ${missing.length} key(s) present in English: ${missing.join(', ')}`,
     ).toEqual([]);
+  });
+});
+
+// ── Topology placeholder resolution (round 154 regression) ───────
+//
+// Rounds 150-152 introduced `topology-apply-workspace-diff` and the
+// discard-dialog message with BARE `{ created }` / `{name}`
+// placeholders. Fluent treats a bare identifier as a TERM reference,
+// so the real runtime rendered the literal `{created}` text (with
+// isolating error markers) instead of the supplied numbers/names —
+// invisible to the mocked-Fluent editor/screen tests, which
+// interpolate by hand. Topology placeholders must use `$`-prefixed
+// variables, pinned here against the REAL production bundles in BOTH
+// locales so a regression fails at the source.
+describe('i18n topology placeholder resolution (round 154)', () => {
+  const cases: Array<{ key: string; args: Record<string, string | number>; en: string; id: string }> = [
+    {
+      key: 'topology-apply-workspace-diff',
+      args: { created: 1, updated: 0, archived: 0, typeChanged: 0, from: 0, to: 1 },
+      en: '1 created · 0 updated · 0 archived · 0 type-changed · rev 0 → 1',
+      id: '1 dibuat · 0 diperbarui · 0 diarsipkan · 0 diubah jenisnya · rev 0 → 1',
+    },
+    {
+      key: 'topology-discard-changes-msg',
+      args: { name: 'Main Street' },
+      en: '"Main Street" has unsaved changes. Switching branches will discard them.',
+      id: '"Main Street" memiliki perubahan yang belum disimpan. Pindah cabang akan menghilangkannya.',
+    },
+  ];
+
+  it('resolves topology placeholders without Fluent error markers in both locales', () => {
+    for (const { key, args, en, id } of cases) {
+      for (const [locale, expected] of [['en', en], ['id', id]] as const) {
+        const bundle = getBundle(locale);
+        const errors: Error[] = [];
+        const rendered = bundle.formatPattern(bundle.getMessage(key)!.value!, args, errors);
+        expect(rendered, `${key} (${locale})`).toBe(expected);
+        expect(errors, `${key} (${locale})`).toEqual([]);
+      }
+    }
+  });
+});
+
+// Round 156: the bare-`{}` placeholder guard. Rounds 150–152 shipped
+// `{ created }` / `{name}` placeholders (treated by Fluent as message
+// references) that rendered literally — invisible to mocked Fluent.
+// Every locale bundle must stay free of bare placeholders whose ident
+// is not a defined message; this test runs inside the `lint:i18n` gate
+// (which executes this file via vitest) so a regression fails closed.
+describe('i18n bare-placeholder scan (round 156)', () => {
+  it('finds no bare `{}` placeholders in any locale bundle', () => {
+    expect(scanLocaleFiles()).toEqual([]);
+  });
+});
+
+// Round 164: the Localized-vars cross-check. Bundle parity counts keys,
+// not variables — a `<Localized id="…" vars={{ … }}>` site missing a
+// declared `$var` renders the raw id in the real runtime, invisible to
+// mocked Fluent. This runs in the same gate so a vars mismatch fails
+// closed with the file/line/id and the missing/extra names.
+describe('i18n Localized-vars cross-check (round 164)', () => {
+  it('finds no vars mismatches across every Localized site and en bundle', () => {
+    expect(scanLocalizedVars()).toEqual([]);
+  });
+});
+
+// Round 165: the translation-var drift check. The en-side gate (above)
+// aligns every site to the en contract, so an id translation referencing
+// a var its en counterpart never declares renders a literal `{$var}`
+// placeholder for Indonesian users. Subset direction: a translation
+// dropping a var is safe, only drift is flagged. Same gate, so a
+// regression fails closed.
+describe('i18n translation-var drift scan (round 165)', () => {
+  it('finds no var drift across every id bundle against its en counterpart', () => {
+    expect(scanTranslationVars()).toEqual([]);
+  });
+});
+
+// Rounds 166-167: the localized-attribute checks. A site localizes an
+// attribute via `attrs`; when the id translation omits it (round 166)
+// it is silently unset for Indonesian users, and when the EN message
+// lacks it entirely (round 167) everyone sees the JSX English
+// fallback. Driven by the site attrs so only rendered attributes
+// count. Same gate, fails closed.
+describe('i18n localized-attribute scan (rounds 166-167)', () => {
+  it('finds no localized attribute missing or omitted by any translation', () => {
+    expect(scanAttributeOmissions()).toEqual([]);
+  });
+});
+
+// Round 169: the reverse direction of the attribute gates. A message
+// declared with ONLY attributes has a null value; a `getString` /
+// `requiredLocalized` consumer reads the VALUE and so renders the raw
+// key id instead of any attribute text. This scans every attribute-only
+// message referenced by a value-reader in production code. Same gate,
+// fails closed.
+describe('i18n attribute-only getString scan (round 169)', () => {
+  it('finds no attribute-only message consumed via getString/requiredLocalized', () => {
+    expect(scanAttributeOnlyGetString()).toEqual([]);
   });
 });

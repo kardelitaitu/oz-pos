@@ -601,6 +601,112 @@ fn check_integrity_on_empty_healthy_db() {
     fs::remove_file(&p).ok();
 }
 
+// ── Tenant-integrity gate (desktop store DBs are `default`-tenant only) ──
+
+/// A clean, migrated DB passes: every seeded row carries the `default`
+/// tenant (the migrations seed store/profile rows with `DEFAULT 'default'`),
+/// so `check_tenant_integrity` must return `Ok` without any data.
+#[test]
+fn check_tenant_integrity_passes_on_clean_db() {
+    let p = fresh_db_path("tenant-clean");
+    {
+        let mut c = open_db(&p);
+        run_migrations(&mut c);
+        let s = store(&c);
+        s.check_tenant_integrity().expect("clean DB passes");
+        // Even with a product and a user present (both `default`-tenant).
+        s.create_product("TENANT-1", "T", price(100), None, None, 5, None)
+            .unwrap();
+        s.check_tenant_integrity()
+            .expect("default-tenant rows pass");
+    }
+    fs::remove_file(&p).ok();
+}
+
+/// A single foreign-tenant product row must fail loud and name `products`.
+#[test]
+fn check_tenant_integrity_rejects_foreign_product() {
+    let p = fresh_db_path("tenant-foreign-product");
+    {
+        let mut c = open_db(&p);
+        run_migrations(&mut c);
+        c.execute(
+            "INSERT INTO products (sku, name, price_minor, currency, tenant_id)
+             VALUES ('X-1', 'Foreign', 100, 'USD', 'other-tenant')",
+            [],
+        )
+        .unwrap();
+        let s = store(&c);
+        let err = s.check_tenant_integrity().unwrap_err().to_string();
+        assert!(
+            err.contains("products"),
+            "error must name the products table: {err}"
+        );
+    }
+    fs::remove_file(&p).ok();
+}
+
+/// A single foreign-tenant user row must fail loud and name `users`.
+#[test]
+fn check_tenant_integrity_rejects_foreign_user() {
+    let p = fresh_db_path("tenant-foreign-user");
+    {
+        let mut c = open_db(&p);
+        run_migrations(&mut c);
+        // users has NOT NULL username/pin_hash/display_name/role_id — seed
+        // a role row first so the FK constraint is satisfied.
+        c.execute(
+            "INSERT INTO roles (id, name) VALUES ('r-foreign', 'owner')",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+             VALUES ('u-foreign', 'foreign', 'hash', 'Foreign', 'r-foreign', 'other-tenant')",
+            [],
+        )
+        .unwrap();
+        let s = store(&c);
+        let err = s.check_tenant_integrity().unwrap_err().to_string();
+        assert!(
+            err.contains("users"),
+            "error must name the users table: {err}"
+        );
+    }
+    fs::remove_file(&p).ok();
+}
+
+/// Both foreign tables at once are reported together, not one at a time.
+#[test]
+fn check_tenant_integrity_reports_both_violations() {
+    let p = fresh_db_path("tenant-both");
+    {
+        let mut c = open_db(&p);
+        run_migrations(&mut c);
+        c.execute(
+            "INSERT INTO products (sku, name, price_minor, currency, tenant_id)
+             VALUES ('X-1', 'Foreign', 100, 'USD', 'other-tenant')",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO roles (id, name) VALUES ('r-foreign', 'owner')",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+             VALUES ('u-foreign', 'foreign', 'hash', 'Foreign', 'r-foreign', 'other-tenant')",
+            [],
+        )
+        .unwrap();
+        let err = store(&c).check_tenant_integrity().unwrap_err().to_string();
+        assert!(err.contains("products"), "error must name products: {err}");
+        assert!(err.contains("users"), "error must name users: {err}");
+    }
+    fs::remove_file(&p).ok();
+}
+
 // ── RUST-02: online backup API (no VACUUM INTO SQL interpolation) ─────
 
 /// Backup to a path containing a single quote, spaces, and Unicode —

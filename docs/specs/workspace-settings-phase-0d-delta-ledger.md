@@ -1,6 +1,6 @@
 # Phase 0d — `setting_updated` Delta Ledger + `write_setting_delta` IPC
 
-- **Status:** PENDING
+- **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 0d of 11 (Workspace Settings Architecture — ADR #22)
 - **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** PREREQUISITE (blocks Phase 2)
@@ -108,3 +108,5 @@ WHERE key = ? AND terminal_id = ?
 - `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar D, §Edge Case #8, §Phase 0d
 - `platform/core/src/settings.rs`
 - `crates/oz-core/migrations/` (existing migration pattern)
+
+> Last audited: 2026-08-08 by docs-auditor (status corrected to IMPLEMENTED).

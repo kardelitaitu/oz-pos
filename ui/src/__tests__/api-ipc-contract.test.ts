@@ -218,26 +218,24 @@ describe('sales.ts IPC contract', () => {
 // ── topology.ts ───────────────────────────────────────────────────
 
 import {
-  saveTopology,
   loadTopology,
   applyTopologyDiff,
+  canSaveTopology,
 } from '@/api/topology';
 
 describe('topology.ts IPC contract', () => {
   beforeEach(() => mockInvoke.mockReset());
 
-  it('saveTopology invokes "save_topology" with nodes + wires', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    const nodes = [{ id: 'n1', type: 'store', name: 'Main', x: 0, y: 0 }];
-    const wires = [{ id: 'w1', from_node_id: 'n1', to_node_id: 'n2', direction: 'one-way' }];
-    await saveTopology(nodes, wires);
-    expect(mockInvoke).toHaveBeenCalledWith('save_topology', { nodes, wires });
-  });
-
   it('loadTopology invokes "load_topology" with no args', async () => {
     mockInvoke.mockResolvedValue(null);
     await loadTopology();
     expect(mockInvoke).toHaveBeenCalledWith('load_topology', undefined);
+  });
+
+  it('loadTopology invokes "load_topology" with a branch id', async () => {
+    mockInvoke.mockResolvedValue(null);
+    await loadTopology('branch-a');
+    expect(mockInvoke).toHaveBeenCalledWith('load_topology', { branchId: 'branch-a' });
   });
 
   it('applyTopologyDiff invokes "apply_topology_diff" with full diff payload', async () => {
@@ -247,7 +245,7 @@ describe('topology.ts IPC contract', () => {
     const creations = [{ id: 'ws-1', type_key: 'restaurant-pos', store_id: 's1', name: 'POS' }];
     const updates = [{ id: 'ws-2', name: 'Renamed' }];
     const archives = ['ws-old'];
-    await applyTopologyDiff('tok', creations, updates, archives, nodes, wires);
+    await applyTopologyDiff('tok', creations, updates, archives, nodes, wires, undefined, 7, '00000000-0000-4000-8000-000000000001');
     expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', {
       sessionToken: 'tok',
       workspaceCreations: creations,
@@ -255,7 +253,44 @@ describe('topology.ts IPC contract', () => {
       workspaceArchives: archives,
       diagramNodes: nodes,
       diagramWires: wires,
+      baseRevision: 7,
+      requestId: '00000000-0000-4000-8000-000000000001',
+      resolvedIssueKeys: [],
     });
+  });
+
+  it('applyTopologyDiff persists branch-scoped resolved issue keys', async () => {
+    mockInvoke.mockResolvedValue({ revision: 8 });
+    await applyTopologyDiff(
+      'tok', [], [], [], [], [], 'branch-a', 7, '00000000-0000-4000-8000-000000000003',
+      ['node:wh-1:topology-validation-warehouse-missing-stock-routing'],
+    );
+    expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', expect.objectContaining({
+      resolvedIssueKeys: ['node:wh-1:topology-validation-warehouse-missing-stock-routing'],
+    }));
+  });
+
+  it('applyTopologyDiff includes the active branch id and revision controls', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await applyTopologyDiff('tok', [], [], [], [], [], 'branch-a', 3, '00000000-0000-4000-8000-000000000002');
+    expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', {
+      sessionToken: 'tok',
+      workspaceCreations: [],
+      workspaceUpdates: [],
+      workspaceArchives: [],
+      diagramNodes: [],
+      diagramWires: [],
+      branchId: 'branch-a',
+      baseRevision: 3,
+      requestId: '00000000-0000-4000-8000-000000000002',
+      resolvedIssueKeys: [],
+    });
+  });
+
+  it('canSaveTopology invokes the backend capability probe', async () => {
+    mockInvoke.mockResolvedValue(true);
+    await expect(canSaveTopology('tok')).resolves.toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('can_save_topology', { sessionToken: 'tok' });
   });
 
   it('loadTopology returns null when no topology saved', async () => {
@@ -264,12 +299,6 @@ describe('topology.ts IPC contract', () => {
     expect(result).toBeNull();
   });
 
-  it('saveTopology propagates backend errors', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('duplicate node id: n1'));
-    await expect(
-      saveTopology([{ id: 'n1', type: 'store', name: 'X', x: 0, y: 0 }], []),
-    ).rejects.toThrow('duplicate node id');
-  });
 });
 
 // ── settings.ts ───────────────────────────────────────────────────
@@ -506,6 +535,8 @@ describe('products.ts IPC contract', () => {
 
 import {
   listWorkspacesScoped,
+  listWorkspaces,
+  listWorkspacesForStoreScoped,
   listWorkspaceScreens,
   createWorkspaceInstanceScoped,
   updateWorkspaceInstanceScoped,
@@ -521,10 +552,29 @@ describe('workspaces.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('list_workspaces_scoped', { sessionToken: 'tok' });
   });
 
-  it('listWorkspaceScreens routes pre-session reads with typeKey + storeId', async () => {
+  it('listWorkspaces binds the picker ticket server-side (audit/06)', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listWorkspaceScreens('restaurant-pos', 'store-1');
+    await listWorkspaces('ticket-abc', 'store-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_workspaces', {
+      ticket: 'ticket-abc',
+      storeId: 'store-1',
+    });
+  });
+
+  it('listWorkspacesForStoreScoped invokes "list_workspaces_for_store_scoped" with sessionToken + storeId', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listWorkspacesForStoreScoped('tok', 'store-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_workspaces_for_store_scoped', {
+      sessionToken: 'tok',
+      storeId: 'store-1',
+    });
+  });
+
+  it('listWorkspaceScreens routes pre-session reads with ticket + typeKey + storeId (audit/06)', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listWorkspaceScreens('ticket-abc', 'restaurant-pos', 'store-1');
     expect(mockInvoke).toHaveBeenCalledWith('list_workspace_screens', {
+      ticket: 'ticket-abc',
       typeKey: 'restaurant-pos',
       storeId: 'store-1',
     });

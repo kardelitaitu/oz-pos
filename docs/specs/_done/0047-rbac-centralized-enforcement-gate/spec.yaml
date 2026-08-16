@@ -1,0 +1,50 @@
+id: 0047-rbac-centralized-enforcement-gate
+title: RBAC centralized fail-closed enforcement gate
+status: implemented
+owner: OZ-POS maintainers
+implementer: Buffy
+priority: P1
+scope:
+  - platform/core/src/rbac.rs
+  - apps/desktop-client/src/commands/authz.rs
+  - apps/desktop-client/src/commands/customers.rs
+  - apps/desktop-client/src/commands/exchange_rates.rs
+  - apps/desktop-client/src/commands/*.rs
+  - apps/tablet-client/src/commands/*.rs
+  - docs/specs/_done/0047-rbac-centralized-enforcement-gate/
+
+problem:
+  - Permission enforcement is a per-command `require_permission_for_user(...)`
+    pattern, so a new command can silently skip the gate; rounds 172 and 174
+    found exactly this class of gap (missing `customers:view` gate, unvalidated
+    exchange-rate writes).
+  - There is no single deny-by-default boundary that review can check against,
+    and frontend role gating is presentation only, never a security boundary.
+  - 'ADR #35 D3 requires one centralized backend `require_permission(permission)`
+    gate that every permission-sensitive command must pass.'
+
+implemented_slice:
+  - Add the centralized backend `require_permission(permission)` gate that
+    resolves the caller's role through family wildcards and sensitive keys
+    (using the 0046 registry).
+  - Migrate every existing permission-sensitive command call site
+    (`require_permission_for_user`) onto the gate.
+  - Deny by default — an unrecognized permission or role resolves to denial, and
+    the gate fails closed on resolution errors.
+  - Add a test that pins the set of permission-sensitive commands to those
+    passing the gate, so a new command skipping it is caught by the suite.
+
+invariants:
+  - Every permission-sensitive command path passes the centralized gate.
+  - An unregistered permission key or unknown role denies by default.
+  - Frontend role gating never gates a backend pass; only the backend gate
+    authorizes.
+  - A new permission-sensitive command cannot skip the gate without a failing
+    test.
+
+non_goals:
+  - Branch/workspace assignment scopes (spec 0048); the gate is permission-only
+    in this slice.
+  - The user profile fields (spec 0049).
+  - 'Permission caching (deferred in ADR #35 D7).'
+  - UI changes beyond removing frontend-only gating where it exists.

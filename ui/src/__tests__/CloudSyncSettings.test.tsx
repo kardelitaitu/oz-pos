@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import settingsFtl from '@/locales/settings.ftl?raw';
@@ -99,6 +99,7 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
     if (
       cmd === 'set_receipt_settings' || cmd === 'set_store_settings' ||
       cmd === 'set_default_currency' || cmd === 'set_user_preferences' ||
+      cmd === 'set_user_preferences_scoped' ||
       cmd === 'update_sync_settings' || cmd === 'set_brand_primary_colour' ||
       cmd === 'set_brand_store_name'
     ) {
@@ -121,8 +122,18 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
     if (cmd === 'check_license_status') {
       return Promise.resolve({ tier: 'pro', tenantId: 'tenant-1', status: 'active', active: true, expiresAt: null, maxStores: 5 });
     }
-    if (cmd === 'pending_sync_count') {
-      return Promise.resolve(0);
+    if (cmd === 'offline_queue_status_summary') {
+      return Promise.resolve({
+        pendingCount: 0,
+        syncedCount: 0,
+        failedCount: 0,
+        conflictCount: 0,
+        lastSyncedAt: null,
+        oldestPendingAt: null,
+      });
+    }
+    if (cmd === 'get_sync_plan') {
+      return Promise.resolve({ ok: true, plan: 'pro', status: 'ok' });
     }
     return Promise.resolve(undefined);
   };
@@ -246,13 +257,13 @@ describe('CloudSyncSettings', () => {
   //  Server URL field
   // ═══════════════════════════════════════════════════════════════
 
-  it('renders server URL input with placeholder', async () => {
+  it('falls back to the local server URL when none is configured', async () => {
     await waitForSyncSection();
 
     const urlInput = getServerUrlInput();
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.type).toBe('url');
-    expect(urlInput).toHaveValue('');
+    expect(urlInput).toHaveValue('http://localhost:3099');
   });
 
   it('updates server URL input value when typing', async () => {
@@ -404,12 +415,12 @@ describe('CloudSyncSettings', () => {
   //  Enabled toggle
   // ═══════════════════════════════════════════════════════════════
 
-  it('renders enabled toggle unchecked by default', async () => {
+  it('enables cloud sync by default when no setting is configured', async () => {
     await waitForSyncSection();
 
     const checkbox = getEnabledCheckbox();
     expect(checkbox).toBeInTheDocument();
-    expect(checkbox.checked).toBe(false);
+    expect(checkbox.checked).toBe(true);
   });
 
   it('toggles enabled state on click', async () => {
@@ -420,10 +431,10 @@ describe('CloudSyncSettings', () => {
     const wrapper = checkbox.closest('.settings-toggle') as HTMLLabelElement;
 
     await user.click(wrapper);
-    expect(checkbox.checked).toBe(true);
+    expect(checkbox.checked).toBe(false);
 
     await user.click(wrapper);
-    expect(checkbox.checked).toBe(false);
+    expect(checkbox.checked).toBe(true);
   });
 
   it('sends enabled flag to backend on save', async () => {
@@ -432,6 +443,7 @@ describe('CloudSyncSettings', () => {
 
     const checkbox = getEnabledCheckbox();
     const wrapper = checkbox.closest('.settings-toggle') as HTMLLabelElement;
+    await user.click(wrapper);
     await user.click(wrapper);
 
     fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
@@ -449,30 +461,16 @@ describe('CloudSyncSettings', () => {
   //  Not-configured hint
   // ═══════════════════════════════════════════════════════════════
 
-  it('shows not-configured hint when serverUrl is null and enabled is false', async () => {
+  it('does not show a not-configured hint with the fallback sync settings', async () => {
     await waitForSyncSection();
 
-    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
+    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
   });
 
-  it('hides not-configured hint when enabled toggle is on', async () => {
-    const user = userEvent.setup();
+  it('keeps the not-configured hint hidden while fallback sync is enabled', async () => {
     await waitForSyncSection();
 
-    // Initially: not configured
-    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
-
-    // Toggle enabled ON
-    const checkbox = getEnabledCheckbox();
-    const wrapper = checkbox.closest('.settings-toggle') as HTMLLabelElement;
-    await user.click(wrapper);
-    fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
-    });
-
-    // Hint should be gone because enabled is now true
+    expect(getEnabledCheckbox().checked).toBe(true);
     expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
   });
 
@@ -480,10 +478,10 @@ describe('CloudSyncSettings', () => {
   //  Sync Now button
   // ═══════════════════════════════════════════════════════════════
 
-  it('does not render Sync Now button when sync is unconfigured', async () => {
+  it('renders Sync Now when fallback sync is configured', async () => {
     await waitForSyncSection();
 
-    expect(screen.queryByRole('button', { name: /sync now/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sync now/i })).toBeInTheDocument();
   });
 
   it('renders Sync Now button when serverUrl is set', async () => {
@@ -526,6 +524,66 @@ describe('CloudSyncSettings', () => {
     });
   });
 
+  it('shows the upgrade prompt when sync_run reports planRequired', async () => {
+    // ADR sync-plan-gating: a free tenant's sync attempt must render a
+    // dedicated "requires a paid plan" block, not a generic sync error.
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings_scoped') {
+        return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true });
+      }
+      if (cmd === 'sync_run') {
+        return Promise.resolve({
+          synced: 0,
+          failed: 0,
+          error: 'cloud sync requires a paid plan',
+          planRequired: true,
+        });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    fireEvent.click(screen.getByRole('button', { name: /sync now/i }));
+
+    await waitFor(() => {
+      // The dedicated upgrade block (not the generic error line).
+      expect(screen.getAllByText(/requires a paid plan/i).length).toBeGreaterThanOrEqual(1);
+    });
+    // The hint that local sales keep working must also be present.
+    expect(screen.getByText(/local sales keep working/i)).toBeInTheDocument();
+    // No generic "Sync failed" toast path: the block replaces the error.
+    expect(screen.queryByText(/Sync failed/i)).not.toBeInTheDocument();
+  });
+
+  it('does not show the upgrade prompt for a generic sync error', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings_scoped') {
+        return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true });
+      }
+      if (cmd === 'sync_run') {
+        return Promise.resolve({
+          synced: 0,
+          failed: 0,
+          error: 'network unreachable',
+          planRequired: false,
+        });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    fireEvent.click(screen.getByRole('button', { name: /sync now/i }));
+
+    await waitFor(() => {
+      // The error text shows in the status line; the upgrade block must NOT.
+      expect(screen.getAllByText(/network unreachable/i).length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.queryByText(/requires a paid plan/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/local sales keep working/i)).not.toBeInTheDocument();
+  });
+
   // ═══════════════════════════════════════════════════════════════
   //  hasApiKey state update after save (regression guard)
   // ═══════════════════════════════════════════════════════════════
@@ -557,8 +615,8 @@ describe('CloudSyncSettings', () => {
   it('updates serverUrl in sync state after save so not-configured hint disappears', async () => {
     await waitForSyncSection();
 
-    // Initially: not configured
-    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
+    // The fallback settings are already configured.
+    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
 
     // Fill server URL and save
     fireEvent.change(getServerUrlInput(), { target: { value: 'https://sync.example.com' } });
@@ -872,5 +930,47 @@ describe('CloudSyncSettings', () => {
 
     // Save button should show unsaved changes (Revert button visible)
     expect(screen.getByRole('button', { name: /revert settings/i })).toBeInTheDocument();
+  });
+
+  it('auto-refreshes the queue summary every 30s while the sync section is open', async () => {
+    vi.useFakeTimers();
+    try {
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === 'get_sync_settings_scoped') {
+          return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true });
+        }
+        return defaultImpl(cmd);
+      });
+
+      renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+      // Flush initial async loads (settings payload etc.).
+      await act(async () => { await Promise.resolve(); });
+      navigateToSync();
+      // Initial summary load fires when the sync section mounts.
+      await act(async () => { await Promise.resolve(); });
+
+      const summaryCalls = () =>
+        invokeMock.mock.calls.filter(([cmd]) => cmd === 'offline_queue_status_summary').length;
+      const callsAfterMount = summaryCalls();
+      expect(callsAfterMount).toBeGreaterThanOrEqual(1);
+
+      // Advance past the 30s poll interval — the panel must refresh.
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
+      expect(summaryCalls()).toBeGreaterThan(callsAfterMount);
+
+      // Leaving the section stops the poll.
+      const callsBeforeLeave = summaryCalls();
+      fireEvent.click(screen.getByRole('treeitem', { name: /general/i }));
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+        await Promise.resolve();
+      });
+      expect(summaryCalls()).toBe(callsBeforeLeave);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

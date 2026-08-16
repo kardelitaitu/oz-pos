@@ -190,3 +190,9 @@ When implemented:
 - P17: Plugin marketplace & DX (model updates via plugin system)
 - `docs/decisions/2026-07-10-crdt-delta-ledger-offline-sync.md`
 - `crates/oz-core/src/db/reports.rs` (data sources)
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

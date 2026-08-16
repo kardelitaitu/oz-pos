@@ -51,7 +51,7 @@ pub struct AuthorizationError {
 /// what actions they can perform in the POS.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Role {
-    /// Unique identifier (UUID or short slug like "role-cashier").
+    /// Unique identifier (UUID or short slug like "role-custom").
     pub id: String,
     /// Human-readable name (e.g. "Owner", "Manager", "Cashier").
     pub name: String,
@@ -168,9 +168,9 @@ impl Role {
 /// # Examples
 ///
 /// - `"sales:void"` — void a completed sale
-/// - `"products:edit"` — create/update/delete products
+/// - `"products:update"` — update existing product details
 /// - `"settings:edit"` — modify store settings
-/// - `"staff:manage"` — create/update/delete staff users
+/// - `"staff:update"` — update an existing staff member
 /// - `"reports:view"` — view sales reports
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Permission {
@@ -267,11 +267,12 @@ pub mod builtin_roles {
     pub const OWNER: &str = "role-owner";
     /// Manager — can manage products, categories, and view reports.
     pub const MANAGER: &str = "role-manager";
-    /// Cashier — can process sales and manage the daily register.
-    pub const CASHIER: &str = "role-cashier";
-    /// Kitchen — can view and update KDS orders.
-    pub const KITCHEN: &str = "role-kitchen";
+    /// Admin — global scope, everything except ownership/billing/irreversible org actions.
+    pub const ADMIN: &str = "role-admin";
+    /// Auditor — global, read-only.
+    pub const AUDITOR: &str = "role-auditor";
     /// Staff — operational role with Manager-level access minus settings.
+    /// The retired cashier/kitchen roles fold into Staff (migration 129).
     pub const STAFF: &str = "role-staff";
     /// Custom — fully flexible role with no preset permissions.
     pub const CUSTOM: &str = "role-custom";
@@ -347,6 +348,8 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::PRODUCTS_DELETE,
             permissions::PRODUCTS_IMPORT,
             permissions::PRODUCTS_EXPORT,
+            permissions::PRODUCTS_CRUD,
+            permissions::PRODUCTS_EDIT_COST,
             permissions::INVENTORY_VIEW,
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
@@ -355,11 +358,15 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::STAFF_READ,
             permissions::STAFF_CREATE,
             permissions::STAFF_UPDATE,
+            permissions::STAFF_READ_IDENTITY,
+            permissions::STAFF_READ_PAYROLL,
+            permissions::STAFF_EDIT_NOTES,
             permissions::SETTINGS_READ,
             permissions::SETTINGS_EDIT,
             permissions::REPORTS_VIEW,
             permissions::REPORTS_EXPORT,
             permissions::REPORTS_SCHEDULE,
+            permissions::ANALYTICS_VIEW,
             permissions::SHIFTS_OPEN,
             permissions::SHIFTS_CLOSE,
             permissions::SHIFTS_VIEW_ANY,
@@ -395,12 +402,14 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::TERMINALS_REGISTER,
             permissions::TERMINALS_EDIT,
             permissions::TERMINALS_DELETE,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
         ],
     },
     RolePreset {
-        id: builtin_roles::CASHIER,
-        name: "Cashier",
-        description: "Can process sales and manage the daily register.",
+        id: builtin_roles::STAFF,
+        name: "Staff",
+        description: "Checkout-operations role — processes sales, payments, discounts, customers and loyalty at the register, opens and closes shifts, and operates assigned workspaces (including KDS). No management access.",
         permissions: &[
             permissions::SALES_PROCESS,
             permissions::SALES_VIEW,
@@ -408,33 +417,28 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::SALES_SPLIT,
             permissions::PAYMENTS_CASH,
             permissions::PAYMENTS_CARD,
+            permissions::PAYMENTS_SETTLE,
+            permissions::DISCOUNTS_APPLY,
             permissions::CUSTOMERS_CREATE,
             permissions::CUSTOMERS_VIEW,
             permissions::LOYALTY_VIEW,
             permissions::LOYALTY_EARN,
             permissions::LOYALTY_REDEEM,
-            permissions::DISCOUNTS_APPLY,
-            permissions::INVENTORY_VIEW,
             permissions::SHIFTS_OPEN,
             permissions::SHIFTS_CLOSE,
+            permissions::TABLES_ASSIGN,
+            permissions::TABLES_MERGE,
+            permissions::TABLES_SPLIT,
+            permissions::TABLES_CLOSE,
             permissions::WORKSPACES_SWITCH,
-        ],
-    },
-    RolePreset {
-        id: builtin_roles::KITCHEN,
-        name: "Kitchen",
-        description: "Can view and update KDS orders and manage the order queue.",
-        permissions: &[
             permissions::KDS_VIEW,
             permissions::KDS_UPDATE,
-            permissions::SALES_VIEW,
-            permissions::WORKSPACES_SWITCH,
         ],
     },
     RolePreset {
-        id: builtin_roles::STAFF,
-        name: "Staff",
-        description: "Operational role with Manager-level access minus settings configuration.",
+        id: builtin_roles::ADMIN,
+        name: "Admin",
+        description: "Global scope — everything except ownership transfer, billing, and irreversible org actions (staff deletion).",
         permissions: &[
             permissions::SALES_PROCESS,
             permissions::SALES_VOID,
@@ -449,6 +453,8 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::PRODUCTS_DELETE,
             permissions::PRODUCTS_IMPORT,
             permissions::PRODUCTS_EXPORT,
+            permissions::PRODUCTS_CRUD,
+            permissions::PRODUCTS_EDIT_COST,
             permissions::INVENTORY_VIEW,
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
@@ -457,9 +463,16 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::STAFF_READ,
             permissions::STAFF_CREATE,
             permissions::STAFF_UPDATE,
+            permissions::STAFF_MANAGE_ROLES,
+            permissions::STAFF_READ_IDENTITY,
+            permissions::STAFF_READ_PAYROLL,
+            permissions::STAFF_EDIT_NOTES,
+            permissions::SETTINGS_READ,
+            permissions::SETTINGS_EDIT,
             permissions::REPORTS_VIEW,
             permissions::REPORTS_EXPORT,
             permissions::REPORTS_SCHEDULE,
+            permissions::ANALYTICS_VIEW,
             permissions::SHIFTS_OPEN,
             permissions::SHIFTS_CLOSE,
             permissions::SHIFTS_VIEW_ANY,
@@ -495,6 +508,28 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::TERMINALS_REGISTER,
             permissions::TERMINALS_EDIT,
             permissions::TERMINALS_DELETE,
+            permissions::CATEGORIES_MANAGE,
+            permissions::PLUGINS_MANAGE,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
+        ],
+    },
+    RolePreset {
+        id: builtin_roles::AUDITOR,
+        name: "Auditor",
+        description: "Global, read-only — views operational data and the audit log; never manages and never sees sensitive profile fields.",
+        permissions: &[
+            permissions::SALES_VIEW,
+            permissions::PRODUCTS_READ,
+            permissions::INVENTORY_VIEW,
+            permissions::STAFF_READ,
+            permissions::SETTINGS_READ,
+            permissions::REPORTS_VIEW,
+            permissions::AUDIT_VIEW,
+            permissions::SHIFTS_VIEW_ANY,
+            permissions::CUSTOMERS_VIEW,
+            permissions::LOYALTY_VIEW,
+            permissions::KDS_VIEW,
         ],
     },
     RolePreset {
@@ -530,47 +565,71 @@ mod preset_tests {
     }
 
     #[test]
-    fn cashier_preset_includes_basic_sales() {
-        let preset = &ROLE_PRESETS[2];
-        assert_eq!(preset.id, builtin_roles::CASHIER);
-        assert!(preset.permissions.contains(&permissions::SALES_PROCESS));
-        assert!(preset.permissions.contains(&permissions::PAYMENTS_CASH));
-        assert!(preset.permissions.contains(&permissions::SHIFTS_OPEN));
-    }
-
-    #[test]
-    fn cashier_lacks_management_permissions() {
-        let preset = &ROLE_PRESETS[2];
-        assert!(!preset.permissions.contains(&permissions::SETTINGS_EDIT));
-        assert!(!preset.permissions.contains(&permissions::STAFF_CREATE));
-        assert!(!preset.permissions.contains(&permissions::SALES_VOID));
-        assert!(!preset.permissions.contains(&permissions::REPORTS_VIEW));
-        assert!(!preset.permissions.contains(&permissions::PRODUCTS_CREATE));
-    }
-
-    #[test]
     fn location_manage_permission_follows_inventory_roles() {
         // LOC-06: location CRUD/rebind is a management capability, not a sales
-        // one. Manager and Staff (inventory managers) hold it; cashier must not
-        // be able to create/rename/deactivate or rebind locations.
+        // one. Manager holds it; Staff is checkout-only and must not manage
+        // inventory locations; a bare Custom role must not either.
         let manager = &ROLE_PRESETS[1];
         assert!(
             manager
                 .permissions
                 .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
         );
-        let staff = &ROLE_PRESETS[4];
+        let staff = &ROLE_PRESETS[2];
         assert!(
-            staff
+            !staff
+                .permissions
+                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE),
+            "Staff is checkout-only and must not manage inventory locations"
+        );
+        let custom = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::CUSTOM)
+            .expect("custom preset");
+        assert!(
+            !custom
                 .permissions
                 .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
         );
-        let cashier = &ROLE_PRESETS[2];
-        assert!(
-            !cashier
-                .permissions
-                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
-        );
+    }
+
+    #[test]
+    fn presets_contain_no_retired_roles() {
+        // ADR #35 D4 (spec 0048 c2c): the cashier/kitchen roles are retired.
+        // Migration 129 removes their rows; the presets must never seed them
+        // again, and Staff (their folding target) must cover their access.
+        for preset in ROLE_PRESETS {
+            assert_ne!(preset.id, "role-cashier");
+            assert_ne!(preset.id, "role-kitchen");
+        }
+        let staff = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::STAFF)
+            .expect("staff preset");
+        for key in [
+            permissions::SALES_PROCESS,
+            permissions::SALES_VIEW,
+            permissions::SALES_DISCOUNT,
+            permissions::SALES_SPLIT,
+            permissions::PAYMENTS_CASH,
+            permissions::PAYMENTS_CARD,
+            permissions::CUSTOMERS_CREATE,
+            permissions::CUSTOMERS_VIEW,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::DISCOUNTS_APPLY,
+            permissions::SHIFTS_OPEN,
+            permissions::SHIFTS_CLOSE,
+            permissions::WORKSPACES_SWITCH,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
+        ] {
+            assert!(
+                staff.permissions.contains(&key),
+                "Staff must cover {key} for the folded cashier/kitchen users"
+            );
+        }
     }
 
     #[test]
@@ -591,23 +650,67 @@ mod preset_tests {
     }
 
     #[test]
-    fn staff_preset_excludes_settings() {
-        let preset = &ROLE_PRESETS[4];
+    fn staff_preset_is_checkout_only() {
+        let preset = &ROLE_PRESETS[2];
         assert_eq!(preset.id, builtin_roles::STAFF);
         assert_eq!(preset.name, "Staff");
+        // No settings access.
         assert!(!preset.permissions.contains(&permissions::SETTINGS_READ));
         assert!(!preset.permissions.contains(&permissions::SETTINGS_EDIT));
-        // Staff should still have Manager-level operational permissions
-        assert!(preset.permissions.contains(&permissions::SALES_VOID));
-        assert!(preset.permissions.contains(&permissions::PRODUCTS_CREATE));
-        assert!(preset.permissions.contains(&permissions::STAFF_CREATE));
-        assert!(preset.permissions.contains(&permissions::REPORTS_VIEW));
+        // No management surfaces: voids, refunds, price overrides, products,
+        // inventory, staff, reports, audit, terminals, promotions.
+        assert!(!preset.permissions.contains(&permissions::SALES_VOID));
+        assert!(!preset.permissions.contains(&permissions::SALES_REFUND));
+        assert!(
+            !preset
+                .permissions
+                .contains(&permissions::SALES_OVERRIDE_PRICE)
+        );
+        assert!(!preset.permissions.contains(&permissions::PAYMENTS_REFUND));
+        assert!(!preset.permissions.contains(&permissions::PRODUCTS_CREATE));
+        assert!(!preset.permissions.contains(&permissions::PRODUCTS_READ));
+        assert!(!preset.permissions.contains(&permissions::INVENTORY_VIEW));
+        assert!(!preset.permissions.contains(&permissions::INVENTORY_ADJUST));
+        assert!(!preset.permissions.contains(&permissions::STAFF_CREATE));
+        assert!(!preset.permissions.contains(&permissions::STAFF_READ));
+        assert!(!preset.permissions.contains(&permissions::REPORTS_VIEW));
+        assert!(!preset.permissions.contains(&permissions::AUDIT_VIEW));
+        assert!(
+            !preset
+                .permissions
+                .contains(&permissions::TERMINALS_REGISTER)
+        );
+        // Checkout operations stay.
+        for key in [
+            permissions::SALES_PROCESS,
+            permissions::SALES_VIEW,
+            permissions::SALES_DISCOUNT,
+            permissions::SALES_SPLIT,
+            permissions::PAYMENTS_CASH,
+            permissions::PAYMENTS_CARD,
+            permissions::PAYMENTS_SETTLE,
+            permissions::DISCOUNTS_APPLY,
+            permissions::CUSTOMERS_CREATE,
+            permissions::CUSTOMERS_VIEW,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::SHIFTS_OPEN,
+            permissions::SHIFTS_CLOSE,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
+            permissions::WORKSPACES_SWITCH,
+        ] {
+            assert!(preset.permissions.contains(&key), "Staff must keep {key}");
+        }
     }
 
     #[test]
     fn custom_preset_has_no_permissions() {
-        let preset = &ROLE_PRESETS[5];
-        assert_eq!(preset.id, builtin_roles::CUSTOM);
+        let preset = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::CUSTOM)
+            .expect("custom preset");
         assert_eq!(preset.name, "Custom");
         assert!(preset.permissions.is_empty());
         let json = preset.permissions_json();
@@ -615,24 +718,133 @@ mod preset_tests {
     }
 
     #[test]
-    fn staff_preset_has_manager_count_minus_settings() {
-        let manager = &ROLE_PRESETS[1];
-        let staff = &ROLE_PRESETS[4];
-        // Staff should have exactly 2 fewer permissions than Manager (settings:read, settings:edit)
-        assert_eq!(
-            staff.permissions.len(),
-            manager.permissions.len() - 2,
-            "Staff should have all Manager permissions except settings:read and settings:edit"
+    fn admin_preset_manages_roles_and_plugins_but_never_wildcard_or_staff_delete() {
+        // ADR #35 D4: Admin is global with the same mechanism as Owner, but
+        // "everything except ownership transfer, billing, and irreversible
+        // org actions" — expressed as an explicit grant list (no `*`), and
+        // staff deletion stays out of the default.
+        let preset = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::ADMIN)
+            .expect("admin preset");
+        assert_eq!(preset.name, "Admin");
+        assert!(
+            !preset.permissions.contains(&"*"),
+            "Admin is never a wildcard"
         );
-        // Verify every Manager permission except settings is present in Staff
-        for perm in manager.permissions {
-            if *perm != permissions::SETTINGS_READ && *perm != permissions::SETTINGS_EDIT {
-                assert!(
-                    staff.permissions.contains(perm),
-                    "Staff should inherit Manager permission: {perm}"
-                );
-            }
+        assert!(
+            preset
+                .permissions
+                .contains(&permissions::STAFF_MANAGE_ROLES)
+        );
+        assert!(preset.permissions.contains(&permissions::PLUGINS_MANAGE));
+        assert!(preset.permissions.contains(&permissions::SETTINGS_EDIT));
+        assert!(
+            !preset.permissions.contains(&permissions::STAFF_DELETE),
+            "irreversible org action stays owner-only by default"
+        );
+    }
+
+    #[test]
+    fn auditor_preset_is_read_only() {
+        // ADR #35 D4: Auditor is global and read-only — views operational
+        // data and the audit log, never manages, never exports, and never
+        // sees sensitive profile fields (0049 adds those denials).
+        let preset = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::AUDITOR)
+            .expect("auditor preset");
+        assert_eq!(preset.name, "Auditor");
+        for read in [
+            permissions::SALES_VIEW,
+            permissions::PRODUCTS_READ,
+            permissions::INVENTORY_VIEW,
+            permissions::STAFF_READ,
+            permissions::REPORTS_VIEW,
+            permissions::AUDIT_VIEW,
+        ] {
+            assert!(
+                preset.permissions.contains(&read),
+                "{read} must be readable"
+            );
         }
+        for write in [
+            permissions::SALES_PROCESS,
+            permissions::STAFF_UPDATE,
+            permissions::SETTINGS_EDIT,
+            permissions::REPORTS_EXPORT,
+            permissions::AUDIT_EXPORT,
+            permissions::CUSTOMERS_CREATE,
+        ] {
+            assert!(
+                !preset.permissions.contains(&write),
+                "{write} is a write/export — Auditor must not hold it"
+            );
+        }
+    }
+
+    #[test]
+    fn staff_preset_has_no_manager_management_surfaces() {
+        // Staff is checkout-only: it must not inherit any management
+        // permission from Manager (ADR #35 D4 taxonomy — settings, analytics,
+        // and cost editing are manager+; the plan extends this to all
+        // management surfaces).
+        let manager = &ROLE_PRESETS[1];
+        let staff = &ROLE_PRESETS[2];
+        for perm in [
+            permissions::SETTINGS_READ,
+            permissions::SETTINGS_EDIT,
+            permissions::ANALYTICS_VIEW,
+            permissions::PRODUCTS_EDIT_COST,
+            permissions::SALES_VOID,
+            permissions::SALES_REFUND,
+            permissions::SALES_OVERRIDE_PRICE,
+            permissions::PAYMENTS_REFUND,
+            permissions::PRODUCTS_CREATE,
+            permissions::PRODUCTS_READ,
+            permissions::INVENTORY_VIEW,
+            permissions::INVENTORY_ADJUST,
+            permissions::INVENTORY_TRANSFER,
+            permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
+            permissions::STAFF_READ,
+            permissions::STAFF_CREATE,
+            permissions::STAFF_UPDATE,
+            permissions::STAFF_READ_IDENTITY,
+            permissions::STAFF_READ_PAYROLL,
+            permissions::STAFF_EDIT_NOTES,
+            permissions::REPORTS_VIEW,
+            permissions::REPORTS_EXPORT,
+            permissions::REPORTS_SCHEDULE,
+            permissions::SHIFTS_VIEW_ANY,
+            permissions::AUDIT_VIEW,
+            permissions::AUDIT_EXPORT,
+            permissions::CUSTOMERS_EDIT,
+            permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_MANAGE,
+            permissions::TABLES_CREATE,
+            permissions::TABLES_EDIT,
+            permissions::TABLES_DELETE,
+            permissions::DISCOUNTS_CREATE,
+            permissions::DISCOUNTS_MANAGE,
+            permissions::PROMOTIONS_CREATE,
+            permissions::PROMOTIONS_EDIT,
+            permissions::PROMOTIONS_DELETE,
+            permissions::PROMOTIONS_APPLY,
+            permissions::TERMINALS_REGISTER,
+            permissions::TERMINALS_EDIT,
+            permissions::TERMINALS_DELETE,
+        ] {
+            assert!(
+                !staff.permissions.contains(&perm),
+                "Staff must not hold manager-only permission: {perm}"
+            );
+        }
+        // Sanity: Manager still holds representative management permissions.
+        assert!(manager.permissions.contains(&permissions::SALES_VOID));
+        assert!(manager.permissions.contains(&permissions::PRODUCTS_CREATE));
+        assert!(manager.permissions.contains(&permissions::STAFF_CREATE));
+        assert!(manager.permissions.contains(&permissions::REPORTS_VIEW));
     }
 }
 
@@ -673,6 +885,13 @@ pub mod permissions {
     pub const PRODUCTS_IMPORT: &str = "products:import";
     /// Export the product catalog.
     pub const PRODUCTS_EXPORT: &str = "products:export";
+    /// Legacy composite seed key (create/read/update/delete) kept
+    /// byte-identical — registered in the permission registry (spec 0046).
+    pub const PRODUCTS_CRUD: &str = "products:crud";
+    /// Set or override a product's cost (HPP). Manager+ only — cost is
+    /// local-only and sensitive (ADR #36 D7); staff can create/update
+    /// products without ever touching cost.
+    pub const PRODUCTS_EDIT_COST: &str = "products:edit_cost";
 
     // ── Inventory ─────────────────────────────────────────────────
     /// View stock levels.
@@ -697,6 +916,12 @@ pub mod permissions {
     pub const STAFF_DELETE: &str = "staff:delete";
     /// Create, edit, or delete roles and their permission sets.
     pub const STAFF_MANAGE_ROLES: &str = "staff:manage_roles";
+    /// Read a staff member's identity fields (national id, tax id) unmasked.
+    pub const STAFF_READ_IDENTITY: &str = "staff:read_identity";
+    /// Read a staff member's payroll fields (monthly take-home pay).
+    pub const STAFF_READ_PAYROLL: &str = "staff:read_payroll";
+    /// Edit a staff member's free-text notes.
+    pub const STAFF_EDIT_NOTES: &str = "staff:edit_notes";
 
     // ── Settings ──────────────────────────────────────────────────
     /// View store and system settings.
@@ -711,6 +936,10 @@ pub mod permissions {
     pub const REPORTS_EXPORT: &str = "reports:export";
     /// Schedule automated report generation.
     pub const REPORTS_SCHEDULE: &str = "reports:schedule";
+
+    // ── Analytics ─────────────────────────────────────────────────
+    /// View per-staff shift + sales analytics (owner / admin / manager).
+    pub const ANALYTICS_VIEW: &str = "analytics:view";
 
     // ── Shifts ────────────────────────────────────────────────────
     /// Open a new cashier shift.
@@ -810,10 +1039,98 @@ pub mod permissions {
     /// Delete / unregister a terminal.
     pub const TERMINALS_DELETE: &str = "terminals:delete";
 
+    // ── Categories ────────────────────────────────────────────────
+    /// Legacy seed key (create/update/delete) kept byte-identical —
+    /// registered in the permission registry (spec 0046).
+    pub const CATEGORIES_MANAGE: &str = "categories:manage";
+
     // ── Plugins ───────────────────────────────────────────────────
     /// Manage plugins (install, enable, disable, remove).
     pub const PLUGINS_MANAGE: &str = "plugins:manage";
 }
+
+/// The complete inventory of enforced permission constants, in one place.
+///
+/// This is the anchor for the registry's bidirectional inventory test
+/// (spec 0046): every key here must be registered, and every registered key
+/// must appear here. Growing the system means adding a constant in
+/// [`permissions`] and an entry in `permission_registry::REGISTRY` — the
+/// inventory test fails if any of the three drift apart.
+pub const ALL_ENFORCED: &[&str] = &[
+    permissions::SALES_PROCESS,
+    permissions::SALES_VOID,
+    permissions::SALES_REFUND,
+    permissions::SALES_VIEW,
+    permissions::SALES_DISCOUNT,
+    permissions::SALES_SPLIT,
+    permissions::SALES_OVERRIDE_PRICE,
+    permissions::PRODUCTS_CREATE,
+    permissions::PRODUCTS_READ,
+    permissions::PRODUCTS_UPDATE,
+    permissions::PRODUCTS_DELETE,
+    permissions::PRODUCTS_IMPORT,
+    permissions::PRODUCTS_EXPORT,
+    permissions::PRODUCTS_CRUD,
+    permissions::PRODUCTS_EDIT_COST,
+    permissions::INVENTORY_VIEW,
+    permissions::INVENTORY_ADJUST,
+    permissions::INVENTORY_TRANSFER,
+    permissions::INVENTORY_COUNT,
+    permissions::INVENTORY_LOCATIONS_MANAGE,
+    permissions::STAFF_CREATE,
+    permissions::STAFF_READ,
+    permissions::STAFF_UPDATE,
+    permissions::STAFF_DELETE,
+    permissions::STAFF_MANAGE_ROLES,
+    permissions::STAFF_READ_IDENTITY,
+    permissions::STAFF_READ_PAYROLL,
+    permissions::STAFF_EDIT_NOTES,
+    permissions::SETTINGS_READ,
+    permissions::SETTINGS_EDIT,
+    permissions::REPORTS_VIEW,
+    permissions::REPORTS_EXPORT,
+    permissions::REPORTS_SCHEDULE,
+    permissions::ANALYTICS_VIEW,
+    permissions::SHIFTS_OPEN,
+    permissions::SHIFTS_CLOSE,
+    permissions::SHIFTS_VIEW_ANY,
+    permissions::AUDIT_VIEW,
+    permissions::AUDIT_EXPORT,
+    permissions::PAYMENTS_CASH,
+    permissions::PAYMENTS_CARD,
+    permissions::PAYMENTS_REFUND,
+    permissions::PAYMENTS_SETTLE,
+    permissions::CUSTOMERS_CREATE,
+    permissions::CUSTOMERS_VIEW,
+    permissions::CUSTOMERS_EDIT,
+    permissions::CUSTOMERS_DELETE,
+    permissions::LOYALTY_VIEW,
+    permissions::LOYALTY_EARN,
+    permissions::LOYALTY_REDEEM,
+    permissions::LOYALTY_MANAGE,
+    permissions::TABLES_ASSIGN,
+    permissions::TABLES_MERGE,
+    permissions::TABLES_SPLIT,
+    permissions::TABLES_CLOSE,
+    permissions::DISCOUNTS_APPLY,
+    permissions::DISCOUNTS_CREATE,
+    permissions::DISCOUNTS_MANAGE,
+    permissions::WORKSPACES_SWITCH,
+    permissions::KDS_VIEW,
+    permissions::KDS_UPDATE,
+    permissions::PROMOTIONS_CREATE,
+    permissions::PROMOTIONS_EDIT,
+    permissions::PROMOTIONS_DELETE,
+    permissions::PROMOTIONS_APPLY,
+    permissions::TABLES_CREATE,
+    permissions::TABLES_EDIT,
+    permissions::TABLES_DELETE,
+    permissions::TERMINALS_REGISTER,
+    permissions::TERMINALS_EDIT,
+    permissions::TERMINALS_DELETE,
+    permissions::CATEGORIES_MANAGE,
+    permissions::PLUGINS_MANAGE,
+];
 
 // ── Tests ───────────────────────────────────────────────────────────
 
@@ -825,9 +1142,9 @@ mod tests {
 
     #[test]
     fn new_role() {
-        let r = Role::new("role-cashier", "Cashier");
-        assert_eq!(r.id, "role-cashier");
-        assert_eq!(r.name, "Cashier");
+        let r = Role::new("role-lite", "Lite");
+        assert_eq!(r.id, "role-lite");
+        assert_eq!(r.name, "Lite");
         assert!(r.description.is_empty());
         assert_eq!(r.permissions, "[]");
     }
@@ -893,7 +1210,8 @@ mod tests {
     #[test]
     fn builtin_role_constants_are_distinct() {
         assert_ne!(builtin_roles::OWNER, builtin_roles::MANAGER);
-        assert_ne!(builtin_roles::MANAGER, builtin_roles::CASHIER);
+        assert_ne!(builtin_roles::MANAGER, builtin_roles::ADMIN);
+        assert_ne!(builtin_roles::STAFF, builtin_roles::CUSTOM);
     }
 
     // ── has_permission — wildcard resolution ──────────────────────
@@ -1037,72 +1355,7 @@ mod tests {
 
     #[test]
     fn all_permission_constants_contain_colon() {
-        let all = [
-            permissions::SALES_PROCESS,
-            permissions::SALES_VOID,
-            permissions::SALES_REFUND,
-            permissions::SALES_VIEW,
-            permissions::SALES_DISCOUNT,
-            permissions::SALES_SPLIT,
-            permissions::PRODUCTS_CREATE,
-            permissions::PRODUCTS_READ,
-            permissions::PRODUCTS_UPDATE,
-            permissions::PRODUCTS_DELETE,
-            permissions::PRODUCTS_IMPORT,
-            permissions::PRODUCTS_EXPORT,
-            permissions::INVENTORY_VIEW,
-            permissions::INVENTORY_ADJUST,
-            permissions::INVENTORY_TRANSFER,
-            permissions::INVENTORY_COUNT,
-            permissions::INVENTORY_LOCATIONS_MANAGE,
-            permissions::STAFF_CREATE,
-            permissions::STAFF_READ,
-            permissions::STAFF_UPDATE,
-            permissions::STAFF_DELETE,
-            permissions::STAFF_MANAGE_ROLES,
-            permissions::SETTINGS_READ,
-            permissions::SETTINGS_EDIT,
-            permissions::REPORTS_VIEW,
-            permissions::REPORTS_EXPORT,
-            permissions::REPORTS_SCHEDULE,
-            permissions::SHIFTS_OPEN,
-            permissions::SHIFTS_CLOSE,
-            permissions::SHIFTS_VIEW_ANY,
-            permissions::AUDIT_VIEW,
-            permissions::AUDIT_EXPORT,
-            permissions::PAYMENTS_CASH,
-            permissions::PAYMENTS_CARD,
-            permissions::PAYMENTS_REFUND,
-            permissions::PAYMENTS_SETTLE,
-            permissions::CUSTOMERS_CREATE,
-            permissions::CUSTOMERS_VIEW,
-            permissions::CUSTOMERS_EDIT,
-            permissions::CUSTOMERS_DELETE,
-            permissions::LOYALTY_VIEW,
-            permissions::LOYALTY_EARN,
-            permissions::LOYALTY_REDEEM,
-            permissions::LOYALTY_MANAGE,
-            permissions::TABLES_ASSIGN,
-            permissions::TABLES_MERGE,
-            permissions::TABLES_SPLIT,
-            permissions::TABLES_CLOSE,
-            permissions::DISCOUNTS_APPLY,
-            permissions::DISCOUNTS_CREATE,
-            permissions::DISCOUNTS_MANAGE,
-            permissions::WORKSPACES_SWITCH,
-            permissions::PROMOTIONS_CREATE,
-            permissions::PROMOTIONS_EDIT,
-            permissions::PROMOTIONS_DELETE,
-            permissions::PROMOTIONS_APPLY,
-            permissions::TABLES_CREATE,
-            permissions::TABLES_EDIT,
-            permissions::TABLES_DELETE,
-            permissions::TERMINALS_REGISTER,
-            permissions::TERMINALS_EDIT,
-            permissions::TERMINALS_DELETE,
-            permissions::PLUGINS_MANAGE,
-        ];
-        for &p in &all {
+        for &p in ALL_ENFORCED {
             assert!(p.contains(':'), "constant {p} is missing ':' separator");
         }
     }
@@ -1110,73 +1363,8 @@ mod tests {
     #[test]
     fn permission_constants_are_unique() {
         use std::collections::HashSet;
-        let all = [
-            permissions::SALES_PROCESS,
-            permissions::SALES_VOID,
-            permissions::SALES_REFUND,
-            permissions::SALES_VIEW,
-            permissions::SALES_DISCOUNT,
-            permissions::SALES_SPLIT,
-            permissions::PRODUCTS_CREATE,
-            permissions::PRODUCTS_READ,
-            permissions::PRODUCTS_UPDATE,
-            permissions::PRODUCTS_DELETE,
-            permissions::PRODUCTS_IMPORT,
-            permissions::PRODUCTS_EXPORT,
-            permissions::INVENTORY_VIEW,
-            permissions::INVENTORY_ADJUST,
-            permissions::INVENTORY_TRANSFER,
-            permissions::INVENTORY_COUNT,
-            permissions::INVENTORY_LOCATIONS_MANAGE,
-            permissions::STAFF_CREATE,
-            permissions::STAFF_READ,
-            permissions::STAFF_UPDATE,
-            permissions::STAFF_DELETE,
-            permissions::STAFF_MANAGE_ROLES,
-            permissions::SETTINGS_READ,
-            permissions::SETTINGS_EDIT,
-            permissions::REPORTS_VIEW,
-            permissions::REPORTS_EXPORT,
-            permissions::REPORTS_SCHEDULE,
-            permissions::SHIFTS_OPEN,
-            permissions::SHIFTS_CLOSE,
-            permissions::SHIFTS_VIEW_ANY,
-            permissions::AUDIT_VIEW,
-            permissions::AUDIT_EXPORT,
-            permissions::PAYMENTS_CASH,
-            permissions::PAYMENTS_CARD,
-            permissions::PAYMENTS_REFUND,
-            permissions::PAYMENTS_SETTLE,
-            permissions::CUSTOMERS_CREATE,
-            permissions::CUSTOMERS_VIEW,
-            permissions::CUSTOMERS_EDIT,
-            permissions::CUSTOMERS_DELETE,
-            permissions::LOYALTY_VIEW,
-            permissions::LOYALTY_EARN,
-            permissions::LOYALTY_REDEEM,
-            permissions::LOYALTY_MANAGE,
-            permissions::TABLES_ASSIGN,
-            permissions::TABLES_MERGE,
-            permissions::TABLES_SPLIT,
-            permissions::TABLES_CLOSE,
-            permissions::DISCOUNTS_APPLY,
-            permissions::DISCOUNTS_CREATE,
-            permissions::DISCOUNTS_MANAGE,
-            permissions::WORKSPACES_SWITCH,
-            permissions::PROMOTIONS_CREATE,
-            permissions::PROMOTIONS_EDIT,
-            permissions::PROMOTIONS_DELETE,
-            permissions::PROMOTIONS_APPLY,
-            permissions::TABLES_CREATE,
-            permissions::TABLES_EDIT,
-            permissions::TABLES_DELETE,
-            permissions::TERMINALS_REGISTER,
-            permissions::TERMINALS_EDIT,
-            permissions::TERMINALS_DELETE,
-            permissions::PLUGINS_MANAGE,
-        ];
         let mut seen = HashSet::new();
-        for &p in &all {
+        for &p in ALL_ENFORCED {
             assert!(seen.insert(p), "duplicate permission constant: {p}");
         }
     }

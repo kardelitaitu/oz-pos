@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 import { Localized } from '@/frontend/shared/Localized';
-import { requiredLocalized } from '@/frontend/shared';
 import { processRefund, type SaleDetail } from '@/api/sales';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatMoney, type Money } from '@/types/domain';
@@ -21,6 +20,8 @@ interface RefundModalProps {
 /** Refund modal — select line items to refund with quantity, reason, and note. Dispatches the refund to the backend on confirm. */
 export default function RefundModal({ open, sale, onClose, onRefunded }: RefundModalProps) {
   const { l10n } = useLocalization();
+  // Date follows the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { session } = useAuth();
   const [selectedLines, setSelectedLines] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
@@ -172,7 +173,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                   className="refund-close"
                   onClick={() => exit.requestClose()}
                   disabled={exit.exiting}
-                  aria-label="Cancel refund"
+                  aria-label={l10n.getString('cancel-refund-aria')}
                 >
                 &times;
               </button>
@@ -186,8 +187,8 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
               <Localized id="refund-sale-total" vars={{ amount: formatMoney(sale.total as Money) }}>
                 <span>Total: {formatMoney(sale.total as Money)}</span>
               </Localized>
-              <Localized id="refund-sale-date" vars={{ date: new Date(sale.createdAt).toLocaleDateString() }}>
-                <span>Date: {new Date(sale.createdAt).toLocaleDateString()}</span>
+              <Localized id="refund-sale-date" vars={{ date: new Date(sale.createdAt).toLocaleDateString(numLocale) }}>
+                <span>Date: {new Date(sale.createdAt).toLocaleDateString(numLocale)}</span>
               </Localized>
             </div>
 
@@ -219,7 +220,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                             className="refund-qty-btn"
                             onClick={() => updateQty(line.id, selectedQty - 1)}
                             disabled={selectedQty <= 1}
-                            aria-label="Decrease refund quantity"
+                            aria-label={l10n.getString('decrease-qty-aria')}
                           >−</button>
                         </Localized>
                         <span className="refund-qty-value">{selectedQty}</span>
@@ -229,7 +230,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                             className="refund-qty-btn"
                             onClick={() => updateQty(line.id, selectedQty + 1)}
                             disabled={selectedQty >= (line.qty ?? 1)}
-                            aria-label="Increase refund quantity"
+                            aria-label={l10n.getString('increase-qty-aria')}
                           >+</button>
                         </Localized>
                         <span className="refund-line-total">
@@ -256,7 +257,6 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                     className="refund-input"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder={requiredLocalized(l10n, 'refund-reason-placeholder')}
                     aria-label={l10n.getString('refund-reason-aria')}
                   />
                 </Localized>
@@ -271,7 +271,6 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                     className="refund-input"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder={requiredLocalized(l10n, 'refund-note-placeholder')}
                     aria-label={l10n.getString('refund-note-aria')}
                   />
                 </Localized>

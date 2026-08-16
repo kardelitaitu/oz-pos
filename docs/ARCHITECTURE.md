@@ -178,9 +178,11 @@ oz-pos/
 - **Responsibilities**: Standalone REST API server for third-party integrations and headless operation.
 - **Stack**: axum 0.8 + jsonwebtoken + tower-http.
 - **Server**: Listens on port 3099 (`OZ_API_PORT` env var). `AppState` wraps `Arc<Mutex<Connection>>`.
-- **Auth**: JWT HS256 tokens. `POST /api/v1/tokens` creates them. `auth_middleware` guards protected routes.
+- **Auth**: JWT HS256 tokens. `POST /api/v1/tokens` creates them; when `OZ_ADMIN_KEY` is configured the mint requires the matching `X-Admin-Key` header (dev mode stays open when unset). `auth_middleware` guards protected routes.
+- **Sync plan gating** (ADR sync-plan-gating): the sync router runs `plan_middleware` between auth and the handler. With `OZ_ENFORCE_PLANS=1`, tenants on the `free` plan (or with no plan row) get `403 {"error":"plan_required"}`; plans live in the `tenant_plans` table, are set via `PUT /api/v1/tenants/{tenant_id}/plan`, and are upgraded automatically by paid Stripe subscriptions via the webhook.
 - **Routes**:
-  - Public: `GET /api/v1/health`, `POST /api/v1/tokens`
+  - Public: `GET /api/v1/health`
+  - Admin (`X-Admin-Key` when `OZ_ADMIN_KEY` is set; open in dev): `POST /api/v1/tokens`, `PUT /api/v1/tenants/{tenant_id}/plan`
   - Protected (JWT): `GET/POST /api/v1/products`, `GET /api/v1/products/{sku}`, `PATCH /api/v1/products/{sku}/stock`, `GET /api/v1/categories`
 - **Tests**: 30+ integration tests on seeded in-memory databases.
 
@@ -227,7 +229,7 @@ Each app crate has an identical command surface, wired through `platform-startup
 
 ### ui/ (React Frontend)
 - **Stack**: React 18 + TypeScript + Vite 6 + `@fluent/react` (i18n) + Vitest (testing).
-- **Architecture rule**: Components never call `invoke()` directly — they go through `ui/src/api/pos.ts`.
+- **Architecture rule**: Components never call `invoke()` directly — they go through `ui/src/api/` (or a documented infrastructure adapter). `scripts/verify-architecture-boundaries.py` blocks new production direct calls and tracks existing exceptions in an expiring baseline.
 - **i18n rule**: All user-visible strings use `@fluent/react`. No hardcoded English in JSX.
 - **Types**: `ui/src/types/domain.ts` mirrors Rust types with branded TypeScript (CartId, LineId, Sku, Money).
 
@@ -260,3 +262,9 @@ cargo tauri dev          # launches Tauri dev window
 
 ---
 *Document generated on 2026‑06‑29.*
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

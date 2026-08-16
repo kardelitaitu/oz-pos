@@ -1,26 +1,63 @@
 dashboard-title = Dasbor
-dashboard-today-revenue = Pendapatan Hari Ini
-dashboard-orders-today = Pesanan Hari Ini
+dashboard-revenue = Pendapatan
+dashboard-gross-profit = Laba Kotor
+dashboard-orders = Pesanan
 dashboard-top-product = Produk Terlaris
 dashboard-low-stock-alerts = Peringatan Stok Menipis
-dashboard-no-data = Belum ada data penjualan hari ini
-dashboard-view-report = Lihat Laporan Lengkap
+dashboard-no-data = Belum ada data
+dashboard-stock-ok = Semua level stok dalam kondisi baik.
+
+# Dashboard — date range
+dashboard-filter-from = Dari
+dashboard-filter-to = Hingga
+dashboard-btn-apply = Terapkan
+
+# Dashboard — granularity toggle
+dashboard-granularity-aria = Granularitas waktu
+dashboard-granularity-daily = Harian
+dashboard-granularity-weekly = Mingguan
+dashboard-granularity-monthly = Bulanan
+
+# Dashboard — charts
+dashboard-chart-revenue = Tren Pendapatan
+dashboard-chart-revenue-aria = Grafik tren pendapatan dan laba
+dashboard-chart-profit = Laba
+dashboard-chart-category-breakdown = Rincian Kategori
+dashboard-chart-category-aria = Rincian penjualan per kategori produk
+dashboard-chart-category = Kategori
+dashboard-chart-heatmap = Heatmap Penjualan
+dashboard-chart-heatmap-aria = Heatmap penjualan per jam dan hari
+dashboard-chart-top-products = 10 Produk Teratas
+dashboard-chart-top-products-aria = 10 produk teratas berdasarkan pendapatan
+dashboard-heatmap-empty = Belum ada data heatmap
+dashboard-heatmap-tooltip = { $day } { $hour }: { $count } pesanan
 
 # Dashboard — a11y
 dashboard-region-aria = Dasbor
 dashboard-stock-alerts-aria = Peringatan stok menipis
-dashboard-stock-left = tersisa
+dashboard-stock-below-threshold = { $qty } tersisa (di bawah { $threshold })
 
-top-products-title = Produk Terlaris
-top-products-period = Periode
-top-products-today = Hari Ini
-top-products-this-week = Minggu Ini
-top-products-this-month = Bulan Ini
-top-products-all-time = Sepanjang Waktu
-top-products-rank = Peringkat
 top-products-name = Nama
 top-products-quantity = Jumlah Terjual
 top-products-revenue = Pendapatan
+top-products-gross-profit = Laba Kotor
+top-products-margin = Margin
+sales-report-top-rank-aria = Urutkan produk terlaris berdasarkan
+sales-report-top-rank-revenue-aria = Urutkan berdasarkan pendapatan
+sales-report-top-rank-profit-aria = Urutkan berdasarkan laba kotor
+sales-report-category-popularity = Popularitas Kategori
+sales-report-category-popularity-category = Kategori
+sales-report-category-popularity-products = Produk
+sales-report-category-popularity-mean = Popularitas
+sales-report-category-popularity-mean-tip = Rata-rata kategori vs. rata-rata katalog
+sales-report-category-popularity-top = Penjual Teratas
+sales-report-category-popularity-uncategorized = Tanpa Kategori
+sales-report-popularity-trend = Tren Popularitas
+sales-report-demand-forecast = Perkiraan Permintaan
+sales-report-demand-forecast-category = Kategori
+sales-report-demand-forecast-avg = Rata-rata / periode
+sales-report-demand-forecast-trend = Tren
+sales-report-demand-forecast-next = Periode berikutnya
 
 heatmap-title = Jam Tersibuk
 heatmap-hour = Jam
@@ -34,11 +71,6 @@ day-thursday = Kam
 day-friday = Jum
 day-saturday = Sab
 
-reports-sales = Laporan Penjualan
-reports-inventory = Laporan Stok
-reports-top-products = Produk Terlaris
-reports-hourly-heatmap = Jam Tersibuk
-reports-export-csv = Ekspor CSV
 
 # ── Kiosk Mode ──
 # ── Shared UI (remaining) ──
@@ -121,3 +153,19 @@ custom-report-run-aria = Jalankan laporan
 custom-report-region-aria = Pembuat Laporan Kustom
 custom-report-export-aria = Ekspor CSV
 custom-report-columns-selected = { $selected } / { $total } dipilih
+
+# Export
+dashboard-export-csv = CSV
+dashboard-export-csv-aria = Ekspor data dasbor sebagai CSV
+dashboard-category-clear-aria = Hapus pilihan kategori
+dashboard-back = Kembali
+dashboard-back-aria = Kembali ke beranda
+dashboard-error-load = Gagal memuat data dasbor. Silakan coba lagi.
+dashboard-refreshing = Menyegarkan…
+dashboard-delta-new = Baru
+
+# Dashboard — CSV export columns
+dashboard-export-col-date = Tanggal
+dashboard-export-col-revenue = Pendapatan
+dashboard-export-col-profit = Laba Kotor
+dashboard-export-col-orders = Pesanan

@@ -9,6 +9,7 @@
 //! survive application restarts.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::State;
 
 use foundation::Percentage;
@@ -16,9 +17,74 @@ use oz_core::db::Store;
 use oz_core::events::{SaleCompleted, SaleCompletedLine};
 use oz_core::{Cart, CartId, CartLine, LineId, Money, PaymentSplitArg, SaleStatus, Sku};
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
+
+const TOPOLOGY_RUNTIME_SETTING_KEY: &str = "oz-pos/topology-runtime";
+
+/// Select every distinct warehouse target from validated POS stock routes.
+///
+/// Runtime-plan order is the allocation priority: the first route is the
+/// preferred warehouse, and later routes fill the remaining quantity.
+fn runtime_stock_target_instances(plan: &Value, source_instance_id: &str) -> Vec<String> {
+    let mut targets = Vec::new();
+    if let Some(routes) = plan.get("routes").and_then(Value::as_array) {
+        for route in routes {
+            let is_stock_route = route.get("source_instance_id").and_then(Value::as_str)
+                == Some(source_instance_id)
+                && route.get("from_port_id").and_then(Value::as_str) == Some("stock-out")
+                && route.get("to_port_id").and_then(Value::as_str) == Some("stock-in")
+                && route.get("relationship_type").and_then(Value::as_str) == Some("stock-routing");
+            // A Retail POS → Warehouse Operation edge is the warehouse's
+            // one primary input. The compiler annotates its target kind so
+            // it can also serve as the stock-deduction target without
+            // confusing Restaurant POS → KDS operation feeds with stock.
+            let is_retail_operation_route = route.get("source_instance_id").and_then(Value::as_str)
+                == Some(source_instance_id)
+                && route.get("from_port_id").and_then(Value::as_str) == Some("operation-out")
+                && route.get("to_port_id").and_then(Value::as_str) == Some("operation-in")
+                && route.get("relationship_type").and_then(Value::as_str) == Some("generic")
+                && route.get("target_node_kind").and_then(Value::as_str) == Some("warehouse");
+            let Some(target) = (is_stock_route || is_retail_operation_route)
+                .then(|| route.get("target_instance_id").and_then(Value::as_str))
+                .flatten()
+            else {
+                continue;
+            };
+            if !targets.iter().any(|existing| existing == target) {
+                targets.push(target.to_owned());
+            }
+        }
+    }
+    targets
+}
+
+fn resolve_runtime_stock_targets(
+    conn: &rusqlite::Connection,
+    store_id: &str,
+    source_instance_id: &str,
+) -> Result<Vec<String>, AppError> {
+    let key = format!("{TOPOLOGY_RUNTIME_SETTING_KEY}/{store_id}");
+    let Some(json) = oz_core::Settings::get(conn, &key)? else {
+        return Ok(Vec::new());
+    };
+    let plan: Value = serde_json::from_str(&json)
+        .map_err(|e| AppError::Internal(format!("parse topology runtime plan: {e}")))?;
+    Ok(runtime_stock_target_instances(&plan, source_instance_id))
+}
+
+fn resolve_runtime_stock_target(
+    conn: &rusqlite::Connection,
+    store_id: &str,
+    source_instance_id: &str,
+) -> Result<Option<String>, AppError> {
+    Ok(
+        resolve_runtime_stock_targets(conn, store_id, source_instance_id)?
+            .into_iter()
+            .next(),
+    )
+}
 
 /// Discriminator for [`CompleteSaleArgs`]/[`CompleteSaleScopedArgs`] payment
 /// state.
@@ -139,6 +205,7 @@ pub async fn set_cart_discount_scoped(
     let percent = Percentage::new(args.percent as u8).unwrap();
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_DISCOUNT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -148,12 +215,6 @@ pub async fn set_cart_discount_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_DISCOUNT,
-    )?;
 
     let mut cart = store
         .load_active_cart(&args.cart_id)?
@@ -232,17 +293,17 @@ pub async fn start_sale_scoped(
     args: StartSaleArgs,
     state: State<'_, AppState>,
 ) -> Result<StartSaleResult, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
+    let conn = state.resolve_store(&session_token)?;
+    let stock_target_instance_id = {
+        let global_db = state.db.lock().await;
+        resolve_runtime_stock_target(&global_db, &session.store_id, &session.instance_id)?
+    };
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let currency: oz_core::Currency = if args.currency.is_empty() {
         // M-6: lookup the store profile's default currency instead of hardcoding "USD".
@@ -259,9 +320,15 @@ pub async fn start_sale_scoped(
     let id = cart.id();
 
     // Resolve the primary deduction location for this workspace instance.
-    let deduction_location_id =
-        oz_core::location_resolver::resolve_primary_location(&db, &session.instance_id, None)
-            .unwrap_or_else(|_| oz_core::location_resolver::get_default_location_id());
+    let deduction_location_id = match stock_target_instance_id.as_deref() {
+        Some(target_instance_id) => {
+            oz_core::location_resolver::resolve_primary_location(&db, target_instance_id, None)?
+        }
+        None => {
+            oz_core::location_resolver::resolve_primary_location(&db, &session.instance_id, None)
+                .unwrap_or_else(|_| oz_core::location_resolver::get_default_location_id())
+        }
+    };
 
     store.save_active_cart(&cart, Some(deduction_location_id.as_str()))?;
     drop(db);
@@ -351,6 +418,7 @@ pub async fn add_line_scoped(
     state: State<'_, AppState>,
 ) -> Result<AddLineResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -359,12 +427,6 @@ pub async fn add_line_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     // ADR-19 §5.1: reject add_line when the cart has no deduction location lock.
     store
@@ -456,6 +518,8 @@ pub async fn override_line_price_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_OVERRIDE_PRICE)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -464,13 +528,7 @@ pub async fn override_line_price_scoped(
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    run_override_line_price(
-        &db,
-        &args.cart_id,
-        &args.line_id,
-        args.new_price_minor,
-        &session.user_id,
-    )
+    run_override_line_price_unchecked(&db, &args.cart_id, &args.line_id, args.new_price_minor)
 }
 
 /// Shared business logic for overriding a line price.
@@ -482,11 +540,20 @@ fn run_override_line_price(
     user_id: &str,
 ) -> Result<(), AppError> {
     let store = Store::new(db);
+    require_permission_for_user(&store, user_id, oz_core::permissions::SALES_OVERRIDE_PRICE)?;
+    run_override_line_price_unchecked(db, cart_id, line_id, new_price_minor)
+}
+
+fn run_override_line_price_unchecked(
+    db: &rusqlite::Connection,
+    cart_id: &CartId,
+    line_id: &LineId,
+    new_price_minor: i64,
+) -> Result<(), AppError> {
+    let store = Store::new(db);
     let mut cart = store
         .load_active_cart(cart_id)?
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", cart_id)))?;
-
-    require_permission_for_user(&store, user_id, oz_core::permissions::SALES_OVERRIDE_PRICE)?;
 
     let currency = cart.currency();
     let new_price = Money {
@@ -561,6 +628,8 @@ pub async fn override_cart_deduction_location_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_OVERRIDE_PRICE)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -572,11 +641,6 @@ pub async fn override_cart_deduction_location_scoped(
     let store = Store::new(&db);
 
     // Permission check: require sales override permission.
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_OVERRIDE_PRICE,
-    )?;
 
     store
         .override_active_cart_deduction_location(&cart_id)
@@ -945,6 +1009,14 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     state: State<'_, AppState>,
 ) -> Result<CompleteSaleResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
+    let stock_target_instance_id = {
+        let global_db = state.db.lock().await;
+        resolve_runtime_stock_target(&global_db, &session.store_id, &session.instance_id)?
+    };
+    let deduction_instance_id = stock_target_instance_id
+        .as_deref()
+        .unwrap_or(&session.instance_id);
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -992,6 +1064,9 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
+        if let Some(target_instance_id) = stock_target_instance_id.as_deref() {
+            oz_core::location_resolver::resolve_primary_location(&db, target_instance_id, None)?;
+        }
 
         // Compute tax (same as first command)
         store.compute_sale_tax(
@@ -1015,7 +1090,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
 
         store.complete_sale_with_resolved_shortfalls(
             &sale,
-            Some(&session.instance_id),
+            Some(deduction_instance_id),
             &splits,
             &session.user_id,
             Some(&session.terminal_id),
@@ -1074,10 +1149,27 @@ pub async fn complete_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<CompleteSaleResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
+    let stock_target_instance_ids = {
+        let global_db = state.db.lock().await;
+        resolve_runtime_stock_targets(&global_db, &session.store_id, &session.instance_id)?
+    };
+    let deduction_instance_id = stock_target_instance_ids
+        .first()
+        .map(String::as_str)
+        .unwrap_or(&session.instance_id);
     let conn = state
         .db_manager
         .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    if !stock_target_instance_ids.is_empty() {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        for target_instance_id in &stock_target_instance_ids {
+            oz_core::location_resolver::resolve_primary_location(&db, target_instance_id, None)?;
+        }
+    }
 
     // ── Lock 1: Load and remove the cart ──────────────────────────
     let mut cart = {
@@ -1085,12 +1177,6 @@ pub async fn complete_sale_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-
-        require_permission_for_user(
-            &store,
-            &session.user_id,
-            oz_core::permissions::SALES_PROCESS,
-        )?;
 
         let cart = store
             .load_active_cart(&args.cart_id)?
@@ -1211,6 +1297,18 @@ pub async fn complete_sale_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
+        let mut stock_locations = Vec::with_capacity(stock_target_instance_ids.len());
+        for target_instance_id in &stock_target_instance_ids {
+            let location = oz_core::location_resolver::resolve_primary_location(
+                &db,
+                target_instance_id,
+                None,
+            )?;
+            if !stock_locations.contains(&location) {
+                stock_locations.push(location);
+            }
+        }
+
         store.compute_sale_tax(
             &mut sale,
             &lua_overrides,
@@ -1238,13 +1336,24 @@ pub async fn complete_sale_scoped(
             }]
         };
 
-        store.complete_sale_deduction(
-            &sale,
-            Some(&session.instance_id),
-            &splits,
-            &session.user_id,
-            Some(&session.terminal_id),
-        )?
+        if stock_locations.is_empty() {
+            store.complete_sale_deduction(
+                &sale,
+                Some(deduction_instance_id),
+                &splits,
+                &session.user_id,
+                Some(&session.terminal_id),
+            )?
+        } else {
+            store.complete_sale_deduction_with_locations(
+                &sale,
+                Some(deduction_instance_id),
+                &stock_locations,
+                &splits,
+                &session.user_id,
+                Some(&session.terminal_id),
+            )?
+        }
     };
 
     let total = cart.total();
@@ -1303,6 +1412,7 @@ pub async fn compute_cart_tax_scoped(
         .parse()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1311,12 +1421,6 @@ pub async fn compute_cart_tax_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let tax = store.compute_cart_tax(
         &lines,
@@ -1400,6 +1504,7 @@ pub async fn hold_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<HoldCartResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1408,12 +1513,6 @@ pub async fn hold_cart_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let id = store.hold_cart(
         &args.label,
@@ -1453,6 +1552,7 @@ pub async fn list_held_carts_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1461,12 +1561,6 @@ pub async fn list_held_carts_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let carts = store.list_held_carts()?;
     drop(db);
@@ -1496,6 +1590,7 @@ pub async fn list_open_bills_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1504,12 +1599,6 @@ pub async fn list_open_bills_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let carts = store.list_open_bills()?;
     drop(db);
@@ -1541,6 +1630,7 @@ pub async fn get_held_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<oz_core::db::HeldCartFull>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1549,12 +1639,6 @@ pub async fn get_held_cart_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let cart = store.get_held_cart(&id)?;
     drop(db);
@@ -1568,6 +1652,7 @@ pub async fn get_held_cart_scoped(
 pub async fn delete_held_cart(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
     store.delete_held_cart(&id)?;
     drop(db);
     tracing::info!(held_cart_id = %id, "held cart deleted");
@@ -1584,6 +1669,7 @@ pub async fn delete_held_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1592,12 +1678,6 @@ pub async fn delete_held_cart_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     store.delete_held_cart(&id)?;
     drop(db);
@@ -1611,6 +1691,7 @@ pub async fn delete_held_cart_scoped(
 mod tests {
     use super::*;
     use oz_core::Currency;
+    use tauri::Manager as _;
 
     fn usd() -> Currency {
         "USD".parse().unwrap()
@@ -1783,5 +1864,225 @@ mod tests {
         let state = AppState::for_test();
         let result = state.resolve_session("bad-token");
         assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[tokio::test]
+    async fn scoped_sale_deducts_from_topology_warehouse_not_pos_location() {
+        use oz_core::migrations;
+        use oz_core::session::SessionContext;
+        use platform_core::StoreDatabaseManager;
+
+        let store_id = "store-stock-route-e2e";
+        let pos_instance_id = "pos-stock-route-e2e";
+        let warehouse_instance_id = "warehouse-stock-route-e2e";
+        let global = migrations::fresh_db();
+        let runtime_key = format!("{TOPOLOGY_RUNTIME_SETTING_KEY}/{store_id}");
+        let runtime_plan = serde_json::json!({
+            "routes": [{
+                "source_instance_id": pos_instance_id,
+                "target_instance_id": warehouse_instance_id,
+                "from_port_id": "stock-out",
+                "to_port_id": "stock-in",
+                "relationship_type": "stock-routing"
+            }]
+        });
+        oz_core::Settings::set(&global, &runtime_key, &runtime_plan.to_string()).unwrap();
+        {
+            let identity_store = Store::new(&global);
+            identity_store.seed_default_roles().unwrap();
+            global.execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+                 VALUES ('stock-route-user', 'stock-route-user', 'hash', 'Stock Route User', 'role-owner', 1, '2026-08-09T00:00:00Z', '2026-08-09T00:00:00Z')",
+                [],
+            )
+            .unwrap();
+        }
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
+        let store_conn = manager.open_store(store_id).unwrap();
+        {
+            let db = store_conn.lock().unwrap();
+            db.execute_batch(
+                "INSERT OR IGNORE INTO store_profiles (id, name, is_primary) VALUES ('store-stock-route-e2e', 'Stock Route E2E', 0);
+                 INSERT INTO inventory_locations (id, name, type) VALUES
+                    ('stock-route-pos-location', 'Stock Route POS', 'store'),
+                    ('stock-route-warehouse-location', 'Stock Route Warehouse', 'warehouse');
+                 INSERT INTO workspace_instances (id, type_key, store_id, name, bound_location_id)
+                    VALUES ('pos-stock-route-e2e', 'restaurant-pos', 'store-stock-route-e2e', 'Route POS', 'stock-route-pos-location');
+                 INSERT INTO workspace_instances (id, type_key, store_id, name, bound_location_id)
+                    VALUES ('warehouse-stock-route-e2e', 'warehouse', 'store-stock-route-e2e', 'Route Warehouse', 'stock-route-warehouse-location');
+                 INSERT INTO products (id, sku, name, price_minor, currency, product_type)
+                    VALUES ('stock-route-product', 'STOCK-ROUTE-COFFEE', 'Stock Route Coffee', 1000, 'USD', 'retail');
+                 INSERT INTO stock_summary (item_id, location_id, qty)
+                    VALUES ('stock-route-product', 'stock-route-pos-location', 20),
+                           ('stock-route-product', 'stock-route-warehouse-location', 20);",
+            )
+            .unwrap();
+        }
+
+        let mut state = AppState::for_test_with_conn(global);
+        state.db_manager = manager;
+        state.session_store.write().unwrap().insert(
+            "stock-route-token".into(),
+            SessionContext::new(
+                "stock-route-user".into(),
+                "role-owner".into(),
+                "stock-route-terminal".into(),
+                store_id.into(),
+                pos_instance_id.into(),
+                "restaurant-pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let started = start_sale_scoped(
+            "stock-route-token".into(),
+            StartSaleArgs {
+                currency: "USD".into(),
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+        add_line_scoped(
+            "stock-route-token".into(),
+            AddLineArgs {
+                cart_id: started.cart_id,
+                sku: Sku::new("STOCK-ROUTE-COFFEE"),
+                qty: 3,
+                unit_price_minor: 1000,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+        complete_sale_scoped(
+            "stock-route-token".into(),
+            CompleteSaleScopedArgs {
+                cart_id: started.cart_id,
+                payment_method: "cash".into(),
+                tendered_minor: Some(3000),
+                customer_id: None,
+                payment_splits: None,
+                customer_name: None,
+                serial_numbers: None,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let state = app.state::<AppState>();
+        let store_conn = state.db_manager.open_store(store_id).unwrap();
+        let db = store_conn.lock().unwrap();
+        let pos_qty: i64 = db
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'stock-route-product' AND location_id = 'stock-route-pos-location'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let warehouse_qty: i64 = db
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'stock-route-product' AND location_id = 'stock-route-warehouse-location'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pos_qty, 20, "POS stock must remain untouched by the route");
+        assert_eq!(
+            warehouse_qty, 17,
+            "Warehouse stock must fund the completed sale"
+        );
+    }
+
+    #[test]
+    fn runtime_plan_selects_stock_target_for_pos_source() {
+        let plan = serde_json::json!({
+            "routes": [{
+                "source_instance_id": "pos-main",
+                "target_instance_id": "warehouse-main",
+                "from_port_id": "stock-out",
+                "to_port_id": "stock-in",
+                "relationship_type": "stock-routing"
+            }]
+        });
+        assert_eq!(
+            runtime_stock_target_instances(&plan, "pos-main"),
+            vec!["warehouse-main"]
+        );
+        assert!(runtime_stock_target_instances(&plan, "other-pos").is_empty());
+    }
+
+    #[test]
+    fn runtime_plan_uses_retail_operation_route_for_warehouse_stock_target() {
+        let plan = serde_json::json!({
+            "routes": [{
+                "source_instance_id": "pos-main",
+                "target_instance_id": "warehouse-main",
+                "from_port_id": "operation-out",
+                "to_port_id": "operation-in",
+                "relationship_type": "generic",
+                "target_node_kind": "warehouse"
+            }]
+        });
+        assert_eq!(
+            runtime_stock_target_instances(&plan, "pos-main"),
+            vec!["warehouse-main"]
+        );
+    }
+
+    #[test]
+    fn runtime_plan_does_not_treat_operation_feed_to_kds_as_stock() {
+        let plan = serde_json::json!({
+            "routes": [{
+                "source_instance_id": "restaurant-pos",
+                "target_instance_id": "kds-main",
+                "from_port_id": "operation-out",
+                "to_port_id": "operation-in",
+                "relationship_type": "generic",
+                "target_node_kind": "workspace"
+            }]
+        });
+        assert!(runtime_stock_target_instances(&plan, "restaurant-pos").is_empty());
+    }
+
+    #[test]
+    fn runtime_plan_preserves_distinct_stock_targets_in_route_order() {
+        let plan = serde_json::json!({
+            "routes": [
+                {
+                    "source_instance_id": "pos-main",
+                    "target_instance_id": "warehouse-b",
+                    "from_port_id": "stock-out",
+                    "to_port_id": "stock-in",
+                    "relationship_type": "stock-routing"
+                },
+                {
+                    "source_instance_id": "pos-main",
+                    "target_instance_id": "warehouse-a",
+                    "from_port_id": "stock-out",
+                    "to_port_id": "stock-in",
+                    "relationship_type": "stock-routing"
+                },
+                {
+                    "source_instance_id": "pos-main",
+                    "target_instance_id": "warehouse-b",
+                    "from_port_id": "stock-out",
+                    "to_port_id": "stock-in",
+                    "relationship_type": "stock-routing"
+                }
+            ]
+        });
+        assert_eq!(
+            runtime_stock_target_instances(&plan, "pos-main"),
+            vec!["warehouse-b", "warehouse-a"]
+        );
     }
 }

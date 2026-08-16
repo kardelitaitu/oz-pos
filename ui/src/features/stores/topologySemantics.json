@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "warehouse": {
+    "primaryInputs": ["location-in", "operation-in"],
+    "operationalInputs": ["stock-in", "transfer-in"],
+    "primaryRelationships": ["location", "generic"],
+    "operationalRelationships": ["stock-routing", "inventory-transfer"]
+  },
+  "workspaceTypeKeys": ["store-pos", "restaurant-pos", "kds"],
+  "nodeKinds": ["branch-location", "workspace", "warehouse", "hardware"],
+  "semanticPairings": [
+    { "source": "location-out", "target": "location-in", "relationshipType": "location", "labelId": "topology-relationship-location" },
+    { "source": "operation-out", "target": "operation-in", "relationshipType": "generic", "labelId": "topology-relationship-operation" },
+    { "source": "stock-out", "target": "stock-in", "relationshipType": "stock-routing", "labelId": "topology-relationship-stock-routing" },
+    { "source": "transfer-out", "target": "transfer-in", "relationshipType": "inventory-transfer", "labelId": "topology-relationship-inventory-transfer" },
+    { "source": "ticket-out", "target": "ticket-in", "relationshipType": "ticket-routing", "labelId": "topology-relationship-ticket-routing" },
+    { "source": "device-out", "target": "generic-in", "relationshipType": "hardware-connection", "labelId": "topology-relationship-hardware-connection" },
+    { "source": "generic-out", "target": "generic-in", "relationshipType": "generic", "labelId": "topology-relationship-generic" }
+  ]
+}

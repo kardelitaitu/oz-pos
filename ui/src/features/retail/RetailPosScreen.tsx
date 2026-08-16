@@ -18,7 +18,9 @@ import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerialBatch, l
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { lookupProductBySkuScoped, lookupByBarcodeScoped, type ProductDto, type CategoryDto } from '@/api/products';
+import { lookupProductBySkuScoped, lookupByBarcodeScoped, createProductScoped, updateProductScoped, adjustStockScoped, recordProductSearchScoped, type ProductDto, type CategoryDto } from '@/api/products';
+import { hasGrantedPermission } from '@/platform/ui/page-registry';
+import { openProductImagesScoped } from '@/api/browser';
 import { loadCatalog, invalidateCatalog } from '@/utils/catalog-cache';
 import { usePagedList } from '@/hooks/usePagedList';
 import { listCustomers, type CustomerDto } from '@/api/customers';
@@ -27,7 +29,7 @@ import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartS
 import { getStoreSettingsScoped, listCreditSales, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { recordMark } from '@/utils/perf-metrics';
-import { type CartId, type CartLine, type CourseId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
+import { DEFAULT_LOW_STOCK_THRESHOLD, type CartId, type CartLine, type CourseId, type LineId, type ModifierSelection, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import RetailFnBar from './RetailFnBar';
@@ -35,6 +37,8 @@ import RetailHeader from './RetailHeader';
 import RetailCartPanel from './RetailCartPanel';
 import { RETAIL_CART_WIDTH_MIN, RETAIL_CART_WIDTH_DEFAULT, RETAIL_CART_WIDTH_MAX_CAP, clampRetailCartWidth } from './RetailCartPanel.constants';
 import RetailProductGrid, { type SortField, type SortOrder } from './RetailProductGrid';
+import RetailProductContextMenu, { type ContextMenuState } from './RetailProductContextMenu';
+import { useRetailColumnPrefs } from './hooks/useRetailColumnPrefs';
 import { SalesHistoryView, TableManagementView, StockInquiryView } from './RetailSubViews';
 import RetailModals from './RetailModals';
 import RetailReminderPopup from './RetailReminderPopup';
@@ -102,6 +106,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
+  // ADR #36 D7: cost editing is manager+ only (products:edit_cost). The
+  // backend enforces the write; this only gates the UI field and payload.
+  const canEditCost = hasGrantedPermission(session?.permissions, 'products:edit_cost');
   const { sessionToken: rawToken, setActiveWorkspace } = useWorkspace();
   const sessionToken = rawToken || '';
   const userId = session?.user_id ?? '';
@@ -337,9 +344,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Undo stack ───────────────────────────────────────────────────
   const MAX_UNDO = 5;
-  const [undoStack, setUndoStack] = useState<{ sku: Sku; name: string; category: string; unit_price: Money; qty: number }[]>([]);
+  const [undoStack, setUndoStack] = useState<{ sku: Sku; name: string; category: string; unit_price: Money; qty: number; courseId?: CourseId; modifiers?: ModifierSelection[] }[]>([]);
 
-  const handleRemoveLine = useCallback((id: string, line: { sku: Sku; name: string; category: string; unit_price: Money; qty: number }) => {
+  const handleRemoveLine = useCallback((id: string, line: { sku: Sku; name: string; category: string; unit_price: Money; qty: number; courseId?: CourseId; modifiers?: ModifierSelection[] }) => {
     removeLine(id as LineId);
     setUndoStack((prev) => [line, ...prev].slice(0, MAX_UNDO));
   }, [removeLine]);
@@ -347,7 +354,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleUndoRemove = useCallback(() => {
     if (undoStack.length === 0) return;
     const item = undoStack[0]!;
-    addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null }, item.qty);
+    // Restore the exact line — including its course assignment and
+    // modifiers — not a bare re-add (the modifiers would be lost).
+    addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null }, item.qty, {
+      ...(item.courseId !== undefined ? { courseId: item.courseId } : {}),
+      ...(item.modifiers !== undefined ? { modifiers: item.modifiers } : {}),
+    });
     announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: item.name }));
     setUndoStack((prev) => prev.slice(1));
   }, [undoStack, addProduct, announce]);
@@ -441,6 +453,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // ADR #36 D4: per-user column visibility + hide-inactive (KDS pattern).
+  const { prefs: colPrefs, toggleColumn: onToggleColumn, setHideInactive: onToggleHideInactive } = useRetailColumnPrefs();
+
+  // ADR #38 D1: positioned row context menu state.
+  const [rowMenu, setRowMenu] = useState<ContextMenuState | null>(null);
+
   const loadProductsAndCategories = useCallback((token: string) => {
     // Abort any previous in-flight request to prevent race condition
     if (loadProductsAbortRef.current) {
@@ -513,7 +531,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const lowStockCount = useMemo(
     () => products.filter((p) => {
       if (p.stock_qty == null || p.stock_qty <= 0) return false;
-      const threshold = p.low_stock_threshold ?? 5;
+      const threshold = p.low_stock_threshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
       return p.stock_qty <= threshold;
     }).length,
     [products],
@@ -527,14 +545,56 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setEditingProduct(p);
   }, []);
 
-  const handleSaveProductEdit = useCallback((updatedProduct: ProductDto) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.sku === updatedProduct.sku ? updatedProduct : p)),
+  // ADR #36 D5: the retail edit modal now persists through
+  // `update_product_scoped` — cost/brand/rack/notes/unit/status ride the
+  // PATCH attribute path, and a stock change issues an inventory adjustment.
+  const handleSaveProductEdit = useCallback(async (updatedProduct: ProductDto) => {
+    const prev = products.find((p) => p.sku === updatedProduct.sku);
+    setProducts((prevList) =>
+      prevList.map((p) => (p.sku === updatedProduct.sku ? updatedProduct : p)),
     );
     // PERF-08: catalog mutated — next load must refetch.
     invalidateCatalog(sessionToken);
     setEditingProduct(null);
-  }, [setProducts, sessionToken]);
+
+    try {
+      // Resolve the category id from the display name so the base update
+      // does not NULL an existing category the modal never edits.
+      const categoryId = categories.find((c) => c.name === updatedProduct.category)?.id ?? null;
+      await updateProductScoped(sessionToken, {
+        sku: updatedProduct.sku,
+        name: updatedProduct.name,
+        priceMinor: updatedProduct.price.minor_units,
+        currency: updatedProduct.price.currency,
+        categoryId,
+        barcode: updatedProduct.barcode ?? null,
+        productType: updatedProduct.product_type,
+        taxRateIds: updatedProduct.tax_rate_ids,
+        // PATCH attributes (ADR #36): absent/null keeps for cost, null clears
+        // the text fields. Cost is omitted entirely without products:edit_cost
+        // (the backend rejects cost writes for staff regardless).
+        costMinor: canEditCost ? (updatedProduct.cost_minor ?? null) : undefined,
+        brand: updatedProduct.brand ?? null,
+        rackLocation: updatedProduct.rack_location ?? null,
+        notes: updatedProduct.notes ?? null,
+        unit: updatedProduct.unit ?? null,
+        isActive: updatedProduct.is_active ?? prev?.is_active ?? true,
+        defaultSupplierId: updatedProduct.default_supplier_id ?? null,
+      });
+
+      // Stock change → inventory adjustment (positive delta restocks,
+      // matching the cost-override flow in the edit modal).
+      if (prev && updatedProduct.stock_qty != null && prev.stock_qty != null && updatedProduct.stock_qty !== prev.stock_qty) {
+        await adjustStockScoped(sessionToken, {
+          sku: updatedProduct.sku,
+          delta: updatedProduct.stock_qty - prev.stock_qty,
+          reason: 'retail-edit',
+        });
+      }
+    } catch (err) {
+      addToast({ message: plainErrorMessage(err, requiredLocalized(l10nRef.current, 'retail-toast-save-product-failed')), type: 'error' });
+    }
+  }, [products, categories, addToast, sessionToken, canEditCost]);
 
   const handleSaveNewCategory = useCallback((newCat: CategoryDto) => {
     setCategories((prev) => [...prev, newCat]);
@@ -543,11 +603,39 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setActiveCategory(newCat.id);
   }, [setCategories, sessionToken]);
 
-  const handleSaveNewProduct = useCallback((newProd: ProductDto) => {
+  // ADR #36 D5: the retail add modal now persists through
+  // `create_product_scoped` (previously the product only lived in local
+  // React state and vanished on reload).
+  const handleSaveNewProduct = useCallback(async (newProd: ProductDto) => {
     setProducts((prev) => [newProd, ...prev]);
     // PERF-08: catalog mutated — next load must refetch.
     invalidateCatalog(sessionToken);
-  }, [setProducts, sessionToken]);
+
+    try {
+      const categoryId = categories.find((c) => c.name === newProd.category)?.id ?? null;
+      await createProductScoped(sessionToken, {
+        sku: newProd.sku,
+        name: newProd.name,
+        priceMinor: newProd.price.minor_units,
+        currency: newProd.price.currency,
+        categoryId,
+        barcode: newProd.barcode ?? null,
+        initialStock: newProd.stock_qty ?? 0,
+        productType: newProd.product_type,
+        taxRateIds: newProd.tax_rate_ids,
+        // Cost is only sent when the session may write it (ADR #36 D7).
+        costMinor: canEditCost ? (newProd.cost_minor ?? 0) : 0,
+        brand: newProd.brand ?? null,
+        rackLocation: newProd.rack_location ?? null,
+        notes: newProd.notes ?? null,
+        unit: newProd.unit ?? null,
+        isActive: newProd.is_active !== false,
+        defaultSupplierId: newProd.default_supplier_id ?? null,
+      });
+    } catch (err) {
+      addToast({ message: plainErrorMessage(err, requiredLocalized(l10nRef.current, 'retail-toast-save-product-failed')), type: 'error' });
+    }
+  }, [categories, addToast, sessionToken, canEditCost]);
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.product_type === 'retail');
@@ -563,23 +651,33 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (filterLowStock) {
       list = list.filter((p) => {
         if (p.stock_qty == null || p.stock_qty <= 0) return false;
-        const threshold = p.low_stock_threshold ?? 5;
+        const threshold = p.low_stock_threshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
         return p.stock_qty <= threshold;
       });
+    }
+    // ADR #36: hide retired products without deleting them.
+    if (colPrefs.hideInactive) {
+      list = list.filter((p) => p.is_active !== false);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
     }
     return list;
-  }, [products, activeCategory, searchQuery, categories, filterLowStock]);
+  }, [products, activeCategory, searchQuery, categories, filterLowStock, colPrefs.hideInactive]);
 
-  const [sortField, setSortField] = useState<SortField>('sku');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  // ADR #37 D5: default sort on load is popularity descending (most
+  // popular first) with SKU tiebreak; clicking a column header switches.
+  const [sortField, setSortField] = useState<SortField>('popularity');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
       setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else if (field === 'popularity') {
+      // First click on popularity sorts most-popular-first (natural).
+      setSortField(field);
+      setSortOrder('desc');
     } else {
       setSortField(field);
       setSortOrder('asc');
@@ -589,6 +687,13 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const sortedProducts = useMemo(() => {
     const list = [...filteredProducts];
     list.sort((a, b) => {
+      // ADR #37 D5: popularity handles direction internally so the SKU
+      // tiebreak stays deterministic (ascending) regardless of order.
+      if (sortField === 'popularity') {
+        const diff = (a.popularity_score ?? 0) - (b.popularity_score ?? 0);
+        if (diff !== 0) return sortOrder === 'asc' ? diff : -diff;
+        return a.sku.localeCompare(b.sku);
+      }
       let comp = 0;
       if (sortField === 'sku') {
         comp = a.sku.localeCompare(b.sku);
@@ -623,6 +728,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     return Math.abs(h) % 360;
   }, []);
 
+  // ADR #37 D2: a product added while a search filter is active is an
+  // acted-upon search — count it for the popularity index (fire-and-forget).
+  const recordSearchIfActive = useCallback((sku: string, fromExplicitLookup = false) => {
+    if (searchQuery.trim() || fromExplicitLookup) {
+      recordProductSearchScoped(sessionToken, sku);
+    }
+  }, [searchQuery, sessionToken]);
+
   const handleAdd = useCallback((p: ProductDto) => {
     if (p.stock_qty != null) {
       const inCart = linesRef.current.filter((l) => l.sku === p.sku).reduce((s, l) => s + l.qty, 0);
@@ -633,7 +746,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     }
     addProduct(toProduct(p));
     announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: p.name }));
-  }, [addProduct, addToast, l10n, announce]);
+    recordSearchIfActive(p.sku);
+  }, [addProduct, addToast, l10n, announce, recordSearchIfActive]);
 
   const handleWeighAdd = useCallback((sku: Sku, weightGrams: number) => {
     const product = products.find((p) => p.sku === sku);
@@ -657,6 +771,18 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setWeighTarget({ sku: p.sku as Sku, name: p.name });
     addToast({ message: requiredLocalized(l10n, 'scale-target-set', { name: p.name }), type: 'info' });
   }, [weighTarget, addToast, l10n]);
+
+  // ── Row context menu (ADR #38) ────────────────────────────────
+
+  const handleRowContextMenu = useCallback((p: ProductDto, x: number, y: number) => {
+    setRowMenu({ product: p, x, y });
+  }, []);
+
+  const handleViewProductImages = useCallback((p: ProductDto) => {
+    // ADR #38 D3: opens the OS default browser in a new tab at a Google
+    // Images search for the product name (+ brand). Best-effort.
+    openProductImagesScoped(sessionToken, p.sku).catch(() => {});
+  }, [sessionToken]);
 
   /** Stock-aware cart qty increase — checks stock_qty before incrementing. */
   const handleIncreaseQty = useCallback((line: { sku: string; id: LineId; qty: number }) => {
@@ -691,26 +817,26 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setSkuInput('');
     const list = productsRef.current;
     const p = list.find((x) => x.sku === val || x.barcode === val);
-    if (p) { handleAdd(p); return; }
+    if (p) { recordSearchIfActive(p.sku, true); handleAdd(p); return; }
     try {
       const found = await lookupProductBySkuScoped(sessionToken, val);
-      if (found) { handleAdd(found); return; }
+      if (found) { recordSearchIfActive(found.sku, true); handleAdd(found); return; }
     } catch { /* unreachable */ }
     addToast({ message: requiredLocalized(l10n, 'retail-sku-not-found', { sku: val }), type: 'warning' });
-  }, [skuInput, handleAdd, addToast, l10n, sessionToken]);
+  }, [skuInput, handleAdd, addToast, l10n, sessionToken, recordSearchIfActive]);
 
   const handleBarcode = useCallback(async (payload: { code: string }) => {
 
     const list = productsRef.current;
     const found = list.find((x) => x.barcode === payload.code);
-    if (found) { handleAdd(found); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
+    if (found) { recordSearchIfActive(found.sku, true); handleAdd(found); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     try {
       const p = await lookupByBarcodeScoped(sessionToken, payload.code);
-      if (p) { handleAdd(p); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
+      if (p) { recordSearchIfActive(p.sku, true); handleAdd(p); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     } catch { /* unreachable */ }
     playError();
     addToast({ message: requiredLocalized(l10n, 'pos-no-barcode-match'), type: 'warning' });
-  }, [handleAdd, addToast, l10n, playBeep, playError, sessionToken]);
+  }, [handleAdd, addToast, l10n, playBeep, playError, sessionToken, recordSearchIfActive]);
 
   useBarcodeScanner({ onProductFound: handleBarcode });
 
@@ -1355,6 +1481,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             skuInput,
             weighTarget,
             filterLowStock,
+            visibleColumns: colPrefs.visibleColumns,
+            hideInactive: colPrefs.hideInactive,
           }}
           actions={{
             onSetActiveCategory: setActiveCategory,
@@ -1371,6 +1499,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             onSkuInputChange: setSkuInput,
             onSkuSubmit: handleSkuSubmit,
             onWeighAdd: handleWeighAdd,
+            onToggleColumn,
+            onToggleHideInactive,
+            onRowContextMenu: handleRowContextMenu,
           }}
           isScaleEnabled={isEnabled(FEATURES.USB_SCALE)}
           catHue={catHue}
@@ -1461,6 +1592,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         onClickHeldCarts={() => { if (!isAnyOverlayOpen()) setShowHeldCartsList(true); }}
       />
       <RetailModals
+        canEditCost={canEditCost}
         shift={{
           activeShift,
           openShiftExit: { shouldRender: retailOpenShiftExit.shouldRender, exiting: retailOpenShiftExit.exiting, requestClose: retailOpenShiftExit.requestClose },
@@ -1575,6 +1707,13 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         quickReturnSale={quickReturnSale}
         quickReturnRefundDone={handleQuickReturnRefundDone}
         scanFlash={scanFlash}
+      />
+
+      {/* ── Row context menu (ADR #38) ───── */}
+      <RetailProductContextMenu
+        menu={rowMenu}
+        onClose={() => setRowMenu(null)}
+        onViewImages={handleViewProductImages}
       />
 
       {/* ── Item modifier modal ──────────── */}

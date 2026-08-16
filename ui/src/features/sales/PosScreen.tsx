@@ -106,6 +106,15 @@ function lineThumbnail(sku: string): { initial: string; hue: number } {
   return { initial: chosen.toUpperCase(), hue };
 }
 
+/**
+ * Split an elapsed duration (ms) into whole hours + minutes, floored.
+ * Used for the live shift timer in the cart header.
+ */
+function elapsedHoursMinutes(sinceMs: number, nowMs: number): { h: number; m: number } {
+  const totalMinutes = Math.max(0, Math.floor((nowMs - sinceMs) / 60_000));
+  return { h: Math.floor(totalMinutes / 60), m: totalMinutes % 60 };
+}
+
 /** Minus icon SVG */
 function MinusIcon() {
   return (
@@ -143,6 +152,48 @@ function ShoppingBagIcon() {
       <path d="M6 2 4 6v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4H6z" />
       <path d="M4 6h16" />
       <path d="M9 10V8a3 3 0 0 1 6 0v2" />
+    </svg>
+  );
+}
+
+/** History / recent-orders icon — same stroke style as the header lock button. */
+function HistoryIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width="18"
+      height="18"
+      aria-hidden="true"
+    >
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </svg>
+  );
+}
+
+/** Kitchen Display (KDS) icon — a kitchen monitor, same stroke style. */
+function KitchenDisplayIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width="18"
+      height="18"
+      aria-hidden="true"
+    >
+      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
     </svg>
   );
 }
@@ -504,6 +555,19 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const activeShiftRef = useRef(activeShift);
   activeShiftRef.current = activeShift;
   const [shiftLoading, setShiftLoading] = useState(true);
+  // Live elapsed-shift clock: while a shift is open, tick every minute so
+  // the header can show a running "2h 15m" instead of the bare opening
+  // time (which read like a wall clock). The interval stops when the
+  // shift closes — activeShift → null runs the effect's cleanup.
+  const [shiftNow, setShiftNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!activeShift) return;
+    // Rebase the elapsed anchor the instant a shift becomes active so the
+    // first render is accurate even if the screen was mounted long before.
+    setShiftNow(Date.now());
+    const id = window.setInterval(() => setShiftNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, [activeShift]);
   const [overrideTarget, setOverrideTarget] = useState<CartLine | null>(null);
   const [showFastPINOverlay, setShowFastPINOverlay] = useState(false);
   const [cartId, setCartId] = useState<CartId | null>(null);
@@ -770,8 +834,10 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   }, [resetCart, customerDisplayPaymentComplete, activeOpenBillId, loadOpenBills, addToast, sessionToken]);
 
   const handleApplyDiscount = useCallback(() => {
-    const pct = parseInt(discountInput, 10);
-    if (Number.isNaN(pct) || pct < 1 || pct > 100) return;
+    // Whole percentage only — reject fractional input instead of
+    // silently truncating it via parseInt.
+    const pct = Number(discountInput);
+    if (!Number.isInteger(pct) || pct < 1 || pct > 100) return;
     setDiscount(pct, discountName.trim() || `${pct}% Discount`);
     setShowDiscountInput(false);
     setDiscountInput('');
@@ -986,8 +1052,10 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
 
   const handleConfirmCloseShift = useCallback(async () => {
     if (!activeShift) return;
-    const balance = parseInt(closingBalance, 10);
-    if (Number.isNaN(balance) || balance < 0) return;
+    // Whole-number minor units — reject fractional input instead of
+    // silently truncating it via parseInt.
+    const balance = Number(closingBalance);
+    if (!Number.isInteger(balance) || balance < 0) return;
 
     setClosingShift(true);
     setCloseShiftError(null);
@@ -1009,8 +1077,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   }, []);
 
   const handleConfirmOpenShift = useCallback(async () => {
-    const balance = parseInt(openingBalance, 10);
-    const safeBalance = !Number.isNaN(balance) && balance >= 0 ? balance : 0;
+    const balance = Number(openingBalance);
+    const safeBalance = !Number.isNaN(balance) && Number.isInteger(balance) && balance >= 0 ? balance : 0;
 
     setOpeningShift(true);
     try {
@@ -1226,51 +1294,56 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         {...cartSwipe}
       >
         <div className="pos-cart-header">
-          <h2 className="pos-cart-title">
-            <Localized id="pos-cart-panel-title">
-              <span>Current Sale</span>
-            </Localized>
-            {lines.length > 0 && (
-              <span className="pos-cart-count">{lines.length}</span>
-            )}
-          </h2>
-
-          {/* ADR-19 §17: locked deduction location badge (clickable → FastPINOverlay override) */}
-          {deductionLocationName && (
-            <button
-              type="button"
-              className="pos-cart-deduction-badge"
-              data-testid="deduction-location-badge"
-              onClick={handleDeductionBadgeClick}
-              aria-label={l10n.getString('pos-cart-deduction-badge-aria', { name: deductionLocationName })}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" aria-hidden="true">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              <Localized id="pos-cart-deducting-label" vars={{ name: deductionLocationName }}>
-                <span>Deducting: {deductionLocationName}</span>
+          {/* ── Left: order/sale title + count + deduction badge ── */}
+          <div className="pos-cart-header-title-area">
+            <h2 className="pos-cart-title">
+              {/* Restaurants take orders, not sales — use the order wording in
+                  the resto workspace; retail keeps "Current Sale". */}
+              <Localized id={activeWorkspace === 'restaurant-pos' ? 'pos-cart-panel-title-order' : 'pos-cart-panel-title'}>
+                <span>{activeWorkspace === 'restaurant-pos' ? 'Current Order' : 'Current Sale'}</span>
               </Localized>
-              {deductionOverridden && (
-                <span className="pos-cart-deduction-override" data-testid="deduction-override-indicator">
-                  {' '}(Override)
-                </span>
+              {lines.length > 0 && (
+                <span className="pos-cart-count">{lines.length}</span>
               )}
-            </button>
-          )}
+            </h2>
 
-          {/* ── Shift status (right side of header) ── */}
-          <div className="pos-cart-header-right">
+            {/* ADR-19 §17: locked deduction location badge (clickable → FastPINOverlay override) */}
+            {deductionLocationName && (
+              <button
+                type="button"
+                className="pos-cart-deduction-badge"
+                data-testid="deduction-location-badge"
+                onClick={handleDeductionBadgeClick}
+                aria-label={l10n.getString('pos-cart-deduction-badge-aria', { name: deductionLocationName })}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <Localized id="pos-cart-deducting-label" vars={{ name: deductionLocationName }}>
+                  <span>Deducting: {deductionLocationName}</span>
+                </Localized>
+                {deductionOverridden && (
+                  <span className="pos-cart-deduction-override" data-testid="deduction-override-indicator">
+                    {' '}(Override)
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* ── Center: shift status ── */}
+          <div className="pos-cart-header-shift">
             {shiftLoading ? (
               <span className="pos-shift-bar-label">{l10n.getString('pos-shift-loading')}</span>
             ) : activeShift ? (
               <>
                 <span className="pos-shift-bar-indicator pos-shift-bar-indicator--open" />
                 <span className="pos-shift-bar-label">
-                  {new Date(activeShift.openedAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {l10n.getString(
+                    'pos-shift-elapsed',
+                    elapsedHoursMinutes(new Date(activeShift.openedAt).getTime(), shiftNow),
+                  )}
                 </span>
                 <button
                   type="button"
@@ -1295,7 +1368,10 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 </button>
               </>
             )}
+          </div>
 
+          {/* ── Right: terminal action buttons ── */}
+          <div className="pos-cart-header-actions">
             {isEnabled(FEATURES.TABLE_MANAGEMENT) && (
               <button
                 type="button"
@@ -1303,7 +1379,6 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 onClick={() => setShowTables(true)}
                 aria-label={requiredLocalized(l10n, 'tables-title')}
                 title={requiredLocalized(l10n, 'tables-title')}
-                style={{ marginRight: 4 }}
               >
                 🪑
               </button>
@@ -1315,21 +1390,23 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               onClick={() => setShowSalesHistory(true)}
               aria-label={requiredLocalized(l10n, 'retail-fn-history')}
               title={requiredLocalized(l10n, 'retail-fn-history')}
-              style={{ marginRight: 4 }}
             >
-              📋
+              <HistoryIcon />
             </button>
 
-            <button
-              type="button"
-              className="pos-cart-lock-btn"
-              onClick={() => setShowStockInquiry(true)}
-              aria-label={requiredLocalized(l10n, 'retail-fn-stok')}
-              title={requiredLocalized(l10n, 'retail-fn-stok')}
-              style={{ marginRight: 4 }}
-            >
-              📦
-            </button>
+            {/* Stock inquiry is a retail-POS concern — the restaurant POS
+                doesn't need it (kitchen flow goes through the KDS). */}
+            {activeWorkspace !== 'restaurant-pos' && (
+              <button
+                type="button"
+                className="pos-cart-lock-btn"
+                onClick={() => setShowStockInquiry(true)}
+                aria-label={requiredLocalized(l10n, 'retail-fn-stok')}
+                title={requiredLocalized(l10n, 'retail-fn-stok')}
+              >
+                📦
+              </button>
+            )}
 
             <button
               type="button"
@@ -1337,21 +1414,24 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               onClick={() => onNavigate?.('kds')}
               aria-label={requiredLocalized(l10n, 'kds-title')}
               title={requiredLocalized(l10n, 'kds-title')}
-              style={{ marginRight: 4 }}
             >
-              👨‍🍳
+              <KitchenDisplayIcon />
             </button>
 
-            <button
-              type="button"
-              className="pos-cart-lock-btn"
-              onClick={handleOpenSettings}
-              aria-label={requiredLocalized(l10n, 'settings-page-title')}
-              title={requiredLocalized(l10n, 'settings-page-title')}
-              style={{ marginRight: 4 }}
-            >
-              ⚙️
-            </button>
+            {/* Settings is a manager/owner surface — not needed at the
+                restaurant cashier terminal (reachable from the workspace
+                picker); retail keeps it. */}
+            {activeWorkspace !== 'restaurant-pos' && (
+              <button
+                type="button"
+                className="pos-cart-lock-btn"
+                onClick={handleOpenSettings}
+                aria-label={requiredLocalized(l10n, 'settings-page-title')}
+                title={requiredLocalized(l10n, 'settings-page-title')}
+              >
+                ⚙️
+              </button>
+            )}
 
             <button
               type="button"
@@ -1588,7 +1668,14 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                               max="100"
                               placeholder="%"
                               value={discountInput}
-                              onChange={(e) => setDiscountInput(e.target.value)}
+                              onChange={(e) => {
+                                // Whole number only — ignore fractional in-progress input
+                                // instead of silently truncating it via parseInt.
+                                const v = Number(e.target.value);
+                                if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                                  setDiscountInput(e.target.value);
+                                }
+                              }}
                               aria-label={l10n.getString('pos-cart-discount-pct-aria')}
                             />
                           </Localized>
@@ -1607,7 +1694,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                               type="button"
                               className="pos-cart-discount-apply"
                               onClick={handleApplyDiscount}
-                              disabled={!discountInput || parseInt(discountInput, 10) < 1 || parseInt(discountInput, 10) > 100}
+                              disabled={!discountInput || !Number.isInteger(Number(discountInput)) || Number(discountInput) < 1 || Number(discountInput) > 100}
                             >
                               Apply
                             </button>
@@ -1965,7 +2052,14 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   min="0"
                   placeholder="e.g. 15000 for $150.00"
                   value={closingBalance}
-                  onChange={(e) => setClosingBalance(e.target.value)}
+                  onChange={(e) => {
+                    // Whole number only — ignore fractional in-progress input
+                    // instead of silently truncating it via parseInt.
+                    const v = Number(e.target.value);
+                    if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                      setClosingBalance(e.target.value);
+                    }
+                  }}
                   aria-label={l10n.getString('pos-close-shift-balance-aria')}
                 />
               </Localized>
@@ -1981,7 +2075,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 <textarea
                   id="shift-notes"
                   className="pos-close-shift-textarea"
-                  rows={2}
+                  rows={3}
                   placeholder="Any notes about this shift…"
                   value={shiftNotes}
                   onChange={(e) => setShiftNotes(e.target.value)}
@@ -2012,8 +2106,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 disabled={
                   closingShift ||
                   !closingBalance ||
-                  parseInt(closingBalance, 10) < 0 ||
-                  Number.isNaN(parseInt(closingBalance, 10))
+                  !Number.isInteger(Number(closingBalance)) ||
+                  Number(closingBalance) < 0
                 }
               >
                 <Localized id={closingShift ? 'pos-close-shift-closing' : 'pos-close-shift-confirm'}>
@@ -2161,7 +2255,14 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   min="0"
                   placeholder="e.g. 500 for $5.00"
                   value={openingBalance}
-                  onChange={(e) => setOpeningBalance(e.target.value)}
+                  onChange={(e) => {
+                    // Whole number only — ignore fractional in-progress input
+                    // instead of silently truncating it via parseInt.
+                    const v = Number(e.target.value);
+                    if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                      setOpeningBalance(e.target.value);
+                    }
+                  }}
                   aria-label={l10n.getString('pos-open-shift-balance-aria')}
                 />
               </Localized>

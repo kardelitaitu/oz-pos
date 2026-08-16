@@ -102,3 +102,23 @@ export function renderWithProvidersSync(
     ),
   );
 }
+
+/**
+ * Re-render a `renderWithProvidersSync`/`renderWithProviders` result with
+ * the same provider stack (Theme/Toast/Zoom/Brand + Fluent). The raw
+ * `result.rerender(ui)` from testing-library replaces the root element
+ * WITHOUT the providers, so components that consume contexts (Toast, etc.)
+ * would throw — this keeps the wrapper intact for prop-driven re-renders.
+ */
+export function rerenderWithProviders(
+  result: RenderResult,
+  ui: ReactElement,
+  ...ftlContents: string[]
+): void {
+  result.rerender(
+    withFluent(
+      <DefaultProviders>{ui}</DefaultProviders>,
+      ...ftlContents,
+    ),
+  );
+}

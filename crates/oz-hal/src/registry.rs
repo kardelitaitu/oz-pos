@@ -14,11 +14,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::drivers::drawer::PrinterKickCashDrawer;
-use crate::drivers::scale::WeightScale;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
 use crate::traits::customer_display::CustomerDisplay;
 use crate::traits::printer::ReceiptPrinter;
+use crate::traits::weight_scale::WeightScale;
 use crate::types::DeviceInfo;
 
 /// Shared, mutable catalogue of HAL drivers.

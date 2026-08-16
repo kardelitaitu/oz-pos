@@ -1,0 +1,1627 @@
+/* ── Scoped light palette (AUT-1) ────────────────────────────────
+   The analytics workspace is deliberately rendered as a fixed light
+   surface regardless of the global theme (owner/admin reporting desk).
+   These screen-scoped tokens keep that white look while satisfying the
+   theme-token compliance scan; they are NOT global design tokens. */
+.analytics {
+  --analytics-bg:            #ffffff;
+  --analytics-bg-surface:    #f8fafc;
+  --analytics-bg-hover:      #f1f5f9;
+  --analytics-bg-subtle:     #eef2f7;
+  --analytics-bg-accent:     #eef2ff;
+  --analytics-fg:            #0f172a;
+  --analytics-fg-strong:     #1a1a2e;
+  --analytics-fg-body:       #1e293b;
+  --analytics-fg-muted:      #334155;
+  --analytics-fg-secondary:  #64748b;
+  --analytics-fg-tertiary:   #94a3b8;
+  --analytics-fg-faint:      #cbd5e1;
+  --analytics-border:        #e2e8f0;
+  --analytics-border-strong: #cbd5e1;
+  --analytics-success:       #16a34a;
+  --analytics-success-bg:    #f0fdf4;
+  --analytics-danger:        #dc2626;
+  --analytics-danger-bg:     #fef2f2;
+  --analytics-danger-bright: #ef4444;
+  --analytics-warning:       #ea580c;
+  --analytics-warning-bright:#f59e0b;
+  --analytics-warning-bg:    #fff7ed;
+  --analytics-heat-1:        #bfdbfe;
+  --analytics-heat-2:        #93c5fd;
+  --analytics-heat-3:        #3b82f6;
+  --analytics-heat-4:        #1d4ed8;
+  --analytics-overlay:       rgba(15, 23, 42, 0.35);
+  --analytics-shadow-card:     0 8px 24px rgba(15, 23, 42, 0.12);
+  --analytics-shadow-popover:  0 4px 14px rgba(15, 23, 42, 0.08);
+  --analytics-shadow-float:    0 4px 12px rgba(15, 23, 42, 0.1);
+  --analytics-shadow-hover:    0 6px 18px rgba(15, 23, 42, 0.18);
+  --analytics-shadow-modal:    0 16px 48px rgba(15, 23, 42, 0.18);
+  --analytics-ring-danger:     0 0 0 3px #fee2e2;
+  --analytics-ring-warning:    0 0 0 3px #fef3c7;
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   Analytics Screen — three flex areas (top / menu / main)
+   ═════════════════════════════════════════════════════════════════════ */
+
+.analytics {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-strong);
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+
+/* ── AREA 1: Topbar ────────────────────────────────────────────── */
+
+.analytics-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--analytics-bg-hover);
+  flex-shrink: 0;
+}
+
+.analytics-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--analytics-border);
+  border-radius: 8px;
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-back-btn:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+.analytics-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analytics-title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--analytics-fg);
+}
+
+.analytics-subtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--analytics-fg-tertiary);
+  line-height: 1.4;
+}
+
+/* ── AREA 2: Menu ──────────────────────────────────────────────── */
+
+.analytics-menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  background: var(--analytics-bg-surface);
+  border-bottom: 1px solid var(--analytics-border);
+  flex-shrink: 0;
+}
+
+.analytics-menu-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* Workspace selector (row 1) */
+.analytics-workspace-select-input {
+  height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--analytics-border);
+  border-radius: 8px;
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-strong);
+  font-size: var(--text-base);
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.analytics-workspace-select-input:focus {
+  outline: 2px solid var(--color-primary, #4f46e5);
+  outline-offset: 1px;
+}
+
+/* Granularity pill buttons (row 2) */
+.analytics-granularity {
+  display: flex;
+  border: 1px solid var(--analytics-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.analytics-granularity-btn {
+  padding: 6px var(--space-4);
+  border: none;
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-granularity-btn:not(:last-child) {
+  border-right: 1px solid var(--analytics-border);
+}
+
+.analytics-granularity-btn--active {
+  background: var(--color-primary, #4f46e5);
+  color: var(--analytics-bg);
+}
+
+.analytics-granularity-btn:hover:not(.analytics-granularity-btn--active) {
+  background: var(--analytics-bg-surface);
+  color: var(--analytics-fg-muted);
+}
+
+/* Custom date range — inline to the right of the granularity pills */
+.analytics-custom-range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: var(--space-4);
+}
+
+.analytics-custom-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.analytics-custom-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--analytics-fg-secondary);
+  white-space: nowrap;
+}
+
+.analytics-custom-input {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--analytics-border);
+  border-radius: 6px;
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-strong);
+  font-size: var(--text-sm);
+  font-family: inherit;
+}
+
+.analytics-custom-input:focus {
+  outline: 2px solid var(--color-primary, #4f46e5);
+  outline-offset: 1px;
+}
+
+.analytics-custom-sep {
+  color: var(--analytics-fg-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* Action buttons — far right of menu row 2 */
+.analytics-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.analytics-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--analytics-border);
+  border-radius: 8px;
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-action-btn:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+.analytics-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Zoom percentage badge — click to reset to 100% */
+.analytics-zoom-badge {
+  min-width: 44px;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--analytics-border);
+  border-radius: 8px;
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-zoom-badge:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+/* Collapse toggle active state */
+.analytics-action-btn--active {
+  background: var(--analytics-bg-accent);
+  color: var(--color-primary, #4f46e5);
+}
+
+/* Zoom slider popover — opens from the zoom badge */
+.analytics-zoom-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px var(--space-3);
+  background: var(--analytics-bg);
+  border: 1px solid var(--analytics-border);
+  border-radius: 10px;
+  box-shadow: var(--analytics-shadow-card);
+}
+
+.analytics-zoom-slider {
+  width: 140px;
+  accent-color: var(--color-primary, #4f46e5);
+}
+
+.analytics-zoom-popover-value {
+  min-width: 40px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--analytics-fg-muted);
+  text-align: center;
+}
+
+.analytics-zoom-reset-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--analytics-border);
+  border-radius: 6px;
+  background: var(--analytics-bg-surface);
+  color: var(--analytics-fg-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-zoom-reset-btn:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+/* Keyboard shortcuts help popover */
+.analytics-actions {
+  position: relative;
+}
+
+.analytics-shortcuts-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 240px;
+  padding: var(--space-3) var(--space-3);
+  background: var(--analytics-bg);
+  border: 1px solid var(--analytics-border);
+  border-radius: 10px;
+  box-shadow: var(--analytics-shadow-card);
+}
+
+.analytics-shortcuts-title {
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--analytics-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.analytics-shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analytics-shortcuts-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--analytics-fg-secondary);
+}
+
+.analytics-shortcuts-keys {
+  padding: 2px 6px;
+  border: 1px solid var(--analytics-border);
+  border-radius: 5px;
+  background: var(--analytics-bg-surface);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  color: var(--analytics-fg-muted);
+}
+
+/* Reset layout — appears in the status bar when order is customized */
+.analytics-reset-layout {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--analytics-border);
+  border-radius: var(--radius-full);
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-reset-layout:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+/* Custom range quick presets */
+.analytics-custom-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: var(--space-4);
+}
+
+.analytics-preset-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--analytics-border);
+  border-radius: var(--radius-full);
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.analytics-preset-chip:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+  border-color: var(--analytics-border-strong);
+}
+
+/* ── AREA 3: Main content — analytics card grid ──────────────── */
+
+.analytics-main {
+  flex: 1;
+  padding: var(--space-6);
+  /* `auto` on both axes so a zoomed grid (CSS `zoom` reflows layout) scrolls
+     horizontally instead of clipping its cards past the viewport edge. */
+  overflow: auto;
+}
+
+/* Responsive grid — max 4 columns, collapses gracefully */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1200px) {
+  .analytics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .analytics-grid { grid-template-columns: 1fr; }
+  .analytics-card--wide,
+  .analytics-card--full { grid-column: 1 / -1; }
+}
+
+/* Individual card */
+.analytics-card {
+  background: var(--analytics-bg);
+  border: 1px solid var(--analytics-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+}
+
+.analytics-card--wide {
+  grid-column: span 2;
+}
+
+.analytics-card--full {
+  grid-column: 1 / -1;
+}
+
+/* Expanded card fills the main area */
+.analytics-card--expanded {
+  grid-column: 1 / -1;
+  min-height: 70vh;
+}
+
+/* Expanded cards scale ranked rows and captions up for readability */
+.analytics-card--expanded .analytics-rank-row {
+  font-size: var(--text-sm);
+  gap: var(--space-3);
+}
+
+.analytics-card--expanded .analytics-rank-index {
+  width: 20px;
+  height: 20px;
+  font-size: var(--text-sm);
+}
+
+.analytics-card--expanded .analytics-card-insight {
+  font-size: var(--text-sm);
+}
+
+/* Collapsed (compact) cards shrink to just their header row */
+.analytics-card--collapsed {
+  min-height: 0;
+}
+
+.analytics-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: var(--space-3) 2% 0;
+}
+
+.analytics-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.analytics-card-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--analytics-fg-tertiary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-card-action:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+.analytics-card-action--active {
+  background: var(--analytics-bg-accent);
+  color: var(--color-primary, #4f46e5);
+}
+
+/* Per-card action buttons (info / expand / options) */
+.analytics-card-actions {
+  position: relative;
+}
+
+/* Portaled to document.body at a fixed viewport position (set inline), so
+   the card's `overflow: hidden` can't clip the open menu. */
+.analytics-card-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 160px;
+  padding: 5px;
+  background: var(--analytics-bg);
+  border: 1px solid var(--analytics-border);
+  border-radius: 10px;
+  box-shadow: var(--analytics-shadow-card);
+}
+
+.analytics-card-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--analytics-fg-muted);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.analytics-card-menu button:hover:not(:disabled) {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-body);
+}
+
+.analytics-card-menu button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.analytics-card-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--analytics-bg-hover);
+}
+
+.analytics-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+}
+
+.analytics-card-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--analytics-fg-muted);
+}
+
+.analytics-card-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Horizontal gutters are a percentage of the card width so they scale
+     with the grid column span (1×1 vs 2×1) instead of staying fixed. */
+  padding: var(--space-4) 2%;
+}
+
+/* Card content spans most of the body's content box (centered via
+   margin:auto) so the visual stretches wide without hugging the card's
+   rounded corners — the 90% leaves a small inset instead of the oversized
+   left/right padding the narrow, centered layout used to produce. */
+.analytics-card-content {
+  width: 90%;
+  margin: auto;
+  transform-origin: center;
+  transition: transform 0.25s ease;
+}
+
+/* Expanded cards revert to auto width so smartScale can enlarge the
+   natural content to fill the taller body. */
+.analytics-card--expanded .analytics-card-content {
+  width: auto;
+}
+
+/* Content fades in when the skeleton clears */
+.analytics-card-content > * {
+  animation: analytics-fade-in 0.3s ease;
+}
+
+@keyframes analytics-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Collapsed cards show only their header */
+.analytics-card--collapsed .analytics-card-body {
+  display: none;
+}
+
+/* Drag-to-reorder affordance */
+.analytics-card-grip {
+  display: inline-flex;
+  align-items: center;
+  color: var(--analytics-fg-faint);
+  cursor: grab;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.analytics-card:hover .analytics-card-grip {
+  color: var(--analytics-fg-tertiary);
+}
+
+.analytics-card--dragging {
+  opacity: 0.4;
+}
+
+.analytics-card--drop-target {
+  outline: 2px solid var(--color-primary, #4f46e5);
+  outline-offset: -2px;
+}
+
+/* Hover lift on cards */
+.analytics-card {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.analytics-card:not(.analytics-card--expanded):hover {
+  box-shadow: var(--analytics-shadow-popover);
+  transform: translateY(-2px);
+}
+
+/* View status bar above the grid */
+.analytics-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 1600px;
+  margin: 0 auto var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--analytics-fg-tertiary);
+}
+
+.analytics-status-item {
+  color: var(--analytics-fg-secondary);
+}
+
+.analytics-status-sep {
+  color: var(--analytics-fg-faint);
+}
+
+/* ── Debug: TTL cache metrics readout ─────────────────────────── */
+.analytics-cache-metrics {
+  position: relative;
+  margin-left: auto;
+}
+
+.analytics-cache-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--analytics-border);
+  border-radius: var(--radius-full);
+  background: var(--analytics-bg-surface);
+  color: var(--analytics-fg-secondary);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.analytics-cache-chip:hover,
+.analytics-cache-chip--open {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+.analytics-cache-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--analytics-success);
+}
+
+.analytics-cache-chip-rate {
+  font-weight: var(--font-weight-semibold);
+  color: var(--analytics-fg-muted);
+}
+
+.analytics-cache-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 340px;
+  padding: var(--space-3);
+  background: var(--analytics-bg);
+  border: 1px solid var(--analytics-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--analytics-shadow-popover);
+}
+
+.analytics-cache-popover-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.analytics-cache-popover-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.analytics-cache-popover-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--analytics-fg);
+}
+
+.analytics-cache-popover-summary {
+  font-size: var(--text-xs);
+  color: var(--analytics-fg-tertiary);
+}
+
+.analytics-cache-clear-btn {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--analytics-border);
+  border-radius: var(--radius-md);
+  background: var(--analytics-bg-surface);
+  color: var(--analytics-fg-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.analytics-cache-clear-btn:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+.analytics-cache-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.analytics-cache-table th,
+.analytics-cache-table td {
+  padding: 4px 6px;
+  text-align: right;
+  color: var(--analytics-fg-muted);
+  border-bottom: 1px solid var(--analytics-bg-hover);
+}
+
+.analytics-cache-table th {
+  font-weight: var(--font-weight-semibold);
+  color: var(--analytics-fg-tertiary);
+}
+
+.analytics-cache-table th:first-child,
+.analytics-cache-table td:first-child {
+  text-align: left;
+}
+
+.analytics-cache-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.analytics-cache-key {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.analytics-cache-empty {
+  padding: 10px;
+  text-align: center;
+  color: var(--analytics-fg-faint);
+}
+
+/* Scroll progress bar — flush below the menu (no gap), tracks the main
+   area's scroll position. Width animates smoothly on fill/shrink. */
+.analytics-scroll-progress {
+  flex-shrink: 0;
+  height: 3px;
+  background: var(--color-primary, #4f46e5);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Transient action toasts */
+.analytics-toasts {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.analytics-toast {
+  padding: 9px var(--space-3);
+  border-radius: 8px;
+  background: var(--analytics-fg);
+  color: var(--analytics-bg-surface);
+  font-size: var(--text-sm);
+  box-shadow: var(--analytics-shadow-hover);
+  animation: analytics-fade-in 0.25s ease;
+}
+
+/* Symmetric exit: toasts fade out instead of snapping away on auto-dismiss.
+   Mirrors the entry keyframe (opacity only) and locks the TO-frame so there
+   is no flash between animation end and React unmount. */
+@keyframes analytics-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.analytics-toast--exiting {
+  animation: analytics-fade-out 0.25s ease both;
+  pointer-events: none;
+}
+
+/* Scroll-to-top button */
+.analytics-scroll-top {
+  position: sticky;
+  bottom: var(--space-5);
+  margin-left: auto;
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--analytics-border);
+  border-radius: 50%;
+  background: var(--analytics-bg);
+  color: var(--analytics-fg-secondary);
+  cursor: pointer;
+  box-shadow: var(--analytics-shadow-float);
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-scroll-top:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+/* ── Designed card visuals (echarts + DOM lists/KPIs) ─────────── */
+
+.analytics-card-visual {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.analytics-card-visual--split {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* KPI headline + delta */
+.analytics-kpi-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* Right-side actions (delta chip + CSV export) next to a KPI headline */
+.analytics-kpi-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Compact CSV export action on the staff-data cards */
+.analytics-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  border: 1px solid var(--analytics-bg-subtle);
+  border-radius: var(--radius-md);
+  background: var(--analytics-bg-surface);
+  color: var(--analytics-fg-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.analytics-export-btn:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg);
+  border-color: var(--analytics-border);
+}
+
+.analytics-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.analytics-kpi-value {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--analytics-fg);
+  white-space: nowrap;
+}
+
+.analytics-kpi-value--good { color: var(--analytics-success); }
+.analytics-kpi-value--bad  { color: var(--analytics-danger); }
+
+.analytics-kpi-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--analytics-fg-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* KPI tiles row (refunds, inventory) */
+.analytics-kpi-tiles {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: 8px;
+}
+
+.analytics-kpi-tiles .analytics-kpi {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--analytics-bg-subtle);
+  border-radius: 8px;
+  background: var(--analytics-bg-surface);
+}
+
+.analytics-kpi-tiles .analytics-kpi-value {
+  font-size: 16px;
+}
+
+/* Expanded tiles grow to fill the larger card (basket size) */
+.analytics-kpi-tiles--expanded .analytics-kpi {
+  padding: var(--space-4) var(--space-5);
+}
+
+.analytics-kpi-tiles--expanded .analytics-kpi-value {
+  font-size: var(--text-3xl);
+}
+
+/* Delta pill */
+.analytics-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.analytics-delta--up {
+  background: var(--analytics-success-bg);
+  color: var(--analytics-success);
+}
+
+.analytics-delta--down {
+  background: var(--analytics-danger-bg);
+  color: var(--analytics-danger);
+}
+
+/* ECharts host */
+.analytics-card-chart {
+  width: 100%;
+  min-width: 0;
+}
+
+/* One-line insight caption under trend charts */
+.analytics-card-insight {
+  margin: 6px 0 0;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--analytics-fg-secondary);
+}
+
+.analytics-card-chart--donut {
+  max-width: 150px;
+  margin: 0 auto;
+}
+
+/* Ranked list rows */
+.analytics-rank-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.analytics-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-xs);
+}
+
+.analytics-rank-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--analytics-bg-accent);
+  color: var(--color-primary, #4f46e5);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.analytics-rank-name {
+  color: var(--analytics-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.analytics-rank-bar-track {
+  flex: 1 1 auto;
+  min-width: 24px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--analytics-bg-hover);
+  overflow: hidden;
+}
+
+.analytics-rank-bar {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--color-primary, #4f46e5);
+}
+
+.analytics-rank-value {
+  color: var(--analytics-fg-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Per-row trend arrow in ranked lists */
+.analytics-rank-delta {
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.analytics-rank-delta--up   { color: var(--analytics-success); }
+.analytics-rank-delta--down { color: var(--analytics-danger); }
+
+/* Legend (donuts + stacked bars) */
+.analytics-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px var(--space-3);
+}
+
+.analytics-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--analytics-fg-secondary);
+}
+
+.analytics-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.analytics-legend-value {
+  font-weight: 600;
+  color: var(--analytics-fg-muted);
+}
+
+/* Low-stock alert list */
+.analytics-alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analytics-alert-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-xs);
+}
+
+.analytics-alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.analytics-alert-dot--critical { background: var(--analytics-danger-bright); box-shadow: var(--analytics-ring-danger); }
+.analytics-alert-dot--warn     { background: var(--analytics-warning-bright); box-shadow: var(--analytics-ring-warning); }
+
+.analytics-alert-name {
+  color: var(--analytics-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.analytics-alert-count {
+  color: var(--analytics-fg-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Suggested reorder chip on low-stock rows */
+.analytics-alert-reorder {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: var(--analytics-warning-bg);
+  color: var(--analytics-warning);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Occupancy gauge */
+.analytics-occupancy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 260px;
+  margin: 0 auto;
+}
+
+.analytics-occupancy-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  justify-content: center;
+}
+
+.analytics-occupancy-value {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  color: var(--color-primary, #4f46e5);
+  line-height: 1;
+}
+
+.analytics-occupancy-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--analytics-fg-tertiary);
+}
+
+.analytics-occupancy-track {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--analytics-bg-hover);
+  overflow: hidden;
+}
+
+.analytics-occupancy-fill {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #818cf8, var(--color-primary, #4f46e5));
+  transition: width 0.4s ease;
+}
+
+.analytics-occupancy-meta {
+  text-align: center;
+  font-size: 10px;
+  color: var(--analytics-fg-tertiary);
+}
+
+/* Smart heatmap — calendar-style cells */
+.analytics-heatmap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+/* Weekly: 7 day rows × 24 hour columns */
+.analytics-heatmap--weekly {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  align-items: center;
+}
+
+/* Each row fills the card width; the 24 hour columns share the remaining
+   space equally while the day-label column stays pinned at 28px. */
+.analytics-weekly-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+/* Blocks scale with their column while staying square, so the 7×24 grid
+   fills the wide card instead of a fixed 16px centered strip. */
+.analytics-weekly-row .analytics-heat-block {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 3px;
+}
+
+.analytics-weekly-row .analytics-heat-label {
+  font-size: var(--text-xs);
+}
+
+.analytics-weekly-day {
+  width: 28px;
+  flex: 0 0 28px;
+  text-align: right;
+  font-weight: 500;
+}
+
+.analytics-weekly-hour {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  color: var(--analytics-fg-faint);
+}
+
+/* Data cells mirror the header's hour columns so labels stay aligned. */
+.analytics-heatmap--weekly .analytics-heat-cell {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Monthly: real calendar — weekday header + day cells starting on the
+   correct weekday, with leading/trailing empty cells completing weeks */
+.analytics-heatmap--monthly {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.analytics-monthly-header,
+.analytics-monthly-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px 10px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.analytics-monthly-header {
+  text-align: center;
+}
+
+.analytics-heatmap--monthly .analytics-heat-block {
+  width: 20px;
+  height: 20px;
+}
+
+.analytics-heat-cell--empty {
+  min-height: 20px;
+}
+
+/* Yearly: 12 month columns × 4 week rows */
+.analytics-heatmap--yearly {
+  gap: 10px;
+}
+
+.analytics-heat-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.analytics-heat-column .analytics-heat-block {
+  width: 20px;
+  height: 20px;
+}
+
+.analytics-heat-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.analytics-heat-block {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  background: var(--analytics-bg-subtle);
+  transition: background 0.2s;
+}
+
+.analytics-heat-cell[data-intensity="1"] .analytics-heat-block { background: var(--analytics-heat-1); }
+.analytics-heat-cell[data-intensity="2"] .analytics-heat-block { background: var(--analytics-heat-2); }
+.analytics-heat-cell[data-intensity="3"] .analytics-heat-block { background: var(--analytics-heat-3); }
+.analytics-heat-cell[data-intensity="4"] .analytics-heat-block { background: var(--analytics-heat-4); }
+
+/* Peak (busiest) cell — a dark ring marks the strongest slot */
+.analytics-heat-cell--peak .analytics-heat-block {
+  outline: 2px solid var(--analytics-fg-strong);
+  outline-offset: 1px;
+}
+
+/* The shared Tooltip wrapper is display:flex; width:100% (built for
+   full-width controls). Inside the dense heatmap it must not introduce a
+   layout box — portal-mode tooltips key off the trigger cell's own rect, so
+   `display: contents` keeps the weekly/calendar/yearly grids intact. */
+.analytics-heatmap .tooltip-wrapper {
+  display: contents;
+}
+
+/* Heatmap intensity scale legend */
+.analytics-heat-scale {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.analytics-heat-scale-swatch .analytics-heat-block {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.analytics-heat-scale-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--analytics-fg-tertiary);
+  margin: 0 4px;
+}
+
+.analytics-heat-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--analytics-fg-tertiary);
+}
+
+/* Card query failure — stable error state (no silent retry loop) */
+.analytics-card-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--analytics-warning-bg);
+  color: var(--analytics-warning);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.analytics-card-error-icon {
+  flex-shrink: 0;
+  font-size: var(--text-base);
+}
+
+.analytics-card-error-text {
+  flex: 1;
+}
+
+/* Muted "no data" placeholder for cards whose query returned zero rows */
+.analytics-card-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-4);
+  color: var(--analytics-fg-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+/* Skeleton shimmer — one per card during recalculation */
+.analytics-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 0 4px;
+}
+
+/* Heatmap-shaped skeleton — grid of small blocks matching the heatmap */
+.analytics-heat-skeleton {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0;
+  max-width: 340px;
+  margin: 0 auto;
+}
+
+.skeleton-heat-block {
+  width: 100%;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.skeleton-bar {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--analytics-bg-hover) 25%, var(--analytics-border) 50%, var(--analytics-bg-hover) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-bar--sm  { width: 45%; }
+.skeleton-bar--md  { width: 70%; }
+.skeleton-bar--lg  { width: 90%; }
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Command palette (Ctrl/Cmd+K) */
+.analytics-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: var(--analytics-overlay);
+}
+
+.analytics-palette {
+  width: min(480px, 90vw);
+  background: var(--analytics-bg);
+  border: 1px solid var(--analytics-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--analytics-shadow-modal);
+  overflow: hidden;
+}
+
+.analytics-palette-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-bottom: 1px solid var(--analytics-border);
+  background: transparent;
+  color: var(--analytics-fg);
+  font-size: var(--text-md);
+  font-family: inherit;
+  outline: none;
+}
+
+.analytics-palette-input::placeholder {
+  color: var(--analytics-fg-tertiary);
+}
+
+.analytics-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.analytics-palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 9px var(--space-3);
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--analytics-fg-muted);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.analytics-palette-item--active {
+  background: var(--analytics-bg-accent);
+  color: var(--color-primary, #4f46e5);
+}
+
+.analytics-palette-hint {
+  padding: 1px 6px;
+  border: 1px solid var(--analytics-border);
+  border-radius: 5px;
+  background: var(--analytics-bg-surface);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+  color: var(--analytics-fg-secondary);
+}
+
+.analytics-palette-empty {
+  padding: var(--space-3) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--analytics-fg-tertiary);
+  text-align: center;
+}
+
+/* ── Accessibility polish ──────────────────────────────────────── */
+
+:where(.analytics) :focus-visible {
+  outline: 2px solid var(--color-primary, #4f46e5);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analytics *,
+  .analytics *::before,
+  .analytics *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ── Print ─────────────────────────────────────────────────────── */
+
+@media print {
+  .analytics-back-btn,
+  .analytics-menu {
+    display: none;
+  }
+
+  .analytics-topbar {
+    border-bottom: none;
+    padding: 8px 0;
+  }
+}

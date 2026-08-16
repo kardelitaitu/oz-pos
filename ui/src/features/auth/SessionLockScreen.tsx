@@ -206,30 +206,35 @@ export default function SessionLockScreen({
     [handleDigit, handleBackspace],
   );
 
-  const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dateStr = time.toLocaleDateString(undefined, {
+  // Clock follows the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
+  const timeStr = time.toLocaleTimeString(numLocale, { hour: '2-digit', minute: '2-digit' });
+  const dateStr = time.toLocaleDateString(numLocale, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
   });
 
   return (
-    <div className="session-lock-overlay">
-      <div className="session-lock-backdrop" />
+    <div className="session-lock-overlay" data-testid="session-lock-screen">
+      <div className="session-lock-backdrop" aria-hidden="true" />
+
       <div className="session-lock-card" ref={cardRef}>
-        {/* Lock icon */}
-        <div className="session-lock-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
+        {/* ── Top bar: lock icon + clock (mirrors the login PIN step) ── */}
+        <div className="session-lock-top-bar">
+          <div className="session-lock-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+          <div className="session-lock-time">{timeStr}</div>
+          <div className="session-lock-date">{dateStr}</div>
         </div>
 
-        {/* Time */}
-        <div className="session-lock-time">{timeStr}</div>
-        <div className="session-lock-date">{dateStr}</div>
-
-        <div className="session-lock-sub">{requiredLocalized(l10n, 'session-lock-enter-pin')}</div>
+        {/* ── Main area: hint + PIN dots + keypad ── */}
+        <div className="session-lock-main-area">
+          <div className="session-lock-sub">{requiredLocalized(l10n, 'session-lock-enter-pin')}</div>
 
         {/* PIN dots */}
         <div className="session-lock-pin-dots" aria-label={requiredLocalized(l10n, 'session-lock-pin-aria', { length: String(pin.length), max: String(MAX_PIN_LENGTH) })}>
@@ -240,19 +245,6 @@ export default function SessionLockScreen({
             />
           ))}
         </div>
-
-        {/* Error */}
-        {error && (
-          <div className="session-lock-error" role="alert" aria-live="polite">
-            <AlertIcon />
-            {error}
-            {isLocked && (
-              <span className="session-lock-rate-limit">
-                {' '}{requiredLocalized(l10n, 'session-lock-lockout', { seconds: String(lockoutRemainingSec) })}
-              </span>
-            )}
-          </div>
-        )}
 
         {/* PIN pad */}
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
@@ -310,12 +302,34 @@ export default function SessionLockScreen({
                 <line x1="18" y1="9" x2="12" y2="15" />
                 <line x1="12" y1="9" x2="18" y2="15" />
               </svg>
-            </button>
-          </div>
+            </button>          </div>
         </div>
 
-        {/* ── Connection status indicators ──────── */}
-        <div className="session-lock-connection-group">
+        {/* Error — below the keypad, same as the login PIN step */}
+        {error && (
+          <div className="session-lock-error" role="alert" aria-live="polite">
+            <AlertIcon />
+            {error}
+            {isLocked && (
+              <span className="session-lock-rate-limit">
+                {' '}{requiredLocalized(l10n, 'session-lock-lockout', { seconds: String(lockoutRemainingSec) })}
+              </span>
+            )}
+          </div>
+        )}
+        </div>
+
+        {/* ── Bottom bar: spacer band (mirrors the login step-dots band) ── */}
+        <div className="session-lock-bottom-bar" aria-hidden="true" />
+      </div>
+
+      {/* ── Footer: version + connection status pills (login-style) ── */}
+      <div className="session-lock-footer">
+        <div className="session-lock-footer-left">
+          <span className="session-lock-footer-version">OZ-POS Enterprise v0.0.25</span>
+        </div>
+        <div className="session-lock-footer-right">
+          <div className="session-lock-connection-group">
           {/* Auth status — via checkLicenseStatus IPC */}            <div className="connection-status" title={authOnline === null ? requiredLocalized(l10n, 'staff-login-connection-checking') : authOnline ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
             <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
             <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-auth')}</span>
@@ -326,6 +340,7 @@ export default function SessionLockScreen({
             <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-sync')}</span>
             {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
           </div>
+        </div>
         </div>
       </div>
     </div>

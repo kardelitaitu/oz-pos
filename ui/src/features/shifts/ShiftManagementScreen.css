@@ -796,3 +796,9 @@
   margin-top: var(--space-0_5);
   padding-top: var(--space-1);
 }
+
+/* ── Gross profit summary (ADR #36 reporting) ──────────────── */
+
+.shift-mgmt-cell-negative {
+  color: var(--color-danger);
+}

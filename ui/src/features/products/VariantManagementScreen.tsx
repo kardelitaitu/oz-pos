@@ -51,6 +51,8 @@ export default function VariantManagementScreen({ productSku, productName, onClo
   const [saving, setSaving] = useState(false);
   const [deletingSku, setDeletingSku] = useState<string | null>(null);
   const [confirmDeleteSku, setConfirmDeleteSku] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { l10n } = useLocalization();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -93,11 +95,23 @@ export default function VariantManagementScreen({ productSku, productName, onClo
 
   const handleSave = useCallback(async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const hasPrice = form.priceMinor.trim() !== '' && form.currency.trim() !== '';
-      const priceMinor = hasPrice ? parseInt(form.priceMinor, 10) : null;
-      if (hasPrice && (Number.isNaN(priceMinor) || priceMinor! < 0)) {
+      // VARIANT-03: prices are integer minor units — `parseInt('4.50')`
+      // would silently truncate to 4, so reject fractional input instead.
+      const priceMinor = hasPrice ? Number(form.priceMinor) : null;
+      if (priceMinor !== null && (!Number.isInteger(priceMinor) || priceMinor < 0)) {
         setSaving(false);
+        setSaveError(l10n.getString('variant-mgmt-error-invalid-price'));
+        return;
+      }
+
+      // Variant-mgmt-error-save key is surfaced here (was an empty catch).
+      const sortOrderNum = Number(form.sortOrder);
+      if (!Number.isInteger(sortOrderNum) || sortOrderNum < 0) {
+        setSaving(false);
+        setSaveError(l10n.getString('variant-mgmt-error-invalid-sort'));
         return;
       }
 
@@ -108,7 +122,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
           priceMinor: hasPrice ? priceMinor : null,
           currency: hasPrice ? form.currency : null,
           barcode: form.barcode || null,
-          sortOrder: parseInt(form.sortOrder, 10) || 0,
+          sortOrder: sortOrderNum,
           isActive: form.isActive,
         });
       } else {
@@ -119,31 +133,33 @@ export default function VariantManagementScreen({ productSku, productName, onClo
           priceMinor: hasPrice ? priceMinor : null,
           currency: hasPrice ? form.currency : null,
           barcode: form.barcode || null,
-          sortOrder: parseInt(form.sortOrder, 10) || 0,
+          sortOrder: sortOrderNum,
         });
       }
       setShowModal(false);
       await load();
     } catch {
-      // Error handling.
+      setSaveError(l10n.getString('variant-mgmt-error-save'));
     } finally {
       setSaving(false);
     }
-  }, [form, editingSku, productSku, load]);
+  }, [form, editingSku, productSku, load, l10n]);
 
   const handleDelete = useCallback(async () => {
     if (!confirmDeleteSku) return;
     setDeletingSku(confirmDeleteSku);
+    setDeleteError(null);
     try {
       await deleteProductVariant(confirmDeleteSku);
       setConfirmDeleteSku(null);
       await load();
     } catch {
-      // Error handling.
+      // Variant-mgmt-error-delete key is surfaced here (was an empty catch).
+      setDeleteError(l10n.getString('variant-mgmt-error-delete'));
     } finally {
       setDeletingSku(null);
     }
-  }, [confirmDeleteSku, load]);
+  }, [confirmDeleteSku, load, l10n]);
 
   return (
     <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('variant-mgmt-overlay-aria', { name: productName })}>
@@ -157,7 +173,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
               type="button"
               className="product-mgmt-modal-close"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={l10n.getString('close-aria')}
             >
               &times;
             </button>
@@ -230,7 +246,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                     <Localized id="variant-mgmt-col-barcode"><th>Barcode</th></Localized>
                     <Localized id="variant-mgmt-col-status"><th>Status</th></Localized>
                     <Localized id="variant-mgmt-actions-aria" attrs={{ 'aria-label': true }}>
-                      <th aria-label="Actions"> </th>
+                      <th aria-label={l10n.getString('actions-aria')}> </th>
                     </Localized>
                   </tr>
                 </thead>
@@ -265,7 +281,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                             type="button"
                             className="product-mgmt-action-btn"
                             onClick={() => openEdit(v)}
-                            aria-label={`Edit ${v.name}`}
+
                           >
                             <Localized id="variant-mgmt-edit">
                               <span>Edit</span>
@@ -278,7 +294,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                             className="product-mgmt-action-btn product-mgmt-action-btn--danger"
                             onClick={() => setConfirmDeleteSku(v.sku)}
                             disabled={deletingSku === v.sku}
-                            aria-label={`Delete ${v.name}`}
+
                           >
                             <Localized id="variant-mgmt-delete">
                               <span>Delete</span>
@@ -304,6 +320,11 @@ export default function VariantManagementScreen({ productSku, productName, onClo
           saveDisabled={!form.name.trim() || !form.sku.trim()}
           cancelLabel={l10n.getString('variant-mgmt-btn-cancel')}
         >
+          {saveError && (
+            <div className="product-mgmt-modal-error" role="alert">
+              {saveError}
+            </div>
+          )}
           <label className="product-mgmt-field" htmlFor="variant-field-name">
             {l10n.getString('variant-mgmt-field-name-required')}
             <Localized id="variant-mgmt-name-placeholder" attrs={{ placeholder: true }}>
@@ -312,7 +333,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                 type="text"
                 id="variant-field-name"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="e.g. Large"
               />
             </Localized>
@@ -326,7 +347,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                 type="text"
                 id="variant-field-sku"
                 value={form.sku}
-                onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                onChange={(e) => setForm((prev) => ({ ...prev, sku: e.target.value }))}
                 disabled={!!editingSku}
                 placeholder="e.g. TEA-LARGE"
               />
@@ -343,7 +364,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                   id="variant-field-price"
                   min="0"
                   value={form.priceMinor}
-                  onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
+                  onChange={(e) => setForm((prev) => ({ ...prev, priceMinor: e.target.value }))}
                   placeholder="450"
                 />
               </Localized>
@@ -357,7 +378,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                   type="text"
                   id="variant-field-currency"
                   value={form.currency}
-                  onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                  onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value }))}
                   placeholder="USD"
                   maxLength={3}
                 />
@@ -373,7 +394,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                 type="text"
                 id="variant-field-barcode"
                 value={form.barcode}
-                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                onChange={(e) => setForm((prev) => ({ ...prev, barcode: e.target.value }))}
                 placeholder="4901234567890"
               />
             </Localized>
@@ -389,7 +410,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                   id="variant-field-sort"
                   min="0"
                   value={form.sortOrder}
-                  onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
+                  onChange={(e) => setForm((prev) => ({ ...prev, sortOrder: e.target.value }))}
                   placeholder="0"
                 />
               </Localized>
@@ -401,13 +422,19 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                   type="checkbox"
                   id="variant-field-active"
                   checked={form.isActive}
-                  onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                  onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
                 />
                 {l10n.getString('variant-mgmt-field-active')}
               </span>
             </label>
           </div>
         </SettingsPopup>
+
+        {deleteError && (
+          <div className="product-mgmt-delete-error" role="alert">
+            {deleteError}
+          </div>
+        )}
 
         <SettingsPopup
           open={!!confirmDeleteSku}

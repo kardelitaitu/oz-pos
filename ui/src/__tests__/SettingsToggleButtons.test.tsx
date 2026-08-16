@@ -158,6 +158,15 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
         return { tier: 'pro', tenantId: 'tenant-1', status: 'active', active: true, expiresAt: null, maxStores: 5 };
       case 'pending_sync_count':
         return 0;
+      case 'get_device_id':
+        return 'device-1';
+      case 'list_terminals':
+      case 'list_terminals_scoped':
+        return [];
+      case 'offline_queue_status_summary':
+        return { pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0, lastSyncedAt: null, oldestPendingAt: null };
+      case 'get_sync_plan':
+        return { ok: true, plan: 'free', status: 'free' };
       default:
         console.warn('UNHANDLED INVOKE COMMAND:', cmd);
         return null;
@@ -242,7 +251,10 @@ describe('Settings Toggle Buttons Regression Suite', () => {
     renderWithProvidersSync(<AppearanceSettings />, settingsFtl, sharedFtl);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Hardware Acceleration')).toBeInTheDocument();
+      // The switch's accessible name comes from the appearance-hw-accel-aria
+      // message (aria-label), wired via <Localized attrs> — not from the
+      // visible "Hardware Acceleration" label.
+      expect(screen.getByRole('switch', { name: 'Toggle hardware acceleration' })).toBeInTheDocument();
     });
 
     const hwInput = document.getElementById('hw-accel-checkbox') as HTMLInputElement;

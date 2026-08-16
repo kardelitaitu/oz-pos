@@ -2,23 +2,29 @@
 //! to `LuaRuntime::load_str()` and verifies the sandbox contains all
 //! attacks without panicking or crashing the process.
 //!
-//! The sandbox strips dangerous globals (os, io, loadfile, etc.) and
-//! sets an instruction limit of 100K VM ops. This fuzz target ensures
-//! no combination of bytes can bypass the sandbox or cause a panic.
+//! The sandbox strips dangerous globals (io, loadfile, dofile, require,
+//! package, debug, raw*, etc.) and enforces a 100K VM-op instruction limit
+//! and a 10 MiB memory limit. This fuzz target ensures no combination of
+//! bytes can bypass the sandbox or cause a panic.
+//!
+//! NOTE: `os` is the ONE exception to the nil rule — `LuaRuntime`
+//! deliberately keeps a RESTRICTED os table (date/time/clock only,
+//! read-only) for scripts that need the clock. A plain nil assert on `os`
+//! panics on every input (fuzz crash 20260811-041231, minimized to the
+//! 4-byte input `loca`; the same stale assert bit this copy of the target
+//! until round 171). The post-load check below asserts the real contract:
+//! os is either nil or the restricted table, and every other dangerous
+//! global is nil.
 //
 // # Safety
 //
 // This fuzz target is `no_main` and compiled only with cargo-fuzz.
 // It does not use `unsafe` directly.
 //
-// The rlua library internally wraps a raw `*mut lua_State`, but the
-// `LuaRuntime` struct in oz-lua is always behind a Mutex in production.
-// In fuzz testing there is no concurrency, and rlua's internal locking
-// is the only synchronization concern.
-//
-// The instruction-limit hook uses rlua's `DebugEvent::Count` which is
-// safe to set from any thread. No other thread safety considerations
-// apply to single-threaded fuzzing.
+// oz-lua migrated from rlua to mlua 0.9 (vendored Lua 5.4); the sandbox
+// checks below use `mlua::Value` types. `LuaRuntime` is used behind a
+// Mutex in production; fuzzing is single-threaded, so no concurrency
+// concerns apply.
 
 #![no_main]
 
@@ -35,26 +41,68 @@ fuzz_target!(|data: &[u8]| {
 
         // Load the arbitrary string as Lua code. The sandbox must:
         // - Not panic/crash on any UTF-8 input
-        // - Block dangerous globals (os, io, loadfile, etc.)
+        // - Block dangerous globals (io, loadfile, dofile, require, etc.)
+        // - Keep only the restricted os table (date/time/clock, read-only)
         // - Abort infinite loops via 100K instruction limit
         let _ = lua.load_str(s);
 
         // Test that the sandbox is still intact after loading potentially
-        // malicious code — dangerous globals must remain nil.
-        // Only check if input is short enough to have loaded successfully
-        // and not exceeded the instruction limit.
+        // malicious code. Only check if input is short enough to have
+        // loaded successfully and not exceeded the instruction limit.
+        //
+        // The contract (pinned in oz-lua as
+        // `sandbox_contract_survives_the_fuzz_crash_input`):
+        //   - os       → restricted table: date/time/clock present,
+        //                execute/remove/rename/exit nil (or nil itself)
+        //   - everything else below → nil
         if s.len() < 500 {
             let globals = lua.inner().globals();
-            let dangerous = ["os", "io", "loadfile", "dofile", "require",
-                             "package", "debug", "rawget", "rawset",
-                             "rawequal", "rawlen", "collectgarbage", "module", "load"];
+            let os_val: mlua::Value = globals.get("os").unwrap_or(mlua::Value::Nil);
+            match &os_val {
+                mlua::Value::Table(t) => {
+                    for safe_key in &["date", "time", "clock"] {
+                        let v: mlua::Value = t.get(*safe_key).unwrap_or(mlua::Value::Nil);
+                        assert!(
+                            !matches!(v, mlua::Value::Nil),
+                            "restricted os.{safe_key} should survive malicious input"
+                        );
+                    }
+                    for dangerous_key in &["execute", "remove", "rename", "exit"] {
+                        let v: mlua::Value = t.get(*dangerous_key).unwrap_or(mlua::Value::Nil);
+                        assert!(
+                            matches!(v, mlua::Value::Nil),
+                            "os.{dangerous_key} should be nil after malicious input"
+                        );
+                    }
+                }
+                _ => assert!(
+                    matches!(os_val, mlua::Value::Nil),
+                    "os should be a restricted table or nil after malicious input"
+                ),
+            }
+
+            let dangerous = [
+                "io",
+                "loadfile",
+                "dofile",
+                "require",
+                "package",
+                "debug",
+                "rawget",
+                "rawset",
+                "rawequal",
+                "rawlen",
+                "collectgarbage",
+                "module",
+                "load",
+            ];
             for name in &dangerous {
-                let val: rlua::Value = match globals.get(*name) {
+                let val: mlua::Value = match globals.get(*name) {
                     Ok(v) => v,
                     Err(_) => continue,
                 };
                 assert!(
-                    matches!(val, rlua::Value::Nil),
+                    matches!(val, mlua::Value::Nil),
                     "dangerous global '{name}' should be nil after malicious input"
                 );
             }

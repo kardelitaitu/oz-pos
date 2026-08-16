@@ -61,10 +61,18 @@ pub struct LoginSession {
     pub user_id: String,
     /// Display name shown on the UI.
     pub display_name: String,
-    /// Role name (e.g. "owner", "manager", "cashier").
+    /// Role name (e.g. "owner", "manager", "staff").
     pub role_name: String,
     /// Role id.
     pub role_id: String,
+    /// Permission keys granted by the user's role, verbatim from the role's
+    /// permissions JSON (may include the `"*"` wildcard — see
+    /// [`crate::rbac::Role::permission_keys`]). Carried on the session so
+    /// UI gates can mirror the backend registry instead of role-name
+    /// strings. `#[serde(default)]` keeps older persisted sessions and
+    /// older clients parsing.
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 #[cfg(test)]
@@ -120,14 +128,28 @@ mod tests {
         let session = LoginSession {
             user_id: "u1".into(),
             display_name: "Alice".into(),
-            role_name: "cashier".into(),
-            role_id: "role-cashier".into(),
+            role_name: "staff".into(),
+            role_id: "role-staff".into(),
+            permissions: vec!["sales:process".into(), "analytics:view".into()],
         };
         let json = serde_json::to_string(&session).unwrap();
         let back: LoginSession = serde_json::from_str(&json).unwrap();
         assert_eq!(back.user_id, "u1");
         assert_eq!(back.display_name, "Alice");
-        assert_eq!(back.role_name, "cashier");
+        assert_eq!(back.role_name, "staff");
+        assert_eq!(back.role_id, "role-staff");
+        // The granted keys ride the wire verbatim — the UI mirrors the
+        // backend registry from them.
+        assert_eq!(back.permissions, vec!["sales:process", "analytics:view"]);
+    }
+
+    #[test]
+    fn login_session_missing_permissions_defaults_empty() {
+        // Older payloads (and older clients) have no `permissions` field;
+        // serde default keeps them parsing instead of failing the session.
+        let json = r##"{"user_id":"u1","display_name":"Alice","role_name":"staff","role_id":"role-staff"}"##;
+        let back: LoginSession = serde_json::from_str(json).unwrap();
+        assert!(back.permissions.is_empty());
     }
 
     #[test]
@@ -137,6 +159,7 @@ mod tests {
             display_name: "Alice".into(),
             role_name: "manager".into(),
             role_id: "role-manager".into(),
+            permissions: vec![],
         };
         let debug = format!("{session:?}");
         assert!(debug.contains("u1"));
@@ -151,6 +174,7 @@ mod tests {
             display_name: "Bob".into(),
             role_name: "owner".into(),
             role_id: "role-owner".into(),
+            permissions: vec!["*".into()],
         };
         let s2 = s1.clone();
         assert_eq!(s1.user_id, s2.user_id);
@@ -164,13 +188,15 @@ mod tests {
         let session = LoginSession {
             user_id: "u1".into(),
             display_name: "Alice".into(),
-            role_name: "cashier".into(),
-            role_id: "role-cashier".into(),
+            role_name: "staff".into(),
+            role_id: "role-staff".into(),
+            permissions: vec!["sales:view".into()],
         };
         let json = serde_json::to_value(&session).unwrap();
         assert_eq!(json["user_id"], "u1");
         assert_eq!(json["display_name"], "Alice");
-        assert_eq!(json["role_name"], "cashier");
-        assert_eq!(json["role_id"], "role-cashier");
+        assert_eq!(json["role_name"], "staff");
+        assert_eq!(json["role_id"], "role-staff");
+        assert_eq!(json["permissions"], serde_json::json!(["sales:view"]));
     }
 }

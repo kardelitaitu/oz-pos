@@ -171,6 +171,24 @@ describe('LoyaltyManagementScreen', () => {
 
   // ── Account expand/collapse ───────────────────────────────────
 
+  it('names the expand control with the customer (LOY-10)', async () => {
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    // The account row is a button (role="button") that expands/collapses.
+    // Its accessible name must identify WHICH customer will be expanded,
+    // not a generic "Expand" label with no context.
+    const aliceRow = screen.getByText('Alice').closest('tr')!;
+    expect(aliceRow.getAttribute('aria-label')).toMatch(/Alice/);
+
+    // The nested expand button must carry the same customer-specific name
+    // so screen-reader users can target a specific account.
+    const expandButtons = screen.getAllByRole('button', { name: /Alice/ });
+    expect(expandButtons.length).toBeGreaterThan(0);
+  });
+
   it('expands account row to show transactions', async () => {
     const user = userEvent.setup();
     renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
@@ -365,5 +383,35 @@ describe('LoyaltyManagementScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('Please fill in all fields correctly')).toBeInTheDocument();
     });
+  });
+
+  it('rejects a non-integer min points instead of truncating it', async () => {
+    const user = userEvent.setup();
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Tiers')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Tiers'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Edit').length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getAllByText('Edit')[0]!);
+    await waitFor(() => {
+      expect(screen.getByText('Save')).toBeInTheDocument();
+    });
+
+    // min_points is the second .loyalty-tier-input — enter a decimal.
+    const inputs = document.querySelectorAll('.loyalty-tier-input');
+    const minPointsInput = inputs[1] as HTMLInputElement;
+    await user.clear(minPointsInput);
+    await user.type(minPointsInput, '10.5');
+
+    await user.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Please fill in all fields correctly')).toBeInTheDocument();
+    });
+    expect(mockUpdateTier).not.toHaveBeenCalled();
   });
 });

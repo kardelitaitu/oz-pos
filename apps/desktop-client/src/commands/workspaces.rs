@@ -9,6 +9,8 @@
 //! commands; legacy mutation and user-targeted assignment commands are not
 //! registered with Tauri.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde::Serialize;
 use tauri::State;
 
@@ -16,11 +18,12 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 use oz_core::db::Store;
-use oz_core::db::workspaces::WorkspaceDto;
+use oz_core::db::workspaces::{CreateWorkspaceInstanceArgs, WorkspaceDto};
 use oz_core::permissions;
 use oz_core::subscription::TenantSubscription;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::require_permission_for_session;
+use crate::commands::picker_ticket;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -54,7 +57,7 @@ pub struct WorkspaceScreenDto {
 }
 
 /// Request body for creating a workspace instance.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CreateInstanceRequest {
     /// Unique identifier.
     pub id: String,
@@ -64,6 +67,9 @@ pub struct CreateInstanceRequest {
     pub store_id: String,
     /// Display name.
     pub name: String,
+    /// Controlled business purpose, independent from the technical type and label.
+    #[serde(default)]
+    pub purpose_key: Option<String>,
     /// Human-readable description.
     pub description: Option<String>,
     /// Colour.
@@ -81,18 +87,22 @@ pub async fn list_workspaces_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkspaceDto>, AppError> {
     let session = state.resolve_session(&session_token)?; // ADR #5: Load subscription from global DB for entitlement filtering.
-    // Also validates the system clock has not been rolled back.
-    let tier = {
+    // Also validates the system clock has not been rolled back. The user's
+    // assignment (ADR #35 D5 / spec 0048) rides the same global-DB lock so
+    // the listing below can scope-filter post-login switches.
+    let (tier, assignment) = {
         let global_db = state.db.lock().await;
         TenantSubscription::validate_clock_rollback(&global_db)?;
-        TenantSubscription::load(&global_db, "default")?
+        let tier = TenantSubscription::load(&global_db, "default")?
             .map(|sub| sub.effective_tier())
             .unwrap_or_else(|| {
                 tracing::warn!(
                     "no subscription found for tenant 'default', defaulting to Free tier"
                 );
                 oz_core::SubscriptionTier::Free
-            })
+            });
+        let assignment = Store::new(&global_db).assignment_for_user(&session.user_id)?;
+        (tier, assignment)
     };
     let conn = state
         .db_manager
@@ -109,7 +119,18 @@ pub async fn list_workspaces_scoped(
         &tier,
     )?;
     drop(db);
-    Ok(rows)
+    // Scope-filter through the user's assignment (scoped-sessions follow-up):
+    // global assignments and legacy users (no assignment) pass everything; a
+    // scoped assignment keeps only instances whose store (branch) and
+    // workspace type are in scope — fail closed, so a scoped member cannot
+    // switch into an out-of-scope workspace type after login.
+    Ok(match assignment {
+        Some(assignment) => rows
+            .into_iter()
+            .filter(|d| assignment.matches_scope(Some(&session.store_id), Some(&d.type_key)))
+            .collect(),
+        None => rows,
+    })
 }
 
 /// Get a single workspace instance. `is_default` reflects the session user. ADR #7.
@@ -143,6 +164,11 @@ pub async fn create_workspace_instance_scoped(
     state: State<'_, AppState>,
 ) -> Result<WorkspaceDto, AppError> {
     let session = state.resolve_session(&session_token)?;
+    // Authorization: the session user's identity + role live in the GLOBAL
+    // identity DB — the store DB has an empty `users` table by design, so
+    // every scoped command authorizes against the global DB before touching
+    // the store connection.
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
 
     // ADR #5: Load subscription from the GLOBAL database first.
     // Also validates the system clock has not been rolled back.
@@ -164,17 +190,20 @@ pub async fn create_workspace_instance_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     let effective = sub.effective_tier();
     store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
-    let _row = store.create_workspace_instance(
-        &req.id,
-        &req.type_key,
-        &req.store_id,
-        &req.name,
-        req.description.as_deref().unwrap_or(""),
-        req.colour.as_deref(),
-    )?;
+    let _row = store.create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
+        id: req.id.clone(),
+        type_key: req.type_key.clone(),
+        store_id: req.store_id.clone(),
+        name: req.name.clone(),
+        description: req.description.clone().unwrap_or_default(),
+        colour: req.colour.clone(),
+        purpose_key: req
+            .purpose_key
+            .clone()
+            .unwrap_or_else(|| "general".to_string()),
+    })?;
     let dto = store.get_workspace_instance(&req.id, Some(&session.user_id))?;
     drop(db);
     tracing::info!(
@@ -201,6 +230,7 @@ pub async fn update_workspace_instance_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -209,7 +239,6 @@ pub async fn update_workspace_instance_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     store.update_workspace_instance(
         &instance_id,
         &name,
@@ -232,6 +261,7 @@ pub async fn archive_workspace_instance_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -240,7 +270,6 @@ pub async fn archive_workspace_instance_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     store.archive_instance(&instance_id)?;
     drop(db);
     tracing::info!(instance_id = %instance_id, "workspace instance archived (scoped)");
@@ -361,6 +390,7 @@ pub async fn set_user_workspace_instances_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -369,7 +399,6 @@ pub async fn set_user_workspace_instances_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     let ids: Vec<&str> = instance_ids.iter().map(|s| s.as_str()).collect();
     store.set_user_workspace_instances(&user_id, ids, default_instance_id.as_deref())?;
     drop(db);
@@ -385,6 +414,7 @@ pub async fn get_user_workspace_instances_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_READ).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -393,7 +423,6 @@ pub async fn get_user_workspace_instances_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
     let ids = store.get_user_workspace_instance_ids(&user_id)?;
     drop(db);
     Ok(ids)
@@ -404,18 +433,54 @@ pub async fn get_user_workspace_instances_scoped(
 /// List workspace instances for the pre-session workspace picker.
 ///
 /// This narrow bootstrap command runs after username/PIN authentication but
-/// before an opaque session token exists. It accepts the login result's role
-/// and user identifiers only to filter the requested store; all authenticated
-/// mutations must use the session-scoped commands below. The requested store
-/// is opened through `StoreDatabaseManager` so this read cannot accidentally
-/// query the global identity database or another store's connection.
+/// before an opaque session token exists. The caller presents the short-lived
+/// picker ticket minted by `staff_login` / `bootstrap_owner` (audit/06
+/// residual): the REAL user is resolved from the global identity database and
+/// the REAL role is used for the listing. A caller-supplied `role_id` /
+/// `user_id` can no longer enumerate instances in stores the caller has no
+/// access to. The requested store is opened through `StoreDatabaseManager` so
+/// this read cannot accidentally query the global identity database or
+/// another store's connection.
 #[tauri::command]
 pub async fn list_workspaces(
     state: State<'_, AppState>,
-    role_id: String,
-    user_id: Option<String>,
+    ticket: String,
     store_id: String,
 ) -> Result<Vec<WorkspaceDto>, AppError> {
+    // 1. Verify the ticket — uniform denial for forged/expired/malformed.
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let user_id = picker_ticket::verify_picker_ticket(&state.picker_ticket_secret, &ticket, now_ts)
+        .ok_or_else(|| AppError::PermissionDenied("invalid or expired picker session".into()))?;
+
+    // 2. Resolve the REAL user + role + assignment from the global identity
+    //    DB. The ticket binds the user; the role is derived from the DB,
+    //    never the claim. The assignment (ADR #35 D5 / spec 0048) is what
+    //    constrains a scoped user's picker below — legacy users without an
+    //    assignment row are not scope-restricted.
+    let (real_role_id, real_user_id, assignment) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let user = store.get_user(&user_id)?.ok_or_else(|| {
+            AppError::PermissionDenied("picker session user no longer exists".into())
+        })?;
+        if !user.is_active {
+            return Err(AppError::PermissionDenied(
+                "picker session user is inactive".into(),
+            ));
+        }
+        let role = store
+            .get_role(&user.role_id)?
+            .ok_or_else(|| AppError::Internal(format!("role {} not found", user.role_id)))?;
+        let assignment = store.assignment_for_user(&user.id)?;
+        (role.id, user.id, assignment)
+    };
+
+    // 3. List instances in the requested store using the REAL role + user.
+    //    `list_workspaces` applies the owner bypass, `user_store_access`
+    //    (multi-store), explicit instance assignment, and role workspace types.
     let conn = state
         .db_manager
         .open_store(&store_id)
@@ -424,9 +489,66 @@ pub async fn list_workspaces(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let rows = store.list_workspaces(&role_id, user_id.as_deref(), &store_id)?;
+    let rows = store.list_workspaces(&real_role_id, Some(&real_user_id), &store_id)?;
     drop(db);
-    Ok(rows)
+
+    // 4. Scope-filter the listing through the user's assignment (ADR #35 D5
+    //    / spec 0048): global assignments and legacy users (no assignment)
+    //    pass everything; a scoped assignment keeps only instances whose
+    //    store (branch) and workspace type are in scope — fail closed, so an
+    //    out-of-scope store or workspace type lists nothing.
+    Ok(match assignment {
+        Some(assignment) => rows
+            .into_iter()
+            .filter(|d| assignment.matches_scope(Some(&store_id), Some(&d.type_key)))
+            .collect(),
+        None => rows,
+    })
+}
+
+/// List workspace instances in an explicitly named store for the session user.
+///
+/// Authenticated replacement for the terminal-management screen's use of the
+/// pre-session picker command (which hardcoded `role-owner`). The session
+/// token binds the caller; the requested store is opened through
+/// `StoreDatabaseManager` and `list_workspaces` still enforces the caller's
+/// store access, so a session can only enumerate stores it may see.
+#[tauri::command]
+pub async fn list_workspaces_for_store_scoped(
+    session_token: String,
+    store_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkspaceDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    // The user's assignment lives in the GLOBAL identity DB (ADR #35 D5 / spec
+    // 0048) — load it before opening the requested store so the listing can be
+    // scope-filtered below.
+    let assignment = {
+        let global_db = state.db.lock().await;
+        Store::new(&global_db).assignment_for_user(&session.user_id)?
+    };
+    let conn = state
+        .db_manager
+        .open_store(&store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let rows = store.list_workspaces(&session.role_id, Some(&session.user_id), &store_id)?;
+    drop(db);
+    // Scope-filter through the user's assignment: a scoped member listing an
+    // explicitly named store outside their branch scope, or a workspace type
+    // outside their workspace scope, sees nothing (fail closed) — the
+    // terminal-management screen cannot switch them into an out-of-scope
+    // workspace after login. Global assignments and legacy users pass through.
+    Ok(match assignment {
+        Some(assignment) => rows
+            .into_iter()
+            .filter(|d| assignment.matches_scope(Some(&store_id), Some(&d.type_key)))
+            .collect(),
+        None => rows,
+    })
 }
 
 // ── Legacy Commands (backward compatible) ────────────────────────────
@@ -451,6 +573,7 @@ pub async fn list_all_workspaces_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkspaceTypeDto>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_READ).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -459,7 +582,6 @@ pub async fn list_all_workspaces_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
     let rows = store.list_all_workspace_types()?;
     drop(db);
     Ok(rows
@@ -473,90 +595,25 @@ pub async fn list_all_workspaces_scoped(
         .collect())
 }
 
-/// Replace all workspace assignments for a user (legacy tables).
-///
-/// **Deprecated for multi-store (ADR #7):** Use `set_user_workspace_instances_scoped`.
-#[tauri::command]
-pub async fn set_user_workspaces(
-    _state: State<'_, AppState>,
-    _user_id: String,
-    _workspace_keys: Vec<String>,
-    _caller_user_id: String,
-) -> Result<(), AppError> {
-    Err(AppError::PermissionDenied(
-        "legacy unscoped workspace commands are disabled; use set_user_workspaces_scoped".into(),
-    ))
-}
-
-/// Replace all workspace assignments for a user (legacy tables), caller from session. ADR #7.
-#[tauri::command]
-pub async fn set_user_workspaces_scoped(
-    session_token: String,
-    user_id: String,
-    workspace_keys: Vec<String>,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn
-        .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
-    let keys: Vec<&str> = workspace_keys.iter().map(|s| s.as_str()).collect();
-    store.set_user_workspaces_legacy(&user_id, keys)?;
-    drop(db);
-    tracing::info!(user_id = %user_id, count = %workspace_keys.len(), "user workspace assignments updated (legacy, scoped)");
-    Ok(())
-}
-
-/// Get the explicit workspace keys assigned to a user (legacy table).
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_user_workspace_instances_scoped`.
-#[tauri::command]
-pub async fn get_user_workspaces(
-    _state: State<'_, AppState>,
-    _user_id: String,
-) -> Result<Vec<String>, AppError> {
-    Err(AppError::PermissionDenied(
-        "legacy unscoped workspace commands are disabled; use get_user_workspaces_scoped".into(),
-    ))
-}
-
-/// Get workspace keys for a user (legacy table), caller from session. ADR #7.
-#[tauri::command]
-pub async fn get_user_workspaces_scoped(
-    session_token: String,
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, AppError> {
-    let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn
-        .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
-    let keys = store.get_user_workspace_keys_legacy(&user_id)?;
-    drop(db);
-    Ok(keys)
-}
-
 /// List screens (nav items) for a workspace type during boot/workspace
 /// selection. The store ID is explicit so the read is routed to the correct
 /// store database; authenticated callers should prefer the scoped variant.
+///
+/// The picker ticket (audit/06 residual) proves the caller completed a real
+/// login before this bootstrap read can touch any store database.
 #[tauri::command]
 pub async fn list_workspace_screens(
     state: State<'_, AppState>,
+    ticket: String,
     type_key: String,
     store_id: String,
 ) -> Result<Vec<WorkspaceScreenDto>, AppError> {
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    picker_ticket::verify_picker_ticket(&state.picker_ticket_secret, &ticket, now_ts)
+        .ok_or_else(|| AppError::PermissionDenied("invalid or expired picker session".into()))?;
     let conn = state
         .db_manager
         .open_store(&store_id)
@@ -878,6 +935,7 @@ mod tests {
         assert_eq!(req.name, "Downtown - Cashier 1");
         assert!(req.description.is_none());
         assert!(req.colour.is_none());
+        assert!(req.purpose_key.is_none());
     }
 
     // ── BootResolution (ADR #4 Phase 3) ─────────────────────────────────
@@ -918,5 +976,546 @@ mod tests {
         let d = format!("{res:?}");
         assert!(d.contains("default"));
         assert!(d.contains("false"));
+    }
+
+    // ── Pre-session picker ticket binding (audit/06 residual) ──────────
+    //
+    // TDD red: `list_workspaces` / `list_workspace_screens` must bind the
+    // listing to the authenticated user server-side. Previously the commands
+    // trusted the caller-supplied `role_id` / `user_id`, so any caller who
+    // knew an owner's id could enumerate instances in any store as
+    // `role-owner`. Now the caller presents a short-lived HMAC ticket and the
+    // REAL role is resolved from the global identity DB.
+
+    use oz_core::StoreProfile;
+    use oz_core::db::assignments::{AssignmentSpec, ScopeMode};
+    use oz_core::migrations;
+    use platform_core::StoreDatabaseManager;
+    use tauri::Manager as _;
+
+    /// Seed the GLOBAL identity DB with an owner and a limited user whose
+    /// role has no workspace-type grants (so it sees no instances — the
+    /// retired cashier role behaved the same way; 0048 sweep).
+    fn seed_global_users(conn: &rusqlite::Connection) {
+        let store = Store::new(conn);
+        store.seed_default_roles().unwrap();
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                ('user-owner',   'owner',   'hash', 'Owner',   'role-owner',   1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite',    1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+        )
+        .unwrap();
+    }
+
+    fn make_profile(id: &str, name: &str) -> StoreProfile {
+        StoreProfile {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            address: String::new(),
+            tax_id: String::new(),
+            currency: "USD".to_owned(),
+            timezone: "UTC".to_owned(),
+            is_primary: false,
+            created_at: "2026-07-01T10:00:00Z".to_owned(),
+            updated_at: "2026-07-01T10:00:00Z".to_owned(),
+        }
+    }
+
+    /// Build an AppState with a global identity DB (users seeded) and a
+    /// temp-dir store manager with store-a (1 instance) and store-b (1
+    /// instance) so cross-store isolation can be exercised.
+    fn picker_state() -> (AppState, tempfile::TempDir) {
+        let conn = migrations::fresh_db();
+        seed_global_users(&conn);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
+
+        for (store_id, instance_id) in [("store-a", "ws-a-1"), ("store-b", "ws-b-1")] {
+            let conn = state.db_manager.open_store(store_id).unwrap();
+            let db = conn.lock().unwrap();
+            let store = Store::new(&db);
+            store
+                .create_store_profile(&make_profile(store_id, store_id))
+                .unwrap();
+            store
+                .create_workspace_instance(instance_id, "store-pos", store_id, "POS", "", None)
+                .unwrap();
+        }
+        (state, temp_dir)
+    }
+
+    fn sign_ticket_for(state: &AppState, user_id: &str, ttl_offset: i64) -> String {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        picker_ticket::sign_picker_ticket(&state.picker_ticket_secret, user_id, now + ttl_offset)
+    }
+
+    #[tokio::test]
+    async fn list_workspaces_rejects_forged_or_missing_ticket() {
+        let (state, _dir) = picker_state();
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // Empty ticket, garbage ticket, and a ticket forged with the wrong
+        // secret must all be denied uniformly (no enumeration oracle).
+        for ticket in [
+            String::new(),
+            "garbage-not-a-ticket".into(),
+            picker_ticket::sign_picker_ticket(
+                b"attacker-secret",
+                "user-owner",
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64
+                    + 300,
+            ),
+        ] {
+            let result = list_workspaces(app.state(), ticket.clone(), "store-a".into()).await;
+            assert!(
+                matches!(result, Err(AppError::PermissionDenied(_))),
+                "ticket {ticket:?} must be denied"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn list_workspaces_rejects_expired_ticket() {
+        let (state, _dir) = picker_state();
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let expired = sign_ticket_for(&app.state(), "user-owner", -1);
+        let result = list_workspaces(app.state(), expired, "store-a".into()).await;
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn list_workspaces_rejects_unknown_user_even_with_valid_signature() {
+        let (state, _dir) = picker_state();
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // A correctly-signed ticket for a user that no longer exists must
+        // still be denied — identity must resolve, not just the HMAC.
+        let ghost = sign_ticket_for(&app.state(), "user-deleted", 300);
+        let result = list_workspaces(app.state(), ghost, "store-a".into()).await;
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn list_workspaces_uses_real_role_not_claimed_role() {
+        let (state, _dir) = picker_state();
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // Owner's ticket → owner bypass lists the instance.
+        let owner_ticket = sign_ticket_for(&app.state(), "user-owner", 300);
+        let owner_rows = list_workspaces(app.state(), owner_ticket, "store-a".into())
+            .await
+            .unwrap();
+        assert!(owner_rows.iter().any(|d| d.instance_id == "ws-a-1"));
+
+        // Cashier's ticket → cashier role has no role_workspace_types in the
+        // fresh store DB, so the listing is empty. The old command let a
+        // caller CLAIM role-owner to see the instance; the new one derives
+        // the role from the DB, so the cashier cannot escalate.
+        let cashier_ticket = sign_ticket_for(&app.state(), "user-cashier", 300);
+        let cashier_rows = list_workspaces(app.state(), cashier_ticket, "store-a".into())
+            .await
+            .unwrap();
+        assert!(
+            cashier_rows.is_empty(),
+            "limited role must not see owner-level instances, got {cashier_rows:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_assignment_filters_picker_workspace_list() {
+        let (state, _dir) = picker_state();
+        // Add a second instance of a different workspace type to store-a so
+        // the workspace dimension of a scoped assignment has something to
+        // filter (the owner bypass would otherwise list both).
+        {
+            let conn = state.db_manager.open_store("store-a").unwrap();
+            let db = conn.lock().unwrap();
+            Store::new(&db)
+                .create_workspace_instance("ws-a-2", "kds", "store-a", "Kitchen", "", None)
+                .unwrap();
+        }
+        // The owner keeps the legacy owner bypass (both instances would
+        // list) but the assignment scope now limits the picker to the
+        // store-pos workspace type (ADR #35 D5 / spec 0048).
+        {
+            let db = state.db.lock().await;
+            Store::new(&db)
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Scoped,
+                        branches_all: true,
+                        branches: vec![],
+                        workspaces_all: false,
+                        workspaces: vec!["store-pos".into()],
+                    },
+                )
+                .unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+        let ticket = sign_ticket_for(&app.state(), "user-owner", 300);
+        let rows = list_workspaces(app.state(), ticket, "store-a".into())
+            .await
+            .unwrap();
+        assert!(
+            rows.iter().any(|d| d.type_key == "store-pos"),
+            "in-scope workspace type must list, got {rows:?}"
+        );
+        assert!(
+            rows.iter().all(|d| d.type_key != "kds"),
+            "out-of-scope workspace type must be hidden, got {rows:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_assignment_branch_dimension_denies_out_of_scope_store() {
+        let (state, _dir) = picker_state();
+        // Owner scoped to branch store-a only — store-b is out of scope, so
+        // listing it must yield nothing (fail closed per ADR #35 D5).
+        {
+            let db = state.db.lock().await;
+            Store::new(&db)
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Scoped,
+                        branches_all: false,
+                        branches: vec!["store-a".into()],
+                        workspaces_all: true,
+                        workspaces: vec![],
+                    },
+                )
+                .unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+        let ticket = sign_ticket_for(&app.state(), "user-owner", 300);
+        let in_scope = list_workspaces(app.state(), ticket.clone(), "store-a".into())
+            .await
+            .unwrap();
+        assert!(in_scope.iter().any(|d| d.instance_id == "ws-a-1"));
+        let out_of_scope = list_workspaces(app.state(), ticket, "store-b".into())
+            .await
+            .unwrap();
+        assert!(
+            out_of_scope.is_empty(),
+            "branch out of scope must deny the whole store, got {out_of_scope:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_workspaces_inactive_user_is_denied() {
+        let (state, _dir) = picker_state();
+        {
+            let db = state.db.lock().await;
+            db.execute("UPDATE users SET is_active = 0 WHERE id = 'user-owner'", [])
+                .unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let ticket = sign_ticket_for(&app.state(), "user-owner", 300);
+        let result = list_workspaces(app.state(), ticket, "store-a".into()).await;
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn list_workspace_screens_requires_valid_ticket() {
+        let (state, _dir) = picker_state();
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let denied = list_workspace_screens(
+            app.state(),
+            "bogus".into(),
+            "store-pos".into(),
+            "store-a".into(),
+        )
+        .await;
+        assert!(matches!(denied, Err(AppError::PermissionDenied(_))));
+
+        let ticket = sign_ticket_for(&app.state(), "user-owner", 300);
+        let allowed =
+            list_workspace_screens(app.state(), ticket, "store-pos".into(), "store-a".into()).await;
+        assert!(allowed.is_ok());
+    }
+
+    #[tokio::test]
+    async fn list_workspaces_for_store_scoped_rejects_invalid_session() {
+        let (state, _dir) = picker_state();
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result =
+            list_workspaces_for_store_scoped("missing-token".into(), "store-a".into(), app.state())
+                .await;
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[tokio::test]
+    async fn list_workspaces_for_store_scoped_uses_session_role() {
+        let (state, _dir) = picker_state();
+        state.session_store.write().unwrap().insert(
+            "cashier-token".into(),
+            oz_core::session::SessionContext::new(
+                "user-cashier".into(),
+                "role-lite".into(),
+                "terminal-1".into(),
+                "store-a".into(),
+                "ws-a-1".into(),
+                "store-pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // The session token binds the real role — a limited session listing
+        // store-a must not see owner-level instances (same as the ticket path).
+        let rows =
+            list_workspaces_for_store_scoped("cashier-token".into(), "store-a".into(), app.state())
+                .await
+                .unwrap();
+        assert!(
+            rows.is_empty(),
+            "cashier session must not enumerate store-a instances, got {rows:?}"
+        );
+    }
+
+    // ── Scoped-sessions follow-up: post-login listings ────────────────────
+    //
+    // TDD red: a scoped member must not be able to switch into an
+    // out-of-scope workspace type or store AFTER login. `list_workspaces_scoped`
+    // and `list_workspaces_for_store_scoped` must scope-filter through the
+    // user's assignment (ADR #35 D5 / spec 0048), mirroring the picker.
+    // `restaurant-pos` is used as the out-of-scope type because the Free tier
+    // allows it (so tier entitlement filtering cannot hide it — only the
+    // assignment can).
+
+    fn mint_session(state: &mut AppState, token: &str, user: &str, role: &str, store: &str) {
+        state.session_store.write().unwrap().insert(
+            token.into(),
+            oz_core::session::SessionContext::new(
+                user.into(),
+                role.into(),
+                "terminal-1".into(),
+                store.into(),
+                "ws-a-1".into(),
+                "store-pos".into(),
+                None,
+                0,
+            ),
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_assignment_filters_session_workspace_listing() {
+        let (mut state, _dir) = picker_state();
+        // A second store-a instance of a type the Free tier ALLOWS
+        // (restaurant-pos) so only the assignment scope can hide it.
+        {
+            let conn = state.db_manager.open_store("store-a").unwrap();
+            let db = conn.lock().unwrap();
+            Store::new(&db)
+                .create_workspace_instance(
+                    "ws-a-rest",
+                    "restaurant-pos",
+                    "store-a",
+                    "Restaurant",
+                    "",
+                    None,
+                )
+                .unwrap();
+        }
+        // Owner scoped to workspace type `store-pos` only.
+        {
+            let db = state.db.lock().await;
+            Store::new(&db)
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Scoped,
+                        branches_all: true,
+                        branches: vec![],
+                        workspaces_all: false,
+                        workspaces: vec!["store-pos".into()],
+                    },
+                )
+                .unwrap();
+        }
+        mint_session(
+            &mut state,
+            "owner-token",
+            "user-owner",
+            "role-owner",
+            "store-a",
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let rows = list_workspaces_scoped("owner-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(
+            rows.iter().any(|d| d.type_key == "store-pos"),
+            "in-scope workspace type must list, got {rows:?}"
+        );
+        assert!(
+            rows.iter().all(|d| d.type_key != "restaurant-pos"),
+            "out-of-scope workspace type must be hidden after login, got {rows:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_assignment_branch_dimension_denies_out_of_scope_store_for_session() {
+        let (mut state, _dir) = picker_state();
+        // Owner scoped to branch store-a only — store-b is out of scope, so
+        // the terminal-management listing of store-b must yield nothing
+        // (fail closed, same as the picker).
+        {
+            let db = state.db.lock().await;
+            Store::new(&db)
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Scoped,
+                        branches_all: false,
+                        branches: vec!["store-a".into()],
+                        workspaces_all: true,
+                        workspaces: vec![],
+                    },
+                )
+                .unwrap();
+        }
+        mint_session(
+            &mut state,
+            "owner-token",
+            "user-owner",
+            "role-owner",
+            "store-a",
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let in_scope =
+            list_workspaces_for_store_scoped("owner-token".into(), "store-a".into(), app.state())
+                .await
+                .unwrap();
+        assert!(in_scope.iter().any(|d| d.instance_id == "ws-a-1"));
+
+        let out_of_scope =
+            list_workspaces_for_store_scoped("owner-token".into(), "store-b".into(), app.state())
+                .await
+                .unwrap();
+        assert!(
+            out_of_scope.is_empty(),
+            "branch out of scope must deny the whole store listing, got {out_of_scope:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_assignment_workspace_dimension_filters_for_store_listing() {
+        let (mut state, _dir) = picker_state();
+        // Same Free-tier-allowed out-of-scope type as the session listing test.
+        {
+            let conn = state.db_manager.open_store("store-a").unwrap();
+            let db = conn.lock().unwrap();
+            Store::new(&db)
+                .create_workspace_instance(
+                    "ws-a-rest",
+                    "restaurant-pos",
+                    "store-a",
+                    "Restaurant",
+                    "",
+                    None,
+                )
+                .unwrap();
+        }
+        // Owner scoped to workspace type `store-pos` only.
+        {
+            let db = state.db.lock().await;
+            Store::new(&db)
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Scoped,
+                        branches_all: true,
+                        branches: vec![],
+                        workspaces_all: false,
+                        workspaces: vec!["store-pos".into()],
+                    },
+                )
+                .unwrap();
+        }
+        mint_session(
+            &mut state,
+            "owner-token",
+            "user-owner",
+            "role-owner",
+            "store-a",
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let rows =
+            list_workspaces_for_store_scoped("owner-token".into(), "store-a".into(), app.state())
+                .await
+                .unwrap();
+        assert!(
+            rows.iter().any(|d| d.type_key == "store-pos"),
+            "in-scope workspace type must list, got {rows:?}"
+        );
+        assert!(
+            rows.iter().all(|d| d.type_key != "restaurant-pos"),
+            "out-of-scope workspace type must be hidden, got {rows:?}"
+        );
     }
 }

@@ -12,7 +12,7 @@ use foundation::validate_not_empty;
 
 use oz_core::permissions;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -147,6 +147,7 @@ pub async fn open_shift_scoped(
     state: State<'_, AppState>,
 ) -> Result<ShiftDto, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SHIFTS_OPEN).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -156,8 +157,6 @@ pub async fn open_shift_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(&store, &session.user_id, permissions::SHIFTS_OPEN)?;
 
     let shift = store.open_shift(
         &session.user_id,
@@ -228,6 +227,7 @@ pub async fn close_shift_scoped(
     validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SHIFTS_CLOSE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -237,8 +237,6 @@ pub async fn close_shift_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(&store, &session.user_id, permissions::SHIFTS_CLOSE)?;
 
     let shift = store.close_shift(&args.id, args.closing_balance_minor, args.notes.as_deref())?;
     drop(db);
@@ -502,9 +500,9 @@ mod tests {
     fn seed_user(conn: &Connection) {
         conn.execute_batch(
             "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-                ('role-cashier', 'cashier', 'Cashier', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+                ('role-staff', 'staff', 'Staff', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
              INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at) VALUES
-                ('user-1', 'alice', 'hash', 'Alice', 'role-cashier', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+                ('user-1', 'alice', 'hash', 'Alice', 'role-staff', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
         ).unwrap();
     }
 

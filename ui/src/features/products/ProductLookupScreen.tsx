@@ -248,11 +248,16 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
                 type="search"
                 className="product-search-input"
                 placeholder="Search products…"
-                aria-label="Search products"
+                aria-label={l10n.getString('search-products-aria')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-bwignore="true"
               />
             </Localized>
           </Localized>
@@ -266,7 +271,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
                 type="text"
                 className="product-barcode-input"
                 placeholder="Scan barcode…"
-                aria-label="Barcode input"
+                aria-label={l10n.getString('barcode-input-aria')}
                 value={barcodeInput}
                 onChange={(e) => setBarcodeInput(e.target.value)}
                 onKeyDown={handleBarcodeKeyDown}
@@ -279,7 +284,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
               type="button"
               className="product-scan-btn"
               onClick={handleBarcodeScan}
-              aria-label="Submit barcode"
+              aria-label={l10n.getString('submit-barcode-aria')}
             >
               <BarcodeIcon />
               <Localized id="product-lookup-barcode-scan">
@@ -506,7 +511,7 @@ function ProductCard({ product, onAdd, added }: ProductCardProps) {
           data-testid="product-card"
           onClick={handleAdd}
           disabled={!product.inStock}
-          aria-label={`${product.name} — ${formatMoney(product.price)}`}
+
         >
           {/* Row: name + category badge */}
           {isPriceRecent(product) && <span className="product-card-price-volatility" title="Price changed recently" />}
@@ -522,6 +527,13 @@ function ProductCard({ product, onAdd, added }: ProductCardProps) {
 
           {/* SKU */}
           <span className="product-card-sku">{product.sku}</span>
+
+          {/* Rack position (ADR #36 D6): staff find the item without asking a manager */}
+          {product.rackLocation && (
+            <span className="product-card-rack" title={l10n.getString('product-lookup-rack-title')}>
+              📦 {product.rackLocation}
+            </span>
+          )}
 
           {/* Footer: stock indicator + add icon */}
           <div className="product-card-footer">

@@ -1,6 +1,6 @@
 # Phase 4 — Tier 2 Modal (WorkspaceSettingsModal)
 
-- **Status:** PENDING
+- **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 4 of 11 (Workspace Settings Architecture — ADR #22)
 - **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** CORE
@@ -92,3 +92,5 @@ Implement `WorkspaceSettingsModal.tsx` — the Tier 2 contextual modal that open
 - `ui/src/frontend/shared/SettingsPopup.tsx` (modal pattern reference)
 - `ui/src/hooks/useFocusTrap.ts`
 - `ui/src/features/stores/NodeTopologyEditor.tsx` (inspector drawer CSS pattern for slideover)
+
+> Last audited: 2026-08-08 by docs-auditor (status corrected to IMPLEMENTED).

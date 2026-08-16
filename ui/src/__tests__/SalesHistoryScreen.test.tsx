@@ -17,6 +17,10 @@ vi.mock('@/api/staff', () => ({
   listStaffScoped: vi.fn(),
 }));
 
+vi.mock('@/api/reports', () => ({
+  getSaleLineMarginsScoped: vi.fn(),
+}));
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     session: { user_id: 'user-1', display_name: 'Cashier', role_name: 'cashier' },
@@ -39,11 +43,13 @@ vi.mock('@/features/sales/RefundModal', () => ({
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import { listSales, getSale, listRefunds } from '@/api/sales';
 import { listStaffScoped } from '@/api/staff';
+import { getSaleLineMarginsScoped } from '@/api/reports';
 
 const mockListSales = listSales as ReturnType<typeof vi.fn>;
 const mockGetSale = getSale as ReturnType<typeof vi.fn>;
 const mockListRefunds = listRefunds as ReturnType<typeof vi.fn>;
 const mockListStaff = listStaffScoped as ReturnType<typeof vi.fn>;
+const mockGetSaleLineMargins = getSaleLineMarginsScoped as ReturnType<typeof vi.fn>;
 
 
 
@@ -87,6 +93,7 @@ const sampleDetail = {
 describe('SalesHistoryScreen', () => {
   beforeEach(() => {
     mockListStaff.mockResolvedValue(sampleStaff);
+    mockGetSaleLineMargins.mockResolvedValue([]);
   });
 
   // ── Rendering ─────────────────────────────────────────────────
@@ -183,6 +190,45 @@ describe('SalesHistoryScreen', () => {
     });
   });
 
+  it('exports per-line cost and margin columns to CSV', async () => {
+    const user = userEvent.setup();
+    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockGetSaleLineMargins.mockResolvedValue([
+      {
+        sale_line_id: 'line-1', sku: 'SKU-001', name: 'Widget', qty: 2,
+        unit_price_minor: 25000, line_total_minor: 50000,
+        unit_cost_minor: 15000, margin_minor: 20000, margin_percent: 40,
+      },
+    ]);
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    const revokeUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
+    await waitFor(() => expect(screen.getByText('Export CSV')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled());
+    const blob = createUrl.mock.calls[0]![0] as Blob;
+    // jsdom's Blob lacks .text() — read via FileReader.
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+    // New per-line headers (header line is unquoted, data cells are quoted)
+    expect(text).toContain('Cashier,SKU,Product,Qty,Unit Price,Unit Cost,Line Margin,Margin %');
+    // Per-line row: sale context + cost/margin (HPP 15000 IDR, margin 40%)
+    expect(text).toContain('"SKU-001"');
+    expect(text).toContain('"Widget"');
+    expect(text).toContain('"Rp 25.000"');
+    expect(text).toContain('"Rp 15.000"');
+    expect(text).toContain('"Rp 20.000"');
+    expect(text).toContain('"40.0%"');
+    createUrl.mockRestore();
+    revokeUrl.mockRestore();
+    clickSpy.mockRestore();
+  });
+
   // ── Detail modal ─────────────────────────────────────────────
 
   it('opens detail modal when View is clicked', async () => {
@@ -210,6 +256,7 @@ describe('SalesHistoryScreen', () => {
     mockListSales.mockResolvedValue([sampleSales[0]!]);
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
+    mockGetSaleLineMargins.mockResolvedValue([]);
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
 
     await waitFor(() => {
@@ -222,6 +269,60 @@ describe('SalesHistoryScreen', () => {
       expect(screen.getByText('SKU-001')).toBeInTheDocument();
       expect(screen.getByText('Widget')).toBeInTheDocument();
     });
+  });
+
+  it('shows cost and margin columns when the margin report loads', async () => {
+    const user = userEvent.setup();
+    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockGetSale.mockResolvedValue(sampleDetail);
+    mockListRefunds.mockResolvedValue([]);
+    mockGetSaleLineMargins.mockResolvedValue([
+      {
+        sale_line_id: 'line-1', sku: 'SKU-001', name: 'Widget', qty: 2,
+        unit_price_minor: 25000, line_total_minor: 50000,
+        unit_cost_minor: 15000, margin_minor: 20000, margin_percent: 40,
+      },
+    ]);
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('View').length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getAllByText('View')[0]!);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cost')).toBeInTheDocument();
+      expect(screen.getByText('Margin')).toBeInTheDocument();
+      expect(screen.getByText('40.0%')).toBeInTheDocument();
+    });
+    // HPP of 15000 IDR renders as Rp 15.000 (id-ID locale).
+    expect(screen.getByText('Rp 15.000')).toBeInTheDocument();
+  });
+
+  it('shows a negative margin in red for loss-leader lines', async () => {
+    const user = userEvent.setup();
+    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockGetSale.mockResolvedValue(sampleDetail);
+    mockListRefunds.mockResolvedValue([]);
+    mockGetSaleLineMargins.mockResolvedValue([
+      {
+        sale_line_id: 'line-1', sku: 'SKU-001', name: 'Widget', qty: 2,
+        unit_price_minor: 25000, line_total_minor: 50000,
+        unit_cost_minor: 30000, margin_minor: -10000, margin_percent: -20,
+      },
+    ]);
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('View').length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getAllByText('View')[0]!);
+
+    await waitFor(() => {
+      expect(screen.getByText('-20.0%')).toBeInTheDocument();
+    });
+    const negMargin = screen.getByText('-20.0%');
+    expect(negMargin.className).toContain('sales-history-cell-negative');
   });
 
   it('shows Reprint Receipt and Refund buttons in detail', async () => {

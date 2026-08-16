@@ -1,0 +1,204 @@
+{
+  "meta": {
+    "description": "Platform POS offline-first untuk kafe, restoran, dan ritel. Tetap berjalan tanpa internet, sinkron saat kembali online."
+  },
+  "nav": {
+    "home": "Beranda",
+    "features": "Fitur",
+    "pricing": "Harga",
+    "download": "Unduh",
+    "docs": "Dokumentasi",
+    "support": "Dukungan",
+    "login": "Masuk",
+    "menu": "Menu",
+    "theme": "Ganti tema",
+    "language": "Bahasa",
+    "homeAria": "Beranda OZ-POS",
+    "mainNav": "Navigasi utama"
+  },
+  "pageDesc": {
+    "features": "Kasir offline-first: penjualan, shift, dan stok yang tetap berjalan tanpa koneksi sama sekali.",
+    "pricing": "Harga sederhana — mulai gratis 90 hari. Paket Trial, Pro, Premium, dan Enterprise.",
+    "download": "Unduh OZ-POS untuk Windows. macOS, Linux, Android, dan iOS segera hadir.",
+    "support": "Dapatkan bantuan OZ-POS — dukungan email dan jawaban untuk pertanyaan paling umum.",
+    "login": "Masuk ke akun OZ-POS Anda hanya dengan email.",
+    "account": "Lisensi, langganan, dan informasi penagihan OZ-POS Anda.",
+    "privacy": "Bagaimana OZ-POS mengumpulkan, menggunakan, dan melindungi data Anda.",
+    "terms": "Ketentuan yang mengatur penggunaan OZ-POS Anda."
+  },
+  "support": {
+    "title": "Dukungan",
+    "subtitle": "Kami siap membantu — hubungi kami kapan saja.",
+    "emailLabel": "Email kami",
+    "email": "support@oz-pos.com",
+    "name": "Nama",
+    "namePlaceholder": "Nama Anda",
+    "message": "Pesan",
+    "messagePlaceholder": "Apa yang bisa kami bantu?",
+    "submit": "Kirim pesan",
+    "sending": "Mengirim…",
+    "success": "Terima kasih! Pesan Anda sedang dalam perjalanan — kami akan segera membalas.",
+    "sendAnother": "Kirim pesan lain",
+    "formError": "Tidak dapat mengirim pesan. Silakan coba lagi nanti.",
+    "faqTitle": "Pertanyaan yang sering diajukan",
+    "faq": [
+      {
+        "q": "Bagaimana memulai uji coba gratis?",
+        "a": "Unduh OZ-POS dan jalankan — uji coba 90 hari dimulai otomatis, tanpa pendaftaran."
+      },
+      {
+        "q": "Apakah OZ-POS berfungsi tanpa internet?",
+        "a": "Ya. Semua fitur berjalan offline dan tersinkron ke cloud saat koneksi kembali."
+      },
+      {
+        "q": "Bagaimana cara mengaktifkan kunci lisensi saya?",
+        "a": "Buka Pengaturan → Lisensi, masukkan kunci Anda, lalu aktifkan. Kunci terikat ke perangkat keras Anda."
+      },
+      {
+        "q": "Di mana saya bisa melaporkan bug?",
+        "a": "Email kami di support@oz-pos.com dengan nomor versi Anda dan deskripsi kejadian."
+      }
+    ]
+  },
+  "docs": {
+    "title": "Dokumentasi",
+    "onThisPage": "Di halaman ini",
+    "updated": "Diperbarui",
+    "categories": {
+      "gettingStarted": "Memulai",
+      "guides": "Panduan",
+      "reference": "Referensi"
+    }
+  },
+  "hero": {
+    "title": "Platform POS Offline-First",
+    "subtitle": "Tetap jualan saat gangguan koneksi. OZ-POS berjalan penuh di perangkat Anda dan sinkron ke cloud begitu koneksi kembali.",
+    "ctaPrimary": "Mulai Uji Coba Gratis",
+    "ctaSecondary": "Lihat Harga"
+  },
+  "features": {
+    "title": "Dibangun untuk dunia nyata",
+    "subtitle": "Kasir yang tidak berhenti saat internet mati.",
+    "items": [
+      {
+        "title": "Offline-first",
+        "description": "Penjualan, shift, dan stok tetap berjalan tanpa koneksi sama sekali — tidak ada yang hilang."
+      },
+      {
+        "title": "Sinkron cloud",
+        "description": "Perubahan tergabung ke cloud begitu kembali online, lintas toko dan register."
+      },
+      {
+        "title": "Pembayaran QRIS",
+        "description": "Terima QRIS secara native, tanpa perangkat tambahan."
+      },
+      {
+        "title": "Multi-toko",
+        "description": "Gudang, register, dan cabang dalam satu topologi yang bisa diedit secara visual."
+      },
+      {
+        "title": "Skrip Lua",
+        "description": "Otomatiskan harga, diskon, dan alur dengan permukaan skrip yang kecil."
+      },
+      {
+        "title": "Shift & rekonsiliasi",
+        "description": "Shift kasir ditutup rapi, dengan riwayat audit lengkap untuk setiap perubahan."
+      }
+    ]
+  },
+  "screenshots": {
+    "title": "Satu ruang kerja, semua stasiun",
+    "caption": "Desktop dan tablet — inti offline-first yang sama, layar yang dirancang khusus."
+  },
+  "pricingPreview": {
+    "title": "Harga sederhana",
+    "subtitle": "Mulai gratis 90 hari. Tingkatkan saat Anda siap.",
+    "viewAll": "Bandingkan semua paket"
+  },
+  "ctaBanner": {
+    "title": "Mulai uji coba gratis hari ini",
+    "subtitle": "Tanpa kartu kredit, tanpa pendaftaran. Unduh dan langsung berjualan.",
+    "cta": "Unduh OZ-POS"
+  },
+  "pricingPage": {
+    "title": "Harga",
+    "subtitle": "Setiap paket mencakup inti offline-first penuh. Tingkatkan untuk lebih banyak toko, register, dan otomatisasi.",
+    "trust1": "Garansi uang kembali 30 hari",
+    "trust2": "Batalkan kapan saja",
+    "note": "Lisensi satu kali (perpetual) belum tersedia — lihat peta jalan.",
+    "comparison": "Perbandingan fitur antar paket"
+  },
+  "download": {
+    "title": "Unduh OZ-POS",
+    "subtitle": "Versi 0.0.25 — uji coba gratis 90 hari, tanpa pendaftaran.",
+    "version": "Versi saat ini",
+    "versionValue": "0.0.25",
+    "platformsTitle": "Pilih platform Anda",
+    "requirementsTitle": "Persyaratan sistem",
+    "requirements": [
+      "Windows 10 / 11 (64-bit) — tersedia sekarang",
+      "macOS 12 atau lebih baru — segera hadir",
+      "Linux (x86_64, glibc 2.31+) — segera hadir",
+      "Android · iOS (tablet & ponsel) — segera hadir",
+      "RAM 4 GB · Disk kosong 1 GB"
+    ],
+    "note": "Unduhan rilis dipublikasikan di GitHub Releases.",
+    "releaseLink": "Lihat GitHub Releases",
+    "comingSoon": "Segera hadir"
+  },
+  "login": {
+    "title": "Masuk ke akun Anda",
+    "subtitle": "Kami akan mengirimkan kode sekali pakai lewat email. Tanpa kata sandi untuk diingat atau diatur ulang.",
+    "email": "Email",
+    "emailPlaceholder": "anda@contoh.com",
+    "sendCode": "Kirim kode",
+    "code": "Kode verifikasi",
+    "codePlaceholder": "Kode 6 digit",
+    "verify": "Verifikasi dan lanjutkan",
+    "backToEmail": "Gunakan email lain",
+    "codeSent": "Kami mengirim kode verifikasi ke email Anda.",
+    "otpNote": "Verifikasi dibatasi kecepatannya untuk melindungi akun Anda.",
+    "errorSend": "Tidak dapat mengirim kode. Silakan coba lagi nanti.",
+    "errorVerify": "Kode tidak valid atau kedaluwarsa. Silakan coba lagi.",
+    "notConfigured": "API autentikasi belum dikonfigurasi pada deployment ini."
+  },
+  "account": {
+    "title": "Akun",
+    "loading": "Memuat lisensi Anda…",
+    "notSignedIn": "Anda belum masuk.",
+    "signIn": "Masuk",
+    "error": "Tidak dapat memuat akun Anda. Silakan coba lagi.",
+    "license": "Lisensi",
+    "licenseKey": "Kunci",
+    "tier": "Paket",
+    "status": "Status",
+    "expires": "Berakhir",
+    "logout": "Keluar",
+    "notConfigured": "API lisensi belum dikonfigurasi pada deployment ini."
+  },
+  "footer": {
+    "rights": "Hak cipta dilindungi.",
+    "privacy": "Privasi",
+    "terms": "Ketentuan",
+    "legal": "Legal"
+  },
+  "legal": {
+    "privacyTitle": "Kebijakan Privasi",
+    "termsTitle": "Ketentuan Layanan",
+    "placeholder": "Halaman ini masih placeholder. Teks hukum akan ditambahkan sebelum peluncuran."
+  },
+  "notFound": {
+    "title": "Halaman tidak ditemukan",
+    "subtitle": "Halaman yang Anda cari tidak ada atau telah dipindahkan.",
+    "home": "Kembali ke beranda"
+  },
+  "docsSearch": {
+    "placeholder": "Cari dokumentasi…",
+    "noResults": "Tidak ada hasil"
+  },
+  "checkout": {
+    "email": "Email untuk pengiriman lisensi",
+    "emailPlaceholder": "anda@contoh.com",
+    "emailRequired": "Masukkan email yang valid — kunci lisensi akan dikirim ke email tersebut."
+  }
+}

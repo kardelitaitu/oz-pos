@@ -18,11 +18,24 @@ export interface LoginSessionDto {
   display_name: string;
   role_name: string;
   role_id: string;
+  /**
+   * Permission keys granted by the user's role, verbatim from the backend
+   * registry (may include the `*` wildcard — use `hasGrantedPermission`
+   * rather than a raw `includes` check). UI gates mirror the backend
+   * instead of role-name strings.
+   */
+  permissions: string[];
 }
 
 /** Result of a successful staff login. */
 export interface StaffLoginResult {
   session: LoginSessionDto;
+  /**
+   * Short-lived ticket for the pre-session workspace picker (audit/06).
+   * Passed to listWorkspaces / listWorkspaceScreens until createSession
+   * returns the opaque session token.
+   */
+  picker_ticket: string;
 }
 
 /** Arguments for checking if a username exists. */
@@ -60,6 +73,8 @@ export interface BootstrapOwnerArgs {
 /** Result of bootstrapping the first owner account. */
 export interface BootstrapOwnerResult {
   session: LoginSessionDto;
+  /** Short-lived ticket for the pre-session workspace picker (audit/06). */
+  picker_ticket: string;
 }
 
 /**
@@ -74,6 +89,36 @@ export const bootstrapOwner = (args: BootstrapOwnerArgs): Promise<BootstrapOwner
 
 // ── Staff Management ──────────────────────────────────────────────
 
+/**
+ * A user's single effective assignment (ADR #35 D5 / spec 0048): scope mode
+ * plus the per-dimension explicit-all flag and list. Empty lists never mean
+ * "all" — the `*_all` flags are the explicit marker, so `list` with no ids
+ * is a deny. Legacy users without an assignment row resolve as global all/all.
+ */
+export interface AssignmentDto {
+  scope_mode: 'global' | 'scoped';
+  /** Branch dimension is explicit `all`. */
+  branches_all: boolean;
+  /** Branch ids in scope when `branches_all` is false. */
+  branch_ids: string[];
+  /** Workspace dimension is explicit `all`. */
+  workspaces_all: boolean;
+  /** Workspace keys in scope when `workspaces_all` is false. */
+  workspace_keys: string[];
+}
+
+/**
+ * The assignment scope carried by the staff create/edit IPC args (ADR #35
+ * D5 / spec 0048). Mirrors `AssignmentDto`.
+ */
+export interface AssignmentArgs {
+  scope_mode: 'global' | 'scoped';
+  branches_all: boolean;
+  branch_ids: string[];
+  workspaces_all: boolean;
+  workspace_keys: string[];
+}
+
 /** A staff member record. */
 export interface StaffMemberDto {
   id: string;
@@ -82,13 +127,65 @@ export interface StaffMemberDto {
   role_id: string;
   role_name: string;
   is_active: boolean;
+  /** National id rendered last-4 masked (ADR #35 D6) — the full value never
+   * appears in the list payload. */
+  national_id_masked: string;
+  /** Whether all 8 required profile fields are present — incomplete users
+   * are flagged and management-role assignment is gated on this. */
+  is_profile_complete: boolean;
+  /** The user's single effective assignment (ADR #35 D5 / spec 0048). */
+  assignment: AssignmentDto;
 }
 
-/** A role definition with display name and description. */
+/**
+ * ADR #35 D6 profile fields carried by the staff create/edit IPC args. All
+ * optional on the wire — the form enforces the 9 required fields locally
+ * with field-level errors before submission, and the backend validates
+ * again at creation.
+ */
+export interface ProfileArgs {
+  date_of_birth?: string;
+  phone?: string;
+  national_id_type?: string;
+  national_id?: string;
+  email?: string;
+  monthly_take_home_minor?: number;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  job_title?: string;
+  notes?: string;
+  address?: string;
+  language?: string;
+  avatar?: string;
+  tax_id?: string;
+  national_id_expires_at?: string;
+  emergency_contact_relationship?: string;
+  hire_date?: string;
+}
+
+/**
+ * A staff profile as seen by the caller (ADR #35 D6): full sensitive values
+ * only when the explicit grants are held, national id always last-4 masked,
+ * reads audited by the backend.
+ */
+export interface ProfileViewDto extends ProfileArgs {
+  user_id: string;
+  username: string;
+  display_name: string;
+  national_id_masked: string;
+  is_complete: boolean;
+}
+
+/** A role definition with display name, description, and granted keys. */
 export interface RoleDto {
   id: string;
   name: string;
   description: string;
+  /**
+   * Granted permission keys, verbatim from the role's permissions JSON
+   * (may include the `*` wildcard — display as-is, do not gate on it).
+   */
+  permissions: string[];
 }
 
 // ── Session-scoped Staff Management (ADR #7 · audit/06 STAFF-01) ───
@@ -102,6 +199,13 @@ export interface CreateStaffScopedArgs {
   pin: string;
   display_name: string;
   role_id: string;
+  /** ADR #35 D6 profile fields — creation requires the 9 mandatory fields. */
+  profile: ProfileArgs;
+  /**
+   * Optional assignment scope (spec 0048). When present, the user is created
+   * with this scope instead of the default global all/all.
+   */
+  assignment?: AssignmentArgs;
 }
 
 /** Arguments for updating a staff member via a session-scoped command. */
@@ -114,10 +218,16 @@ export interface UpdateStaffScopedArgs {
   /** STAFF-03: optional new PIN; hashed server-side. Omit to keep current. */
   pin?: string;
   /**
-   * STAFF-05: workspace key assignment applied atomically with the profile
-   * update (single IPC call). Omit to leave workspace assignments untouched.
+   * ADR #35 D6 profile fields (validated + encrypted at rest by the backend).
+   * Omit to leave the profile columns untouched.
    */
-  workspace_keys?: string[];
+  profile?: ProfileArgs;
+  /**
+   * Optional assignment scope (ADR #35 D5 / spec 0048). When present, it is
+   * written atomically with the user + profile update. Omit to leave the
+   * assignment scope untouched.
+   */
+  assignment?: AssignmentArgs;
 }
 
 /** List all staff members (caller resolved from session token). */
@@ -141,6 +251,17 @@ export const updateStaffScoped = (
   args: UpdateStaffScopedArgs,
 ): Promise<StaffMemberDto> =>
   loggedInvoke<StaffMemberDto>('update_staff_scoped', { sessionToken, args });
+
+/**
+ * Load a staff member's full profile as the session user sees it (ADR #35
+ * D6). Sensitive fields are withheld/masked without the explicit grants and
+ * reads are audited by the backend.
+ */
+export const getStaffProfileScoped = (
+  sessionToken: string,
+  userId: string,
+): Promise<ProfileViewDto> =>
+  loggedInvoke<ProfileViewDto>('get_staff_profile_scoped', { sessionToken, userId });
 
 // ── Session Token (ADR #4 / ADR #7) ───────────────────────────────
 

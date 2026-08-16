@@ -31,6 +31,10 @@ const testL10n = {
       'settings-card-size-increase-aria': 'Increase card size',
       'settings-font-size-decrease-aria': 'Decrease font size',
       'settings-font-size-increase-aria': 'Increase font size',
+      'decrease-card-size-aria': 'Decrease card size',
+      'increase-card-size-aria': 'Increase card size',
+      'decrease-font-size-aria': 'Decrease font size',
+      'increase-font-size-aria': 'Increase font size',
     };
     return defaults[id] ?? id;
   },

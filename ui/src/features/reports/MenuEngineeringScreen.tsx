@@ -607,7 +607,7 @@ export default function MenuEngineeringScreen() {
                 onMouseEnter={() => setHoveredRow(row.product_id)}
                 onMouseLeave={() => setHoveredRow(null)}
                 tabIndex={0}
-                aria-label={`${row.name}: ${row.quadrantMeta.label}`}
+                aria-label={`${row.name}: ${l10n.getString(`menu-eng-${row.quadrant.toLowerCase()}`)}`}
               >
                 <span role="cell">{i + 1}</span>
                 <span role="cell" className="menu-eng-table-name">
@@ -635,7 +635,7 @@ export default function MenuEngineeringScreen() {
                       border: `1px solid ${row.quadrantMeta.color}`,
                     }}
                   >
-                    {row.quadrantMeta.icon} {row.quadrantMeta.label}
+                    {row.quadrantMeta.icon} {l10n.getString(`menu-eng-${row.quadrant.toLowerCase()}`)}
                   </span>
                 </span>
                 <span role="cell" className="menu-eng-table-recs">

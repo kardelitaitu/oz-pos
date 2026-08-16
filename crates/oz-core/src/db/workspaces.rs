@@ -77,6 +77,8 @@ pub struct WorkspaceInstanceRow {
     pub description: String,
     /// Optional per-instance accent colour override.
     pub colour: Option<String>,
+    /// Controlled business purpose independent from type and display label.
+    pub purpose_key: String,
     /// Instance status — 'active', 'quota_suspended', 'archived'.
     pub status: String,
     /// ISO timestamp.
@@ -98,6 +100,8 @@ pub struct WorkspaceDto {
     pub store_id: String,
     /// Store display name (from store_profiles).
     pub store_name: String,
+    /// Controlled business purpose, independent from type, label, and access policy.
+    pub purpose_key: String,
     /// Instance display name.
     pub name: String,
     /// Description (from the type).
@@ -110,6 +114,29 @@ pub struct WorkspaceDto {
     pub colour: Option<String>,
     /// Whether this is the user's default instance.
     pub is_default: bool,
+}
+
+/// Input parameters for [`Store::create_workspace_instance_with_purpose`].
+///
+/// Bundled into a struct so the creator's signature stays under clippy's
+/// `too_many_arguments` threshold as it grows.
+#[derive(Debug, Clone)]
+pub struct CreateWorkspaceInstanceArgs {
+    /// Unique workspace instance id.
+    pub id: String,
+    /// Technical instance type key (e.g. `store-pos`).
+    pub type_key: String,
+    /// Owning store profile id.
+    pub store_id: String,
+    /// Human-readable instance name.
+    pub name: String,
+    /// Optional free-text description.
+    pub description: String,
+    /// Optional accent colour.
+    pub colour: Option<String>,
+    /// Controlled business purpose key, independent from the technical
+    /// type and the label (`general` is the neutral default).
+    pub purpose_key: String,
 }
 
 // ── Legacy Queries (backward compatible) ────────────────────────────────
@@ -152,7 +179,9 @@ impl Store<'_> {
             || role_id == "admin"
             || role_id == "role-manager"
             || role_id == "role-staff"
+            || role_id == "role-auditor"
             || role_id == "manager"
+            || role_id == "auditor"
         {
             return self.list_all_workspace_types();
         }
@@ -223,38 +252,12 @@ impl Store<'_> {
         rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
     }
 
-    /// Legacy: replace workspace assignments for a user (old tables).
-    pub fn set_user_workspaces_legacy<'b>(
-        &self,
-        user_id: &str,
-        ws_keys: impl IntoIterator<Item = &'b str>,
-    ) -> Result<(), CoreError> {
-        let tx = self.conn.unchecked_transaction()?;
-
-        tx.execute(
-            "DELETE FROM user_workspaces WHERE user_id = ?1",
-            params![user_id],
-        )?;
-
-        for key in ws_keys {
-            tx.execute(
-                "INSERT OR IGNORE INTO user_workspaces (user_id, ws_key) VALUES (?1, ?2)",
-                params![user_id, key],
-            )?;
-        }
-
-        tx.commit()?;
-        Ok(())
-    }
-
-    /// Legacy: get workspace keys assigned to a user (old table).
-    pub fn get_user_workspace_keys_legacy(&self, user_id: &str) -> Result<Vec<String>, CoreError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT ws_key FROM user_workspaces WHERE user_id = ?1 ORDER BY ws_key")?;
-        let rows = stmt.query_map(params![user_id], |row| row.get::<_, String>(0))?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
-    }
+    // Retired (0048 follow-up): the `set_user_workspaces_legacy` /
+    // `get_user_workspace_keys_legacy` write path is gone — the assignment
+    // model (ADR #35 D5 / spec 0048) supersedes it, and staff CRUD writes
+    // `assignments` + dimension rows in the global identity DB. The old
+    // `user_workspaces` table is still READ by the legacy listing above and
+    // kept for data compatibility; nothing writes it anymore.
 }
 
 // ── New Type Queries (ADR #4) ────────────────────────────────────────────
@@ -363,7 +366,9 @@ impl Store<'_> {
             || role_id == "admin"
             || role_id == "role-manager"
             || role_id == "role-staff"
+            || role_id == "role-auditor"
             || role_id == "manager"
+            || role_id == "auditor"
         {
             // Phase 2: check user_store_access for multi-store enforcement.
             if let Some(uid) = user_id {
@@ -427,6 +432,7 @@ impl Store<'_> {
         format!(
             "SELECT wi.id, wi.type_key, wi.store_id,
                     COALESCE(sp.name, wi.store_id) AS store_name,
+                    wi.purpose_key,
                     wi.name, wt.description, wt.icon, wt.layout_mode,
                     COALESCE(wi.colour, wt.accent_colour) AS colour,
                     COALESCE(uwi.is_default, 0) AS is_default
@@ -445,12 +451,13 @@ impl Store<'_> {
             type_key: row.get(1)?,
             store_id: row.get(2)?,
             store_name: row.get(3)?,
-            name: row.get(4)?,
-            description: row.get(5)?,
-            icon: row.get(6)?,
-            layout_mode: row.get(7)?,
-            colour: row.get(8)?,
-            is_default: row.get::<_, i32>(9)? != 0,
+            purpose_key: row.get(4)?,
+            name: row.get(5)?,
+            description: row.get(6)?,
+            icon: row.get(7)?,
+            layout_mode: row.get(8)?,
+            colour: row.get(9)?,
+            is_default: row.get::<_, i32>(10)? != 0,
         })
     }
 
@@ -533,6 +540,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT wi.id, wi.type_key, wi.store_id,
                     COALESCE(sp.name, wi.store_id) AS store_name,
+                    wi.purpose_key,
                     wi.name, wt.description, wt.icon, wt.layout_mode,
                     COALESCE(wi.colour, wt.accent_colour) AS colour,
                     COALESCE((SELECT is_default FROM user_workspace_instances
@@ -549,12 +557,13 @@ impl Store<'_> {
                 type_key: row.get(1)?,
                 store_id: row.get(2)?,
                 store_name: row.get(3)?,
-                name: row.get(4)?,
-                description: row.get(5)?,
-                icon: row.get(6)?,
-                layout_mode: row.get(7)?,
-                colour: row.get(8)?,
-                is_default: row.get::<_, i32>(9)? != 0,
+                purpose_key: row.get(4)?,
+                name: row.get(5)?,
+                description: row.get(6)?,
+                icon: row.get(7)?,
+                layout_mode: row.get(8)?,
+                colour: row.get(9)?,
+                is_default: row.get::<_, i32>(10)? != 0,
             })
         })
         .map_err(CoreError::from)
@@ -638,6 +647,36 @@ impl Store<'_> {
         description: &str,
         colour: Option<&str>,
     ) -> Result<WorkspaceInstanceRow, CoreError> {
+        self.create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
+            id: id.to_string(),
+            type_key: type_key.to_string(),
+            store_id: store_id.to_string(),
+            name: name.to_string(),
+            description: description.to_string(),
+            colour: colour.map(str::to_string),
+            purpose_key: "general".to_string(),
+        })
+    }
+
+    /// Create a workspace instance with an explicit controlled business purpose.
+    ///
+    /// `purpose_key` is independent from the technical `type_key`, editable
+    /// instance name, and authorization assignments. The legacy creator above
+    /// delegates to this method with the neutral `general` purpose.
+    pub fn create_workspace_instance_with_purpose(
+        &self,
+        args: CreateWorkspaceInstanceArgs,
+    ) -> Result<WorkspaceInstanceRow, CoreError> {
+        let CreateWorkspaceInstanceArgs {
+            id,
+            type_key,
+            store_id,
+            name,
+            description,
+            colour,
+            purpose_key,
+        } = args;
+
         if id.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "id",
@@ -662,6 +701,12 @@ impl Store<'_> {
                 message: "workspace instance name must not be empty".into(),
             });
         }
+        if purpose_key.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "purpose_key",
+                message: "workspace instance purpose_key must not be empty".into(),
+            });
+        }
 
         let tx = self.conn.unchecked_transaction()?;
 
@@ -681,15 +726,15 @@ impl Store<'_> {
         }
 
         tx.execute(
-            "INSERT INTO workspace_instances (id, type_key, store_id, name, description, colour, status, last_accessed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            params![id, type_key, store_id, name, description, colour],
+            "INSERT INTO workspace_instances (id, type_key, store_id, name, description, colour, purpose_key, status, last_accessed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            params![id, type_key, store_id, name, description, colour, purpose_key],
         )?;
 
         tx.commit()?;
 
         let row: WorkspaceInstanceRow = self.conn.query_row(
-            "SELECT id, type_key, store_id, name, description, colour, status, created_at, updated_at
+            "SELECT id, type_key, store_id, name, description, colour, purpose_key, status, created_at, updated_at
              FROM workspace_instances WHERE id = ?1",
             params![id],
             |row| {
@@ -700,9 +745,10 @@ impl Store<'_> {
                     name: row.get(3)?,
                     description: row.get(4)?,
                     colour: row.get(5)?,
-                    status: row.get(6)?,
-                    created_at: row.get(7)?,
-                    updated_at: row.get(8)?,
+                    purpose_key: row.get(6)?,
+                    status: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
                 })
             },
         )?;
@@ -945,7 +991,7 @@ impl Store<'_> {
         store_id: &str,
     ) -> Result<Vec<WorkspaceInstanceRow>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, type_key, store_id, name, description, colour, status, created_at, updated_at
+            "SELECT id, type_key, store_id, name, description, colour, purpose_key, status, created_at, updated_at
              FROM workspace_instances
              WHERE store_id = ?1
              ORDER BY name",
@@ -958,9 +1004,10 @@ impl Store<'_> {
                 name: row.get(3)?,
                 description: row.get(4)?,
                 colour: row.get(5)?,
-                status: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                purpose_key: row.get(6)?,
+                status: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
@@ -1017,31 +1064,54 @@ impl Store<'_> {
 
     /// Verify that a user has access to a specific workspace instance.
     ///
-    /// Resolution order (mirrors `list_workspaces_inner`):
+    /// This is the server-side authorization gate `create_session` calls in
+    /// both desktop and tablet clients (ADR #4 / ADR #7). It FAILS CLOSED:
+    ///
+    /// 0. The caller identity is bound to the database — the user must
+    ///    exist, be active, and the claimed `role_id` must equal the user's
+    ///    actual role. A claimed role is never trusted for the privilege
+    ///    checks below; otherwise any caller who knew an owner's user id
+    ///    could mint a session as that owner (privilege escalation) in any
+    ///    store's active instance (cross-store session minting).
     /// 1. Owner/admin role keys — instance must exist and be active (with
     ///    `user_store_access` check for multi-store mode)
     /// 2. `user_workspace_instances` — direct assignment for this user
     /// 3. `role_workspace_types` — role grants access to the instance's type
     ///
     /// Returns `Ok(true)` if the user may create a session against this
-    /// instance, `Ok(false)` if access is denied.
-    ///
-    /// Called by `create_session` in both desktop and tablet clients as a
-    /// server-side authorization gate (ADR #4 / ADR #7).
+    /// instance, `Ok(false)` if access is denied. Denials (unknown user,
+    /// inactive user, forged role, missing instance) all return `Ok(false)`
+    /// so the caller surfaces one uniform "no access" error without
+    /// revealing which identity records exist.
     pub fn verify_instance_access(
         &self,
-        role_id: &str,
+        claimed_role_id: &str,
         user_id: &str,
         instance_id: &str,
         store_id: &str,
     ) -> Result<bool, CoreError> {
+        // 0. Bind the caller identity to the database. Every later branch
+        // uses the REAL role resolved from `users`, never the claim.
+        let Some(user) = self.get_user(user_id)? else {
+            return Ok(false); // unknown identity — fail closed
+        };
+        if !user.is_active {
+            return Ok(false); // deactivated account — fail closed
+        }
+        if user.role_id != claimed_role_id {
+            return Ok(false); // forged role claim — fail closed
+        }
+        let role_id = &user.role_id;
+
         // 1. Owner/admin bypass — check store access if user_store_access is active.
         if role_id == "role-owner"
             || role_id == "role-admin"
             || role_id == "admin"
             || role_id == "role-manager"
             || role_id == "role-staff"
+            || role_id == "role-auditor"
             || role_id == "manager"
+            || role_id == "auditor"
         {
             // Check if user has explicit store access rows (multi-store mode, ADR #4 Phase 2).
             let has_store_access: bool = self
@@ -1140,7 +1210,7 @@ mod tests {
     fn list_all_workspace_types_returns_seeded() {
         let (store, _) = fresh();
         let ws = store.list_all_workspace_types().unwrap();
-        assert_eq!(ws.len(), 5);
+        assert_eq!(ws.len(), 6);
         assert!(ws.iter().any(|w| w.key == "restaurant-pos"));
         assert!(ws.iter().any(|w| w.key == "kds"));
         assert!(ws.iter().any(|w| w.key == "store-pos"));
@@ -1151,6 +1221,9 @@ mod tests {
         // for stock-keeping is 'warehouse', not 'inventory'.
         assert!(ws.iter().any(|w| w.key == "warehouse"));
         assert!(ws.iter().any(|w| w.key == "admin"));
+        // ADR #35 D5 (migration 128): 'retail-pos' is the legacy cashier
+        // workspace that role-cashier users fold into as Staff assignments.
+        assert!(ws.iter().any(|w| w.key == "retail-pos"));
         let kds = ws.iter().find(|w| w.key == "kds").unwrap();
         assert_eq!(kds.name, "Kitchen Display");
         assert_eq!(kds.icon, "kds");
@@ -1160,40 +1233,7 @@ mod tests {
     fn list_workspaces_legacy_owner_returns_all() {
         let (store, _) = fresh();
         let ws = store.list_workspaces_legacy("role-owner", None).unwrap();
-        assert_eq!(ws.len(), 5);
-    }
-
-    #[test]
-    fn set_user_workspaces_legacy_replaces_previous() {
-        let (store, user_id) = fresh();
-        // Post ADR-18 §13 finding 37 (migration 091): workspace_types.key is
-        // 'warehouse', not 'inventory' — the user_workspaces.ws_key FK
-        // column references `workspaces.key` and the literal 'inventory'
-        // would FK-violate against the post-rename workspaces row.
-        store
-            .set_user_workspaces_legacy(&user_id, ["restaurant-pos", "warehouse"])
-            .unwrap();
-        let keys = store.get_user_workspace_keys_legacy(&user_id).unwrap();
-        assert_eq!(keys.len(), 2);
-        assert!(keys.contains(&"warehouse".into()));
-
-        store
-            .set_user_workspaces_legacy(&user_id, ["admin"])
-            .unwrap();
-        let keys = store.get_user_workspace_keys_legacy(&user_id).unwrap();
-        assert_eq!(keys.len(), 1);
-        assert_eq!(keys[0], "admin");
-    }
-
-    #[test]
-    fn set_user_workspaces_legacy_empty_clears() {
-        let (store, user_id) = fresh();
-        store
-            .set_user_workspaces_legacy(&user_id, ["admin"])
-            .unwrap();
-        store.set_user_workspaces_legacy(&user_id, []).unwrap();
-        let keys = store.get_user_workspace_keys_legacy(&user_id).unwrap();
-        assert!(keys.is_empty());
+        assert_eq!(ws.len(), 6);
     }
 
     #[test]
@@ -1204,8 +1244,15 @@ mod tests {
             .unwrap();
         assert!(before.is_empty(), "role-test has no role_workspaces");
 
+        // The user_workspaces write path is retired (assignment model
+        // supersedes it); seed the legacy row directly to keep pinning the
+        // legacy listing's replace-mode read.
         store
-            .set_user_workspaces_legacy(&user_id, ["admin"])
+            .conn
+            .execute(
+                "INSERT INTO user_workspaces (user_id, ws_key) VALUES (?1, ?2)",
+                params![user_id, "admin"],
+            )
             .unwrap();
         let after = store
             .list_workspaces_legacy("role-test", Some(&user_id))
@@ -1214,20 +1261,13 @@ mod tests {
         assert_eq!(after[0].key, "admin");
     }
 
-    #[test]
-    fn get_user_workspace_keys_legacy_empty_when_no_override() {
-        let (store, user_id) = fresh();
-        let keys = store.get_user_workspace_keys_legacy(&user_id).unwrap();
-        assert!(keys.is_empty());
-    }
-
     // ── New tests (ADR #4 Phase 1) ────────────────────────────────────
 
     #[test]
     fn list_workspace_types_returns_all() {
         let (store, _) = fresh();
         let types = store.list_workspace_types().unwrap();
-        assert_eq!(types.len(), 5);
+        assert_eq!(types.len(), 6);
         assert!(types.iter().any(|t| t.layout_mode == "fullscreen"));
         assert!(types.iter().any(|t| t.layout_mode == "sidebar"));
     }
@@ -1249,6 +1289,22 @@ mod tests {
             assert!(!w.name.is_empty());
             assert!(!w.layout_mode.is_empty());
         }
+    }
+
+    #[test]
+    fn list_workspaces_auditor_returns_instances_in_store() {
+        // Auditor is a global read-only role per the five-role taxonomy — it
+        // must resolve the same workspace instances as the management roles
+        // so it can reach its read-only screens (audit log, reports,
+        // inventory) through the workspace picker.
+        let (store, _) = fresh();
+        let dto = store
+            .list_workspaces("role-auditor", None, "default")
+            .unwrap();
+        assert_eq!(dto.len(), 5);
+        assert!(dto.iter().any(|w| w.type_key == "kds"));
+        assert!(dto.iter().any(|w| w.type_key == "restaurant-pos"));
+        assert!(dto.iter().any(|w| w.type_key == "admin"));
     }
 
     #[test]
@@ -1287,6 +1343,41 @@ mod tests {
             .unwrap();
         assert_eq!(dto.len(), 6);
         assert!(dto.iter().any(|w| w.instance_id == "test-cashier-1"));
+    }
+
+    #[test]
+    fn purpose_key_is_independent_from_type_and_name() {
+        let (store, _) = fresh();
+        store
+            .create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
+                id: "ws-checkout".into(),
+                type_key: "store-pos".into(),
+                store_id: "default".into(),
+                name: "Front Counter".into(),
+                description: String::new(),
+                colour: None,
+                purpose_key: "checkout".into(),
+            })
+            .unwrap();
+        store
+            .create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
+                id: "ws-returns".into(),
+                type_key: "store-pos".into(),
+                store_id: "default".into(),
+                name: "Returns Counter".into(),
+                description: String::new(),
+                colour: None,
+                purpose_key: "returns".into(),
+            })
+            .unwrap();
+
+        let rows = store.list_all_instances("default").unwrap();
+        let checkout = rows.iter().find(|row| row.id == "ws-checkout").unwrap();
+        let returns = rows.iter().find(|row| row.id == "ws-returns").unwrap();
+        assert_eq!(checkout.type_key, returns.type_key);
+        assert_eq!(checkout.purpose_key, "checkout");
+        assert_eq!(returns.purpose_key, "returns");
+        assert_ne!(checkout.name, returns.name);
     }
 
     #[test]
@@ -2089,5 +2180,203 @@ mod tests {
             .update_workspace_instance("ws-1", "", None, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field: "name", .. }));
+    }
+
+    // ── Session-mint authorization gate (audit/06 residual) ────────────
+    //
+    // `verify_instance_access` is the server-side gate `create_session`
+    // calls in both desktop and tablet clients (ADR #4 / ADR #7). TDD red:
+    // the gate must FAIL CLOSED when the caller identity cannot be trusted
+    // — unknown user, inactive user, or a claimed `role_id` that does not
+    // match the user's actual database role. The previous implementation
+    // trusted the caller-supplied `role_id` for the owner/manager bypass
+    // and never resolved the user, so any IPC caller who knew a user id
+    // could mint a session AS that user (privilege escalation) in ANY
+    // store's active instance (cross-store session minting) — the residual
+    // recorded in audit/06.
+
+    /// Seed the built-in roles plus an owner user (role-owner carries `*`).
+    fn seed_owner_user(conn: &rusqlite::Connection) {
+        let store = Store::new(conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn verify_instance_access_denies_unknown_user() {
+        let (store, _) = fresh();
+        // A ghost user id with the owner claim previously passed the owner
+        // bypass (no `user_store_access` rows → single-store mode) and
+        // would have minted a session for an identity that does not exist.
+        let ok = store
+            .verify_instance_access(
+                "role-owner",
+                "ghost-user",
+                "default-restaurant-pos",
+                "default",
+            )
+            .unwrap();
+        assert!(!ok, "unknown user must not be able to open a session");
+    }
+
+    #[test]
+    fn verify_instance_access_rejects_forged_owner_role() {
+        let (store, user_id) = fresh();
+        // user-1's ACTUAL role is role-test. Claiming role-owner must be
+        // rejected even though the instance exists and is active.
+        let ok = store
+            .verify_instance_access("role-owner", &user_id, "default-restaurant-pos", "default")
+            .unwrap();
+        assert!(
+            !ok,
+            "a claimed role differing from the user's real role must be denied"
+        );
+    }
+
+    #[test]
+    fn verify_instance_access_denies_inactive_user() {
+        let (store, user_id) = fresh();
+        // Claim the user's REAL role AND grant an explicit instance
+        // assignment: without the `is_active` guard, branch 2 would return
+        // Ok(true), so this test uniquely pins the inactive check rather
+        // than being denied by a role mismatch.
+        store
+            .set_user_workspace_instances(&user_id, ["default-admin"], None)
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE users SET is_active = 0 WHERE id = ?1",
+                params![user_id],
+            )
+            .unwrap();
+        let ok = store
+            .verify_instance_access("role-test", &user_id, "default-admin", "default")
+            .unwrap();
+        assert!(!ok, "deactivated users must not be able to open a session");
+    }
+
+    #[test]
+    fn verify_instance_access_allows_real_owner() {
+        let (store, _) = fresh();
+        seed_owner_user(store.conn);
+        let ok = store
+            .verify_instance_access(
+                "role-owner",
+                "user-owner",
+                "default-restaurant-pos",
+                "default",
+            )
+            .unwrap();
+        assert!(
+            ok,
+            "a real owner with the matching role keeps instance access"
+        );
+    }
+
+    #[test]
+    fn verify_instance_access_allows_auditor() {
+        // Auditor is a global read-only role — the session-open gate must
+        // admit it into any active instance so it can reach its read-only
+        // screens (the plan's "Auditor is global" claim).
+        let (store, _) = fresh();
+        seed_owner_user(store.conn);
+        store
+            .conn
+            .execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at)
+                 VALUES ('user-auditor', 'auditor', 'hash', 'Auditor', 'role-auditor', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+                [],
+            )
+            .unwrap();
+        let ok = store
+            .verify_instance_access(
+                "role-auditor",
+                "user-auditor",
+                "default-restaurant-pos",
+                "default",
+            )
+            .unwrap();
+        assert!(
+            ok,
+            "a real auditor with the matching role keeps instance access"
+        );
+    }
+
+    #[test]
+    fn verify_instance_access_allows_explicit_assignment_with_real_role() {
+        let (store, user_id) = fresh();
+        store
+            .set_user_workspace_instances(&user_id, ["default-admin"], None)
+            .unwrap();
+        let ok = store
+            .verify_instance_access("role-test", &user_id, "default-admin", "default")
+            .unwrap();
+        assert!(
+            ok,
+            "explicit instance assignment with the real role stays allowed"
+        );
+    }
+
+    #[test]
+    fn verify_instance_access_multi_store_owner_limited_to_assigned_stores() {
+        let (store, _) = fresh();
+        seed_owner_user(store.conn);
+        store
+            .conn
+            .execute(
+                "INSERT INTO store_profiles (id, name, address, currency, timezone)
+                 VALUES ('store-b', 'Store B', '456 Elm', 'IDR', 'Asia/Jakarta')",
+                [],
+            )
+            .unwrap();
+        store
+            .create_workspace_instance(
+                "store-b-restaurant-pos",
+                "restaurant-pos",
+                "store-b",
+                "Store B POS",
+                "",
+                None,
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO user_store_access (user_id, store_id, access_level)
+                 VALUES ('user-owner', 'default', 'manager')",
+                [],
+            )
+            .unwrap();
+
+        let ok_default = store
+            .verify_instance_access(
+                "role-owner",
+                "user-owner",
+                "default-restaurant-pos",
+                "default",
+            )
+            .unwrap();
+        let ok_store_b = store
+            .verify_instance_access(
+                "role-owner",
+                "user-owner",
+                "store-b-restaurant-pos",
+                "store-b",
+            )
+            .unwrap();
+        assert!(
+            ok_default,
+            "owner with store access keeps their assigned store"
+        );
+        assert!(
+            !ok_store_b,
+            "multi-store owner must not open a session in an unassigned store"
+        );
     }
 }

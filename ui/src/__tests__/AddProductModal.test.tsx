@@ -63,6 +63,29 @@ describe('AddProductModal', () => {
     expect(screen.getByPlaceholderText('e.g. Logitech G Pro X Wireless Mouse')).toBeInTheDocument();
   });
 
+  it('rejects fractional price input instead of truncating it', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AddProductModal
+        categories={sampleCategories}
+        isOpen={true}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    // Price and cost both default to 0 (ADR #36), so disambiguate by order.
+    const priceInput = screen.getAllByDisplayValue('0')[0] as HTMLInputElement;
+    await user.clear(priceInput);
+    await user.type(priceInput, '1850.5');
+
+    // Fractional keystrokes are ignored — the field must not silently
+    // truncate 1850.5 to 1850 via parseInt.
+    expect(priceInput.value).toBe('1850');
+  });
+
   it('creates new product when form is submitted', async () => {
     const user = userEvent.setup();
     const handleSave = vi.fn();
@@ -81,7 +104,8 @@ describe('AddProductModal', () => {
     const nameInput = screen.getByPlaceholderText('e.g. Logitech G Pro X Wireless Mouse');
     await user.type(nameInput, 'Corsair Vengeance DDR5 32GB');
 
-    const priceInput = screen.getByDisplayValue('0');
+    // Price and cost both default to 0 (ADR #36), so disambiguate by order.
+    const priceInput = screen.getAllByDisplayValue('0')[0] as HTMLElement;
     await user.clear(priceInput);
     await user.type(priceInput, '1850000');
 
@@ -98,5 +122,50 @@ describe('AddProductModal', () => {
       }),
     );
     expect(handleClose).toHaveBeenCalled();
+  });
+
+  it('hides the cost field and saves cost 0 when canEditCost is false (ADR #36 D7)', async () => {
+    const user = userEvent.setup();
+    const handleSave = vi.fn();
+    const handleClose = vi.fn();
+
+    render(
+      <AddProductModal
+        categories={sampleCategories}
+        isOpen={true}
+        onClose={handleClose}
+        onSave={handleSave}
+        canEditCost={false}
+      />,
+      { wrapper },
+    );
+
+    // Cost label falls back to the JSX default (no FTL key in this test
+    // bundle) — it must not be rendered for non-permitted sessions.
+    expect(screen.queryByText('Cost (IDR)')).not.toBeInTheDocument();
+    // The other ADR #36 fields still render.
+    expect(screen.getByLabelText('Unit')).toBeInTheDocument();
+
+    const nameInput = screen.getByPlaceholderText('e.g. Logitech G Pro X Wireless Mouse');
+    await user.type(nameInput, 'Staff-Created Product');
+    await user.click(screen.getByRole('button', { name: 'Create Product' }));
+
+    expect(handleSave).toHaveBeenCalledWith(
+      expect.objectContaining({ cost_minor: 0 }),
+    );
+    expect(handleClose).toHaveBeenCalled();
+  });
+
+  it('shows the cost field by default (manager session)', () => {
+    render(
+      <AddProductModal
+        categories={sampleCategories}
+        isOpen={true}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByText('Cost (IDR)')).toBeInTheDocument();
   });
 });

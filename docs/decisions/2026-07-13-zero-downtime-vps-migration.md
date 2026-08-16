@@ -128,3 +128,8 @@ if response.error == "server_migrated" {
 - ADR #10 — Sync Performance, Ultra-Low-Cost Server, and 3-Month Retention Strategy
 - `crates/oz-core/src/settings.rs` — Settings DB getters/setters
 - `platform/sync/src/transport.rs` — Client transport parsing
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit; Phase 4 ADR Deep Audit
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+> status: ACCURATE (verified against actual codebase)

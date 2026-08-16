@@ -1,6 +1,6 @@
 # Phase 6 — Deprecation
 
-- **Status:** PENDING (gated — must wait one full release cycle after Phase 5)
+- **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor) (gated — must wait one full release cycle after Phase 5)
 - **Phase:** 6 of 11 (Workspace Settings Architecture — ADR #22)
 - **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** LOW (safe if feature-flag gated)
@@ -76,3 +76,5 @@ Delete the obsolete `RetailOptionsScreen.tsx` component and clean up legacy CSS 
 - `ui/src/features/retail/RetailPosScreen.tsx`
 - `ui/src/features/retail/RetailPosScreen.css`
 - `ui/src/features/sales/PosScreen.tsx`
+
+> Last audited: 2026-08-08 by docs-auditor (status corrected to IMPLEMENTED).

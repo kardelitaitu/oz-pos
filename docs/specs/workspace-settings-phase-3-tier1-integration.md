@@ -1,6 +1,6 @@
 # Phase 3 — Tier 1 Integration (Central Hub)
 
-- **Status:** PENDING
+- **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 3 of 11 (Workspace Settings Architecture — ADR #22)
 - **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** CORE
@@ -83,3 +83,5 @@ Add new nav items for workspace config cards to `SettingsNavTree.tsx` and update
 - `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar A, §SettingsNavTree Integration, §Phase 3
 - `ui/src/features/settings/SettingsNavTree.tsx`
 - `ui/src/features/settings/SettingsPage.tsx`
+
+> Last audited: 2026-08-08 by docs-auditor (status corrected to IMPLEMENTED).

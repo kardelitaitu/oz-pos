@@ -14,6 +14,8 @@ use oz_core::{CoreError, Currency, FeatureRegistry, Money, SaleStatus, Settings,
 
 use crate::cli::*;
 
+use crate::seed_demo::run_seed_demo;
+
 // ── DB helpers ────────────────────────────────────────────────────────
 
 pub(crate) fn open_db(path: &str) -> Result<Connection> {
@@ -55,6 +57,7 @@ pub fn run() -> Result<()> {
             password,
             dry_run,
         }) => run_import_ozpkg(&conn, &input, &password, dry_run),
+        Some(Command::SeedDemo(args)) => run_seed_demo(&conn, &args),
         None => {
             let mut cmd = Cli::command();
             cmd.print_help()?;
@@ -160,7 +163,7 @@ pub(crate) fn run_init_db(conn: &Connection, args: &InitDbArgs) -> Result<()> {
              '[\"*\"]'),
             ('role-manager', 'manager', 'Can manage products, categories, and view reports',
              '[\"products:crud\",\"categories:manage\",\"sales:void\",\"reports:view\"]'),
-            ('role-cashier', 'cashier', 'Can process sales and manage the daily register',
+            ('role-staff', 'staff', 'Operational role with Manager-level access minus settings',
              '[\"sales:process\",\"sales:view\",\"customers:view\"]');",
     )
     .context("seeding roles")?;
@@ -1596,9 +1599,9 @@ mod tests {
     #[test]
     fn run_user_create_and_list() {
         let conn = setup_in_memory_db();
-        seed_role(&conn, "role-cashier", "Cashier");
+        seed_role(&conn, "role-staff", "Staff");
         let store = make_store(&conn);
-        run_user_create(&store, "jdoe", "hash123", "John Doe", "role-cashier").unwrap();
+        run_user_create(&store, "jdoe", "hash123", "John Doe", "role-staff").unwrap();
 
         let users = store.list_users().unwrap();
         assert!(!users.is_empty());

@@ -16,7 +16,7 @@ import salesFtl from '@/locales/sales.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
 import tablesFtl from '@/locales/tables.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
-import type { LineId, Sku } from '@/types/domain';
+import type { CourseId, LineId, Sku } from '@/types/domain';
 
 // ── Mock modules ──────────────────────────────────────────────────
 
@@ -601,5 +601,83 @@ describe('RetailPosScreen — interactions', () => {
     rafSpy.mockRestore();
     cafSpy.mockRestore();
     rectSpy.mockRestore();
+  });
+
+  // ── Cart line remove → undo flow (RetailCartPanel undo bar) ────
+
+  it('reveals the undo bar when a cart line is removed', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      total: { minor_units: 3500, currency: 'IDR' },
+      subtotal: { minor_units: 3500, currency: 'IDR' },
+    }));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Indomie Goreng').length).toBeGreaterThanOrEqual(1);
+    });
+    expect(document.querySelector('.retail-undo-bar')).toBeNull();
+    const removeBtns = document.querySelectorAll('.retail-cart-remove-btn');
+    await userEvent.click(removeBtns[0]!);
+    // The undo bar appears with the removed-item count (aria-live status).
+    await waitFor(() => {
+      const bar = document.querySelector('.retail-undo-bar');
+      expect(bar).not.toBeNull();
+      expect(bar!.textContent).toMatch(/1 item removed/);
+    });
+  });
+
+  it('undo restores the removed line with its modifiers and course intact', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
+      lines: [{
+        id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1,
+        unit_price: { minor_units: 3500, currency: 'IDR' },
+        courseId: 'main' as CourseId,
+        modifiers: [{ groupId: 'g1', groupName: 'Topping', modifierId: 'm1', modifierName: 'Extra Cheese', priceMinor: 500 }],
+      }],
+      total: { minor_units: 4000, currency: 'IDR' },
+      subtotal: { minor_units: 4000, currency: 'IDR' },
+      addProduct: mockAddProduct,
+    }));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Indomie Goreng').length).toBeGreaterThanOrEqual(1);
+    });
+    const removeBtns = document.querySelectorAll('.retail-cart-remove-btn');
+    await userEvent.click(removeBtns[0]!);
+    await waitFor(() => expect(document.querySelector('.retail-undo-bar')).not.toBeNull());
+    await userEvent.click(screen.getByRole('button', { name: /^undo$/i }));
+    // The exact line — sku, name, price, qty AND its modifiers + course —
+    // must be handed back to the state layer, not a bare re-add.
+    expect(mockAddProduct).toHaveBeenCalledTimes(1);
+    expect(mockAddProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng', price: { minor_units: 3500, currency: 'IDR' } }),
+      1,
+      expect.objectContaining({
+        courseId: 'main',
+        modifiers: [expect.objectContaining({ modifierName: 'Extra Cheese', priceMinor: 500 })],
+      }),
+    );
+  });
+
+  it('dismissing the undo bar discards the removed line without restoring it', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      total: { minor_units: 3500, currency: 'IDR' },
+      subtotal: { minor_units: 3500, currency: 'IDR' },
+    }));
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Indomie Goreng').length).toBeGreaterThanOrEqual(1);
+    });
+    const removeBtns = document.querySelectorAll('.retail-cart-remove-btn');
+    await userEvent.click(removeBtns[0]!);
+    await waitFor(() => expect(document.querySelector('.retail-undo-bar')).not.toBeNull());
+    await userEvent.click(screen.getByRole('button', { name: /dismiss undo notification/i }));
+    // Dismiss = discard: nothing is re-added, and the bar fades away.
+    expect(mockAddProduct).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.querySelector('.retail-undo-bar')).toBeNull());
   });
 });

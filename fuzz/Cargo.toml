@@ -34,7 +34,7 @@ cargo-fuzz = true
 #                         ozpkg_parse + manifest_parse.
 #   lua-fuzz            - enables lua_sandbox (oz-lua already in base deps).
 [features]
-oz-core-fuzz   = ["dep:oz-core", "dep:serde_json"]
+oz-core-fuzz   = ["dep:oz-core"]
 oz-plugin-fuzz = ["oz-core-fuzz", "dep:oz-plugin", "dep:toml"]
 lua-fuzz       = []
 
@@ -45,8 +45,13 @@ foundation = { path = "../foundation" }
 oz-lua = { path = "../crates/oz-lua" }
 oz-core   = { path = "../crates/oz-core",   optional = true }
 oz-plugin = { path = "../crates/oz-plugin", optional = true }
-rlua = "0.20"
-serde_json = { version = "1", optional = true }
+# oz-lua migrated from rlua to mlua 0.9; the lua_sandbox target inspects
+# the sandbox via mlua types, so mlua must be a direct dep with the same
+# features oz-lua enables (lua54, vendored, send).
+mlua = { version = "0.9", features = ["lua54", "vendored", "send"] }
+# Pure-Rust; unconditional because percentage_parse exercises the serde
+# range-check boundary (previously only pulled in via oz-core-fuzz).
+serde_json = "1"
 toml = { version = "0.8", optional = true }
 
 [[bin]]
@@ -87,6 +92,13 @@ bench = false
 [[bin]]
 name = "manifest_parse"
 path = "fuzz_targets/manifest_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "percentage_parse"
+path = "fuzz_targets/percentage_parse.rs"
 test = false
 doc = false
 bench = false

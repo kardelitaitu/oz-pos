@@ -56,7 +56,7 @@ export const test = base.extend<LoggedInFixture>({
 
         // Enter username.
         const usernameInput = page.locator('.staff-login-input').first();
-        await usernameInput.fill('kasir');
+        await usernameInput.fill('staff');
 
         // Submit.
         await page.locator('.staff-login-submit-btn').click();

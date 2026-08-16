@@ -44,7 +44,19 @@ vi.mock('@/contexts/BrandContext', () => ({
 
 vi.mock('@fluent/react', () => ({
   useLocalization: () => ({
-    l10n: { getString: (id: string) => id },
+    l10n: {
+      getString: (id: string) => {
+        const map: Record<string, string> = {
+          'primary-colour-picker-aria': 'Primary colour picker',
+          'colour-hex-aria': 'Colour hex value',
+          'reset-colour-aria': 'Reset colour to default',
+          'pick-logo-aria': 'Pick logo file',
+          'reset-appearance-aria': 'Reset all appearance settings',
+          'save-appearance-aria': 'Save appearance',
+        };
+        return map[id] || id;
+      },
+    },
   }),
   Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
 }));

@@ -38,6 +38,9 @@ export function WorkspaceInventorySettings({
   const originalsRef = useRef<Record<string, unknown>>({
     lowStockThreshold, deductionPreferWarehouse,
   });
+  // Keys the user has edited while the initial load is in flight — the
+  // load must never silently revert them (draft-overwrite race).
+  const touchedRef = useRef<Set<'lowStockThreshold' | 'deductionPreferWarehouse'>>(new Set());
 
   const dirty = useMemo(() => hasChanges(
     { lowStockThreshold, deductionPreferWarehouse } as Record<string, unknown>,
@@ -54,8 +57,12 @@ export function WorkspaceInventorySettings({
       getSetting('inventory.deduction_prefer_warehouse'),
     ]).then(([thresholdRaw, preferWhRaw]) => {
       const t = parseInt(thresholdRaw ?? '', 10);
-      if (!isNaN(t) && t >= 0) setLowStockThreshold(t);
-      setDeductionPreferWarehouse(preferWhRaw === 'true');
+      if (!touchedRef.current.has('lowStockThreshold') && !isNaN(t) && t >= 0) {
+        setLowStockThreshold(t);
+      }
+      if (!touchedRef.current.has('deductionPreferWarehouse')) {
+        setDeductionPreferWarehouse(preferWhRaw === 'true');
+      }
       originalsRef.current = {
         lowStockThreshold: !isNaN(t) && t >= 0 ? t : 10,
         deductionPreferWarehouse: preferWhRaw === 'true',
@@ -115,7 +122,15 @@ export function WorkspaceInventorySettings({
               min={0}
               max={999}
               value={lowStockThreshold}
-              onChange={(e) => setLowStockThreshold(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              onChange={(e) => {
+                touchedRef.current.add('lowStockThreshold');
+                // Threshold is a whole number — ignore fractional in-progress
+                // input instead of silently truncating it via parseInt.
+                const v = Number(e.target.value);
+                if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                  setLowStockThreshold(e.target.value === '' ? 0 : v);
+                }
+              }}
             />
             {!isCompact && (
               <span className="settings-range-value">
@@ -159,7 +174,10 @@ export function WorkspaceInventorySettings({
                     role="switch"
                     checked={deductionPreferWarehouse}
                     aria-checked={deductionPreferWarehouse}
-                    onChange={(e) => setDeductionPreferWarehouse(e.target.checked)}
+                    onChange={(e) => {
+                      touchedRef.current.add('deductionPreferWarehouse');
+                      setDeductionPreferWarehouse(e.target.checked);
+                    }}
                   />
                   <span className="settings-toggle-slider" />
                 </span>

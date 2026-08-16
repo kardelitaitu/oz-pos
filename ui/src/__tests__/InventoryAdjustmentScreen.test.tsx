@@ -101,6 +101,27 @@ describe('InventoryAdjustmentScreen', () => {
     expect(screen.getByLabelText(/reason/i)).toBeInTheDocument();
   });
 
+  it('rejects fractional quantities instead of silently truncating them', async () => {
+    renderWithFluentSync(<ToastProvider><InventoryAdjustmentScreen /></ToastProvider>, inventoryFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('searchbox')).toBeInTheDocument();
+    });
+
+    await userEvent.type(screen.getByRole('searchbox'), 'latte');
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /caffè latte/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('option', { name: /caffè latte/i }));
+
+    await userEvent.type(screen.getByRole('spinbutton'), '2.5');
+    await userEvent.selectOptions(screen.getByLabelText(/reason/i), 'damaged');
+
+    // The apply button stays disabled for a fractional quantity — the
+    // previous `parseInt(quantity, 10)` would have sent 2 silently.
+    expect(screen.getByRole('button', { name: /apply restock/i })).toBeDisabled();
+    expect(invokeMock).not.toHaveBeenCalledWith('adjust_stock');
+  });
+
   // ── Durable product-load error (INV-08) ────────────────────────
 
   it('shows a persistent error with retry when products fail to load', async () => {

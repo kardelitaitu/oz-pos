@@ -17,7 +17,7 @@ use foundation::validate_not_empty;
 
 use oz_core::permissions;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -178,6 +178,22 @@ pub struct ProductDto {
     pub price_updated_at: String,
     /// Product type: "retail", "restaurant", or "both".
     pub product_type: String,
+    /// Cost price in minor units (local-only, ADR #36).
+    pub cost_minor: i64,
+    /// Brand (free text).
+    pub brand: Option<String>,
+    /// Rack position code.
+    pub rack_location: Option<String>,
+    /// Free-text notes.
+    pub notes: Option<String>,
+    /// Unit of measure.
+    pub unit: Option<String>,
+    /// Active/sellable status.
+    pub is_active: bool,
+    /// Default supplier FK (local-only).
+    pub default_supplier_id: Option<String>,
+    /// Materialized popularity score (ADR #37) — retail grid sort key.
+    pub popularity_score: f64,
 }
 
 /// Money DTO matching the front-end `Money` type (snake_case keys).
@@ -269,6 +285,14 @@ fn map_products_to_dtos(
                 price_updated_at: pwd.product.price_updated_at,
                 product_type: pwd.product.product_type.as_str().to_owned(),
                 tax_rate_ids,
+                cost_minor: pwd.product.cost_minor,
+                brand: pwd.product.brand.clone(),
+                rack_location: pwd.product.rack_location.clone(),
+                notes: pwd.product.notes.clone(),
+                unit: pwd.product.unit.clone(),
+                is_active: pwd.product.is_active,
+                default_supplier_id: pwd.product.default_supplier_id.clone(),
+                popularity_score: pwd.popularity_score,
             }
         })
         .collect();
@@ -394,6 +418,14 @@ fn map_pwd_to_dto(
             product_type: pwd.product.product_type.as_str().to_owned(),
             created_at: pwd.product.created_at,
             price_updated_at: pwd.product.price_updated_at,
+            cost_minor: pwd.product.cost_minor,
+            brand: pwd.product.brand.clone(),
+            rack_location: pwd.product.rack_location.clone(),
+            notes: pwd.product.notes.clone(),
+            unit: pwd.product.unit.clone(),
+            is_active: pwd.product.is_active,
+            default_supplier_id: pwd.product.default_supplier_id.clone(),
+            popularity_score: pwd.popularity_score,
         }
     }))
 }
@@ -424,6 +456,31 @@ pub struct CreateProductArgs {
     #[serde(default = "default_product_type")]
     /// Product Type.
     pub product_type: String,
+    #[serde(default)]
+    /// Cost price in minor units (ADR #36, local-only).
+    pub cost_minor: i64,
+    #[serde(default)]
+    /// Brand (free text).
+    pub brand: Option<String>,
+    #[serde(default)]
+    /// Rack position code.
+    pub rack_location: Option<String>,
+    #[serde(default)]
+    /// Free-text notes.
+    pub notes: Option<String>,
+    #[serde(default)]
+    /// Unit of measure.
+    pub unit: Option<String>,
+    #[serde(default = "default_true")]
+    /// Active/sellable status.
+    pub is_active: bool,
+    #[serde(default)]
+    /// Default supplier FK (local-only).
+    pub default_supplier_id: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Args for `create_product_scoped` — identical to `CreateProductArgs`
@@ -449,6 +506,27 @@ pub struct CreateProductScopedArgs {
     #[serde(default = "default_product_type")]
     /// Product Type.
     pub product_type: String,
+    #[serde(default)]
+    /// Cost price in minor units (ADR #36, local-only).
+    pub cost_minor: i64,
+    #[serde(default)]
+    /// Brand (free text).
+    pub brand: Option<String>,
+    #[serde(default)]
+    /// Rack position code.
+    pub rack_location: Option<String>,
+    #[serde(default)]
+    /// Free-text notes.
+    pub notes: Option<String>,
+    #[serde(default)]
+    /// Unit of measure.
+    pub unit: Option<String>,
+    #[serde(default = "default_true")]
+    /// Active/sellable status.
+    pub is_active: bool,
+    #[serde(default)]
+    /// Default supplier FK (local-only).
+    pub default_supplier_id: Option<String>,
 }
 
 fn default_product_type() -> String {
@@ -490,7 +568,7 @@ pub async fn create_product(
             currency,
         };
 
-        store.create_product(
+        store.create_product_with_attributes(
             &args.sku,
             &args.name,
             price,
@@ -498,6 +576,15 @@ pub async fn create_product(
             args.barcode.as_deref(),
             args.initial_stock,
             Some(&args.product_type),
+            &oz_core::db::CreateProductAttributes {
+                cost_minor: args.cost_minor,
+                brand: args.brand.clone(),
+                rack_location: args.rack_location.clone(),
+                notes: args.notes.clone(),
+                unit: args.unit.clone(),
+                is_active: args.is_active,
+                default_supplier_id: args.default_supplier_id.clone(),
+            },
         )?;
 
         store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
@@ -544,6 +631,13 @@ pub async fn create_product_scoped(
     state: State<'_, AppState>,
 ) -> Result<CreateProductResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_CREATE).await?;
+    // ADR #36 D7: setting a cost (HPP) requires the manager-only
+    // products:edit_cost permission — staff can create products without
+    // ever touching cost.
+    if args.cost_minor != 0 {
+        require_permission_for_session(&state, &session, permissions::PRODUCTS_EDIT_COST).await?;
+    }
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -557,8 +651,6 @@ pub async fn create_product_scoped(
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
 
-        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_CREATE)?;
-
         let currency: oz_core::Currency = args
             .currency
             .parse()
@@ -569,7 +661,7 @@ pub async fn create_product_scoped(
             currency,
         };
 
-        store.create_product(
+        store.create_product_with_attributes(
             &args.sku,
             &args.name,
             price,
@@ -577,6 +669,15 @@ pub async fn create_product_scoped(
             args.barcode.as_deref(),
             args.initial_stock,
             Some(&args.product_type),
+            &oz_core::db::CreateProductAttributes {
+                cost_minor: args.cost_minor,
+                brand: args.brand.clone(),
+                rack_location: args.rack_location.clone(),
+                notes: args.notes.clone(),
+                unit: args.unit.clone(),
+                is_active: args.is_active,
+                default_supplier_id: args.default_supplier_id.clone(),
+            },
         )?;
 
         store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
@@ -631,6 +732,27 @@ pub struct UpdateProductArgs {
     pub tax_rate_ids: Vec<String>,
     /// Product Type.
     pub product_type: Option<String>,
+    #[serde(default)]
+    /// Updated cost in minor units (None keeps).
+    pub cost_minor: Option<i64>,
+    #[serde(default)]
+    /// Updated brand — `null` clears, string sets, absent keeps.
+    pub brand: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated rack position code — `null` clears, string sets, absent keeps.
+    pub rack_location: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated notes — `null` clears, string sets, absent keeps.
+    pub notes: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated unit — `null` clears, string sets, absent keeps.
+    pub unit: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated active status.
+    pub is_active: Option<bool>,
+    #[serde(default)]
+    /// Updated default supplier — `null` clears, string sets, absent keeps.
+    pub default_supplier_id: Option<Option<String>>,
 }
 
 /// Args for `update_product_scoped` — identical to `UpdateProductArgs`
@@ -653,6 +775,57 @@ pub struct UpdateProductScopedArgs {
     pub tax_rate_ids: Vec<String>,
     /// Product Type.
     pub product_type: Option<String>,
+    #[serde(default)]
+    /// Updated cost in minor units (None keeps).
+    pub cost_minor: Option<i64>,
+    #[serde(default)]
+    /// Updated brand — `null` clears, string sets, absent keeps.
+    pub brand: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated rack position code — `null` clears, string sets, absent keeps.
+    pub rack_location: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated notes — `null` clears, string sets, absent keeps.
+    pub notes: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated unit — `null` clears, string sets, absent keeps.
+    pub unit: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated active status.
+    pub is_active: Option<bool>,
+    #[serde(default)]
+    /// Updated default supplier — `null` clears, string sets, absent keeps.
+    pub default_supplier_id: Option<Option<String>>,
+}
+
+impl UpdateProductArgs {
+    /// Map the PATCH-style attribute fields onto the core update struct.
+    fn to_update_attributes(&self) -> oz_core::db::UpdateProductAttributes {
+        oz_core::db::UpdateProductAttributes {
+            cost_minor: self.cost_minor,
+            brand: self.brand.clone(),
+            rack_location: self.rack_location.clone(),
+            notes: self.notes.clone(),
+            unit: self.unit.clone(),
+            is_active: self.is_active,
+            default_supplier_id: self.default_supplier_id.clone(),
+        }
+    }
+}
+
+impl UpdateProductScopedArgs {
+    /// Map the PATCH-style attribute fields onto the core update struct.
+    fn to_update_attributes(&self) -> oz_core::db::UpdateProductAttributes {
+        oz_core::db::UpdateProductAttributes {
+            cost_minor: self.cost_minor,
+            brand: self.brand.clone(),
+            rack_location: self.rack_location.clone(),
+            notes: self.notes.clone(),
+            unit: self.unit.clone(),
+            is_active: self.is_active,
+            default_supplier_id: self.default_supplier_id.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -698,6 +871,8 @@ pub async fn update_product(
 
     store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
 
+    store.update_product_attributes(&args.sku, &args.to_update_attributes())?;
+
     Ok(UpdateProductResult { sku: args.sku })
 }
 
@@ -712,6 +887,13 @@ pub async fn update_product_scoped(
     state: State<'_, AppState>,
 ) -> Result<UpdateProductResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_UPDATE).await?;
+    // ADR #36 D7: changing a product's cost (HPP) requires the manager-only
+    // products:edit_cost permission. A PATCH that does not touch cost
+    // (cost_minor absent) stays open to PRODUCTS_UPDATE holders.
+    if args.cost_minor.is_some() {
+        require_permission_for_session(&state, &session, permissions::PRODUCTS_EDIT_COST).await?;
+    }
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -724,8 +906,6 @@ pub async fn update_product_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-
-        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_UPDATE)?;
 
         let currency: oz_core::Currency = args
             .currency
@@ -748,6 +928,8 @@ pub async fn update_product_scoped(
         )?;
 
         store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
+
+        store.update_product_attributes(&args.sku, &args.to_update_attributes())?;
     }
 
     tracing::info!(sku = %args.sku, name = %args.name, "product updated (scoped)");
@@ -850,6 +1032,39 @@ fn run_get_product_track_serial_batch(store: &Store<'_>, skus: &[String]) -> Vec
         .collect()
 }
 
+// ── Popularity search signal (ADR #37) ──────────────────────────────
+
+/// Record an acted-upon product search for the popularity index.
+///
+/// ADR #37 D2: only searches that end in an add-to-cart count — raw
+/// search counts are polluted by typos and "do you have…" lookups, so
+/// the UI fires this event when a search result is actually added.
+///
+/// Fire-and-forget from the frontend: the response is `()` and failures
+/// are logged, never surfaced. The write is a single append to
+/// `product_activity` plus a single-SKU score recompute.
+#[tauri::command]
+pub async fn record_product_search_scoped(
+    session_token: String,
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    match store.record_product_search(&sku) {
+        Ok(()) => {}
+        Err(e) => {
+            // ADR #37 D3: non-blocking — a tracking failure must never
+            // fail an add-to-cart.
+            tracing::warn!(sku = %sku, error = %e, "product search signal not recorded");
+        }
+    }
+    Ok(())
+}
+
 // ── Delete product ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -895,6 +1110,7 @@ pub async fn delete_product_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_DELETE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -907,7 +1123,6 @@ pub async fn delete_product_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_DELETE)?;
         store.delete_product(&args.sku)?;
     }
 
@@ -920,6 +1135,7 @@ mod tests {
     use super::*;
     use oz_core::migrations;
     use rusqlite::Connection;
+    use tauri::Manager as _;
 
     fn fresh_conn() -> Connection {
         migrations::fresh_db()
@@ -1086,6 +1302,14 @@ mod tests {
             created_at: "2025-01-01".into(),
             price_updated_at: "2025-01-01".into(),
             product_type: "retail".into(),
+            cost_minor: 0,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
+            popularity_score: 0.0,
         };
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["sku"], "COFFEE");
@@ -1109,6 +1333,14 @@ mod tests {
             created_at: "2025-01-01".into(),
             price_updated_at: "2025-01-01".into(),
             product_type: "retail".into(),
+            cost_minor: 0,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
+            popularity_score: 0.0,
         };
         let d = format!("{dto:?}");
         assert!(d.contains("Green Tea"));
@@ -1229,6 +1461,13 @@ mod tests {
             initial_stock: 0,
             tax_rate_ids: vec![],
             product_type: "retail".into(),
+            cost_minor: 0,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
         };
         let d = format!("{args:?}");
         assert!(d.contains("N"));
@@ -1343,6 +1582,206 @@ mod tests {
         let session = state.resolve_session("tok-valid").unwrap();
         assert_eq!(session.store_id, "default");
         assert_eq!(session.type_key, "restaurant-pos");
+    }
+
+    fn seeded_cost_gate_app() -> tauri::App<tauri::test::MockRuntime> {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        // role-costless is a custom role that holds PRODUCTS_CREATE/
+        // PRODUCTS_UPDATE but NOT PRODUCTS_EDIT_COST (ADR #36 D7 — manager+
+        // only); role-staff is checkout-only and holds none of them.
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-costless', 'Costless', 'Custom', '[\"products:create\",\"products:update\"]',
+                 '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                ('user-staff',    'staff',    'hash', 'Staff',    'role-staff',    1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                ('user-costless', 'costless', 'hash', 'Costless', 'role-costless', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                ('user-manager',  'manager',  'hash', 'Manager',  'role-manager',  1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+        )
+        .unwrap();
+        let state = AppState::for_test_with_conn(conn);
+        for (token, user, role) in [
+            ("staff-token", "user-staff", "role-staff"),
+            ("costless-token", "user-costless", "role-costless"),
+            ("manager-token", "user-manager", "role-manager"),
+        ] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                oz_core::session::SessionContext::new(
+                    user.into(),
+                    role.into(),
+                    "terminal-1".into(),
+                    "store-1".into(),
+                    "instance-1".into(),
+                    "pos".into(),
+                    None,
+                    0,
+                ),
+            );
+        }
+        tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap()
+    }
+
+    fn create_args(sku: &str, cost_minor: i64) -> CreateProductScopedArgs {
+        CreateProductScopedArgs {
+            sku: sku.into(),
+            name: sku.into(),
+            price_minor: 100,
+            currency: "USD".into(),
+            category_id: None,
+            barcode: None,
+            initial_stock: 0,
+            tax_rate_ids: vec![],
+            product_type: "retail".into(),
+            cost_minor,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
+        }
+    }
+
+    fn update_args(sku: &str, cost_minor: Option<i64>) -> UpdateProductScopedArgs {
+        UpdateProductScopedArgs {
+            sku: sku.into(),
+            name: sku.into(),
+            price_minor: 100,
+            currency: "USD".into(),
+            category_id: None,
+            barcode: None,
+            tax_rate_ids: vec![],
+            product_type: Some("retail".into()),
+            cost_minor,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: None,
+            default_supplier_id: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn create_product_scoped_denies_cost_without_edit_cost_permission() {
+        let app = seeded_cost_gate_app();
+
+        // A create-capable role (custom: products:create, no edit_cost)
+        // creating a product WITHOUT cost passes the gate (the test state has
+        // no store DB, so the call then fails internally — the point is it is
+        // NOT a permission denial).
+        let no_cost = create_product_scoped(
+            "costless-token".into(),
+            create_args("SKU-NO-COST", 0),
+            app.state(),
+        )
+        .await;
+        assert!(!matches!(no_cost, Err(AppError::PermissionDenied(_))));
+
+        // The same role setting a cost is rejected outright.
+        let with_cost = create_product_scoped(
+            "costless-token".into(),
+            create_args("SKU-COST", 100),
+            app.state(),
+        )
+        .await;
+        assert!(matches!(with_cost, Err(AppError::PermissionDenied(_))));
+
+        // Staff is checkout-only and cannot create products at all.
+        let staff = create_product_scoped(
+            "staff-token".into(),
+            create_args("SKU-STAFF", 0),
+            app.state(),
+        )
+        .await;
+        assert!(matches!(staff, Err(AppError::PermissionDenied(_))));
+
+        // Manager passes the gate (then fails on the missing store DB, not
+        // on the permission).
+        let manager = create_product_scoped(
+            "manager-token".into(),
+            create_args("SKU-MGR", 100),
+            app.state(),
+        )
+        .await;
+        assert!(!matches!(manager, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn update_product_scoped_denies_cost_change_without_edit_cost_permission() {
+        let app = seeded_cost_gate_app();
+
+        // A create-capable role (custom: products:update, no edit_cost) PATCH
+        // without touching cost passes the gate.
+        let no_cost = update_product_scoped(
+            "costless-token".into(),
+            update_args("SKU-1", None),
+            app.state(),
+        )
+        .await;
+        assert!(!matches!(no_cost, Err(AppError::PermissionDenied(_))));
+
+        // The same role PATCH that changes cost is rejected.
+        let with_cost = update_product_scoped(
+            "costless-token".into(),
+            update_args("SKU-1", Some(100)),
+            app.state(),
+        )
+        .await;
+        assert!(matches!(with_cost, Err(AppError::PermissionDenied(_))));
+
+        // Staff is checkout-only and cannot update products at all.
+        let staff = update_product_scoped(
+            "staff-token".into(),
+            update_args("SKU-1", None),
+            app.state(),
+        )
+        .await;
+        assert!(matches!(staff, Err(AppError::PermissionDenied(_))));
+
+        // Manager PATCH with cost passes the gate.
+        let manager = update_product_scoped(
+            "manager-token".into(),
+            update_args("SKU-1", Some(100)),
+            app.state(),
+        )
+        .await;
+        assert!(!matches!(manager, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[test]
+    fn edit_cost_permission_membership_is_manager_only() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                    ('user-manager', 'manager', 'hash', 'Manager', 'role-manager', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                    ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        let store = Store::new(&conn);
+        // Owner (`*`) and Manager presets hold it; Staff does not.
+        assert!(
+            require_permission_for_user(&store, "user-owner", permissions::PRODUCTS_EDIT_COST)
+                .is_ok()
+        );
+        assert!(
+            require_permission_for_user(&store, "user-manager", permissions::PRODUCTS_EDIT_COST)
+                .is_ok()
+        );
+        assert!(matches!(
+            require_permission_for_user(&store, "user-staff", permissions::PRODUCTS_EDIT_COST),
+            Err(AppError::PermissionDenied(_))
+        ));
     }
 
     #[test]

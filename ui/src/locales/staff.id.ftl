@@ -23,7 +23,6 @@ staff-login-submit = Masuk
 staff-login-submitting = Memasuki sistem…
 
 # Restaurant Menu
-staff-login-verifying = Memverifikasi…
 staff-login-error-connection = Tidak dapat memverifikasi nama pengguna. Periksa koneksi Anda.
 staff-login-back = ← Kembali
 staff-login-copyright = © 2026 OZ-POS. Seluruh hak cipta dilindungi.
@@ -33,7 +32,6 @@ staff-login-lockout = Terkunci. Coba lagi dalam { $seconds }d
 # ── Product Bundles ──
 staff-title = Staf
 staff-add-button = Tambah Staf
-staff-loading = Memuat staf…
 staff-empty = Belum ada anggota staf.
 staff-empty-cta = Tambah anggota staf pertama
 staff-col-name = Nama
@@ -73,6 +71,7 @@ staff-pin-edit-placeholder =
 staff-pin-placeholder =
     .placeholder = Masukkan PIN
 staff-field-role-label = Peran *
+staff-role-permissions-label = Izin peran
 staff-role-select-default = Pilih peran…
 staff-btn-cancel = Batal
 staff-btn-update = Perbarui
@@ -87,7 +86,6 @@ staff-table-aria = Anggota staf
 staff-field-username-aria = Nama Pengguna
 staff-field-name-aria = Nama Tampilan
 staff-field-pin-aria = PIN
-staff-error-generic = { $message }
 staff-error-load = Gagal memuat data staf
 staff-retry = Coba lagi
 
@@ -108,9 +106,7 @@ staff-toast-deactivated = { $name } dinonaktifkan
 staff-toast-restored = { $name } diaktifkan kembali
 
 # ── Staff Login (remaining) ──
-staff-login-subtitle = Login Staf
 staff-login-step-username = Masukkan nama pengguna Anda
-staff-login-step-pin = Masukkan PIN Anda
 staff-login-progress-aria = Kemajuan login
 staff-login-username-placeholder =
     .placeholder = Nama Pengguna
@@ -128,10 +124,15 @@ staff-login-backspace-aria =
 staff-login-digit-aria =
     .aria-label = { $digit }
 
-# ── Workspace Access ──
-staff-ws-section-label = Akses Ruang Kerja
-staff-ws-role-defaults = Gunakan default peran
-staff-ws-custom = Kustom
+# ── Assignment Access (ADR #35 D5 / spec 0048) ──
+staff-assignment-section-label = Akses Penugasan
+staff-assignment-global = Semua cabang & ruang kerja
+staff-assignment-scoped = Batasi berdasarkan cabang atau ruang kerja
+staff-assignment-branches-label = Cabang
+staff-assignment-workspaces-label = Ruang Kerja
+staff-assignment-all-branches = Semua cabang
+staff-assignment-all-workspaces = Semua ruang kerja
+staff-assignment-all-workspaces-short = Semua
 
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
 
@@ -158,3 +159,55 @@ staff-login-connection-auth = Auth
 staff-login-connection-sync = Sinkron
 
 # ── Product Management ──
+
+# ── ADR #35 D6 profil pengguna (spec 0049) ─────────────────────────────
+
+staff-col-id = ID
+staff-id-masked-aria = Nomor identitas (disamarkan)
+staff-profile-incomplete = Profil belum lengkap
+staff-profile-incomplete-edit-hint = Lengkapi profil anggota ini untuk membuka penetapan peran dan workspace.
+staff-profile-section-label = Profil
+staff-field-dob-label = Tanggal Lahir *
+staff-field-dob-aria = Tanggal lahir (wajib)
+staff-field-phone-label = Telepon *
+staff-field-phone-aria = Nomor telepon (wajib)
+staff-field-national-id-type-label = Jenis Nomor Identitas *
+staff-field-national-id-type-aria = Jenis nomor identitas (wajib)
+staff-national-id-type-select = Pilih jenis
+staff-national-id-type-ssn = SSN (AS)
+staff-national-id-type-nik = NIK / KTP (Indonesia)
+staff-field-national-id-label = Nomor Identitas *
+staff-field-national-id-aria = Nomor identitas (wajib)
+staff-field-email-label = Email *
+staff-field-email-aria = Alamat email (wajib)
+staff-field-pay-label = Gaji Bersih Bulanan *
+staff-field-pay-aria = Gaji bersih bulanan (wajib)
+staff-field-emergency-name-label = Kontak Darurat *
+staff-field-emergency-name-aria = Nama kontak darurat (wajib)
+staff-field-emergency-phone-label = Telepon Kontak Darurat *
+staff-field-emergency-phone-aria = Telepon kontak darurat (wajib)
+staff-field-job-title-label = Jabatan
+staff-field-job-title-aria = Jabatan
+staff-field-notes-label = Catatan
+staff-field-notes-aria = Catatan
+staff-field-address-label = Alamat
+staff-field-address-aria = Alamat
+staff-field-tax-id-label = NPWP
+staff-field-tax-id-aria = NPWP
+staff-field-hire-date-label = Tanggal Bergabung
+staff-field-hire-date-aria = Tanggal bergabung
+
+# Error validasi per bidang (dilokalkan, tampil di bawah bidang)
+staff-error-dob-required = Tanggal lahir wajib diisi.
+staff-error-phone-required = Nomor telepon wajib diisi.
+staff-error-national-id-type-required = Jenis nomor identitas wajib diisi.
+staff-error-national-id-required = Nomor identitas wajib diisi.
+staff-error-email-required = Alamat email wajib diisi.
+staff-error-pay-required = Gaji bersih bulanan wajib diisi.
+staff-error-emergency-name-required = Nama kontak darurat wajib diisi.
+staff-error-emergency-phone-required = Telepon kontak darurat wajib diisi.
+staff-error-email-invalid = Masukkan alamat email yang valid.
+staff-error-phone-invalid = Telepon harus dalam format +kode negara nomor.
+staff-error-national-id-invalid = Nomor identitas harus 9 digit (SSN) atau 16 digit (NIK).
+staff-error-pay-invalid = Masukkan jumlah positif.
+staff-error-dob-invalid = Gunakan format YYYY-MM-DD.

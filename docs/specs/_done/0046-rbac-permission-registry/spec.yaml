@@ -1,0 +1,58 @@
+id: 0046-rbac-permission-registry
+title: RBAC code-resident permission registry
+status: implemented
+owner: OZ-POS maintainers
+implementer: Buffy
+priority: P1
+scope:
+  - platform/core/src/rbac.rs
+  - platform/kernel/src/manifest.rs
+  - modules/*/manifest.json
+  - modules/staff/src/models.rs
+  - crates/oz-core/src/db/staff.rs
+  - apps/desktop-client/src/commands/authz.rs
+  - apps/desktop-client/src/commands/*.rs
+  - apps/tablet-client/src/commands/*.rs
+  - docs/specs/_done/0046-rbac-permission-registry/
+
+problem:
+  - Roles store flat JSON permission lists, so nothing classifies a key as
+    operational (wildcard-eligible) or sensitive (explicit-only), and a future
+    `sales:refund`-class key would be as wildcard-eligible as `reports:view`.
+  - Wildcard matching exists in `rbac.rs::has_permission`, but there is no
+    single registry mapping every enforced key to its family, sensitivity, and
+    description, and no write-time validation that role grants reference known
+    keys.
+  - 'ADR #35 D2/D3 require the registry to live in code and to be the source of
+    truth for "growing the system means adding registry entries, never editing
+    roles".'
+
+implemented_slice:
+  - Introduce a code-resident permission registry (key -> family, sensitive
+    flag, description), backed by `rbac.rs` consts and module manifests.
+  - 'Classify every permission string currently enforced anywhere (role seeds,
+    module manifests, command gates) into a family and mark each key
+    operational or sensitive per ADR #35 D2 (voids, refunds, billing,
+    ownership, role management, bulk export, staff identity/payroll/notes are
+    sensitive).'
+  - Validate role grants against the registry at write time — unregistered keys
+    are rejected, and a sensitive key can never be granted via a family
+    wildcard.
+  - Keep every existing `{resource}:{action}` string byte-identical.
+  - Add tests pinning the full current key inventory, the sensitive
+    never-wildcarded rule, and write-time rejection of unknown keys.
+
+invariants:
+  - Every permission key enforced anywhere in the codebase is registered
+    (compile- and test-pinned inventory).
+  - A sensitive key can never be granted through a family wildcard.
+  - Role writes reject unregistered or wildcard-flagged-sensitive keys.
+  - No existing permission string is renamed.
+  - New operational keys require only a registry addition — zero role edits.
+
+non_goals:
+  - The centralized enforcement gate (spec 0047).
+  - The assignment model and role taxonomy migration (spec 0048).
+  - The user profile fields (spec 0049).
+  - A runtime-editable registry or a database `permission_registry` table.
+  - Renaming or restructuring existing permission strings.

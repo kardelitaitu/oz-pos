@@ -87,6 +87,7 @@ const mockAuthSession: Mock<() => AuthContextValue> = vi.fn(() => ({
     role_name: 'owner',
     role_id: 'role-1',
     display_name: 'Test Owner',
+    permissions: ['*'],
   },
   loading: false,
   error: null,
@@ -94,6 +95,7 @@ const mockAuthSession: Mock<() => AuthContextValue> = vi.fn(() => ({
   logout: vi.fn(),
   clearError: vi.fn(),
   swapSession: vi.fn(),
+  pickerTicket: null,
   isManager: true,
   isOwner: true,
 }));
@@ -129,6 +131,7 @@ function mockOwnerSession() {
       role_name: 'owner',
       role_id: 'role-1',
       display_name: 'Test Owner',
+      permissions: ['*'],
     },
     loading: false,
     error: null,
@@ -136,6 +139,7 @@ function mockOwnerSession() {
     logout: vi.fn(),
     clearError: vi.fn(),
     swapSession: vi.fn(),
+  pickerTicket: null,
     isManager: true,
     isOwner: true,
   });
@@ -148,6 +152,7 @@ function mockCashierSession() {
       role_name: 'cashier',
       role_id: 'role-cashier',
       display_name: 'Cashier',
+      permissions: [],
     },
     loading: false,
     error: null,
@@ -155,6 +160,7 @@ function mockCashierSession() {
     logout: vi.fn(),
     clearError: vi.fn(),
     swapSession: vi.fn(),
+  pickerTicket: null,
     isManager: false,
     isOwner: false,
   });
@@ -169,6 +175,7 @@ function mockNoSession() {
     logout: vi.fn(),
     clearError: vi.fn(),
     swapSession: vi.fn(),
+  pickerTicket: null,
     isManager: false,
     isOwner: false,
   });

@@ -6,7 +6,7 @@ import { fileURLToPath, URL } from 'node:url';
 // Tauri expects a fixed port; fail if it isn't available.
 const host = process.env.TAURI_DEV_HOST;
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
 
   resolve: {
@@ -17,19 +17,32 @@ export default defineConfig({
     // Node's ESM resolver and fail with `Cannot find package`.
     // Trailing slashes on both `./src/` and `replacement` keep the
     // path join clean (`…/foo`, never `…/srccomponents/foo`).
+    //
+    // The Tauri API mocks are DEV-SERVER-ONLY: they let the app be
+    // previewed in a plain browser (and drive E2E) without the Rust
+    // backend. They must never be bundled into production builds —
+    // `vite build` (packaged app) resolves the real @tauri-apps/api
+    // packages, otherwise the shipped app silently runs on mock data.
+    // Inside a real Tauri webview (packaged app or `tauri dev`) the
+    // mock itself delegates to window.__TAURI_INTERNALS__, so the dev
+    // server still talks to the real backend when one is present.
     alias: [
-      {
-        find: /^@tauri-apps\/api\/core$/,
-        replacement: `${fileURLToPath(new URL('./src/dev-mock/tauri-api.ts', import.meta.url))}`,
-      },
-      {
-        // Dev event bridge — the real @tauri-apps/api/event module needs
-        // window.__TAURI_INTERNALS__ (undefined in a plain browser) and
-        // crashes the KDS screen's kds:orders-changed listener. The mock
-        // provides in-memory pub/sub so E2E dev flows work end to end.
-        find: /^@tauri-apps\/api\/event$/,
-        replacement: `${fileURLToPath(new URL('./src/dev-mock/tauri-event.ts', import.meta.url))}`,
-      },
+      ...(command === 'serve'
+        ? [
+            {
+              find: /^@tauri-apps\/api\/core$/,
+              replacement: `${fileURLToPath(new URL('./src/dev-mock/tauri-api.ts', import.meta.url))}`,
+            },
+            {
+              // Dev event bridge — the real @tauri-apps/api/event module needs
+              // window.__TAURI_INTERNALS__ (undefined in a plain browser) and
+              // crashes the KDS screen's kds:orders-changed listener. The mock
+              // provides in-memory pub/sub so E2E dev flows work end to end.
+              find: /^@tauri-apps\/api\/event$/,
+              replacement: `${fileURLToPath(new URL('./src/dev-mock/tauri-event.ts', import.meta.url))}`,
+            },
+          ]
+        : []),
       {
         find: /^@\//,
         replacement: `${fileURLToPath(new URL('./src/', import.meta.url))}/`,
@@ -128,4 +141,4 @@ export default defineConfig({
       ],
     },
   },
-});
+}));

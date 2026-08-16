@@ -44,9 +44,12 @@ next: Migrate loyalty commands and DB layer into this module | perf: N/A.
 //! # use modules_loyalty::{LoyaltyModule, LoyaltyTier, LoyaltyAccount, LoyaltyTransaction, LoyaltyAccountWithDetails};
 //! ```
 
+pub mod error;
 pub mod models;
 pub mod repository;
 pub mod service;
+
+pub use error::LoyaltyError;
 
 pub use models::{
     GiftCard, GiftCardFilter, GiftCardTransaction, GiftCardWithTransactions, IssueGiftCardInput,

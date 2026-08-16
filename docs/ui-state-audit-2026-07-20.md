@@ -44,3 +44,9 @@ Notable gaps found and documented:
 - **1 screen uses `console.error`** for session destroy — intentional, no user impact.
 
 **Verdict:** ✅ Error handling is robust. 2 alert() calls are the only minor polish gap.
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

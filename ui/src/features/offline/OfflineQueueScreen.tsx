@@ -8,7 +8,13 @@ import {
   retryOfflineSync,
   deleteOfflineItem,
   getOfflineQueueStatusSummary,
+  getSyncPlan,
+  listRemoteFailures,
+  requeueRemoteFailure,
   type OfflineQueueItemDto,
+  type OfflineQueueSummaryDto,
+  type RemoteSyncFailureDto,
+  type SyncPlanResult,
   type SyncResult,
 } from '@/api/offline';
 import { Card } from '@/components/Card';
@@ -19,9 +25,9 @@ import './OfflineQueueScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -56,11 +62,34 @@ function statusLabel(status: string): string {
   }
 }
 
+/** Relative-time label ("just now", "5m ago", …) for the summary panel. */
+function formatRelativeTime(iso: string | null): { fluentKey: string; fluentArgs: Record<string, number | string> } | null {
+  if (!iso) return null;
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return null;
+  const diffMs = Math.max(0, Date.now() - ts);
+  if (diffMs < 60_000) {
+    return { fluentKey: 'offline-queue-time-just-now', fluentArgs: {} };
+  }
+  const mins = Math.floor(diffMs / 60_000);
+  const hours = Math.floor(diffMs / 3_600_000);
+  const days = Math.floor(diffMs / 86_400_000);
+  if (days >= 1) {
+    return { fluentKey: 'offline-queue-time-days-ago', fluentArgs: { count: days } };
+  }
+  if (hours >= 1) {
+    return { fluentKey: 'offline-queue-time-hours-ago', fluentArgs: { count: hours } };
+  }
+  return { fluentKey: 'offline-queue-time-minutes-ago', fluentArgs: { count: mins } };
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 /** Offline queue screen — view pending, synced, and failed offline operations with retry and delete capabilities. */
 export default function OfflineQueueScreen() {
   const { l10n } = useLocalization();
+  // Dates follow the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const [items, setItems] = useState<OfflineQueueItemDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +98,15 @@ export default function OfflineQueueScreen() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [conflictCount, setConflictCount] = useState<number>(0);
+  // Detailed queue status (pending/synced/failed/conflicts + timestamps)
+  // surfaced from offline_queue_status_summary (P1-6 sync observability).
+  const [queueSummary, setQueueSummary] = useState<OfflineQueueSummaryDto | null>(null);
+  // The tenant's sync plan read from the server (ADR sync-plan-gating) —
+  // lets operators see free/pro and the upgrade prompt without syncing.
+  const [syncPlan, setSyncPlan] = useState<SyncPlanResult | null>(null);
+  // SYNC-11: remote items quarantined after repeated pull-application failures.
+  const [failures, setFailures] = useState<RemoteSyncFailureDto[]>([]);
+  const [requeueError, setRequeueError] = useState<string | null>(null);
   // ERR-07: generation guard + last-refresh tracking for the poll loop.
   // A late poll response after unmount/supersession is ignored, and repeated
   // failures surface a non-blocking stale indicator instead of being silent.
@@ -81,14 +119,24 @@ export default function OfflineQueueScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [data, count, summary] = await Promise.all([
+      const [data, count, summary, remoteFailures] = await Promise.all([
         listAllOffline(),
         pendingOfflineCount(),
         getOfflineQueueStatusSummary().catch(() => null),
+        // Tolerate a dead-letter read failure: the local queue must not
+        // blank out because the quarantine listing is unavailable.
+        listRemoteFailures().catch(() => [] as RemoteSyncFailureDto[]),
       ]);
       setItems(data);
       setPendingCount(count);
-      if (summary) setConflictCount(summary.conflictCount);
+      if (summary) {
+        setConflictCount(summary.conflictCount);
+        setQueueSummary(summary);
+      }
+      // Best-effort plan read — never fail the screen if the server is
+      // unreachable or sync isn't configured.
+      getSyncPlan().then(setSyncPlan).catch(() => setSyncPlan(null));
+      setFailures(remoteFailures);
     } catch {
       setError(l10n.getString('offline-queue-error'));
     } finally {
@@ -121,7 +169,11 @@ export default function OfflineQueueScreen() {
         ]);
         if (gen !== pollGenRef.current) return; // superseded or unmounted
         setPendingCount(count);
-        if (summary) setConflictCount(summary.conflictCount);
+        if (summary) {
+          setConflictCount(summary.conflictCount);
+          setQueueSummary(summary);
+        }
+        getSyncPlan().then(setSyncPlan).catch(() => setSyncPlan(null));
         pollFailuresRef.current = 0;
         setPollStale(false);
         setLastPolledAt(new Date());
@@ -157,6 +209,18 @@ export default function OfflineQueueScreen() {
       setError(l10n.getString('offline-queue-sync-error'));
     } finally {
       setSyncing(false);
+    }
+  }, [load, l10n]);
+
+  // ── Requeue dead-lettered remote item ─────────────────────────
+
+  const handleRequeue = useCallback(async (itemId: string) => {
+    setRequeueError(null);
+    try {
+      await requeueRemoteFailure(itemId);
+      await load();
+    } catch {
+      setRequeueError(l10n.getString('offline-queue-quarantine-requeue-error'));
     }
   }, [load, l10n]);
 
@@ -211,6 +275,74 @@ export default function OfflineQueueScreen() {
         </Button>
       </div>
 
+      {/* ADR sync-plan-gating: show the tenant's plan so operators see
+          free/pro and the upgrade prompt without running a sync. */}
+      {syncPlan?.ok && syncPlan.plan && (
+        <div
+          className={`offline-queue-plan-row${syncPlan.plan === 'free' ? ' offline-queue-plan-row--free' : ''}`}
+          data-testid="offline-queue-plan-row"
+        >
+          <Localized id="offline-queue-plan-label"><span className="offline-queue-plan-label">Plan</span></Localized>
+          {syncPlan.plan === 'pro' ? (
+            <span className="offline-queue-plan-badge offline-queue-plan-badge--pro">
+              <Localized id="offline-queue-plan-pro"><span>Pro</span></Localized>
+            </span>
+          ) : (
+            <span className="offline-queue-plan-badge offline-queue-plan-badge--free">
+              <Localized id="offline-queue-plan-free"><span>Free</span></Localized>
+            </span>
+          )}
+          {syncPlan.plan === 'free' && (
+            <Localized id="offline-queue-plan-upgrade-hint">
+              <span className="offline-queue-plan-upgrade-hint">Upgrade to sync to the cloud</span>
+            </Localized>
+          )}
+        </div>
+      )}
+
+      {/* P1-6: detailed queue status — same numbers operators see in
+          Settings → Cloud Sync, surfaced here outside settings. */}
+      {queueSummary && (
+        <div className="offline-queue-summary" data-testid="offline-queue-summary">
+          <div className="offline-queue-summary-grid">
+            <span className="offline-queue-summary-item">
+              <strong>{queueSummary.pendingCount}</strong>
+              <Localized id="offline-queue-summary-pending"><span>pending</span></Localized>
+            </span>
+            <span className="offline-queue-summary-item">
+              <strong>{queueSummary.syncedCount}</strong>
+              <Localized id="offline-queue-summary-synced"><span>synced</span></Localized>
+            </span>
+            <span className="offline-queue-summary-item">
+              <strong>{queueSummary.failedCount}</strong>
+              <Localized id="offline-queue-summary-failed"><span>failed</span></Localized>
+            </span>
+            <span className="offline-queue-summary-item">
+              <strong>{queueSummary.conflictCount}</strong>
+              <Localized id="offline-queue-summary-conflicts"><span>conflicts</span></Localized>
+            </span>
+          </div>
+          <div className="offline-queue-summary-meta">
+            <span className="offline-queue-summary-time">
+              {(() => {
+                const rel = formatRelativeTime(queueSummary.lastSyncedAt);
+                return rel
+                  ? l10n.getString('offline-queue-last-synced', { time: l10n.getString(rel.fluentKey, rel.fluentArgs) })
+                  : l10n.getString('offline-queue-last-synced-never');
+              })()}
+            </span>
+            <span className="offline-queue-summary-time">
+              {(() => {
+                const rel = formatRelativeTime(queueSummary.oldestPendingAt);
+                return rel
+                  ? l10n.getString('offline-queue-oldest-pending', { time: l10n.getString(rel.fluentKey, rel.fluentArgs) })
+                  : l10n.getString('offline-queue-oldest-pending-none');
+              })()}
+            </span>
+          </div>
+        </div>
+      )}
+
       {conflictCount > 0 && (
         <div className="offline-queue-sync-result" role="alert" style={{ borderColor: 'var(--color-warning-border, #ffc107)' }}>
           <Localized id="offline-queue-conflict-count" vars={{ count: String(conflictCount) }}>
@@ -228,14 +360,28 @@ export default function OfflineQueueScreen() {
           {lastPolledAt && (
             <span className="offline-queue-stale-time">
               {requiredLocalized(l10n, 'offline-queue-last-refreshed', {
-                time: lastPolledAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+                time: lastPolledAt.toLocaleTimeString(numLocale, { hour: '2-digit', minute: '2-digit' }),
               })}
             </span>
           )}
         </div>
       )}
 
-      {syncResult && (
+      {syncResult && syncResult.planRequired && (
+        <div className="offline-queue-sync-result offline-queue-sync-result--plan" role="status">
+          <p className="offline-queue-plan-required-title">
+            <Localized id="offline-queue-plan-required">
+              <span>Cloud sync requires a paid plan</span>
+            </Localized>
+          </p>
+          <p className="offline-queue-plan-required-hint">
+            <Localized id="offline-queue-plan-required-hint">
+              <span>Your local sales keep working — upgrade to sync them to the cloud.</span>
+            </Localized>
+          </p>
+        </div>
+      )}
+      {syncResult && !syncResult.planRequired && (
         <div className="offline-queue-sync-result" role="status">
           <Localized
             id="offline-queue-sync-success"
@@ -389,9 +535,9 @@ export default function OfflineQueueScreen() {
                       </Localized>
                     )}
                   </td>
-                  <td className="offline-queue-cell-created">{formatDate(item.createdAt)}</td>
+                  <td className="offline-queue-cell-created">{formatDate(item.createdAt, numLocale)}</td>
                   <td className="offline-queue-cell-synced">
-                    {item.syncedAt ? formatDate(item.syncedAt) : (
+                    {item.syncedAt ? formatDate(item.syncedAt, numLocale) : (
                       <Localized id="offline-queue-none">
                         <span className="offline-queue-cell-none">—</span>
                       </Localized>
@@ -414,6 +560,70 @@ export default function OfflineQueueScreen() {
 </tbody>
           </table>
         </div>
+      )}
+
+      {/* SYNC-11: quarantined remote items — visible even when the local
+          queue is empty so operators can remediate and requeue them. */}
+      {phase !== 'loading' && phase !== 'error' && (
+        <section className="offline-queue-quarantine" aria-label={requiredLocalized(l10n, 'offline-queue-quarantine-table-aria')}>
+          <div className="offline-queue-quarantine-header">
+            <Localized id="offline-queue-quarantine-title">
+              <h2 className="offline-queue-quarantine-title">Quarantined Remote Items</h2>
+            </Localized>
+            <Localized id="offline-queue-quarantine-description">
+              <p className="offline-queue-quarantine-description">Items from the sync server that repeatedly failed to apply. Requeue after fixing the underlying issue.</p>
+            </Localized>
+          </div>
+
+          {requeueError && (
+            <div className="offline-queue-error" role="alert">
+              <span>{requeueError}</span>
+            </div>
+          )}
+
+          {failures.length === 0 ? (
+            <Localized id="offline-queue-quarantine-empty">
+              <p className="offline-queue-quarantine-empty">No quarantined items.</p>
+            </Localized>
+          ) : (
+            <div className="offline-queue-table-wrap">
+              <table className="offline-queue-table" aria-label={requiredLocalized(l10n, 'offline-queue-quarantine-table-aria')}>
+                <thead>
+                  <tr>
+                    <Localized id="offline-queue-quarantine-item-id"><th>Item ID</th></Localized>
+                    <Localized id="offline-queue-action"><th>Action</th></Localized>
+                    <Localized id="offline-queue-quarantine-attempts"><th>Attempts</th></Localized>
+                    <Localized id="offline-queue-last-error"><th>Last Error</th></Localized>
+                    <th aria-label={l10n.getString('offline-queue-table-actions')}> </th>
+                  </tr>
+                </thead>
+                <tbody>{failures.map((failure) => (
+                    <tr key={failure.itemId}>
+                      <td className="offline-queue-cell-action">{failure.itemId}</td>
+                      <td>{failure.action}</td>
+                      <td className="offline-queue-cell-retries">{failure.attempts}</td>
+                      <td className="offline-queue-cell-error">
+                        <span title={failure.lastError}>{failure.lastError}</span>
+                      </td>
+                      <td>
+                        <div className="offline-queue-cell-actions">
+                          <button
+                            type="button"
+                            className="offline-queue-action-btn"
+                            onClick={() => handleRequeue(failure.itemId)}
+                            aria-label={l10n.getString('offline-queue-quarantine-requeue-aria', { itemId: failure.itemId })}
+                          >
+                            <Localized id="offline-queue-quarantine-requeue"><span>Requeue</span></Localized>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+</tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

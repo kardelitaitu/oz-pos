@@ -118,10 +118,11 @@ pub async fn create_category_scoped(
     args: CreateCategoryArgs,
     state: State<'_, AppState>,
 ) -> Result<CreateCategoryResult, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
-    // Permission is checked against the GLOBAL identity DB (ADR #4/#7);
-    // the store-scoped DB has no user rows.
+    let session = state.resolve_session(&session_token)?;
+    // Permission is checked against the GLOBAL identity DB (ADR #4/#7)
+    // before the store-scoped connection is opened.
     require_category_permission(&state, &session.user_id, permissions::PRODUCTS_CREATE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -177,8 +178,9 @@ pub async fn update_category_scoped(
     args: UpdateCategoryArgs,
     state: State<'_, AppState>,
 ) -> Result<UpdateCategoryResult, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_category_permission(&state, &session.user_id, permissions::PRODUCTS_UPDATE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -230,8 +232,9 @@ pub async fn delete_category_scoped(
     args: DeleteCategoryArgs,
     state: State<'_, AppState>,
 ) -> Result<DeleteCategoryResult, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_category_permission(&state, &session.user_id, permissions::PRODUCTS_DELETE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -426,14 +429,17 @@ mod tests {
 
     #[tokio::test]
     async fn scoped_category_command_denies_user_without_permission() {
-        // Cashier role lacks products:create/update/delete (ROLE_PRESETS).
+        // A narrow custom role (no products:* grants) — the new role-staff
+        // preset includes products:create/update/delete, so a limited user
+        // must use a custom role instead (0048 retirement sweep).
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
-        conn.execute(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
-            [],
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
 
@@ -445,7 +451,7 @@ mod tests {
             "cashier-token".into(),
             SessionContext::new(
                 "user-cashier".into(),
-                "role-cashier".into(),
+                "role-lite".into(),
                 "terminal-1".into(),
                 "store-cashier".into(),
                 "instance-1".into(),

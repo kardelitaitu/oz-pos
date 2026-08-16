@@ -1,0 +1,91 @@
+# ── Website Deploy (Cloudflare Workers) ─────────────────────────────
+#
+# Builds the Astro marketing site (website/) and deploys it to Cloudflare
+# Workers static assets (workers.dev) via wrangler.
+#
+#   • PRs + pushes to main:  astro check + i18n audit gate + build
+#   • Pushes to main only:   deploy to Cloudflare (requires secrets)
+#
+# Fail-closed: if CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not
+# configured as repo secrets, the deploy step FAILS loudly instead of
+# silently skipping — a "successful" run must never mean "not deployed".
+#
+# Required secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   — token with Workers Scripts:Edit
+#                            (wrangler.toml → name "oz-pos")
+#   CLOUDFLARE_ACCOUNT_ID  — Cloudflare account id (dash.cloudflare.com)
+#   PUBLIC_LICENSE_API_URL — https://<license-service>.code.run
+#   PUBLIC_PADDLE_CLIENT_TOKEN — Paddle.js v2 client token (optional:
+#                            without it the checkout buttons degrade to
+#                            the mailto fallback at build time)
+
+name: Website Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/website.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'website/**'
+
+env:
+  # Baked into the JS bundle at build time (import.meta.env) — must be set
+  # here, NOT in wrangler.toml. Empty strings are fine for local preview;
+  # CI always injects the real values for main-branch deploys.
+  PUBLIC_LICENSE_API_URL: ${{ secrets.PUBLIC_LICENSE_API_URL }}
+  PUBLIC_PADDLE_CLIENT_TOKEN: ${{ secrets.PUBLIC_PADDLE_CLIENT_TOKEN }}
+
+jobs:
+  check:
+    name: Website Check + Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'website/package-lock.json'
+      - run: cd website && npm ci --no-audit --no-fund
+      # Build-time Mermaid rendering (rehype-mermaid) needs a Playwright
+      # browser at build only — never shipped to the client.
+      - run: cd website && npx playwright install --with-deps chromium
+      - run: cd website && npm run check
+      - run: cd website && npm run build
+
+  deploy:
+    name: Deploy to Cloudflare Workers
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: check
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'website/package-lock.json'
+      - run: cd website && npm ci --no-audit --no-fund
+      - run: cd website && npx playwright install --with-deps chromium
+      - name: Verify deploy secrets are configured (fail-closed)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID repo secret — cannot deploy."
+            echo "Add both secrets (Workers Scripts:Edit token + account id), then re-run this job."
+            exit 1
+          fi
+          echo "Deploy secrets present — proceeding."
+      - run: cd website && npm run build
+      - name: Deploy with wrangler
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: cd website && npx wrangler deploy

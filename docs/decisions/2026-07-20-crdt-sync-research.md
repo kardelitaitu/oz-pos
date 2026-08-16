@@ -167,3 +167,9 @@ adoption with a fraction of the migration effort.
 - `platform/sync/src/conflict.rs` — current entity-type conflict dispatch
 - `crates/oz-core/src/db/reports.rs` — SQL aggregation queries
 - `platform/sync/tests/` — 139 integration tests
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

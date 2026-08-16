@@ -7,7 +7,7 @@
 #
 # Usage:
 #   bash scripts/test-tdd.sh                  # auto-detect crate from cwd (nextest)
-#   bash scripts/test-tdd.sh -p oz-core       # specific crate
+#   bash scripts/test-tdd.sh -p crates/oz-core   # specific crate (directory path, e.g. crates/oz-core, platform/sync)
 #   bash scripts/test-tdd.sh --vanilla        # use cargo test instead of nextest
 #   bash scripts/test-tdd.sh --watch          # watch mode (re-run on changes)
 #

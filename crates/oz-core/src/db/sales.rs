@@ -1,5 +1,7 @@
 //! Sale CRUD — create, list, get, update status, held carts, exports.
 
+use std::collections::HashMap;
+
 use rusqlite::params;
 
 use crate::error::CoreError;
@@ -99,6 +101,127 @@ pub struct HeldCartFull {
 
 // ── Sale Deduction (ADR-19) ────────────────────────────────────────
 
+/// MONEY-04: payment splits must cover the recorded sale total before a
+/// sale may be persisted.
+///
+/// Over-tender is allowed (the difference becomes change back to the
+/// customer); under-payment is rejected so a hostile IPC caller (or a buggy
+/// front-end) cannot complete a sale for less than the ledger total. A
+/// negative split is never legitimate and is rejected even when the sum
+/// happens to cover the total. Summing uses checked arithmetic so a huge
+/// split list cannot overflow past the total.
+/// Insert one sale line with the HPP cost snapshot (ADR #36 reporting).
+///
+/// The product's cost is frozen at write time so historical margins never
+/// change when `products.cost_minor` is edited later. NULL when the product
+/// is missing or has no cost set — the reporting layer falls back to the
+/// product's current cost (and 0) via COALESCE.
+fn insert_sale_line(tx: &rusqlite::Transaction<'_>, line: &SaleLine) -> Result<(), CoreError> {
+    let unit_cur =
+        std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| CoreError::Validation {
+            field: "currency",
+            message: format!("invalid UTF-8 in currency bytes: {e}"),
+        })?;
+    // `products.cost_minor` is `NOT NULL DEFAULT 0` — 0 means "cost not
+    // set". Normalize it to NULL so an unset snapshot can never shadow a
+    // later-set product cost in the reporting COALESCE fallback.
+    let cost_minor = match tx.query_row(
+        "SELECT cost_minor FROM products WHERE sku = ?1",
+        params![line.sku],
+        |row| row.get::<_, i64>(0),
+    ) {
+        Ok(v) if v > 0 => Some(v),
+        Ok(_) | Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => return Err(CoreError::Db(e)),
+    };
+    tx.execute(
+        "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
+                                 tax_minor, tax_rate_id, tax_breakdown_json,
+                                 serial_number, course, modifiers_json, cost_minor)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+        params![
+            line.id,
+            line.sale_id,
+            line.sku,
+            line.qty,
+            line.unit_price.minor_units,
+            line.line_total.minor_units,
+            unit_cur,
+            line.line_position,
+            line.tax_amount.minor_units,
+            line.tax_rate_id,
+            line.tax_breakdown_json,
+            line.serial_number,
+            line.course,
+            line.modifiers_json,
+            cost_minor,
+        ],
+    )?;
+    Ok(())
+}
+
+fn validate_payment_splits_cover_total(
+    splits: &[crate::PaymentSplitArg],
+    total_minor: i64,
+) -> Result<(), CoreError> {
+    let mut sum: i64 = 0;
+    for split in splits {
+        if split.amount_minor < 0 {
+            return Err(CoreError::Validation {
+                field: "payments",
+                message: format!(
+                    "payment split amount must be non-negative, got {}",
+                    split.amount_minor
+                ),
+            });
+        }
+        sum = sum
+            .checked_add(split.amount_minor)
+            .ok_or_else(|| CoreError::Validation {
+                field: "payments",
+                message: "payment split total overflow".into(),
+            })?;
+    }
+    if sum < total_minor {
+        return Err(CoreError::Validation {
+            field: "payments",
+            message: format!("payment splits ({sum}) do not cover the sale total ({total_minor})"),
+        });
+    }
+    Ok(())
+}
+
+fn stock_at_locations(
+    tx: &rusqlite::Transaction<'_>,
+    product_id: &str,
+    locations: &[crate::inventory::LocationId],
+) -> Result<Vec<crate::sale_deduction::LocationStock>, CoreError> {
+    locations
+        .iter()
+        .map(|location_id| {
+            let qty: i64 = tx
+                .query_row(
+                    "SELECT COALESCE(qty, 0) FROM stock_summary WHERE item_id = ?1 AND location_id = ?2",
+                    rusqlite::params![product_id, location_id.as_str()],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            let location_name: String = tx
+                .query_row(
+                    "SELECT name FROM inventory_locations WHERE id = ?1",
+                    rusqlite::params![location_id.as_str()],
+                    |row| row.get(0),
+                )
+                .unwrap_or_else(|_| location_id.as_str().to_owned());
+            Ok(crate::sale_deduction::LocationStock {
+                location_id: location_id.clone(),
+                location_name,
+                qty_available: qty,
+            })
+        })
+        .collect()
+}
+
 impl Store<'_> {
     /// Complete a sale with location-aware stock deduction (ADR-19 §6).
     ///
@@ -128,40 +251,118 @@ impl Store<'_> {
         sale: &Sale,
         workspace_instance_id: Option<&str>,
         payment_splits: &[crate::PaymentSplitArg],
+        staff_user_id: &str,
+        terminal_id: Option<&str>,
+    ) -> Result<crate::sale_deduction::CompleteSaleResult, CoreError> {
+        let location = crate::location_resolver::resolve_primary_location(
+            self.conn,
+            workspace_instance_id.unwrap_or("default"),
+            None,
+        )
+        .unwrap_or_else(|_| crate::location_resolver::get_default_location_id());
+        self.complete_sale_deduction_with_locations(
+            sale,
+            workspace_instance_id,
+            &[location],
+            payment_splits,
+            staff_user_id,
+            terminal_id,
+        )
+    }
+}
+
+/// Batch-lookup product (id, product_type) for multiple SKUs in a single query.
+///
+/// Returns a `HashMap<SKU, (product_id, product_type)>`. SKUs not found
+/// in the database are absent from the map (caller handles missing entries).
+fn batch_lookup_products(
+    conn: &rusqlite::Connection,
+    skus: &[&str],
+) -> Result<HashMap<String, (String, String)>, CoreError> {
+    if skus.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let placeholders: Vec<String> = (0..skus.len()).map(|i| format!("?{}", i + 1)).collect();
+    let sql = format!(
+        "SELECT sku, id, product_type FROM products WHERE sku IN ({})",
+        placeholders.join(",")
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::types::ToSql> = skus
+        .iter()
+        .map(|s| s as &dyn rusqlite::types::ToSql)
+        .collect();
+    let rows = stmt.query_map(params.as_slice(), |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })?;
+    let mut map = HashMap::new();
+    for row in rows {
+        let (sku, id, ptype) = row?;
+        map.insert(sku, (id, ptype));
+    }
+    Ok(map)
+}
+
+impl Store<'_> {
+    /// Complete a sale by greedily allocating each tracked line across the
+    /// topology-selected locations in route order. All stock checks,
+    /// deductions, sale persistence, and deduction provenance remain inside
+    /// one SQLite transaction; an underfunded route set rolls back entirely.
+    #[allow(clippy::too_many_arguments)]
+    pub fn complete_sale_deduction_with_locations(
+        &self,
+        sale: &Sale,
+        workspace_instance_id: Option<&str>,
+        stock_locations: &[crate::inventory::LocationId],
+        payment_splits: &[crate::PaymentSplitArg],
         _staff_user_id: &str,
         _terminal_id: Option<&str>,
     ) -> Result<crate::sale_deduction::CompleteSaleResult, CoreError> {
         use crate::inventory_transaction::InventoryTransactionId;
         use crate::sale_deduction::{Shortfall, StockDeduction};
 
+        // MONEY-03 follow-up: a negative line qty would record a negative
+        // ledger total AND credit stock (the deduction delta is `-qty`, which
+        // is positive when qty is negative). CartLine asserts qty > 0, but this
+        // is the ledger boundary — reject hostile or hand-built sales up front.
+        for line in &sale.lines {
+            if line.qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!("sale line quantity must be positive, got {}", line.qty),
+                });
+            }
+        }
+
         // ADR-19 §5.2: single transaction prevents two concurrent sales from
         // racing on the same inventory row. Same pattern as create_sale().
         let tx = self.conn.unchecked_transaction()?;
 
-        // ── Resolve primary deduction location ─────────────────────
-        let primary_location = crate::location_resolver::resolve_primary_location(
-            &tx,
-            workspace_instance_id.unwrap_or("default"),
-            None,
-        )
-        .unwrap_or_else(|_| crate::location_resolver::get_default_location_id());
+        // ── Resolve topology route order ──────────────────────────
+        let default_location = crate::location_resolver::get_default_location_id();
+        let stock_locations = if stock_locations.is_empty() {
+            std::slice::from_ref(&default_location)
+        } else {
+            stock_locations
+        };
+        let primary_location = stock_locations[0].clone();
 
         // ── Phase 1: stock check + shortfall collection ────────────
         let mut deductions: Vec<StockDeduction> = Vec::with_capacity(sale.lines.len());
+        let mut line_deductions: HashMap<String, Vec<crate::sale_deduction::LocationAllocation>> =
+            HashMap::new();
         let mut shortfalls: Vec<Shortfall> = Vec::new();
 
-        for line in &sale.lines {
-            let product_info: Option<(String, String)> = match tx.query_row(
-                "SELECT id, product_type FROM products WHERE sku = ?1",
-                rusqlite::params![line.sku],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            ) {
-                Ok(val) => Some(val),
-                Err(rusqlite::Error::QueryReturnedNoRows) => None,
-                Err(e) => return Err(CoreError::Db(e)),
-            };
+        // Batch-lookup all SKUs in a single query (avoids N+1 per-line SELECT).
+        let skus: Vec<&str> = sale.lines.iter().map(|l| l.sku.as_str()).collect();
+        let product_map = batch_lookup_products(&tx, &skus)?;
 
-            let Some((pid, ptype_str)) = product_info else {
+        for line in &sale.lines {
+            let Some((pid, ptype_str)) = product_map.get(line.sku.as_str()) else {
                 shortfalls.push(Shortfall {
                     sku: line.sku.clone(),
                     product_name: line.sku.clone(),
@@ -173,9 +374,9 @@ impl Store<'_> {
                 });
                 continue;
             };
-            let ptype = crate::product::ProductType::parse_str(&ptype_str).unwrap_or_default();
+            let ptype = crate::product::ProductType::parse_str(ptype_str).unwrap_or_default();
             let tracks_inventory = ptype.tracks_inventory();
-            let recipe = self.get_recipe_ingredients(&pid)?;
+            let recipe = self.get_recipe_ingredients(pid)?;
             let has_recipe = !recipe.is_empty();
 
             if !tracks_inventory && !has_recipe {
@@ -185,18 +386,28 @@ impl Store<'_> {
 
             // 1. Check composite product stock if it tracks inventory
             if tracks_inventory {
-                let available: i64 = tx
-                    .query_row(
-                        "SELECT COALESCE(qty, 0) FROM stock_summary \
-                         WHERE item_id = ?1 AND location_id = ?2",
-                        rusqlite::params![pid, primary_location.as_str()],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(0);
-
-                if available < line.qty {
-                    let deficit = line.qty - available;
-                    let alternatives = if let Some(ws_id) = workspace_instance_id {
+                let availability = stock_at_locations(&tx, pid, stock_locations)?;
+                if let Some(allocations) =
+                    crate::sale_deduction::allocate_stock_in_route_order(line.qty, &availability)
+                {
+                    deductions.extend(allocations.iter().map(|allocation| StockDeduction {
+                        sku: line.sku.clone(),
+                        location_id: allocation.location_id.clone(),
+                        delta: -allocation.qty,
+                    }));
+                    line_deductions.insert(line.id.to_string(), allocations);
+                } else {
+                    let available = availability
+                        .first()
+                        .map(|location| location.qty_available)
+                        .unwrap_or(0);
+                    let alternatives = if stock_locations.len() > 1 {
+                        availability
+                            .into_iter()
+                            .skip(1)
+                            .filter(|a| a.qty_available > 0)
+                            .collect()
+                    } else if let Some(ws_id) = workspace_instance_id {
                         crate::location_resolver::resolve_location_chain_for_sku(
                             &tx, ws_id, &line.sku, line.qty,
                         )
@@ -213,15 +424,9 @@ impl Store<'_> {
                         product_name: line.sku.clone(),
                         requested_qty: line.qty,
                         primary_qty_available: available,
-                        deficit,
+                        deficit: line.qty.saturating_sub(available),
                         primary_location_id: primary_location.clone(),
                         alternatives,
-                    });
-                } else {
-                    deductions.push(StockDeduction {
-                        sku: line.sku.clone(),
-                        location_id: primary_location.clone(),
-                        delta: -line.qty,
                     });
                 }
             }
@@ -244,22 +449,48 @@ impl Store<'_> {
                         let ing_ptype = crate::product::ProductType::parse_str(&ing_ptype_str)
                             .unwrap_or_default();
                         if ing_ptype.tracks_inventory() {
-                            let required_qty = line.qty * ingredient.quantity_required;
-                            let available: i64 = tx
-                                .query_row(
-                                    "SELECT COALESCE(qty, 0) FROM stock_summary \
-                                     WHERE item_id = ?1 AND location_id = ?2",
-                                    rusqlite::params![
-                                        ingredient.ingredient_product_id,
-                                        primary_location.as_str()
-                                    ],
-                                    |row| row.get(0),
+                            // MONEY-03: line.qty arrives from untrusted IPC input
+                            // and must use checked arithmetic like `compute_line_tax`
+                            // (TAX-04). Dev/test builds disable overflow checks, so
+                            // a bare `*` silently wraps and completes the sale with
+                            // a corrupt stock delta.
+                            let required_qty = line
+                                .qty
+                                .checked_mul(ingredient.quantity_required)
+                                .ok_or_else(|| CoreError::Validation {
+                                field: "qty",
+                                message: "ingredient deduction quantity overflow".into(),
+                            })?;
+                            let availability = stock_at_locations(
+                                &tx,
+                                &ingredient.ingredient_product_id,
+                                stock_locations,
+                            )?;
+                            if let Some(allocations) =
+                                crate::sale_deduction::allocate_stock_in_route_order(
+                                    required_qty,
+                                    &availability,
                                 )
-                                .unwrap_or(0);
-
-                            if available < required_qty {
-                                let deficit = required_qty - available;
-                                let alternatives = if let Some(ws_id) = workspace_instance_id {
+                            {
+                                deductions.extend(allocations.iter().map(|allocation| {
+                                    StockDeduction {
+                                        sku: ing_sku.clone(),
+                                        location_id: allocation.location_id.clone(),
+                                        delta: -allocation.qty,
+                                    }
+                                }));
+                            } else {
+                                let available = availability
+                                    .first()
+                                    .map(|location| location.qty_available)
+                                    .unwrap_or(0);
+                                let alternatives = if stock_locations.len() > 1 {
+                                    availability
+                                        .into_iter()
+                                        .skip(1)
+                                        .filter(|a| a.qty_available > 0)
+                                        .collect()
+                                } else if let Some(ws_id) = workspace_instance_id {
                                     crate::location_resolver::resolve_location_chain_for_sku(
                                         &tx,
                                         ws_id,
@@ -279,15 +510,9 @@ impl Store<'_> {
                                     product_name: ing_name,
                                     requested_qty: required_qty,
                                     primary_qty_available: available,
-                                    deficit,
+                                    deficit: required_qty.saturating_sub(available),
                                     primary_location_id: primary_location.clone(),
                                     alternatives,
-                                });
-                            } else {
-                                deductions.push(StockDeduction {
-                                    sku: ing_sku,
-                                    location_id: primary_location.clone(),
-                                    delta: -required_qty,
                                 });
                             }
                         }
@@ -312,6 +537,11 @@ impl Store<'_> {
             });
         }
 
+        // MONEY-04: validate payment splits against the ledger total AFTER
+        // stock resolution (so the PartialStockResult dialog keeps precedence)
+        // but BEFORE any write — the error path rolls the whole tx back.
+        validate_payment_splits_cover_total(payment_splits, sale.total.minor_units)?;
+
         // ── Phase 2: execute deductions ───────────────────────────
         let deduct_tx_id = InventoryTransactionId::new();
         let term_id = _terminal_id.map(crate::terminal::TerminalId::from);
@@ -330,14 +560,27 @@ impl Store<'_> {
         let deduction_json = serde_json::json!({
             "version": 1,
             "lines": sale.lines.iter().map(|line| {
+                let deductions = line_deductions
+                    .get(&line.id.to_string())
+                    .map(|allocations| {
+                        allocations
+                            .iter()
+                            .map(|allocation| serde_json::json!({
+                                "location_id": allocation.location_id.as_str(),
+                                "qty": allocation.qty,
+                                "sold_at": now,
+                            }))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| vec![serde_json::json!({
+                        "location_id": primary_location.as_str(),
+                        "qty": line.qty,
+                        "sold_at": now,
+                    })]);
                 serde_json::json!({
                     "sale_line_id": line.id,
                     "sku": line.sku,
-                    "deductions": [{
-                        "location_id": primary_location.as_str(),
-                        "qty": line.qty,
-                        "sold_at": now
-                    }]
+                    "deductions": deductions,
                 })
             }).collect::<Vec<_>>()
         })
@@ -360,8 +603,8 @@ impl Store<'_> {
                                  tendered_minor, discount_percent, discount_label, user_id,
                                  created_at, updated_at, subtotal_minor, tax_total_minor,
                                  customer_id, deduction_locations, version,
-                                 pending_expires_at)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16)",
+                                 pending_expires_at, tenant_id)
+             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, 'default')",
             rusqlite::params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 sale.payment_method, sale.tendered_minor,
@@ -373,35 +616,7 @@ impl Store<'_> {
         )?;
 
         for line in &sale.lines {
-            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
-                CoreError::Validation {
-                    field: "currency",
-                    message: format!("invalid UTF-8 in currency bytes: {e}"),
-                }
-            })?;
-            tx.execute(
-                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
-                                         currency, line_position, tax_minor, tax_rate_id,
-                                         tax_breakdown_json, serial_number, course,
-                                         modifiers_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                rusqlite::params![
-                    line.id,
-                    line.sale_id,
-                    line.sku,
-                    line.qty,
-                    line.unit_price.minor_units,
-                    line.line_total.minor_units,
-                    unit_cur,
-                    line.line_position,
-                    line.tax_amount.minor_units,
-                    line.tax_rate_id,
-                    line.tax_breakdown_json,
-                    line.serial_number,
-                    line.course,
-                    line.modifiers_json,
-                ],
-            )?;
+            insert_sale_line(&tx, line)?;
         }
 
         // Create payment records.
@@ -485,6 +700,17 @@ impl Store<'_> {
     ) -> Result<crate::sale_deduction::CompleteSaleResult, CoreError> {
         use crate::inventory_transaction::InventoryTransactionId;
         use crate::sale_deduction::ResolvedShortfall;
+
+        // MONEY-03 follow-up: same negative-qty rejection as
+        // complete_sale_deduction — a negative qty would credit stock.
+        for line in &sale.lines {
+            if line.qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!("sale line quantity must be positive, got {}", line.qty),
+                });
+            }
+        }
 
         // ── BEGIN IMMEDIATE ───────────────────────────────────────
         let tx = self.conn.unchecked_transaction()?;
@@ -641,7 +867,16 @@ impl Store<'_> {
                             let ing_ptype = crate::product::ProductType::parse_str(&ing_ptype_str)
                                 .unwrap_or_default();
                             if ing_ptype.tracks_inventory() {
-                                let required_qty = line.qty * ingredient.quantity_required;
+                                // MONEY-03: same overflow contract as the primary
+                                // deduction path — the non-resolution BOM branch
+                                // must reject an overflowing line qty up front.
+                                let required_qty = line
+                                    .qty
+                                    .checked_mul(ingredient.quantity_required)
+                                    .ok_or_else(|| CoreError::Validation {
+                                        field: "qty",
+                                        message: "ingredient deduction quantity overflow".into(),
+                                    })?;
                                 deductions.push(crate::sale_deduction::StockDeduction {
                                     sku: ing_sku,
                                     location_id: primary_location.clone(),
@@ -688,6 +923,9 @@ impl Store<'_> {
             }
         }
 
+        // MONEY-04: same ledger-integrity contract as complete_sale_deduction.
+        validate_payment_splits_cover_total(payment_splits, sale.total.minor_units)?;
+
         // ── Phase 2: Execute deductions ───────────────────────────
         let deduct_tx_id = InventoryTransactionId::new();
         let term_id = terminal_id.map(crate::terminal::TerminalId::from);
@@ -725,8 +963,8 @@ impl Store<'_> {
                                  tendered_minor, discount_percent, discount_label, user_id,
                                  created_at, updated_at, subtotal_minor, tax_total_minor,
                                  customer_id, deduction_locations, version,
-                                 pending_expires_at)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16)",
+                                 pending_expires_at, tenant_id)
+             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, 'default')",
             rusqlite::params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 sale.payment_method, sale.tendered_minor,
@@ -738,35 +976,7 @@ impl Store<'_> {
         )?;
 
         for line in &sale.lines {
-            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
-                CoreError::Validation {
-                    field: "currency",
-                    message: format!("invalid UTF-8 in currency bytes: {e}"),
-                }
-            })?;
-            tx.execute(
-                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
-                                         currency, line_position, tax_minor, tax_rate_id,
-                                         tax_breakdown_json, serial_number, course,
-                                         modifiers_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                rusqlite::params![
-                    line.id,
-                    line.sale_id,
-                    line.sku,
-                    line.qty,
-                    line.unit_price.minor_units,
-                    line.line_total.minor_units,
-                    unit_cur,
-                    line.line_position,
-                    line.tax_amount.minor_units,
-                    line.tax_rate_id,
-                    line.tax_breakdown_json,
-                    line.serial_number,
-                    line.course,
-                    line.modifiers_json,
-                ],
-            )?;
+            insert_sale_line(&tx, line)?;
         }
 
         if !payment_splits.is_empty() {
@@ -793,6 +1003,15 @@ impl Store<'_> {
         }
 
         tx.commit()?;
+
+        // ADR #37 D3: recompute popularity for every sold SKU — the sale
+        // ledger rows are durable now, so the sales signal (decayed units)
+        // reflects this transaction. Runs outside the tx (read-only pass).
+        for line in &sale.lines {
+            if let Err(e) = self.recompute_popularity(line.sku.as_str()) {
+                tracing::warn!(sku = %line.sku, error = %e, "popularity recompute failed after sale");
+            }
+        }
 
         Ok(crate::sale_deduction::CompleteSaleResult {
             sale_id: sale.id.clone(),
@@ -968,6 +1187,73 @@ impl Store<'_> {
 
     /// Persist a [`Sale`] (header + all line items) inside a single transaction.
     pub fn create_sale(&self, sale: &Sale) -> Result<(), CoreError> {
+        // MONEY-07: this legacy global-db door deserializes a Sale straight from
+        // import/CLI JSON (oz-cli) — CartLine::new's qty > 0 assert never runs.
+        // Reject the same negative money/qty class MONEY-06 guards on the
+        // complete_sale* entry points, or a hostile import writes negative
+        // ledger rows. Zero-total (free) sales with empty lines stay legal.
+        for line in &sale.lines {
+            if line.qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!("sale line quantity must be positive, got {}", line.qty),
+                });
+            }
+            if line.line_total.minor_units < 0 {
+                return Err(CoreError::Validation {
+                    field: "line_total",
+                    message: format!(
+                        "sale line total must be non-negative, got {}",
+                        line.line_total.minor_units
+                    ),
+                });
+            }
+            if line.tax_amount.minor_units < 0 {
+                return Err(CoreError::Validation {
+                    field: "tax_amount",
+                    message: format!(
+                        "sale line tax must be non-negative, got {}",
+                        line.tax_amount.minor_units
+                    ),
+                });
+            }
+        }
+        if sale.total.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "total",
+                message: format!(
+                    "sale total must be non-negative, got {}",
+                    sale.total.minor_units
+                ),
+            });
+        }
+        if sale.subtotal.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "subtotal",
+                message: format!(
+                    "sale subtotal must be non-negative, got {}",
+                    sale.subtotal.minor_units
+                ),
+            });
+        }
+        if sale.tax_total.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "tax_total",
+                message: format!(
+                    "sale tax total must be non-negative, got {}",
+                    sale.tax_total.minor_units
+                ),
+            });
+        }
+        if let Some(tendered) = sale.tendered_minor
+            && tendered < 0
+        {
+            return Err(CoreError::Validation {
+                field: "tendered_minor",
+                message: format!("tendered amount must be non-negative, got {tendered}"),
+            });
+        }
+
         let cur_str = std::str::from_utf8(&sale.currency.0).map_err(|e| CoreError::Validation {
             field: "currency",
             message: format!("invalid UTF-8 in currency bytes: {e}"),
@@ -979,8 +1265,8 @@ impl Store<'_> {
         tx.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                                 discount_percent, discount_label, user_id, created_at, updated_at,
-                                subtotal_minor, tax_total_minor, customer_id, version)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1)",
+                                subtotal_minor, tax_total_minor, customer_id, version, tenant_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, 'default')",
             params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 status_str, sale.payment_method, sale.tendered_minor,
@@ -992,28 +1278,7 @@ impl Store<'_> {
         )?;
 
         for line in &sale.lines {
-            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
-                CoreError::Validation {
-                    field: "currency",
-                    message: format!("invalid UTF-8 in currency bytes: {e}"),
-                }
-            })?;
-            tx.execute(
-                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                                        tax_minor, tax_rate_id, tax_breakdown_json,
-                                        serial_number, course, modifiers_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                params![
-                    line.id, line.sale_id, line.sku, line.qty,
-                    line.unit_price.minor_units, line.line_total.minor_units,
-                    unit_cur, line.line_position,
-                    line.tax_amount.minor_units, line.tax_rate_id,
-                    line.tax_breakdown_json,
-                    line.serial_number,
-                    line.course,
-                    line.modifiers_json,
-                ],
-            )?;
+            insert_sale_line(&tx, line)?;
         }
 
         tx.commit()?;
@@ -1668,6 +1933,23 @@ impl Store<'_> {
         let mut total_tax: Option<Money> = None;
         let mut subtotal: Option<Money> = None;
 
+        // MONEY-02 follow-up: reject negative line totals in a pre-pass so a
+        // hand-built `Sale` cannot record negative tax on the ledger, and so
+        // the error path leaves no partially-mutated Sale behind. CartLine
+        // asserts qty > 0 so this is unreachable from the front-end, but this
+        // is the tax boundary.
+        for line in &sale.lines {
+            if line.line_total.minor_units < 0 {
+                return Err(CoreError::Validation {
+                    field: "line_total",
+                    message: format!(
+                        "line total must be non-negative, got {}",
+                        line.line_total.minor_units
+                    ),
+                });
+            }
+        }
+
         for line in &mut sale.lines {
             let line_subtotal = line.line_total;
             let mut line_tax = Money::zero(currency);
@@ -1777,7 +2059,36 @@ impl Store<'_> {
         let mut total_tax: Option<Money> = None;
 
         for line in lines {
-            let line_total_minor = line.qty * line.unit_price_minor;
+            // MONEY-02: negative qty/price would produce a negative line total
+            // and a negative "tax" preview (the front-end renders it raw). The
+            // cart model never allows negative qty/price, so reject them with a
+            // structured Validation error naming the offending field.
+            if line.qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!("qty must be positive, got {}", line.qty),
+                });
+            }
+            if line.unit_price_minor < 0 {
+                return Err(CoreError::Validation {
+                    field: "price",
+                    message: format!(
+                        "unit price must be non-negative, got {}",
+                        line.unit_price_minor
+                    ),
+                });
+            }
+            // MONEY-01: the line total comes from untrusted IPC input and must
+            // use checked arithmetic like `compute_line_tax` (TAX-04). The
+            // workspace disables overflow-checks for dev/test builds, so a
+            // bare `*` silently wraps and feeds a wrong tax to the register.
+            let line_total_minor =
+                line.qty.checked_mul(line.unit_price_minor).ok_or_else(|| {
+                    CoreError::Validation {
+                        field: "tax",
+                        message: "cart line total overflow".into(),
+                    }
+                })?;
             let rates = self.resolve_best_tax_rates_for_sku(&line.sku)?;
 
             for rate in &rates {
@@ -1913,6 +2224,17 @@ mod tests {
         assert_eq!(loaded.status, SaleStatus::Pending);
         assert_eq!(loaded.total.minor_units, 1150);
         assert_eq!(loaded.line_count, 2);
+
+        // The desktop Store stamps the same identity contract as the cloud
+        // REST path: every sale belongs to the `default` tenant.
+        let tenant: String = conn
+            .query_row(
+                "SELECT tenant_id FROM sales WHERE id = ?1",
+                [&sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tenant, "default");
     }
 
     #[test]
@@ -1934,6 +2256,53 @@ mod tests {
     }
 
     #[test]
+    fn create_sale_snapshots_product_cost_at_checkout() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // A product with a known HPP: the snapshot must freeze it into the
+        // line at write time (ADR #36 reporting follow-up).
+        s.create_product("STEAK", "STEAK", price(2500), None, None, 100, None)
+            .unwrap();
+        conn.execute(
+            "UPDATE products SET cost_minor = 800 WHERE sku = 'STEAK'",
+            [],
+        )
+        .unwrap();
+        let sale = make_single_line_sale("STEAK", 2, 2500);
+        s.create_sale(&sale).unwrap();
+
+        let cost: Option<i64> = conn
+            .query_row(
+                "SELECT cost_minor FROM sale_lines WHERE sku = 'STEAK'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            cost,
+            Some(800),
+            "product cost must be frozen into the line at checkout"
+        );
+
+        // A product without a cost set (0 = unset) must snapshot as NULL,
+        // never 0 — otherwise the reporting fallback to a later-set product
+        // cost would be shadowed.
+        s.create_product("FREE", "FREE", price(500), None, None, 100, None)
+            .unwrap();
+        let sale2 = make_single_line_sale("FREE", 1, 500);
+        s.create_sale(&sale2).unwrap();
+        let cost2: Option<i64> = conn
+            .query_row(
+                "SELECT cost_minor FROM sale_lines WHERE sku = 'FREE'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(cost2, None, "unset cost must snapshot as NULL, not 0");
+    }
+
+    #[test]
     fn create_sale_empty_cart() {
         let conn = fresh();
         let cart = Cart::new(usd());
@@ -1943,6 +2312,88 @@ mod tests {
         assert_eq!(loaded.line_count, 0);
         assert_eq!(loaded.lines.len(), 0);
         assert_eq!(loaded.total.minor_units, 0);
+    }
+
+    // MONEY-07: create_sale is the legacy global-db import door (oz-cli
+    // deserializes a Sale straight from JSON payloads, bypassing CartLine's
+    // qty > 0 assert). Every money/qty field must be validated the same way
+    // the complete_sale* entry points were in MONEY-06, or a hostile import
+    // writes negative ledger rows.
+    #[test]
+    fn create_sale_rejects_negative_line_qty() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.lines[0].qty = -2;
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "qty"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_line_total() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.lines[0].line_total = price(-500);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "line_total"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_total() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.total = price(-700);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "total"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_tendered_minor() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.tendered_minor = Some(-500);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "tendered_minor"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_subtotal() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.subtotal = price(-1150);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "subtotal"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_tax_total() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.tax_total = price(-100);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "tax_total"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_line_tax_amount() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.lines[0].tax_amount = price(-10);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "tax_amount"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
     }
 
     #[test]
@@ -2217,10 +2668,10 @@ mod tests {
         // Seed two users and a terminal.
         conn.execute_batch(
             "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-               ('role-cashier', 'cashier', 'Cashier', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+               ('role-staff', 'staff', 'Staff', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
              INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at) VALUES
-               ('user-morning', 'alice', 'hash', 'Alice', 'role-cashier', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-               ('user-evening', 'bob', 'hash', 'Bob', 'role-cashier', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+               ('user-morning', 'alice', 'hash', 'Alice', 'role-staff', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+               ('user-evening', 'bob', 'hash', 'Bob', 'role-staff', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
         ).unwrap();
 
         // ── Morning shift ──
@@ -2916,6 +3367,75 @@ mod tests {
         assert_eq!(trunc.minor_units, 333);
     }
 
+    // ── MONEY-01: unchecked qty × price overflow in compute_cart_tax ──
+    //
+    // CartLineTaxInput comes straight off the IPC boundary (untrusted
+    // renderer input) and compute_cart_tax runs on the hot path — the
+    // live tax preview fires on every cart change. The per-line total
+    // must use checked arithmetic like compute_line_tax (TAX-04); a
+    // wrap in release would feed a wrong tax to the register, and a
+    // debug build panics.
+    #[test]
+    fn compute_cart_tax_line_total_overflow_returns_validation_error() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
+
+        // (i64::MAX / 2) * 4 overflows i64.
+        let lines = vec![CartLineTaxInput {
+            sku: "COFFEE".into(),
+            qty: i64::MAX / 2,
+            unit_price_minor: 4,
+        }];
+        match s.compute_cart_tax(&lines, usd(), RoundingMode::HalfUp) {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(field, "tax");
+                assert!(
+                    message.contains("overflow"),
+                    "unexpected overflow message: {message}"
+                );
+            }
+            Err(other) => panic!("expected Validation overflow error, got: {other:?}"),
+            Ok(m) => panic!("overflow must not wrap silently, got Ok({m:?})"),
+        }
+    }
+
+    // ── MONEY-02: negative qty / unit price must be rejected ──
+    //
+    // CartLineTaxInput comes off the IPC boundary; a hostile renderer can
+    // send a negative qty or price. That yields a negative line total and a
+    // negative "tax" preview (the front-end displays it raw). The cart model
+    // never allows negative qty/price, so fail with a structured Validation
+    // error naming the offending field.
+    #[test]
+    fn compute_cart_tax_rejects_negative_qty_and_price() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
+
+        let negative_qty = vec![CartLineTaxInput {
+            sku: "COFFEE".into(),
+            qty: -2,
+            unit_price_minor: 350,
+        }];
+        match s.compute_cart_tax(&negative_qty, usd(), RoundingMode::HalfUp) {
+            Err(CoreError::Validation { field, .. }) => assert_eq!(field, "qty"),
+            Err(other) => panic!("expected qty Validation error, got: {other:?}"),
+            Ok(m) => panic!("negative qty must be rejected, got Ok({m:?})"),
+        }
+
+        let negative_price = vec![CartLineTaxInput {
+            sku: "COFFEE".into(),
+            qty: 1,
+            unit_price_minor: -350,
+        }];
+        match s.compute_cart_tax(&negative_price, usd(), RoundingMode::HalfUp) {
+            Err(CoreError::Validation { field, .. }) => assert_eq!(field, "price"),
+            Err(other) => panic!("expected price Validation error, got: {other:?}"),
+            Ok(m) => panic!("negative price must be rejected, got Ok({m:?})"),
+        }
+    }
+
     #[test]
     fn refund_full_amount_after_half_up_tax() {
         let conn = fresh();
@@ -2957,6 +3477,30 @@ mod tests {
         assert_eq!(refunds[0].total.minor_units, 770);
     }
 
+    /// MONEY-02 follow-up: a hand-built `Sale` with a negative `line_total`
+    /// flows straight into `compute_line_tax` and records a negative tax on
+    /// the sale. `Sale::from_cart` only produces non-negative line totals
+    /// (CartLine asserts qty > 0), but this is the tax boundary — reject it
+    /// up front so a hostile or malformed sale cannot distort the ledger.
+    #[test]
+    fn compute_sale_tax_rejects_negative_line_total() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
+        seed_product_with_category(&conn, "COFFEE", None);
+
+        let mut sale = make_single_line_sale("COFFEE", 2, 350);
+        sale.lines[0].line_total = price(-700);
+
+        let err = s
+            .compute_sale_tax(&mut sale, &[], RoundingMode::HalfUp)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation { field, .. } if field == "line_total"
+        ));
+    }
+
     #[test]
     fn void_sale_succeeds_regardless_of_stock() {
         let conn = fresh();
@@ -2994,6 +3538,39 @@ mod tests {
         )
         .unwrap();
         product_id
+    }
+
+    /// Seed a composite `service` product with a BOM recipe whose ingredient
+    /// tracks inventory. The composite does not track inventory itself, so
+    /// only the ingredient deduction path runs. Returns (parent, ingredient)
+    /// product ids.
+    fn seed_bom_composite(
+        conn: &Connection,
+        parent_sku: &str,
+        ingredient_sku: &str,
+        ingredient_stock: i64,
+        qty_required: i64,
+    ) -> (String, String) {
+        let parent_id = uuid::Uuid::now_v7().to_string();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES (?1, ?2, ?2, 1000, 'USD', 'service')",
+            rusqlite::params![parent_id, parent_sku],
+        )
+        .unwrap();
+        let ingredient_id = seed_product_with_stock(conn, ingredient_sku, ingredient_stock);
+        conn.execute(
+            "INSERT INTO product_recipes (id, parent_product_id, ingredient_product_id, \
+             quantity_required, unit) VALUES (?1, ?2, ?3, ?4, 'pcs')",
+            rusqlite::params![
+                uuid::Uuid::now_v7().to_string(),
+                parent_id,
+                ingredient_id,
+                qty_required,
+            ],
+        )
+        .unwrap();
+        (parent_id, ingredient_id)
     }
 
     /// Helper: seed a product with stock at TWO locations for split-fulfillment tests.
@@ -3043,6 +3620,56 @@ mod tests {
     }
 
     #[test]
+    fn complete_sale_deduction_topology_allocates_across_routes_atomically() {
+        let conn = fresh();
+        let s = store(&conn);
+        setup_locations_with_stock(&conn, "TOPO-COFFEE", "loc-route-a", 3, "loc-route-b", 10);
+        let sale = make_single_line_sale("TOPO-COFFEE", 8, 1000);
+        let locations = vec![
+            crate::inventory::LocationId::from("loc-route-a"),
+            crate::inventory::LocationId::from("loc-route-b"),
+        ];
+        let result = s
+            .complete_sale_deduction_with_locations(
+                &sale,
+                None,
+                &locations,
+                &tender(8000),
+                "cashier-1",
+                None,
+            )
+            .unwrap();
+        assert_eq!(result.status, SaleStatus::Pending);
+
+        let route_a: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'TOPO-COFFEE') AND location_id = 'loc-route-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let route_b: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'TOPO-COFFEE') AND location_id = 'loc-route-b'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(route_a, 0);
+        assert_eq!(route_b, 5);
+
+        let deduction_locations: String = conn
+            .query_row(
+                "SELECT deduction_locations FROM sales WHERE id = ?1",
+                [&sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(deduction_locations.contains("loc-route-a"));
+        assert!(deduction_locations.contains("loc-route-b"));
+    }
+
+    #[test]
     fn complete_sale_deduction_sufficient_stock_succeeds() {
         let conn = fresh();
         let s = store(&conn);
@@ -3051,7 +3678,7 @@ mod tests {
 
         let sale = make_single_line_sale("COFFEE", 2, 350);
         let result = s
-            .complete_sale_deduction(&sale, None, &[], "cashier-1", None)
+            .complete_sale_deduction(&sale, None, &tender(700), "cashier-1", None)
             .unwrap();
 
         assert_eq!(result.sale_id, sale.id);
@@ -3203,14 +3830,7 @@ mod tests {
         seed_product_with_stock(&conn, "COFFEE", 10);
 
         let sale = make_single_line_sale("COFFEE", 2, 350);
-        let splits = vec![crate::PaymentSplitArg {
-            method: "cash".into(),
-            amount_minor: 500,
-            gateway_reference: None,
-            gateway_status: None,
-            gateway_response: None,
-            idempotency_key: None,
-        }];
+        let splits = tender(700);
         let result = s
             .complete_sale_deduction(&sale, None, &splits, "cashier-1", None)
             .unwrap();
@@ -3225,6 +3845,294 @@ mod tests {
             )
             .unwrap();
         assert_eq!(payment_count, 1, "one payment row created");
+    }
+
+    /// One full-tender cash split for the given amount (MONEY-04 tests).
+    fn tender(amount_minor: i64) -> Vec<crate::PaymentSplitArg> {
+        vec![crate::PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+            idempotency_key: None,
+        }]
+    }
+
+    /// MONEY-04: payment splits must cover the ledger total. Over-tender is
+    /// allowed (change back); under-payment must be rejected even though the
+    /// old code happily persisted the sale — a hostile IPC caller could
+    /// complete a 700-minor sale with a 500-minor "payment".
+    #[test]
+    fn complete_sale_deduction_rejects_underpaid_payment_splits() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let result = s.complete_sale_deduction(&sale, None, &tender(500), "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+                assert!(
+                    message.contains("do not cover"),
+                    "expected an under-payment message, got: {message}"
+                );
+            }
+            other => panic!("under-paid splits must not complete the sale, got: {other:?}"),
+        }
+
+        // Nothing may be persisted: no sale row, no payment rows.
+        assert!(
+            s.get_sale(&sale.id).unwrap().is_none(),
+            "no sale row may exist"
+        );
+        let payment_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM payments WHERE sale_id = ?1",
+                rusqlite::params![sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(payment_count, 0, "no payment rows may exist");
+    }
+
+    /// The worst case: `payment_splits: Some([])` bypasses the command layer's
+    /// full-tender default and would previously complete a sale with zero
+    /// payment records.
+    #[test]
+    fn complete_sale_deduction_rejects_empty_payment_splits() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let result = s.complete_sale_deduction(&sale, None, &[], "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, .. }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+            }
+            other => panic!("empty splits must not complete the sale, got: {other:?}"),
+        }
+    }
+
+    /// Over-tender must remain legal — the difference is change back to the
+    /// customer.
+    #[test]
+    fn complete_sale_deduction_accepts_overpaid_payment_splits() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let result = s
+            .complete_sale_deduction(&sale, None, &tender(1000), "cashier-1", None)
+            .unwrap();
+        assert_eq!(result.status, SaleStatus::Pending);
+
+        let paid: i64 = conn
+            .query_row(
+                "SELECT amount_minor FROM payments WHERE sale_id = ?1",
+                rusqlite::params![sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(paid, 1000, "the over-tendered split is recorded for change");
+    }
+
+    /// A negative split could game the sum check (e.g. [900, -200] sums to
+    /// 700) while still writing garbage payment rows into reports.
+    #[test]
+    fn complete_sale_deduction_rejects_negative_payment_split() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let splits = vec![
+            crate::PaymentSplitArg {
+                method: "cash".into(),
+                amount_minor: 900,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
+                idempotency_key: None,
+            },
+            crate::PaymentSplitArg {
+                method: "other".into(),
+                amount_minor: -200,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
+                idempotency_key: None,
+            },
+        ];
+        let result = s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+                assert!(
+                    message.contains("non-negative"),
+                    "expected a non-negative message, got: {message}"
+                );
+            }
+            other => panic!("negative splits must not complete the sale, got: {other:?}"),
+        }
+    }
+
+    /// The resolved-shortfalls command shares the same ledger-write path and
+    /// must enforce the identical contract.
+    #[test]
+    fn complete_sale_with_resolved_shortfalls_rejects_underpaid_payment_splits() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let result = s.complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &tender(500),
+            "cashier-1",
+            None,
+            &[],
+        );
+
+        match result {
+            Err(CoreError::Validation { field, .. }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+            }
+            other => {
+                panic!("resolved-shortfalls under-paid splits must not complete, got: {other:?}")
+            }
+        }
+    }
+
+    /// The split sum uses checked arithmetic: a hostile list whose total
+    /// overflows i64 must fail with a structured error, not wrap past the
+    /// sale total.
+    #[test]
+    fn complete_sale_deduction_rejects_overflowing_payment_split_sum() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let splits = vec![
+            crate::PaymentSplitArg {
+                method: "cash".into(),
+                amount_minor: i64::MAX,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
+                idempotency_key: None,
+            },
+            crate::PaymentSplitArg {
+                method: "card".into(),
+                amount_minor: 1,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
+                idempotency_key: None,
+            },
+        ];
+        let result = s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+                assert!(
+                    message.contains("overflow"),
+                    "expected an overflow message, got: {message}"
+                );
+            }
+            other => panic!("overflowing split sum must not complete the sale, got: {other:?}"),
+        }
+    }
+
+    /// MONEY-03 follow-up: a negative line qty on a hand-built `Sale` would
+    /// record a negative ledger total AND credit stock (the deduction delta is
+    /// `-qty`, positive when qty is negative). `CartLine::new` asserts qty > 0
+    /// so this is unreachable from the front-end, but this Store API is the
+    /// ledger boundary — reject it up front.
+    #[test]
+    fn complete_sale_deduction_rejects_negative_line_qty() {
+        use crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", -2, 350);
+        let result = s.complete_sale_deduction(&sale, None, &tender(700), "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(field, "qty", "expected field 'qty', got '{field}'");
+                assert!(
+                    message.contains("positive"),
+                    "expected a positive-qty message, got: {message}"
+                );
+            }
+            other => panic!("negative qty must not complete the sale, got: {other:?}"),
+        }
+
+        // Stock must be untouched — a negative qty must never credit it.
+        let remaining: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary \
+                 WHERE item_id = (SELECT id FROM products WHERE sku = 'COFFEE') \
+                 AND location_id = ?1",
+                rusqlite::params![CANONICAL_DEFAULT_LOCATION_UUID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            remaining, 10,
+            "stock must not be credited by a negative qty"
+        );
+    }
+
+    /// The resolved-shortfalls command shares the same ledger-write path.
+    #[test]
+    fn complete_sale_with_resolved_shortfalls_rejects_negative_line_qty() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", -2, 350);
+        let result = s.complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &tender(700),
+            "cashier-1",
+            None,
+            &[],
+        );
+
+        match result {
+            Err(CoreError::Validation { field, .. }) => {
+                assert_eq!(field, "qty", "expected field 'qty', got '{field}'");
+            }
+            other => panic!("negative qty must not complete the sale, got: {other:?}"),
+        }
     }
 
     // ── complete_sale_with_resolved_shortfalls (ADR-19 §6b) ─────
@@ -3256,7 +4164,7 @@ mod tests {
             .complete_sale_with_resolved_shortfalls(
                 &sale,
                 None,
-                &[],
+                &tender(4200),
                 "cashier-1",
                 None,
                 &[resolution],
@@ -3369,6 +4277,95 @@ mod tests {
         );
     }
 
+    /// MONEY-03: the BOM ingredient total (`line.qty × quantity_required`)
+    /// comes from untrusted IPC qty and must use checked arithmetic like
+    /// `compute_line_tax` (TAX-04). Dev/test builds disable overflow
+    /// checks, so a bare `*` silently wraps and the deduction path either
+    /// completes the sale with a corrupt stock delta or fails downstream.
+    #[test]
+    fn complete_sale_deduction_bom_quantity_overflow_returns_validation_error() {
+        use crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Composite 'service' product with a BOM recipe: the composite does
+        // not track inventory, so only the ingredient path runs.
+        let (_burger_id, bun_id) = seed_bom_composite(&conn, "BURGER", "BUN", 10, 3);
+
+        // (i64::MAX / 2) * 3 overflows i64.
+        let sale = make_single_line_sale("BURGER", i64::MAX / 2, 1);
+        let result = s.complete_sale_deduction(&sale, None, &[], "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(field, "qty", "expected field 'qty', got '{field}'");
+                assert!(
+                    message.contains("overflow"),
+                    "expected an overflow message, got: {message}"
+                );
+            }
+            other => panic!(
+                "BOM qty × quantity_required overflow must not wrap silently, got: {other:?}"
+            ),
+        }
+
+        // The deduction must never be applied.
+        let bun_stock: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary \
+                 WHERE item_id = ?1 AND location_id = ?2",
+                rusqlite::params![bun_id, CANONICAL_DEFAULT_LOCATION_UUID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            bun_stock, 10,
+            "stock must be untouched when the BOM total overflows"
+        );
+    }
+
+    /// MONEY-03: the resolved-shortfalls command shares the same unchecked
+    /// BOM multiply for non-resolution lines; pin the same overflow contract.
+    #[test]
+    fn complete_sale_with_resolved_shortfalls_bom_quantity_overflow_returns_validation_error() {
+        use crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let conn = fresh();
+        let s = store(&conn);
+
+        let (_burger_id, bun_id) = seed_bom_composite(&conn, "BURGER", "BUN", 10, 3);
+
+        // No resolutions: the non-resolution BOM path runs.
+        let sale = make_single_line_sale("BURGER", i64::MAX / 2, 1);
+        let result =
+            s.complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[]);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(field, "qty", "expected field 'qty', got '{field}'");
+                assert!(
+                    message.contains("overflow"),
+                    "expected an overflow message, got: {message}"
+                );
+            }
+            other => panic!(
+                "BOM qty × quantity_required overflow must not wrap silently, got: {other:?}"
+            ),
+        }
+
+        let bun_stock: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary \
+                 WHERE item_id = ?1 AND location_id = ?2",
+                rusqlite::params![bun_id, CANONICAL_DEFAULT_LOCATION_UUID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            bun_stock, 10,
+            "stock must be untouched when the BOM total overflows"
+        );
+    }
+
     /// Non-resolution lines still get deducted from primary location.
     #[test]
     fn complete_sale_with_resolved_shortfalls_deducts_unresolved_lines_at_primary() {
@@ -3413,7 +4410,7 @@ mod tests {
             .complete_sale_with_resolved_shortfalls(
                 &sale,
                 None,
-                &[],
+                &tender(1950),
                 "cashier-1",
                 None,
                 &[resolution],
@@ -3460,7 +4457,14 @@ mod tests {
 
         let sale = make_single_line_sale("COFFEE", 3, 350);
         let result = s
-            .complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[])
+            .complete_sale_with_resolved_shortfalls(
+                &sale,
+                None,
+                &tender(1050),
+                "cashier-1",
+                None,
+                &[],
+            )
             .unwrap();
         assert_eq!(result.status, SaleStatus::Pending);
 
@@ -3590,7 +4594,7 @@ mod tests {
         s.complete_sale_with_resolved_shortfalls(
             &sale,
             None,
-            &[],
+            &tender(1600),
             "cashier-1",
             None,
             &[resolution],
@@ -3692,7 +4696,8 @@ mod tests {
             handles.push(std::thread::spawn(move || {
                 let conn = rusqlite::Connection::open(&p).unwrap();
                 let store = Store::new(&conn);
-                let result = store.complete_sale_deduction(&sl, None, &[], "cashier-1", None);
+                let result =
+                    store.complete_sale_deduction(&sl, None, &tender(700), "cashier-1", None);
                 (i, result)
             }));
         }
@@ -3791,7 +4796,7 @@ mod tests {
             .unwrap();
         let sale = Sale::from_cart(&cart).unwrap();
 
-        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+        s.complete_sale_deduction(&sale, None, &tender(15000), "staff-1", None)
             .unwrap();
 
         // First void succeeds
@@ -3836,7 +4841,7 @@ mod tests {
             .unwrap();
         let sale = Sale::from_cart(&cart).unwrap();
 
-        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+        s.complete_sale_deduction(&sale, None, &tender(2000), "staff-1", None)
             .unwrap();
 
         // Manually set pending_expires_at to 1 hour in the past.
@@ -3902,7 +4907,7 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
 
         // Use complete_sale_deduction which sets pending_expires_at = NOW + 30 min.
-        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+        s.complete_sale_deduction(&sale, None, &tender(1000), "staff-1", None)
             .unwrap();
 
         // Reap should NOT touch this fresh sale.
@@ -3945,7 +4950,7 @@ mod tests {
             .unwrap();
         let sale = Sale::from_cart(&cart).unwrap();
 
-        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+        s.complete_sale_deduction(&sale, None, &tender(1000), "staff-1", None)
             .unwrap();
 
         // First operation succeeds (finalize).

@@ -53,8 +53,9 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	tenants := core.NewBaseCollection("tenants")
 	tenants.Fields.Add(
 		&core.EmailField{Name: "email", Required: true},
-		&core.TextField{Name: "phone", Required: true},
+		&core.TextField{Name: "phone"},
 		&core.TextField{Name: "api_key", Required: true},
+		&core.TextField{Name: "api_key_lookup"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
 	)
 	tenants.CreateRule = types.Pointer("")
@@ -68,16 +69,22 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	licenseKeys.Fields.Add(
 		&core.TextField{Name: "key", Required: true},
 		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
-		&core.NumberField{Name: "max_stores", Required: true},
-		&core.NumberField{Name: "max_pos_instances", Required: true},
-		&core.JSONField{Name: "allowed_types", Required: true},
+		&core.NumberField{Name: "max_stores"},
+		&core.NumberField{Name: "max_pos_instances"},
+		&core.JSONField{Name: "allowed_types"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"unused", "activated", "expired", "revoked"}},
 		&core.DateField{Name: "expires_at", Required: true},
 		&core.DateField{Name: "activated_at"},
 		&core.RelationField{Name: "activated_by", CollectionId: tenants.Id, MaxSelect: 1},
 		&core.DateField{Name: "revoked_at"},
 		&core.TextField{Name: "notes"},
+		&core.TextField{Name: "paddle_sub_id"},
 	)
+	// Autodate created/updated mirror the production pb_schema.json so
+	// handlers sorting by "-created" (e.g. /web/me license lookup) work
+	// identically in tests.
+	licenseKeys.Fields.Add(&core.AutodateField{Name: "created", OnCreate: true})
+	licenseKeys.Fields.Add(&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true})
 	licenseKeys.CreateRule = types.Pointer("")
 	licenseKeys.ListRule = types.Pointer("")
 	licenseKeys.ViewRule = types.Pointer("")
@@ -99,6 +106,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.DateField{Name: "grace_until"},
 		&core.TextField{Name: "signed_payload", Required: true},
 		&core.TextField{Name: "signature", Required: true},
+		&core.TextField{Name: "paddle_sub_id"},
 	)
 	subscriptions.CreateRule = types.Pointer("")
 	subscriptions.ListRule = types.Pointer("")
@@ -137,6 +145,12 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
+		se.Router.POST("/api/v1/web/contact", handleContact(app))
+		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
+		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.GET("/api/v1/web/me", handleMe(app))
+		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		return se.Next()
 	})
 }
@@ -166,7 +180,15 @@ func seedTenant(t *testing.T, app *tests.TestApp, tenantID, apiKey, status strin
 	// (which lowercases incoming requests before searching by email).
 	rec.Set("email", strings.ToLower(tenantID+"@example.com"))
 	rec.Set("phone", "-")
-	rec.Set("api_key", apiKey)
+	// The handler verifies against a bcrypt hash; seed the hashed form so the
+	// presented plaintext apiKey authenticates (matching production at-rest
+	// storage).
+	hash, lookup, err := hashAPIKey(apiKey)
+	if err != nil {
+		t.Fatalf("failed to hash api_key in seedTenant: %v", err)
+	}
+	rec.Set("api_key", hash)
+	rec.Set("api_key_lookup", lookup)
 	rec.Set("status", status)
 	if err := app.Save(rec); err != nil {
 		t.Fatalf("failed to seed tenant %q: %v", tenantID, err)
@@ -223,8 +245,9 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 		tenants := core.NewBaseCollection("tenants")
 		tenants.Fields.Add(
 			&core.EmailField{Name: "email", Required: true},
-			&core.TextField{Name: "phone", Required: true},
+			&core.TextField{Name: "phone"},
 			&core.TextField{Name: "api_key", Required: true},
+			&core.TextField{Name: "api_key_lookup"},
 			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
 		)
 		tenants.CreateRule = types.Pointer("")
@@ -243,18 +266,24 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 	licenseKeys.Fields.Add(
 		&core.TextField{Name: "key", Required: true},
 		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
-		&core.NumberField{Name: "max_stores", Required: true},
-		&core.NumberField{Name: "max_pos_instances", Required: true},
-		&core.JSONField{Name: "allowed_types", Required: true},
+		&core.NumberField{Name: "max_stores"},
+		&core.NumberField{Name: "max_pos_instances"},
+		&core.JSONField{Name: "allowed_types"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"unused", "activated", "expired", "revoked"}},
 		&core.DateField{Name: "expires_at", Required: true},
 		&core.DateField{Name: "activated_at"},
 		&core.DateField{Name: "revoked_at"},
 		&core.TextField{Name: "notes"},
+		&core.TextField{Name: "paddle_sub_id"},
 	)
 	if tenantsID != "" {
 		licenseKeys.Fields.Add(&core.RelationField{Name: "activated_by", CollectionId: tenantsID, MaxSelect: 1})
 	}
+	// Autodate created/updated mirror the production pb_schema.json so
+	// handlers sorting by "-created" (e.g. /web/me license lookup) work
+	// identically in tests.
+	licenseKeys.Fields.Add(&core.AutodateField{Name: "created", OnCreate: true})
+	licenseKeys.Fields.Add(&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true})
 	licenseKeys.CreateRule = types.Pointer("")
 	licenseKeys.ListRule = types.Pointer("")
 	licenseKeys.ViewRule = types.Pointer("")
@@ -288,12 +317,12 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 			&core.NumberField{Name: "max_stores"},
 			&core.NumberField{Name: "max_pos_instances"},
 			&core.JSONField{Name: "allowed_types"},
-			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
-			&core.DateField{Name: "starts_at", Required: true},
+			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}}, &core.DateField{Name: "starts_at", Required: true},
 			&core.DateField{Name: "expires_at", Required: true},
 			&core.DateField{Name: "grace_until"},
 			&core.TextField{Name: "signed_payload", Required: true},
 			&core.TextField{Name: "signature", Required: true},
+			&core.TextField{Name: "paddle_sub_id"},
 		)
 		subscriptions.CreateRule = types.Pointer("")
 		subscriptions.ListRule = types.Pointer("")
@@ -334,6 +363,12 @@ func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
+		se.Router.POST("/api/v1/web/contact", handleContact(app))
+		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
+		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.GET("/api/v1/web/me", handleMe(app))
+		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		return se.Next()
 	})
 
@@ -461,6 +496,7 @@ func seedLicenseKeyWithLimits(t *testing.T, app *tests.TestApp, key, tierKey, st
 // with Bearer authentication, the server can no longer leak whether a given
 // tenant_id vs. api_key-vs-tenant combination is "valid".
 func TestStatusHandler_UnknownAPIKey(t *testing.T) {
+	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
 
@@ -520,13 +556,55 @@ func TestStatusHandler_TenantNoSubscription(t *testing.T) {
 	}
 }
 
+// TestStatusHandler_RateLimited verifies that /status shares the persisted
+// 5-per-IP-per-hour token bucket (it used to be completely unthrottled,
+// letting an attacker hammer the bcrypt verification without touching the
+// activate/renew budget). The bucket is drained BEFORE auth — like
+// /activate and /renew — so failed attempts cannot bypass the limiter.
+func TestStatusHandler_RateLimited(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const tenantID = "statusratelim01" // 15 chars (PocketBase implicit id field)
+	const apiKey = "statusratekey0001"
+	seedTenant(t, app, tenantID, apiKey, "active")
+	seedSubscriptionStatus(t, app, tenantID, "pro", "active", time.Now().AddDate(0, -1, 0))
+
+	mux, _ := se.Router.BuildMux()
+
+	// First 5 calls in the hour succeed (each consumes a token).
+	for i := 1; i <= 5; i++ {
+		req := httptest.NewRequest("POST", "/api/v1/license/status", nil)
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("call %d should succeed, got %d: %s", i, rec.Code, rec.Body.String())
+		}
+	}
+
+	// The 6th call in the hour is rejected with 429.
+	req := httptest.NewRequest("POST", "/api/v1/license/status", nil)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 on the 6th call, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // ── Tests: Activate Handler ──────────────────────────────────────
 
 func TestActivateHandler_MissingFields(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
-		Method:          "POST",
-		URL:             "/api/v1/license/activate",
-		Body:            strings.NewReader(`{}`),
+		Method: "POST",
+		URL:    "/api/v1/license/activate",
+		Body:   strings.NewReader(`{}`),
+		// A present (but irrelevant) Bearer header lets the request past
+		// auth so it hits the required-field validation (the header-only
+		// auth would otherwise 401 first on a credential-less request).
+		Headers:         map[string]string{"Authorization": "Bearer dummy"},
 		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`, "required"},
 	})
@@ -566,6 +644,7 @@ func TestActivateHandler_AlreadyUsedKey_WrongEmail(t *testing.T) {
 			"email": "wrongemail@example.com",
 			"machine_id": "usedmachin00001"
 		}`),
+		Headers:         map[string]string{"Authorization": "Bearer dummy"},
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`"error"`, "invalid or already used license key"},
 		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
@@ -586,6 +665,7 @@ func TestActivateHandler_ExpiredKey(t *testing.T) {
 			"email": "expiredkeytes001@example.com",
 			"machine_id": "expmachint00001"
 		}`),
+		Headers:         map[string]string{"Authorization": "Bearer dummy"},
 		ExpectedStatus:  410,
 		ExpectedContent: []string{`"error"`, "expired"},
 		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
@@ -606,6 +686,7 @@ func TestActivateHandler_RevokedKey(t *testing.T) {
 			"email": "revokedkeyte0001@example.com",
 			"machine_id": "revmachint00001"
 		}`),
+		Headers:         map[string]string{"Authorization": "Bearer dummy"},
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`"error"`, "already used"},
 		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
@@ -620,9 +701,13 @@ func TestActivateHandler_RevokedKey(t *testing.T) {
 
 func TestRenewHandler_MissingFields(t *testing.T) {
 	runScenario(t, &tests.ApiScenario{
-		Method:          "POST",
-		URL:             "/api/v1/license/renew",
-		Body:            strings.NewReader(`{}`),
+		Method: "POST",
+		URL:    "/api/v1/license/renew",
+		Body:   strings.NewReader(`{}`),
+		// A present (but irrelevant) Bearer header lets the request past
+		// auth so it hits the required-field validation (the header-only
+		// auth would otherwise 401 first on a credential-less request).
+		Headers:         map[string]string{"Authorization": "Bearer dummy"},
 		ExpectedStatus:  400,
 		ExpectedContent: []string{`"error"`, "required"},
 	})
@@ -634,9 +719,11 @@ func TestRenewHandler_InvalidAPIKey(t *testing.T) {
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
 			"tenant_id": "tsxinvalid00001",
-			"api_key": "invalidkey00001",
 			"key": "OZ-RENEW-KEY"
 		}`),
+		// Send the invalid key via the header so the test exercises the
+		// invalid-key path (not the missing-credential path).
+		Headers:         map[string]string{"Authorization": "Bearer invalidkey00001"},
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`"error"`},
 	})
@@ -662,9 +749,9 @@ func TestRenewHandler_WrongTenantID(t *testing.T) {
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
 			"tenant_id": "wrongtenant0001",
-			"api_key": "wrongapik000001",
 			"key": "OZ-RENEW-KEY"
 		}`),
+		Headers:         map[string]string{"Authorization": "Bearer wrongapik000001"},
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`tenant_id does not match api_key`},
 		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
@@ -681,9 +768,9 @@ func TestRenewHandler_SuspendedTenant(t *testing.T) {
 		URL:    "/api/v1/license/renew",
 		Body: strings.NewReader(`{
 			"tenant_id": "susptest0000001",
-			"api_key": "suspapikey00001",
 			"key": "OZ-RENEW-KEY"
 		}`),
+		Headers:         map[string]string{"Authorization": "Bearer suspapikey00001"},
 		ExpectedStatus:  401,
 		ExpectedContent: []string{`not active`},
 		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
@@ -700,6 +787,7 @@ func TestRenewHandler_SuspendedTenant(t *testing.T) {
 // seeing records seeded in BeforeTestFunc.
 
 func TestStatusHandler_WithSubscription(t *testing.T) {
+	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
 
@@ -745,6 +833,7 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 func resetRateLimiters() {
 	ipRateLimiter.stop()
 	keyFailTracker.stop()
+	contactRateLimiter.stop()
 
 	ipRateLimiter.mu.Lock()
 	ipRateLimiter.buckets = make(map[string]*tokenBucket)
@@ -759,8 +848,32 @@ func resetRateLimiters() {
 	keyFailTracker.db = nil
 	keyFailTracker.mu.Unlock()
 
+	contactRateLimiter.mu.Lock()
+	contactRateLimiter.buckets = make(map[string]*tokenBucket)
+	// contactRateLimiter is intentionally in-memory only (see contact.go).
+	contactRateLimiter.db = nil
+	contactRateLimiter.mu.Unlock()
+
+	// Web OTP stores + windowed limiters (web_otp.go) are in-memory and
+	// keyed by email/IP — clear them so tests start from a clean slate.
+	webOtpStore.mu.Lock()
+	webOtpStore.codes = make(map[string]*otpCode)
+	webOtpStore.sessions = make(map[string]*webSession)
+	webOtpStore.mu.Unlock()
+
+	otpRequestLimiter.mu.Lock()
+	otpRequestLimiter.entries = make(map[string]*windowEntry)
+	otpRequestLimiter.mu.Unlock()
+	otpVerifyLimiter.mu.Lock()
+	otpVerifyLimiter.entries = make(map[string]*windowEntry)
+	otpVerifyLimiter.mu.Unlock()
+	otpIPLimiter.mu.Lock()
+	otpIPLimiter.entries = make(map[string]*windowEntry)
+	otpIPLimiter.mu.Unlock()
+
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
+	contactRateLimiter.startCleanup()
 }
 
 func TestRenewHandler_NoSubscription(t *testing.T) {
@@ -774,9 +887,10 @@ func TestRenewHandler_NoSubscription(t *testing.T) {
 	// Need a seeded unused key too so it passes key validation before checking subscriptions
 	seedLicenseKey(t, app, "rnwsubkey000001-key", "pro", "unused", "2099-12-31 23:59:59.000Z")
 
-	body := strings.NewReader(`{"tenant_id":"rnwsub000000001","api_key":"rnwsubkey000001","key":"rnwsubkey000001-key"}`)
+	body := strings.NewReader(`{"tenant_id":"rnwsub000000001","key":"rnwsubkey000001-key"}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer rnwsubkey000001")
 	rec := httptest.NewRecorder()
 	mux, err := se.Router.BuildMux()
 	if err != nil {
@@ -804,9 +918,10 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	// Seed valid unused key for renewal
 	seedLicenseKey(t, app, "rnwhappykey0001-key", "pro", "unused", "2099-12-31 23:59:59.000Z")
 
-	body := strings.NewReader(`{"tenant_id":"rnwhappy0000001","api_key":"rnwhappykey0001","key":"rnwhappykey0001-key"}`)
+	body := strings.NewReader(`{"tenant_id":"rnwhappy0000001","key":"rnwhappykey0001-key"}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer rnwhappykey0001")
 	rec := httptest.NewRecorder()
 	mux, err := se.Router.BuildMux()
 	if err != nil {
@@ -900,9 +1015,10 @@ func TestRenewHandler_TierChange_UsesNewKeyLimits(t *testing.T) {
 			"enterprise", "unused", "2099-12-31 23:59:59.000Z",
 			20, 10, `["restaurant-pos","store-pos","kds"]`)
 
-		body := strings.NewReader(`{"tenant_id":"rnwupgradetn001","api_key":"rnwupgradetn001-key","key":"OZ-RNW-UPG-ENT01"}`)
+		body := strings.NewReader(`{"tenant_id":"rnwupgradetn001","key":"OZ-RNW-UPG-ENT01"}`)
 		req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer rnwupgradetn001-key")
 		rec := httptest.NewRecorder()
 		mux, err := se.Router.BuildMux()
 		if err != nil {
@@ -952,9 +1068,10 @@ func TestRenewHandler_TierChange_UsesNewKeyLimits(t *testing.T) {
 			"pro", "unused", "2099-12-31 23:59:59.000Z",
 			5, 3, `["restaurant-pos","store-pos"]`)
 
-		body := strings.NewReader(`{"tenant_id":"rnwdowngrade001","api_key":"rnwdowngrade001-key","key":"OZ-RNW-DWN-PRO01"}`)
+		body := strings.NewReader(`{"tenant_id":"rnwdowngrade001","key":"OZ-RNW-DWN-PRO01"}`)
 		req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer rnwdowngrade001-key")
 		rec := httptest.NewRecorder()
 		mux, err := se.Router.BuildMux()
 		if err != nil {
@@ -1040,9 +1157,10 @@ func TestRenewHandler_ConcurrentSameKey_OnlyOneWins(t *testing.T) {
 			defer wg.Done()
 			<-start
 			body := strings.NewReader(
-				`{"tenant_id":"racerenew000001","api_key":"racerenewkey00001","key":"OZ-RACE-RENEW-01"}`)
+				`{"tenant_id":"racerenew000001","key":"OZ-RACE-RENEW-01"}`)
 			req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer racerenewkey00001")
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
 			codesMu.Lock()
@@ -1360,11 +1478,11 @@ func TestActivateHandler_ExistingTenantAcceptsValidAPIKey(t *testing.T) {
 	body := strings.NewReader(`{
 		"key": "OZ-VALIDKEY-001",
 		"email": "validkeyten0001@example.com",
-		"machine_id": "validmachin0001",
-		"api_key": "validkeykey00001"
+		"machine_id": "validmachin0001"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer validkeykey00001")
 	rec := httptest.NewRecorder()
 	mux, err := se.Router.BuildMux()
 	if err != nil {
@@ -1516,11 +1634,11 @@ func TestRenewHandler_MissingSubscriptionsCollection(t *testing.T) {
 
 	body := strings.NewReader(`{
 		"tenant_id": "rnwmiscfg000001",
-		"api_key": "rnwmiscfgkey001",
 		"key": "rnwmiscfgkey001-key"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer rnwmiscfgkey001")
 	rec := httptest.NewRecorder()
 	mux, err := se.Router.BuildMux()
 	if err != nil {
@@ -1597,11 +1715,11 @@ func TestActivateHandler_SameTenantKeyReuse(t *testing.T) {
 	body := strings.NewReader(`{
 		"key": "OZ-REUSE-KEY0001",
 		"email": "reuseTen0000001@example.com",
-		"machine_id": "newmachine00001",
-		"api_key": "reuseApikey00001"
+		"machine_id": "newmachine00001"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer reuseApikey00001")
 	rec := httptest.NewRecorder()
 	mux, err := se.Router.BuildMux()
 	if err != nil {
@@ -1623,12 +1741,13 @@ func TestActivateHandler_SameTenantKeyReuse(t *testing.T) {
 	if _, ok := resp["signature"]; !ok {
 		t.Error("expected signature in response")
 	}
-	// api_key is included because keyStatus was "activated" — caller
-	// proved they know both a key already bound to this tenant AND
-	// the matching api_key. Without the api_key match this branch
-	// is gated by the H1 fix in activate.go and returns 401.
-	if _, ok := resp["api_key"]; !ok {
-		t.Error("expected api_key in response on key reuse by same tenant")
+	// api_key is NOT re-emitted on same-tenant key reuse: the stored value
+	// is now a one-way bcrypt hash, and this caller already presented the
+	// correct key — so there is no rotation and no re-emit. A caller who
+	// lost the key reaches the same branch without a valid api_key and
+	// receives a freshly rotated key instead.
+	if _, ok := resp["api_key"]; ok {
+		t.Error("api_key must NOT be re-emitted when the caller already proved they hold it (write-only secret)")
 	}
 }
 
@@ -1658,11 +1777,11 @@ func TestActivateHandler_EmailCaseInsensitive(t *testing.T) {
 	body := strings.NewReader(`{
 		"key": "OZ-CASE-INSEN01",
 		"email": "CASEINSEN000001@EXAMPLE.COM",
-		"machine_id": "casemachin00001",
-		"api_key": "caseInsenKey0001"
+		"machine_id": "casemachin00001"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer caseInsenKey0001")
 	rec := httptest.NewRecorder()
 	mux, err := se.Router.BuildMux()
 	if err != nil {
@@ -2514,11 +2633,11 @@ func TestActivateHandler_MachineAlreadyExists(t *testing.T) {
 	body := strings.NewReader(`{
 		"key": "OZ-REINSTALL-01",
 		"email": "reinstallten001@example.com",
-		"machine_id": "reinstallmac001",
-		"api_key": "reinstallkey0001"
+		"machine_id": "reinstallmac001"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer reinstallkey0001")
 	rec := httptest.NewRecorder()
 	mux, _ := se.Router.BuildMux()
 	mux.ServeHTTP(rec, req)
@@ -2530,11 +2649,11 @@ func TestActivateHandler_MachineAlreadyExists(t *testing.T) {
 	body2 := strings.NewReader(`{
 		"key": "OZ-REINSTALL-01",
 		"email": "reinstallten001@example.com",
-		"machine_id": "reinstallmac001",
-		"api_key": "reinstallkey0001"
+		"machine_id": "reinstallmac001"
 	}`)
 	req2 := httptest.NewRequest("POST", "/api/v1/license/activate", body2)
 	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Authorization", "Bearer reinstallkey0001")
 	rec2 := httptest.NewRecorder()
 	mux.ServeHTTP(rec2, req2)
 
@@ -2543,15 +2662,17 @@ func TestActivateHandler_MachineAlreadyExists(t *testing.T) {
 	}
 }
 
-// ── Tests: C1-followup auth migration (Bearer + body backward-compat) ───
+// ── Tests: C1-followup auth migration (Bearer header is the SOLE channel) ──
 //
-// status.go was already migrated to Bearer-only in the C1 audit. activate.go
-// and renew.go still accept api_key in the JSON body for backward-compat with
-// deployed POS clients. These tests verify:
-//   - Authorization: Bearer <api_key> is the preferred path
-//   - Body api_key still works (legacy clients keep functioning)
-//   - Both present and matching works (idempotent)
-//   - Both present and mismatched is rejected (no silent guessing)
+// status.go was already migrated to Bearer-only in the C1 audit. The
+// C1-followup hardening then removed the legacy body `api_key` fallback
+// from activate.go and renew.go entirely — a body credential leaks into
+// CDN / webserver access logs that capture request bodies, and two
+// credential channels can disagree. These tests verify:
+//   - Authorization: Bearer <api_key> is the ONLY accepted credential
+//   - Body api_key alone is rejected with 401 + a WWW-Authenticate hint
+//   - Both present and matching works (header is authoritative)
+//   - Both present and mismatched: the header wins, the body is ignored
 // plus the logger-redaction helper that future debug-logging can use to
 // safely print request bodies.
 
@@ -2640,10 +2761,10 @@ func TestRenewHandler_AuthPaths(t *testing.T) {
 			expectCode: http.StatusOK,
 		},
 		{
-			name:       "body api_key only (legacy backward-compat)",
+			name:       "body api_key only (rejected — header is the sole credential channel)",
 			authHeader: "",
 			bodyAPIKey: apiKey,
-			expectCode: http.StatusOK,
+			expectCode: http.StatusUnauthorized,
 		},
 		{
 			name:       "both present and matching (idempotent)",
@@ -2652,10 +2773,10 @@ func TestRenewHandler_AuthPaths(t *testing.T) {
 			expectCode: http.StatusOK,
 		},
 		{
-			name:       "both present and mismatched (ambiguous -> 401)",
+			name:       "both present and mismatched (header wins, body ignored)",
 			authHeader: "Bearer " + apiKey,
 			bodyAPIKey: "wrongapikeyrnw001",
-			expectCode: http.StatusUnauthorized,
+			expectCode: http.StatusOK,
 		},
 	}
 
@@ -2682,22 +2803,27 @@ func TestRenewHandler_AuthPaths(t *testing.T) {
 			if rec.Code != tc.expectCode {
 				t.Errorf("expected %d, got %d. Body: %s", tc.expectCode, rec.Code, rec.Body.String())
 			}
+			if tc.expectCode == http.StatusUnauthorized {
+				if got := rec.Header().Get("WWW-Authenticate"); got == "" {
+					t.Errorf("expected WWW-Authenticate hint on 401, got none")
+				}
+			}
 		})
 	}
 }
 
-// TestRenewHandler_LogsDeprecationOnBodyFallback verifies the backward-
-// compat deprecation nudge actually fires on the body-fallback path AND
-// does NOT fire on the Bearer path. Without this test, a future refactor
-// could silently drop the log.Printf line and operators would never
-// know which clients still need to migrate to the Bearer header — the
-// entire reason for the body-fixture backward-compat.
+// TestRenewHandler_RejectsBodyAPIKey verifies the C1-followup hardening:
+// the legacy body `api_key` field is no longer a credential — a request
+// that sends the key ONLY in the body is rejected with 401, a
+// `WWW-Authenticate: Bearer` hint, and an error message pointing at the
+// Authorization header. The Bearer path succeeds without any deprecation
+// log (there is nothing left to deprecate).
 //
 // log.SetOutput is package-global, so we restore os.Stderr via
 // t.Cleanup. Do NOT add t.Parallel() to this test (would race with the
 // captured buffer; the other tests in this package run sequentially
 // anyway, which is fine).
-func TestRenewHandler_LogsDeprecationOnBodyFallback(t *testing.T) {
+func TestRenewHandler_RejectsBodyAPIKey(t *testing.T) {
 	resetRateLimiters()
 
 	var buf bytes.Buffer
@@ -2714,7 +2840,7 @@ func TestRenewHandler_LogsDeprecationOnBodyFallback(t *testing.T) {
 
 	mux, _ := se.Router.BuildMux()
 
-	// ── Case 1: body-only fallback MUST log DEPRECATION ──────────
+	// ── Case 1: body-only api_key is REJECTED (401 + hint) ──────
 	buf.Reset()
 	seedLicenseKey(t, app, "OZ-DEPRNW-BODY01", "pro", "unused", "2099-12-31 23:59:59.000Z")
 	body := fmt.Sprintf(`{"tenant_id":"%s","api_key":"%s","key":"OZ-DEPRNW-BODY01"}`,
@@ -2724,14 +2850,22 @@ func TestRenewHandler_LogsDeprecationOnBodyFallback(t *testing.T) {
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("body-fallback setup failed: %d, %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for body-only api_key, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(buf.String(), "DEPRECATION: /renew") {
-		t.Errorf("expected DEPRECATION log on body-fallback success, got buffer: %q", buf.String())
+	if got := rec.Header().Get("WWW-Authenticate"); got == "" {
+		t.Errorf("expected WWW-Authenticate hint on 401, got none")
+	}
+	if !strings.Contains(rec.Body.String(), "Authorization: Bearer") {
+		t.Errorf("expected error message pointing at the Authorization header, got: %s", rec.Body.String())
+	}
+	// A rejected body-only attempt must not authenticate, so no success-path
+	// log line can fire for it.
+	if strings.Contains(buf.String(), "DEPRECATION: /renew") {
+		t.Errorf("DEPRECATION log must be gone after the fallback removal, got buffer: %q", buf.String())
 	}
 
-	// ── Case 2: Bearer header MUST NOT log DEPRECATION ──────────
+	// ── Case 2: Bearer header succeeds, no deprecation noise ────
 	buf.Reset()
 	seedLicenseKey(t, app, "OZ-DEPRNW-BEARER1", "pro", "unused", "2099-12-31 23:59:59.000Z")
 	body2 := fmt.Sprintf(`{"tenant_id":"%s","key":"OZ-DEPRNW-BEARER1"}`, tenantID)
@@ -2778,10 +2912,10 @@ func TestActivateHandler_AuthPaths(t *testing.T) {
 			expectCode: http.StatusOK,
 		},
 		{
-			name:       "body api_key only (legacy backward-compat)",
+			name:       "body api_key only (rejected — header is the sole credential channel)",
 			authHeader: "",
 			bodyAPIKey: apiKey,
-			expectCode: http.StatusOK,
+			expectCode: http.StatusUnauthorized,
 		},
 		{
 			name:       "both present and matching (idempotent)",
@@ -2790,10 +2924,10 @@ func TestActivateHandler_AuthPaths(t *testing.T) {
 			expectCode: http.StatusOK,
 		},
 		{
-			name:       "both present and mismatched (ambiguous -> 401)",
+			name:       "both present and mismatched (header wins, body ignored)",
 			authHeader: "Bearer " + apiKey,
 			bodyAPIKey: "wrongapikeyact001",
-			expectCode: http.StatusUnauthorized,
+			expectCode: http.StatusOK,
 		},
 	}
 
@@ -2819,6 +2953,11 @@ func TestActivateHandler_AuthPaths(t *testing.T) {
 
 			if rec.Code != tc.expectCode {
 				t.Errorf("expected %d, got %d. Body: %s", tc.expectCode, rec.Code, rec.Body.String())
+			}
+			if tc.expectCode == http.StatusUnauthorized {
+				if got := rec.Header().Get("WWW-Authenticate"); got == "" {
+					t.Errorf("expected WWW-Authenticate hint on 401, got none")
+				}
 			}
 		})
 	}
@@ -2925,9 +3064,9 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		if tenant.GetString("status") != "active" {
 			t.Errorf("tenant status should be active")
 		}
-		if tenant.GetString("api_key") != apiKey {
-			t.Errorf("tenant api_key mismatch: DB has %q, response gave %q",
-				tenant.GetString("api_key"), apiKey)
+		// The stored value is a bcrypt hash, not the plaintext key.
+		if !verifyAPIKey(tenant.GetString("api_key"), apiKey) {
+			t.Errorf("stored api_key hash does not verify against the issued key %q", apiKey)
 		}
 
 		// Verify the persisted phone matches the request (not the old "-" placeholder).
@@ -2970,11 +3109,11 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		body := strings.NewReader(fmt.Sprintf(`{
 			"key": "%s",
 			"email": "%s",
-			"machine_id": "%s",
-			"api_key": "%s"
-		}`, key1, email, "lifecyclemac002", apiKey))
+			"machine_id": "%s"
+		}`, key1, email, "lifecyclemac002"))
 		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 
@@ -2994,10 +3133,13 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		if _, ok := resp["signature"]; !ok {
 			t.Error("expected signature on reuse")
 		}
-		// On key reuse, api_key is re-emitted (caller proved they know
-		// the key bound to this tenant).
-		if v, ok := resp["api_key"]; !ok || v.(string) != apiKey {
-			t.Error("expected api_key to be re-emitted on key reuse")
+		// On key reuse, api_key is NOT re-emitted: the stored value is a
+		// one-way bcrypt hash, and this caller already presented the
+		// correct key. (A caller without a valid key gets a freshly
+		// rotated key instead — verified in the no-api_key sub-request
+		// below.)
+		if _, ok := resp["api_key"]; ok {
+			t.Error("api_key must NOT be re-emitted on key reuse when the caller already holds it")
 		}
 		if v, ok := resp["tenant_id"]; !ok || v.(string) != tenantID {
 			t.Errorf("expected tenant_id=%q on reuse, got %v", tenantID, resp["tenant_id"])
@@ -3042,6 +3184,14 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		}
 		if _, ok := resp2["signed_payload"]; !ok {
 			t.Error("expected signed_payload on reuse without api_key")
+		}
+		// Losing the api_key triggers a rotation: the server can't re-emit
+		// the bcrypt hash, so it issues a fresh key to restore renew/status
+		// access. The new key must differ from the original.
+		if v, ok := resp2["api_key"]; !ok {
+			t.Error("expected a rotated api_key on reuse without api_key")
+		} else if s := v.(string); s == apiKey || !strings.HasPrefix(s, "oz_") {
+			t.Errorf("expected a fresh rotated api_key, got %q", s)
 		}
 	})
 
@@ -3107,11 +3257,11 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		body := strings.NewReader(fmt.Sprintf(`{
 			"key": "%s",
 			"email": "%s",
-			"machine_id": "%s",
-			"api_key": "%s"
-		}`, key2, email, "lifecyclemac005", wrongKey))
+			"machine_id": "%s"
+		}`, key2, email, "lifecyclemac005"))
 		req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+wrongKey)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 
@@ -3166,11 +3316,11 @@ func TestActivateHandler_DifferentTenantReturnsWrongEmailError(t *testing.T) {
 	body := strings.NewReader(`{
 		"key": "OZ-DIFF-TENANT01",
 		"email": "tenanta00000001@example.com",
-		"machine_id": "difftenmac00001",
-		"api_key": "tenantakey000001"
+		"machine_id": "difftenmac00001"
 	}`)
 	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer tenantakey000001")
 	rec := httptest.NewRecorder()
 	mux, _ := se.Router.BuildMux()
 	mux.ServeHTTP(rec, req)
@@ -3263,9 +3413,10 @@ func TestRenewHandler_SuccessClearsKeyFailures(t *testing.T) {
 	}
 
 	// Successful renewal.
-	body := strings.NewReader(fmt.Sprintf(`{"tenant_id":"%s","api_key":"%s","key":"%s"}`, tenantID, apiKey, newKey))
+	body := strings.NewReader(fmt.Sprintf(`{"tenant_id":"%s","key":"%s"}`, tenantID, newKey))
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	rec := httptest.NewRecorder()
 	mux, _ := se.Router.BuildMux()
 	mux.ServeHTTP(rec, req)
@@ -3301,9 +3452,10 @@ func TestRenewHandler_ExpiredKeyRejected(t *testing.T) {
 	// Seed a key that is unused but expired.
 	seedLicenseKey(t, app, expKey, "pro", "unused", "2020-01-01 00:00:00.000Z")
 
-	body := strings.NewReader(fmt.Sprintf(`{"tenant_id":"%s","api_key":"%s","key":"%s"}`, tenantID, apiKey, expKey))
+	body := strings.NewReader(fmt.Sprintf(`{"tenant_id":"%s","key":"%s"}`, tenantID, expKey))
 	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	rec := httptest.NewRecorder()
 	mux, _ := se.Router.BuildMux()
 	mux.ServeHTTP(rec, req)
@@ -3386,7 +3538,6 @@ func seedSubscriptionStatus(t *testing.T, app *tests.TestApp, tenantID, tierKey,
 }
 
 // seedMachine inserts a tenant_machines record directly via app.Save.
-
 
 // ── Tests: Machine Revocation via /status (P8-2) ──────────────────
 //

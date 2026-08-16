@@ -19,6 +19,14 @@ import { plainErrorMessage } from "@/utils/app-error";
 export interface AuthState {
   /** The currently logged-in user's session, or null if not logged in. */
   session: LoginSessionDto | null;
+  /**
+   * Short-lived picker ticket (audit/06) minted at login.
+   *
+   * Consumed by the pre-session workspace picker (`listWorkspaces` /
+   * `listWorkspaceScreens`) until `createSession` returns the opaque
+   * session token. Cleared on logout and replaced on hot-swap.
+   */
+  pickerTicket: string | null;
   /** Whether a login attempt is in progress. */
   loading: boolean;
   /** Error message from the last failed login attempt. */
@@ -40,8 +48,11 @@ export interface AuthContextValue extends AuthState {
    * ADR #6: Hot-swap the session to a different user without triggering
    * the full login/logout lifecycle (no workspace reset). Used by
    * FastPINOverlay for shared touchscreen operator switching.
+   *
+   * `pickerTicket` is the fresh ticket from the hot-swap login; pass it
+   * when available so the picker stays bound to the new user (audit/06).
    */
-  swapSession: (session: LoginSessionDto) => void;
+  swapSession: (session: LoginSessionDto, pickerTicket?: string) => void;
 }
 
 // ── Context ─────────────────────────────────────────────────────────
@@ -64,6 +75,7 @@ interface AuthProviderProps {
  */
 export function AuthProvider({ children, onLogin }: AuthProviderProps) {
   const [session, setSession] = useState<LoginSessionDto | null>(null);
+  const [pickerTicket, setPickerTicket] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submittingRef = useRef(false);
@@ -77,6 +89,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
       try {
         const result = await staffLogin({ username, pin });
         setSession(result.session);
+        setPickerTicket(result.picker_ticket);
         try { sessionStorage.setItem('current-username', username); } catch { /* ignore */ }
         onLogin?.();
       } catch (err) {
@@ -93,6 +106,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
 
   const logout = useCallback(() => {
     setSession(null);
+    setPickerTicket(null);
     setError(null);
     try { sessionStorage.removeItem('current-username'); } catch { /* ignore */ }
   }, []);
@@ -105,26 +119,41 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
    * ADR #6: Replace the current session with a new user's session
    * without triggering the login flow (no loading/error reset, no onLogin).
    * This is the hot-swap path used by FastPINOverlay.
+   *
+   * audit/06: the picker ticket is replaced alongside the session so the
+   * pre-session picker stays bound to the freshly-authenticated user.
    */
-  const swapSession = useCallback((newSession: LoginSessionDto) => {
+  const swapSession = useCallback((newSession: LoginSessionDto, newPickerTicket?: string) => {
     setSession(newSession);
+    setPickerTicket(newPickerTicket ?? null);
     setError(null);
   }, []);
 
+  // The backend returns display names from the seeded roles ("Owner",
+  // "Manager", "Staff"), while older clients and tests may provide the
+  // stable lowercase role keys. Normalize once so authorization-sensitive UI
+  // gates behave identically for either representation.
+  const normalizedRoleName = session?.role_name.trim().toLowerCase();
+  // Management-level gate (0048): owner/admin/manager only. Staff is a
+  // checkout-operations role and must NOT reach void, refund, price
+  // override, audit export, or full settings — the backend denies those
+  // (sales:void / sales:refund / sales:override_price / audit:export are
+  // not in the Staff preset), so the buttons must be hidden too.
   const isManager =
-    session?.role_name === "manager" ||
-    session?.role_name === "owner" ||
-    session?.role_name === "staff" ||
-    session?.role_name === "role-manager" ||
-    session?.role_name === "role-owner" ||
-    session?.role_name === "role-staff";
+    normalizedRoleName === "manager" ||
+    normalizedRoleName === "owner" ||
+    normalizedRoleName === "admin" ||
+    normalizedRoleName === "role-manager" ||
+    normalizedRoleName === "role-owner" ||
+    normalizedRoleName === "role-admin";
   const isOwner =
-    session?.role_name === "owner" ||
-    session?.role_name === "role-owner";
+    normalizedRoleName === "owner" ||
+    normalizedRoleName === "role-owner";
 
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
+      pickerTicket,
       loading,
       error,
       login,
@@ -136,6 +165,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
     }),
     [
       session,
+      pickerTicket,
       loading,
       error,
       login,

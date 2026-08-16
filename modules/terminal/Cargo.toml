@@ -8,6 +8,7 @@ description = "OZ-POS Terminal Module: registered POS device management, heartbe
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 foundation = { workspace = true }
 rusqlite = { workspace = true }
 chrono = { workspace = true }

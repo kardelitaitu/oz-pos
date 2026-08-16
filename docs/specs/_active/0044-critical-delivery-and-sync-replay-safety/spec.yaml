@@ -1,0 +1,42 @@
+id: 0044-critical-delivery-and-sync-replay-safety
+title: Critical delivery and sync replay safety
+status: needs-human-approval
+owner: OZ-POS maintainers
+implementer: Buffy
+priority: P0
+scope:
+  - platform/sync/src/queue.rs
+  - platform/sync/src/daemon.rs
+  - crates/oz-core/src/db/offline.rs
+  - crates/oz-core/src/db/products.rs
+  - docs/specs/_active/0044-critical-delivery-and-sync-replay-safety/
+
+problem:
+  - Remote mutation and its sync_applied_items receipt were separate commits.
+  - A crash after mutation commit and before receipt commit could replay stock,
+    sale, or movement mutations.
+  - EventBus handler failures are logged and isolated, but critical-vs-best-effort
+    delivery semantics are not yet explicitly modeled.
+
+implemented_slice:
+  - Add an atomic remote application path that checks the receipt, applies the
+    mutation, and records the receipt in one SQLite transaction.
+  - Preserve the existing fire-and-continue EventBus API; do not make checkout
+    depend on reporting, telemetry, or notifications in this slice.
+  - Add regression tests for replay suppression and transaction rollback.
+
+invariants:
+  - Applying the same remote item after a committed atomic application changes
+    local state exactly once.
+  - If any mutation or receipt write fails before commit, neither the mutation
+    nor the receipt remains committed.
+  - Unsupported remote actions never fabricate a successful domain mutation.
+  - Event handlers remain isolated; critical delivery policy is a follow-up
+    design decision, not an implicit change to checkout behavior.
+
+non_goals:
+  - Redesigning the EventBus or adding a durable outbox.
+  - Making all event handlers checkout-critical.
+  - Refactoring desktop/tablet command surfaces.
+  - Changing conflict-resolution policy.
+  - Changing database tenancy semantics.

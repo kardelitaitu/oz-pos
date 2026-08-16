@@ -34,6 +34,7 @@ retail-edit-field-high-stock = High Stock Threshold
 retail-edit-save = Save Changes
 retail-edit-cancel = Cancel
 retail-edit-btn-aria = Edit product { $name }
+close-aria = Close
 `;
 
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -146,6 +147,15 @@ describe('EditProductModal', () => {
       in_stock: true,
       low_stock_threshold: 3,
       high_stock_threshold: 12,
+      // ADR #36 attributes default in the modal.
+      cost_minor: 0,
+      brand: null,
+      rack_location: null,
+      notes: null,
+      unit: null,
+      is_active: true,
+      default_supplier_id: null,
+      popularity_score: 0,
     });
     expect(handleClose).toHaveBeenCalled();
   });

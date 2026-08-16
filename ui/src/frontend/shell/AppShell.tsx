@@ -148,16 +148,16 @@ export default function AppShell() {
             setHasActiveLicense(true);
             if (licenseStatus.status === 'gracePeriod') {
               addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
-            } else if (!licenseStatus.is_active) {
+            } else if (!licenseStatus.isActive) {
               addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is inactive. Please renew from Settings.' });
             }
           } else {
             // ── Fresh install ──────────────────────────────────────────
             // Respect the license gate; show ActivationFlow if not active.
-            setHasActiveLicense(licenseStatus.is_active);
+            setHasActiveLicense(licenseStatus.isActive);
             if (licenseStatus.status === 'gracePeriod') {
               addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
-            } else if (!licenseStatus.is_active && licenseStatus.status !== 'missing') {
+            } else if (!licenseStatus.isActive && licenseStatus.status !== 'missing') {
               setLicenseError(licenseStatus.message);
             }
           }
@@ -185,17 +185,25 @@ export default function AppShell() {
   }, []); // run once on mount — addToastRef keeps the callback current
 
   // Navigate to workspace-appropriate route on selection.
+  // When a hash-based shortcut route is present (e.g. from the workspace
+  // home screen's Analytics / Reports cards), respect it instead of the
+  // workspace default.
   const prevWorkspaceRef = useRef(activeWorkspace);
   useEffect(() => {
     if (prevWorkspaceRef.current !== undefined && prevWorkspaceRef.current !== activeWorkspace) {
-      const workspaceRoute: Record<string, string> = {
-        'restaurant-pos': 'sales',
-        'store-pos': 'products',
-        kds: 'kds',
-        inventory: 'inventory',
-        admin: 'settings',
-      };
-      setCurrentRoute(workspaceRoute[activeWorkspace ?? ''] ?? 'products');
+      const hashRoute = window.location.hash.replace('#/', '');
+      if (hashRoute && getPage(hashRoute)) {
+        setCurrentRoute(hashRoute);
+      } else {
+        const workspaceRoute: Record<string, string> = {
+          'restaurant-pos': 'sales',
+          'store-pos': 'products',
+          kds: 'kds',
+          warehouse: 'inventory',
+          admin: 'settings',
+        };
+        setCurrentRoute(workspaceRoute[activeWorkspace ?? ''] ?? 'products');
+      }
     }
     prevWorkspaceRef.current = activeWorkspace;
   }, [activeWorkspace]);
@@ -269,7 +277,7 @@ export default function AppShell() {
     'restaurant-pos': 'restaurant-pos',
     'store-pos': 'store-pos',
     kds: 'kds',
-    inventory: 'inventory',
+    warehouse: 'warehouse',
   };
   const workspaceType: WorkspaceType | null = activeWorkspace ? (WORKSPACE_TO_TYPE[activeWorkspace] ?? null) : null;
 
@@ -310,20 +318,21 @@ export default function AppShell() {
   useWorkspaceNavShortcuts(activeWorkspace, handleBackToPicker);
 
   const userRole = session?.role_name ?? '';
+  const userPermissions = session?.permissions;
 
   const handleNavigate = useCallback((route: AppRoute) => {
     const target = getPage(route);
-    if (target && !isPageAccessible(target, userRole)) {
+    if (target && !isPageAccessible(target, userRole, userPermissions)) {
       const accessiblePages = ['sales', 'products', 'sales-history', 'sales-dashboard'];
       const fallback = accessiblePages.find((r) => {
         const p = getPage(r);
-        return p && isPageAccessible(p, userRole);
+        return p && isPageAccessible(p, userRole, userPermissions);
       }) ?? 'products';
       setCurrentRoute(fallback);
       return;
     }
     setCurrentRoute(route);
-  }, [userRole]);
+  }, [userRole, userPermissions]);
 
   // P12-4: Session lock screen takes precedence over all other views
   if (isLocked && session) {
@@ -402,7 +411,7 @@ export default function AppShell() {
   // Render the current page from the registry, or null if not found.
   const pageRegistration = getPage(currentRoute);
   const PageComponent = pageRegistration?.component ?? null;
-  const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole);
+  const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole, userPermissions);
 
   // Workspace fullscreen — restaurant POS hides the sidebar.
   // KDS is a separate workspace screen, navigated to via the chef button in PosScreen.
@@ -504,6 +513,7 @@ export default function AppShell() {
       <PermissionDenied
         action={pageRegistration!.label}
         requiredRole={pageRegistration!.requiredRole!}
+        requiredPermission={pageRegistration!.requiredPermission}
       />
     ) : PageComponent ? (
       <LazyBoundary>
@@ -518,12 +528,15 @@ export default function AppShell() {
         route={currentRoute}
         onNavigate={handleNavigate}
         sessionToken={sessionToken}
-        {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
+        {...(featuresLoaded
+          ? { enabledFeatures: enabled, userRole, ...(userPermissions && { permissions: userPermissions }) }
+          : { userRole, ...(userPermissions && { permissions: userPermissions }) })}
       >
         {pageDenied ? (
           <PermissionDenied
             action={pageRegistration!.label}
             requiredRole={pageRegistration!.requiredRole!}
+            requiredPermission={pageRegistration!.requiredPermission}
           />
         ) : PageComponent ? (
           <LazyBoundary>

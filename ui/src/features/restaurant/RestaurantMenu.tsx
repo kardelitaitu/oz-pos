@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { Localized } from '@/components/Localized';
-import { type Product } from '@/types/domain';
+import { formatMoney, type Product } from '@/types/domain';
 import { useLocalization } from '@fluent/react';
 import { useProducts } from '@/features/products/useProducts';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useTheme } from '@/frontend/shell/ThemeProvider';
 import { useFullscreen } from '@/hooks/useFullscreen';
-import { getUserPreferencesScoped, setUserPreferences } from '@/api/settings';
+import { getUserPreferencesScoped, setUserPreferencesScoped } from '@/api/settings';
 import './RestaurantMenu.css';
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -41,6 +41,10 @@ const COLOR_PALETTE = [
   '#d946ef',
   '#ec4899',
 ];
+
+// Allow normal touchscreen finger jitter without mistaking a real drag/scroll
+// for a long-press context-menu request.
+const TOUCH_SLOP_PX = 8;
 
 // ── Category icon SVGs ─────────────────────────────────────────────
 function CategoryIconFood() {
@@ -133,7 +137,7 @@ function loadPinned(uid: string): Set<string> {
 }
 
 function savePinned(pinned: Set<string>, uid: string) {
-  localStorage.setItem(key(uid, 'pinned'), JSON.stringify([...pinned]));
+  try { localStorage.setItem(key(uid, 'pinned'), JSON.stringify([...pinned])); } catch { /* storage unavailable */ }
 }
 
 function loadColors(uid: string): Record<string, string> {
@@ -146,7 +150,7 @@ function loadColors(uid: string): Record<string, string> {
 }
 
 function saveColors(colors: Record<string, string>, uid: string) {
-  localStorage.setItem(key(uid, 'colors'), JSON.stringify(colors));
+  try { localStorage.setItem(key(uid, 'colors'), JSON.stringify(colors)); } catch { /* storage unavailable */ }
 }
 
 function loadPop(uid: string): Record<string, number> {
@@ -171,7 +175,7 @@ function loadUnavailable(uid: string): Set<string> {
   }
 }
 function saveUnavailable(unavail: Set<string>, uid: string) {
-  localStorage.setItem(key(uid, 'unavail'), JSON.stringify([...unavail]));
+  try { localStorage.setItem(key(uid, 'unavail'), JSON.stringify([...unavail])); } catch { /* storage unavailable */ }
 }
 
 /** Sort so pinned items appear first, preserving original order within each group. */
@@ -185,12 +189,22 @@ function sortPinnedFirst(items: Product[], pinned: Set<string>): Product[] {
   return [...pinnedList, ...rest];
 }
 
-/** Plus icon SVG */
-function PlusIcon() {
+/**
+ * Add-badge glyphs for the card's accent strip — a filled circle with a
+ * plus (default), check (400ms added flash), or minus (unavailable).
+ * The circle is a two-tone badge: fill comes from CSS (--color-accent-fg)
+ * and the glyph is stroked in --color-accent, so it reads as a button on
+ * the coloured strip while keeping contrast in every theme.
+ */
+type AddGlyph = 'plus' | 'check' | 'minus';
+
+function AddBadge({ glyph }: { glyph: AddGlyph }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
+    <svg viewBox="0 0 24 24" className="restaurant-card-add-badge" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      {glyph === 'plus' && <path d="M12 8v8M8 12h8" />}
+      {glyph === 'check' && <path d="M8.5 12.5l2.5 2.5 4.5-5" />}
+      {glyph === 'minus' && <path d="M8 12h8" />}
     </svg>
   );
 }
@@ -216,7 +230,7 @@ function PinIcon() {
  */
 export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   const { l10n } = useLocalization();
-  const { products, categories, categoryMeta, loading } = useProducts();
+  const { products, categoryMeta, loading } = useProducts();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { session, logout } = useAuth();
   const { sessionToken } = useWorkspace();
@@ -224,6 +238,37 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const hamburgerRef = useRef<HTMLDivElement>(null);
+  const hamburgerButtonRef = useRef<HTMLButtonElement>(null);
+  const hamburgerDropdownRef = useRef<HTMLDivElement>(null);
+  const hamburgerWasOpenRef = useRef(false);
+  const hamburgerOpenedWithKeyboardRef = useRef(false);
+  const contextMenuOpenRef = useRef(false);
+
+  // Move focus into the hamburger menu when it opens and return focus to the
+  // trigger when it closes. This keeps the popover keyboard-operable without
+  // disturbing the separate product context menu focus contract.
+  useEffect(() => {
+    if (menuOpen) {
+      hamburgerDropdownRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    } else if (hamburgerWasOpenRef.current && hamburgerOpenedWithKeyboardRef.current) {
+      hamburgerButtonRef.current?.focus();
+    }
+    hamburgerWasOpenRef.current = menuOpen;
+  }, [menuOpen]);
+
+  // Close the hamburger menu on Escape before the global search shortcut can
+  // clear or blur the search field.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      hamburgerOpenedWithKeyboardRef.current = true;
+      setMenuOpen(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [menuOpen]);
 
   // Close hamburger menu on click outside
   useEffect(() => {
@@ -241,9 +286,10 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   const addedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleAddProduct = useCallback((product: Product) => {
-    addCountRef.current = { ...addCountRef.current, [product.sku]: (addCountRef.current[product.sku] ?? 0) + 1 };
-    savePop(addCountRef.current, userId);
-    forceRender((n) => n + 1);
+    const nextCounts = { ...addCountRef.current, [product.sku]: (addCountRef.current[product.sku] ?? 0) + 1 };
+    addCountRef.current = nextCounts;
+    setPopularityCounts(nextCounts);
+    savePop(nextCounts, userId);
     onAddProduct?.(product);
     setAddedSku(product.sku);
     if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
@@ -258,10 +304,12 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   const [colors, setColors] = useState<Record<string, string>>(loadColors(userId));
   const [unavailable, setUnavailable] = useState<Set<string>>(loadUnavailable(userId));
   const addCountRef = useRef<Record<string, number>>(loadPop(userId));
-  const [, forceRender] = useState(0);
+  const [popularityCounts, setPopularityCounts] = useState<Record<string, number>>(() => loadPop(userId));
   const [sortMode, setSortMode] = useState<SortMode>(() => {
-    try { return (localStorage.getItem(key(userId, 'sort')) as SortMode) || 'manual'; }
-    catch { return 'manual'; }
+    try {
+      const stored = localStorage.getItem(key(userId, 'sort'));
+      return stored === 'a-z' || stored === 'date' || stored === 'popularity' ? stored : 'manual';
+    } catch { return 'manual'; }
   });
   const [cardSize, setCardSize] = useState(() => {
     try { return Math.min(4, Math.max(0, parseInt(localStorage.getItem(key(userId, 'cardsize')) ?? '0', 10) || 0)); }
@@ -271,6 +319,39 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     try { return Math.min(4, Math.max(0, parseInt(localStorage.getItem(key(userId, 'fontsize')) ?? '0', 10) || 0)); }
     catch { return 0; }
   });
+  const menuStateUserIdRef = useRef(userId);
+  const skipMenuPersistenceRef = useRef(false);
+  const locallyModifiedPreferencesRef = useRef<Set<string>>(new Set());
+
+  // Rehydrate user-scoped card state when the authenticated user changes.
+  // Without this boundary, React preserves the previous user's card settings
+  // because the component remains mounted across session changes.
+  useLayoutEffect(() => {
+    if (menuStateUserIdRef.current === userId) return;
+    menuStateUserIdRef.current = userId;
+    skipMenuPersistenceRef.current = true;
+    locallyModifiedPreferencesRef.current.clear();
+    setContextMenu(null);
+    contextMenuOpenRef.current = false;
+    contextTriggerRef.current = null;
+    contextFromKeyboardRef.current = false;
+    setAddedSku(null);
+    setPinned(loadPinned(userId));
+    setColors(loadColors(userId));
+    setUnavailable(loadUnavailable(userId));
+    addCountRef.current = loadPop(userId);
+    setPopularityCounts(addCountRef.current);
+    try {
+      const storedSort = localStorage.getItem(key(userId, 'sort'));
+      setSortMode(storedSort === 'a-z' || storedSort === 'date' || storedSort === 'popularity' ? storedSort : 'manual');
+      setCardSize(Math.min(4, Math.max(0, parseInt(localStorage.getItem(key(userId, 'cardsize')) ?? '0', 10) || 0)));
+      setFontSize(Math.min(4, Math.max(0, parseInt(localStorage.getItem(key(userId, 'fontsize')) ?? '0', 10) || 0)));
+    } catch {
+      setSortMode('manual');
+      setCardSize(0);
+      setFontSize(0);
+    }
+  }, [userId]);
 
   // Clean up add-to-cart animation timer on unmount
   useEffect(() => {
@@ -279,35 +360,80 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     };
   }, []);
 
-  // Load preferences from backend on mount, syncing to localStorage
+  const persistMenuPreference = useCallback((preferenceKey: string, value: string) => {
+    locallyModifiedPreferencesRef.current.add(preferenceKey);
+    try { localStorage.setItem(key(userId, preferenceKey), value); } catch { /* offline / quota */ }
+    if (!sessionToken) return;
+    void setUserPreferencesScoped(sessionToken, [{ key: preferenceKey, value }]).catch(() => {
+      // Keep the local preference when the scoped backend is temporarily offline.
+    });
+  }, [sessionToken, userId]);
+
+  const changeCardSize = useCallback((delta: number) => {
+    const next = Math.min(4, Math.max(0, cardSize + delta));
+    if (next === cardSize) return;
+    setCardSize(next);
+    persistMenuPreference('cardsize', String(next));
+  }, [cardSize, persistMenuPreference]);
+
+  const changeFontSize = useCallback((delta: number) => {
+    const next = Math.min(4, Math.max(0, fontSize + delta));
+    if (next === fontSize) return;
+    setFontSize(next);
+    persistMenuPreference('fontsize', String(next));
+  }, [fontSize, persistMenuPreference]);
+
+  // Load preferences from backend on mount, syncing to localStorage. Ignore
+  // late responses when the active user or store session changes.
   useEffect(() => {
     if (!sessionToken) return;
+    // A fresh session (new token) is authoritative: drop the locally-armed
+    // guards carried over from the previous session so the backend
+    // rehydrates this session's display preferences (sort / card / font
+    // size). Same-token late responses are still guarded below.
+    locallyModifiedPreferencesRef.current.clear();
+    let cancelled = false;
     getUserPreferencesScoped(sessionToken).then((prefs) => {
+      if (cancelled) return;
       const cs = prefs['cardsize'];
-      if (cs !== undefined) {
+      if (cs !== undefined && !locallyModifiedPreferencesRef.current.has('cardsize')) {
         const v = Math.min(4, Math.max(0, parseInt(cs, 10) || 0));
         setCardSize(v);
         try { localStorage.setItem(key(userId, 'cardsize'), String(v)); } catch { /* noop */ }
       }
       const fs = prefs['fontsize'];
-      if (fs !== undefined) {
+      if (fs !== undefined && !locallyModifiedPreferencesRef.current.has('fontsize')) {
         const v = Math.min(4, Math.max(0, parseInt(fs, 10) || 0));
         setFontSize(v);
         try { localStorage.setItem(key(userId, 'fontsize'), String(v)); } catch { /* noop */ }
+      }
+      const savedSort = prefs['sort'];
+      if (!locallyModifiedPreferencesRef.current.has('sort') && (savedSort === 'manual' || savedSort === 'a-z' || savedSort === 'date' || savedSort === 'popularity')) {
+        setSortMode(savedSort);
+        try { localStorage.setItem(key(userId, 'sort'), savedSort); } catch { /* noop */ }
       }
       const fsm = prefs['font-smoothing'];
       if (fsm === 'antialiased' || fsm === 'subpixel') {
         document.documentElement.setAttribute('data-font-smoothing', fsm);
       }
     }).catch(() => { /* offline — keep localStorage values */ });
+    return () => { cancelled = true; };
   }, [userId, sessionToken]);
 
   // Sync pinned/colors/unavailable to localStorage whenever state changes.
   // Extracted from setState updaters to avoid side effects in pure functions
   // (React 18 strict mode calls updaters twice, causing duplicate writes).
-  useEffect(() => { savePinned(pinned, userId); }, [pinned, userId]);
-  useEffect(() => { saveColors(colors, userId); }, [colors, userId]);
-  useEffect(() => { saveUnavailable(unavailable, userId); }, [unavailable, userId]);
+  // Skip the first pass after a user switch so the previous user's state cannot
+  // overwrite the newly selected user's storage before rehydration completes.
+  useEffect(() => {
+    if (skipMenuPersistenceRef.current) {
+      skipMenuPersistenceRef.current = false;
+      return;
+    }
+    savePinned(pinned, userId);
+    saveColors(colors, userId);
+    saveUnavailable(unavailable, userId);
+  }, [pinned, colors, unavailable, userId]);
 
   // ── Context menu state ──────────────────────────────
   const [contextMenu, setContextMenu] = useState<{
@@ -316,6 +442,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     y: number;
     isPinned: boolean;
     isUnavailable: boolean;
+    sourceInStock: boolean;
     currentColor: string | undefined;
     fromKeyboard: boolean;
   } | null>(null);
@@ -329,6 +456,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   // A11Y-06: close the menu and, when it was opened from the keyboard, return
   // focus to the triggering card (WAI-ARIA menu pattern).
   const closeContextMenu = useCallback(() => {
+    contextMenuOpenRef.current = false;
     setContextMenu(null);
     if (contextFromKeyboardRef.current) contextTriggerRef.current?.focus();
     contextTriggerRef.current = null;
@@ -369,7 +497,10 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
       }
     };
     const keyHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeContextMenu();
+      if (e.key === 'Escape') {
+        e.stopImmediatePropagation();
+        closeContextMenu();
+      }
     };
     document.addEventListener('mousedown', handler);
     document.addEventListener('keydown', keyHandler);
@@ -379,21 +510,27 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     };
   }, [contextMenu, closeContextMenu]);
 
-  // Listen for global Ctrl+F → focus search input
+  // Listen for global Ctrl+F → focus search input, except while an overlay
+  // owns keyboard interaction.
   useEffect(() => {
-    const handler = () => searchInputRef.current?.focus();
+    const handler = () => {
+      if (menuOpen || contextMenuOpenRef.current || hamburgerDropdownRef.current?.contains(document.activeElement)) return;
+      searchInputRef.current?.focus();
+    };
     window.addEventListener('app-search', handler);
     return () => window.removeEventListener('app-search', handler);
-  }, []);
+  }, [menuOpen]);
 
   // Type anywhere → focus search + insert char, Escape → clear + blur
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (menuOpen || contextMenuOpenRef.current) return;
         setSearchQuery('');
         searchInputRef.current?.blur();
         return;
       }
+      if (menuOpen || contextMenuOpenRef.current) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
@@ -413,13 +550,16 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [menuOpen]);
 
-  const handleContextMenu = useCallback((sku: string, e: React.MouseEvent, trigger?: HTMLElement, fromKeyboard = false) => {
+  const handleContextMenu = useCallback((sku: string, e: React.MouseEvent, trigger?: HTMLElement, fromKeyboard = false, sourceInStock = true) => {
     e.preventDefault();
     contextTriggerRef.current = trigger ?? null;
     contextFromKeyboardRef.current = fromKeyboard;
-    setContextMenu({ sku, x: e.clientX, y: e.clientY, isPinned: pinned.has(sku), isUnavailable: unavailable.has(sku), currentColor: colors[sku], fromKeyboard });
+    contextMenuOpenRef.current = true;
+    const x = Number.isFinite(e.clientX) ? e.clientX : 4;
+    const y = Number.isFinite(e.clientY) ? e.clientY : 4;
+    setContextMenu({ sku, x, y, isPinned: pinned.has(sku), isUnavailable: unavailable.has(sku), sourceInStock, currentColor: colors[sku], fromKeyboard });
   }, [pinned, colors, unavailable]);
 
   const togglePin = useCallback((sku: string) => {
@@ -460,10 +600,32 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     closeContextMenu();
   }, [closeContextMenu]);
 
-  const categoryOptions = useMemo<Category[]>(
-    () => ['All', ...categories],
-    [categories],
+  // Restaurant and retail are separate workspaces. Category tabs must be
+  // derived from restaurant products rather than the shared catalog category
+  // list, otherwise a retail-only category can leak into this menu.
+  const restaurantProducts = useMemo(
+    () => products.filter((p) => p.productType === 'restaurant'),
+    [products],
   );
+
+  const categoryOptions = useMemo<Category[]>(
+    () => ['All', ...new Set(restaurantProducts.map((p) => p.category))].sort((a, b) => {
+      if (a === 'All') return -1;
+      if (b === 'All') return 1;
+      return a.localeCompare(b);
+    }),
+    [restaurantProducts],
+  );
+
+  // Keep the selection valid when products are refreshed or removed. The
+  // derived value prevents a transient empty result while the state catches
+  // up; the effect also clears the stale selection if that category returns.
+  const effectiveCategory = categoryOptions.includes(activeCategory) ? activeCategory : 'All';
+  useEffect(() => {
+    if (activeCategory !== 'All' && !categoryOptions.includes(activeCategory)) {
+      setActiveCategory('All');
+    }
+  }, [activeCategory, categoryOptions]);
 
   const catMetaMap = useMemo(() => {
     const m = new Map<string, { colour: string; icon: string }>();
@@ -471,15 +633,33 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     return m;
   }, [categoryMeta]);
 
+  const handleHamburgerKeyDown = useCallback((e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+    const items = Array.from(
+      hamburgerDropdownRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [],
+    );
+    if (items.length === 0) return;
+    const current = items.indexOf(e.currentTarget);
+    const next = e.key === 'Home'
+      ? 0
+      : e.key === 'End'
+        ? items.length - 1
+        : e.key === 'ArrowDown'
+          ? (current + 1 + items.length) % items.length
+          : (current - 1 + items.length) % items.length;
+    e.preventDefault();
+    items[next]?.focus();
+  }, []);
+
   const filtered = useMemo(() => {
-    let result = products.filter((p) => p.productType === 'restaurant');
-    if (activeCategory !== 'All') result = result.filter((p) => p.category === activeCategory);
+    let result = restaurantProducts;
+    if (effectiveCategory !== 'All') result = result.filter((p) => p.category === effectiveCategory);
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
     }
     result = [...result];
-    const counts = sortMode === 'popularity' ? addCountRef.current : undefined;
+    const counts = sortMode === 'popularity' ? popularityCounts : undefined;
     switch (sortMode) {
       case 'a-z':
         result.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
@@ -492,7 +672,10 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
         break;
     }
     return sortPinnedFirst(result, pinned);
-  }, [activeCategory, products, searchQuery, pinned, sortMode]);
+  }, [effectiveCategory, restaurantProducts, searchQuery, pinned, sortMode, popularityCounts]);
+
+  const viewportWidth = typeof window !== 'undefined' && Number.isFinite(window.innerWidth) ? window.innerWidth : 1024;
+  const viewportHeight = typeof window !== 'undefined' && Number.isFinite(window.innerHeight) ? window.innerHeight : 768;
 
   return (
     <div className="restaurant-menu" style={{ '--card-size': cardSize, '--font-size': fontSize } as React.CSSProperties}>
@@ -502,9 +685,19 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           <button
             type="button"
             className="restaurant-hamburger-btn"
+            ref={hamburgerButtonRef}
+            onPointerDown={() => {
+              hamburgerOpenedWithKeyboardRef.current = false;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                hamburgerOpenedWithKeyboardRef.current = true;
+              }
+            }}
             onClick={() => setMenuOpen((prev) => !prev)}
             aria-label={l10n.getString('restaurant-menu-hamburger-aria')}
             aria-expanded={menuOpen}
+            aria-controls="restaurant-hamburger-menu"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" style={{ pointerEvents: 'none' }}>
               <line x1="3" y1="6" x2="21" y2="6" />
@@ -514,17 +707,24 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           </button>
 
           {menuOpen && (
-            <div className="restaurant-hamburger-dropdown" role="menu">
+            <div
+              ref={hamburgerDropdownRef}
+              id="restaurant-hamburger-menu"
+              className="restaurant-hamburger-dropdown"
+              role="group"
+              tabIndex={-1}
+              aria-label={l10n.getString('restaurant-menu-hamburger-aria')}
+            >
               <span className="restaurant-hamburger-label"><Localized id="restaurant-sort-label"><span>Sort</span></Localized></span>
               {(['manual', 'a-z', 'date', 'popularity'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   className="restaurant-hamburger-item restaurant-hamburger-item--sort"
-                  role="menuitem"
+                  onKeyDown={handleHamburgerKeyDown}
                   onClick={() => {
                     setSortMode(mode);
-                    localStorage.setItem(key(userId, 'sort'), mode);
+                    persistMenuPreference('sort', mode);
                     setMenuOpen(false);
                   }}
                 >
@@ -535,14 +735,15 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 </button>
               ))}
               <div className="restaurant-hamburger-divider" role="separator" />
-              <div className="restaurant-hamburger-item restaurant-hamburger-size" role="menuitem">
+              <div className="restaurant-hamburger-item restaurant-hamburger-size" role="group" aria-label={l10n.getString('restaurant-size-label')}>
                 <span className="restaurant-hamburger-size-label"><Localized id="restaurant-size-label"><span>Menu Size</span></Localized></span>
                 <div className="restaurant-hamburger-size-controls">
                   <button
                     type="button"
                     className="restaurant-size-btn"
+                    onKeyDown={handleHamburgerKeyDown}
                     disabled={cardSize <= 0}
-                    onClick={() => { setCardSize((s) => { const v = Math.max(0, s - 1); localStorage.setItem(key(userId, 'cardsize'), String(v)); setUserPreferences(userId, [{ key: 'cardsize', value: String(v) }]); return v; }); }}
+                    onClick={() => changeCardSize(-1)}
                     aria-label={l10n.getString('restaurant-size-decrease-aria')}
                   >
                     &minus;
@@ -551,8 +752,9 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                   <button
                     type="button"
                     className="restaurant-size-btn"
+                    onKeyDown={handleHamburgerKeyDown}
                     disabled={cardSize >= 4}
-                    onClick={() => { setCardSize((s) => { const v = Math.min(4, s + 1); localStorage.setItem(key(userId, 'cardsize'), String(v)); setUserPreferences(userId, [{ key: 'cardsize', value: String(v) }]); return v; }); }}
+                    onClick={() => changeCardSize(1)}
                     aria-label={l10n.getString('restaurant-size-increase-aria')}
                   >
                     +
@@ -560,7 +762,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 </div>
               </div>
               <div className="restaurant-hamburger-divider" role="separator" />
-              <div className="restaurant-hamburger-item restaurant-hamburger-size" role="menuitem">
+              <div className="restaurant-hamburger-item restaurant-hamburger-size" role="group" aria-label={l10n.getString('restaurant-font-size-label')}>
                 <Localized id="restaurant-font-size-label">
                   <span className="restaurant-hamburger-size-label">Font Size</span>
                 </Localized>
@@ -568,8 +770,9 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                   <button
                     type="button"
                     className="restaurant-size-btn"
+                    onKeyDown={handleHamburgerKeyDown}
                     disabled={fontSize <= 0}
-                    onClick={() => { setFontSize((s) => { const v = Math.max(0, s - 1); localStorage.setItem(key(userId, 'fontsize'), String(v)); setUserPreferences(userId, [{ key: 'fontsize', value: String(v) }]); return v; }); }}
+                    onClick={() => changeFontSize(-1)}
                     aria-label={l10n.getString('restaurant-font-size-decrease-aria')}
                   >
                     &minus;
@@ -578,8 +781,9 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                   <button
                     type="button"
                     className="restaurant-size-btn"
+                    onKeyDown={handleHamburgerKeyDown}
                     disabled={fontSize >= 4}
-                    onClick={() => { setFontSize((s) => { const v = Math.min(4, s + 1); localStorage.setItem(key(userId, 'fontsize'), String(v)); setUserPreferences(userId, [{ key: 'fontsize', value: String(v) }]); return v; }); }}
+                    onClick={() => changeFontSize(1)}
                     aria-label={l10n.getString('restaurant-font-size-increase-aria')}
                   >
                     +
@@ -590,7 +794,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
               <button
                 type="button"
                 className="restaurant-hamburger-item"
-                role="menuitem"
+                onKeyDown={handleHamburgerKeyDown}
                 aria-label={l10n.getString(theme === 'dark' ? 'restaurant-theme-light' : 'restaurant-theme-dark')}
                 onClick={() => { toggleTheme(); setMenuOpen(false); }}
               >
@@ -601,7 +805,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
               <button
                 type="button"
                 className="restaurant-hamburger-item"
-                role="menuitem"
+                onKeyDown={handleHamburgerKeyDown}
                 aria-label={l10n.getString('restaurant-lock-terminal')}
                 onClick={() => { logout(); setMenuOpen(false); }}
               >
@@ -610,7 +814,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
               <button
                 type="button"
                 className="restaurant-hamburger-item"
-                role="menuitem"
+                onKeyDown={handleHamburgerKeyDown}
                 aria-label={l10n.getString('restaurant-toggle-fullscreen')}
                 onClick={() => { toggleFullscreen(); setMenuOpen(false); }}
               >
@@ -636,15 +840,22 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
         <input
-          type="text"
+          type="search"
           className="restaurant-search-input"
           id="restaurant-menu-search"
           name="restaurant-menu-search"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          data-1p-ignore="true"
+          data-lpignore="true"
+          data-bwignore="true"
           ref={searchInputRef}
           placeholder={l10n.getString('restaurant-menu-search-placeholder')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           aria-label={l10n.getString('restaurant-search-aria')}
+          style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
         />
         {searchQuery && (
           <button
@@ -663,7 +874,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
       <div className="restaurant-categories" role="tablist" aria-label={l10n.getString('restaurant-categories-aria')}>
           {categoryOptions.map((cat) => {
             const meta = catMetaMap.get(cat);
-            const isActive = activeCategory === cat;
+            const isActive = effectiveCategory === cat;
             return (
               <button
                 key={cat}
@@ -711,6 +922,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
             <RestaurantCard
               key={product.sku}
               product={{ ...product, inStock: product.inStock && !unavailable.has(product.sku) }}
+              sourceInStock={product.inStock}
               pinned={pinned.has(product.sku)}
               color={colors[product.sku] ?? catMetaMap.get(product.category)?.colour}
               onAdd={handleAddProduct}
@@ -728,8 +940,8 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           ref={menuRef}
           className="restaurant-context-menu"
           style={{
-            left: Math.max(4, Math.min(contextMenu.x, window.innerWidth - 180)),
-            top: Math.max(4, Math.min(contextMenu.y, window.innerHeight - 280)),
+            left: Math.max(4, Math.min(contextMenu.x, viewportWidth - 180)),
+            top: Math.max(4, Math.min(contextMenu.y, viewportHeight - 280)),
           }}
           role="menu"
           tabIndex={-1}
@@ -746,20 +958,22 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
             <span>{contextMenu.isPinned ? 'Unpin from top' : 'Pin to top'}</span>
           </Localized>
           </button>
-          <button
-            type="button"
-            className="restaurant-context-item"
-            aria-label={l10n.getString(contextMenu.isUnavailable ? 'restaurant-context-available' : 'restaurant-context-unavailable')}
-            onClick={() => toggleUnavailable(contextMenu.sku)}
-            role="menuitem"
-          >
-            <Localized id={contextMenu.isUnavailable ? 'restaurant-context-available' : 'restaurant-context-unavailable'}>
-            <span>{contextMenu.isUnavailable ? 'Mark available' : 'Mark unavailable'}</span>
-          </Localized>
-          </button>
+          {contextMenu.sourceInStock && (
+            <button
+              type="button"
+              className="restaurant-context-item"
+              aria-label={l10n.getString(contextMenu.isUnavailable ? 'restaurant-context-available' : 'restaurant-context-unavailable')}
+              onClick={() => toggleUnavailable(contextMenu.sku)}
+              role="menuitem"
+            >
+              <Localized id={contextMenu.isUnavailable ? 'restaurant-context-available' : 'restaurant-context-unavailable'}>
+              <span>{contextMenu.isUnavailable ? 'Mark available' : 'Mark unavailable'}</span>
+            </Localized>
+            </button>
+          )}
           <div className="restaurant-context-divider" role="separator" />
           <span className="restaurant-context-label"><Localized id="restaurant-context-color-label"><span>Colorize Add</span></Localized></span>
-          <div className="restaurant-context-colors" role="menuitem">
+          <div className="restaurant-context-colors" role="group" aria-label={l10n.getString('restaurant-context-color-label')}>
             {COLOR_PALETTE.map((c) => (
               <button
                 key={c}
@@ -791,26 +1005,115 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
 
 interface RestaurantCardProps {
   product: Product;
+  sourceInStock: boolean;
   pinned: boolean;
   color: string | undefined;
   onAdd: ((product: Product) => void) | undefined;
-  onContextMenu: (sku: string, e: React.MouseEvent, trigger: HTMLElement, fromKeyboard: boolean) => void;
+  onContextMenu: (sku: string, e: React.MouseEvent, trigger: HTMLElement, fromKeyboard: boolean, sourceInStock: boolean) => void;
   added?: boolean;
   index?: number;
 }
 
-function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, index }: RestaurantCardProps) {
+function RestaurantCard({ product, sourceInStock, pinned, color, onAdd, onContextMenu, added, index }: RestaurantCardProps) {
   const { l10n } = useLocalization();
+  const touchLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
+  const productRef = useRef(product);
+  productRef.current = product;
+  const onContextMenuRef = useRef(onContextMenu);
+  onContextMenuRef.current = onContextMenu;
+
+  const unavailableLabel = requiredLocalized(l10n, 'restaurant-card-unavailable');
+  const addLabel = requiredLocalized(l10n, 'restaurant-card-add');
+  const cardAriaLabel = product.inStock
+    ? `${product.name}, ${formatMoney(product.price)}, ${addLabel}`
+    : `${product.name}, ${formatMoney(product.price)}, ${unavailableLabel}`;
+
+  const clearTouchLongPress = useCallback(() => {
+    if (touchLongPressTimerRef.current) {
+      clearTimeout(touchLongPressTimerRef.current);
+      touchLongPressTimerRef.current = null;
+    }
+    touchStartRef.current = null;
+  }, []);
+
   const handleClick = useCallback(() => {
+    if (suppressClickRef.current) {
+      // The synthetic click generated by a long-press is suppressed, but a
+      // later pointer sequence clears this flag in handlePointerDown.
+      suppressClickRef.current = false;
+      return;
+    }
+    // Source-unavailable cards remain context-menu accessible for pin/color
+    // actions, but must never add an out-of-stock item to the sale.
+    if (!product.inStock) return;
     onAdd?.(product);
   }, [product, onAdd]);
 
   const handleContext = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    onContextMenu(product.sku, e, e.currentTarget as HTMLElement, false);
-  }, [product.sku, onContextMenu]);
+    onContextMenu(product.sku, e, e.currentTarget as HTMLElement, false, sourceInStock);
+  }, [product.sku, sourceInStock, onContextMenu]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    // A long-press may not produce the browser's synthetic click after the
+    // context menu opens. Clear suppression when a new pointer sequence starts
+    // so the next deliberate tap can never be swallowed.
+    suppressClickRef.current = false;
+    if (e.pointerType && e.pointerType !== 'touch') return;
+    clearTouchLongPress();
+    touchStartRef.current = { x: e.clientX, y: e.clientY };
+    const trigger = e.currentTarget;
+    touchLongPressTimerRef.current = setTimeout(() => {
+      suppressClickRef.current = true;
+      const rect = trigger.getBoundingClientRect();
+      const clientX = Number.isFinite(e.clientX) ? e.clientX : rect.left + rect.width / 2;
+      const clientY = Number.isFinite(e.clientY) ? e.clientY : rect.top + rect.height / 2;
+      onContextMenuRef.current(
+        productRef.current.sku,
+        {
+          preventDefault: () => {},
+          clientX: Number.isFinite(clientX) ? clientX : 4,
+          clientY: Number.isFinite(clientY) ? clientY : 4,
+        } as unknown as React.MouseEvent,
+        trigger,
+        false,
+        sourceInStock,
+      );
+      touchLongPressTimerRef.current = null;
+    }, 500);
+  }, [clearTouchLongPress, sourceInStock]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!touchStartRef.current || (e.pointerType && e.pointerType !== 'touch')) return;
+
+    const dx = e.clientX - touchStartRef.current.x;
+    const dy = e.clientY - touchStartRef.current.y;
+    // Ignore small coordinate jitter from a resting finger. Cancel only when
+    // movement exceeds the touch slop, which indicates scrolling or dragging.
+    // If a WebView omits coordinates, keep the timer alive rather than
+    // cancelling a valid long-press on an indeterminate movement event.
+    if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) <= TOUCH_SLOP_PX) return;
+    clearTouchLongPress();
+  }, [clearTouchLongPress]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!e.pointerType || e.pointerType === 'touch') clearTouchLongPress();
+  }, [clearTouchLongPress]);
+
+  const handlePointerLeave = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!e.pointerType || e.pointerType === 'touch') clearTouchLongPress();
+  }, [clearTouchLongPress]);
+
+  useEffect(() => () => clearTouchLongPress(), [clearTouchLongPress]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLButtonElement>) => {
+    // A keyboard activation starts a distinct interaction sequence. Clear any
+    // stale touch suppression so a long-press cannot swallow Enter or Space.
+    if (e.key === 'Enter' || e.key === ' ') {
+      suppressClickRef.current = false;
+    }
     if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
@@ -823,9 +1126,10 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
         } as unknown as React.MouseEvent,
         e.currentTarget,
         true,
+        sourceInStock,
       );
     }
-  }, [product.sku, onContextMenu]);
+  }, [product.sku, sourceInStock, onContextMenu]);
 
   let cardClass = 'restaurant-card';
   if (pinned) cardClass += ' restaurant-card--pinned';
@@ -836,11 +1140,21 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
     <button
       type="button"
       className={cardClass}
-      tabIndex={product.inStock ? 0 : -1}
+      tabIndex={0}
+      aria-disabled={!product.inStock}
       onClick={handleClick}
       onContextMenu={handleContext}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
       onKeyDown={handleKeyDown}
-      style={{ '--btn-color': color ?? 'var(--color-accent)', animationDelay: `${(index ?? 0) * 35}ms` } as React.CSSProperties}
+      aria-label={cardAriaLabel}
+      style={{
+        '--btn-color': color ?? 'var(--color-accent)',
+        animationDelay: `${(index ?? 0) * 35}ms`,
+      } as React.CSSProperties}
     >
       <div className="restaurant-card-body">
         {pinned && (
@@ -848,16 +1162,30 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
             <PinIcon />
           </span>
         )}
-        <h3 className="restaurant-card-name" title={product.name}>
+        <span className="restaurant-card-name" title={product.name}>
           {product.name}
-        </h3>
+        </span>
+        <span className="restaurant-card-price">{formatMoney(product.price)}</span>
+        {!product.inStock && (
+          <span className="restaurant-card-status">
+            <Localized id="restaurant-card-unavailable"><span>Unavailable</span></Localized>
+          </span>
+        )}
       </div>
-      <span className="restaurant-card-add-icon" aria-hidden="true">
-        <PlusIcon />
-        <Localized id="restaurant-card-add">
-          <span>Add</span>
-        </Localized>
-      </span>
+      {product.inStock ? (
+        <span className="restaurant-card-add-icon">
+          <AddBadge glyph={added ? 'check' : 'plus'} />
+          <span className="sr-only">
+            <Localized id="restaurant-card-add">
+              <span>Add</span>
+            </Localized>
+          </span>
+        </span>
+      ) : (
+        <span className="restaurant-card-add-icon restaurant-card-add-icon--disabled" aria-hidden="true">
+          <AddBadge glyph="minus" />
+        </span>
+      )}
     </button>
   );
 }

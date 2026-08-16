@@ -18,9 +18,13 @@ import {
   type DeviceBindingDto,
 } from '@/api/terminals';
 import { listStores, type StoreProfile } from '@/api/stores';
-import { listWorkspaces, type WorkspaceDto } from '@/api/workspaces';
+import {
+  listWorkspacesForStoreScoped,
+  type WorkspaceDto,
+} from '@/api/workspaces';
 import { FEATURES } from '@/hooks/useFeatures';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -128,9 +132,13 @@ const EMPTY_FORM: FormData = {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
+/** Short readable "last seen" / created timestamp in the active locale.
+ *  Uses toLocaleString (not toLocaleDateString) so the hour/minute options
+ *  are honored instead of silently ignored. */
+function formatDate(iso: string, locale: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -145,7 +153,10 @@ function formatDate(iso: string): string {
 export default function TerminalManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
+  // Timestamps follow the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -260,9 +271,12 @@ export default function TerminalManagementScreen() {
           setBindingStores(stores);
           if (b.boundStoreId) {
             setSelectedStoreId(b.boundStoreId);
-            // Load instances for the bound store.
+            // Load instances for the bound store (audit/06: session-scoped,
+            // never a hardcoded role-owner claim).
             try {
-              const instances = await listWorkspaces('role-owner', b.boundStoreId);
+              const instances = sessionToken
+                ? await listWorkspacesForStoreScoped(sessionToken, b.boundStoreId)
+                : [];
               if (!cancelled) {
                 setBindingInstances(instances);
                 if (b.boundInstanceId) setSelectedInstanceId(b.boundInstanceId);
@@ -279,7 +293,7 @@ export default function TerminalManagementScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [editingId, l10n]);
+  }, [editingId, l10n, sessionToken]);
 
   // Load instances when the selected store changes.
   useEffect(() => {
@@ -291,7 +305,9 @@ export default function TerminalManagementScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const instances = await listWorkspaces('role-owner', selectedStoreId);
+        const instances = sessionToken
+          ? await listWorkspacesForStoreScoped(sessionToken, selectedStoreId)
+          : [];
         if (!cancelled) {
           setBindingInstances(instances);
           setSelectedInstanceId((prev) =>
@@ -303,7 +319,7 @@ export default function TerminalManagementScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedStoreId, editingId]);
+  }, [selectedStoreId, editingId, sessionToken]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
@@ -532,7 +548,7 @@ export default function TerminalManagementScreen() {
                 <Localized id="terminal-last-seen"><th>Last Seen</th></Localized>
                 <Localized id="terminal-created"><th>Created</th></Localized>
                 <Localized id="terminal-col-actions" attrs={{ "aria-label": true }}>
-                  <th aria-label="Actions"> </th>
+                  <th> </th>
                 </Localized>
               </tr>
             </thead>
@@ -552,13 +568,13 @@ export default function TerminalManagementScreen() {
                     )}
                   </td>
                   <td className="terminal-mgmt-cell-last-seen">
-                    {terminal.lastSeenAt ? formatDate(terminal.lastSeenAt) : (
+                    {terminal.lastSeenAt ? formatDate(terminal.lastSeenAt, numLocale) : (
                       <Localized id="terminal-never">
                         <span>Never</span>
                       </Localized>
                     )}
                   </td>
-                  <td className="terminal-mgmt-cell-created">{formatDate(terminal.createdAt)}</td>
+                  <td className="terminal-mgmt-cell-created">{formatDate(terminal.createdAt, numLocale)}</td>
                   <td>
                     <div className="terminal-mgmt-cell-actions">
                     <Localized id="terminal-edit-action" attrs={{ "aria-label": true }} vars={{ name: terminal.name }}>
@@ -566,7 +582,6 @@ export default function TerminalManagementScreen() {
                         type="button"
                         className="terminal-mgmt-action-btn"
                         onClick={() => openEdit(terminal)}
-                        aria-label={`Edit ${terminal.name}`}
                       >
                         <Localized id="terminal-edit-action"><span>Edit</span></Localized>
                       </button>
@@ -576,7 +591,6 @@ export default function TerminalManagementScreen() {
                         type="button"
                         className="terminal-mgmt-action-btn terminal-mgmt-action-btn--danger"
                         onClick={() => openDelete(terminal)}
-                        aria-label={`Delete ${terminal.name}`}
                       >
                         <Localized id="terminal-delete-action"><span>Delete</span></Localized>
                       </button>
@@ -614,7 +628,7 @@ export default function TerminalManagementScreen() {
               type="text"
               id="terminal-field-name"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
               placeholder="e.g. Front Counter"
               autoComplete="off"
             />
@@ -632,7 +646,7 @@ export default function TerminalManagementScreen() {
               type="text"
               id="terminal-field-device-id"
               value={form.deviceId}
-              onChange={(e) => setForm({ ...form, deviceId: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, deviceId: e.target.value }))}
               placeholder="e.g. hostname or MAC address"
               autoComplete="off"
             />
@@ -650,7 +664,7 @@ export default function TerminalManagementScreen() {
               type="password"
               id="terminal-field-secret"
               value={form.terminalSecret}
-              onChange={(e) => setForm({ ...form, terminalSecret: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, terminalSecret: e.target.value }))}
               autoComplete="off"
             />
           </label>
@@ -665,7 +679,7 @@ export default function TerminalManagementScreen() {
             className="terminal-mgmt-input terminal-mgmt-textarea"
             id="terminal-field-metadata"
             value={form.metadata}
-            onChange={(e) => setForm({ ...form, metadata: e.target.value })}
+            onChange={(e) => setForm((prev) => ({ ...prev, metadata: e.target.value }))}
             rows={3}
           />
         </label>
@@ -678,7 +692,7 @@ export default function TerminalManagementScreen() {
               type="checkbox"
               id="terminal-field-active"
               checked={form.isActive}
-              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
             />
             <Localized id="terminal-is-active">
               <label className="terminal-mgmt-checkbox-label" htmlFor="terminal-field-active">

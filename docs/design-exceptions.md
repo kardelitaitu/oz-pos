@@ -262,3 +262,9 @@ value to the nearest existing token. They are listed here for future work items:
 
 *Generated from `themeTokenCompliance.test.ts` output. The test is the single
 source of truth for the violation count — this document is a human-readable guide.*
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

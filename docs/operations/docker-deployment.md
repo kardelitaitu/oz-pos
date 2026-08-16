@@ -283,6 +283,8 @@ needed.
 | `REDIS_URL` | `redis://redis:6379` | pos-cloud-server | Redis connection string |
 | `REDIS_CACHE_TTL` | `300` | pos-cloud-server | Redis cache TTL (seconds) |
 | `DATABASE_URL` | _(empty)_ | pos-cloud-server | PostgreSQL connection string |
+| `OZ_ADMIN_KEY` | _(empty)_ | pos-cloud-server | Admin key gating `POST /api/v1/tokens` and the plan admin endpoint. Empty (unset) = dev mode, endpoints stay open; set in production so only callers with the matching `X-Admin-Key` header can mint tokens or change plans (ADR sync-auth-hardening P2, sync-plan-gating) |
+| `OZ_ENFORCE_PLANS` | _(empty)_ | pos-cloud-server | When `1`/`true`/`on`, sync requests from tenants on the `free` plan (or with no plan row) are rejected with `403 {"error":"plan_required"}`. Unset = gating off (dev mode) |
 | `PG_USER` | `ozpos` | pos-cloud-db | PostgreSQL user |
 | `PG_DATABASE` | `ozpos` | pos-cloud-db | PostgreSQL database name |
 

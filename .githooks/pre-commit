@@ -1,28 +1,61 @@
 #!/bin/bash
+
 # .githooks/pre-commit — auto-format Rust code before every commit.
 set -e
 
+# Locate rustup portably. The previous hardcoded WSL path
+# (/mnt/c/Users/.../.cargo/bin/rustup.exe) broke the hook under Git Bash
+# on Windows, where /mnt/c does not resolve. Prefer rustup on PATH, then
+# rustup.exe, then the standard Windows install location under /c/.
+RUSTUP=""
+if command -v rustup >/dev/null 2>&1; then
+    RUSTUP="rustup"
+elif command -v rustup.exe >/dev/null 2>&1; then
+    RUSTUP="rustup.exe"
+else
+    for d in /c/Users/*/.cargo/bin; do
+        if [ -x "$d/rustup.exe" ]; then
+            RUSTUP="$d/rustup.exe"
+            break
+        fi
+    done
+fi
+
+if [ -z "$RUSTUP" ]; then
+    echo "error: rustup not found — install Rust or add cargo's bin dir to PATH. Aborting commit." >&2
+    exit 1
+fi
+
 # Run cargo fmt, capturing output if it fails
-if ! cargo fmt --all 2>/dev/null; then
+if ! "$RUSTUP" run stable cargo fmt --all 2>/dev/null; then
     echo "error: cargo fmt failed — aborting commit." >&2
     exit 1
 fi
 
-# Re-stage ONLY files that cargo fmt actually modified (.rs sources).
-# Earlier: `git diff --name-only` returned every tracked-but-uncommitted
-# change in the working tree — not just files `cargo fmt --all` touched.
-# The hook then auto-staged them via `git add $CHANGED`, sweeping every
-# non-Rust file in the developer's in-flight work (unrelated .md / .tsx
-# / .ftl / .json / .gitignore / AGENTS.md / READMEs) into the next
-# commit's staging area. Scope the diff to `-- '*.rs'` so CHANGED holds
-# only Rust files (cargo fmt's actual mutation surface). Other
-# working-tree changes stay in the developer's own staging — the hook
-# is a check, not a silent re-stage.
-CHANGED=$(git diff --name-only -- '*.rs')
-if [ -n "$CHANGED" ]; then
-    echo "cargo fmt applied changes to:"
-    echo "$CHANGED"
-    git add $CHANGED
+# Re-stage ONLY .rs files that are part of the current commit (staged
+# before the hook ran). `git diff --name-only -- '*.rs'` lists every
+# working-tree-modified Rust file — including other agents' in-flight
+# changes — so adding that whole list swept unrelated Rust work into
+# the commit despite this comment's earlier claim. Formatting fixes to
+# .rs files outside the staged set stay in the worktree for their
+# owner's own commit; the hook is a check, not a silent re-stage.
+STAGED_RS=$(git diff --cached --name-only -- '*.rs')
+if [ -n "$STAGED_RS" ]; then
+    # Re-add only the .rs files that still exist in the worktree.
+    # cargo fmt can only modify existing files, and `git add` on a
+    # staged deletion (or any missing path) exits non-zero, which
+    # `set -e` turns into an aborted commit.
+    EXISTING_RS=""
+    for f in $STAGED_RS; do
+        if [ -f "$f" ]; then
+            EXISTING_RS="$EXISTING_RS $f"
+        fi
+    done
+    if [ -n "$EXISTING_RS" ]; then
+        echo "cargo fmt applied changes to:"
+        echo "$EXISTING_RS"
+        git add $EXISTING_RS
+    fi
 fi
 
 # ── i18n lint ──────────────────────────────────────────────────────────────

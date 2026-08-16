@@ -74,13 +74,27 @@ if [ "${RESTORE_NO_CONFIRM:-}" != "1" ]; then
 fi
 
 # Create pre-restore safety backup
+# Uses .backup (NOT a raw cp): the app runs in WAL mode, so the live
+# database's latest writes may live in $TARGET_DB-wal. A plain `cp` of
+# the main file would silently drop those uncheckpointed frames, making
+# the safety backup stale and useless for rollback. .backup produces a
+# consistent snapshot that includes WAL content.
 if [ -f "$TARGET_DB" ]; then
-  cp "$TARGET_DB" "${TARGET_DB}.pre-restore"
+  if ! sqlite3 "$TARGET_DB" ".backup '${TARGET_DB}.pre-restore'"; then
+    echo "restore-db: ERROR — failed to create pre-restore backup; aborting." >&2
+    exit 1
+  fi
   echo "restore-db: pre-restore backup saved to ${TARGET_DB}.pre-restore"
 fi
 
 # Replace the active database
 mv "$RESTORE_DB" "$TARGET_DB"
+
+# Drop the stale WAL/SHM sidecar files. They belong to the OLD database
+# (the one we just replaced); SQLite would otherwise replay those frames
+# against the freshly restored main file on next open and corrupt it.
+# Safe to remove: their content was captured by the .backup above.
+rm -f "$TARGET_DB-wal" "$TARGET_DB-shm"
 echo "restore-db: restored $TARGET_DB from $BACKUP_FILE"
 
 # Final validation

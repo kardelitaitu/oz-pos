@@ -231,10 +231,11 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
-        conn.execute(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
-            [],
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited loyalty view', '[\"loyalty:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
         let state = AppState::for_test_with_conn(conn);

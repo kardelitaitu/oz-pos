@@ -13,7 +13,7 @@ use axum::{
     extract::Request,
     http::{StatusCode, header},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -36,6 +36,11 @@ pub struct ApiTokenClaims {
     /// `None` for single-store deployments (backward compatible).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<String>,
+
+    /// Registered terminal that minted this token (ADR sync-auth-hardening
+    /// P3). `None` for admin-minted or legacy tokens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_id: Option<String>,
 }
 
 /// Response body returned when a new token is created.
@@ -54,9 +59,12 @@ pub struct TokenResponse {
 /// Falls back to a hard-coded dev secret if `OZ_API_SECRET` is unset,
 /// so the server starts in development without extra config. Production
 /// deployments MUST set `OZ_API_SECRET`.
-fn signing_secret() -> String {
-    std::env::var("OZ_API_SECRET")
-        .unwrap_or_else(|_| "oz-pos-dev-secret-change-in-production".into())
+fn signing_secret(provided: Option<&str>) -> String {
+    provided
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_owned())
+        .or_else(|| std::env::var("OZ_API_SECRET").ok())
+        .unwrap_or_else(|| "oz-pos-dev-secret-change-in-production".into())
 }
 
 /// Generate a new signed JWT with the given subject label, optionally
@@ -73,6 +81,20 @@ pub fn create_token(
     subject: &str,
     expiry_hours: Option<i64>,
     tenant_id: Option<&str>,
+    secret: Option<&str>,
+) -> Result<TokenResponse, jsonwebtoken::errors::Error> {
+    create_token_scoped(subject, expiry_hours, tenant_id, None, secret)
+}
+
+/// Mint a token scoped to a registered terminal (ADR sync-auth-hardening
+/// P3). `terminal_id` is embedded in the claims so the server knows which
+/// device the token belongs to.
+pub fn create_token_scoped(
+    subject: &str,
+    expiry_hours: Option<i64>,
+    tenant_id: Option<&str>,
+    terminal_id: Option<&str>,
+    secret: Option<&str>,
 ) -> Result<TokenResponse, jsonwebtoken::errors::Error> {
     let hours = expiry_hours.unwrap_or(DEFAULT_EXPIRY_HOURS);
     let now = Utc::now();
@@ -85,9 +107,10 @@ pub fn create_token(
         exp: exp_time.timestamp() as usize,
         iat: now.timestamp() as usize,
         tenant_id: tenant_id.map(|s| s.to_owned()),
+        terminal_id: terminal_id.map(|s| s.to_owned()),
     };
 
-    let secret = signing_secret();
+    let secret = signing_secret(secret);
     let encoding_key = EncodingKey::from_secret(secret.as_bytes());
     let token = encode(&Header::default(), &claims, &encoding_key)?;
 
@@ -102,33 +125,58 @@ pub fn create_token(
 ///
 /// Returns `Ok(claims)` if the token is valid and not expired.
 pub fn validate_token(token_str: &str) -> Result<ApiTokenClaims, jsonwebtoken::errors::Error> {
-    let secret = signing_secret();
+    let secret = signing_secret(None);
     let decoding_key = DecodingKey::from_secret(secret.as_bytes());
     let mut validation = Validation::default();
     validation.validate_exp = true;
     decode::<ApiTokenClaims>(token_str, &decoding_key, &validation).map(|data| data.claims)
 }
 
+/// Build a structured 401 response distinguishing why auth failed
+/// (ADR sync-auth-hardening P4): `token_expired`, `invalid_token`, or
+/// `missing_token`. The client refreshes its stored key ONLY on
+/// `token_expired`; the other codes indicate a configuration problem.
+fn unauthorized(error_code: &'static str) -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        [(header::WWW_AUTHENTICATE, "Bearer")],
+        axum::Json(serde_json::json!({ "error": error_code })),
+    )
+        .into_response()
+}
+
+/// Classify a JWT validation failure as `token_expired` or `invalid_token`.
+fn error_code_for(e: &jsonwebtoken::errors::Error) -> &'static str {
+    if matches!(e.kind(), jsonwebtoken::errors::ErrorKind::ExpiredSignature) {
+        "token_expired"
+    } else {
+        "invalid_token"
+    }
+}
+
 /// Axum middleware that rejects requests without a valid JWT.
 ///
 /// Attach to protected routes via `Router::layer(from_fn(auth_middleware))`.
-pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, StatusCode> {
+/// Returns a structured 401 body (`token_expired` / `invalid_token` /
+/// `missing_token`) plus `WWW-Authenticate: Bearer` so clients can tell
+/// why auth failed (ADR sync-auth-hardening P4).
+pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, Response> {
     let auth_header = req
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or_else(|| unauthorized("missing_token"))?;
 
     let token = auth_header
         .strip_prefix("Bearer ")
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or_else(|| unauthorized("missing_token"))?;
 
     match validate_token(token) {
         Ok(claims) => {
             req.extensions_mut().insert(claims);
             Ok(next.run(req).await)
         }
-        Err(_) => Err(StatusCode::UNAUTHORIZED),
+        Err(e) => Err(unauthorized(error_code_for(&e))),
     }
 }
 
@@ -138,7 +186,7 @@ mod tests {
 
     #[test]
     fn create_and_validate() {
-        let resp = create_token("test-script", Some(1), None).unwrap();
+        let resp = create_token("test-script", Some(1), None, None).unwrap();
         let claims = validate_token(&resp.token).unwrap();
         assert_eq!(claims.sub, "test-script");
         assert_eq!(claims.jti, resp.token_id);
@@ -151,7 +199,7 @@ mod tests {
 
     #[test]
     fn tampered_token_is_rejected() {
-        let resp = create_token("tamper", Some(24), None).unwrap();
+        let resp = create_token("tamper", Some(24), None, None).unwrap();
         // Append junk to invalidate the signature.
         let bad = format!("{}x", resp.token);
         assert!(validate_token(&bad).is_err());
@@ -160,7 +208,7 @@ mod tests {
     #[test]
     fn expired_token_is_rejected() {
         // Create a token that was already expired 1 hour ago.
-        let resp = create_token("expired", Some(-1), None).unwrap();
+        let resp = create_token("expired", Some(-1), None, None).unwrap();
         let result = validate_token(&resp.token);
         assert!(result.is_err(), "expired token should be rejected");
     }
@@ -178,7 +226,7 @@ mod tests {
     #[test]
     fn create_token_default_expiry_works() {
         // None expiry should default to 24 hours and produce a valid token.
-        let resp = create_token("default-exp", None, None).unwrap();
+        let resp = create_token("default-exp", None, None, None).unwrap();
         assert!(!resp.token.is_empty());
         assert!(!resp.expires_at.is_empty());
         assert!(!resp.token_id.is_empty());
@@ -188,7 +236,7 @@ mod tests {
 
     #[test]
     fn token_id_is_uuid_v4_format() {
-        let resp = create_token("uuid-test", Some(1), None).unwrap();
+        let resp = create_token("uuid-test", Some(1), None, None).unwrap();
         assert_eq!(resp.token_id.len(), 36, "UUID v4 should be 36 chars");
         assert_eq!(
             resp.token_id.chars().filter(|c| *c == '-').count(),
@@ -199,7 +247,7 @@ mod tests {
 
     #[test]
     fn expires_at_is_valid_rfc3339() {
-        let resp = create_token("rfc3339", Some(1), None).unwrap();
+        let resp = create_token("rfc3339", Some(1), None, None).unwrap();
         // RFC 3339: "2025-01-15T10:30:00+00:00" or "2025-01-15T10:30:00Z"
         assert!(
             resp.expires_at.contains('T'),
@@ -220,7 +268,7 @@ mod tests {
 
     #[test]
     fn claims_have_non_empty_fields() {
-        let resp = create_token("fields", Some(1), None).unwrap();
+        let resp = create_token("fields", Some(1), None, None).unwrap();
         let claims = validate_token(&resp.token).unwrap();
         assert!(!claims.sub.is_empty());
         assert!(!claims.jti.is_empty());
@@ -230,15 +278,15 @@ mod tests {
 
     #[test]
     fn claims_exp_is_after_iat() {
-        let resp = create_token("time-order", Some(1), None).unwrap();
+        let resp = create_token("time-order", Some(1), None, None).unwrap();
         let claims = validate_token(&resp.token).unwrap();
         assert!(claims.exp > claims.iat, "exp should be after iat");
     }
 
     #[test]
     fn two_tokens_have_different_ids() {
-        let a = create_token("a", Some(1), None).unwrap();
-        let b = create_token("b", Some(1), None).unwrap();
+        let a = create_token("a", Some(1), None, None).unwrap();
+        let b = create_token("b", Some(1), None, None).unwrap();
         assert_ne!(a.token_id, b.token_id, "each token should have a unique ID");
         assert_ne!(a.token, b.token, "each token should have a unique JWT");
     }
@@ -260,7 +308,7 @@ mod tests {
     fn token_with_zero_hour_expiry_is_well_formed() {
         // 0-hour expiry: token may or may not be valid depending on
         // clock precision, but it should always be structurally correct.
-        let resp = create_token("zero", Some(0), None).unwrap();
+        let resp = create_token("zero", Some(0), None, None).unwrap();
         assert!(!resp.token.is_empty());
         assert!(!resp.token_id.is_empty());
         assert!(!resp.expires_at.is_empty());

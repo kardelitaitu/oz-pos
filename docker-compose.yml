@@ -58,6 +58,14 @@ services:
       # network). Override with REDIS_URL for external Redis instances.
       REDIS_URL: "${REDIS_URL:-redis://redis:6379}"
       REDIS_CACHE_TTL: "${REDIS_CACHE_TTL:-300}"
+
+      # Admin key gating token minting + the plan admin endpoint (ADR
+      # sync-auth-hardening P2 / sync-plan-gating). Empty (unset) = dev
+      # mode open; set in production.
+      OZ_ADMIN_KEY: "${OZ_ADMIN_KEY:-}"
+      # Plan gating (ADR sync-plan-gating): "1"/"true"/"on" rejects sync
+      # from free tenants with 403 plan_required. Unset = off (dev mode).
+      OZ_ENFORCE_PLANS: "${OZ_ENFORCE_PLANS:-}"
     volumes:
       - oz_cloud_data:/data
     restart: unless-stopped

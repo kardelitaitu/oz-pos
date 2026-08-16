@@ -60,6 +60,7 @@ use oz_hal::DriverRegistry;
 use platform_core::StoreDatabaseManager;
 use platform_kernel::Kernel;
 use platform_sync::daemon::SyncDaemon;
+use platform_sync::pg_daemon::PgSyncDaemon;
 
 use crate::error::AppError;
 
@@ -103,6 +104,12 @@ pub struct AppState {
     /// Background sync daemon. Started during app setup via
     /// [`SyncDaemon::start`](platform_sync::daemon::SyncDaemon::start).
     pub sync_daemon: SyncDaemon,
+
+    /// Background PostgreSQL sync daemon (the optional PG transport).
+    /// Started during app setup alongside the HTTP daemon; its tick loop
+    /// no-ops while `pg_sync.enabled` is off. The `pg_sync_*` commands
+    /// start/stop it and read its status.
+    pub pg_sync_daemon: PgSyncDaemon,
 
     /// Caching layer (Redis-backed when configured, no-op otherwise).
     /// Shared across all `Store` instances via `Arc`.
@@ -149,6 +156,19 @@ pub struct AppState {
     /// tokio workers). Consumers (Redis pub/sub subscriber, inventory
     /// change publisher) read this field.
     pub terminal_id: Arc<Mutex<Option<String>>>,
+
+    /// Per-process secret for the pre-session picker ticket HMAC.
+    ///
+    /// Generated once at startup (audit/06 residual). Tickets are
+    /// short-lived (5 min) and die with the process, so the secret is
+    /// never persisted — there is nothing to leak from the OS keyring
+    /// and a restart simply invalidates outstanding tickets.
+    pub picker_ticket_secret: Vec<u8>,
+
+    /// Serializes topology Applies within this process. The topology diff
+    /// spans the global and store databases, so concurrent Applies cannot
+    /// safely compare revisions or recover partial work independently.
+    pub topology_apply_lock: Mutex<()>,
 }
 
 impl AppState {
@@ -171,9 +191,33 @@ impl AppState {
         migrations::run(&mut conn)
             .map_err(|e| AppError::Internal(format!("running migrations: {e}")))?;
 
+        // ── Tenant-integrity gate (fail loud) ────────────────────────
+        // Desktop store DBs are scoped by construction to the `default`
+        // tenant. A foreign-tenant row here means a sync/restore mishap
+        // planted another store's data into this file; refuse to boot so
+        // the operator reconciles it instead of silently mixing tenants.
+        // Two indexed COUNTs (`idx_products_tenant` / `idx_users_tenant`)
+        // — cheap enough to run at every startup.
+        oz_core::db::Store::new(&conn)
+            .check_tenant_integrity()
+            .map_err(|e| AppError::Internal(format!("tenant integrity check: {e}")))?;
+
         // Seed the primary store profile if none exists.
         seed_primary_store(&conn)
             .map_err(|e| AppError::Internal(format!("seeding primary store: {e}")))?;
+
+        // ── Popularity full pass (ADR #37) ────────────────────────────
+        // Materialize popularity scores right after migrations so the retail
+        // grid's default popularity sort is meaningful from the first launch:
+        // sales are read from sale_lines, edit events were seeded by
+        // migration 134, and search events accumulate from launch. The pass
+        // is local-only analytics — a failure must not block startup.
+        if let Err(e) = oz_core::db::Store::new(&conn).recompute_all_popularity() {
+            tracing::warn!(
+                error = %e,
+                "popularity full pass failed; retail popularity sort falls back"
+            );
+        }
 
         // ── Cache layer initialisation (read settings BEFORE moving conn) ──
         let redis_url = oz_core::Settings::get_redis_url(&conn).unwrap_or_else(|e| {
@@ -287,12 +331,15 @@ impl AppState {
             plugin_watcher,
             plugin_hot_reload_task,
             sync_daemon: SyncDaemon::new(),
+            pg_sync_daemon: PgSyncDaemon::new(),
             cache,
             inventory_pubsub_shutdown,
             kernel_shutdown: Some(kernel_shutdown_tx),
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds,
             terminal_id,
+            picker_ticket_secret: uuid::Uuid::new_v4().as_bytes().to_vec(),
+            topology_apply_lock: Mutex::new(()),
         })
     }
 }
@@ -301,6 +348,13 @@ impl AppState {
 ///
 /// Called once on first startup after migrations run. Subsequent
 /// launches find the existing row and skip the insert.
+///
+/// Migration 025 seeds a `'default'` row with `is_primary = 0` (so tests can
+/// create their own primary stores). If that row already exists we must
+/// promote it to primary with an explicit `UPDATE`, because an
+/// `INSERT OR IGNORE` cannot change the existing `is_primary` value — leaving
+/// `get_primary_store()` (which queries `is_primary = 1`) returning `None`
+/// and breaking boot on a fresh install.
 fn seed_primary_store(conn: &Connection) -> Result<(), rusqlite::Error> {
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM store_profiles", [], |r| r.get(0))?;
     if count == 0 {
@@ -311,6 +365,21 @@ fn seed_primary_store(conn: &Connection) -> Result<(), rusqlite::Error> {
             rusqlite::params![now],
         )?;
         tracing::info!("seeded default primary store profile");
+    } else {
+        // Promote the canonical 'default' store to primary. The unique partial
+        // index on is_primary = 1 allows at most one primary store, so only
+        // promote when no other store is already primary (multi-store case).
+        let affected = conn.execute(
+            "UPDATE store_profiles SET is_primary = 1
+             WHERE id = 'default'
+               AND NOT EXISTS (
+                 SELECT 1 FROM store_profiles WHERE is_primary = 1 AND id != 'default'
+               )",
+            [],
+        )?;
+        if affected > 0 {
+            tracing::info!("promoted 'default' store profile to primary");
+        }
     }
     Ok(())
 }
@@ -626,12 +695,15 @@ impl AppState {
             plugin_watcher: None,
             plugin_hot_reload_task: None,
             sync_daemon: SyncDaemon::new(),
+            pg_sync_daemon: PgSyncDaemon::new(),
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
             kernel_shutdown: None,
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds: 86400,
             terminal_id: Arc::new(Mutex::new(None)),
+            picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
+            topology_apply_lock: Mutex::new(()),
         }
     }
 

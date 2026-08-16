@@ -72,3 +72,9 @@
 ### Verdict
 
 ✅ **48/48 scripts present and verified.** No broken scripts, no missing chmod. All `.sh` scripts use `#!/usr/bin/env bash` with `set -euo pipefail`. Platform coverage is balanced (20 sh, 12 ps1, 11 py).
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

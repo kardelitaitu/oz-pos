@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! WhatsApp Cloud API notification client for OZ-POS.
 //!
 //! Provides a notification abstraction with a mock driver for testing

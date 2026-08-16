@@ -114,6 +114,51 @@ pub struct SnapshotProduct {
     /// the global catalog exactly as before.
     #[serde(default)]
     pub store_id: Option<String>,
+    /// Product brand (free text, synced — ADR #36 D2).
+    #[serde(default)]
+    pub brand: Option<String>,
+    /// Rack position code (synced).
+    #[serde(default)]
+    pub rack_location: Option<String>,
+    /// Free-text notes (synced).
+    #[serde(default)]
+    pub notes: Option<String>,
+    /// Unit of measure (synced).
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Active/sellable status (synced so retirement propagates).
+    /// `cost_minor`, `default_supplier_id`, and `popularity_score` are
+    /// deliberately absent — local-only (ADR #36 D2, ADR #37 D4).
+    #[serde(default = "default_snapshot_is_active")]
+    pub is_active: bool,
+}
+
+fn default_snapshot_is_active() -> bool {
+    true
+}
+
+impl Default for SnapshotProduct {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            sku: String::new(),
+            name: String::new(),
+            price_minor: 0,
+            currency: String::new(),
+            category_id: None,
+            barcode: None,
+            created_at: None,
+            updated_at: None,
+            price_updated_at: None,
+            track_serial: false,
+            store_id: None,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+        }
+    }
 }
 
 /// A tax-rate row in a server snapshot (typed, RUST-04).
@@ -276,8 +321,22 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
+            // Read the body once; 401/403 classification, the migration
+            // redirect, and the generic Transport error all need it, and
+            // `text()` consumes the response.
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+            // ADR sync-auth-hardening P1/P4: a 401 with `token_expired` means
+            // stale auth — the caller refreshes and retries once; a genuinely
+            // invalid token is a config problem that must not be masked.
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(classify_auth_401(&body));
+            }
+            // ADR sync-plan-gating: a 403 plan_required is terminal — no
+            // refresh, no retry, no quarantine.
+            if status == reqwest::StatusCode::FORBIDDEN && body.contains("plan_required") {
+                return Err(SyncError::PlanRequired);
+            }
 
             // ADR #11: Detect server migration redirect.
             if let Some(new_url) = parse_server_migrated(&body) {
@@ -335,8 +394,18 @@ impl SyncTransport {
         }
 
         if !resp.status().is_success() {
+            // Read the body once; 401/403 classification, the migration
+            // redirect, and the generic Transport error all need it.
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+            // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(classify_auth_401(&body));
+            }
+            // ADR sync-plan-gating: a 403 plan_required is terminal.
+            if status == reqwest::StatusCode::FORBIDDEN && body.contains("plan_required") {
+                return Err(SyncError::PlanRequired);
+            }
 
             // ADR #11: Detect server migration redirect.
             if let Some(new_url) = parse_server_migrated(&body) {
@@ -409,8 +478,18 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
+            // Read the body once; 401/403 classification, the migration
+            // redirect, and the generic Transport error all need it.
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+            // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(classify_auth_401(&body));
+            }
+            // ADR sync-plan-gating: a 403 plan_required is terminal.
+            if status == reqwest::StatusCode::FORBIDDEN && body.contains("plan_required") {
+                return Err(SyncError::PlanRequired);
+            }
 
             // ADR #11: Detect server migration redirect.
             if let Some(new_url) = parse_server_migrated(&body) {
@@ -431,6 +510,20 @@ impl SyncTransport {
     }
 }
 
+/// Classify a 401 response body (ADR sync-auth-hardening P4): explicit
+/// `token_expired` (or a bare 401 from an older server) maps to
+/// [`SyncError::AuthExpired`]; explicit `invalid_token` / `missing_token`
+/// maps to [`SyncError::AuthInvalid`].
+fn classify_auth_401(body: &str) -> SyncError {
+    if body.contains("token_expired") {
+        SyncError::AuthExpired
+    } else if body.contains("invalid_token") || body.contains("missing_token") {
+        SyncError::AuthInvalid
+    } else {
+        SyncError::AuthExpired
+    }
+}
+
 /// Parse a `server_migrated` redirect from a JSON response body (ADR #11).
 ///
 /// Returns `Some(new_url)` if the body contains `{"error":"server_migrated","new_url":"..."}`,
@@ -447,6 +540,45 @@ fn parse_server_migrated(body: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ADR #35 D6 / spec 0049 residency: the sync wire format for users
+    // carries only the operational fields — profile columns (national id,
+    // monthly pay, tax id, emergency contact, etc.) must never travel over
+    // the sync channel. Adding one here breaks the pin deliberately.
+    #[test]
+    fn snapshot_user_wire_format_has_no_profile_fields() {
+        let user = SnapshotUser {
+            id: "u-1".into(),
+            username: "alice".into(),
+            display_name: "Alice".into(),
+            role_id: "role-staff".into(),
+            is_active: true,
+            created_at: Some("2026-01-01T00:00:00Z".into()),
+            updated_at: Some("2026-01-01T00:00:00Z".into()),
+        };
+        let json = serde_json::to_value(&user).unwrap();
+        let obj = json.as_object().expect("snapshot user is a JSON object");
+        let keys: Vec<&String> = obj.keys().collect();
+        for banned in [
+            "national_id",
+            "national_id_hash",
+            "monthly_take_home_minor",
+            "tax_id",
+            "email",
+            "phone",
+            "date_of_birth",
+            "emergency_contact_name",
+            "emergency_contact_phone",
+            "notes",
+            "address",
+            "hire_date",
+        ] {
+            assert!(
+                !keys.contains(&&banned.to_string()),
+                "sensitive/profile field {banned} must never sync"
+            );
+        }
+    }
 
     #[test]
     fn transport_construction() {
@@ -782,6 +914,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![SnapshotTaxRate {
                 id: "t-1".into(),
@@ -1021,6 +1154,90 @@ mod tests {
             captured.as_deref(),
             Some("Bearer sk-test-123"),
             "the configured bearer token must reach the server (RUST-05)"
+        );
+    }
+    #[tokio::test]
+    async fn push_items_maps_bare_401_to_auth_expired() {
+        use axum::{Router, http::StatusCode, routing::post};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn reject_push() -> StatusCode {
+            StatusCode::UNAUTHORIZED
+        }
+
+        let app = Router::new().route("/api/sync/push", post(reject_push));
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        let transport =
+            SyncTransport::new(&format!("http://localhost:{port}"), Some("stale-token"));
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":3}"#);
+        let err = transport.push_items(&[item]).await.unwrap_err();
+
+        assert!(
+            matches!(err, SyncError::AuthExpired),
+            "a bare 401 must surface as AuthExpired (backward compat), got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn push_items_maps_structured_invalid_token_401() {
+        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn reject_push() -> impl IntoResponse {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "invalid_token"})),
+            )
+        }
+
+        let app = Router::new().route("/api/sync/push", post(reject_push));
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        let transport = SyncTransport::new(&format!("http://localhost:{port}"), Some("bad-token"));
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":4}"#);
+        let err = transport.push_items(&[item]).await.unwrap_err();
+
+        assert!(
+            matches!(err, SyncError::AuthInvalid),
+            "an explicit invalid_token 401 must surface as AuthInvalid, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn push_items_maps_403_plan_required() {
+        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn reject_push() -> impl IntoResponse {
+            (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({"error": "plan_required"})),
+            )
+        }
+
+        let app = Router::new().route("/api/sync/push", post(reject_push));
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        let transport = SyncTransport::new(
+            &format!("http://localhost:{port}"),
+            Some("free-tenant-token"),
+        );
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":5}"#);
+        let err = transport.push_items(&[item]).await.unwrap_err();
+
+        assert!(
+            matches!(err, SyncError::PlanRequired),
+            "a 403 plan_required must surface as PlanRequired (ADR sync-plan-gating), got: {err:?}"
         );
     }
 

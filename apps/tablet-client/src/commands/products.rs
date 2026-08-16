@@ -105,6 +105,22 @@ pub struct ProductDto {
     pub price_updated_at: String,
     /// Product type: "retail", "restaurant", or "both".
     pub product_type: String,
+    /// Cost price in minor units (local-only, ADR #36).
+    pub cost_minor: i64,
+    /// Brand (free text).
+    pub brand: Option<String>,
+    /// Rack position code.
+    pub rack_location: Option<String>,
+    /// Free-text notes.
+    pub notes: Option<String>,
+    /// Unit of measure.
+    pub unit: Option<String>,
+    /// Active/sellable status.
+    pub is_active: bool,
+    /// Default supplier FK (local-only).
+    pub default_supplier_id: Option<String>,
+    /// Materialized popularity score (ADR #37) — retail grid sort key.
+    pub popularity_score: f64,
 }
 
 /// Money DTO matching the front-end `Money` type (snake_case keys).
@@ -178,6 +194,14 @@ fn map_products_to_dtos(
                 tax_rate_ids: store
                     .get_product_tax_rates(pwd.product.sku.as_str())
                     .unwrap_or_default(),
+                cost_minor: pwd.product.cost_minor,
+                brand: pwd.product.brand.clone(),
+                rack_location: pwd.product.rack_location.clone(),
+                notes: pwd.product.notes.clone(),
+                unit: pwd.product.unit.clone(),
+                is_active: pwd.product.is_active,
+                default_supplier_id: pwd.product.default_supplier_id.clone(),
+                popularity_score: pwd.popularity_score,
             }
         })
         .collect();
@@ -269,6 +293,14 @@ fn map_pwd_to_dto(
             product_type: pwd.product.product_type.as_str().to_owned(),
             created_at: pwd.product.created_at,
             price_updated_at: pwd.product.price_updated_at,
+            cost_minor: pwd.product.cost_minor,
+            brand: pwd.product.brand.clone(),
+            rack_location: pwd.product.rack_location.clone(),
+            notes: pwd.product.notes.clone(),
+            unit: pwd.product.unit.clone(),
+            is_active: pwd.product.is_active,
+            default_supplier_id: pwd.product.default_supplier_id.clone(),
+            popularity_score: pwd.popularity_score,
         }
     }))
 }
@@ -299,6 +331,31 @@ pub struct CreateProductArgs {
     #[serde(default = "default_product_type")]
     /// Product Type.
     pub product_type: String,
+    #[serde(default)]
+    /// Cost price in minor units (ADR #36, local-only).
+    pub cost_minor: i64,
+    #[serde(default)]
+    /// Brand (free text).
+    pub brand: Option<String>,
+    #[serde(default)]
+    /// Rack position code.
+    pub rack_location: Option<String>,
+    #[serde(default)]
+    /// Free-text notes.
+    pub notes: Option<String>,
+    #[serde(default)]
+    /// Unit of measure.
+    pub unit: Option<String>,
+    #[serde(default = "default_true")]
+    /// Active/sellable status.
+    pub is_active: bool,
+    #[serde(default)]
+    /// Default supplier FK (local-only).
+    pub default_supplier_id: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_product_type() -> String {
@@ -325,6 +382,12 @@ pub async fn create_product(
         let store = Store::new(&db);
 
         require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_CREATE)?;
+        // ADR #36 D7: setting a cost (HPP) requires the manager-only
+        // products:edit_cost permission — staff can create products without
+        // ever touching cost.
+        if args.cost_minor != 0 {
+            require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_EDIT_COST)?;
+        }
 
         let currency: oz_core::Currency = args
             .currency
@@ -336,7 +399,7 @@ pub async fn create_product(
             currency,
         };
 
-        store.create_product(
+        store.create_product_with_attributes(
             &args.sku,
             &args.name,
             price,
@@ -344,6 +407,15 @@ pub async fn create_product(
             args.barcode.as_deref(),
             args.initial_stock,
             Some(&args.product_type),
+            &oz_core::db::CreateProductAttributes {
+                cost_minor: args.cost_minor,
+                brand: args.brand.clone(),
+                rack_location: args.rack_location.clone(),
+                notes: args.notes.clone(),
+                unit: args.unit.clone(),
+                is_active: args.is_active,
+                default_supplier_id: args.default_supplier_id.clone(),
+            },
         )?;
 
         store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
@@ -400,6 +472,42 @@ pub struct UpdateProductArgs {
     pub tax_rate_ids: Vec<String>,
     /// Product Type.
     pub product_type: Option<String>,
+    #[serde(default)]
+    /// Updated cost in minor units (None keeps).
+    pub cost_minor: Option<i64>,
+    #[serde(default)]
+    /// Updated brand — `null` clears, string sets, absent keeps.
+    pub brand: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated rack position code — `null` clears, string sets, absent keeps.
+    pub rack_location: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated notes — `null` clears, string sets, absent keeps.
+    pub notes: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated unit — `null` clears, string sets, absent keeps.
+    pub unit: Option<Option<String>>,
+    #[serde(default)]
+    /// Updated active status.
+    pub is_active: Option<bool>,
+    #[serde(default)]
+    /// Updated default supplier — `null` clears, string sets, absent keeps.
+    pub default_supplier_id: Option<Option<String>>,
+}
+
+impl UpdateProductArgs {
+    /// Map the PATCH-style attribute fields onto the core update struct.
+    fn to_update_attributes(&self) -> oz_core::db::UpdateProductAttributes {
+        oz_core::db::UpdateProductAttributes {
+            cost_minor: self.cost_minor,
+            brand: self.brand.clone(),
+            rack_location: self.rack_location.clone(),
+            notes: self.notes.clone(),
+            unit: self.unit.clone(),
+            is_active: self.is_active,
+            default_supplier_id: self.default_supplier_id.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -419,6 +527,12 @@ pub async fn update_product(
     let store = Store::new(&db);
 
     require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_UPDATE)?;
+    // ADR #36 D7: changing a product's cost (HPP) requires the manager-only
+    // products:edit_cost permission. A PATCH that does not touch cost
+    // (cost_minor absent) stays open to PRODUCTS_UPDATE holders.
+    if args.cost_minor.is_some() {
+        require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_EDIT_COST)?;
+    }
 
     let currency: oz_core::Currency = args
         .currency
@@ -441,6 +555,8 @@ pub async fn update_product(
     )?;
 
     store.set_product_tax_rates(&args.sku, &args.tax_rate_ids)?;
+
+    store.update_product_attributes(&args.sku, &args.to_update_attributes())?;
 
     Ok(UpdateProductResult { sku: args.sku })
 }
@@ -501,6 +617,29 @@ fn run_get_product_track_serial_batch(store: &Store<'_>, skus: &[String]) -> Vec
             }
         })
         .collect()
+}
+
+// ── Popularity search signal (ADR #37) ──────────────────────────────
+
+/// Record an acted-upon product search for the popularity index.
+///
+/// ADR #37 D2: only searches that end in an add-to-cart count. Fire
+/// and forget — failures are logged, never surfaced.
+#[command]
+pub async fn record_product_search(
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    match store.record_product_search(&sku) {
+        Ok(()) => {}
+        Err(e) => {
+            tracing::warn!(sku = %sku, error = %e, "product search signal not recorded");
+        }
+    }
+    drop(db);
+    Ok(())
 }
 
 // ── Delete product ──────────────────────────────────────────────────
@@ -695,6 +834,14 @@ mod tests {
             created_at: "2025-01-01T00:00:00Z".into(),
             price_updated_at: "2025-01-01T00:00:00Z".into(),
             product_type: "retail".into(),
+            cost_minor: 0,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
+            popularity_score: 0.0,
         };
         let d = format!("{dto:?}");
         assert!(d.contains("LATTE"));
@@ -755,6 +902,13 @@ mod tests {
             initial_stock: 0,
             tax_rate_ids: vec![],
             product_type: "retail".into(),
+            cost_minor: 0,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
         };
         let d = format!("{args:?}");
         assert!(d.contains("Green Tea"));

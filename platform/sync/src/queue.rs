@@ -7,6 +7,7 @@ use oz_core::db::Store;
 use oz_core::db::offline::SyncStatusSummary;
 use oz_core::error::CoreError;
 use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus};
+use oz_core::settings::Settings;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -41,6 +42,39 @@ struct StockMovementPayload {
     source_user_id: Option<String>,
     store_id: String,
     created_at: String,
+}
+
+/// Default originating terminal for remote settings items whose payload
+/// omits `terminal_id` (older servers / relay terminals).
+fn default_sync_terminal() -> String {
+    "sync".into()
+}
+
+/// Payload for the `settings.update` / `settings.change` sync action
+/// (SYNC-10). Carries the key, the new value, and the terminal that made
+/// the change so the local delta ledger records the originator and the
+/// daemon can re-emit a `SettingsUpdated` event for UI reactivity.
+#[derive(Deserialize)]
+struct SettingsUpdatePayload {
+    key: String,
+    value: String,
+    #[serde(default = "default_sync_terminal")]
+    terminal_id: String,
+}
+
+/// Outcome of applying a remote item atomically (SYNC-10).
+///
+/// [`SyncQueue::apply_remote_atomic`] returns only `applied` for legacy
+/// callers; the reporting variant [`SyncQueue::apply_remote_atomic_full`]
+/// additionally surfaces a settings change (changed key + originating
+/// terminal) so the sync daemon can publish `SettingsUpdated` after the
+/// transaction commits.
+#[derive(Debug, Clone, Default)]
+pub struct ApplyOutcome {
+    /// Whether the mutation was applied (false on idempotent replay skip).
+    pub applied: bool,
+    /// `Some((key, terminal_id))` when this item applied a settings change.
+    pub settings_change: Option<(String, String)>,
 }
 
 /// A resolved item after conflict resolution — may be accepted from either
@@ -195,6 +229,197 @@ impl SyncQueue {
         self.apply_resolution(store, &resolved)
     }
 
+    /// Apply a remote item and its idempotency receipt atomically.
+    ///
+    /// The existence check, domain mutation, and receipt insert share one
+    /// SQLite transaction. A crash before commit therefore rolls back both
+    /// the mutation and the receipt, while a replay after commit is skipped.
+    ///
+    /// Returns only whether the mutation applied — see
+    /// [`apply_remote_atomic_full`](Self::apply_remote_atomic_full) for the
+    /// variant that also reports settings changes for `SettingsUpdated`.
+    pub fn apply_remote_atomic(
+        &self,
+        store: &Store<'_>,
+        item: &OfflineQueueItem,
+    ) -> Result<bool, CoreError> {
+        Ok(self.apply_remote_atomic_full(store, item)?.applied)
+    }
+
+    /// Apply a remote item and its idempotency receipt atomically, reporting
+    /// settings changes (SYNC-10).
+    ///
+    /// Identical transaction semantics to
+    /// [`apply_remote_atomic`](Self::apply_remote_atomic), but the outcome
+    /// also carries the changed settings key and its originating terminal so
+    /// the sync daemon can publish `SettingsUpdated` after the commit —
+    /// making a change made on another terminal reactive in this one's UI.
+    pub fn apply_remote_atomic_full(
+        &self,
+        store: &Store<'_>,
+        item: &OfflineQueueItem,
+    ) -> Result<ApplyOutcome, CoreError> {
+        // A quarantined item must not be retried by every subsequent page
+        // pull. Operators can inspect the retained payload and explicitly
+        // requeue it after correcting the source or client version.
+        if store.is_remote_failure_dead_lettered(&item.id)? {
+            return Ok(ApplyOutcome::default());
+        }
+
+        let tx = store.conn().unchecked_transaction()?;
+        let already: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sync_applied_items WHERE item_id = ?1)",
+            rusqlite::params![item.id],
+            |row| row.get(0),
+        )?;
+        if already {
+            tx.commit()?;
+            return Ok(ApplyOutcome::default());
+        }
+
+        match self.apply_remote_in_tx(&tx, item) {
+            Ok(()) => {
+                store.mark_remote_item_applied_in_tx(&tx, &item.id, &item.action)?;
+                store.clear_remote_failure_in_tx(&tx, &item.id)?;
+                tx.commit()?;
+                Ok(ApplyOutcome {
+                    applied: true,
+                    settings_change: settings_change_of(item),
+                })
+            }
+            Err(error) => {
+                drop(tx);
+                store.record_remote_failure(
+                    &item.id,
+                    &item.action,
+                    &item.payload,
+                    &error.to_string(),
+                    3,
+                )?;
+                Err(error)
+            }
+        }
+    }
+
+    /// Apply a remote mutation using a caller-owned transaction.
+    #[allow(deprecated)]
+    fn apply_remote_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        item: &OfflineQueueItem,
+    ) -> Result<(), CoreError> {
+        match item.action.as_str() {
+            "complete_sale" => {
+                let payload: SalePayload = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid sale payload: {e}")))?;
+                for line in &payload.line_items {
+                    Store::new(tx).adjust_stock_in_tx(tx, &line.sku, -line.qty)?;
+                }
+            }
+            "stock.adjusted" => {
+                let payload: Value = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid stock payload: {e}")))?;
+                let apply_one = |value: Value| -> Result<(), CoreError> {
+                    let sub: StockAdjustmentPayload = serde_json::from_value(value)
+                        .map_err(|e| CoreError::Internal(format!("invalid stock payload: {e}")))?;
+                    Store::new(tx).adjust_stock_in_tx(tx, &sub.sku, sub.delta)?;
+                    Ok(())
+                };
+                if payload.get("merge_type").and_then(|m| m.as_str()) == Some("crdt_delta") {
+                    apply_one(payload.get("local").cloned().unwrap_or(Value::Null))?;
+                    apply_one(payload.get("remote").cloned().unwrap_or(Value::Null))?;
+                } else {
+                    apply_one(payload)?;
+                }
+            }
+            "product.created" => {
+                let payload: Value = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid product payload: {e}")))?;
+                let sku = payload["sku"].as_str().unwrap_or("");
+                let name = payload["name"].as_str().unwrap_or("");
+                let price_minor = payload["price_minor"].as_i64().unwrap_or(-1);
+                let currency = payload["currency"].as_str().unwrap_or("");
+                let currency_parsed: oz_core::Currency =
+                    currency
+                        .parse()
+                        .map_err(|e: oz_core::money::InvalidCurrencyCode| {
+                            CoreError::Internal(format!("invalid currency in sync payload: {e}"))
+                        })?;
+                let initial_stock = payload["initial_stock"].as_i64().unwrap_or(0);
+                let product_type = payload["product_type"].as_str().unwrap_or("retail");
+                Store::new(tx).create_product_if_absent_in_tx(
+                    tx,
+                    sku,
+                    name,
+                    oz_core::Money {
+                        minor_units: price_minor,
+                        currency: currency_parsed,
+                    },
+                    payload["category_id"].as_str(),
+                    payload["barcode"].as_str(),
+                    initial_stock,
+                    product_type,
+                )?;
+            }
+            "stock.movement" => {
+                let payload: Value = serde_json::from_str(&item.payload).map_err(|e| {
+                    CoreError::Internal(format!("invalid stock.movement payload: {e}"))
+                })?;
+                let apply_one = |value: &Value| -> Result<(), CoreError> {
+                    let m: StockMovementPayload =
+                        serde_json::from_value(value.clone()).map_err(|e| {
+                            CoreError::Internal(format!("invalid stock.movement payload: {e}"))
+                        })?;
+                    Store::new(tx).insert_stock_movement_in_tx(
+                        tx,
+                        &m.id,
+                        &m.item_id,
+                        m.delta,
+                        m.reason.as_deref(),
+                        m.source_terminal_id.as_deref(),
+                        m.source_user_id.as_deref(),
+                        &m.store_id,
+                        &m.created_at,
+                    )
+                };
+                if payload.get("merge_type").and_then(|m| m.as_str()) == Some("crdt_delta") {
+                    apply_one(payload.get("local").unwrap_or(&Value::Null))?;
+                    apply_one(payload.get("remote").unwrap_or(&Value::Null))?;
+                } else {
+                    apply_one(&payload)?;
+                }
+            }
+            // SYNC-10: a settings change made on another terminal — write the
+            // value row and a versioned delta row inside this transaction.
+            // `write_delta` uses a nested SAVEPOINT, which is safe inside the
+            // caller's transaction; a delta failure is non-fatal (the value
+            // row still landed) and the change is still reported so the UI
+            // refetches (matches `set_tracked`'s delta philosophy).
+            "settings.update" | "settings.change" => {
+                let payload: SettingsUpdatePayload = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid settings payload: {e}")))?;
+                Settings::set(tx, &payload.key, &payload.value)?;
+                if let Err(e) =
+                    Settings::write_delta(tx, &payload.key, &payload.value, &payload.terminal_id)
+                {
+                    tracing::warn!(
+                        key = %payload.key,
+                        terminal_id = %payload.terminal_id,
+                        error = %e,
+                        "sync settings delta write failed (non-fatal)"
+                    );
+                }
+            }
+            _ => {
+                return Err(CoreError::Internal(format!(
+                    "unsupported remote sync action: {}",
+                    item.action
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Apply a remote item to the local store.
     ///
     /// Parses the `action` field and dispatches to the appropriate local
@@ -310,6 +535,27 @@ impl SyncQueue {
                 }
                 Ok(())
             }
+            // SYNC-10 parity: the legacy (non-atomic) dispatcher applies
+            // remote settings changes with the same row + delta semantics.
+            "settings.update" | "settings.change" => {
+                let payload: SettingsUpdatePayload = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid settings payload: {e}")))?;
+                Settings::set(store.conn(), &payload.key, &payload.value)?;
+                if let Err(e) = Settings::write_delta(
+                    store.conn(),
+                    &payload.key,
+                    &payload.value,
+                    &payload.terminal_id,
+                ) {
+                    tracing::warn!(
+                        key = %payload.key,
+                        terminal_id = %payload.terminal_id,
+                        error = %e,
+                        "sync settings delta write failed (non-fatal)"
+                    );
+                }
+                Ok(())
+            }
             // Unsupported action — log and skip.
             _ => {
                 tracing::warn!(action = %item.action, "unsupported remote sync action");
@@ -317,6 +563,21 @@ impl SyncQueue {
             }
         }
     }
+}
+
+/// Extract the settings change an item carries, if any (SYNC-10).
+///
+/// Called only on the successful-apply path of
+/// [`SyncQueue::apply_remote_atomic_full`]. The apply arm parses the same
+/// `SettingsUpdatePayload` before it can succeed, so this re-parse can
+/// never diverge from what was applied — it only exists to surface the
+/// changed key and originating terminal for `SettingsUpdated`.
+fn settings_change_of(item: &OfflineQueueItem) -> Option<(String, String)> {
+    if item.action != "settings.update" && item.action != "settings.change" {
+        return None;
+    }
+    let payload: SettingsUpdatePayload = serde_json::from_str(&item.payload).ok()?;
+    Some((payload.key, payload.terminal_id))
 }
 
 impl Default for SyncQueue {
@@ -738,6 +999,111 @@ mod tests {
     }
 
     #[test]
+    fn apply_remote_atomic_replay_changes_stock_once() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+        let remote = OfflineQueueItem {
+            id: "remote-sale-once".into(),
+            action: "complete_sale".into(),
+            payload: r#"{"line_items":[{"sku":"COFFEE","qty":2}]}"#.into(),
+            ..OfflineQueueItem::new("complete_sale", "{}")
+        };
+
+        assert!(queue.apply_remote_atomic(&store, &remote).unwrap());
+        assert!(!queue.apply_remote_atomic(&store, &remote).unwrap());
+        assert_eq!(inventory_qty(&store, "COFFEE"), 48);
+        assert!(store.is_remote_item_applied(&remote.id).unwrap());
+    }
+
+    #[test]
+    fn apply_remote_atomic_failure_rolls_back_mutation_and_receipt() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+        let remote = OfflineQueueItem {
+            id: "remote-sale-invalid".into(),
+            action: "complete_sale".into(),
+            payload: r#"{"line_items":[{"sku":"COFFEE","qty":2},{"sku":"MISSING","qty":1}]}"#
+                .into(),
+            ..OfflineQueueItem::new("complete_sale", "{}")
+        };
+
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert_eq!(inventory_qty(&store, "COFFEE"), 50);
+        assert!(!store.is_remote_item_applied(&remote.id).unwrap());
+        assert!(!store.is_remote_failure_dead_lettered(&remote.id).unwrap());
+
+        // The third failed attempt quarantines the poison item. A later
+        // replay is skipped without mutating state or advancing a receipt.
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert!(store.is_remote_failure_dead_lettered(&remote.id).unwrap());
+        assert!(!queue.apply_remote_atomic(&store, &remote).unwrap());
+    }
+
+    #[test]
+    fn apply_remote_atomic_clears_stale_failure_after_success() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+        let remote = OfflineQueueItem {
+            id: "remote-sale-recovered".into(),
+            action: "complete_sale".into(),
+            payload: r#"{"line_items":[{"sku":"COFFEE","qty":1}]}"#.into(),
+            ..OfflineQueueItem::new("complete_sale", "{}")
+        };
+
+        store
+            .record_remote_failure(
+                &remote.id,
+                &remote.action,
+                &remote.payload,
+                "temporary failure",
+                3,
+            )
+            .unwrap();
+        assert_eq!(store.list_remote_failures().unwrap().len(), 1);
+
+        assert!(queue.apply_remote_atomic(&store, &remote).unwrap());
+        assert_eq!(inventory_qty(&store, "COFFEE"), 49);
+        assert!(store.list_remote_failures().unwrap().is_empty());
+    }
+
+    #[test]
+    fn apply_remote_atomic_rejects_conflicting_existing_product() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        store
+            .conn()
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at,
+                                      product_type, version)
+                 VALUES ('prod-existing', 'COFFEE', 'Existing Coffee', 350, 'USD',
+                         '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 'retail', 1)",
+                [],
+            )
+            .unwrap();
+        let payload = serde_json::json!({
+            "sku": "COFFEE",
+            "name": "Different Coffee",
+            "price_minor": 450,
+            "currency": "USD",
+            "initial_stock": 0,
+            "product_type": "retail"
+        })
+        .to_string();
+        let remote = OfflineQueueItem::new("product.created", &payload);
+
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert!(!store.is_remote_item_applied(&remote.id).unwrap());
+        assert_eq!(
+            store.get_product("COFFEE").unwrap().unwrap().product.name,
+            "Existing Coffee"
+        );
+    }
+
+    #[test]
     fn apply_remote_stock_adjustment() {
         let store = setup_store();
         seed_product_and_inventory(&store);
@@ -775,6 +1141,143 @@ mod tests {
         assert!(result.is_ok(), "unknown action should not error");
         let all = store.list_all_offline().unwrap();
         assert!(all.is_empty(), "no queue items should be created");
+    }
+
+    #[test]
+    fn apply_remote_atomic_rejects_unknown_action_without_receipt() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let remote = OfflineQueueItem::new("unknown.action", r#"{\"data\":\"test\"}"#);
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert!(!store.is_remote_item_applied(&remote.id).unwrap());
+    }
+
+    // ── SYNC-10: remote settings application + reactivity ────────
+
+    /// Helper: a remote `settings.update` item as the cloud server would
+    /// deliver it (fixed id so the idempotency ledger absorbs replays).
+    fn remote_settings_update(id: &str) -> OfflineQueueItem {
+        let mut item = OfflineQueueItem::new(
+            "settings.update",
+            r#"{"key":"store.name","value":"Remote Acme","terminal_id":"term-remote","version":3}"#,
+        );
+        item.id = id.into();
+        item.created_at = "2026-01-02T00:00:00.000Z".into();
+        item
+    }
+
+    /// SYNC-10 Red: a remote `settings.update` must apply the value row AND
+    /// a versioned delta ledger row atomically with the idempotency receipt
+    /// — today it errors as an unsupported action and gets quarantined.
+    #[test]
+    fn apply_remote_atomic_settings_update_writes_row_and_delta() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let remote = remote_settings_update("remote-setting-1");
+
+        assert!(
+            queue.apply_remote_atomic(&store, &remote).unwrap(),
+            "settings.update must apply instead of erroring as unsupported"
+        );
+        assert_eq!(
+            oz_core::settings::Settings::get(store.conn(), "store.name")
+                .unwrap()
+                .as_deref(),
+            Some("Remote Acme"),
+            "the settings row must be updated"
+        );
+        assert_eq!(
+            oz_core::settings::Settings::get_version(store.conn(), "store.name", "term-remote")
+                .unwrap(),
+            Some(1),
+            "a versioned delta row must be written for the (key, terminal) pair"
+        );
+        assert!(
+            store.is_remote_item_applied("remote-setting-1").unwrap(),
+            "the idempotency receipt must be recorded with the mutation"
+        );
+    }
+
+    /// SYNC-10 Red: the atomic apply must surface the settings change
+    /// (changed key + originating terminal) so the daemon can publish
+    /// `SettingsUpdated` for UI reactivity. `apply_remote_atomic_full` is
+    /// the reporting variant; the legacy bool wrapper keeps old callers.
+    #[test]
+    fn apply_remote_atomic_full_surfaces_settings_change() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let remote = remote_settings_update("remote-setting-2");
+
+        let outcome = queue.apply_remote_atomic_full(&store, &remote).unwrap();
+        assert!(outcome.applied);
+        assert_eq!(
+            outcome.settings_change,
+            Some(("store.name".to_string(), "term-remote".to_string())),
+            "the changed key and originating terminal must be reported"
+        );
+    }
+
+    /// SYNC-10: replay of the same remote settings item must NOT publish a
+    /// second change (the ledger skips it, so the outcome carries no change).
+    #[test]
+    fn apply_remote_atomic_full_replay_reports_no_settings_change() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let remote = remote_settings_update("remote-setting-3");
+
+        let first = queue.apply_remote_atomic_full(&store, &remote).unwrap();
+        let replay = queue.apply_remote_atomic_full(&store, &remote).unwrap();
+        assert!(first.applied);
+        assert!(first.settings_change.is_some());
+        assert!(
+            !replay.applied && replay.settings_change.is_none(),
+            "a replayed item must not re-apply or re-report the change (SYNC-01)"
+        );
+    }
+
+    /// SYNC-10: the non-atomic dispatcher (legacy SyncEngine path) applies
+    /// settings updates with the same row + delta semantics.
+    #[test]
+    fn apply_remote_settings_update_non_atomic() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let remote = remote_settings_update("remote-setting-4");
+
+        queue.apply_remote(&store, &remote).unwrap();
+        assert_eq!(
+            oz_core::settings::Settings::get(store.conn(), "store.name")
+                .unwrap()
+                .as_deref(),
+            Some("Remote Acme")
+        );
+        assert_eq!(
+            oz_core::settings::Settings::get_version(store.conn(), "store.name", "term-remote")
+                .unwrap(),
+            Some(1)
+        );
+    }
+
+    /// SYNC-10: the `settings.change` action alias (the audit catalog's
+    /// spelling) applies identically to `settings.update`.
+    #[test]
+    fn apply_remote_settings_change_alias() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let mut remote = remote_settings_update("remote-setting-5");
+        remote.action = "settings.change".into();
+
+        let outcome = queue.apply_remote_atomic_full(&store, &remote).unwrap();
+        assert!(outcome.applied);
+        assert_eq!(
+            outcome.settings_change,
+            Some(("store.name".to_string(), "term-remote".to_string()))
+        );
+        assert_eq!(
+            oz_core::settings::Settings::get(store.conn(), "store.name")
+                .unwrap()
+                .as_deref(),
+            Some("Remote Acme")
+        );
     }
 
     // ── stock.movement cross-store delta routing (ADR #6) ────────

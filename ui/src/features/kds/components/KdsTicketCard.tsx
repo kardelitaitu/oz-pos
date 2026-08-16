@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, memo, useCallback } from 'react';
+import { useEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useTicketSla } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized } from '@/frontend/shared';
 import { getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
+import { createCooldownWrapper } from '@/features/kds/hooks/useActionCooldown';
 
 /** Props for the KdsTicketCard component. */
 export interface KdsTicketCardProps {
@@ -164,13 +165,16 @@ export const KdsTicketCard = memo(function KdsTicketCard({
     if (e.key === 'Escape') handleCancelEdit();
   }, [handleSaveEdit, handleCancelEdit]);
 
-  const handleClick = () => {
-    if (editing) return;
-    const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
-    if (currentIdx >= 0 && currentIdx < STATUS_ORDER.length - 1) {
-      onAdvance(order);
-    }
-  };
+  const handleClick = useMemo(
+    () => createCooldownWrapper(() => {
+      if (editing) return;
+      const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
+      if (currentIdx >= 0 && currentIdx < STATUS_ORDER.length - 1) {
+        onAdvance(order);
+      }
+    }, 200),
+    [editing, order, onAdvance],
+  );
 
   const startEditing = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -197,6 +201,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
           {showTableNumber && order.table_number && (
             <span className="kds-ticket-table">{order.table_number}</span>
           )}
+          <span className="kds-ticket-item-count-badge">{order.item_count}</span>
         </span>
         <span className={`kds-ticket-time kds-ticket-time--${level}`}>{display}</span>
       </div>
@@ -226,7 +231,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                   onClick={(e) => {
                     if (canAdvanceItem && onAdvanceItem) {
                       e.stopPropagation();
-                      onAdvanceItem(item);
+                      createCooldownWrapper(() => onAdvanceItem(item), 200)();
                     }
                   }}
                   role={canAdvanceItem ? 'button' : undefined}
@@ -243,7 +248,10 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                   <div className="kds-ticket-item-status-row">
                     <span className={`kds-ticket-item-status-dot kds-ticket-item-status-dot--${item.item_status}`} aria-hidden="true" />
                     <span className="kds-ticket-item-name">
-                      {item.qty > 1 ? `${item.display_name} x${item.qty}` : item.display_name}
+                      {item.display_name}
+                      {item.qty > 1 && (
+                        <span className="kds-ticket-item-qty">×{item.qty}</span>
+                      )}
                     </span>
                     <span className="kds-ticket-item-status-label">
                       {requiredLocalized(l10n, `kds-item-status-${item.item_status}`)}
@@ -298,7 +306,10 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                 type="number"
                 min={1}
                 value={editCount}
-                onChange={(e) => setEditCount(e.target.value)}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (e.target.value === '' || (Number.isInteger(v) && v >= 1)) setEditCount(e.target.value);
+                }}
                 onKeyDown={handleKeyDown}
                 aria-label={requiredLocalized(l10n, 'kds-edit-count-aria')}
               />

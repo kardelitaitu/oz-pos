@@ -320,7 +320,7 @@ H-3 resolved (path validation + canonicalization + extension allowlist). **M-6 r
 
 ---
 
-## 7. Prioritized 0.0.5 release-blocker order (ALL RESOLVED)
+## 7. Prioritized release-blocker order (ALL RESOLVED — 0.0.22 / 0.0.23)
 
 All CRITICAL and HIGH findings are now resolved across the 0.0.22 / 0.0.23 releases:
 
@@ -402,14 +402,14 @@ grep -nE 'Mutex|RwLock|mpsc|AtomicBool|AtomicU' apps/desktop-client/src/state.rs
 - **Method:** re-run the baseline block + the greps above; expect closed findings to return empty (or expected non-critical output).
 - **Next scheduled audit:** after Epic X-1 (state & concurrency) and X-5 (input validation) land; expected ≈ 0.0.24.
 
-#### Re-audit instructions for non-clippy findings
+### Re-audit instructions for non-clippy findings
 Add the result of each grep to the next audit report under a "Closure" column. If a grep returns hits that were either ACCEPTABLE-but-undocumented (e.g. `display` formatters using f64 for non-monetary floats) or NEW improper additions, file either a follow-up ticket or amend this report with a new finding ID.
 
 ---
 
 ## 11. C-1 Closure (Epic X-3)
 
-**Status:** CLOSED — merged as part of the C-1 / X-3 PR on branch `0.0.5`. The single highest-impact money-safety defect in the audit foundation crate is fully remediated.
+**Status:** CLOSED — merged via PR #11 (`6b611145`, branch `kardelitaitu/0.0.5`) carrying commit `ac38ab9` (`fix(currency): close C-1 by converting exchange rates to i64 minor units (Epic X-3)`, 2026-07-12); the fix is present in the `0.0.5` → `0.0.25` release lineage and `main`. The single highest-impact money-safety defect in the audit foundation crate is fully remediated.
 
 ### What changed (8 files)
 

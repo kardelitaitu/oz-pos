@@ -207,7 +207,14 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                         min={0}
                         aria-label={l10n.getString('po-form-qty')}
                         value={line.qty}
-                        onChange={(e) => updateLine(idx, 'qty', parseInt(e.target.value) || 0)}
+                        onChange={(e) => {
+                          // Whole number only — ignore fractional in-progress input
+                          // instead of silently truncating it via parseInt.
+                          const v = Number(e.target.value);
+                          if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                            updateLine(idx, 'qty', e.target.value === '' ? 0 : v);
+                          }
+                        }}
                       />
                     </td>
                     <td>
@@ -217,7 +224,14 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                         min={0}
                         aria-label={l10n.getString('po-form-unit-cost')}
                         value={line.unit_cost_minor}
-                        onChange={(e) => updateLine(idx, 'unit_cost_minor', parseInt(e.target.value) || 0)}
+                        onChange={(e) => {
+                          // Whole number only — ignore fractional in-progress input
+                          // instead of silently truncating it via parseInt.
+                          const v = Number(e.target.value);
+                          if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                            updateLine(idx, 'unit_cost_minor', e.target.value === '' ? 0 : v);
+                          }
+                        }}
                         placeholder={l10n.getString('po-form-unit-cost-placeholder')}
                       />
                     </td>

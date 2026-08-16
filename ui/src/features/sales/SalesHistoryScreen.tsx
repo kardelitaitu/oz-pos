@@ -12,6 +12,7 @@ import {
   type LineItemDto,
 } from '@/api/sales';
 import { listStaffScoped, type StaffMemberDto } from '@/api/staff';
+import { getSaleLineMarginsScoped, type SaleLineMarginDto } from '@/api/reports';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
@@ -135,6 +136,8 @@ export default function SalesHistoryScreen() {
   const [_refundsLoading, setRefundsLoading] = useState(false);
   const { session, isManager } = useAuth();
   const { sessionToken } = useWorkspace();
+  // ── Per-line cost / margin (HPP) for the open sale detail ──
+  const [lineMargins, setLineMargins] = useState<SaleLineMarginDto[]>([]);
 
   // P2-4: Sale detail cache — avoids re-fetching the same sale on modal re-open.
   // Invalidated when a sale is voided or refunded (status-changing events).
@@ -318,15 +321,28 @@ export default function SalesHistoryScreen() {
       } catch {
         setRefunds([]);
       }
+      // Margin is a live report (costs can change) — always refresh.
+      try {
+        const margins = sessionToken
+          ? await getSaleLineMarginsScoped(sessionToken, id)
+          : [];
+        setLineMargins(margins);
+      } catch {
+        setLineMargins([]);
+      }
       return;
     }
 
     setDetailLoading(true);
     setRefunds([]);
+    setLineMargins([]);
     try {
-      const [sale, refundData] = await Promise.all([
+      const [sale, refundData, margins] = await Promise.all([
         getSale(id),
         listRefunds(id).catch(() => [] as RefundDto[]),
+        sessionToken
+          ? getSaleLineMarginsScoped(sessionToken, id).catch(() => [] as SaleLineMarginDto[])
+          : Promise.resolve([] as SaleLineMarginDto[]),
       ]);
       // Cache the result for future re-opens (null-safe: getSale can return null)
       if (sale) {
@@ -334,16 +350,18 @@ export default function SalesHistoryScreen() {
       }
       setDetail(sale);
       setRefunds(refundData);
+      setLineMargins(margins);
     } catch {
       // IPC unavailable.
     } finally {
       setDetailLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   const closeDetail = useCallback(() => {
     setDetail(null);
     setRefunds([]);
+    setLineMargins([]);
   }, []);
 
   const detailExit = useExitAnimation(!!detail, closeDetail);
@@ -427,37 +445,81 @@ export default function SalesHistoryScreen() {
     return s ? s.display_name : userId.slice(0, 8);
   }, [staff]);
 
-  const handleExportCsv = useCallback(() => {
-    const headers = [
-      l10n.getString('sales-history-export-id'),
-      l10n.getString('sales-history-export-date'),
-      l10n.getString('sales-history-export-total'),
-      l10n.getString('sales-history-export-items'),
-      l10n.getString('sales-history-export-status'),
-      l10n.getString('sales-history-export-payment'),
-      l10n.getString('sales-history-export-cashier'),
-    ];
-    // Export ALL filtered results, not just current page.
-    const rows = filteredSales.map((s) => [
-      s.id,
-      new Date(s.createdAt).toLocaleString(),
-      formatMoney(s.total),
-      String(s.lineCount),
-      s.status,
-      s.paymentMethod ?? '',
-      cashierName(s.userId),
-    ]);
-    const bom = '\uFEFF';
-    const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sales-export-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    a.remove();
-  }, [filteredSales, cashierName, l10n]);
+  const [csvExporting, setCsvExporting] = useState(false);
+
+  const handleExportCsv = useCallback(async () => {
+    if (csvExporting) return;
+    setCsvExporting(true);
+    try {
+      const headers = [
+        l10n.getString('sales-history-export-id'),
+        l10n.getString('sales-history-export-date'),
+        l10n.getString('sales-history-export-total'),
+        l10n.getString('sales-history-export-items'),
+        l10n.getString('sales-history-export-status'),
+        l10n.getString('sales-history-export-payment'),
+        l10n.getString('sales-history-export-cashier'),
+        l10n.getString('sales-history-export-sku'),
+        l10n.getString('sales-history-export-product'),
+        l10n.getString('sales-history-export-qty'),
+        l10n.getString('sales-history-export-unit-price'),
+        l10n.getString('sales-history-export-unit-cost'),
+        l10n.getString('sales-history-export-line-margin'),
+        l10n.getString('sales-history-export-margin-pct'),
+      ];
+      // Export ALL filtered results, not just current page — one CSV row per
+      // sale line, with per-line cost (HPP) and margin from the report layer.
+      const withLines = await Promise.all(
+        filteredSales.map(async (s) => {
+          const margins = sessionToken
+            ? await getSaleLineMarginsScoped(sessionToken, s.id).catch(() => [] as SaleLineMarginDto[])
+            : [];
+          return { sale: s, margins };
+        }),
+      );
+      const rows: string[][] = [];
+      for (const { sale: s, margins } of withLines) {
+        const context = [
+          s.id,
+          new Date(s.createdAt).toLocaleString(),
+          formatMoney(s.total),
+          String(s.lineCount),
+          s.status,
+          s.paymentMethod ?? '',
+          cashierName(s.userId),
+        ];
+        if (margins.length === 0) {
+          // Margins unavailable (e.g. IPC down) — emit the summary row alone.
+          rows.push([...context, '', '', '', '', '', '', '']);
+          continue;
+        }
+        for (const l of margins) {
+          rows.push([
+            ...context,
+            l.sku,
+            l.name,
+            String(l.qty),
+            formatMoney({ minor_units: l.unit_price_minor, currency: s.total.currency }),
+            formatMoney({ minor_units: l.unit_cost_minor, currency: s.total.currency }),
+            formatMoney({ minor_units: l.margin_minor, currency: s.total.currency }),
+            `${l.margin_percent.toFixed(1)}%`,
+          ]);
+        }
+      }
+      const bom = '\uFEFF';
+      const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
+      const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sales-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      a.remove();
+    } finally {
+      setCsvExporting(false);
+    }
+  }, [filteredSales, cashierName, l10n, sessionToken, csvExporting]);
 
   // ── Focus trap refs ───────────────────────────────
   const voidPanelRef = useRef<HTMLDivElement>(null);
@@ -511,8 +573,12 @@ export default function SalesHistoryScreen() {
         </div>
         <div className="sales-history-header-actions">
           <Localized id="sales-history-export-csv">
-            <button type="button" className="sales-history-export-btn" onClick={handleExportCsv}>
-              <span>Export CSV</span>
+            <button type="button" className="sales-history-export-btn" onClick={handleExportCsv} disabled={csvExporting}>
+              {csvExporting ? (
+                <Localized id="sales-history-exporting"><span>Exporting…</span></Localized>
+              ) : (
+                <span>Export CSV</span>
+              )}
             </button>
           </Localized>
         </div>
@@ -520,7 +586,7 @@ export default function SalesHistoryScreen() {
 
       {/* ── Filter bar ──────────────────────────────────────────── */}
       <Localized id="sales-history-filter-aria" attrs={{ 'aria-label': true }}>
-        <div className="sales-history-filters" role="search" aria-label="Filter sales">
+        <div className="sales-history-filters" role="search" aria-label={l10n.getString('filter-sales-aria')}>
         {/* Search */}
         <div className="sales-history-filter-group">
           <Localized id="sales-history-search-label">
@@ -535,7 +601,7 @@ export default function SalesHistoryScreen() {
                 placeholder="Search sale ID, payment, cashier…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="Search sales"
+                aria-label={l10n.getString('search-aria')}
               />
             </Localized>
           </Localized>
@@ -547,7 +613,7 @@ export default function SalesHistoryScreen() {
             <span className="sales-history-filter-label"><span>Status</span></span>
           </Localized>
           <Localized id="sales-history-status-filter-aria" attrs={{ 'aria-label': true }}>
-            <div className="sales-history-filter-chips" role="radiogroup" aria-label="Filter by status">
+            <div className="sales-history-filter-chips" role="radiogroup" aria-label={l10n.getString('filter-status-aria')}>
               {STATUS_OPTIONS.map((opt) => {
                 const statusIds: Record<string, string> = {
                   'All': 'sales-history-status-all',
@@ -585,7 +651,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-filter-date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              aria-label="From date"
+              aria-label={l10n.getString('from-date-aria')}
             />
           </Localized>
         </div>
@@ -600,7 +666,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-filter-date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              aria-label="To date"
+              aria-label={l10n.getString('to-date-aria')}
             />
           </Localized>
         </div>
@@ -616,7 +682,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-filter-select"
               value={cashierFilter}
               onChange={(e) => setCashierFilter(e.target.value)}
-              aria-label="Filter by cashier"
+              aria-label={l10n.getString('filter-cashier-aria')}
             >
             <Localized id="sales-history-cashier-all">
               <option value=""><span>All Cashiers</span></option>
@@ -720,7 +786,7 @@ export default function SalesHistoryScreen() {
       ) : (
         <div className="sales-history-table-wrap">
           <Localized id="sales-history-table-aria" attrs={{ 'aria-label': true }}>
-            <table className="sales-history-table" aria-label="Sales history">
+            <table className="sales-history-table" aria-label={l10n.getString('sales-history-aria')}>
             <thead>
               <tr>
                 <Localized id="sales-history-col-id">
@@ -775,7 +841,7 @@ export default function SalesHistoryScreen() {
                   <th><span>Cashier</span></th>
                 </Localized>
                 <Localized id="sales-history-actions-aria" attrs={{ 'aria-label': true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>
@@ -798,7 +864,7 @@ export default function SalesHistoryScreen() {
       {/* ── Pagination controls ────────────────────────────── */}
       {!loading && filteredSales.length > pageSize && (
         <Localized id="sales-history-pagination-aria" attrs={{ 'aria-label': true }}>
-        <nav className="sales-history-pagination" aria-label="Pagination">
+        <nav className="sales-history-pagination" aria-label={l10n.getString('pagination-aria')}>
           <Localized id="sales-history-prev-aria" attrs={{ 'aria-label': true }}>
           <Localized id="sales-history-prev-page">
             <button
@@ -806,7 +872,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-page-btn"
               disabled={safePage <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              aria-label="Previous page"
+              aria-label={l10n.getString('previous-page-aria')}
             >
               <span>&larr; Prev</span>
             </button>
@@ -824,7 +890,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-page-btn"
               disabled={safePage >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              aria-label="Next page"
+              aria-label={l10n.getString('next-page-aria')}
             >
               <span>Next &rarr;</span>
             </button>
@@ -840,7 +906,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-page-size-select"
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
-              aria-label="Results per page"
+              aria-label={l10n.getString('results-per-page-aria')}
             >
               {PAGE_SIZE_OPTIONS.map((size) => (
                 <option key={size} value={size}>{size}</option>
@@ -865,7 +931,7 @@ export default function SalesHistoryScreen() {
       {/* ── Void Confirmation Modal ──────────────────────────── */}
       {voidExit.shouldRender && voidTarget && (
         <Localized id="sales-history-void-overlay-aria" attrs={{ 'aria-label': true }}>
-        <div className={`sales-history-overlay${voidExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Void order">
+        <div className={`sales-history-overlay${voidExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('void-order-aria')}>
           <div ref={voidPanelRef} className={`sales-history-modal sales-history-void-modal${voidExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-void-title">
@@ -876,7 +942,7 @@ export default function SalesHistoryScreen() {
                   type="button"
                   className="sales-history-modal-close"
                   onClick={voidExit.requestClose}
-                  aria-label="Close void dialog"
+                  aria-label={l10n.getString('close-void-aria')}
                 >
                   &times;
                 </button>
@@ -906,7 +972,7 @@ export default function SalesHistoryScreen() {
                     placeholder="e.g. Customer cancellation"
                     value={voidReason}
                     onChange={(e) => setVoidReason(e.target.value)}
-                    aria-label="Void reason"
+                    aria-label={l10n.getString('void-reason-aria')}
                   />
                 </Localized>
                 </Localized>
@@ -943,7 +1009,7 @@ export default function SalesHistoryScreen() {
       {/* ── Detail modal ────────────────────────────────────────── */}
       {detailExit.shouldRender && detail && (
         <Localized id="sales-history-detail-overlay-aria" attrs={{ 'aria-label': true }}>
-        <div className={`sales-history-overlay${detailExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Sale detail">
+        <div className={`sales-history-overlay${detailExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('sale-detail-aria')}>
           <div ref={detailPanelRef} className={`sales-history-modal${detailExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-detail-title">
@@ -955,7 +1021,7 @@ export default function SalesHistoryScreen() {
                   type="button"
                   className="sales-history-modal-close"
                   onClick={detailExit.requestClose}
-                  aria-label="Close"
+                  aria-label={l10n.getString('close-aria')}
                 >
                   &times;
                 </button>
@@ -1062,7 +1128,7 @@ export default function SalesHistoryScreen() {
                   <h3><span>Line Items</span></h3>
                 </Localized>
                 <Localized id="sales-history-lines-aria" attrs={{ 'aria-label': true }}>
-                <table className="sales-history-lines-table" aria-label="Sale line items">
+                <table className="sales-history-lines-table" aria-label={l10n.getString('sale-line-items-aria')}>
                   <thead>
                     <tr>
                       <Localized id="sales-history-line-sku"><th><span>SKU</span></th></Localized>
@@ -1070,6 +1136,13 @@ export default function SalesHistoryScreen() {
                       <Localized id="sales-history-line-qty"><th><span>Qty</span></th></Localized>
                       <Localized id="sales-history-line-unit-price"><th><span>Unit Price</span></th></Localized>
                       <Localized id="sales-history-line-total"><th><span>Total</span></th></Localized>
+                      {lineMargins.length > 0 && (
+                        <>
+                          <Localized id="sales-history-line-cost"><th><span>Cost</span></th></Localized>
+                          <Localized id="sales-history-line-margin"><th><span>Margin</span></th></Localized>
+                          <Localized id="sales-history-line-margin-pct"><th><span>Margin %</span></th></Localized>
+                        </>
+                      )}
                       {detail.lines.some((l) => l.tax_amount) && (
                         <Localized id="sales-history-line-tax"><th><span>Tax</span></th></Localized>
                       )}
@@ -1082,6 +1155,19 @@ export default function SalesHistoryScreen() {
                         <td>{line.qty}</td>
                         <td>{formatMoney(line.unit_price)}</td>
                         <td>{formatMoney({ minor_units: line.total_minor, currency: line.unit_price.currency })}</td>
+                        {lineMargins.length > 0 && (
+                          (() => {
+                            const m = lineMargins.find((lm) => lm.sale_line_id === line.id);
+                            if (!m) return <td>{'\u2014'}</td>;
+                            return (
+                              <>
+                                <td className="sales-history-cell-mono">{formatMoney({ minor_units: m.unit_cost_minor, currency: line.unit_price.currency })}</td>
+                                <td className={`sales-history-cell-mono${m.margin_minor < 0 ? ' sales-history-cell-negative' : ''}`}>{formatMoney({ minor_units: m.margin_minor, currency: line.unit_price.currency })}</td>
+                                <td className={`sales-history-cell-mono${m.margin_percent < 0 ? ' sales-history-cell-negative' : ''}`}>{m.margin_percent.toFixed(1)}%</td>
+                              </>
+                            );
+                          })()
+                        )}
                         <td>{line.tax_amount ? formatMoney(line.tax_amount) : '\u2014'}</td>
                       </tr>
                     ))}
@@ -1103,7 +1189,7 @@ export default function SalesHistoryScreen() {
                         </div>
                         <div className="sales-history-refund-reason">{rf.reason}</div>
                         <Localized id="sales-history-refund-lines-aria" attrs={{ 'aria-label': true }}>
-                        <table className="sales-history-lines-table" aria-label="Refund line items">
+                        <table className="sales-history-lines-table" aria-label={l10n.getString('refund-line-items-aria')}>
                           <thead>
                             <tr>
                               <Localized id="refund-line-sku"><th><span>SKU</span></th></Localized>

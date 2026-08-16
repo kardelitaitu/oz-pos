@@ -25,7 +25,8 @@ import {
   type CurrencyDto,
 } from '@/api/currency';
 import { getBrandSettingsScoped } from '@/api/branding';
-import { getVersionScoped, type VersionInfo } from '@/api/system';
+import { getVersionScoped, getDeviceId, type VersionInfo } from '@/api/system';
+import { listTerminals } from '@/api/terminals';
 import { useWorkspace } from './WorkspaceContext';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -54,6 +55,26 @@ export interface SettingsState {
   appVersion: string;
 }
 
+/** Local development sync endpoint used when no server is configured. */
+export const DEFAULT_LOCAL_SYNC_SERVER_URL = 'http://localhost:3099';
+
+/**
+ * Give an unconfigured settings page a usable local-sync draft.
+ *
+ * A missing/blank URL means there is no target to connect to, regardless of
+ * whether an old API key was retained. Keep configured URLs and explicit
+ * enabled states untouched; this fallback only supplies the local defaults
+ * for the unconfigured settings surface.
+ */
+export function withSyncDefaults(sync: SyncSettingsDto): SyncSettingsDto {
+  if (sync.serverUrl?.trim()) return sync;
+  return {
+    ...sync,
+    serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
+    enabled: true,
+  };
+}
+
 /** Default state used before the initial fetch completes. */
 const DEFAULT_SETTINGS: SettingsState = {
   receipt: {
@@ -70,7 +91,11 @@ const DEFAULT_SETTINGS: SettingsState = {
     taxRoundingMode: 'half_up',
   },
   store: { name: '', address: '', taxId: '', currency: 'IDR', branch: '' },
-  sync: { serverUrl: null, hasApiKey: false, enabled: false },
+  sync: {
+    serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
+    hasApiKey: false,
+    enabled: true,
+  },
   brand: { colour: '#10b981', storeName: '' },
   preferences: { cardSize: 0, fontSize: 0, fontSmoothing: 'antialiased' },
   currencies: [],
@@ -83,7 +108,7 @@ export interface SettingsContextValue {
   settings: SettingsState;
   /** True during initial fetch and during active refetch windows. */
   loading: boolean;
-  /** Error message when ALL APIs fail; null when at least one succeeded. */
+  /** Fluent key id when ALL APIs fail; null when at least one succeeded. */
   error: string | null;
   /** True when the most recent load succeeded partially (some APIs failed). */
   hasPartialError: boolean;
@@ -168,8 +193,61 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
   const pendingKeysRef = useRef<Set<string>>(new Set());
   const mountedRef = useRef(true);
 
-  // Read sessionToken for scoped settings APIs
-  const { sessionToken } = useWorkspace();
+  // Read sessionToken for scoped settings APIs. `terminalId` is the
+  // device id (`getDeviceId()`); the backend tags `settings_updated` events
+  // with the originating terminal's ROW id (or "unknown" when this device
+  // has no registered terminal).
+  const { sessionToken, terminalId } = useWorkspace();
+
+  // ── Local terminal identity (SYNC-10) ────────────────────────
+  // A local save already refetches via the save handler's
+  // markSettingsUpdated call; the backend ALSO publishes a
+  // settings_updated event for that same change. The listener must ignore
+  // events it can positively attribute to this terminal so the UI doesn't
+  // double-refetch, while still reacting to events from other terminals.
+  //
+  // Identities: the device id (the value the backend matches against the
+  // terminals.device_id column) plus the registered terminal's row id
+  // (the value the backend actually emits in events). "unknown" is the
+  // backend's signature for an unregistered device — when no terminal is
+  // registered here, every "unknown" event is a local echo, so it is
+  // skipped too; when we ARE registered, "unknown" can only be an
+  // unregistered peer's change and must still refetch.
+  const localIdentityRef = useRef<{ ids: Set<string>; hasRegisteredTerminal: boolean }>({
+    ids: new Set(),
+    hasRegisteredTerminal: false,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ids = new Set<string>();
+        let hasRegisteredTerminal = false;
+        const deviceId = terminalId || (await getDeviceId().catch(() => ''));
+        if (deviceId) ids.add(deviceId);
+        try {
+          const terminals = await listTerminals();
+          const match = terminals.find((t) => t.deviceId === deviceId);
+          if (match) {
+            ids.add(match.id);
+            hasRegisteredTerminal = true;
+          }
+        } catch {
+          // IPC unavailable (browser dev) — device id only.
+        }
+        if (!cancelled) {
+          localIdentityRef.current = { ids, hasRegisteredTerminal };
+        }
+      } catch {
+        // Never let identity resolution crash the provider (e.g. a test or
+        // non-Tauri shell that leaves getDeviceId unmocked).
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [terminalId]);
 
   // ── Full load (all APIs) ────────────────────────────────────
 
@@ -212,7 +290,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
         hasAnyFailure = true;
       }
       if (syncR.status === 'fulfilled' && syncR.value) {
-        setSettings((prev) => ({ ...prev, sync: syncR.value }));
+        setSettings((prev) => ({ ...prev, sync: withSyncDefaults(syncR.value) }));
       } else {
         hasAnyFailure = true;
       }
@@ -250,7 +328,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
       }
 
       if (results.every((r) => r.status === 'rejected')) {
-        setError('Failed to load settings');
+        setError('settings-load-failed');
         setHasPartialError(false);
       } else {
         setHasPartialError(hasAnyFailure);
@@ -307,7 +385,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
       tasks.push(
         getSyncSettingsScoped(sessionToken).then((v) => {
           if (!v) return;
-          setSettings((prev) => ({ ...prev, sync: v }));
+          setSettings((prev) => ({ ...prev, sync: withSyncDefaults(v) }));
         }),
       );
     }
@@ -409,6 +487,15 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
           'settings_updated',
           (event) => {
             const keys = event.payload.changed_keys;
+            const origin = event.payload.terminal_id;
+            // Skip our own change — the save handler already refetched via
+            // markSettingsUpdated (see the identity effect above).
+            const identity = localIdentityRef.current;
+            const isOwn =
+              origin !== undefined &&
+              (identity.ids.has(origin) ||
+                (origin === 'unknown' && !identity.hasRegisteredTerminal));
+            if (isOwn) return;
             if (keys && keys.length > 0) {
               markSettingsUpdated(keys);
             }

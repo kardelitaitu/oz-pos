@@ -19,6 +19,7 @@ next: None | perf: CLI runs are ephemeral; no long-lived allocations.
 pub mod cli;
 pub mod commands;
 pub mod error;
+pub mod seed_demo;
 
 pub use cli::*;
 pub use commands::run;

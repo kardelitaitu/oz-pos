@@ -1,0 +1,146 @@
+---
+export function getStaticPaths() {
+  return [{ params: { locale: 'en' } }, { params: { locale: 'id' } }];
+}
+import Base from '../../layouts/Base.astro';
+import Hero from '../../components/Hero.astro';
+import PricingCard from '../../components/PricingCard.astro';
+import { t, dict } from '../../i18n';
+import { pricingFor } from '../../content/pricing';
+import { getRelativeLocaleUrl } from 'astro:i18n';
+
+const locale = Astro.currentLocale ?? 'en';
+const pageTitle = `OZ-POS — ${t(locale, 'hero.title')}`;
+const features = (dict(locale).features as { items: { title: string; description: string }[] }).items;
+const pricing = pricingFor(locale).slice(0, 3); // trial, pro, premium
+const download = getRelativeLocaleUrl(locale, 'download');
+const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
+---
+
+<Base title={pageTitle}>
+  <Hero />
+
+  <!-- Features -->
+  <section class="mx-auto max-w-6xl px-4 py-16" aria-label={t(locale, 'features.title')}>
+    <div class="text-center">
+      <h2 class="text-3xl font-bold">{t(locale, 'features.title')}</h2>
+      <p class="mt-2 text-muted">{t(locale, 'features.subtitle')}</p>
+    </div>
+    <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {
+        features.map((f) => (
+          <div class="rounded-xl border border-ink/10 bg-surface/40 p-6">
+            <h3 class="font-semibold">{f.title}</h3>
+            <p class="mt-2 text-sm text-muted">{f.description}</p>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <!-- Screenshot mock (placeholder until real product shots) -->
+  <section class="mx-auto max-w-6xl px-4 py-8" aria-label={t(locale, 'screenshots.title')}>
+    <div class="text-center">
+      <h2 class="text-3xl font-bold">{t(locale, 'screenshots.title')}</h2>
+      <p class="mt-2 text-muted">{t(locale, 'screenshots.caption')}</p>
+    </div>
+    <div
+      class="mt-10 overflow-hidden rounded-xl border border-ink/10 bg-gradient-to-br from-surface to-primary shadow-2xl shadow-black/40"
+      aria-hidden="true"
+    >
+      <!-- Window chrome -->
+      <div class="flex items-center gap-1.5 border-b border-ink/10 bg-primary/60 px-4 py-3">
+        <span class="h-3 w-3 rounded-full bg-accent/60"></span>
+        <span class="h-3 w-3 rounded-full bg-ink/15"></span>
+        <span class="h-3 w-3 rounded-full bg-ink/15"></span>
+        <span class="ml-4 rounded-md bg-ink/5 px-3 py-1 text-[10px] text-muted">Kategori · Menu · Pesanan</span>
+      </div>
+      <div class="grid grid-cols-5 gap-4 p-6">
+        <!-- Product grid -->
+        <div class="col-span-3 space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            {[
+              ['Kopi Tubruk', '18.000'],
+              ['Nasi Goreng', '25.000'],
+              ['Es Teh Manis', '8.000'],
+              ['Mie Goreng', '23.000'],
+            ].map(([name, price]) => (
+              <div class="rounded-lg border border-ink/10 bg-ink/5 p-3">
+                <p class="text-xs font-medium">{name}</p>
+                <p class="mt-1 text-[10px] text-accent">Rp {price}</p>
+              </div>
+            ))}
+          </div>
+          <div class="flex gap-3">
+            {['Kopi', 'Makanan', 'Minuman', 'Camilan'].map((cat, i) => (
+              <span
+                class:list={[
+                  'rounded-full px-3 py-1 text-[10px]',
+                  i === 0 ? 'bg-accent/20 text-accent' : 'bg-ink/5 text-muted',
+                ]}
+              >
+                {cat}
+              </span>
+            ))}
+          </div>
+        </div>
+        <!-- Cart -->
+        <div class="col-span-2 space-y-3 rounded-lg border border-ink/10 bg-primary/40 p-4">
+          <div class="flex justify-between text-[10px] text-muted">
+            <span>Pesanan #1042</span>
+            <span>Kasir: Dewi</span>
+          </div>
+          <div class="space-y-2 border-b border-ink/10 pb-3">
+            {[
+              ['Kopi Tubruk ×2', '36.000'],
+              ['Nasi Goreng ×1', '25.000'],
+              ['Es Teh Manis ×1', '8.000'],
+            ].map(([item, price]) => (
+              <div class="flex justify-between text-[11px]">
+                <span>{item}</span>
+                <span class="text-muted">Rp {price}</span>
+              </div>
+            ))}
+          </div>
+          <div class="flex justify-between text-sm font-semibold">
+            <span>Total</span>
+            <span class="text-accent">Rp 69.000</span>
+          </div>
+          <div class="rounded-md bg-accent py-2 text-center text-xs font-semibold text-black">
+            Bayar · QRIS
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing preview -->
+  <section class="mx-auto max-w-6xl px-4 py-16" aria-label={t(locale, 'pricingPreview.title')}>
+    <div class="text-center">
+      <h2 class="text-3xl font-bold">{t(locale, 'pricingPreview.title')}</h2>
+      <p class="mt-2 text-muted">{t(locale, 'pricingPreview.subtitle')}</p>
+    </div>
+    <div class="mt-10 grid gap-6 md:grid-cols-3">
+      {pricing.map((tier) => <PricingCard tier={tier} />)}
+    </div>
+    <div class="mt-8 text-center">
+      <a href={pricingHref} class="text-sm font-semibold text-link hover:underline">
+        {t(locale, 'pricingPreview.viewAll')} →
+      </a>
+    </div>
+  </section>
+
+  <!-- CTA banner -->
+  <section class="mx-auto max-w-6xl px-4 pb-20">
+    <div class="rounded-2xl border border-accent/30 bg-surface/60 px-6 py-14 text-center">
+      <h2 class="text-3xl font-bold">{t(locale, 'ctaBanner.title')}</h2>
+      <p class="mt-3 text-muted">{t(locale, 'ctaBanner.subtitle')}</p>
+      <a
+        href={download}
+        class="mt-8 inline-block rounded-md bg-accent px-6 py-3 font-semibold text-black transition hover:opacity-90"
+      >
+        {t(locale, 'ctaBanner.cta')}
+      </a>
+    </div>
+  </section>
+</Base>

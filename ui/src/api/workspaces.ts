@@ -11,6 +11,8 @@ export interface WorkspaceDto {
   type_key: string;
   store_id: string;
   store_name: string;
+  /** Controlled business purpose, independent from type, label, and access policy. */
+  purpose_key: string;
   name: string;
   description: string;
   icon: string;
@@ -31,6 +33,8 @@ export interface CreateInstanceRequest {
   type_key: string;
   store_id: string;
   name: string;
+  /** Controlled business purpose; omitted by legacy callers and defaults to `general`. */
+  purpose_key?: string;
   description?: string;
   colour?: string;
 }
@@ -165,16 +169,32 @@ export async function getUserWorkspaceInstancesScoped(
  * @deprecated Required only during pre-session workspace selection. Once a
  * session exists, use listWorkspacesScoped so the store and permissions are
  * resolved from the session token.
+ *
+ * audit/06: the backend resolves the caller's REAL role from the picker
+ * ticket — caller-supplied role/user are no longer accepted.
  */
 export async function listWorkspaces(
-  roleId: string,
+  pickerTicket: string,
   storeId: string,
-  userId?: string,
 ): Promise<WorkspaceDto[]> {
   return loggedInvoke<WorkspaceDto[]>('list_workspaces', {
-    roleId,
+    ticket: pickerTicket,
     storeId,
-    userId: userId ?? null,
+  });
+}
+
+/**
+ * List workspace instances in an explicitly named store for the session
+ * user (audit/06). Authenticated replacement for the terminal-management
+ * screen's cross-store instance picker.
+ */
+export async function listWorkspacesForStoreScoped(
+  sessionToken: string,
+  storeId: string,
+): Promise<WorkspaceDto[]> {
+  return loggedInvoke<WorkspaceDto[]>('list_workspaces_for_store_scoped', {
+    sessionToken,
+    storeId,
   });
 }
 
@@ -182,13 +202,16 @@ export async function listWorkspaces(
  * List screens during pre-session workspace selection.
  *
  * The explicit store ID keeps this bootstrap read on the selected store
- * database. Authenticated callers should use listWorkspaceScreensScoped.
+ * database, but only after the picker ticket (audit/06) proves a real login.
+ * Authenticated callers should use listWorkspaceScreensScoped.
  */
 export async function listWorkspaceScreens(
+  pickerTicket: string,
   typeKey: string,
   storeId: string,
 ): Promise<WorkspaceScreenDto[]> {
   return loggedInvoke<WorkspaceScreenDto[]>('list_workspace_screens', {
+    ticket: pickerTicket,
     typeKey,
     storeId,
   });
@@ -205,19 +228,3 @@ export async function listAllWorkspacesScoped(
   return loggedInvoke<WorkspaceTypeDto[]>('list_all_workspaces_scoped', { sessionToken });
 }
 
-/** Replace workspace key assignments (legacy), caller from session. ADR #7. */
-export async function setUserWorkspacesScoped(
-  sessionToken: string,
-  userId: string,
-  workspaceKeys: string[],
-): Promise<void> {
-  return loggedInvoke<void>('set_user_workspaces_scoped', { sessionToken, userId, workspaceKeys });
-}
-
-/** Get workspace keys for a user (legacy), caller from session. ADR #7. */
-export async function getUserWorkspacesScoped(
-  sessionToken: string,
-  userId: string,
-): Promise<string[]> {
-  return loggedInvoke<string[]>('get_user_workspaces_scoped', { sessionToken, userId });
-}

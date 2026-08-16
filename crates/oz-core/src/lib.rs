@@ -78,6 +78,8 @@ pub mod offline;
 pub mod ozpkg;
 /// Payment processing and split-tender allocation.
 pub mod payment;
+/// Product popularity scoring (ADR #37) — pure decayed/smoothed blend.
+pub mod popularity;
 /// Product catalog — SKU, price, type, metadata.
 pub mod product;
 /// Product bundles — sell multiple SKUs as one item.
@@ -130,6 +132,8 @@ pub mod terminal;
 pub mod terminal_override;
 /// Terminal profile configuration.
 pub mod terminal_profile;
+/// Semantic validation for the topology graph (ADR #34 contract gates).
+pub mod topology;
 /// Staff user accounts and role-based access control.
 pub mod user;
 /// Per-user display preferences (card size, font size, etc.).
@@ -167,11 +171,12 @@ pub use cart::{Cart, CartError, CartId, CartLine};
 pub use cash_payout::CashPayout;
 pub use category::Category;
 pub use customer::Customer;
+pub use db::plans::TenantPlan;
 pub use db::reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     StockAlertEvent, TopProductRow, WeeklyRevenueRow,
 };
-pub use db::{ProductWithDetails, Store};
+pub use db::{ProductWithDetails, RemoteSyncFailure, Store};
 pub use error::{CoreError, CoreErrorKind};
 pub use features::{
     Feature, FeatureGuard, FeatureGuardRegistry, FeatureRegistry, KdsFeatureGuard,
@@ -203,6 +208,7 @@ pub use loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, Loyalt
 pub use money::{Currency, Money, format_minor};
 pub use offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
 pub use payment::{Payment, PaymentSplitArg};
+pub use platform_core::permission_registry;
 pub use platform_core::rbac::{AuthorizationError, has_permission, permissions};
 pub use product::{Product, ProductType};
 pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
@@ -226,9 +232,11 @@ pub use store_profile::StoreProfile;
 pub use subscription::{InstanceStatus, SubscriptionTier, TenantSubscription};
 pub use supplier::Supplier;
 pub use sync_client::{
-    PingResult, PullResult, Snapshot, SyncAttemptResult, SyncConfig, TokenResult, apply_snapshot,
-    apply_sync_outcomes, fetch_snapshot_from_server, mark_all_failed, ping_server, request_token,
-    send_items_to_server, sync_pending,
+    PingResult, PullResult, Snapshot, SyncAttemptResult, SyncConfig, SyncHttpError,
+    TerminalRegistrationResult, TokenResult, admin_key_from_env, apply_snapshot,
+    apply_sync_outcomes, fetch_snapshot_from_server, mark_all_failed, mint_token,
+    persist_refreshed_api_key, ping_server, register_terminal, request_refresh_token,
+    request_token, request_token_client_credentials, send_items_to_server, sync_pending,
 };
 pub use table::{Table, TableStatus};
 pub use terminal::Terminal;

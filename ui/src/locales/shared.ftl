@@ -12,10 +12,6 @@ theme-toggle-aria =
     } mode
 
 # Badge
-badge-default = Badge
-badge-success = Success
-badge-warning = Warning
-badge-danger = Danger
 badge-info = Info
 
 # Loading / Spinner
@@ -30,16 +26,12 @@ toast-info = This is an informational message
 
 # Empty state
 empty-state-title = Nothing here yet
-empty-state-desc = Get started by adding your first item
-empty-state-cta = Add Product
 
 # Error boundary
 error-boundary-title = Something went wrong
 error-boundary-retry = Try Again
 
 # Error state
-error-state-title = Something went wrong
-error-state-desc = An unexpected error occurred. Please try again.
 error-state-retry = Retry
 
 # AppError user-safe copy (ERR-05/ERR-06 — typed normalizer output)
@@ -72,6 +64,31 @@ search = Search
 toggle = Toggle
 no-results = No results found
 error-occurred = An error occurred
+
+# Common aria-label attributes for generic UI actions
+clear-aria = Clear
+backspace-aria = Backspace
+username-aria = Username
+actions-aria = Actions
+collapse-aria = Collapse sidebar
+notifications-aria = Notifications
+settings-aria = Settings
+export-csv-aria = Export CSV
+search-aria = Search
+workspaces-aria = Workspaces
+developer-tools-aria = Developer tools
+theme-selector-aria = Theme selector
+cancel-refund-aria = Cancel refund
+decrease-qty-aria = Decrease quantity
+increase-qty-aria = Increase quantity
+filter-sales-aria = Filter sales
+filter-status-aria = Filter by status
+from-date-aria = From date
+to-date-aria = To date
+filter-cashier-aria = Filter by cashier
+sales-history-aria = Sales history
+pagination-aria = Pagination
+badge-tooltip-aria = Badge with tooltip
 
 # Audit Log
 audit-log-title = Audit Log
@@ -140,6 +157,8 @@ modal-close-aria = Close dialog
 # Permission Denied
 permission-denied-title = Access Denied
 permission-denied-desc = { $action } requires a { $requiredRole } role.
+permission-denied-perm-desc = You don't have permission to access { $action }.
+permission-denied-perm-key = (required permission: { $permission })
 permission-denied-current = You are logged in as { $displayName } ({ $roleName }).
 permission-denied-go-back = Go back
 
@@ -206,6 +225,7 @@ nav-bundles = Bundles
 nav-settings = Settings
 nav-general = General
 nav-dashboard-report = Dashboard
+nav-analytics = Staff Analytics
 nav-sales-report = Sales Report
 nav-inventory-report = Inventory Report
 nav-design-system = Design System
@@ -218,10 +238,9 @@ nav-purchase-orders = Purchase Orders
 nav-stock-transfers = Stock Transfers
 nav-custom-report = Custom Report
 nav-pos = POS
+app-sidebar-subtitle = Point of Sale
 nav-stock = Stock
-nav-history = History
 nav-reports = Reports
-nav-section-app = App
 nav-sidebar-collapse = Collapse sidebar
 nav-sidebar-expand = Expand sidebar
 nav-main-aria = Main navigation
@@ -234,17 +253,14 @@ workspace-home-fullscreen-hint = F11
 fullscreen-enabled = Fullscreen mode enabled
 fullscreen-disabled = Fullscreen mode disabled
 workspace-home-loading = Loading workspaces…
-workspace-home-loading-aria = Loading workspaces
 workspace-home-sr-error = Connection error
 workspace-home-available = { $count } workspaces available
 workspace-home-coming-soon = Coming soon
 workspace-card-active-aria = Active workspace
-workspace-home-subtitle = Select a workspace to start
 workspace-home-empty = No workspaces available
 workspace-home-empty-desc = You don't have access to any workspaces yet. Contact an administrator.
 workspace-card-open-aria = Open { $name }
 workspace-card-no-access-aria = { $name } — not available for your role
-workspace-card-no-access-title = Your role ({ $role }) cannot access this workspace
 workspace-card-no-access-badge = Not available
 workspace-home-logout = Logout
 workspace-home-logout-confirm-title = Logout?
@@ -261,13 +277,10 @@ workspace-card-pin-aria = Pin { $name } to top
 workspace-card-unpin-aria = Unpin { $name }
 
 # Shell
-shell-loading = Loading…
 
 # Status Bar
 status-bar-connected = Backend connected
 status-bar-disconnected = Backend disconnected
-status-bar-checking = Checking backend connection
-status-bar-authenticating = Authenticating...
 # Sync connection status
 status-bar-sync-connected = Cloud sync connected
 status-bar-sync-disconnected = Cloud sync disconnected
@@ -279,7 +292,7 @@ staff-login-license-inactive = License inactive
 statusbar-conflict-count = { $count } sync conflict(s) resolved
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Application status
-statusbar-version = OZ-POS Enterprise v0.0.24
+statusbar-version = OZ-POS Enterprise v0.0.25
 statusbar-sync-name = Sync
 statusbar-gateway-name = Stripe
 statusbar-license = Proprietary License
@@ -345,13 +358,17 @@ auth-error-title = Error
 auth-create-pin-title = Create Owner PIN
 auth-create-pin-desc = Set up the first owner account to manage your POS
 auth-create-pin-display-name-label = Display Name
-auth-create-pin-display-name-placeholder = Store Owner
+auth-create-pin-display-name-placeholder =
+    .placeholder = Store Owner
 auth-create-pin-username-label = Username
-auth-create-pin-username-placeholder = owner
+auth-create-pin-username-placeholder =
+    .placeholder = owner
 auth-create-pin-pin-label = PIN
-auth-create-pin-pin-placeholder = At least 4 digits
+auth-create-pin-pin-placeholder =
+    .placeholder = At least 4 digits
 auth-create-pin-confirm-label = Confirm PIN
-auth-create-pin-confirm-placeholder = Re-enter PIN
+auth-create-pin-confirm-placeholder =
+    .placeholder = Re-enter PIN
 auth-create-pin-creating = Creating...
 auth-create-pin-create = Create Owner Account
 auth-create-pin-success = Owner account created successfully!
@@ -359,3 +376,45 @@ auth-create-pin-error-fields = All fields are required.
 auth-create-pin-error-pin-length = PIN must be at least 4 characters.
 auth-create-pin-error-pin-mismatch = PINs do not match.
 auth-create-pin-error-generic = An error occurred while creating the owner account.
+
+# Additional common aria-label attributes
+close-aria = Close
+search-customers-aria = Search customers
+search-products-aria = Search products
+barcode-input-aria = Barcode input
+submit-barcode-aria = Submit barcode
+select-course-aria = Select course
+revert-changes-aria = Revert changes
+add-sample-line-aria = Add a sample line
+previous-page-aria = Previous page
+next-page-aria = Next page
+results-per-page-aria = Results per page
+void-order-aria = Void order
+close-void-aria = Close void dialog
+void-reason-aria = Void reason
+sale-detail-aria = Sale detail
+sale-line-items-aria = Sale line items
+refund-line-items-aria = Refund line items
+orders-aria = Orders
+back-to-orders-aria = Back to orders list
+order-line-items-aria = Order line items
+decrease-card-size-aria = Decrease card size
+increase-card-size-aria = Increase card size
+decrease-font-size-aria = Decrease font size
+increase-font-size-aria = Increase font size
+primary-colour-picker-aria = Primary colour picker
+colour-hex-aria = Colour hex value
+reset-colour-aria = Reset colour to default
+pick-logo-aria = Pick logo file
+reset-appearance-aria = Reset all appearance settings
+save-appearance-aria = Save appearance
+
+# Workspace home — Insights section (owner/admin only)
+workspace-home-insights-section = Insights
+workspace-home-analytics-title = Analytics
+workspace-home-analytics-desc = Staff performance, sales trends, and shift metrics
+workspace-home-analytics-aria = Open Analytics
+workspace-home-reports-title = Reports
+workspace-home-reports-desc = Sales, inventory, and custom reports dashboard
+workspace-home-reports-aria = Open Reports
+workspace-home-shortcut-open = Open

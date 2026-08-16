@@ -64,6 +64,7 @@ pub fn run() {
     {
         let result: Result<(), AppError> = tauri::Builder::default()
             .plugin(tauri_plugin_clipboard_manager::init())
+            .plugin(tauri_plugin_opener::init())
             .setup(|app| {
                 let state = AppState::new(app.handle())
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -177,6 +178,15 @@ pub fn run() {
                                                 );
                                             }
                                         }
+                                        // ADR sync-plan-gating: a free tenant
+                                        // is gated, not broken — keep items
+                                        // `pending` so they sync automatically
+                                        // after an upgrade (no mark_all_failed).
+                                        Err(oz_core::sync_client::SyncHttpError::PlanRequired) => {
+                                            tracing::error!(
+                                                "tablet sync daemon: cloud sync requires a paid plan"
+                                            );
+                                        }
                                         Err(e) => {
                                             let _ = oz_core::sync_client::mark_all_failed(
                                                 &store,
@@ -243,6 +253,8 @@ pub fn run() {
                 commands::staff::list_roles_scoped,
                 commands::staff::create_staff_scoped,
                 commands::staff::update_staff_scoped,
+                commands::staff::get_staff_profile_scoped,
+                commands::staff::bootstrap_owner,
                 commands::categories::list_categories,
                 commands::categories::create_category,
                 commands::categories::create_category_scoped,
@@ -351,6 +363,8 @@ pub fn run() {
                 commands::settings::set_hardware_settings,
                 commands::settings::get_user_preferences,
                 commands::settings::set_user_preferences,
+                commands::settings::get_user_preferences_scoped,
+                commands::settings::set_user_preferences_scoped,
                 commands::settings::get_setting,
                 commands::settings::set_setting,
                 commands::setup::get_enabled_features,
@@ -366,6 +380,8 @@ pub fn run() {
                 commands::products::adjust_stock,
                 commands::products::get_product_track_serial,
                 commands::products::get_product_track_serial_batch,
+                commands::products::record_product_search,
+                commands::browser::open_product_images,
                 commands::promotions::list_promotions,
                 commands::promotions::get_promotion,
                 commands::promotions::create_promotion,
@@ -373,6 +389,15 @@ pub fn run() {
                 commands::promotions::delete_promotion,
                 commands::promotions::apply_promotion,
                 commands::promotions::get_sale_promotions,
+                commands::purchasing::list_suppliers,
+                commands::purchasing::get_supplier,
+                commands::purchasing::create_supplier,
+                commands::purchasing::update_supplier,
+                commands::purchasing::list_purchase_orders,
+                commands::purchasing::get_purchase_order,
+                commands::purchasing::create_purchase_order,
+                commands::purchasing::update_po_status,
+                commands::purchasing::receive_purchase_order,
                 commands::product_variants::list_product_variants,
                 commands::product_variants::get_product_variant,
                 commands::product_variants::create_product_variant,
@@ -395,12 +420,19 @@ pub fn run() {
                 commands::terminals::list_terminal_overrides,
                 commands::terminals::set_terminal_override,
                 commands::terminals::delete_terminal_override,
+                commands::terminals::set_device_binding,
+                commands::terminals::set_device_binding_scoped,
+                commands::workspaces::list_workspaces,
+                commands::workspaces::list_workspace_screens,
+                commands::workspaces::resolve_boot_store,
                 commands::offline::enqueue_offline,
                 commands::offline::list_pending_offline,
                 commands::offline::list_all_offline,
                 commands::offline::pending_offline_count,
                 commands::offline::retry_offline_sync,
                 commands::offline::delete_offline_item,
+                commands::offline::requeue_remote_failure,
+                commands::offline::list_remote_failures,
                 commands::sync::get_sync_settings,
                 commands::sync::update_sync_settings,
                 commands::sync::sync_run,
@@ -408,6 +440,7 @@ pub fn run() {
                 commands::sync::pending_sync_count,
                 commands::sync::test_sync_connection,
                 commands::sync::request_sync_token,
+                commands::sync::get_sync_plan,
                 commands::refunds::process_refund,
                 commands::refunds::process_refund_scoped,
                 commands::refunds::list_refunds,
@@ -415,14 +448,31 @@ pub fn run() {
                 commands::refunds::lookup_sale_by_receipt_barcode,
                 commands::refunds::lookup_sale_by_receipt_barcode_scoped,
                 commands::reports::get_menu_engineering_scoped,
+                commands::reports::get_sale_line_margins_scoped,
                 commands::reports::get_daily_revenue_scoped,
                 commands::reports::get_weekly_revenue_scoped,
                 commands::reports::get_monthly_revenue_scoped,
                 commands::reports::get_top_products_scoped,
+                commands::reports::get_category_popularity_scoped,
+                commands::reports::get_category_popularity_trend_scoped,
+                commands::reports::get_category_forecast_scoped,
                 commands::reports::get_hourly_heatmap_scoped,
                 commands::reports::get_low_stock_alerts_scoped,
                 commands::reports::get_category_breakdown_scoped,
+                commands::reports::get_payment_method_breakdown_scoped,
+                commands::reports::get_voided_sales_summary_scoped,
+                commands::reports::get_voided_items_scoped,
+                commands::reports::get_basket_size_scoped,
+                commands::reports::get_basket_size_trend_scoped,
+                commands::reports::get_customer_split_scoped,
+                commands::reports::get_discounts_summary_scoped,
+                commands::reports::get_inventory_turnover_scoped,
+                commands::reports::get_inventory_trend_scoped,
+                commands::reports::get_table_turnover_scoped,
+                commands::reports::get_hourly_occupancy_scoped,
                 commands::reports::build_custom_report_scoped,
+                commands::analytics::get_staff_analytics_scoped,
+                commands::analytics::get_staff_analytics_daily_scoped,
                 commands::scale::read_scale_weight,
                 commands::tables::list_tables,
                 commands::tables::get_table,

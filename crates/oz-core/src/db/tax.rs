@@ -372,7 +372,7 @@ impl Store<'_> {
     ///
     /// TAX-03: every id must resolve to an active rate — archived or
     /// unknown ids are rejected up front (see
-    /// [`Self::ensure_active_tax_rate_ids`]).
+    /// `Self::ensure_active_tax_rate_ids`).
     pub fn set_category_tax_rates(
         &self,
         category_id: &str,

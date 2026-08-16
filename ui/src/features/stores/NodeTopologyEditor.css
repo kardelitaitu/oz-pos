@@ -14,23 +14,24 @@
 /* Header */
 .node-topology-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-3);
   padding: var(--space-4) var(--space-6);
   background-color: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
-.node-topology-header-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.node-topology-header-title h2 {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--font-weight-bold);
+/* The branch (graph) selector toolbar sits inline as the header's left
+   cluster (the parent passes it via the branchToolbar slot): drop the
+   standalone bar's own chrome so it blends into the header surface, and
+   let it yield space (min-width: 0) instead of forcing overflow when a
+   branch name is long. */
+.node-topology-header .topology-branch-toolbar {
+  flex-shrink: 1;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
 }
 
 .topology-tier-badge {
@@ -43,10 +44,31 @@
   border: 1px solid var(--color-border);
 }
 
+/* View-only notice shown when the session user cannot persist topology
+   changes (no `staff:update`): the canvas stays fully readable but Apply
+   is disabled, so the user never hits a save-time permission surprise. */
+.topology-readonly-note {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-subtle, var(--color-accent-subtle));
+  color: var(--color-warning-fg, var(--color-fg-muted));
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
 .node-topology-header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
+  /* Push the action buttons to the far right of the single-row header;
+     the toolbar cluster + tier badge stay grouped on the left. The
+     cluster may wrap only when the header genuinely runs out of room. */
+  margin-left: auto;
+  /* Anchor for the shortcuts help popover (absolute below the button). */
+  position: relative;
 }
 
 /* Main Layout */
@@ -143,10 +165,179 @@
   gap: 2px;
 }
 
-.tool-rack-divider {
-  border: none;
+/* Palette sections group the cards into Add Nodes / Edit clusters —
+   small-caps section titles separated by a hairline, mirroring the
+   professional tool-panel hierarchy. */
+.tool-rack-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tool-rack-section + .tool-rack-section {
+  margin-top: var(--space-1);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
-  margin: var(--space-2) 0;
+}
+
+.tool-rack-section-title {
+  margin: 0 0 var(--space-1) 0;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-muted);
+}
+
+.tool-rack-subsection-title {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle, var(--color-border));
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-muted);
+}
+
+.rack-view-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.rack-view-toggle:hover {
+  border-color: var(--color-border-strong);
+}
+
+.rack-view-toggle.is-active {
+  background-color: var(--color-accent-subtle);
+  border-color: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+
+.rack-view-note {
+  display: block;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  padding: var(--space-1) var(--space-2);
+}
+
+.rack-share-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.rack-share-row .rack-view-toggle {
+  flex: 1;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.rack-template-pop {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.rack-template-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+}
+
+.rack-template-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.rack-template-save {
+  padding: var(--space-1) var(--space-3);
+  background-color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent-fg);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.rack-template-list {
+  padding: var(--space-2);
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.rack-template-empty {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  padding: var(--space-1) var(--space-2);
+}
+
+.rack-template-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.rack-template-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.rack-template-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rack-template-actions {
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.rack-template-actions button {
+  padding: var(--space-0) var(--space-2);
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.rack-template-actions button:hover {
+  border-color: var(--color-border-strong);
 }
 
 .delete-btn {
@@ -155,13 +346,34 @@
   border-color: var(--color-danger);
 }
 
-.canvas-controls-mini {
-  margin-top: auto;
-  display: flex;
-  justify-content: space-between;
+/* Palette tool cards carry a keyboard-slot badge (1-4) that mirrors the
+   canvas spawn shortcuts. kbd keeps the OS-looking keycap: subtle border,
+   slightly heavier bottom edge, small caps. */
+.tool-card-shortcut {
+  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: center;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
   align-items: center;
-  font-size: var(--text-xs);
+  justify-content: center;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
   color: var(--color-fg-muted);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  font-family: inherit;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.tool-card:hover .tool-card-shortcut {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 /* Canvas Viewport */
@@ -169,8 +381,29 @@
   flex: 1;
   position: relative;
   background-color: var(--color-bg);
-  background-image: radial-gradient(var(--color-border) 1px, transparent 0);
-  background-size: 24px 24px;
+  /* Touch parity: the canvas owns its gestures (pan/pinch/drag) — without
+     this the browser would hijack touch scrolling/zooming before the
+     pointer handlers see the events. */
+  touch-action: none;
+  /* Space held → the next left-drag pans; the grab cursor advertises it. */
+  &.canvas-space-pan,
+  &.canvas-space-pan * {
+    cursor: grab !important;
+  }
+  /* Major 120px grid lines over the 24px dot grid — the subtle two-tier
+     grid reads as a professional canvas surface and makes snap movement
+     legible. WKWebView <16.4 fallback first; the color-mix declaration
+     (valid only in newer engines) replaces it where supported. */
+  background-image:
+    linear-gradient(rgba(127, 127, 127, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(127, 127, 127, 0.10) 1px, transparent 1px),
+    radial-gradient(var(--color-border) 1px, transparent 0);
+  background-size: 120px 120px, 120px 120px, 24px 24px;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-border) 38%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-border) 38%, transparent) 1px, transparent 1px),
+    radial-gradient(var(--color-border) 1px, transparent 0);
+  background-size: 120px 120px, 120px 120px, 24px 24px;
   overflow: hidden;
   cursor: grab;
   outline: none;
@@ -204,6 +437,11 @@
   top: 0;
   left: 0;
   pointer-events: none;
+  /* Nodes can now sit at negative canvas coordinates (view-relative edge
+     clamp) — without this, wire tails entering a west/north-bound node's
+     negative port are clipped at the SVG's x=0/y=0 boundary. The canvas
+     container's own overflow:hidden still clips at the real canvas edge. */
+  overflow: visible;
 }
 
 .wire-hitbox {
@@ -221,6 +459,38 @@
   stroke-dasharray: 0 10;
   stroke-linecap: round;
   transition: stroke 0.2s ease;
+}
+
+/* Round 146: under-card wire segments drawn on top of the cards. Must
+   mirror the base .wire-path stroke exactly (dotted 3px accent) so a
+   crossing wire reads as one continuous connection across the card. The
+   overlay is pointer-events-none — it never intercepts card clicks. */
+.node-wires-crossing path {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 3px;
+  stroke-dasharray: 0 10;
+  stroke-linecap: round;
+}
+
+/* Round 151: the overlay must mirror the base wire's interaction states
+   (.wire-group:hover .wire-path brightens + thickens, .wire-selected
+   turns info-blue, .wire-group.wire-dimmed fades) or the wire visibly
+   splits again under the card the moment the user hovers or selects it.
+   Hover is declared LAST so it wins the tie against selected, matching
+   the base hover rule's higher specificity. */
+.node-wires-crossing path.node-wires-crossing-selected {
+  stroke: var(--color-info);
+  stroke-width: 4px;
+}
+
+.node-wires-crossing path.node-wires-crossing-dimmed {
+  opacity: 0.25;
+}
+
+.node-wires-crossing path.node-wires-crossing-hover {
+  stroke: var(--color-accent-hover);
+  stroke-width: 4px;
 }
 
 .wire-group .wire-end-dot {
@@ -246,6 +516,25 @@
   stroke-width: 4px;
 }
 
+.wire-bend-handle {
+  fill: var(--color-info);
+  stroke: var(--color-surface);
+  stroke-width: 2px;
+  cursor: grab;
+}
+
+.wire-bend-handle:active {
+  cursor: grabbing;
+}
+
+.wire-bend-ghost {
+  fill: none;
+  stroke: var(--color-info);
+  stroke-width: 1.5px;
+  stroke-dasharray: 2 2;
+  cursor: crosshair;
+}
+
 .wire-label-group {
   cursor: pointer;
   pointer-events: all;
@@ -254,6 +543,15 @@
 .wire-label-group:hover .wire-label-bg {
   fill: var(--color-accent-subtle);
   stroke: var(--color-accent-hover);
+}
+
+/* While a connection is in flight, hovering a label shows the native
+   <title> tooltip and the accent ring — signalling that flipping
+   direction here is safe and the connection stays in progress. */
+.wire-label-group-connecting:hover .wire-label-bg {
+  fill: var(--color-accent-subtle);
+  stroke: var(--color-accent-hover);
+  stroke-width: 2px;
 }
 
 .wire-label-bg {
@@ -276,18 +574,17 @@
 /* Topology Node Component */
 .topology-node {
   position: absolute;
-  width: 200px;
+  width: 240px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md), 0 1px 3px rgba(0,0,0,0.08);
   user-select: none;
+  height: 240px;
+  box-sizing: border-box;
+  overflow: visible;
   cursor: move;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.topology-node:hover {
-  border-color: var(--color-accent);
 }
 
 .topology-node:focus-visible {
@@ -295,9 +592,98 @@
   outline-offset: 2px;
 }
 
+/* Crisp selection ring: a 2px gap of canvas background between the card
+   and a 2px accent ring — reads as "selected" even against a busy grid. */
 .node-selected {
   border-color: var(--color-accent);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent), var(--shadow-md);
+}
+
+/* Round 158: branch-diff overlay markers. The compare panel classifies
+   the saved diagrams; the markers tint the LIVE cards so an operator sees
+   WHERE locations differ — red for a workspace only this branch has,
+   amber for one that is shared but wired/named/retyped differently. */
+/* Flat ring markers (no --shadow-*: these are in-canvas surfaces, not
+   elevated cards, and the ring alone reads clearly at small sizes). */
+.topology-node--overlay-only-here {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-danger);
+}
+
+.topology-node--overlay-differing {
+  border-color: var(--color-warning);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-warning);
+}
+
+/* Ghost cards: other-only workspaces from the compared branch, placed at
+   their SAVED positions in that diagram. Decorative hints — never
+   interactive, never focusable — so the overlay cannot steal a click,
+   hover, or keyboard stop from a real card below. */
+.topology-overlay-ghost-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.topology-overlay-ghost {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 240px;
+  height: 240px;
+  box-sizing: border-box;
+  border: 2px dashed var(--color-success, #10b981);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-success, #10b981) 12%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px;
+}
+
+.topology-overlay-ghost-name {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-success-fg, var(--color-fg));
+}
+
+/* Round 169: ghosts GLIDE instead of snapping when they clamp into the
+   visible canvas. The transition animates transform (compositor-friendly
+   — easing left/top would layout-thrash) and the keyframes soften the
+   mount pop with a fade-and-rise. Both are gated behind the layer's
+   animate class: the editor drops it during a mouse-pan drag so an
+   edge-anchored ghost tracks the pointer instead of trailing it. */
+.topology-ghosts-animate .topology-overlay-ghost {
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: topology-ghost-in 280ms ease-out both;
+}
+
+@keyframes topology-ghost-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Round 160: dashed stubs for the other branch's ghost-to-ghost wiring.
+   Stroke properties are exempt from the design-token gate; the colour
+   still comes from a token so the stubs read as part of the ghost
+   family. stroke-opacity (not opacity) keeps the layer soft without a
+   hardcoded value. */
+.topology-overlay-stub-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.topology-overlay-stub {
+  stroke: var(--color-success, #10b981);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 6;
+  stroke-opacity: 0.7;
+  fill: none;
 }
 
 .node-connecting-source {
@@ -317,6 +703,8 @@
 
 .node-header {
   display: flex;
+  height: 48px;
+  box-sizing: border-box;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
@@ -342,7 +730,30 @@
 .node-type-warehouse .node-type-accent { background: var(--color-success); }
 .node-type-hardware .node-type-accent { background: var(--color-warning); }
 
-/* Drag grip — 6-dot pattern, visible on hover */
+/* Type-tinted card headers: a whisper of each node type's colour in the
+   header strip (fallback bg-subtle for engines without color-mix). */
+.node-type-store .node-header {
+  background-color: var(--color-bg-subtle);
+  background-color: color-mix(in srgb, var(--color-info) 9%, var(--color-bg-subtle));
+}
+
+.node-type-workspace .node-header {
+  background-color: var(--color-bg-subtle);
+  background-color: color-mix(in srgb, var(--color-accent) 9%, var(--color-bg-subtle));
+}
+
+.node-type-warehouse .node-header {
+  background-color: var(--color-bg-subtle);
+  background-color: color-mix(in srgb, var(--color-success) 9%, var(--color-bg-subtle));
+}
+
+.node-type-hardware .node-header {
+  background-color: var(--color-bg-subtle);
+  background-color: color-mix(in srgb, var(--color-warning) 9%, var(--color-bg-subtle));
+}
+
+/* Drag grip — always visible in the node body now that the title bar is
+   reserved for the icon and node name. */
 .node-grip {
   display: inline-flex;
   align-items: center;
@@ -351,15 +762,9 @@
   height: 14px;
   flex-shrink: 0;
   color: var(--color-fg-tertiary);
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  opacity: 0.6;
   cursor: move;
   margin-left: var(--space-1);
-}
-
-.topology-node:hover .node-grip,
-.topology-node:focus-within .node-grip {
-  opacity: 0.6;
 }
 
 .node-grip:hover {
@@ -384,11 +789,13 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  flex: 1;
-  margin-right: var(--space-4);
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: var(--space-2);
 }
 
 .node-title {
+  min-width: 0;
   font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
   white-space: nowrap;
@@ -396,24 +803,237 @@
   text-overflow: ellipsis;
 }
 
+/* Inline Branch Location rename on the node card: a quiet pencil beside
+   the title, swapping the title for a small input while editing. */
+.node-card-rename-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.node-card-rename-btn:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-fg);
+  border-color: var(--color-border);
+}
+
+.node-card-rename-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.node-card-rename-input {
+  width: 120px;
+  min-width: 0;
+  padding: 2px var(--space-1);
+  border: 1px solid var(--color-border-focus);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+}
+
+/* Floating relabel input anchored at the wire's midpoint; the translate
+   centers it on the point (the midpoint is the input's top-left corner). */
+.wire-rename-input {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  width: 180px;
+  min-width: 0;
+  padding: 4px var(--space-2);
+  border: 1px solid var(--color-border-focus);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+  box-shadow: var(--shadow-md);
+  z-index: 20;
+}
+
+/* Live Figma-style alignment guides while dragging: full-canvas 1px lines
+   at the snapped edge/center, in canvas space so they pan/zoom with the
+   diagram. pointer-events none — they must never intercept the drag. */
+.alignment-guide {
+  position: absolute;
+  pointer-events: none;
+  background: var(--color-accent, #5a9fd4);
+  z-index: 5;
+}
+.alignment-guide-x {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.alignment-guide-y {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+/* Optional permanent label pill at the wire's midpoint; clicking opens the
+   round-20 rename editor. Dimmed with its wire during hover-focus. */
+.wire-label-pill {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-elevated);
+  color: var(--color-fg);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.4;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  z-index: 10;
+}
+.wire-label-pill:hover {
+  border-color: var(--color-border-focus);
+}
+.wire-label-pill-dimmed {
+  opacity: 0.35;
+}
+
 .node-body {
-  padding: var(--space-3);
+  height: 152px;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-3) 48px;
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+  overflow: hidden;
+}
+
+/* The title bar is intentionally minimal: icon + node name only. Auxiliary
+   affordances and status belong to the card content so the title remains
+   stable and easy to scan. */
+.node-body-meta {
+  display: flex;
+  align-items: flex-start;
   gap: var(--space-1);
+  min-width: 0;
+}
+
+.node-body-accent {
+  position: static;
+  align-self: stretch;
+  width: 3px;
+  min-height: 2.4em;
+  flex: 0 0 3px;
+  border-radius: var(--radius-sm);
+}
+
+.node-body-meta .node-grip {
+  margin-top: 2px;
+}
+
+.node-body-meta .node-subtitle {
+  flex: 1 1 auto;
+}
+
+.node-body-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  gap: var(--space-2);
+}
+
+/* Compact, frontend-only configuration controls. These are intentionally
+   limited to low-risk canvas settings; advanced workspace settings stay in
+   the inspector drawer until the backend contract is designed. */
+.node-config-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 28px;
+  font-size: var(--text-xs);
+}
+
+.node-config-label {
+  flex: 0 0 auto;
+  color: var(--color-fg-muted);
+  font-weight: var(--font-weight-bold);
+}
+
+.node-config-input {
+  min-width: 0;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font: inherit;
+}
+
+.node-config-input:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.node-config-toggle {
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.node-config-toggle input {
+  accent-color: var(--color-accent);
+  width: 1rem;
+  height: 1rem;
+}
+
+.node-titlebar {
+  cursor: move;
 }
 
 .node-subtitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.4em;
   font-size: var(--text-xs);
+  line-height: 1.2;
   color: var(--color-fg-muted);
 }
 
+/* Compact status chip in the node body — deliberately kept above the
+   connector rail, so telemetry text can never collide with connector labels.
+   The title bar owns only the icon and node name; the body owns description,
+   status, and inline controls; the bottom rail owns only connectors. */
 .node-telemetry-badge {
-  display: inline-block;
-  font-size: var(--text-xs);
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
   font-weight: var(--font-weight-bold);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
   width: fit-content;
 }
 
@@ -430,6 +1050,67 @@
 .telemetry-offline {
   background: var(--color-danger-subtle);
   color: var(--color-danger);
+}
+
+/* Non-destructive overlap indicator (round 143): a warning chip on cards
+   that overlap a neighbour in the loaded diagram. The invariant guards
+   new movement, so the badge only ever surfaces pre-existing data
+   quality problems — never an auto-jump. */
+.node-overlap-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  width: fit-content;
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning);
+}
+
+/* Wire-scoped validation marker — a warning badge at the midpoint of a
+   flagged wire (warehouse-at-capacity and other wire-level errors). */
+.wire-validation-marker {
+  cursor: pointer;
+}
+
+.wire-validation-marker > circle {
+  fill: var(--color-danger);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.wire-validation-marker-text {
+  fill: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Tier-downgrade notice — bottom-center info strip that tells the user
+   stored capacity numbers exist but the Pro-gated checks are suppressed. */
+.topology-tier-notice {
+  position: absolute;
+  bottom: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: min(90%, 560px);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  line-height: 1.4;
 }
 
 /* ── Node add animation — scale-in ────────────────────── */
@@ -469,7 +1150,10 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1_5) var(--space-4);
-  background: var(--color-bg-elevated);
+  /* THM-08: opaque panel — elevated is an 8% alpha tint in the glass theme,
+     so the HUD's text blended with canvas nodes beneath it. The whole-panel
+     opacity was also dropped: with an opaque bg it only re-introduced bleed. */
+  background: var(--color-bg-popover);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   box-shadow: var(--shadow-sm);
@@ -477,7 +1161,6 @@
   color: var(--color-fg-tertiary);
   pointer-events: none;
   z-index: 5;
-  opacity: 0.85;
 }
 
 .canvas-hud-item {
@@ -490,56 +1173,273 @@
   background: var(--color-border);
 }
 
-/* ── 4-Port Socket Layout ───────────────────────────── */
+/* ── Floating canvas zoom cluster (bottom-right) ───────────────────
+   The standard canvas-tool pattern: compact − / % / + controls with the
+   view actions (Fit All, Reset) behind a divider. Sits above the HUD
+   (z-index 6); the wrapper stops mousedown so clicking never starts a
+   pan or marquee. */
+.canvas-zoom-controls {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--color-bg-popover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
+}
 
-.node-port-sockets-group {
+.canvas-zoom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-fg-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.canvas-zoom-btn:hover,
+.canvas-zoom-btn:focus-visible {
+  background: var(--color-bg-subtle);
+  color: var(--color-fg);
+}
+
+.canvas-zoom-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.canvas-zoom-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.canvas-zoom-level {
+  min-width: 44px;
+  padding: 0 var(--space-1);
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  text-align: center;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg-secondary);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.canvas-zoom-level:hover,
+.canvas-zoom-level:focus-visible {
+  background: var(--color-bg-subtle);
+  color: var(--color-fg);
+}
+
+.canvas-zoom-level:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.canvas-zoom-slider-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-popover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.canvas-zoom-slider-pop input[type='range'] {
+  width: 110px;
+  accent-color: var(--color-accent);
+}
+
+.canvas-zoom-slider-value {
+  min-width: 40px;
+  text-align: right;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-zoom-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 var(--space-1);
+  background: var(--color-border);
+}
+
+.canvas-zoom-action {
+  padding: 0 var(--space-3);
+}
+
+/* ── Empty-state onboarding ────────────────────────────────────────
+   Centered guidance while the canvas has no nodes (fresh install or
+   after the last branch is deleted). pointer-events: none so panning
+   the empty canvas still works under the hint. */
+.topology-empty-state {
   position: absolute;
   inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   pointer-events: none;
-  z-index: -1;
+}
+
+.topology-empty-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 380px;
+  padding: var(--space-6) var(--space-8);
+  text-align: center;
+  color: var(--color-fg-muted);
+}
+
+.topology-empty-state-card svg {
+  color: var(--color-accent);
+  opacity: 0.75;
+  margin-bottom: var(--space-1);
+}
+
+.topology-empty-state-card h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg);
+}
+
+.topology-empty-state-card p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* ── Labeled left/right connector layout ───────────────────────── */
+
+/* The connector rail geometry is the single source of truth for wire
+   endpoints: NODE_PORT_ROW_H (32px) and NODE_PORT_MARKER (12px) in
+   nodeTopologyClamp.ts drive NODE_PORT_Y. Keep these numbers in lockstep
+   — the ::before circle is centered at top = (32 − 12) / 2 = 10. */
+.node-port-sockets-group {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 32px;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .node-port-socket {
   position: absolute;
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-full);
-  background-color: var(--color-bg-surface);
-  border: 2px solid var(--color-accent);
+  width: 116px;
+  height: 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
   pointer-events: all;
   padding: 0;
-  opacity: 0;
-  transition: opacity 0.2s ease, transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.topology-node:hover .node-port-sockets-group {
+  opacity: 1;
+  transition: opacity 0.15s ease;
   z-index: 1;
 }
 
-.topology-node:hover .node-port-socket,
-.node-connecting-source .node-port-socket,
-.node-port-socket:focus-visible {
-  opacity: 1;
+/* The button is a generous labeled hit area; the small circle is the actual
+   connector marker. Keeping these separate prevents the label from being
+   positioned relative to a 12px socket and colliding with the node body. */
+.node-port-socket::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  border: 2px solid var(--color-accent);
+  box-sizing: border-box;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.node-port-socket:hover,
-.node-port-socket:focus-visible {
+.node-connecting-source .node-port-sockets-group,
+.node-port-sockets-group:focus-within {
+  z-index: 2;
+}
+
+.node-port-socket:hover::before,
+.node-port-socket:focus-visible::before {
   transform: scale(1.4);
   background-color: var(--color-accent);
   box-shadow: 0 0 8px var(--color-accent);
 }
 
-.node-port-socket.port-active {
-  opacity: 1;
+.node-port-socket.port-active::before {
   transform: scale(1.6);
   background-color: var(--color-accent);
   box-shadow: 0 0 12px var(--color-accent);
 }
 
-.node-port-socket.port-highlight {
-  opacity: 1;
+.node-port-socket.port-highlight::before {
   animation: port-glow 1.5s infinite;
+}
+
+.node-port-socket.port-compatible::before {
+  border-color: var(--color-success, #22c55e);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success, #22c55e) 22%, transparent);
+}
+
+.node-port-socket.port-incompatible {
+  opacity: 0.28;
+  filter: grayscale(1);
+}
+
+.topology-workspace-identity {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+
+.topology-identity-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--color-text-secondary);
+}
+
+.topology-identity-technical code {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 @keyframes port-glow {
@@ -547,33 +1447,78 @@
   50% { box-shadow: 0 0 0 6px var(--color-accent-subtle); }
 }
 
-/* Position each port at the center of its edge */
-.node-port-socket.port-top {
-  top: -6px;
-  left: calc(50% - 6px);
-}
-
+/* Position only left/right ports. Legacy top/bottom values are retained in
+   the TypeScript geometry map so old saved wires can still be displayed. */
 .node-port-socket.port-right {
+  /* Overhang is a hit-area convenience only; the circle itself sits at the
+     card edge (right: 0) where the SVG endpoint lands. */
   right: -6px;
-  top: calc(50% - 6px);
+  top: 0;
 }
 
-.node-port-socket.port-bottom {
-  bottom: -6px;
-  left: calc(50% - 6px);
+.node-port-socket.port-right::before {
+  right: 0;
 }
 
 .node-port-socket.port-left {
+  /* Overhang is a hit-area convenience only; the circle itself sits at the
+     card edge (left: 0) where the SVG endpoint lands. */
   left: -6px;
-  top: calc(50% - 6px);
+  top: 0;
+}
+
+.node-port-socket.port-left::before {
+  left: 0;
+}
+
+/* Connector label — plain text beside the marker circle. No pill/box chrome:
+   a boxed label reads as competing chrome against body content and wire
+   labels, which is what made the footer look cluttered. The circle marker
+   is the interactive affordance; the label just names the port. */
+.node-port-label {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  max-width: 104px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  color: var(--color-fg-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.2;
+  z-index: 2;
+  transition: color 0.15s ease;
+}
+
+.node-port-socket:hover .node-port-label,
+.node-port-socket:focus-visible .node-port-label {
+  color: var(--color-fg);
+}
+
+.node-port-label-left {
+  left: var(--space-4);
+  text-align: left;
+}
+
+.node-port-label-right {
+  right: var(--space-4);
+  text-align: right;
+}
+
+.node-port-socket.port-incompatible .node-port-label {
+  color: var(--color-fg-muted);
 }
 
 
 
-/* Right Inspector Drawer */
+/* Right Inspector Drawer — floats over the canvas, so it needs an opaque
+   panel (THM-08): surface is a 5% alpha tint in the glass theme. */
 .node-inspector-drawer {
   width: 340px;
-  background-color: var(--color-bg-surface);
+  background-color: var(--color-bg-popover);
   border-left: 1px solid var(--color-border);
   padding: var(--space-5);
   display: flex;
@@ -606,6 +1551,21 @@
   font-size: var(--text-sm);
 }
 
+/* Pro-tier lock chip on the warehouse capacity inputs (round 78) —
+   mirrors the tool-card .lock-badge but inline with the field label. */
+.inspector-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: var(--space-2);
+  vertical-align: middle;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
 .inspector-field input[type="text"] {
   padding: var(--space-2);
   background-color: var(--color-bg);
@@ -636,3 +1596,877 @@
   color: var(--color-fg);
   cursor: pointer;
 }
+
+/* ── Live validation surface (ADR #34 slice 2) ───────────────────
+   Semantic errors rendered straight on the canvas while editing: a
+   per-card note floating in the reserved port-rail padding (never
+   disturbing the fixed card geometry) and a fixed banner overlaying the
+   canvas top for graph-level problems (branch roots, wire integrity).
+   The banner is a sibling of the pannable viewport, so it stays put. */
+.node-validation-note {
+  position: absolute;
+  bottom: var(--space-11);
+  left: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-subtle);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 45%, transparent);
+  color: var(--color-warning);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+/* Compact excess-count chip inside the validation note (round 113):
+   "N Stock Rooms — 1 allowed" / "N Branch Locations — 1 allowed", pinned
+   to the note's right edge. Warning-toned like the note itself. */
+.node-validation-count-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-warning-subtle);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 45%, transparent);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* "Intentionally empty" dismiss on the missing-stock-routing note
+   (round 81) — sits at the note's right edge, warning-toned. */
+.node-validation-note-dismiss {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-4);
+  height: var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.node-validation-note-dismiss:hover {
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+}
+
+/* One-click "add stock wire" guidance chip (round 80) — info-styled,
+   stacked above the warning note so the two never overlap. */
+.node-stock-wire-hint {
+  position: absolute;
+  bottom: calc(var(--space-11) + var(--space-10));
+  left: var(--space-2);
+  right: var(--space-2);
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-info) 9%, var(--color-bg-subtle));
+  border: 1px solid color-mix(in srgb, var(--color-info) 45%, transparent);
+  color: var(--color-info);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.node-stock-wire-hint-icon {
+  flex: 0 0 auto;
+  color: var(--color-info);
+  font-weight: var(--font-weight-bold, 600);
+}
+
+.node-validation-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--color-warning);
+  color: var(--color-bg-elevated);
+  font-weight: var(--font-weight-bold);
+  font-size: 10px;
+}
+
+.topology-validation-widget {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.topology-issues-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-popover);
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.topology-issues-btn:hover {
+  background: var(--color-danger-subtle);
+}
+
+.topology-issues-label {
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .topology-issues-label-pop {
+    animation: topology-issues-pop 200ms ease-out;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topology-issues-label-pop {
+    animation: none;
+  }
+}
+
+/* Settle pop for the issues count: a short scale bump so a count change
+   reads as an event instead of a silent edit. The element is re-keyed on
+   the settled count, so this replays exactly once per settle. */
+@keyframes topology-issues-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+.topology-validation-panel {
+  margin-top: var(--space-1);
+  min-width: 15rem;
+  max-width: 20rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-popover);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+}
+
+.topology-validation-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg);
+  text-align: left;
+}
+
+.topology-validation-item:hover {
+  background: var(--color-bg-subtle);
+}
+
+.topology-validation-item-select {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-fg);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+/* Ghost dismiss button — deliberately shadow-free so the noise-dither
+   registry (which covers shadowed surfaces) needs no new entry. */
+.topology-validation-item-action {
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-info);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.topology-validation-item-action:hover {
+  background: color-mix(in srgb, var(--color-info) 9%, var(--color-bg-subtle));
+}
+
+.topology-validation-item-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+}
+
+.topology-validation-item-dismiss:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-subtle);
+}
+
+.topology-validation-item-node {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-sm);
+}
+
+.topology-validation-item-msg {
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+
+.topology-validation-item-static {
+  cursor: default;
+}
+
+.topology-validation-banner {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 90%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-subtle);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 50%, transparent);
+  box-shadow: var(--shadow-md);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ── Marquee box selection ──────────────────────────────────────
+   A screen-space drag rect on the empty canvas (left button). Drawn as a
+   fixed sibling of the pannable viewport so it never moves with the
+   canvas; pointer-events none lets the pointer reach the canvas below. */
+.topology-marquee {
+  position: absolute;
+  z-index: 4;
+  border: 1px dashed var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+/* ── Relationship picker (ADR #34) ───────────────────────────────
+   A floating menu at the target socket when a drop admits multiple
+   relationships (workspace→warehouse: stock-routing vs transfer).
+   Anchored to the node's left edge in canvas-container screen space
+   (node position × zoom + pan); a sibling of the pannable viewport so
+   it never pans with the canvas. */
+.topology-relationship-picker {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-100%, -50%);
+  min-width: 172px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.topology-relationship-picker-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 4px 4px;
+}
+
+.topology-relationship-option {
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.topology-relationship-option:hover,
+.topology-relationship-option:focus-visible {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+}
+
+.topology-relationship-cancel {
+  margin-top: 2px;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-fg-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.topology-relationship-cancel:hover,
+.topology-relationship-cancel:focus-visible {
+  background: color-mix(in srgb, var(--color-fg) 8%, transparent);
+  color: var(--color-fg);
+}
+
+/* ── Legacy-schema migration dialog ──────────────────────────────
+   Load-time repair surface for ambiguous legacy wires (ADR #34 item 7):
+   a fixed modal listing each unresolved wire with its legal resolution
+   options. Renders above the canvas overlay chrome (picker z-index 6). */
+.topology-migration-dialog {
+  position: absolute;
+  z-index: 8;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(22rem, calc(100% - 2 * var(--space-4)));
+  max-height: 70%;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.topology-migration-dialog h2 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg);
+}
+
+.topology-migration-description {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  line-height: 1.45;
+}
+
+.topology-migration-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.topology-migration-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-fg) 4%, transparent);
+  border: 1px solid var(--color-border);
+}
+
+.topology-migration-names {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+}
+
+.topology-migration-entry select {
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+}
+
+.topology-migration-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.topology-migration-actions button {
+  padding: var(--space-1_5) var(--space-3_5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.topology-migration-actions .topology-migration-resolve {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.topology-migration-actions button:hover,
+.topology-migration-actions button:focus-visible {
+  filter: brightness(1.06);
+}
+
+/* ── Unsaved-changes chip (header) ────────────────────────────────
+   A quiet warning pill that appears the moment the canvas diverges from
+   the last applied snapshot and disappears on Apply/load/preset. role=
+   status keeps it out of the tab order; the dot is a live state glyph. */
+.topology-dirty-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-warning-subtle);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 45%, transparent);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Round 148: the Apply change summary inside the dirty chip — counts and
+   revision bump, muted so the "Unsaved changes" label stays the focus. */
+.topology-diff-summary {
+  color: color-mix(in srgb, var(--color-warning) 75%, transparent);
+  font-weight: var(--font-weight-regular);
+  white-space: nowrap;
+}
+
+.topology-dirty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ── Shortcuts help popover (header "?" button) ───────────────────
+   KDS-style cheatsheet anchored under the header actions; the kbd keys
+   reuse the keycap language of the palette slot badges. */
+.topology-shortcuts-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.topology-shortcuts-btn:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-fg);
+  border-color: var(--color-border-focus);
+}
+
+.topology-shortcuts-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.topology-shortcuts-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: var(--z-popover);
+  min-width: 17rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-popover);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.topology-shortcuts-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-muted);
+  margin-bottom: var(--space-1);
+}
+
+.topology-shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 2px 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+}
+
+.topology-shortcuts-desc {
+  color: var(--color-fg-secondary);
+}
+
+.topology-shortcuts-key {
+  flex: 0 0 auto;
+  min-width: 22px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--color-fg-muted);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+/* ── Hover-focus dimming ──────────────────────────────────────────
+   While a node card is hovered, everything not directly connected to it
+   recedes (Figma-style focus). Opacity-only, so it composes with the
+   selection ring and connection pulses; pointer events are untouched so
+   a dimmed card remains draggable. */
+.topology-node {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.15s ease;
+}
+
+.topology-node.node-dimmed {
+  opacity: 0.35;
+}
+
+.wire-group {
+  transition: opacity 0.15s ease;
+}
+
+.wire-group.wire-dimmed {
+  opacity: 0.25;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topology-node,
+  .wire-group {
+    transition: none;
+  }
+}
+
+/* ── Right-click canvas context menu ──────────────────────────────
+   Anchored at the cursor (container-relative screen px), above the other
+   overlays (z-index 7). Menu role + menuitem buttons; the section title
+   mirrors the shortcuts popover's micro-label language. */
+.topology-context-menu {
+  position: absolute;
+  z-index: 7;
+  min-width: 13rem;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-popover);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topology-context-section-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-fg-muted);
+  padding: var(--space-1) var(--space-2) 2px;
+}
+
+.topology-context-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.topology-context-item:hover,
+.topology-context-item:focus-visible {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+  outline: none;
+}
+
+.topology-context-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--color-accent);
+}
+
+.topology-context-divider {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: var(--space-1) 0;
+}
+
+/* ── Node finder (Ctrl+F) ──────────────────────────────────────────
+   Quick-jump overlay anchored top-center of the canvas. Follows the
+   floating-panel pattern (popover surface + --shadow-md, registered in
+   the noise-dither ::after list) so it reads as a sibling of the
+   context menu and zoom pop. */
+.topology-finder {
+  position: absolute;
+  top: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  width: min(22rem, calc(100% - 2 * var(--space-4)));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--color-bg-popover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.topology-finder-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+.topology-finder-input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.topology-finder-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topology-finder-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.topology-finder-item.is-active,
+.topology-finder-item:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+}
+
+.topology-finder-item-name {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.topology-finder-item-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.topology-finder-empty {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* ── Multi-select align & distribute toolbar ───────────────────────
+   Floats above the selection's bounding box (centered, translate(-50%,
+   -100%)), the Figma-style quick alignment cluster. role=toolbar keeps
+   the buttons keyboard-navigable; the divider splits align from
+   distribute. */
+.topology-align-toolbar {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-50%, -100%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-popover);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+}
+
+.topology-align-slot {
+  display: inline-flex;
+  align-items: center;
+}
+
+.topology-align-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.topology-align-btn:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-fg);
+}
+
+.topology-align-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.topology-align-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 var(--space-1);
+  background: var(--color-border);
+}
+
+/* ── Canvas HUD status readouts ────────────────────────────────── */
+.canvas-hud-cursor {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Canvas minimap (bottom-left overview) ─────────────────────── */
+.topology-minimap {
+  position: absolute;
+  left: var(--space-3);
+  bottom: var(--space-3);
+  z-index: 6;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-popover);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.topology-minimap:active {
+  cursor: grabbing;
+}
+
+.topology-minimap:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.topology-minimap svg {
+  display: block;
+}
+
+.topology-minimap-node {
+  fill: var(--color-bg-subtle);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.topology-minimap-node.node-type-store {
+  fill: var(--color-info);
+}
+
+.topology-minimap-node.node-type-workspace {
+  fill: var(--color-accent);
+}
+
+.topology-minimap-node.node-type-warehouse {
+  fill: var(--color-success);
+}
+
+.topology-minimap-node.node-type-hardware {
+  fill: var(--color-warning);
+}
+
+.topology-minimap-wire {
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+  opacity: 0.7;
+}
+
+.topology-minimap-viewport {
+  fill: var(--color-accent-alpha);
+  stroke: var(--color-accent);
+  stroke-width: 1;
+  pointer-events: none;
+}
+

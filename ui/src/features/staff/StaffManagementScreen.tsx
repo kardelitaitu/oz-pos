@@ -5,14 +5,14 @@ import {
   listRolesScoped,
   createStaffScoped,
   updateStaffScoped,
+  getStaffProfileScoped,
   type StaffMemberDto,
   type RoleDto,
+  type ProfileArgs,
+  type AssignmentArgs,
 } from '@/api/staff';
-import {
-  listAllWorkspacesScoped,
-  getUserWorkspacesScoped,
-  type WorkspaceTypeDto,
-} from '@/api/workspaces';
+import { listAllWorkspacesScoped, type WorkspaceTypeDto } from '@/api/workspaces';
+import { listStores, type StoreProfile } from '@/api/stores';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -47,6 +47,34 @@ function wsIcon(key: string): React.ReactNode {
   }
 }
 
+// ── Five-role taxonomy (ADR #35 D4 / spec 0048) ──────────────────────
+//
+// The staff screen presents exactly the five preset roles, in this order.
+// Cashier/kitchen are retired (0048 2c) and custom roles have no UI yet
+// (0048 non-goal) — so the dropdown is the taxonomy, never the raw role
+// table. Role ids are the seeded preset ids (platform-core `ROLE_PRESETS`).
+const PRESET_ROLE_ORDER = [
+  'role-owner',
+  'role-admin',
+  'role-manager',
+  'role-staff',
+  'role-auditor',
+] as const;
+
+/**
+ * The roles presented in the dropdown, filtered to the five-role taxonomy
+ * and ordered Owner → Admin → Manager → Staff → Auditor.
+ */
+function taxonomyRoles(roles: RoleDto[]): RoleDto[] {
+  const byId = new Map(roles.map((r) => [r.id, r]));
+  const ordered: RoleDto[] = [];
+  for (const id of PRESET_ROLE_ORDER) {
+    const role = byId.get(id);
+    if (role) ordered.push(role);
+  }
+  return ordered;
+}
+
 // ── Form state ──────────────────────────────────────────────────────
 
 interface FormData {
@@ -56,10 +84,36 @@ interface FormData {
   roleId: string;
   /** STAFF-09: current active state — preserved unchanged on profile edits. */
   isActive: boolean;
-  /** Only used when editing — workspace assignment mode */
-  wsMode: 'default' | 'custom';
-  /** Only used when editing — selected workspace keys */
-  wsKeys: string[];
+  /** Only used when editing — assignment scope mode (ADR #35 D5). */
+  scopeMode: 'global' | 'scoped';
+  /** Only used when editing — branch dimension is explicit `all`. */
+  branchesAll: boolean;
+  /** Only used when editing — branch ids in scope when not all. */
+  branchIds: string[];
+  /** Only used when editing — workspace dimension is explicit `all`. */
+  workspacesAll: boolean;
+  /** Only used when editing — workspace keys in scope when not all. */
+  workspaceKeys: string[];
+  // ── ADR #35 D6 profile fields ────────────────────────────────
+  dateOfBirth: string;
+  phone: string;
+  nationalIdType: string;
+  nationalId: string;
+  email: string;
+  /** Monthly take-home pay — kept as a string in the form, parsed to minor
+   * units on submit. */
+  monthlyTakeHome: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  jobTitle: string;
+  notes: string;
+  address: string;
+  language: string;
+  avatar: string;
+  taxId: string;
+  nationalIdExpiresAt: string;
+  emergencyContactRelationship: string;
+  hireDate: string;
 }
 
 const EMPTY_FORM: FormData = {
@@ -68,9 +122,113 @@ const EMPTY_FORM: FormData = {
   pin: '',
   roleId: '',
   isActive: true,
-  wsMode: 'default',
-  wsKeys: [],
+  scopeMode: 'global',
+  branchesAll: true,
+  branchIds: [],
+  workspacesAll: true,
+  workspaceKeys: [],
+  dateOfBirth: '',
+  phone: '',
+  nationalIdType: '',
+  nationalId: '',
+  email: '',
+  monthlyTakeHome: '',
+  emergencyContactName: '',
+  emergencyContactPhone: '',
+  jobTitle: '',
+  notes: '',
+  address: '',
+  language: '',
+  avatar: '',
+  taxId: '',
+  nationalIdExpiresAt: '',
+  emergencyContactRelationship: '',
+  hireDate: '',
 };
+
+/** Build the IPC `ProfileArgs` from the form, skipping empty optionals. */
+function profileArgsFromForm(form: FormData): ProfileArgs {
+  const payMinor = form.monthlyTakeHome.trim()
+    ? Math.round(parseFloat(form.monthlyTakeHome) * 100)
+    : undefined;
+  const profile: ProfileArgs = {};
+  const set = (key: keyof ProfileArgs, value: string | number | undefined) => {
+    if (value !== undefined && String(value).trim() !== '') {
+      // exactOptionalPropertyTypes: assign via bracket to keep the key set.
+      (profile as Record<string, string | number>)[key] = value;
+    }
+  };
+  set('date_of_birth', form.dateOfBirth.trim());
+  set('phone', form.phone.trim());
+  set('national_id_type', form.nationalIdType.trim());
+  set('national_id', form.nationalId.trim());
+  set('email', form.email.trim());
+  set('monthly_take_home_minor', payMinor);
+  set('emergency_contact_name', form.emergencyContactName.trim());
+  set('emergency_contact_phone', form.emergencyContactPhone.trim());
+  set('job_title', form.jobTitle.trim());
+  set('notes', form.notes.trim());
+  set('address', form.address.trim());
+  set('language', form.language.trim());
+  set('avatar', form.avatar.trim());
+  set('tax_id', form.taxId.trim());
+  set('national_id_expires_at', form.nationalIdExpiresAt.trim());
+  set('emergency_contact_relationship', form.emergencyContactRelationship.trim());
+  set('hire_date', form.hireDate.trim());
+  return profile;
+}
+
+/**
+ * ADR #35 D6 field-level validation. Returns localized per-field errors for
+ * the 9 mandatory fields (username + full name included) plus shape checks
+ * for email / phone / national id / pay. Empty object means valid.
+ */
+function validateProfileForm(form: FormData, l10n: ReturnType<typeof useLocalization>['l10n'], isEditing: boolean): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const required = (field: keyof FormData, key: string) => {
+    if (!String(form[field]).trim()) {
+      errors[field] = l10n.getString(key);
+    }
+  };
+  if (!isEditing) {
+    required('username', 'staff-error-username-required');
+  }
+  required('displayName', 'staff-error-display-name-required');
+  required('dateOfBirth', 'staff-error-dob-required');
+  required('phone', 'staff-error-phone-required');
+  required('nationalIdType', 'staff-error-national-id-type-required');
+  required('nationalId', 'staff-error-national-id-required');
+  required('email', 'staff-error-email-required');
+  required('monthlyTakeHome', 'staff-error-pay-required');
+  required('emergencyContactName', 'staff-error-emergency-name-required');
+  required('emergencyContactPhone', 'staff-error-emergency-phone-required');
+
+  const email = form.email.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors['email'] = l10n.getString('staff-error-email-invalid');
+  }
+  const phone = form.phone.trim();
+  if (phone && !/^\+\d{7,14}$/.test(phone)) {
+    errors['phone'] = l10n.getString('staff-error-phone-invalid');
+  }
+  const idType = form.nationalIdType.trim();
+  const nationalId = form.nationalId.trim();
+  if (nationalId) {
+    const expected = idType === 'nik' ? 16 : 9;
+    if (!/^\d+$/.test(nationalId) || nationalId.length !== expected) {
+      errors['nationalId'] = l10n.getString('staff-error-national-id-invalid');
+    }
+  }
+  const pay = form.monthlyTakeHome.trim();
+  if (pay && (!/^\d+(\.\d{1,2})?$/.test(pay) || parseFloat(pay) <= 0)) {
+    errors['monthlyTakeHome'] = l10n.getString('staff-error-pay-invalid');
+  }
+  const dob = form.dateOfBirth.trim();
+  if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+    errors['dateOfBirth'] = l10n.getString('staff-error-dob-invalid');
+  }
+  return errors;
+}
 
 // ── Component ───────────────────────────────────────────────────────
 
@@ -83,7 +241,9 @@ export default function StaffManagementScreen() {
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceTypeDto[]>([]);
   const [workspaceNameMap, setWorkspaceNameMap] = useState<Map<string, string>>(new Map());
-  const [staffWorkspaces, setStaffWorkspaces] = useState<Map<string, string[]>>(new Map());
+  /** Branch picker source — `store_profiles` rows are the branch ids the
+   * assignment model scopes on (ADR #35 D5). */
+  const [branches, setBranches] = useState<StoreProfile[]>([]);
   const [loading, setLoading] = useState(true);
   /** STAFF-08: primary staff/roles load failed — show error + retry. */
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -95,7 +255,11 @@ export default function StaffManagementScreen() {
   const [deactivating, setDeactivating] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** ADR #35 D6: the member being edited has an incomplete profile —
+   * management-role and assignment controls are disabled until complete. */
+  const [editingIncomplete, setEditingIncomplete] = useState(false);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,31 +279,23 @@ export default function StaffManagementScreen() {
       setStaff(staffData);
       setRoles(rolesData);
 
-      // Load workspace names and assignments for the table column.
-      // STAFF-08: a workspace failure must NOT hide staff rows — show an
-      // explicit "workspace data unavailable" notice instead.
+      // Load workspace names + branch ids for the table column and the
+      // assignment editor. STAFF-08: a workspace failure must NOT hide
+      // staff rows — show an explicit "workspace data unavailable" notice
+      // instead. The workspace column derives from the DTO assignment
+      // (spec 0048), so it only needs the name map, not per-user lookups.
       try {
-        const workspaces = await listAllWorkspacesScoped(sessionToken);
+        const [workspaces, storeProfiles] = await Promise.all([
+          listAllWorkspacesScoped(sessionToken),
+          listStores(),
+        ]);
         const nameMap = new Map<string, string>();
         for (const w of workspaces) {
           nameMap.set(w.key, w.name);
         }
         setWorkspaceNameMap(nameMap);
-
-        const wsMap = new Map<string, string[]>();
-        const results = await Promise.allSettled(
-          staffData.map((m) => getUserWorkspacesScoped(sessionToken, m.id)),
-        );
-        for (let i = 0; i < results.length; i++) {
-          const member = staffData[i];
-          const r = results[i];
-          if (member && r && r.status === 'fulfilled') {
-            wsMap.set(member.id, r.value);
-          } else if (member) {
-            wsMap.set(member.id, []);
-          }
-        }
-        setStaffWorkspaces(wsMap);
+        setAllWorkspaces(workspaces);
+        setBranches(storeProfiles);
         setWorkspacesUnavailable(false);
       } catch {
         setWorkspacesUnavailable(true);
@@ -161,6 +317,8 @@ export default function StaffManagementScreen() {
   const openCreate = useCallback(() => {
     setForm(EMPTY_FORM);
     setEditingId(null);
+    setEditingIncomplete(false);
+    setFieldErrors({});
     setError(null);
     setShowModal(true);
   }, []);
@@ -174,26 +332,75 @@ export default function StaffManagementScreen() {
       pin: '',
       roleId: member.role_id,
       isActive: member.is_active,
-      wsMode: 'default',
-      wsKeys: [],
+      // The assignment editor starts from the member's CURRENT effective
+      // assignment (ADR #35 D5 / spec 0048) — global roles show as global,
+      // scoped members show their all/list dimensions.
+      scopeMode: member.assignment.scope_mode,
+      branchesAll: member.assignment.branches_all,
+      branchIds: member.assignment.branch_ids,
+      workspacesAll: member.assignment.workspaces_all,
+      workspaceKeys: member.assignment.workspace_keys,
+      dateOfBirth: '',
+      phone: '',
+      nationalIdType: '',
+      nationalId: '',
+      email: '',
+      monthlyTakeHome: '',
+      emergencyContactName: '',
+      emergencyContactPhone: '',
+      jobTitle: '',
+      notes: '',
+      address: '',
+      language: '',
+      avatar: '',
+      taxId: '',
+      nationalIdExpiresAt: '',
+      emergencyContactRelationship: '',
+      hireDate: '',
     });
     setEditingId(member.id);
+    // ADR #35 D6: incomplete-profile members get management-role and
+    // assignment controls disabled until their profile is complete.
+    setEditingIncomplete(!member.is_profile_complete);
+    setFieldErrors({});
     setError(null);
     setShowModal(true);
 
-    // Load workspaces and user's current assignments in parallel.
+    // Load the full profile (masked/withheld per the caller's grants) and
+    // the workspace/branch options in parallel.
     try {
       if (!sessionToken) {
         return;
       }
-      const [workspaces, userKeys] = await Promise.all([
+      const [profile, workspaces, storeProfiles] = await Promise.all([
+        getStaffProfileScoped(sessionToken, member.id),
         listAllWorkspacesScoped(sessionToken),
-        getUserWorkspacesScoped(sessionToken, member.id),
+        listStores(),
       ]);
+      setForm((prev) => ({
+        ...prev,
+        dateOfBirth: profile.date_of_birth ?? '',
+        phone: profile.phone ?? '',
+        nationalIdType: profile.national_id_type ?? '',
+        nationalId: profile.national_id ?? '',
+        email: profile.email ?? '',
+        monthlyTakeHome: profile.monthly_take_home_minor != null
+          ? String(profile.monthly_take_home_minor / 100)
+          : '',
+        emergencyContactName: profile.emergency_contact_name ?? '',
+        emergencyContactPhone: profile.emergency_contact_phone ?? '',
+        jobTitle: profile.job_title ?? '',
+        notes: profile.notes ?? '',
+        address: profile.address ?? '',
+        language: profile.language ?? '',
+        avatar: profile.avatar ?? '',
+        taxId: profile.tax_id ?? '',
+        nationalIdExpiresAt: profile.national_id_expires_at ?? '',
+        emergencyContactRelationship: profile.emergency_contact_relationship ?? '',
+        hireDate: profile.hire_date ?? '',
+      }));
       setAllWorkspaces(workspaces);
-      if (userKeys.length > 0) {
-        setForm((prev) => ({ ...prev, wsMode: 'custom', wsKeys: userKeys }));
-      }
+      setBranches(storeProfiles);
     } catch {
       addToast({ message: requiredLocalized(l10n, 'staff-error-workspaces-failed'), type: 'error' });
       setAllWorkspaces([]);
@@ -202,19 +409,42 @@ export default function StaffManagementScreen() {
 
   const closeModal = useCallback(() => {
     setShowModal(false);
+    setFieldErrors({});
     setError(null);
   }, []);
 
-  // ── Toggle workspace checkbox ──────────────────────────────────
+  // ── Assignment editor toggles (ADR #35 D5 / spec 0048) ────────────
+  //
+  // Each scoped dimension is an explicit `all` or a list — the all/list
+  // toggle and the list checkboxes never express an implicit "all".
 
-  const toggleWsKey = useCallback((key: string) => {
+  const toggleBranch = useCallback((id: string) => {
     setForm((prev) => ({
       ...prev,
-      wsKeys: prev.wsKeys.includes(key)
-        ? prev.wsKeys.filter((k) => k !== key)
-        : [...prev.wsKeys, key],
+      branchIds: prev.branchIds.includes(id)
+        ? prev.branchIds.filter((b) => b !== id)
+        : [...prev.branchIds, id],
     }));
   }, []);
+
+  const toggleWorkspace = useCallback((key: string) => {
+    setForm((prev) => ({
+      ...prev,
+      workspaceKeys: prev.workspaceKeys.includes(key)
+        ? prev.workspaceKeys.filter((k) => k !== key)
+        : [...prev.workspaceKeys, key],
+    }));
+  }, []);
+
+  /** Assignment args derived from the form — `global` ignores both
+   * dimensions; `scoped` keeps the explicit all/list per dimension. */
+  const assignmentArgsFromForm = (): AssignmentArgs => ({
+    scope_mode: form.scopeMode,
+    branches_all: form.scopeMode === 'global' ? true : form.branchesAll,
+    branch_ids: form.scopeMode === 'global' ? [] : form.branchIds,
+    workspaces_all: form.scopeMode === 'global' ? true : form.workspacesAll,
+    workspace_keys: form.scopeMode === 'global' ? [] : form.workspaceKeys,
+  });
 
   // ── Save / Update ──────────────────────────────────────────────
 
@@ -228,23 +458,24 @@ export default function StaffManagementScreen() {
     const username = form.username.trim().toLowerCase();
     const displayName = form.displayName.trim();
 
-    if (!username) {
-      setError(l10n.getString('staff-error-username-required'));
-      return;
-    }
-    if (!displayName) {
-      setError(l10n.getString('staff-error-display-name-required'));
-      return;
-    }
+    // ADR #35 D6: field-level, localized validation of the 9 mandatory
+    // fields + shapes. The form cannot submit with any required field
+    // missing.
+    const errors = validateProfileForm(form, l10n, isEditing);
     if (!form.roleId) {
-      setError(l10n.getString('staff-error-role-required'));
-      return;
+      errors['roleId'] = l10n.getString('staff-error-role-required');
     }
     if (!editingId && (!form.pin || form.pin.length < 4)) {
-      setError(l10n.getString('staff-error-pin-length'));
+      errors['pin'] = l10n.getString('staff-error-pin-length');
+    }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      const first = Object.values(errors)[0];
+      setError(first ?? null);
       return;
     }
 
+    setFieldErrors({});
     setSaving(true);
     setError(null);
     try {
@@ -252,6 +483,7 @@ export default function StaffManagementScreen() {
         setError(l10n.getString('staff-error-save-failed'));
         return;
       }
+      const profile = profileArgsFromForm(form);
       if (editingId) {
         const trimmedPin = form.pin.trim();
         // STAFF-05: profile + workspace assignment are now ONE IPC call —
@@ -267,8 +499,11 @@ export default function StaffManagementScreen() {
           is_active: form.isActive,
           // STAFF-03: rotate PIN only when a new one was entered.
           ...(trimmedPin ? { pin: trimmedPin } : {}),
-          // STAFF-05: workspace assignment rides on the same command.
-          workspace_keys: form.wsMode === 'custom' ? form.wsKeys : [],
+          // ADR #35 D5 (spec 0048): the assignment scope rides the same
+          // atomic update — the backend replaces it inside the transaction.
+          assignment: assignmentArgsFromForm(),
+          // ADR #35 D6: the profile columns ride the same atomic update.
+          profile,
         });
       } else {
         await createStaffScoped(sessionToken, {
@@ -276,6 +511,8 @@ export default function StaffManagementScreen() {
           pin: form.pin,
           display_name: displayName,
           role_id: form.roleId,
+          // ADR #35 D6: creation requires the 9 mandatory fields.
+          profile,
         });
       }
 
@@ -358,12 +595,10 @@ export default function StaffManagementScreen() {
       case 'role-admin':   return 'warning';
       case 'manager':
       case 'role-manager': return 'info';
-      case 'kitchen':
-      case 'role-kitchen': return 'success';
-      case 'cashier':
-      case 'role-cashier': return 'default';
       case 'staff':
       case 'role-staff':  return 'default';
+      case 'auditor':
+      case 'role-auditor': return 'success';
       case 'custom':
       case 'role-custom': return 'default';
       default:             return 'default';
@@ -373,7 +608,11 @@ export default function StaffManagementScreen() {
   // ── Render ─────────────────────────────────────────────────────
 
   const isEditing = editingId !== null;
-  const hasRoleSelected = roles.length > 0;
+  const selectableRoles = taxonomyRoles(roles);
+  const hasRoleSelected = selectableRoles.length > 0;
+  // The role chosen in the editor — its granted permission keys render as
+  // read-only chips so an admin sees exactly what the role can do (0046).
+  const selectedRole = selectableRoles.find((r) => r.id === form.roleId) ?? null;
 
   return (
     <div className="staff-mgmt" onContextMenu={(e) => e.preventDefault()}>
@@ -453,9 +692,10 @@ export default function StaffManagementScreen() {
                 <Localized id="staff-col-workspace"><th>Workspace</th></Localized>
                 <Localized id="staff-col-name"><th>Name</th></Localized>
                 <Localized id="staff-col-username"><th>Username</th></Localized>
+                <Localized id="staff-col-id"><th>ID</th></Localized>
                 <Localized id="staff-col-status"><th>Status</th></Localized>
                 <Localized id="staff-col-actions" attrs={{ "aria-label": true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>
@@ -470,14 +710,32 @@ export default function StaffManagementScreen() {
                     </Badge>
                   </td>
                   <td className="staff-mgmt-cell-username">
-                    {(staffWorkspaces.get(member.id) ?? [])
-                      .map((k) => workspaceNameMap.get(k) ?? k)
-                      .join(', ') || '—'}
+                    {member.assignment.scope_mode === 'global' || member.assignment.workspaces_all ? (
+                      <Localized id="staff-assignment-all-workspaces-short">
+                        <span>All</span>
+                      </Localized>
+                    ) : (
+                      member.assignment.workspace_keys
+                        .map((k) => workspaceNameMap.get(k) ?? k)
+                        .join(', ') || '—'
+                    )}
                   </td>
                   <td>
                     <span>{member.display_name}</span>
+                    {!member.is_profile_complete && (
+                      <Badge variant="warning" className="staff-mgmt-incomplete-badge">
+                        <Localized id="staff-profile-incomplete">
+                          <span>Profile incomplete</span>
+                        </Localized>
+                      </Badge>
+                    )}
                   </td>
                   <td className="staff-mgmt-cell-username">{member.username}</td>
+                  <td className="staff-mgmt-cell-username">
+                    <span aria-label={l10n.getString('staff-id-masked-aria')}>
+                      {member.national_id_masked}
+                    </span>
+                  </td>
                   <td>
                     {member.is_active ? (
                       <Localized id="staff-status-active">
@@ -496,7 +754,7 @@ export default function StaffManagementScreen() {
                         type="button"
                         className="staff-mgmt-action-btn"
                         onClick={() => openEdit(member)}
-                        aria-label={`Edit ${member.display_name}`}
+
                       >
                         <Localized id="staff-edit"><span>Edit</span></Localized>
                       </button>
@@ -506,7 +764,7 @@ export default function StaffManagementScreen() {
                         type="button"
                         className={`staff-mgmt-action-btn ${member.is_active ? 'staff-mgmt-action-btn--warn' : 'staff-mgmt-action-btn--restore'}`}
                         onClick={() => toggleActive(member)}
-                        aria-label={member.is_active ? `Deactivate ${member.display_name}` : `Reactivate ${member.display_name}`}
+
                       >
                         <Localized id={member.is_active ? 'staff-deactivate' : 'staff-restore'}>
                           <span>{member.is_active ? 'Deactivate' : 'Restore'}</span>
@@ -536,7 +794,13 @@ export default function StaffManagementScreen() {
           !form.displayName.trim() ||
           !form.roleId ||
           (!isEditing && (!form.pin || form.pin.length < 4)) ||
-          (isEditing && form.wsMode === 'custom' && allWorkspaces.length > 0 && form.wsKeys.length === 0)
+          // ADR #35 D5: a scoped assignment must not save with an empty
+          // list dimension — `list` with no ids is a deny, never an
+          // implicit "all" (the all/list toggle is the explicit marker).
+          (isEditing &&
+            form.scopeMode === 'scoped' &&
+            ((!form.branchesAll && branches.length > 0 && form.branchIds.length === 0) ||
+              (!form.workspacesAll && allWorkspaces.length > 0 && form.workspaceKeys.length === 0)))
         }
         cancelLabel={l10n.getString('staff-btn-cancel')}
       >
@@ -551,7 +815,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-username"
               value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
               placeholder="e.g. jane"
               disabled={isEditing}
               autoComplete="off"
@@ -573,7 +837,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-name"
               value={form.displayName}
-              onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, displayName: e.target.value }))}
               placeholder="e.g. Jane Smith"
               autoComplete="off"
               autoCorrect="off"
@@ -596,7 +860,7 @@ export default function StaffManagementScreen() {
                       type="password"
                       id="staff-field-pin"
                       value={form.pin}
-                      onChange={(e) => setForm({ ...form, pin: e.target.value })}
+                      onChange={(e) => setForm((prev) => ({ ...prev, pin: e.target.value }))}
                       placeholder={isEditing ? 'Leave blank to keep current' : 'Enter PIN'}
                       autoComplete="off"
                       autoCorrect="off"
@@ -606,7 +870,9 @@ export default function StaffManagementScreen() {
           </Localized>
         </label>
 
-                {/* Role selector */}
+                {/* Role selector — disabled for incomplete profiles (ADR #35
+                    D6: management-role assignment requires a complete
+                    profile) */}
                 {hasRoleSelected && (
                   <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-role">
                     <Localized id="staff-field-role-label">
@@ -615,70 +881,372 @@ export default function StaffManagementScreen() {
                     <SettingsSelect
                       id="staff-field-role"
                       value={form.roleId}
-                      onChange={(value) => setForm({ ...form, roleId: value })}
-                      options={roles.map((r) => ({ value: r.id, label: `${r.name} — ${r.description}` }))}
+                      disabled={editingIncomplete}
+                      onChange={(value) => setForm((prev) => ({ ...prev, roleId: value }))}
+                      options={selectableRoles.map((r) => ({ value: r.id, label: `${r.name} — ${r.description}` }))}
                       placeholder={l10n.getString('staff-role-select-default')}
                       ariaLabel={l10n.getString('staff-field-role-label')}
                     />
                   </label>
                 )}
 
-        {/* ── Workspace Access Section (edit only) ──────── */}
-        {isEditing && allWorkspaces.length > 0 && (
-          <fieldset className="staff-mgmt-ws-section">
-            <Localized id="staff-ws-section-label">
-              <legend className="staff-mgmt-label">Workspace Access</legend>
+                {/* Granted permission keys for the selected role (0046) —
+                    read-only chips; the backend list_roles_scoped carries
+                    them verbatim from the role's permissions JSON. */}
+                {selectedRole && selectedRole.permissions.length > 0 && (
+                  <div className="staff-mgmt-role-permissions">
+                    <Localized id="staff-role-permissions-label">
+                      <span className="staff-mgmt-role-permissions-label">Role permissions</span>
+                    </Localized>
+                    <div
+                      className="staff-mgmt-role-permissions-chips"
+                      role="list"
+                      aria-label={l10n.getString('staff-role-permissions-label')}
+                    >
+                      {selectedRole.permissions.map((p) => (
+                        <span key={p} className="staff-mgmt-role-permission-chip" role="listitem">{p}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+        {/* ── Profile section (ADR #35 D6) ──────────────────────── */}
+        {editingIncomplete && (
+          <p className="staff-mgmt-incomplete-hint" role="note">
+            <Localized id="staff-profile-incomplete-edit-hint">
+              <span>Complete this member&apos;s profile to unlock role and workspace assignment.</span>
+            </Localized>
+          </p>
+        )}
+        <fieldset className="staff-mgmt-profile-section">
+          <Localized id="staff-profile-section-label">
+            <legend className="staff-mgmt-label">Profile</legend>
+          </Localized>
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-dob" aria-label={l10n.getString('staff-field-dob-aria')}>
+            <Localized id="staff-field-dob-label">
+              <span className="staff-mgmt-label">Date of Birth *</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="date"
+              id="staff-field-dob"
+              value={form.dateOfBirth}
+              onChange={(e) => setForm((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
+            />
+          </label>
+          {fieldErrors['dateOfBirth'] && (
+            <span className="staff-mgmt-field-error" role="alert">{fieldErrors['dateOfBirth']}</span>
+          )}
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-phone" aria-label={l10n.getString('staff-field-phone-aria')}>
+            <Localized id="staff-field-phone-label">
+              <span className="staff-mgmt-label">Phone *</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="tel"
+              id="staff-field-phone"
+              value={form.phone}
+              onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+              placeholder="+62 812 3456 7890"
+            />
+          </label>
+          {fieldErrors['phone'] && (
+            <span className="staff-mgmt-field-error" role="alert">{fieldErrors['phone']}</span>
+          )}
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-national-id-type" aria-label={l10n.getString('staff-field-national-id-type-aria')}>
+            <Localized id="staff-field-national-id-type-label">
+              <span className="staff-mgmt-label">National ID Type *</span>
+            </Localized>
+            <select
+              className="staff-mgmt-input"
+              id="staff-field-national-id-type"
+              value={form.nationalIdType}
+              onChange={(e) => setForm((prev) => ({ ...prev, nationalIdType: e.target.value }))}
+            >
+              <option value="">{l10n.getString('staff-national-id-type-select')}</option>
+              <option value="ssn">{l10n.getString('staff-national-id-type-ssn')}</option>
+              <option value="nik">{l10n.getString('staff-national-id-type-nik')}</option>
+            </select>
+          </label>
+          {fieldErrors['nationalIdType'] && (
+            <span className="staff-mgmt-field-error" role="alert">{fieldErrors['nationalIdType']}</span>
+          )}
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-national-id" aria-label={l10n.getString('staff-field-national-id-aria')}>
+            <Localized id="staff-field-national-id-label">
+              <span className="staff-mgmt-label">National ID *</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="text"
+              id="staff-field-national-id"
+              value={form.nationalId}
+              onChange={(e) => setForm((prev) => ({ ...prev, nationalId: e.target.value }))}
+              inputMode="numeric"
+              autoComplete="off"
+            />
+          </label>
+          {fieldErrors['nationalId'] && (
+            <span className="staff-mgmt-field-error" role="alert">{fieldErrors['nationalId']}</span>
+          )}
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-email" aria-label={l10n.getString('staff-field-email-aria')}>
+            <Localized id="staff-field-email-label">
+              <span className="staff-mgmt-label">Email *</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="email"
+              id="staff-field-email"
+              value={form.email}
+              onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+              placeholder="name@example.com"
+              autoComplete="off"
+            />
+          </label>
+          {fieldErrors['email'] && (
+            <span className="staff-mgmt-field-error" role="alert">{fieldErrors['email']}</span>
+          )}
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-pay" aria-label={l10n.getString('staff-field-pay-aria')}>
+            <Localized id="staff-field-pay-label">
+              <span className="staff-mgmt-label">Monthly Take-Home Pay *</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="text"
+              id="staff-field-pay"
+              value={form.monthlyTakeHome}
+              onChange={(e) => setForm((prev) => ({ ...prev, monthlyTakeHome: e.target.value }))}
+              inputMode="decimal"
+              placeholder="5000000"
+            />
+          </label>
+          {fieldErrors['monthlyTakeHome'] && (
+            <span className="staff-mgmt-field-error" role="alert">{fieldErrors['monthlyTakeHome']}</span>
+          )}
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-emergency-name" aria-label={l10n.getString('staff-field-emergency-name-aria')}>
+            <Localized id="staff-field-emergency-name-label">
+              <span className="staff-mgmt-label">Emergency Contact *</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="text"
+              id="staff-field-emergency-name"
+              value={form.emergencyContactName}
+              onChange={(e) => setForm((prev) => ({ ...prev, emergencyContactName: e.target.value }))}
+              autoComplete="off"
+            />
+          </label>
+          {fieldErrors['emergencyContactName'] && (
+            <span className="staff-mgmt-field-error" role="alert">{fieldErrors['emergencyContactName']}</span>
+          )}
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-emergency-phone" aria-label={l10n.getString('staff-field-emergency-phone-aria')}>
+            <Localized id="staff-field-emergency-phone-label">
+              <span className="staff-mgmt-label">Emergency Contact Phone *</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="tel"
+              id="staff-field-emergency-phone"
+              value={form.emergencyContactPhone}
+              onChange={(e) => setForm((prev) => ({ ...prev, emergencyContactPhone: e.target.value }))}
+              placeholder="+62 812 3456 7890"
+            />
+          </label>
+          {fieldErrors['emergencyContactPhone'] && (
+            <span className="staff-mgmt-field-error" role="alert">{fieldErrors['emergencyContactPhone']}</span>
+          )}
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-job-title" aria-label={l10n.getString('staff-field-job-title-aria')}>
+            <Localized id="staff-field-job-title-label">
+              <span className="staff-mgmt-label">Job Title</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="text"
+              id="staff-field-job-title"
+              value={form.jobTitle}
+              onChange={(e) => setForm((prev) => ({ ...prev, jobTitle: e.target.value }))}
+            />
+          </label>
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-notes" aria-label={l10n.getString('staff-field-notes-aria')}>
+            <Localized id="staff-field-notes-label">
+              <span className="staff-mgmt-label">Notes</span>
+            </Localized>
+            <textarea
+              className="staff-mgmt-input"
+              id="staff-field-notes"
+              value={form.notes}
+              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+            />
+          </label>
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-address" aria-label={l10n.getString('staff-field-address-aria')}>
+            <Localized id="staff-field-address-label">
+              <span className="staff-mgmt-label">Address</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="text"
+              id="staff-field-address"
+              value={form.address}
+              onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
+            />
+          </label>
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-tax-id" aria-label={l10n.getString('staff-field-tax-id-aria')}>
+            <Localized id="staff-field-tax-id-label">
+              <span className="staff-mgmt-label">Tax ID</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="text"
+              id="staff-field-tax-id"
+              value={form.taxId}
+              onChange={(e) => setForm((prev) => ({ ...prev, taxId: e.target.value }))}
+            />
+          </label>
+
+          <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-hire-date" aria-label={l10n.getString('staff-field-hire-date-aria')}>
+            <Localized id="staff-field-hire-date-label">
+              <span className="staff-mgmt-label">Hire Date</span>
+            </Localized>
+            <input
+              className="staff-mgmt-input"
+              type="date"
+              id="staff-field-hire-date"
+              value={form.hireDate}
+              onChange={(e) => setForm((prev) => ({ ...prev, hireDate: e.target.value }))}
+            />
+          </label>
+        </fieldset>
+
+        {/* ── Assignment Access Section (edit only, ADR #35 D5) ── */}
+        {isEditing && (
+          <fieldset className="staff-mgmt-ws-section" disabled={editingIncomplete}>
+            <Localized id="staff-assignment-section-label">
+              <legend className="staff-mgmt-label">Assignment Access</legend>
             </Localized>
 
             <div className="staff-mgmt-radio">
               <input
                 type="radio"
-                name="wsMode"
-                value="default"
-                checked={form.wsMode === 'default'}
-                onChange={() => setForm({ ...form, wsMode: 'default', wsKeys: [] })}
-                aria-label={l10n.getString('staff-ws-role-defaults')}
+                name="scopeMode"
+                value="global"
+                checked={form.scopeMode === 'global'}
+                onChange={() => setForm((prev) => ({ ...prev, scopeMode: 'global' }))}
+                aria-label={l10n.getString('staff-assignment-global')}
               />
-              <Localized id="staff-ws-role-defaults">
-                <span>Use role defaults</span>
+              <Localized id="staff-assignment-global">
+                <span>All branches &amp; workspaces</span>
               </Localized>
             </div>
 
             <div className="staff-mgmt-radio">
               <input
                 type="radio"
-                name="wsMode"
-                value="custom"
-                checked={form.wsMode === 'custom'}
-                onChange={() => setForm({ ...form, wsMode: 'custom' })}
-                aria-label={l10n.getString('staff-ws-custom')}
+                name="scopeMode"
+                value="scoped"
+                checked={form.scopeMode === 'scoped'}
+                onChange={() => setForm((prev) => ({ ...prev, scopeMode: 'scoped' }))}
+                aria-label={l10n.getString('staff-assignment-scoped')}
               />
-              <Localized id="staff-ws-custom">
-                <span>Custom</span>
+              <Localized id="staff-assignment-scoped">
+                <span>Restrict by branch or workspace</span>
               </Localized>
             </div>
 
-            {form.wsMode === 'custom' && (
-              <div className="staff-mgmt-ws-checkboxes">
-                {allWorkspaces.map((ws) => (
-                  <label key={ws.key} className="staff-mgmt-ws-checkbox">
+            {form.scopeMode === 'scoped' && (
+              <>
+                {/* ── Branch dimension (explicit all or list) ── */}
+                <div className="staff-mgmt-dimension">
+                  <Localized id="staff-assignment-branches-label">
+                    <span className="staff-mgmt-dimension-label">Branches</span>
+                  </Localized>
+                  <label className="staff-mgmt-ws-checkbox" htmlFor="staff-assignment-all-branches">
                     <input
+                      id="staff-assignment-all-branches"
                       type="checkbox"
-                      checked={form.wsKeys.includes(ws.key)}
-                      onChange={() => toggleWsKey(ws.key)}
+                      aria-label={requiredLocalized(l10n, 'staff-assignment-all-branches')}
+                      checked={form.branchesAll}
+                      onChange={() =>
+                        setForm((prev) => ({ ...prev, branchesAll: !prev.branchesAll, branchIds: [] }))
+                      }
                     />
-                    <span className="staff-mgmt-ws-checkbox-label">
-                      {ws.icon && (
-                        <span className="staff-mgmt-ws-icon" aria-hidden="true">
-                          {wsIcon(ws.icon)}
-                        </span>
-                      )}
-                      {ws.name}
-                    </span>
-                    <span className="staff-mgmt-ws-desc">{ws.description}</span>
+                    <Localized id="staff-assignment-all-branches">
+                      <span>All branches</span>
+                    </Localized>
                   </label>
-                ))}
-              </div>
+                  {!form.branchesAll && branches.length > 0 && (
+                    <div className="staff-mgmt-ws-checkboxes">
+                      {branches.map((b) => (
+                        <label key={b.id} className="staff-mgmt-ws-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={form.branchIds.includes(b.id)}
+                            onChange={() => toggleBranch(b.id)}
+                          />
+                          <span className="staff-mgmt-ws-checkbox-label">{b.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Workspace dimension (explicit all or list) ── */}
+                <div className="staff-mgmt-dimension">
+                  <Localized id="staff-assignment-workspaces-label">
+                    <span className="staff-mgmt-dimension-label">Workspaces</span>
+                  </Localized>
+                  <label className="staff-mgmt-ws-checkbox" htmlFor="staff-assignment-all-workspaces">
+                    <input
+                      id="staff-assignment-all-workspaces"
+                      type="checkbox"
+                      aria-label={requiredLocalized(l10n, 'staff-assignment-all-workspaces')}
+                      checked={form.workspacesAll}
+                      onChange={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          workspacesAll: !prev.workspacesAll,
+                          workspaceKeys: [],
+                        }))
+                      }
+                    />
+                    <Localized id="staff-assignment-all-workspaces">
+                      <span>All workspaces</span>
+                    </Localized>
+                  </label>
+                  {!form.workspacesAll && allWorkspaces.length > 0 && (
+                    <div className="staff-mgmt-ws-checkboxes">
+                      {allWorkspaces.map((ws) => (
+                        <label key={ws.key} className="staff-mgmt-ws-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={form.workspaceKeys.includes(ws.key)}
+                            onChange={() => toggleWorkspace(ws.key)}
+                          />
+                          <span className="staff-mgmt-ws-checkbox-label">
+                            {ws.icon && (
+                              <span className="staff-mgmt-ws-icon" aria-hidden="true">
+                                {wsIcon(ws.icon)}
+                              </span>
+                            )}
+                            {ws.name}
+                          </span>
+                          <span className="staff-mgmt-ws-desc">{ws.description}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </fieldset>
         )}

@@ -371,6 +371,14 @@ mod tests {
     fn seed_identity(conn: &rusqlite::Connection, user_id: &str, role_id: &str) {
         let store = Store::new(conn);
         store.seed_default_roles().unwrap();
+        // Custom fixture roles (role-lite) may not be presets — create them
+        // first so the user insert's FK holds.
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO roles (id, name, description, permissions, created_at, updated_at)
+             VALUES ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]',
+                     '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+        )
+        .unwrap();
         conn.execute(
             "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active,
                                 created_at, updated_at)
@@ -500,7 +508,9 @@ mod tests {
     #[tokio::test]
     async fn scoped_transfer_denies_user_without_transfer_permission() {
         let global = oz_core::migrations::fresh_db();
-        seed_identity(&global, "transfer-cashier", "role-cashier");
+        // Narrow custom role without inventory:transfer — the new role-staff
+        // preset grants it (0048 retirement sweep).
+        seed_identity(&global, "transfer-cashier", "role-lite");
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path().to_path_buf();
         let _keep_temp_dir = Box::leak(Box::new(temp_dir));
@@ -510,7 +520,7 @@ mod tests {
             "cashier-transfer-token".into(),
             SessionContext::new(
                 "transfer-cashier".into(),
-                "role-cashier".into(),
+                "role-lite".into(),
                 "terminal-1".into(),
                 "store-cashier".into(),
                 "instance-1".into(),

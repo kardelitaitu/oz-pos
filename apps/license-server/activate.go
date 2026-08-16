@@ -39,20 +39,34 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// Resolve api_key: prefer Authorization: Bearer <key>, fall back to
-		// the body field for backward-compat with C1-pre-audit wire format
-		// (C1 audit fix that was only applied to /status). The Bearer path
-		// keeps the credential out of CDN / webserver access logs that
-		// capture request bodies, so we nudge body-fallback callers via a
-		// deprecation log line (logged ONLY on successful auth so attackers
-		// can't spam the log by sending failing body-auth requests).
-		apiKey, usedBodyFallback, authErr := extractAPIKey(req.APIKey, e.Request.Header.Get("Authorization"))
-		if authErr != nil {
+		// ── Authenticate via Authorization: Bearer <api_key> ──────
+		// The Bearer header is the SOLE credential channel (C1-followup
+		// hardening removed the legacy body `api_key` fallback — a body
+		// credential leaks into CDN / webserver access logs that capture
+		// request bodies). Two cases:
+		//   * header present → it is authoritative (the body field is
+		//     ignored for authentication);
+		//   * header absent + body api_key present → the caller is a
+		//     legacy client sending the credential where access logs can
+		//     capture it — reject with a hint pointing at the header;
+		//   * header absent + no body api_key → first-time activation
+		//     has no credential yet (the server issues one) — proceed.
+		authHeader := e.Request.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, bearerPrefix) {
+			apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
+			if apiKey == "" {
+				e.Response.Header().Set("WWW-Authenticate", `Bearer realm="license"`)
+				return e.JSON(http.StatusUnauthorized, map[string]any{
+					"error": "api_key must be sent in the Authorization: Bearer <api_key> header (body api_key is no longer accepted)",
+				})
+			}
+			req.APIKey = apiKey
+		} else if req.APIKey != "" {
+			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="license"`)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "api_key in body does not match Authorization header",
+				"error": "api_key must be sent in the Authorization: Bearer <api_key> header (body api_key is no longer accepted)",
 			})
 		}
-		req.APIKey = apiKey
 
 		// Normalize email to lowercase + trim so that lookup-by-email
 		// is case-insensitive and whitespace-tolerant. Email addresses
@@ -110,6 +124,10 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 
 		// ── Find or Create tenant record by Email ─────────────────
 		var isNewTenant bool
+		// Plaintext api_key to return in the response, if any. The stored
+		// value is a bcrypt hash, so the plaintext is only ever available
+		// here — at the moment it is minted (or rotated).
+		var issuedAPIKey string
 		tenant, err := app.FindFirstRecordByData("tenants", "email", req.Email)
 		if err != nil {
 			// Tenant not found by email. Before creating one, check
@@ -164,7 +182,16 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// Falls back to "-" when empty so the required field
 			// constraint on the tenants collection is satisfied.
 			tenant.Set("phone", strDefault(req.Phone, "-"))
-			tenant.Set("api_key", generateAPIKey())
+			issuedAPIKey = generateAPIKey()
+			apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(issuedAPIKey)
+			if hashErr != nil {
+				log.Printf("Failed to hash api_key: %v", hashErr)
+				return e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "failed to create tenant",
+				})
+			}
+			tenant.Set("api_key", apiKeyHash)
+			tenant.Set("api_key_lookup", apiKeyLookup)
 			tenant.Set("status", "active")
 			if saveErr := app.Save(tenant); saveErr != nil {
 				log.Printf("Failed to save tenant: %v", saveErr)
@@ -302,7 +329,33 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 					"signed_payload": subRecord.GetString("signed_payload"),
 					"signature":      subRecord.GetString("signature"),
 					"tenant_id":      tenant.Id,
-					"api_key":        tenant.GetString("api_key"),
+				}
+
+				// The stored api_key is a one-way bcrypt hash and can never
+				// be re-emitted. A caller who proved they hold the current
+				// key (email + key bound to this tenant AND a matching
+				// api_key) needs no re-emit. A caller who reached this branch
+				// on email + key alone (e.g. a reinstall that lost the key)
+				// gets a freshly rotated key so renew/status access is still
+				// recoverable without storing plaintext at rest.
+				if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
+					newAPIKey := generateAPIKey()
+					apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
+					if hashErr != nil {
+						log.Printf("Re-activation api_key rotation failed for tenant %q: %v", tenant.Id, hashErr)
+						return e.JSON(http.StatusInternalServerError, map[string]any{
+							"error": "failed to rotate api_key",
+						})
+					}
+					tenant.Set("api_key", apiKeyHash)
+					tenant.Set("api_key_lookup", apiKeyLookup)
+					if saveErr := app.Save(tenant); saveErr != nil {
+						log.Printf("Re-activation api_key rotation save failed for tenant %q: %v", tenant.Id, saveErr)
+						return e.JSON(http.StatusInternalServerError, map[string]any{
+							"error": "failed to rotate api_key",
+						})
+					}
+					resp["api_key"] = newAPIKey
 				}
 
 				// Clear any accumulated failure tracking for this key
@@ -328,8 +381,32 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// ── New activation for existing tenant: api_key required ──
 			// The caller must prove they are the registered tenant admin
 			// by presenting the api_key that was issued on first activation.
+			// EXCEPTION: webhook-issued keys (paddle_sub_id set) are bound
+			// to this tenant's email at purchase, so email + key is sufficient
+			// proof (the same model as re-activation). The tenant's api_key is
+			// minted NOW and returned in the response so /status and /renew
+			// work for the POS — the webhook only stored a placeholder hash.
 			if keyStatus == "unused" || keyStatus == "" {
-				if tenant.GetString("api_key") != req.APIKey {
+				paddleIssued := keyRecord.GetString("paddle_sub_id") != ""
+				if paddleIssued {
+					newAPIKey := generateAPIKey()
+					apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
+					if hashErr != nil {
+						log.Printf("Paddle-key activation api_key mint failed for tenant %q: %v", tenant.Id, hashErr)
+						return e.JSON(http.StatusInternalServerError, map[string]any{
+							"error": "failed to create api_key",
+						})
+					}
+					tenant.Set("api_key", apiKeyHash)
+					tenant.Set("api_key_lookup", apiKeyLookup)
+					if saveErr := app.Save(tenant); saveErr != nil {
+						log.Printf("Paddle-key activation api_key save failed for tenant %q: %v", tenant.Id, saveErr)
+						return e.JSON(http.StatusInternalServerError, map[string]any{
+							"error": "failed to create api_key",
+						})
+					}
+					issuedAPIKey = newAPIKey
+				} else if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
 					return e.JSON(http.StatusUnauthorized, map[string]any{
 						"error": "api_key required (or mismatched) — caller is not the registered administrator of this tenant",
 					})
@@ -343,12 +420,6 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				})
 			}
 
-			if usedBodyFallback {
-				// Nudge operator toward the Bearer header. Logged
-				// post-auth-success only so failed-auth attempts (which
-				// hit the 401 branch above) don't spam the log.
-				log.Printf("DEPRECATION: /activate authenticated via legacy body api_key for tenant_id=%q; migrate client to Authorization: Bearer <api_key> to keep the credential out of CDN / webserver access logs that capture request bodies", tenant.Id)
-			}
 		}
 
 		tenantID := tenant.Id
@@ -420,6 +491,41 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			if err := app.Save(machine); err != nil {
 				log.Printf("H1 audit: machine registration failed (id=%q tenant_id=%q): %v", req.MachineID, tenantID, err)
 			}
+		}
+
+		// ── Webhook-issued key: reuse the Paddle-created subscription ──
+		// The Paddle webhook created the active subscription at purchase and
+		// keeps it in sync via subscription.* events. Don't mint a duplicate
+		// here — return the existing signed payload so the POS gets the same
+		// tier/expiry Paddle authorized. Manual keys never hit this branch.
+		if keyRecord.GetString("paddle_sub_id") != "" {
+			subs, err := app.FindRecordsByFilter(
+				"subscriptions",
+				"tenant_id = {:tenant_id} && status = 'active'",
+				"-starts_at", 1, 0,
+				map[string]any{"tenant_id": tenantID},
+			)
+			if err == nil && len(subs) > 0 {
+				subRecord := subs[0]
+				keyRecord.Set("status", "activated")
+				keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
+				keyRecord.Set("activated_by", tenantID)
+				if err := app.Save(keyRecord); err != nil {
+					log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
+				}
+				keyFailTracker.clearKey(req.Key)
+				resp := map[string]any{
+					"signed_payload": subRecord.GetString("signed_payload"),
+					"signature":      subRecord.GetString("signature"),
+					"tenant_id":      tenantID,
+				}
+				if issuedAPIKey != "" {
+					resp["api_key"] = issuedAPIKey
+				}
+				return e.JSON(http.StatusOK, resp)
+			}
+			// No active subscription yet (edge case: webhook raced the
+			// activation) — fall through and create one from the key below.
 		}
 
 		// ── Build and sign subscription ───────────────────────────
@@ -495,14 +601,14 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			"signature":      signature,
 			"tenant_id":      tenantID,
 		}
-		// api_key is included only for:
-		//   - newly created tenants (so the POS can persist it)
-		//   - re-activation of an already-activated key (caller proved
-		//     knowledge of the key bound to this tenant)
-		// It is intentionally omitted for existing tenants activating
-		// a new key — the caller already proved they hold it (H1 audit).
-		if isNewTenant || keyStatus == "activated" {
-			resp["api_key"] = tenant.GetString("api_key")
+		// api_key is included only for newly created tenants (so the POS can
+		// persist it). The stored value is a bcrypt hash, so the plaintext
+		// issuedAPIKey captured at mint time is returned here. Re-activation
+		// of an already-activated key is handled earlier (rotation). Existing
+		// tenants activating a new key already proved they hold the key, so
+		// nothing is re-emitted (H1 audit).
+		if isNewTenant || issuedAPIKey != "" {
+			resp["api_key"] = issuedAPIKey
 		}
 		return e.JSON(http.StatusOK, resp)
 	}

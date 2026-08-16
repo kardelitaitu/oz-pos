@@ -15,6 +15,7 @@ import { registerAuditFeature } from './audit/register';
 import { registerOfflineFeature } from './offline/register';
 import { registerShiftsFeature } from './shifts/register';
 import { registerReportsFeature } from './reports/register';
+import { registerAnalyticsFeature } from './analytics/register';
 import { registerDesignFeature } from './design/register';
 import { registerKdsFeature } from './kds/register';
 import { registerKioskFeature } from './kiosk/register';
@@ -59,6 +60,7 @@ export function registerAllFeatures() {
   registerOfflineFeature();
   registerShiftsFeature();
   registerReportsFeature();
+  registerAnalyticsFeature();
   registerDesignFeature();
   registerKdsFeature();
   registerKioskFeature();

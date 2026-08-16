@@ -4,6 +4,11 @@
 > records the baseline, deltas since previous measurement, and any
 > relevant commit/change context.
 
+> Note (2026-08-08, docs-auditor): the baseline JSON files referenced below
+> (`docs/benchmarks/baseline-2026-07-21.json`, `target/criterion/baseline.json`)
+> do **not** exist in the repo yet — the workflow is documented but has not
+> been executed. Create the baseline on the first run per the steps below.
+
 ## How to Update
 
 ### 1. Run all benchmarks

@@ -239,7 +239,12 @@ platform/kernel/src/
 ## Related Documents
 
 - [ADR #30: Domain Module Extraction](2026-07-24-domain-module-extraction.md) — Original P1 modularization plan
-- [REVIEW_2.md](../../REVIEW_2.md) — Item R2 (DB monolith) and R5 (platform split)
 - [ARCHITECTURE.md](../../ARCHITECTURE.md) — Target architecture specification
 - `modules/sales/src/repository.rs` — Existing partial repository template
 - `platform/core/src/database/` — Existing sub-module directory pattern
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

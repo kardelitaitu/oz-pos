@@ -1400,12 +1400,15 @@ mod tests {
     }
 
     /// Seed a user with ONLY sales:process permission (no SALES_OVERRIDE_PRICE).
+    /// role-lite: a narrow custom role — the new role-staff preset grants
+    /// sales:override_price, which would flip the rejection below (0048
+    /// retirement sweep).
     fn seed_cashier_without_override_permission(conn: &Connection, user_id: &str) {
         conn.execute_batch(&format!(
             "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-                ('role-cashier', 'Cashier', 'Cashier', '[\"sales:process\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+                ('role-lite', 'Lite', 'Limited sales', '[\"sales:process\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
              INSERT INTO users (id, username, display_name, role_id, pin_hash, is_active, created_at, updated_at) VALUES
-                ('{user_id}', '{user_id}', 'Cashier', 'role-cashier', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+                ('{user_id}', '{user_id}', 'Cashier', 'role-lite', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
         )).unwrap();
     }
 

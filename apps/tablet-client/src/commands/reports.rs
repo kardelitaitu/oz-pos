@@ -7,9 +7,12 @@
 use tauri::{State, command};
 
 use oz_core::db::Store;
+use oz_core::db::popularity::{CategoryForecastRow, CategoryPopularityRow, CategoryTrendPoint};
 use oz_core::db::reports::{
-    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
-    TopProductRow, WeeklyRevenueRow,
+    BasketSizeRow, BasketTrendRow, CategoryBreakdownRow, CustomerSplitRow, DailyRevenueRow,
+    DiscountsSummaryRow, HourlyHeatmapRow, HourlyOccupancyRow, InventoryTrendRow,
+    InventoryTurnoverRow, LowStockAlert, MonthlyRevenueRow, PaymentMethodRow, TableTurnoverRow,
+    TopProductRow, VoidedItemRow, VoidedSummaryRow, WeeklyRevenueRow,
 };
 use oz_core::export::{CustomReportRequest, CustomReportResponse};
 use oz_core::permissions;
@@ -46,6 +49,17 @@ fn validate_top_product_limit(limit: i64) -> Result<(), AppError> {
     Ok(())
 }
 
+/// The top-products ranking keys accepted by the command layer (whitelist
+/// — the store query falls back to revenue for anything else).
+fn validate_top_product_order(order_by: &str) -> Result<(), AppError> {
+    if !matches!(order_by, "revenue" | "profit") {
+        return Err(AppError::Invalid(format!(
+            "top product order must be 'revenue' or 'profit', got '{order_by}'"
+        )));
+    }
+    Ok(())
+}
+
 #[command]
 /// Get menu engineering for the session's store.
 pub async fn get_menu_engineering_scoped(
@@ -62,6 +76,25 @@ pub async fn get_menu_engineering_scoped(
         &db,
         &start_date,
         &end_date,
+    )?)
+}
+
+#[command]
+/// Get per-line cost and margin for a single sale (HPP exposure).
+///
+/// Enriches every line of the sale with the product's current cost, the
+/// line margin, and the margin percentage (see `oz_reporting::margin`).
+pub async fn get_sale_line_margins_scoped(
+    session_token: String,
+    sale_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<oz_reporting::margin::SaleLineMargin>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(oz_reporting::margin::query_sale_lines_with_margin(
+        &db, &sale_id,
     )?)
 }
 
@@ -117,14 +150,110 @@ pub async fn get_top_products_scoped(
     start_date: String,
     end_date: String,
     limit: i64,
+    order_by: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<TopProductRow>, AppError> {
     validate_top_product_limit(limit)?;
+    validate_top_product_order(&order_by)?;
     let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    Ok(Store::new(&db).top_products(&start_date, &end_date, limit)?)
+    Ok(Store::new(&db).top_products(&start_date, &end_date, limit, &order_by)?)
+}
+
+/// Per-category popularity limits: a category's leaderboard needs only a
+/// handful of entries (the UI shows the top 3).
+const MAX_CATEGORY_TOP: i64 = 20;
+
+fn validate_category_top(top_per_category: i64) -> Result<(), AppError> {
+    if !(1..=MAX_CATEGORY_TOP).contains(&top_per_category) {
+        return Err(AppError::Invalid(format!(
+            "top per category must be between 1 and {MAX_CATEGORY_TOP}"
+        )));
+    }
+    Ok(())
+}
+
+/// Trend series limit: the chart shows one line per category, so more than
+/// a handful of series becomes unreadable.
+const MAX_TREND_CATEGORIES: i64 = 10;
+
+fn validate_trend_args(granularity: &str, top_categories: i64) -> Result<(), AppError> {
+    if !oz_core::db::popularity::TREND_GRANULARITIES.contains(&granularity) {
+        return Err(AppError::Invalid(format!(
+            "granularity must be one of {:?}",
+            oz_core::db::popularity::TREND_GRANULARITIES
+        )));
+    }
+    if !(1..=MAX_TREND_CATEGORIES).contains(&top_categories) {
+        return Err(AppError::Invalid(format!(
+            "top categories must be between 1 and {MAX_TREND_CATEGORIES}"
+        )));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+/// Get per-category popularity standings for the session's store: each
+/// category's mean score, its ratio to the catalog average, and its
+/// top products ranked by popularity (ADR #37 per-category evolution).
+pub async fn get_category_popularity_scoped(
+    session_token: String,
+    top_per_category: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<CategoryPopularityRow>, AppError> {
+    validate_category_top(top_per_category)?;
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).category_popularity(top_per_category)?)
+}
+
+#[tauri::command]
+/// Get the per-period popularity trend for the session's store: each of the
+/// top categories' score over `start_date..=end_date`, bucketed by
+/// `granularity` (`daily` | `weekly` | `monthly`) — the same ADR #37 blend
+/// as the materialized scores, so the lines read against current standings.
+pub async fn get_category_popularity_trend_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    granularity: String,
+    top_categories: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<CategoryTrendPoint>, AppError> {
+    validate_trend_args(&granularity, top_categories)?;
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).category_popularity_trend(
+        &start_date,
+        &end_date,
+        &granularity,
+        top_categories,
+    )?)
+}
+
+#[tauri::command]
+/// Get the next-period demand forecast per top category (simple linear fit
+/// over the popularity trend series' recent units) for the session's store.
+pub async fn get_category_forecast_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    granularity: String,
+    top_categories: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<CategoryForecastRow>, AppError> {
+    validate_trend_args(&granularity, top_categories)?;
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).category_forecast(&start_date, &end_date, &granularity, top_categories)?)
 }
 
 #[command]
@@ -172,6 +301,173 @@ pub async fn get_category_breakdown_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     Ok(Store::new(&db).category_breakdown(&start_date, &end_date)?)
+}
+
+#[command]
+/// Get revenue split by payment method for the session's store.
+pub async fn get_payment_method_breakdown_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<PaymentMethodRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).payment_method_breakdown(&start_date, &end_date)?)
+}
+
+#[command]
+/// Get voided-sale totals for the session's store.
+pub async fn get_voided_sales_summary_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<VoidedSummaryRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).voided_sales_summary(&start_date, &end_date)?)
+}
+
+#[command]
+/// Get the top voided product lines for the session's store.
+pub async fn get_voided_items_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    limit: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<VoidedItemRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).voided_items(&start_date, &end_date, limit)?)
+}
+
+#[command]
+/// Get average basket size for the session's store.
+pub async fn get_basket_size_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<BasketSizeRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).avg_basket_size(&start_date, &end_date)?)
+}
+
+#[command]
+/// Get per-day basket size (mean line count) for the session's store.
+pub async fn get_basket_size_trend_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<BasketTrendRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).basket_size_trend(&start_date, &end_date)?)
+}
+
+#[command]
+/// Get new vs returning customer counts for the session's store.
+pub async fn get_customer_split_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<CustomerSplitRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).customer_split(&start_date, &end_date)?)
+}
+
+#[command]
+/// Get discount usage summary for the session's store.
+pub async fn get_discounts_summary_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<DiscountsSummaryRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).discounts_summary(&start_date, &end_date)?)
+}
+
+#[command]
+/// Get a stock-turnover snapshot for the session's store at one location.
+pub async fn get_inventory_turnover_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    location_id: String,
+    state: State<'_, AppState>,
+) -> Result<InventoryTurnoverRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).inventory_turnover(&start_date, &end_date, &location_id)?)
+}
+
+#[command]
+/// Get daily units sold (the inventory trend line) for the session's store.
+pub async fn get_inventory_trend_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<InventoryTrendRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).inventory_trend(&start_date, &end_date)?)
+}
+
+#[command]
+/// Completed table-bound orders per day for the session's store.
+pub async fn get_table_turnover_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TableTurnoverRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).table_turnover(&start_date, &end_date)?)
+}
+
+#[command]
+/// Completed table-bound orders per hour of day for the session's store.
+pub async fn get_hourly_occupancy_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<HourlyOccupancyRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).hourly_table_activity(&start_date, &end_date)?)
 }
 
 #[command]

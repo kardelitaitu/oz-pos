@@ -6,8 +6,8 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::sync_client::{self, SyncConfig};
-use oz_core::{OfflineQueueItem, Store, SyncPriority};
+use oz_core::sync_client::{self, SyncAttemptResult, SyncConfig};
+use oz_core::{OfflineQueueItem, RemoteSyncFailure, Store, SyncPriority};
 
 use foundation::validate_not_empty;
 
@@ -59,6 +59,42 @@ impl From<OfflineQueueItem> for OfflineQueueItemDto {
     }
 }
 
+/// Retained remote-application failure DTO for the front-end.
+///
+/// Exposes everything an operator needs to decide whether to requeue a
+/// dead-lettered item (via `requeue_remote_failure`): the remote item id,
+/// action, retained payload for inspection, attempt count, the latest
+/// error, and the dead-letter flag.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSyncFailureDto {
+    /// Remote item identifier.
+    pub item_id: String,
+    /// Remote action name.
+    pub action: String,
+    /// Original payload retained for operator inspection.
+    pub payload: String,
+    /// Number of failed application attempts.
+    pub attempts: i64,
+    /// Most recent application error.
+    pub last_error: String,
+    /// Whether retry is exhausted and the item is quarantined.
+    pub dead_lettered: bool,
+}
+
+impl From<RemoteSyncFailure> for RemoteSyncFailureDto {
+    fn from(failure: RemoteSyncFailure) -> Self {
+        Self {
+            item_id: failure.item_id,
+            action: failure.action,
+            payload: failure.payload,
+            attempts: failure.attempts,
+            last_error: failure.last_error,
+            dead_lettered: failure.dead_lettered,
+        }
+    }
+}
+
 /// Result of a sync retry attempt.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +105,11 @@ pub struct SyncResult {
     pub failed_count: i64,
     /// Total number of items that were attempted.
     pub total_count: i64,
+    /// The server rejected the attempt because this tenant is on the
+    /// `free` plan (ADR sync-plan-gating). Items stay `pending` and sync
+    /// automatically after an upgrade.
+    #[serde(default)]
+    pub plan_required: bool,
 }
 
 /// Arguments for enqueuing an offline transaction.
@@ -198,6 +239,7 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
             synced_count: 0,
             failed_count: 0,
             total_count: 0,
+            plan_required: false,
         });
     }
 
@@ -215,6 +257,15 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
     let store = Store::new(&db);
     let attempt = match outcomes {
         Ok(outcomes) => sync_client::apply_sync_outcomes(&store, &pending_items, &outcomes)?,
+        // ADR sync-plan-gating: a free tenant is gated, not broken. Do NOT
+        // mark the items failed — they stay `pending` and sync automatically
+        // once the tenant upgrades.
+        Err(sync_client::SyncHttpError::PlanRequired) => SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        },
         Err(e) => sync_client::mark_all_failed(&store, &pending_items, &e.to_string())?,
     };
     drop(db);
@@ -223,6 +274,7 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
         synced_count: attempt.synced as i64,
         failed_count: attempt.failed as i64,
         total_count,
+        plan_required: attempt.plan_required,
     })
 }
 
@@ -238,6 +290,78 @@ pub async fn delete_offline_item(id: String, state: State<'_, AppState>) -> Resu
 
     tracing::info!(id, "offline queue item deleted");
     Ok(())
+}
+
+/// Arguments for `requeue_remote_failure`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequeueRemoteFailureArgs {
+    /// Remote item id currently quarantined in `sync_remote_failures`.
+    pub item_id: String,
+}
+
+/// Requeue a dead-lettered remote item so the next sync cycle retries it.
+///
+/// Operators call this after remediating the item's source (e.g. creating
+/// the missing product a remote sale referenced, or upgrading a client that
+/// rejected the payload). The quarantine row is cleared and the durable
+/// pull anchor is rewound, so the next pull re-fetches the item and retries
+/// it with a fresh attempt budget; the idempotency ledger makes the full
+/// re-pull safe.
+///
+/// An id that is not currently dead-lettered returns `NotFound` — a
+/// mistyped id must not be a silent no-op.
+#[command]
+pub async fn requeue_remote_failure(
+    args: RequeueRemoteFailureArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("itemId", &args.item_id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    run_requeue_remote_failure(&db, &args.item_id)?;
+    drop(db);
+
+    tracing::info!(item_id = %args.item_id, "dead-lettered remote item requeued for sync retry");
+    Ok(())
+}
+
+/// Execute the requeue against a connection, extracted so the command
+/// boundary is unit-testable without a Tauri runtime.
+fn run_requeue_remote_failure(conn: &rusqlite::Connection, item_id: &str) -> Result<(), AppError> {
+    let store = Store::new(conn);
+    store.requeue_remote_failure(item_id)?;
+    Ok(())
+}
+
+/// List retained remote-application failures (dead-letter discovery).
+///
+/// Operators call this to discover which remote items are quarantined (or
+/// still being retried) before deciding to `requeue_remote_failure` — the
+/// dead-letter workflow needs the ids, and the DTO carries the retained
+/// payload + last error so the remediation is informed. Returns the newest
+/// failure first, mirroring the store's ordering.
+#[command]
+pub async fn list_remote_failures(
+    state: State<'_, AppState>,
+) -> Result<Vec<RemoteSyncFailureDto>, AppError> {
+    let db = state.db.lock().await;
+    let failures = run_list_remote_failures(&db)?;
+    drop(db);
+    Ok(failures)
+}
+
+/// Execute the listing against a connection, extracted so the command
+/// boundary is unit-testable without a Tauri runtime.
+fn run_list_remote_failures(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<RemoteSyncFailureDto>, AppError> {
+    let store = Store::new(conn);
+    let failures = store.list_remote_failures()?;
+    Ok(failures
+        .into_iter()
+        .map(RemoteSyncFailureDto::from)
+        .collect())
 }
 
 #[cfg(test)]
@@ -424,6 +548,7 @@ mod tests {
             synced_count: 5,
             failed_count: 2,
             total_count: 7,
+            plan_required: false,
         };
         let d = format!("{sr:?}");
         assert!(d.contains("5"));
@@ -436,6 +561,7 @@ mod tests {
             synced_count: 10,
             failed_count: 0,
             total_count: 10,
+            plan_required: false,
         };
         let json = serde_json::to_value(&sr).unwrap();
         assert_eq!(json["syncedCount"], 10);
@@ -460,5 +586,107 @@ mod tests {
         };
         let d = format!("{args:?}");
         assert!(d.contains("test"));
+    }
+
+    // ── list_remote_failures (dead-letter discovery) ────────────────
+
+    #[test]
+    fn run_list_remote_failures_empty_db() {
+        let conn = fresh_conn();
+        let failures = run_list_remote_failures(&conn).unwrap();
+        assert!(failures.is_empty(), "fresh db must have no failures");
+    }
+
+    #[test]
+    fn run_list_remote_failures_returns_retained_failures_newest_first() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+
+        // Two distinct remote items: one retryable, one dead-lettered after
+        // the third failed attempt. Both must be listed — operators need to
+        // see every retained failure, with dead-lettered items flagged.
+        store
+            .record_remote_failure(
+                "dl-item-1",
+                "complete_sale",
+                "{\"sale_id\":\"s1\"}",
+                "missing product",
+                3,
+            )
+            .unwrap();
+        for _ in 0..3 {
+            store
+                .record_remote_failure("retry-item-2", "stock.adjusted", "{}", "bad", 3)
+                .unwrap();
+        }
+        assert!(!store.is_remote_failure_dead_lettered("dl-item-1").unwrap());
+        assert!(
+            store
+                .is_remote_failure_dead_lettered("retry-item-2")
+                .unwrap()
+        );
+
+        let failures = run_list_remote_failures(&conn).unwrap();
+        assert_eq!(failures.len(), 2);
+        let by_id: std::collections::HashMap<_, _> = failures
+            .iter()
+            .map(|dto| (dto.item_id.clone(), dto))
+            .collect();
+        let dl = by_id.get("dl-item-1").unwrap();
+        assert_eq!(dl.action, "complete_sale");
+        assert_eq!(dl.attempts, 1);
+        assert_eq!(dl.last_error, "missing product");
+        assert!(!dl.dead_lettered, "dl-item-1 is still retryable");
+        let retry = by_id.get("retry-item-2").unwrap();
+        assert_eq!(retry.action, "stock.adjusted");
+        assert_eq!(retry.attempts, 3);
+        assert!(retry.dead_lettered, "retry-item-2 hit the dead letter");
+        assert_eq!(retry.payload, "{}");
+    }
+
+    // ── requeue_remote_failure (dead-letter requeue workflow) ────────
+
+    #[test]
+    fn run_requeue_remote_failure_clears_dead_letter() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+
+        // Drive a remote item to the dead letter, then persist a pull
+        // anchor past it (as the daemon would after quarantining it).
+        for _ in 0..3 {
+            store
+                .record_remote_failure("dl-item-1", "complete_sale", "{}", "bad", 3)
+                .unwrap();
+        }
+        assert!(store.is_remote_failure_dead_lettered("dl-item-1").unwrap());
+        store
+            .set_sync_pull_state(Some("2026-06-01T00:00:00Z"), Some("cursor-1"))
+            .unwrap();
+
+        run_requeue_remote_failure(&conn, "dl-item-1").unwrap();
+
+        assert!(!store.is_remote_failure_dead_lettered("dl-item-1").unwrap());
+        assert!(store.list_remote_failures().unwrap().is_empty());
+        let st = store.get_sync_pull_state().unwrap();
+        assert!(st.since.is_none(), "anchor must rewind after requeue");
+        assert!(st.cursor.is_none(), "cursor must clear with the anchor");
+    }
+    #[test]
+    fn run_requeue_remote_failure_unknown_id_errors() {
+        let conn = fresh_conn();
+        let err = run_requeue_remote_failure(&conn, "never-seen").unwrap_err();
+        match err {
+            AppError::Core { sub_kind, .. } => {
+                assert_eq!(format!("{sub_kind:?}"), "NotFound");
+            }
+            other => panic!("expected NotFound Core error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn requeue_remote_failure_args_deserialize() {
+        let json = r#"{"itemId":"dl-1"}"#;
+        let args: RequeueRemoteFailureArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.item_id, "dl-1");
     }
 }

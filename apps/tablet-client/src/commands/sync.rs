@@ -117,6 +117,7 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
                 synced: 0,
                 failed: 0,
                 error: Some("Sync is not configured or disabled".into()),
+                plan_required: false,
             });
         }
     };
@@ -126,6 +127,7 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
             synced: 0,
             failed: 0,
             error: None,
+            plan_required: false,
         });
     }
 
@@ -141,6 +143,15 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
             &pending_items,
             &outcomes,
         )?),
+        // ADR sync-plan-gating: a free tenant is gated, not broken. Do NOT
+        // mark the items failed — they stay `pending` and sync automatically
+        // once the tenant upgrades.
+        Err(sync_client::SyncHttpError::PlanRequired) => Ok(SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        }),
         Err(e) => Ok(sync_client::mark_all_failed(
             &store,
             &pending_items,
@@ -177,12 +188,45 @@ pub async fn request_sync_token(
         }
     };
     match resolved {
-        Some(u) => Ok(sync_client::request_token(&u).await),
+        Some(u) => {
+            Ok(sync_client::request_token(&u, sync_client::admin_key_from_env().as_deref()).await)
+        }
         None => Ok(sync_client::TokenResult {
             ok: false,
             token: None,
             status: "No server URL configured".into(),
             expires_at: None,
+        }),
+    }
+}
+
+/// Read the caller's own sync plan from the server (ADR sync-plan-gating).
+///
+/// Resolves URL + API key from settings, then calls `GET
+/// /api/v1/tenants/me/plan`. The endpoint is not plan-gated, so a free
+/// tenant can read its own plan to render the upgrade prompt without
+/// running a sync.
+#[command]
+pub async fn get_sync_plan(
+    state: State<'_, AppState>,
+) -> Result<sync_client::TenantPlanResult, AppError> {
+    // Resolve URL + API key first (brief DB lock), then drop the lock
+    // before the async HTTP call.
+    let (url, api_key) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let config = SyncConfig::from_settings(&store)?;
+        match config {
+            Some(c) => (Some(c.server_url), c.api_key),
+            None => (None, None),
+        }
+    };
+    match (url, api_key) {
+        (Some(u), Some(key)) => Ok(sync_client::fetch_tenant_plan(&u, &key).await),
+        _ => Ok(sync_client::TenantPlanResult {
+            ok: false,
+            plan: None,
+            status: "Sync is not configured".into(),
         }),
     }
 }
@@ -510,5 +554,100 @@ mod tests {
             Some("existing-key")
         );
         assert!(!Settings::is_sync_enabled(&conn).unwrap());
+    }
+
+    #[test]
+    fn update_sync_settings_data_clear_url_writes_empty_row() {
+        // The UI sends server_url: None when the user clears the field.
+        // The command must write an empty row (Some("")) rather than
+        // leaving the stale URL (which would keep auto-provision from ever
+        // repairing a broken URL) or deleting the row (which would make a
+        // cleared + disabled install look like a fresh one and re-trigger
+        // provisioning on the next debug launch).
+        let conn = migrations::fresh_db();
+        Settings::set_sync_server_url(&conn, "https://sync.example.com").unwrap();
+        Settings::set_sync_enabled(&conn, false).unwrap();
+
+        let args = UpdateSyncSettingsArgs {
+            server_url: None,
+            api_key: None,
+            enabled: false,
+        };
+        update_sync_settings_data(&conn, &args).unwrap();
+
+        assert_eq!(
+            Settings::get_sync_server_url(&conn).unwrap(),
+            Some("".into())
+        );
+    }
+
+    #[tokio::test]
+    async fn sync_run_plan_required_keeps_items_pending() {
+        // ADR sync-plan-gating: a 403 plan_required from the server must
+        // keep queued items `pending` (never mark them failed) and flag
+        // plan_required so the UI can show an upgrade prompt.
+        use crate::state::AppState;
+        use oz_core::Store;
+        use oz_core::migrations;
+        use oz_core::offline::OfflineQueueStatus;
+        use tauri::Manager as _;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_url = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buffer = vec![0_u8; 16 * 1024];
+            let _ = socket.read(&mut buffer).await;
+            let body = r#"{"error":"plan_required"}"#;
+            let response = format!(
+                "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
+
+        let conn = migrations::fresh_db();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+        {
+            let state = app.state::<AppState>();
+            let db = state.db.lock().await;
+            update_sync_settings_data(
+                &db,
+                &UpdateSyncSettingsArgs {
+                    server_url: Some(server_url),
+                    api_key: Some("test-jwt".into()),
+                    enabled: true,
+                },
+            )
+            .unwrap();
+            Store::new(&db)
+                .enqueue_offline("complete_sale", r#"{"id":"tablet-plan-gate"}"#)
+                .unwrap();
+        }
+
+        let result = sync_run(app.state()).await.unwrap();
+        task.await.unwrap();
+
+        assert!(result.plan_required, "must flag plan_required for the UI");
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 0, "a plan gate is not a failure");
+
+        let state = app.state::<AppState>();
+        let db = state.db.lock().await;
+        let items = Store::new(&db).list_all_offline().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].status,
+            OfflineQueueStatus::Pending,
+            "plan-gated items must stay pending so they sync after upgrade"
+        );
     }
 }

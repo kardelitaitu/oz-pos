@@ -58,6 +58,12 @@ pub struct KdsOrder {
     /// Populated from the sale's store context. Used by KDS tablets
     /// to filter orders for defense-in-depth in multi-store deployments.
     pub store_id: Option<String>,
+    /// Topology-selected KDS workspace instance for this ticket.
+    ///
+    /// `None` is retained for tickets created before runtime route
+    /// compilation or by legacy unscoped callers.
+    #[serde(default)]
+    pub target_instance_id: Option<String>,
     /// Current kitchen status ("pending", "preparing", "ready", "served", "cancelled").
     pub status: String,
     /// Comma-separated item names for display.
@@ -258,6 +264,7 @@ mod tests {
             id: "o-1".into(),
             sale_id: "s-1".into(),
             store_id: Some("store-default".into()),
+            target_instance_id: Some("kds-main".into()),
             status: "pending".into(),
             items_summary: "Coffee x2, Bagel".into(),
             item_count: 3,
@@ -311,6 +318,7 @@ mod tests {
             id: "o-2".into(),
             sale_id: "s-2".into(),
             store_id: None,
+            target_instance_id: None,
             status: "served".into(),
             items_summary: "Done".into(),
             item_count: 1,

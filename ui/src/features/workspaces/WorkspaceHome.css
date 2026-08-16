@@ -28,7 +28,7 @@
   --ws-glow: rgba(34, 197, 94, 0.15);
 }
 
-.ws-color-inventory {
+.ws-color-warehouse {
   --ws-accent: #a855f7;
   --ws-accent-bg: rgba(168, 85, 247, 0.1);
   --ws-glow: rgba(168, 85, 247, 0.15);
@@ -216,6 +216,12 @@
   align-items: stretch;
   justify-content: flex-start;
   padding: var(--space-3) 10%;
+  /* Short viewports: if the card grid is taller than the available
+     height (landscape phones, small laptops), scroll vertically
+     instead of clipping the bottom row. Horizontal overflow stays
+     hidden — the e2e contract forbids body-level x-overflow. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ── Footer box (bottom 8%) ─────────────────────────────────────── */
@@ -247,7 +253,11 @@
   width: 100%;
   max-width: none;
   flex: 1;
-  grid-auto-rows: 1fr;
+  /* min-content min: rows never crush below their content on short
+     viewports (landscape/tablet) — the grid overflows and the main
+     area scrolls instead of clipping the card text. When there is
+     room, all rows still share the free space equally (1fr). */
+  grid-auto-rows: minmax(min-content, 1fr);
   opacity: 1;
 }
 
@@ -256,13 +266,24 @@
 .workspace-card {
   position: relative;
   text-align: left;
-  padding: clamp(12px, 5%, 28px) clamp(14px, 6%, 32px);
+  /* Override the global button reset (display: inline-flex). As a flex
+     container the interior row would shrink-wrap to its min-content
+     width — every card then settles at a different interior width and
+     the 40:60 split collapses on some cards. Block layout makes the
+     row fill the card, so all cards share identical geometry. */
+  display: block;
+  /* Container for cqw typography: 1cqw = 1% of the card's content
+     width, so titles/descriptions scale with the card itself instead
+     of the viewport. */
+  container-type: inline-size;
+  /* 10% frame: the card content sits inside a 10% padding gutter on every
+     side, so the interior scales proportionally at any resolution. */
+  padding: 10%;
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   cursor: pointer;
-  position: relative;
   overflow: hidden;
   box-shadow: var(--shadow-glow, var(--shadow-2xl)), var(--shadow-sm);
   transition:
@@ -310,19 +331,6 @@
   animation: ws-card-hover-sway var(--duration-3500) var(--ease-in-out) infinite;
 }
 
-/* ── Card exit animation ─────────────────────────────────────────── */
-
-.workspace-card--exiting {
-  pointer-events: none;
-  animation: ws-card-exit 0.3s cubic-bezier(0.5, 0, 0.75, 0) forwards;
-}
-
-.workspace-card--exiting ~ .workspace-card {
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s var(--ease-out);
-}
-
 /* Subtle scale-in for the icon on the active card */
 .workspace-card--active .workspace-card-icon {
   transform: scale(1.05);
@@ -358,16 +366,29 @@
 }
 
 .workspace-card-row {
-  display: flex;
-  flex-direction: row;
+  /* 40:60 interior split — icon zone | text zone. Percentage-based
+     (2fr : 3fr), so the card content re-proportions automatically at
+     any resolution without reflowing into a different layout. The
+     gap is intentionally 0: the gutter lives in the text zone's left
+     padding, so the two zones are exactly 40/60 at EVERY width (a
+     grid gap would eat a larger share on tiny cards and break it). */
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  gap: 0;
   align-items: center;
-  gap: var(--space-5);
   height: 100%;
 }
 
 .workspace-card-icon {
-  flex: 0 0 min(25%, 96px);
-  aspect-ratio: 1;
+  /* 5% inner padding on the icon zone. As a grid item, % padding
+     resolves against the zone's own width, so the icon stays inset
+     proportionally at any resolution. */
+  padding: 5%;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--ws-accent, var(--color-accent));
   transform-origin: center;
   transition: transform var(--duration-250) var(--ease-out);
@@ -396,8 +417,12 @@
 }
 
 .workspace-card-icon svg {
-  width: 100%;
-  height: 100%;
+  /* Proportional icon: ~55% of the zone's content width keeps the glyph at
+     roughly 1/6 of the card width at every resolution (matches the reference
+     proportions) without a hard pixel cap that would break on tiny cards. */
+  width: 55%;
+  height: auto;
+  aspect-ratio: 1;
   filter: drop-shadow(0 0 6px var(--ws-glow, transparent));
   transition: filter var(--duration-200) var(--ease-out);
 }
@@ -423,39 +448,60 @@
   animation: ws-icon-wiggle 0.6s var(--ease-out);
 }
 
-/* ── Card body ───────────────────────────────────────────────────── */
-
-.workspace-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0_5);
-  flex: 1;
-  min-width: 0;
-}
-
 .workspace-card:hover .workspace-card-icon svg {
   filter: drop-shadow(0 0 10px var(--ws-glow, transparent));
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+ * Card Interior — Proportional 40:60 Split (any resolution)
+ *
+ * The card is a 10% padding frame; the content area is split 40:60
+ * (icon zone | text zone) via the 2fr/3fr grid on .workspace-card-row.
+ * Everything is percentage-based, so the interior re-proportions at
+ * any resolution by construction — no viewport or container queries
+ * needed, and the layout never collapses into a different shape.
+ *
+ * Fallback note: engines without grid support fall back to the base
+ * block layout — acceptable for this app's evergreen WebView2 target.
+ * ═══════════════════════════════════════════════════════════════════ */
+
 /* ── Card body ───────────────────────────────────────────────────── */
 
 .workspace-card-body {
+  /* 10% inner padding on the text zone — resolves against the zone's
+     own width (grid item), keeping the interior proportional at any
+     resolution. The gutter between the 40% icon zone and this 60%
+     text zone lives here (left padding), so the zone ratio stays
+     exactly 40:60 at every width. */
+  padding: 10%;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  /* Tight title→description lockup — half the default spacing. */
   gap: var(--space-0_5);
-  flex: 1;
   min-width: 0;
 }
 
 .workspace-card-name {
-  font-size: clamp(var(--text-base), 1.5vw, var(--text-2xl));
+  /* Typography tracks the CARD, not the viewport. cqw (container width)
+     keeps the title proportional to the 60% text zone at any resolution.
+     Sized one step above the description so the title is the dominant
+     text in the card; long names wrap evenly via text-wrap: balance. The
+     vw clamp is the fallback for engines without container-query units;
+     engines with cqw use the second declaration. */
+  font-size: clamp(var(--text-lg), 1.35vw, var(--text-2xl));
+  font-size: clamp(var(--text-lg), 5cqw, var(--text-2xl));
   font-weight: var(--font-weight-bold);
   color: var(--color-fg);
   margin: 0;
+  text-wrap: balance;
+  line-height: var(--leading-tight, 1.25);
 }
 
 .workspace-card-desc {
-  font-size: clamp(var(--text-xs), 1vw, var(--text-base));
+  /* Same container-relative sizing as the title, one step down. */
+  font-size: clamp(var(--text-sm), 0.95vw, var(--text-base));
+  font-size: clamp(var(--text-sm), 3.2cqw, var(--text-base));
   color: var(--color-fg-secondary);
   margin: 0;
   line-height: var(--leading-relaxed);
@@ -710,7 +756,7 @@
   width: 100%;
   max-width: none;
   flex: 1;
-  grid-auto-rows: 1fr;
+  grid-auto-rows: minmax(min-content, 1fr);
 }
 
 .workspace-skeleton-grid .workspace-skeleton-card {
@@ -718,11 +764,11 @@
 }
 
 .workspace-skeleton-card {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  gap: 0;
   align-items: center;
-  gap: var(--space-5);
-  padding: clamp(12px, 5%, 28px) clamp(14px, 6%, 32px);
+  padding: 10%;
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
@@ -731,8 +777,10 @@
 }
 
 .workspace-skeleton-icon {
-  flex: 0 0 min(25%, 96px);
-  aspect-ratio: 1;
+  /* Mirrors the real card's 5% icon-zone padding. */
+  padding: 5%;
+  width: 100%;
+  height: 100%;
   border-radius: var(--radius-lg);
   background: linear-gradient(
     90deg,
@@ -744,8 +792,21 @@
   animation: ws-shimmer var(--duration-1500) var(--ease-in-out) infinite;
 }
 
+.workspace-skeleton-body {
+  /* Mirrors .workspace-card-body — grid item in the 60% zone with the
+     same 10% inner padding, so the skeleton matches the real card. */
+  padding: 10%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
 .workspace-skeleton-title {
-  width: 8.75rem;
+  /* Proportional to the text zone (mirrors the real card): the shimmer
+     bar tracks the zone width at any resolution instead of a fixed rem. */
+  width: 65%;
   height: 1.25rem;
   border-radius: var(--radius-sm);
   background: linear-gradient(
@@ -759,7 +820,7 @@
 }
 
 .workspace-skeleton-desc {
-  width: 13.75rem;
+  width: 100%;
   height: 0.875rem;
   border-radius: var(--radius-sm);
   background: linear-gradient(
@@ -773,8 +834,8 @@
   animation-delay: 0.1s;
 }
 
-.workspace-skeleton-desc:nth-child(3) {
-  width: 10rem;
+.workspace-skeleton-body .workspace-skeleton-desc:nth-child(2) {
+  width: 62%;
 }
 
 /* ── Empty state ─────────────────────────────────────────────────── */
@@ -996,9 +1057,8 @@
 
 .role-badge--owner   { color: var(--color-warning); }
 .role-badge--manager { color: var(--color-info); }
-.role-badge--cashier { color: var(--color-success); }
-.role-badge--kitchen {  color: var(--color-link-visited, #a855f7); } /* design exception: semantic workspace accent color */
 .role-badge--staff  { color: var(--color-fg-secondary); }
+.role-badge--auditor { color: var(--color-success); }
 .role-badge--custom { color: var(--color-purple, #9333ea); }
 .role-badge--default { color: var(--color-fg-tertiary); }
 
@@ -1035,17 +1095,6 @@
   }
 }
 
-@keyframes ws-card-exit {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-}
-
 @keyframes ws-glow-breath {
   0%, 100% {
     opacity: 0.6;
@@ -1059,8 +1108,22 @@
  * Responsive
  * ═══════════════════════════════════════════════════════════════════ */
 
-@media (max-width: 400px) {
-  .workspace-grid {
+/* Column collapse: the 3-column grid is held only while cards stay
+   comfortably wide. Below 1100px (portrait tablets, small laptops) the
+   grid drops to 2 columns, and below 640px to 1 — so a card never
+   crushes below ~240px, where the 40:60 interior would force titles
+   onto cramped wrapped lines. The keyboard navigation reads the live
+   column count, so arrow-key grid movement follows automatically. */
+@media (max-width: 1100px) {
+  .workspace-grid,
+  .workspace-skeleton-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace-grid,
+  .workspace-skeleton-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1177,9 +1240,20 @@
     opacity: 1;
     transform: none;
   }
+}
 
-  .workspace-card--exiting {
-    animation: none;
-    opacity: 0;
-  }
+/* ── Section label divider (Analytics & Reports) ─────────────── */
+
+.workspace-section-label {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0 var(--space-1) var(--space-1);
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  user-select: none;
 }

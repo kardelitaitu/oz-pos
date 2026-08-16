@@ -1,0 +1,33 @@
+---
+import { getRelativeLocaleUrl } from 'astro:i18n';
+import { locales, t } from '../i18n';
+
+const locale = (Astro.currentLocale ?? 'en') as 'en' | 'id';
+// Strip the locale prefix so the toggle keeps the same page in the other locale.
+const path = Astro.url.pathname.replace(/^\/(?:en|id)(?:\/|$)/, '');
+// The 404 page is served at /404 (no locale prefix; Astro builds it from
+// /404, /404/, or /404.html depending on version). Linking the toggle to
+// /en/404/ or /id/404/ would point at non-existent pages — fall back home.
+const target = !path || path.replace(/^\/+/, '').startsWith('404') ? '/' : path;
+---
+
+<div
+  class="flex items-center rounded-full border border-ink/10 bg-primary p-0.5"
+  role="group"
+  aria-label={t(locale, 'nav.language')}
+>
+  {
+    locales.map((code) => (
+      <a
+        href={getRelativeLocaleUrl(code, target)}
+        aria-current={locale === code ? 'page' : undefined}
+        class:list={[
+          'rounded-full px-3 py-1.5 text-xs font-semibold transition',
+          locale === code ? 'bg-accent text-black' : 'text-muted hover:text-ink',
+        ]}
+      >
+        {code.toUpperCase()}
+      </a>
+    ))
+  }
+</div>

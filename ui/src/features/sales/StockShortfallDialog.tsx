@@ -351,14 +351,19 @@ export default function StockShortfallDialog({
                                   type="number"
                                   className="shortfall-split-input"
                                   value={currentQty}
-                                  onChange={(e) =>
-                                    handleSplitQtyChange(
-                                      shortfall.sku,
-                                      alt.locationId,
-                                      parseInt(e.target.value, 10) || 0,
-                                      Math.min(alt.qtyAvailable, shortfall.deficit)
-                                    )
-                                  }
+                                  onChange={(e) => {
+                                    // Whole number only — ignore fractional in-progress input
+                                    // instead of silently truncating it via parseInt.
+                                    const v = Number(e.target.value);
+                                    if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                                      handleSplitQtyChange(
+                                        shortfall.sku,
+                                        alt.locationId,
+                                        e.target.value === '' ? 0 : v,
+                                        Math.min(alt.qtyAvailable, shortfall.deficit)
+                                      );
+                                    }
+                                  }}
                                   min={0}
                                   max={Math.min(alt.qtyAvailable, shortfall.deficit)}
                                   aria-label={`${alt.locationName} qty`}

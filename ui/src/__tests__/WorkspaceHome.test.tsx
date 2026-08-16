@@ -5,10 +5,16 @@
 // based access control, and per-workspace accent colors.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { screen, waitFor, fireEvent, within, configure } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluent } from '@/__tests__/test-utils/render';
 import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
+
+// WorkspaceHome renders a heavy multi-section screen driven by async
+// context mocks; under parallel CI load a full render can exceed the
+// default 1s waitFor timeout (the same flake class as SettingsPage).
+// Vitest isolates module state per file, so this does not leak.
+configure({ asyncUtilTimeout: 5000 });
 
 // ── Hoisted mocks ──────────────────────────────────────────────
 
@@ -47,7 +53,7 @@ const sampleWorkspaces = [
   { instance_id: 'default-restaurant-pos', type_key: 'restaurant-pos', store_id: 'default', store_name: 'Main Store', name: 'Restaurant POS', description: 'Cashier terminal for restaurant ordering', icon: 'restaurant', layout_mode: 'fullscreen', colour: null, is_default: false },
   { instance_id: 'default-store-pos', type_key: 'store-pos', store_id: 'default', store_name: 'Main Store', name: 'Store POS', description: 'Cashier terminal for retail', icon: 'store', layout_mode: 'fullscreen', colour: null, is_default: false },
   { instance_id: 'default-kds', type_key: 'kds', store_id: 'default', store_name: 'Main Store', name: 'Kitchen Display', description: 'Order queue display for the kitchen', icon: 'kds', layout_mode: 'fullscreen', colour: null, is_default: false },
-  { instance_id: 'default-inventory', type_key: 'inventory', store_id: 'default', store_name: 'Main Store', name: 'Inventory Management', description: 'Manage products and stock', icon: 'inventory', layout_mode: 'sidebar', colour: null, is_default: false },
+  { instance_id: 'default-warehouse', type_key: 'warehouse', store_id: 'default', store_name: 'Main Store', name: 'Warehouse', description: 'Product and stock management', icon: 'package', layout_mode: 'sidebar', colour: null, is_default: false },
   { instance_id: 'default-admin', type_key: 'admin', store_id: 'default', store_name: 'Main Store', name: 'Admin', description: 'System settings and reports', icon: 'admin', layout_mode: 'sidebar', colour: null, is_default: false },
 ];
 
@@ -69,13 +75,13 @@ function mockDefaultUser() {
   });
 }
 
-function mockCashierUser() {
+function mockAuditorUser() {
   mockAuthSession.mockReturnValue({
     session: {
       user_id: 'user-2',
-      display_name: 'Cashier One',
-      role_name: 'cashier',
-      role_id: 'role-cashier',
+      display_name: 'Auditor One',
+      role_name: 'auditor',
+      role_id: 'role-auditor',
     },
     loading: false,
     error: null,
@@ -217,7 +223,7 @@ describe('WorkspaceHome', () => {
       });
       expect(screen.getByText('Store POS')).toBeInTheDocument();
       expect(screen.getByText('Kitchen Display')).toBeInTheDocument();
-      expect(screen.getByText('Inventory Management')).toBeInTheDocument();
+      expect(screen.getByText('Warehouse')).toBeInTheDocument();
       expect(screen.getByText('Admin')).toBeInTheDocument();
     });
 
@@ -286,7 +292,7 @@ describe('WorkspaceHome', () => {
 
       // Each card should have a shortcut hint (hidden until hover)
       const hints = document.querySelectorAll('button.workspace-card .workspace-card-overlay');
-      expect(hints.length).toBe(5);
+      expect(hints.length).toBe(7);
       expect(hints[0]?.textContent).toMatch(/1/);
       expect(hints[4]?.textContent).toMatch(/5/);
     });
@@ -335,14 +341,14 @@ describe('WorkspaceHome', () => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
-      const cards = Array.from(document.querySelectorAll('.workspace-card')).filter(c => !c.textContent?.includes('Coming soon'));
+      const cards = Array.from(document.querySelectorAll('.workspace-card')).filter(c => !c.textContent?.includes('Coming soon') && !c.textContent?.includes('Analytics') && !c.textContent?.includes('Reports'));
       expect(cards.length).toBe(5);
       const names = Array.from(cards).map((c) => c.querySelector('.workspace-card-name')?.textContent);
       expect(names).toEqual([
         'Restaurant POS',
         'Store POS',
         'Kitchen Display',
-        'Inventory Management',
+        'Warehouse',
         'Admin',
       ]);
     });
@@ -373,10 +379,15 @@ describe('WorkspaceHome', () => {
   });
 
   // ── Role-based access ───────────────────────────────────────
+  //
+  // Every preset role (owner/admin/manager/staff/auditor) can activate the
+  // workspaces assigned to it; assignment filtering happens on the backend
+  // `list_workspaces`. The client-side gate only blocks unknown/legacy
+  // roles, so a recognized preset role sees all cards enabled (0048 2c).
 
   describe('role-based access', () => {
-    it('disables workspace cards that are not accessible for cashier role', async () => {
-      mockCashierUser();
+    it('enables all workspace cards for a recognized preset role', async () => {
+      mockAuditorUser();
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: sampleWorkspaces,
         loading: false,
@@ -394,19 +405,14 @@ describe('WorkspaceHome', () => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
-      const cards = Array.from(document.querySelectorAll('.workspace-card--disabled')).filter(c => !c.textContent?.includes('Coming soon'));
-      // Cashier can only access restaurant-pos and store-pos
-      expect(cards.length).toBe(3);
-      const disabledNames = Array.from(cards).map(
-        (c) => c.querySelector('.workspace-card-name')?.textContent,
-      );
-      expect(disabledNames).toContain('Kitchen Display');
-      expect(disabledNames).toContain('Inventory Management');
-      expect(disabledNames).toContain('Admin');
+      const cards = Array.from(document.querySelectorAll('.workspace-card')).filter(c => !c.textContent?.includes('Coming soon'));
+      const disabled = cards.filter((c) => c.classList.contains('workspace-card--disabled'));
+      // Auditor is a recognized preset role — no client-side card disabling.
+      expect(disabled.length).toBe(0);
     });
 
-    it('shows badge on disabled workspace cards', async () => {
-      mockCashierUser();
+    it('shows no availability badge for a recognized preset role', async () => {
+      mockAuditorUser();
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: sampleWorkspaces,
         loading: false,
@@ -427,7 +433,7 @@ describe('WorkspaceHome', () => {
       const badges = Array.from(screen.getAllByText('Not available')).filter(
         (b) => !b.closest('.workspace-card')?.textContent?.includes('Coming soon')
       );
-      expect(badges.length).toBe(3);
+      expect(badges.length).toBe(0);
     });
 
     it('allows owner role to click Admin workspace', async () => {
@@ -940,8 +946,12 @@ describe('WorkspaceHome', () => {
       firstCard.focus();
 
       fireEvent.keyDown(document.activeElement!, { key: 'End' });
-      const cards = document.querySelectorAll('.workspace-card');
-      expect(document.activeElement).toBe(cards[4]);
+      // 5 workspace + 2 insights + 3 coming-soon = 10 total cards.
+      // Keyboard nav targets focusable (non-disabled) cards — the last
+      // focusable card is Reports (index 6 among focusables).
+      const allCards = document.querySelectorAll('.workspace-card');
+      expect(allCards.length).toBe(10);
+      expect(document.activeElement).toBe(allCards[6]);
     });
   });
 

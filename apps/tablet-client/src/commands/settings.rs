@@ -11,7 +11,7 @@ use tauri::command;
 use std::collections::HashMap;
 
 use oz_core::permissions;
-use oz_core::{Settings, UserPreferences};
+use oz_core::{Settings, Store, UserPreferences};
 
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
@@ -397,6 +397,52 @@ pub async fn set_user_preferences(
     Ok(UserPreferences::set_batch(&conn, &user_id, &pairs)?)
 }
 
+#[command]
+/// Get user preferences resolved from a session token. ADR #7.
+///
+/// Uses `session.user_id` for the preference lookup against the
+/// session's store database, so a tablet terminal persists the same
+/// per-user preferences (menu sort, card/font size) that the desktop
+/// client writes.
+pub async fn get_user_preferences_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, String>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(UserPreferences::get_all(&db, &session.user_id)?)
+}
+
+#[command]
+/// Set user preferences resolved from a session token. ADR #7.
+///
+/// Uses `session.user_id` for the preference write against the
+/// session's store database — parity with the desktop client so
+/// the restaurant-menu hamburger configuration persists to the
+/// shared user settings on tablet terminals.
+pub async fn set_user_preferences_scoped(
+    session_token: String,
+    prefs: Vec<UserPrefEntry>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let pairs: Vec<(String, String)> = prefs.into_iter().map(|e| (e.key, e.value)).collect();
+    Ok(UserPreferences::set_batch(&db, &session.user_id, &pairs)?)
+}
+
 // ── Generic key-value settings ────────────────────────────────
 
 /// Read a single setting value by key.
@@ -426,20 +472,56 @@ pub async fn set_setting(
     user_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    // Extract terminal_id before locking the DB — no await inside the lock.
+    let terminal_id = state
+        .terminal_id
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
     let conn = state.db.lock().await;
     let store = oz_core::db::Store::new(&conn);
     require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    run_set_setting(&conn, &key, &value)
+    run_set_setting(&conn, &key, &value, &terminal_id)?;
+    // SYNC-10 parity: enqueue the change so the tablet's sync daemon
+    // pushes it to the cloud (and the desktop's pull re-applies it).
+    // Warn-and-continue — the local write already committed.
+    if let Err(e) = enqueue_settings_update(&store, &key, &value, &terminal_id) {
+        tracing::warn!(key = %key, error = %e, "failed to enqueue settings.update sync item");
+    }
+    Ok(())
 }
 
 /// Business logic for `set_setting` (extracted for testing).
-fn run_set_setting(conn: &rusqlite::Connection, key: &str, value: &str) -> Result<(), AppError> {
-    Ok(Settings::set(conn, key, value)?)
+/// Uses `set_tracked` so every settings change writes a delta record
+/// (ADR #22) — the basis for version-LWW when the change syncs.
+fn run_set_setting(
+    conn: &rusqlite::Connection,
+    key: &str,
+    value: &str,
+    terminal_id: &str,
+) -> Result<(), AppError> {
+    Ok(Settings::set_tracked(conn, key, value, terminal_id)?)
+}
+
+/// Enqueue a `settings.update` sync item for a tablet settings save,
+/// scoped to the "default" tenant on the global queue (SYNC-10).
+/// Supersede semantics live in oz-core's
+/// [`Store::enqueue_settings_update_superseding`].
+fn enqueue_settings_update(
+    store: &Store,
+    key: &str,
+    value: &str,
+    terminal_id: &str,
+) -> Result<(), AppError> {
+    Ok(store.enqueue_settings_update_superseding(key, value, terminal_id, "default")?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_core::SyncPriority;
     use oz_core::migrations;
     use rusqlite::Connection;
 
@@ -857,10 +939,47 @@ mod tests {
         assert!(result.is_none());
     }
 
+    /// ADR #22 parity: the tablet's settings write must record a delta
+    /// (version 1), not just overwrite the row — the delta ledger is the
+    /// basis for version-LWW when the change syncs.
+    #[test]
+    fn run_set_setting_writes_delta_row() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "delta.test", "delta-val", "term-delta").unwrap();
+        assert_eq!(
+            Settings::get(&conn, "delta.test").unwrap(),
+            Some("delta-val".into())
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "delta.test", "term-delta").unwrap(),
+            Some(1)
+        );
+    }
+
+    /// SYNC-10 parity: a tablet settings save must enqueue a
+    /// `settings.update` item on the global queue so the tablet's sync
+    /// daemon pushes it to the cloud (and the desktop's pull re-applies it).
+    #[test]
+    fn set_setting_enqueues_settings_update_item() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        enqueue_settings_update(&store, "theme", "dark", "term-1").unwrap();
+
+        let pending = store.list_pending_offline().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].action, "settings.update");
+        assert_eq!(pending[0].tenant_id, "default");
+        assert_eq!(pending[0].priority, SyncPriority::Low);
+        let v: serde_json::Value = serde_json::from_str(&pending[0].payload).unwrap();
+        assert_eq!(v["key"], "theme");
+        assert_eq!(v["value"], "dark");
+        assert_eq!(v["terminal_id"], "term-1");
+    }
+
     #[test]
     fn set_setting_persists_and_get_returns_it() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "sync.auth_token", "sk_test_abc123").unwrap();
+        run_set_setting(&conn, "sync.auth_token", "sk_test_abc123", "term-1").unwrap();
         let result = run_get_setting(&conn, "sync.auth_token").unwrap();
         assert_eq!(result, Some("sk_test_abc123".into()));
     }
@@ -868,8 +987,8 @@ mod tests {
     #[test]
     fn set_setting_overwrites_previous_value() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "my.key", "v1").unwrap();
-        run_set_setting(&conn, "my.key", "v2").unwrap();
+        run_set_setting(&conn, "my.key", "v1", "term-1").unwrap();
+        run_set_setting(&conn, "my.key", "v2", "term-1").unwrap();
         let result = run_get_setting(&conn, "my.key").unwrap();
         assert_eq!(result, Some("v2".into()));
     }
@@ -877,8 +996,8 @@ mod tests {
     #[test]
     fn set_setting_empty_string_is_stored_as_empty() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "key", "hello").unwrap();
-        run_set_setting(&conn, "key", "").unwrap();
+        run_set_setting(&conn, "key", "hello", "term-1").unwrap();
+        run_set_setting(&conn, "key", "", "term-1").unwrap();
         let result = run_get_setting(&conn, "key").unwrap();
         assert_eq!(result, Some("".into()));
     }
@@ -886,9 +1005,9 @@ mod tests {
     #[test]
     fn get_setting_after_multiple_keys_only_returns_requested() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "a", "1").unwrap();
-        run_set_setting(&conn, "b", "2").unwrap();
-        run_set_setting(&conn, "c", "3").unwrap();
+        run_set_setting(&conn, "a", "1", "term-1").unwrap();
+        run_set_setting(&conn, "b", "2", "term-1").unwrap();
+        run_set_setting(&conn, "c", "3", "term-1").unwrap();
         assert_eq!(run_get_setting(&conn, "b").unwrap(), Some("2".into()));
         assert_eq!(run_get_setting(&conn, "d").unwrap(), None);
     }
@@ -901,7 +1020,7 @@ mod tests {
         let conn = fresh_conn();
 
         // Simulate SettingsPage saving a token
-        run_set_setting(&conn, "sync.auth_token", "jwt-token-xyz").unwrap();
+        run_set_setting(&conn, "sync.auth_token", "jwt-token-xyz", "term-1").unwrap();
 
         // Simulate useCloudSync loading the token on the other screen
         let loaded = run_get_setting(&conn, "sync.auth_token").unwrap();
@@ -909,6 +1028,110 @@ mod tests {
             loaded,
             Some("jwt-token-xyz".into()),
             "C-3 regression: token saved via SettingsPage must be readable via get_setting"
+        );
+    }
+
+    // ── Scoped user preferences (tablet parity — AUDIT-25) ─────────
+
+    use oz_core::session::SessionContext;
+    use platform_core::StoreDatabaseManager;
+    use tauri::Manager as _;
+
+    /// Seed a session for `token` bound to `store_id` and `user_id`.
+    fn seed_session(state: &mut AppState, token: &str, store_id: &str, user_id: &str) {
+        state.session_store.write().unwrap().insert(
+            token.into(),
+            SessionContext::new(
+                user_id.into(),
+                "role-staff".into(),
+                "terminal-1".into(),
+                store_id.into(),
+                "instance-1".into(),
+                "restaurant-pos".into(),
+                None,
+                0,
+            ),
+        );
+    }
+
+    fn pref(key: &str, value: &str) -> UserPrefEntry {
+        UserPrefEntry {
+            key: key.into(),
+            value: value.into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn scoped_user_preferences_rejects_invalid_token() {
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test())
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let read = get_user_preferences_scoped("missing-token".into(), app.state()).await;
+        assert!(matches!(read, Err(AppError::InvalidSession)));
+
+        let write = set_user_preferences_scoped(
+            "missing-token".into(),
+            vec![pref("cardsize", "3")],
+            app.state(),
+        )
+        .await;
+        assert!(matches!(write, Err(AppError::InvalidSession)));
+    }
+
+    #[tokio::test]
+    async fn scoped_user_preferences_roundtrip_targets_session_store_and_user() {
+        let conn = oz_core::migrations::fresh_db();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        seed_session(&mut state, "store-a-token", "store-a", "cashier-a");
+        seed_session(&mut state, "store-b-token", "store-b", "cashier-a");
+        seed_session(&mut state, "other-user-token", "store-a", "cashier-b");
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // The restaurant-menu hamburger configuration for cashier-a in
+        // store-a — the exact keys RestaurantMenu persists scoped.
+        set_user_preferences_scoped(
+            "store-a-token".into(),
+            vec![
+                pref("sort", "popularity"),
+                pref("cardsize", "3"),
+                pref("fontsize", "2"),
+            ],
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let prefs = get_user_preferences_scoped("store-a-token".into(), app.state())
+            .await
+            .unwrap();
+        assert_eq!(prefs.get("sort").map(String::as_str), Some("popularity"));
+        assert_eq!(prefs.get("cardsize").map(String::as_str), Some("3"));
+        assert_eq!(prefs.get("fontsize").map(String::as_str), Some("2"));
+
+        // Isolated per store: the same user in store-b must not see store-a.
+        let store_b = get_user_preferences_scoped("store-b-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(
+            store_b.is_empty(),
+            "store B must not see store A user preferences"
+        );
+
+        // Isolated per user: another user in store-a must not see them.
+        let other = get_user_preferences_scoped("other-user-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(
+            other.is_empty(),
+            "another user in the same store must not see cashier-a preferences"
         );
     }
 }

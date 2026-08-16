@@ -14,15 +14,19 @@ use super::{Store, row_to_product};
 
 /// A [`Product`] enriched with category name and stock quantity from
 /// LEFT JOINs on `categories` and `inventory`.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ProductWithDetails {
     /// The core product fields (flattened into the parent JSON).
     #[serde(flatten)]
     pub product: Product,
     /// Display name from `categories.name`, if linked.
     pub category_name: Option<String>,
-    /// Current stock from `inventory.qty`, if an inventory row exists.
+    /// Current stock — SUM of `stock_summary.qty` across locations, falling
+    /// back to the legacy `inventory.qty` when no ledger rows exist (ADR #36).
     pub stock_qty: Option<i64>,
+    /// Materialized popularity score (ADR #37) — sort key for the retail grid.
+    #[serde(default)]
+    pub popularity_score: f64,
 }
 
 fn row_to_product_with_details(row: &rusqlite::Row) -> rusqlite::Result<ProductWithDetails> {
@@ -31,6 +35,7 @@ fn row_to_product_with_details(row: &rusqlite::Row) -> rusqlite::Result<ProductW
         product,
         category_name: row.get("category_name")?,
         stock_qty: row.get("stock_qty")?,
+        popularity_score: row.get("popularity_score").unwrap_or(0.0),
     })
 }
 
@@ -90,6 +95,68 @@ fn upsert_stock_summary_in_tx(
     Ok(())
 }
 
+// ── ADR #36 product attributes ───────────────────────────────────────
+
+/// Product attributes beyond the base create fields (ADR #36).
+///
+/// [`Store::create_product`] delegates with the default so legacy callers
+/// are unaffected; commands that carry the new fields call
+/// [`Store::create_product_with_attributes`].
+#[derive(Debug, Clone)]
+pub struct CreateProductAttributes {
+    /// Purchase/cost price in minor units (local-only).
+    pub cost_minor: i64,
+    /// Brand (free text).
+    pub brand: Option<String>,
+    /// Rack position code.
+    pub rack_location: Option<String>,
+    /// Free-text notes.
+    pub notes: Option<String>,
+    /// Unit of measure.
+    pub unit: Option<String>,
+    /// Active/sellable status (default: active).
+    pub is_active: bool,
+    /// Default supplier FK (local-only).
+    pub default_supplier_id: Option<String>,
+}
+
+impl Default for CreateProductAttributes {
+    fn default() -> Self {
+        Self {
+            cost_minor: 0,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
+        }
+    }
+}
+
+/// ADR #36 attribute patch for [`Store::update_product_attributes`].
+///
+/// PATCH semantics: `None` = keep, `Some(None)` = clear (set NULL),
+/// `Some(Some(v))` = set. `cost_minor`/`is_active` are plain `Option` —
+/// `Some` updates, `None` keeps.
+#[derive(Debug, Clone, Default)]
+pub struct UpdateProductAttributes {
+    /// Updated cost in minor units.
+    pub cost_minor: Option<i64>,
+    /// Updated brand (None keeps, Some(None) clears).
+    pub brand: Option<Option<String>>,
+    /// Updated rack position code.
+    pub rack_location: Option<Option<String>>,
+    /// Updated notes.
+    pub notes: Option<Option<String>>,
+    /// Updated unit of measure.
+    pub unit: Option<Option<String>>,
+    /// Updated active status.
+    pub is_active: Option<bool>,
+    /// Updated default supplier.
+    pub default_supplier_id: Option<Option<String>>,
+}
+
 // ── Product CRUD ─────────────────────────────────────────────────────
 
 impl Store<'_> {
@@ -99,8 +166,10 @@ impl Store<'_> {
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
                      p.track_serial, p.product_type, p.version,
+                     p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
+                     p.is_active, p.default_supplier_id, p.popularity_score,
                      c.name AS category_name,
-                     i.qty AS stock_qty
+                     COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -128,8 +197,10 @@ impl Store<'_> {
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
                      p.track_serial, p.product_type, p.version,
+                     p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
+                     p.is_active, p.default_supplier_id, p.popularity_score,
                      c.name AS category_name,
-                     i.qty AS stock_qty
+                     COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -148,8 +219,10 @@ impl Store<'_> {
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
                      p.track_serial, p.product_type, p.version,
+                     p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
+                     p.is_active, p.default_supplier_id, p.popularity_score,
                      c.name AS category_name,
-                     i.qty AS stock_qty
+                     COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -175,8 +248,10 @@ impl Store<'_> {
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
                      p.track_serial, p.product_type, p.version,
+                     p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
+                     p.is_active, p.default_supplier_id, p.popularity_score,
                      c.name AS category_name,
-                     i.qty AS stock_qty
+                     COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -208,8 +283,10 @@ impl Store<'_> {
             "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
                      p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
                      p.track_serial, p.product_type, p.version,
+                     p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
+                     p.is_active, p.default_supplier_id, p.popularity_score,
                      c.name AS category_name,
-                     i.qty AS stock_qty
+                     COALESCE((SELECT SUM(ss.qty) FROM stock_summary ss WHERE ss.item_id = p.id), i.qty) AS stock_qty
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -236,16 +313,56 @@ impl Store<'_> {
         initial_stock: i64,
         product_type: Option<&str>,
     ) -> Result<Product, CoreError> {
+        self.create_product_with_attributes(
+            sku,
+            name,
+            price,
+            category_id,
+            barcode,
+            initial_stock,
+            product_type,
+            &CreateProductAttributes::default(),
+        )
+    }
+
+    /// Create a product with the ADR #36 attributes.
+    ///
+    /// [`Store::create_product`] delegates here with default attributes so the
+    /// ~100 legacy call sites are untouched.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_product_with_attributes(
+        &self,
+        sku: &str,
+        name: &str,
+        price: Money,
+        category_id: Option<&str>,
+        barcode: Option<&str>,
+        initial_stock: i64,
+        product_type: Option<&str>,
+        attrs: &CreateProductAttributes,
+    ) -> Result<Product, CoreError> {
         if sku.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "sku",
                 message: "SKU must not be empty".into(),
             });
         }
+        if sku.len() > 50 {
+            return Err(CoreError::Validation {
+                field: "sku",
+                message: format!("SKU must not exceed 50 characters, got {}", sku.len()),
+            });
+        }
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "name",
                 message: "name must not be empty".into(),
+            });
+        }
+        if name.len() > 255 {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: format!("name must not exceed 255 characters, got {}", name.len()),
             });
         }
         if price.minor_units < 0 {
@@ -274,8 +391,8 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         let result = tx.execute(
-            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 1)",
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 1, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             params![
                 id,
                 sku.trim(),
@@ -289,6 +406,13 @@ impl Store<'_> {
                 now,
                 0i32,
                 product_type,
+                attrs.cost_minor,
+                attrs.brand,
+                attrs.rack_location,
+                attrs.notes,
+                attrs.unit,
+                attrs.is_active as i64,
+                attrs.default_supplier_id,
             ],
         );
 
@@ -348,7 +472,91 @@ impl Store<'_> {
             track_serial: false,
             product_type: parsed_pt,
             version: 1,
+            cost_minor: attrs.cost_minor,
+            brand: attrs.brand.clone(),
+            rack_location: attrs.rack_location.clone(),
+            notes: attrs.notes.clone(),
+            unit: attrs.unit.clone(),
+            is_active: attrs.is_active,
+            default_supplier_id: attrs.default_supplier_id.clone(),
         })
+    }
+
+    /// Apply ADR #36 attribute changes to a product identified by SKU.
+    ///
+    /// PATCH semantics (see [`UpdateProductAttributes`]). Records an edit
+    /// activity event and refreshes the popularity score in the same
+    /// transaction (ADR #37 D2/D3). Returns [`CoreError::NotFound`] when the
+    /// SKU does not exist and no-op when the patch is empty.
+    pub fn update_product_attributes(
+        &self,
+        sku: &str,
+        attrs: &UpdateProductAttributes,
+    ) -> Result<(), CoreError> {
+        let mut sets: Vec<String> = Vec::new();
+        let mut values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        // Set-or-clear helper for clearable text columns.
+        macro_rules! set_clearable {
+            ($col:expr, $opt:expr) => {
+                match &$opt {
+                    Some(Some(val)) => {
+                        sets.push(format!("{} = ?", $col));
+                        values.push(Box::new(val.clone()));
+                    }
+                    Some(None) => sets.push(format!("{} = NULL", $col)),
+                    None => {}
+                }
+            };
+        }
+
+        if let Some(cost) = attrs.cost_minor {
+            sets.push("cost_minor = ?".into());
+            values.push(Box::new(cost));
+        }
+        set_clearable!("brand", attrs.brand);
+        set_clearable!("rack_location", attrs.rack_location);
+        set_clearable!("notes", attrs.notes);
+        set_clearable!("unit", attrs.unit);
+        set_clearable!("default_supplier_id", attrs.default_supplier_id);
+        if let Some(active) = attrs.is_active {
+            sets.push("is_active = ?".into());
+            values.push(Box::new(active as i64));
+        }
+
+        if sets.is_empty() {
+            return Ok(());
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let tx = self.conn.unchecked_transaction()?;
+
+        sets.push("updated_at = ?".into());
+        values.push(Box::new(now.clone()));
+        let sql = format!("UPDATE products SET {} WHERE sku = ?", sets.join(", "));
+        values.push(Box::new(sku.to_string()));
+
+        let rows = tx.execute(&sql, rusqlite::params_from_iter(values))?;
+        if rows == 0 {
+            tx.rollback()?;
+            return Err(CoreError::NotFound {
+                entity: "product",
+                id: sku.to_owned(),
+            });
+        }
+
+        // ADR #37 D2: every product update is an edit signal.
+        tx.execute(
+            "INSERT INTO product_activity (id, sku, event_type) VALUES (?1, ?2, 'edit')",
+            params![crate::new_id(), sku],
+        )?;
+        tx.commit()?;
+
+        self.recompute_popularity(sku)?;
+        if let Some(cache) = &self.cache {
+            cache.invalidate_product(sku);
+        }
+        Ok(())
     }
 
     /// Update an existing product identified by SKU.
@@ -460,7 +668,7 @@ impl Store<'_> {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score
              FROM products WHERE sku = ?1",
         )?;
         let product = stmt.query_row(params![sku], row_to_product)?;
@@ -473,7 +681,7 @@ impl Store<'_> {
             return Ok(None);
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score
              FROM products WHERE barcode = ?1",
         )?;
         let result = stmt.query_row(params![barcode.trim()], row_to_product);
@@ -780,6 +988,270 @@ impl Store<'_> {
             ],
         )?;
         Ok(())
+    }
+
+    /// Insert a stock movement using a caller-owned transaction.
+    ///
+    /// Sync replay handling uses this form so the immutable ledger row and
+    /// its remote receipt can commit or roll back together.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_stock_movement_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        id: &str,
+        item_id: &str,
+        delta: i64,
+        reason: Option<&str>,
+        source_terminal_id: Option<&str>,
+        source_user_id: Option<&str>,
+        store_id: &str,
+        created_at: &str,
+    ) -> Result<(), CoreError> {
+        tx.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                          source_terminal_id, source_user_id,
+                                          store_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                id,
+                item_id,
+                delta,
+                reason,
+                source_terminal_id,
+                source_user_id,
+                store_id,
+                created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Create a product and its initial stock inside a caller-owned
+    /// transaction, unless the SKU already exists.
+    ///
+    /// Returns `true` when a row was inserted and `false` when the SKU was
+    /// already present. The operation is intentionally idempotent by SKU so
+    /// a replay after a commit-before-receipt crash cannot create a duplicate.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_product_if_absent_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        sku: &str,
+        name: &str,
+        price: Money,
+        category_id: Option<&str>,
+        barcode: Option<&str>,
+        initial_stock: i64,
+        product_type: &str,
+    ) -> Result<bool, CoreError> {
+        if sku.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "sku",
+                message: "SKU must not be empty".into(),
+            });
+        }
+        if sku.len() > 50 {
+            return Err(CoreError::Validation {
+                field: "sku",
+                message: format!("SKU must not exceed 50 characters, got {}", sku.len()),
+            });
+        }
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "name must not be empty".into(),
+            });
+        }
+        if name.len() > 255 {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: format!("name must not exceed 255 characters, got {}", name.len()),
+            });
+        }
+        if price.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "price",
+                message: "price must be ≥ 0".into(),
+            });
+        }
+        if initial_stock < 0 {
+            return Err(CoreError::Validation {
+                field: "initial_stock",
+                message: "initial_stock must be ≥ 0".into(),
+            });
+        }
+
+        let cur_str = std::str::from_utf8(&price.currency.0)
+            .map_err(|e| CoreError::Validation {
+                field: "currency",
+                message: format!("invalid UTF-8 in currency bytes: {e}"),
+            })?
+            .to_owned();
+
+        // A repeated SKU is only idempotent when it describes the same
+        // product. Silently accepting a different payload would record a
+        // receipt while discarding a legitimate remote catalog conflict.
+        {
+            use rusqlite::OptionalExtension;
+            // Existing-product row for the idempotency comparison (clippy
+            // type_complexity — factored into a named type).
+            type ExistingRow = (String, i64, String, Option<String>, Option<String>, String);
+            let existing: Option<ExistingRow> = tx
+                .query_row(
+                    "SELECT p.name, p.price_minor, p.currency, p.category_id, p.barcode,
+                            p.product_type
+                     FROM products p
+                     WHERE p.sku = ?1",
+                    params![sku.trim()],
+                    |row| {
+                        Ok((
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                            row.get(5)?,
+                        ))
+                    },
+                )
+                .optional()?;
+            if let Some((
+                existing_name,
+                existing_price,
+                existing_currency,
+                existing_category,
+                existing_barcode,
+                existing_type,
+            )) = existing
+            {
+                let same = existing_name == name.trim()
+                    && existing_price == price.minor_units
+                    && existing_currency == cur_str
+                    && existing_category.as_deref() == category_id
+                    && existing_barcode.as_deref() == barcode
+                    && existing_type == product_type;
+                // `initial_stock` is write-once creation metadata. Current
+                // inventory is mutable, so it is intentionally not compared
+                // when recognizing a replay of an already-existing SKU.
+                if !same {
+                    return Err(CoreError::Conflict {
+                        entity: "product",
+                        field: "sku",
+                    });
+                }
+                return Ok(false);
+            }
+        }
+
+        let id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let inserted = tx.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode,
+                                   created_at, updated_at, price_updated_at, track_serial,
+                                   product_type, version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?8, 0, ?9, 1)
+             ON CONFLICT (tenant_id, sku) DO NOTHING",
+            params![
+                id,
+                sku.trim(),
+                name.trim(),
+                price.minor_units,
+                cur_str,
+                category_id,
+                barcode,
+                now,
+                product_type,
+            ],
+        )?;
+
+        if inserted == 0 || initial_stock == 0 || product_type == "service" {
+            return Ok(inserted == 1);
+        }
+
+        tx.execute(
+            "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)",
+            params![id, initial_stock, now],
+        )?;
+        let movement_id = uuid::Uuid::now_v7().to_string();
+        tx.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                          source_terminal_id, source_user_id, created_at)
+             VALUES (?1, ?2, ?3, 'initial-stock', NULL, NULL, ?4)",
+            params![movement_id, id, initial_stock, now],
+        )?;
+        upsert_stock_summary_in_tx(
+            tx,
+            &id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            initial_stock,
+            &now,
+        )?;
+
+        Ok(true)
+    }
+
+    /// Adjust stock for a product by SKU inside a caller-owned transaction.
+    ///
+    /// This compatibility path mirrors [`Store::adjust_stock`] while allowing
+    /// sync replay to commit the stock mutation and remote receipt together.
+    /// New checkout code should use the location-aware canonical API below.
+    #[deprecated(note = "use adjust_stock_at_location_with_reason instead")]
+    pub fn adjust_stock_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        sku: &str,
+        delta: i64,
+    ) -> Result<i64, CoreError> {
+        let product_id: String = tx
+            .query_row(
+                "SELECT id FROM products WHERE sku = ?1",
+                params![sku],
+                |row| row.get(0),
+            )
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                    entity: "product",
+                    id: sku.to_owned(),
+                },
+                other => CoreError::Db(other),
+            })?;
+        let previous_qty: i64 = match tx.query_row(
+            "SELECT qty FROM inventory WHERE product_id = ?1",
+            params![product_id],
+            |row| row.get(0),
+        ) {
+            Ok(qty) => qty,
+            Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+            Err(error) => return Err(CoreError::Db(error)),
+        };
+        let new_qty = previous_qty
+            .checked_add(delta)
+            .filter(|&v| v >= 0)
+            .ok_or_else(|| CoreError::Validation {
+                field: "delta",
+                message: format!(
+                    "adjustment would cause negative stock (previous: {previous_qty}, delta: {delta})"
+                ),
+            })?;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        tx.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, created_at)
+             VALUES (?1, ?2, ?3, 'remote-sync', ?4)",
+            params![uuid::Uuid::now_v7().to_string(), product_id, delta, now],
+        )?;
+        tx.execute(
+            "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty, updated_at = excluded.updated_at",
+            params![product_id, new_qty, now],
+        )?;
+        upsert_stock_summary_in_tx(
+            tx,
+            &product_id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            new_qty,
+            &now,
+        )?;
+        Ok(new_qty)
     }
 
     /// Adjust stock for a product by SKU inside a transaction.
@@ -3955,5 +4427,172 @@ mod tests {
         // No negative event should be emitted.
         let events = recorded_events.lock().unwrap();
         assert_eq!(events.len(), 0, "no negative event for positive qty");
+    }
+
+    // ── ADR #36: attribute roundtrip + stock total ──────────────────
+
+    #[test]
+    fn create_with_attributes_roundtrips_through_get_product() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // default_supplier_id is an FK to suppliers (046) — seed the row.
+        conn.execute(
+            "INSERT INTO suppliers (id, code, name, created_at, updated_at) \
+             VALUES ('sup-1', 'SUP-01', 'Supplier One', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let attrs = CreateProductAttributes {
+            cost_minor: 7500,
+            brand: Some("Acme".into()),
+            rack_location: Some("A-07".into()),
+            notes: Some("Fragile — keep upright".into()),
+            unit: Some("pcs".into()),
+            is_active: false,
+            default_supplier_id: Some("sup-1".into()),
+        };
+        let product = s
+            .create_product_with_attributes(
+                "ATTRIB-1",
+                "Attribute Product",
+                price(12000),
+                None,
+                None,
+                0,
+                Some("retail"),
+                &attrs,
+            )
+            .unwrap();
+        assert_eq!(product.cost_minor, 7500);
+        assert_eq!(product.brand.as_deref(), Some("Acme"));
+        assert_eq!(product.rack_location.as_deref(), Some("A-07"));
+        assert_eq!(product.notes.as_deref(), Some("Fragile — keep upright"));
+        assert_eq!(product.unit.as_deref(), Some("pcs"));
+        assert!(!product.is_active);
+        assert_eq!(product.default_supplier_id.as_deref(), Some("sup-1"));
+
+        // Roundtrip through the DB read path.
+        let fetched = s.get_product("ATTRIB-1").unwrap().unwrap();
+        assert_eq!(fetched.product.cost_minor, 7500);
+        assert_eq!(fetched.product.brand.as_deref(), Some("Acme"));
+        assert_eq!(fetched.product.rack_location.as_deref(), Some("A-07"));
+        assert_eq!(fetched.product.unit.as_deref(), Some("pcs"));
+        assert!(!fetched.product.is_active);
+    }
+
+    #[test]
+    fn update_product_attributes_patch_clear_and_keep() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_product_with_attributes(
+            "PATCH-1",
+            "Patch Product",
+            price(1000),
+            None,
+            None,
+            0,
+            Some("retail"),
+            &CreateProductAttributes {
+                brand: Some("KeepMe".into()),
+                rack_location: Some("B-02".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        // PATCH: set brand (Some(Some)), clear rack (Some(None)), leave
+        // cost/unit absent (None = keep).
+        s.update_product_attributes(
+            "PATCH-1",
+            &UpdateProductAttributes {
+                cost_minor: None,
+                brand: Some(Some("Changed".into())),
+                rack_location: Some(None),
+                notes: None,
+                unit: None,
+                is_active: None,
+                default_supplier_id: None,
+            },
+        )
+        .unwrap();
+
+        let fetched = s.get_product("PATCH-1").unwrap().unwrap();
+        assert_eq!(fetched.product.brand.as_deref(), Some("Changed"));
+        assert_eq!(fetched.product.rack_location, None, "rack must be cleared");
+        assert_eq!(
+            fetched.product.unit, None,
+            "absent unit must keep (no change)"
+        );
+
+        // Clear brand too via Some(None) and deactivate.
+        s.update_product_attributes(
+            "PATCH-1",
+            &UpdateProductAttributes {
+                cost_minor: Some(888),
+                brand: Some(None),
+                rack_location: None,
+                notes: None,
+                unit: None,
+                is_active: Some(false),
+                default_supplier_id: None,
+            },
+        )
+        .unwrap();
+        let fetched = s.get_product("PATCH-1").unwrap().unwrap();
+        assert_eq!(fetched.product.brand, None);
+        assert_eq!(fetched.product.cost_minor, 888);
+        assert!(!fetched.product.is_active);
+    }
+
+    #[test]
+    fn list_products_stock_is_sum_across_locations() {
+        let conn = fresh();
+        let s = store(&conn);
+        let pid = s
+            .create_product_with_attributes(
+                "SUM-1",
+                "Multi-Location Product",
+                price(5000),
+                None,
+                None,
+                0,
+                Some("retail"),
+                &CreateProductAttributes::default(),
+            )
+            .unwrap()
+            .id;
+
+        // Seed stock at three locations (10 + 4 + 1 = 15 total units).
+        let wh_a = s
+            .create_inventory_location("Warehouse A", "warehouse", "")
+            .unwrap();
+        let wh_b = s
+            .create_inventory_location("Warehouse B", "warehouse", "")
+            .unwrap();
+        for (loc, qty) in [
+            (crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID, 10i64),
+            (wh_a.as_str(), 4i64),
+            (wh_b.as_str(), 1i64),
+        ] {
+            conn.execute(
+                "INSERT OR REPLACE INTO stock_summary (item_id, location_id, qty, updated_at) \
+                 VALUES (?1, ?2, ?3, '2025-01-01T00:00:00.000Z')",
+                params![pid, loc, qty],
+            )
+            .unwrap();
+        }
+
+        let listed = s.list_products().unwrap();
+        let sum = listed
+            .iter()
+            .find(|p| p.product.sku.as_str() == "SUM-1")
+            .unwrap();
+        assert_eq!(
+            sum.stock_qty,
+            Some(15),
+            "stock column must total units across all locations (ADR #36 D3)"
+        );
     }
 }

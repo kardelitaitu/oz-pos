@@ -582,3 +582,9 @@ The ADR is "complete" (can move from Proposed → Accepted) when:
 ---
 
 **End of ADR #19.** This document is the canonical reference for the Rust implementation; commit `ef87dac` (ADR-18 schema kit) is its prerequisite foundation.
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

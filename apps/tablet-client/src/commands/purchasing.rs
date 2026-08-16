@@ -147,7 +147,11 @@ impl From<PurchaseOrderWithLines> for PurchaseOrderDto {
             created_by: po.order.created_by,
             created_at: po.order.created_at,
             updated_at: po.order.updated_at,
-            lines: po.lines.into_iter().map(PurchaseOrderLineDto::from).collect(),
+            lines: po
+                .lines
+                .into_iter()
+                .map(PurchaseOrderLineDto::from)
+                .collect(),
             supplier_name: po.supplier_name,
         }
     }

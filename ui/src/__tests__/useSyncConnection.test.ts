@@ -76,6 +76,27 @@ describe('useSyncConnection', () => {
     expect(result.current.latencyMs).toBeNull();
   });
 
+  it('retries quickly after a disconnected check so startup bootstrap can recover', async () => {
+    mockTestSyncConnection
+      .mockResolvedValueOnce({ ok: false, status: 'No server URL configured', latencyMs: null })
+      .mockResolvedValueOnce({ ok: true, status: 'Connected', latencyMs: 7 });
+
+    const { result } = renderHook(() => useSyncConnection());
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(result.current.state).toBe('disconnected');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    expect(mockTestSyncConnection).toHaveBeenCalledTimes(2);
+    expect(result.current.state).toBe('connected');
+    expect(result.current.latencyMs).toBe(7);
+  });
+
   it('polls periodically and updates state', async () => {
     // First call: connected
     mockTestSyncConnection.mockResolvedValueOnce({

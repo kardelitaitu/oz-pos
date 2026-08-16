@@ -13,6 +13,17 @@ import { LocalizationProvider } from '@fluent/react';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceInventorySettings } from '@/features/settings/workspace-cards/WorkspaceInventorySettings';
 
+// Resolve the settings IPC instantly (the dev-mock invoke adds a fixed
+// 50ms real-timer delay per call). The card's mount load calls setState
+// when it lands, which can revert a change made in that window and disable
+// Save — skipping onSaved. Microtask resolution makes the load
+// deterministic. `null` values parse back to the card's defaults (10,
+// false), so dirty tracking starts clean.
+vi.mock('@/api/settings', () => ({
+  getSetting: vi.fn(() => Promise.resolve(null)),
+  setSettings: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock('@/contexts/SettingsContext', () => ({
   useSettings: () => ({
     settings: {

@@ -1,5 +1,6 @@
 //! Settings Repository — key-value database persistence layer.
 
+use crate::error::SettingsError;
 use rusqlite::{Connection, params};
 
 /// Database access repository for key-value settings.
@@ -14,7 +15,7 @@ impl<'a> SettingsRepository<'a> {
     }
 
     /// Retrieve setting value by key.
-    pub fn get(&self, key: &str) -> Result<Option<String>, anyhow::Error> {
+    pub fn get(&self, key: &str) -> Result<Option<String>, SettingsError> {
         let mut stmt = self
             .conn
             .prepare("SELECT value FROM settings WHERE key = ?1")?;
@@ -27,7 +28,7 @@ impl<'a> SettingsRepository<'a> {
     }
 
     /// Insert or update setting value by key.
-    pub fn set(&self, key: &str, value: &str) -> Result<(), anyhow::Error> {
+    pub fn set(&self, key: &str, value: &str) -> Result<(), SettingsError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         self.conn.execute(
             "INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)

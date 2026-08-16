@@ -1,0 +1,194 @@
+# ── OZ-POS Unified Image (auth + sync in one container) ──────────────
+#
+# Builds both functions into a single image and runs them under one
+# supervisor behind a single caddy reverse proxy:
+#
+#   caddy  :80 ──► /api/v1/license/*, /_/*, /api/collections/* → PocketBase :8080
+#               └─► everything else (sync/REST/webhooks/tokens) → oz-cloud-server :3099
+#
+# Usage:
+#
+#   docker build -f Dockerfile.unified -t oz-pos-unified:latest .
+#   docker run -d -p 80:80 \
+#     -v oz_data:/data -v oz_pb_data:/pb/pb_data \
+#     -e OZ_API_SECRET="$(openssl rand -hex 32)" \
+#     -e OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)" \
+#     oz-pos-unified:latest
+#
+# Sync defaults to SQLite at /data/oz-pos.db; set DATABASE_URL to switch
+# to the managed Postgres addon (see unify-auth-and-sync.md).
+
+# ── Stage 1: Go license server (static build) ────────────────────────
+# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-16 to
+# Go 1.25.13 — clears the stdlib CVE set fixed in 1.25.13).
+FROM golang:1.25-alpine@sha256:3eb6c2b3db8d55e38537302edb510b4417f8a115efbd5906d131ceba9468e29a AS gobuilder
+
+WORKDIR /src
+
+COPY apps/license-server/go.mod apps/license-server/go.sum ./
+RUN go mod download
+
+# Non-test sources only (healthcheck.go is //go:build ignore; *_test.go
+# files are excluded by `go build`). modernc.org/sqlite is pure Go, so a
+# CGO_ENABLED=0 static binary runs on the glibc runtime image below.
+COPY apps/license-server/main.go apps/license-server/activate.go \
+     apps/license-server/renew.go apps/license-server/status.go \
+     apps/license-server/helpers.go apps/license-server/expiry.go \
+     apps/license-server/ratelimit.go apps/license-server/health.go \
+     apps/license-server/api_key.go apps/license-server/contact.go ./
+COPY apps/license-server/pb_schema.json ./
+
+RUN CGO_ENABLED=0 go build -o /out/pocketbase -ldflags="-s -w" .
+
+# ── Stage 2: Rust cloud server ───────────────────────────────────────
+# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-03).
+FROM rust:1.88-slim@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89 AS builder
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        pkg-config \
+        libc-dev \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy manifest files first so Docker can cache dependency downloads.
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates/oz-core/Cargo.toml crates/oz-core/
+COPY crates/oz-api/Cargo.toml crates/oz-api/
+COPY crates/oz-logging/Cargo.toml crates/oz-logging/
+COPY crates/oz-hal/Cargo.toml crates/oz-hal/
+COPY crates/oz-lua/Cargo.toml crates/oz-lua/
+COPY crates/oz-notification/Cargo.toml crates/oz-notification/
+COPY crates/oz-plugin/Cargo.toml crates/oz-plugin/
+COPY crates/oz-security/Cargo.toml crates/oz-security/
+COPY crates/oz-payment/Cargo.toml crates/oz-payment/
+COPY crates/oz-reporting/Cargo.toml crates/oz-reporting/
+COPY crates/oz-cli/Cargo.toml crates/oz-cli/
+COPY foundation/Cargo.toml foundation/
+COPY platform/core/Cargo.toml platform/core/
+COPY platform/kernel/Cargo.toml platform/kernel/
+COPY platform/startup/Cargo.toml platform/startup/
+COPY platform/sync/Cargo.toml platform/sync/
+COPY modules/sales/Cargo.toml modules/sales/
+COPY modules/inventory/Cargo.toml modules/inventory/
+COPY modules/crm/Cargo.toml modules/crm/
+COPY modules/tax/Cargo.toml modules/tax/
+COPY modules/settings/Cargo.toml modules/settings/
+COPY modules/staff/Cargo.toml modules/staff/
+COPY modules/reporting/Cargo.toml modules/reporting/
+COPY modules/terminal/Cargo.toml modules/terminal/
+COPY modules/currency/Cargo.toml modules/currency/
+COPY modules/loyalty/Cargo.toml modules/loyalty/
+COPY apps/cloud-server/Cargo.toml apps/cloud-server/
+
+# Prime the dependency cache (best-effort, mirrors Dockerfile.server —
+# see DOCKER-09).
+RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
+             crates/oz-hal/src crates/oz-lua/src crates/oz-notification/src \
+             crates/oz-plugin/src crates/oz-security/src crates/oz-payment/src \
+             crates/oz-reporting/src crates/oz-cli/src foundation/src \
+             platform/core/src platform/kernel/src platform/startup/src \
+             platform/sync/src \
+             modules/sales/src modules/inventory/src \
+             modules/crm/src modules/tax/src modules/settings/src \
+             modules/staff/src modules/reporting/src modules/terminal/src \
+             modules/currency/src modules/loyalty/src \
+             apps/cloud-server/src apps/desktop-client/src apps/tablet-client/src \
+    && echo "// dummy" > crates/oz-core/src/lib.rs \
+    && echo "// dummy" > crates/oz-api/src/lib.rs \
+    && echo "// dummy" > crates/oz-logging/src/lib.rs \
+    && echo "// dummy" > crates/oz-hal/src/lib.rs \
+    && echo "// dummy" > crates/oz-lua/src/lib.rs \
+    && echo "// dummy" > crates/oz-notification/src/lib.rs \
+    && echo "// dummy" > crates/oz-plugin/src/lib.rs \
+    && echo "// dummy" > crates/oz-security/src/lib.rs \
+    && echo "// dummy" > crates/oz-payment/src/lib.rs \
+    && echo "// dummy" > crates/oz-reporting/src/lib.rs \
+    && echo "// dummy" > crates/oz-cli/src/lib.rs \
+    && echo "// dummy" > foundation/src/lib.rs \
+    && echo "// dummy" > platform/core/src/lib.rs \
+    && echo "// dummy" > platform/kernel/src/lib.rs \
+    && echo "// dummy" > platform/startup/src/lib.rs \
+    && echo "// dummy" > platform/sync/src/lib.rs \
+    && echo "// dummy" > modules/sales/src/lib.rs \
+    && echo "// dummy" > modules/inventory/src/lib.rs \
+    && echo "// dummy" > modules/crm/src/lib.rs \
+    && echo "// dummy" > modules/tax/src/lib.rs \
+    && echo "// dummy" > modules/settings/src/lib.rs \
+    && echo "// dummy" > modules/staff/src/lib.rs \
+    && echo "// dummy" > modules/reporting/src/lib.rs \
+    && echo "// dummy" > modules/terminal/src/lib.rs \
+    && echo "// dummy" > modules/currency/src/lib.rs \
+    && echo "// dummy" > modules/loyalty/src/lib.rs \
+    && echo "// dummy" > apps/cloud-server/src/main.rs \
+    && echo "// dummy" > apps/desktop-client/src/main.rs \
+    && printf '[package]\nname = "oz-pos-app"\nversion = "0.0.25"\nedition = "2021"\n' > apps/desktop-client/Cargo.toml \
+    && echo "// dummy" > apps/tablet-client/src/main.rs \
+    && printf '[package]\nname = "oz-pos-tablet"\nversion = "0.0.25"\nedition = "2021"\n' > apps/tablet-client/Cargo.toml \
+    && (cargo build --package oz-cloud-server --release > /tmp/prime.log 2>&1 \
+        || { echo "WARN: dependency cache-priming build did not complete (best-effort; see /tmp/prime.log)"; }) \
+    && true
+
+# Copy the actual source and rebuild. ui/ is intentionally NOT copied:
+# oz-core vendors its topologySemantics.json contract and the server build
+# must never depend on the UI tree (.dockerignore excludes ui entirely).
+COPY crates/ crates/
+COPY foundation/ foundation/
+COPY platform/ platform/
+COPY modules/ modules/
+COPY apps/ apps/
+
+RUN cargo build --package oz-cloud-server --release
+
+# ── Stage 3: caddy binary (copied out of its official image) ─────────
+# DOCKER-02: pinned to an immutable digest (refreshed 2026-08-14).
+FROM caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648 AS caddy
+
+# ── Stage 4: Runtime (both functions + caddy + supervisor) ───────────
+# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-03).
+FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS runtime
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libc6 \
+        supervisor \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# DOCKER-01: single non-root user owns both data directories. supervisord
+# runs as root only to bind caddy's :80; each program drops to `ozpos`.
+RUN groupadd --system ozpos && \
+    useradd --system --gid ozpos --home-dir /app ozpos && \
+    mkdir -p /app /data /pb/pb_data /etc/caddy && \
+    chown -R ozpos:ozpos /app /data /pb
+
+WORKDIR /app
+
+COPY --from=builder /build/target/release/oz-cloud-server /app/oz-cloud-server
+COPY --from=gobuilder /out/pocketbase /app/pocketbase
+COPY --from=caddy /usr/bin/caddy /usr/bin/caddy
+
+COPY apps/unified/supervisord.conf /etc/supervisor/supervisord.conf
+COPY apps/unified/Caddyfile /etc/caddy/Caddyfile
+COPY apps/unified/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY apps/unified/healthcheck.sh /app/healthcheck.sh
+RUN chmod +x /app/docker-entrypoint.sh /app/healthcheck.sh
+
+# Runtime volumes: sync SQLite data + PocketBase data.
+VOLUME ["/data", "/pb/pb_data"]
+
+ENV OZ_DB_PATH=/data/oz-pos.db
+ENV OZ_API_PORT=3099
+ENV RUST_LOG=info
+
+# Single public port — caddy path-routes to :8080 / :3099 internally.
+EXPOSE 80
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=30s \
+    CMD /app/healthcheck.sh
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

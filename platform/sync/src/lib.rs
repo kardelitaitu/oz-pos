@@ -75,8 +75,8 @@ pub enum SyncError {
 
     /// The client's sync anchor (`since` timestamp) is older than the
     /// oldest retained row on the server. Data in that gap has been
-    /// pruned (P-1 retention). The client should log a warning and
-    /// retry on the next scheduled cycle.
+    /// pruned (P-1 retention). Sync clients should recover through the
+    /// snapshot endpoint when available, then resume from that boundary.
     #[error("anchor expired: data older than {}", oldest_available.as_deref().unwrap_or("unknown"))]
     AnchorExpired {
         /// ISO-8601 timestamp of the oldest retained row on the server.
@@ -91,6 +91,26 @@ pub enum SyncError {
         /// The new server URL to connect to.
         new_url: String,
     },
+
+    /// The server rejected our authentication because the token expired
+    /// (HTTP 401 + `token_expired`, or a bare 401 from an older server).
+    /// Callers refresh the API key and retry exactly once
+    /// (ADR sync-auth-hardening P1/P4).
+    #[error("sync server rejected authentication: token expired (HTTP 401)")]
+    AuthExpired,
+
+    /// The server rejected our authentication because the token is invalid
+    /// or missing (HTTP 401 + `invalid_token` / `missing_token`) — a local
+    /// configuration problem. Do NOT refresh; surface the error
+    /// (ADR sync-auth-hardening P4).
+    #[error("sync server rejected authentication: invalid token (HTTP 401)")]
+    AuthInvalid,
+
+    /// The tenant is on the `free` plan and cloud sync is gated
+    /// (HTTP 403 + `plan_required`, ADR sync-plan-gating). Terminal: do
+    /// NOT refresh, retry, or quarantine — surface the upgrade prompt.
+    #[error("cloud sync requires a paid plan (HTTP 403 plan_required)")]
+    PlanRequired,
 
     /// Database error from the underlying oz-core store.
     #[error("database error: {0}")]
@@ -386,6 +406,409 @@ mod tests {
         }
     }
 
+    // ── SYNC-01 parity: engine pull is replay-safe + anchor-advanced ─
+
+    /// Spawn a mock server whose pull endpoint ALWAYS returns the same
+    /// remote `stock.adjusted` item regardless of the `since`/`cursor`
+    /// request params — simulates a server that replays history or a
+    /// client whose anchor was lost. `/api/health` is served so the
+    /// engine's pre-sync health check passes.
+    async fn spawn_replaying_engine_server() -> String {
+        use crate::transport::{PullResponse, PushOutcome, PushResponse};
+        use axum::{
+            Json, Router,
+            routing::{get, post},
+        };
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "stock.adjusted",
+                r#"{"sku":"COFFEE","delta":10}"#,
+            );
+            // Fixed id + timestamp so the SAME remote item is returned on
+            // every pull — exactly the replay scenario SYNC-01 targets.
+            // Deliberately ignores the since/cursor params, like a server
+            // that no longer retains history past its anchor.
+            item.id = "remote-engine-replay-1".into();
+            item.created_at = "2026-01-01T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/health", get(|| async { axum::http::StatusCode::OK }))
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-01 regression at the ENGINE level: the immediate/manual sync
+    /// path must apply a replayed remote item exactly once and persist the
+    /// durable pull anchor, matching the daemon. Previously the engine
+    /// derived `since` from the local queue's synced timestamps — which
+    /// pulled remote items never move — so every cycle re-fetched and
+    /// re-applied the same remote mutations (silent inventory corruption).
+    #[tokio::test]
+    async fn engine_applies_replayed_remote_item_only_once() {
+        use oz_core::db::Store;
+        use oz_core::migrations;
+
+        let server_url = spawn_replaying_engine_server().await;
+        let db = migrations::fresh_db();
+        let store = Store::new(&db);
+
+        // Seed product + inventory so the remote +10 adjustment has a target.
+        db.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
+             VALUES ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty, updated_at)
+             VALUES ('prod-coffee', 50, '2026-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        let engine = SyncEngine::new(SyncConfig {
+            server_url: server_url.clone(),
+            api_key: None,
+        });
+
+        // Cycle 1: applies the +10 delta (50 → 60) and advances the anchor.
+        let result_1 = engine.run_sync_cycle(&store).await.unwrap();
+        assert_eq!(result_1.pulled, 1, "first cycle must pull the remote item");
+        assert_eq!(store.get_stock("prod-coffee").unwrap(), 60);
+
+        let pull_state = store.get_sync_pull_state().unwrap();
+        assert_eq!(
+            pull_state.since.as_deref(),
+            Some("2026-01-01T00:00:00.000Z"),
+            "durable pull anchor must be persisted after the first cycle"
+        );
+
+        // Cycle 2: the server replays the SAME item. The idempotency
+        // ledger must skip it — stock stays 60, not 70.
+        let result_2 = engine.run_sync_cycle(&store).await.unwrap();
+        assert_eq!(
+            result_2.pulled, 1,
+            "second cycle re-pulls the replayed item"
+        );
+        assert_eq!(
+            store.get_stock("prod-coffee").unwrap(),
+            60,
+            "replayed remote item must NOT be applied a second time (SYNC-01)"
+        );
+
+        let ledger_rows: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM sync_applied_items WHERE item_id = 'remote-engine-replay-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(ledger_rows, 1, "ledger must hold exactly one receipt");
+    }
+
+    /// Spawn a mock server whose pull endpoint ALWAYS returns a malformed
+    /// remote sale (a line referencing a product that does not exist), so
+    /// `apply_remote_atomic` fails on every attempt.
+    async fn spawn_poison_engine_server() -> String {
+        use crate::transport::{PullResponse, PushOutcome, PushResponse};
+        use axum::{
+            Json, Router,
+            routing::{get, post},
+        };
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "complete_sale",
+                r#"{"line_items":[{"sku":"MISSING","qty":1}]}"#,
+            );
+            item.id = "remote-engine-poison-1".into();
+            item.created_at = "2026-01-03T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/health", get(|| async { axum::http::StatusCode::OK }))
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// Engine-level dead-letter test (parity with the daemon's
+    /// `daemon_retains_anchor_until_remote_item_is_dead_lettered`): a poison
+    /// remote item must retain the durable anchor while it is retryable,
+    /// then allow the anchor to advance after the third failed attempt
+    /// dead-letters it.
+    #[tokio::test]
+    async fn engine_retains_anchor_until_remote_item_is_dead_lettered() {
+        use oz_core::db::Store;
+        use oz_core::migrations;
+
+        let server_url = spawn_poison_engine_server().await;
+        let db = migrations::fresh_db();
+        let store = Store::new(&db);
+
+        let engine = SyncEngine::new(SyncConfig {
+            server_url: server_url.clone(),
+            api_key: None,
+        });
+
+        for attempt in 1..=3 {
+            let result = engine.run_sync_cycle(&store).await.unwrap();
+            assert_eq!(
+                result.pulled, 1,
+                "cycle {attempt} must pull the poison item"
+            );
+
+            let pull_state = store.get_sync_pull_state().unwrap();
+            let dead_lettered = store
+                .is_remote_failure_dead_lettered("remote-engine-poison-1")
+                .unwrap();
+
+            if attempt < 3 {
+                assert!(
+                    pull_state.since.is_none(),
+                    "retryable failure must retain the anchor (attempt {attempt})"
+                );
+                assert!(!dead_lettered);
+            } else {
+                assert!(
+                    pull_state.since.is_some(),
+                    "dead-lettered item may advance the anchor"
+                );
+                assert!(dead_lettered);
+            }
+        }
+
+        let attempts: i64 = db
+            .query_row(
+                "SELECT attempts FROM sync_remote_failures WHERE item_id = 'remote-engine-poison-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(attempts, 3);
+    }
+
+    // ── AnchorExpired snapshot recovery: durable anchor reset ───────
+
+    /// Spawn a mock server whose pull endpoint mirrors the real cloud
+    /// server's P-1 retention check: it returns 410 `anchor_expired` ONLY
+    /// when the client's `since` predates the server's oldest retained row
+    /// (`2026-02-01`), and otherwise serves a remote `stock.adjusted` item.
+    /// The snapshot endpoint returns a valid reference-data snapshot and
+    /// counts every hit via the shared [`std::sync::atomic::AtomicUsize`].
+    async fn spawn_anchor_expired_then_healthy_server()
+    -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use crate::transport::{PullResponse, PushOutcome, PushResponse};
+        use axum::{
+            Json, Router,
+            extract::State,
+            http::StatusCode,
+            response::IntoResponse,
+            routing::{get, post},
+        };
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        const OLDEST_AVAILABLE: &str = "2026-02-01T00:00:00.000Z";
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let snapshot_hits = std::sync::Arc::new(AtomicUsize::new(0));
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+
+        // 410 only when `since` predates the retention floor; a reset anchor
+        // (== oldest_available) flows items normally.
+        async fn handle_pull(Json(req): Json<crate::transport::PullRequest>) -> impl IntoResponse {
+            if let Some(ref since) = req.since
+                && since.as_str() < OLDEST_AVAILABLE
+            {
+                return (
+                    StatusCode::GONE,
+                    Json(serde_json::json!({
+                        "error": "anchor_expired",
+                        "oldest_available": OLDEST_AVAILABLE,
+                    })),
+                )
+                    .into_response();
+            }
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "stock.adjusted",
+                r#"{"sku":"COFFEE","delta":5}"#,
+            );
+            item.id = "post-snapshot-item".into();
+            item.created_at = "2026-03-01T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+            .into_response()
+        }
+
+        async fn handle_snapshot(
+            State(hits): State<std::sync::Arc<AtomicUsize>>,
+        ) -> Json<crate::transport::SyncSnapshotResponse> {
+            hits.fetch_add(1, Ordering::SeqCst);
+            Json(crate::transport::SyncSnapshotResponse {
+                version: 1,
+                products: vec![crate::transport::SnapshotProduct {
+                    id: "p-snap".into(),
+                    sku: "SNAPSHOT-COFFEE".into(),
+                    name: "Snapshot Coffee".into(),
+                    price_minor: 350,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: None,
+                    ..Default::default()
+                }],
+                tax_rates: vec![],
+                users: vec![],
+            })
+        }
+
+        async fn handle_health() -> impl IntoResponse {
+            (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
+        }
+
+        let app = Router::new()
+            .route("/api/health", get(handle_health))
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull))
+            .route("/api/sync/snapshot", get(handle_snapshot))
+            .with_state(snapshot_hits.clone());
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), snapshot_hits)
+    }
+
+    /// Regression: after an `AnchorExpired` snapshot import succeeds, the
+    /// durable pull anchor must be reset (to the server's oldest retained
+    /// row, or cleared) so the next cycle is not expired again. Previously
+    /// the stale anchor was kept, so every cycle re-triggered AnchorExpired
+    /// and re-fetched the whole snapshot.
+    #[tokio::test]
+    async fn engine_resets_anchor_after_snapshot_import() {
+        use oz_core::db::Store;
+        use oz_core::migrations;
+        use std::sync::atomic::Ordering;
+
+        let (server_url, snapshot_hits) = spawn_anchor_expired_then_healthy_server().await;
+        let db = migrations::fresh_db();
+        let store = Store::new(&db);
+
+        // Seed product + inventory so the post-reset +5 adjustment has a
+        // target.
+        db.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
+             VALUES ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty, updated_at)
+             VALUES ('prod-coffee', 50, '2026-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        // A pre-existing stale anchor, older than the server's oldest
+        // retained row — P-1 retention has pruned the gap.
+        store
+            .set_sync_pull_state(Some("2025-01-01T00:00:00.000Z"), None)
+            .unwrap();
+
+        let engine = SyncEngine::new(SyncConfig {
+            server_url: server_url.clone(),
+            api_key: None,
+        });
+
+        // Cycle 1: stale anchor → 410 → snapshot fetched + imported.
+        let result_1 = engine.run_sync_cycle(&store).await.unwrap();
+        assert_eq!(result_1.pulled, 0, "cycle 1 expires before pulling items");
+        assert_eq!(
+            snapshot_hits.load(Ordering::SeqCst),
+            1,
+            "snapshot fetched exactly once in cycle 1"
+        );
+        // The snapshot import must have actually landed — the anchor reset
+        // is conditional on a successful import.
+        assert!(
+            store
+                .product_id_by_sku("SNAPSHOT-COFFEE")
+                .unwrap()
+                .is_some(),
+            "snapshot reference data must be imported before the anchor resets"
+        );
+        // The durable anchor must be reset to the server's oldest retained
+        // row so the next pull is not expired again.
+        let state = store.get_sync_pull_state().unwrap();
+        assert_eq!(
+            state.since.as_deref(),
+            Some("2026-02-01T00:00:00.000Z"),
+            "durable anchor must advance to oldest_available after snapshot import"
+        );
+        assert_eq!(
+            state.cursor, None,
+            "cursor must be cleared after snapshot import"
+        );
+
+        // Cycle 2: the reset anchor is no longer expired — items flow, and
+        // the snapshot is NOT fetched again.
+        let result_2 = engine.run_sync_cycle(&store).await.unwrap();
+        assert_eq!(result_2.pulled, 1, "cycle 2 pulls the post-snapshot item");
+        assert_eq!(
+            store.get_stock("prod-coffee").unwrap(),
+            55,
+            "post-snapshot +5 adjustment must apply"
+        );
+        assert_eq!(
+            snapshot_hits.load(Ordering::SeqCst),
+            1,
+            "snapshot must NOT be re-fetched after the anchor reset"
+        );
+    }
+
     // ── P1-4: import_snapshot tests ───────────────────────────────
 
     /// Seed a role so user FK constraints are satisfied.
@@ -416,6 +839,11 @@ mod tests {
             price_updated_at: None,
             track_serial: false,
             store_id: None,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
         }
     }
 
@@ -478,6 +906,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -510,6 +939,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -541,6 +971,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -572,6 +1003,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -772,6 +1204,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -807,6 +1240,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![tax_rate("tax-extra", "Extra Tax", 500)],
             users: vec![user("extra-user", "Extra User", "role-1")],
@@ -917,6 +1351,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -956,6 +1391,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: Some("store-a".into()),
+                    ..Default::default()
                 },
                 transport::SnapshotProduct {
                     id: "p-b".into(),
@@ -970,6 +1406,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: Some("store-b".into()),
+                    ..Default::default()
                 },
                 transport::SnapshotProduct {
                     id: "p-g".into(),
@@ -984,6 +1421,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: None,
+                    ..Default::default()
                 },
             ],
             tax_rates: vec![],
@@ -1038,6 +1476,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: Some("store-a".into()),
+                    ..Default::default()
                 },
                 transport::SnapshotProduct {
                     id: "p-ghost".into(),
@@ -1052,6 +1491,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: Some("ghost-store".into()),
+                    ..Default::default()
                 },
             ],
             tax_rates: vec![],
@@ -1133,7 +1573,7 @@ pub fn build_batches(
 ///
 /// Upserts products (by SKU), tax rates (by ID), and users (by username)
 /// inside a single transaction. Returns the total number of rows written.
-fn import_snapshot(
+pub(crate) fn import_snapshot(
     store: &Store<'_>,
     snapshot: &transport::SyncSnapshotResponse,
 ) -> SyncResult<usize> {
@@ -1204,7 +1644,7 @@ fn import_snapshot(
                                        price_updated_at, track_serial, store_id)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
                          COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13)
-                 ON CONFLICT(sku) DO UPDATE SET
+                 ON CONFLICT (tenant_id, sku) DO UPDATE SET
                      name            = excluded.name,
                      price_minor     = excluded.price_minor,
                      currency        = excluded.currency,
@@ -1284,7 +1724,7 @@ fn import_snapshot(
                 "INSERT INTO users (id, username, pin_hash, display_name, role_id,
                                     is_active, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, ?9), COALESCE(?8, ?9))
-                 ON CONFLICT(username) DO UPDATE SET
+                 ON CONFLICT (tenant_id, username) DO UPDATE SET
                      display_name = excluded.display_name,
                      role_id      = excluded.role_id,
                      is_active    = excluded.is_active,
@@ -1334,6 +1774,13 @@ impl SyncEngine {
     /// any data. If the health check fails, the cycle is skipped with an info log
     /// rather than an error — this prevents noisy error logs when the server is
     /// intentionally offline.
+    ///
+    /// The pull phase is replay-safe (SYNC-01 parity with the daemon): remote
+    /// items are applied atomically with a durable `sync_applied_items` receipt,
+    /// poison items are dead-lettered after their retry budget, and the durable
+    /// [`oz_core::db::offline::SyncPullState`] anchor advances only after a page
+    /// applied successfully — so a server replay or lost anchor never applies a
+    /// mutation twice.
     ///
     /// Returns a [`ReplicationResult`] with counts of pushed/pulled items.
     pub async fn run_sync_cycle(&self, store: &Store<'_>) -> SyncResult<ReplicationResult> {
@@ -1409,16 +1856,24 @@ impl SyncEngine {
 
         // Phase 2: Pull remote updates from the server.
         // P-3: Paginated pull — loop until next_cursor is null.
-        let last_sync = queue.last_synced_at(store)?;
+        // SYNC-01 (parity with the daemon): the `since` anchor comes from
+        // the DURABLE `sync_pull_state` row, not from the local queue's
+        // synced timestamps. `last_synced_at` only reflects what THIS
+        // terminal pushed — pulled remote items never move it — so the old
+        // anchor re-fetched and re-applied the same remote pages on every
+        // cycle. The durable anchor advances only after a page applied
+        // successfully, so a crash mid-pull replays safely.
+        let pull_state = store.get_sync_pull_state()?;
+        let mut pull_since = pull_state.since;
         let mut total_pulled = 0usize;
-        let mut cursor: Option<String> = None;
+        let mut cursor = pull_state.cursor;
         let mut pages = 0u32;
 
         loop {
             pages += 1;
             let pull_result = match self
                 .transport
-                .pull_updates(last_sync.as_deref(), cursor.as_deref())
+                .pull_updates(pull_since.as_deref(), cursor.as_deref())
                 .await
             {
                 Ok(result) => result,
@@ -1438,6 +1893,18 @@ impl SyncEngine {
                                 imported = snapshot_count,
                                 "snapshot imported successfully after anchor expiry"
                             );
+                            // The snapshot is the authoritative full state,
+                            // so the durable pull anchor can advance to the
+                            // server's oldest retained row — the client no
+                            // longer needs anything older. Without this
+                            // reset the STALE anchor survives the import and
+                            // every subsequent cycle re-triggers
+                            // AnchorExpired → re-fetches the whole snapshot
+                            // (wasted bandwidth + server load). When the
+                            // server omitted `oldest_available`, clear the
+                            // anchor instead — the next pull starts fresh
+                            // and the idempotency ledger absorbs any replay.
+                            store.set_sync_pull_state(oldest_available.as_deref(), None)?;
                         }
                         Err(e) => {
                             // ADR #11: Propagate server migration redirect so
@@ -1470,10 +1937,74 @@ impl SyncEngine {
                 "pulled page"
             );
 
+            // SYNC-01: apply each item atomically — the domain mutation and
+            // its idempotency receipt commit together, and a poison item is
+            // dead-lettered after its retry budget — exactly like the
+            // daemon. An already-applied replay is a no-op. A retryable
+            // failure retains the durable anchor so the next cycle re-pulls
+            // the same page; a dead-lettered item is quarantined and counts
+            // as applied (the page may advance past it).
+            let mut page_all_applied = true;
             for remote_item in &pull_result.items {
-                queue.apply_remote(store, remote_item)?;
+                match queue.apply_remote_atomic(store, remote_item) {
+                    Ok(applied) => {
+                        if !applied
+                            && store
+                                .is_remote_failure_dead_lettered(&remote_item.id)
+                                .unwrap_or(false)
+                        {
+                            tracing::error!(
+                                item_id = %remote_item.id,
+                                action = %remote_item.action,
+                                "remote item remains quarantined; advancing page anchor"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        let dead_lettered = store
+                            .is_remote_failure_dead_lettered(&remote_item.id)
+                            .unwrap_or(false);
+                        if dead_lettered {
+                            tracing::error!(
+                                item_id = %remote_item.id,
+                                action = %remote_item.action,
+                                error = %e,
+                                "remote item quarantined after repeated failures; advancing page anchor"
+                            );
+                        } else {
+                            page_all_applied = false;
+                            tracing::error!(
+                                item_id = %remote_item.id,
+                                action = %remote_item.action,
+                                error = %e,
+                                "failed to atomically apply remote item; retaining pull anchor for retry"
+                            );
+                        }
+                    }
+                }
             }
 
+            // SYNC-01: advance the durable anchor ONLY after the whole
+            // page applied successfully (dead-lettered items count as
+            // applied — they are quarantined). A retryable failure leaves
+            // the old anchor and stops pagination so the next cycle
+            // re-pulls from the same point; the idempotency ledger absorbs
+            // any replay. Retrying the same page is safe because the
+            // bundled server's `(created_at, id)` cursors are stable
+            // (same cursor → same page).
+            if !page_all_applied {
+                break;
+            }
+            // The anchor must be MONOTONIC: take the later of the current
+            // anchor and the page's newest row. `.or()` alone could regress
+            // the anchor when the server returns rows older than `since`
+            // (clock skew / late delivery), which would re-fetch history on
+            // every cycle. ISO-8601 timestamps are fixed-format, so
+            // lexicographic ordering equals chronological ordering here.
+            let page_max = pull_result.items.iter().map(|i| i.created_at.clone()).max();
+            let new_since = std::cmp::max(pull_since.clone(), page_max);
+            store.set_sync_pull_state(new_since.as_deref(), pull_result.next_cursor.as_deref())?;
+            pull_since = new_since;
             cursor = pull_result.next_cursor;
             if !has_more {
                 break;

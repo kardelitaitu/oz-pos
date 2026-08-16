@@ -201,8 +201,6 @@ fn desktop_client_staff_commands_use_scoped_boundary() {
         // are replaced by session-scoped variants. General pre-session
         // workspace discovery commands remain registered intentionally.
         "commands::workspaces::list_all_workspaces",
-        "commands::workspaces::set_user_workspaces",
-        "commands::workspaces::get_user_workspaces",
         "commands::workspaces::set_user_workspace_instances",
         "commands::workspaces::get_user_workspace_instances",
     ] {
@@ -282,8 +280,6 @@ fn tablet_client_staff_commands_use_scoped_boundary() {
         // surface; keep this assertion so a future registration cannot bypass
         // the session-scoped boundary established for desktop.
         "commands::workspaces::list_all_workspaces",
-        "commands::workspaces::set_user_workspaces",
-        "commands::workspaces::get_user_workspaces",
         "commands::workspaces::set_user_workspace_instances",
         "commands::workspaces::get_user_workspace_instances",
     ] {

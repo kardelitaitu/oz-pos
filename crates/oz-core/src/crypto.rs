@@ -106,6 +106,41 @@ fn derive_static_key() -> [u8; 32] {
     key
 }
 
+/// Derive a static 256-bit key for user-profile at-rest encryption.
+///
+/// Profile fields (national id, monthly take-home pay) are encrypted at
+/// rest with a domain-separated static key (the [`encrypt_smtp_at_rest`]
+/// precedent) so the data stays readable after a database restore on a
+/// different machine — profile data must survive device migration, unlike
+/// machine-bound API keys. Provides defence against casual database
+/// inspection, not against an attacker holding the app binary.
+fn derive_profile_static_key() -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(b"oz-pos.user-profile-at-rest.v1:");
+    let hash = hasher.finalize();
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&hash);
+    key
+}
+
+/// Encrypt a user-profile sensitive field (ADR #35 D6 / spec 0049) for
+/// at-rest storage. Uses a fresh random nonce per call.
+pub fn encrypt_profile_field(plaintext: &str) -> Result<String, CoreError> {
+    let key = derive_profile_static_key();
+    encrypt(plaintext, &key)
+}
+
+/// Decrypt a user-profile sensitive field previously encrypted with
+/// [`encrypt_profile_field`].
+///
+/// Fails closed: corrupted, truncated, or cross-domain ciphertext returns
+/// an error — never plaintext.
+pub fn decrypt_profile_field(encrypted_b64: &str) -> Result<String, CoreError> {
+    let key = derive_profile_static_key();
+    decrypt(encrypted_b64, &key)
+}
+
 /// Internal: encrypt plaintext with a pre-derived key.
 fn encrypt(plaintext: &str, key: &[u8; 32]) -> Result<String, CoreError> {
     let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
@@ -269,6 +304,30 @@ mod tests {
         // Legacy plaintext passwords are returned unchanged.
         let result = decrypt_smtp_password("plaintext-password", "machine-1").unwrap();
         assert_eq!(result, "plaintext-password");
+    }
+
+    #[test]
+    fn profile_field_roundtrip() {
+        let original = "3201010101010001";
+        let encrypted = encrypt_profile_field(original).unwrap();
+        let decrypted = decrypt_profile_field(&encrypted).unwrap();
+        assert_eq!(decrypted, original);
+    }
+
+    #[test]
+    fn profile_field_uses_fresh_nonce() {
+        let c1 = encrypt_profile_field("123456789").unwrap();
+        let c2 = encrypt_profile_field("123456789").unwrap();
+        assert_ne!(c1, c2, "each encryption must use a fresh nonce");
+    }
+
+    #[test]
+    fn profile_field_decrypt_garbage_fails_closed() {
+        assert!(decrypt_profile_field("garbage").is_err());
+        assert!(decrypt_profile_field("").is_err());
+        // A value from another domain must not decrypt.
+        let smtp = encrypt_smtp_at_rest("not-a-national-id");
+        assert!(decrypt_profile_field(&smtp).is_err());
     }
 
     #[test]

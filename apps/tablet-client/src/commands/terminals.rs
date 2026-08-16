@@ -3,7 +3,9 @@
 //! CRUD operations for registered POS terminals. Each POS device
 //! registers itself with a unique name and device identifier.
 
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use tauri::{State, command};
 
 use oz_core::{Store, Terminal, TerminalFeatureOverride};
@@ -13,6 +15,50 @@ use foundation::validate_not_empty;
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
+
+type HmacSha256 = Hmac<Sha256>;
+
+/// Keyring name for the device binding HMAC secret (parity with the
+/// desktop client's `DEVICE_BINDING_KEYRING_NAME`).
+pub const DEVICE_BINDING_KEYRING_NAME: &str = "oz-pos/device-binding-hmac-key";
+
+/// Compute an HMAC-SHA256 signature for a device binding.
+///
+/// The signature covers `{terminal_id}:{bound_store_id}:{bound_instance_id}`
+/// using a secret stored in the OS keyring. If no secret exists yet, one is
+/// generated and stored. Parity with the desktop client's `sign_binding`.
+fn sign_binding(
+    keyring: &dyn oz_security::Keyring,
+    terminal_id: &str,
+    store_id: &str,
+    instance_id: &str,
+) -> Result<String, AppError> {
+    let secret = keyring
+        .get_secret(DEVICE_BINDING_KEYRING_NAME)
+        .map_err(|e| AppError::Internal(format!("keyring read failed: {e}")))?;
+
+    let secret = match secret {
+        Some(s) => s,
+        None => {
+            let new_secret = uuid::Uuid::now_v7().to_string();
+            keyring
+                .set_secret(DEVICE_BINDING_KEYRING_NAME, &new_secret)
+                .map_err(|e| AppError::Internal(format!("keyring write failed: {e}")))?;
+            new_secret
+        }
+    };
+
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .map_err(|e| AppError::Internal(format!("HMAC init failed: {e}")))?;
+    mac.update(terminal_id.as_bytes());
+    mac.update(b":");
+    mac.update(store_id.as_bytes());
+    mac.update(b":");
+    mac.update(instance_id.as_bytes());
+
+    let result = mac.finalize();
+    Ok(hex::encode(result.into_bytes()))
+}
 
 // ── DTOs ──────────────────────────────────────────────────────────────
 
@@ -99,6 +145,123 @@ pub struct UpdateTerminalArgs {
 pub struct UpdateTerminalResult {
     /// Unique identifier.
     pub id: String,
+}
+
+// ── Device binding ────────────────────────────────────────────────────
+//
+// Parity with the desktop client (audit/06 residual): a tablet can be
+// bound to a store+instance so `resolve_boot_store` auto-boots into it.
+// The binding signature is an HMAC-SHA256 over
+// `{terminal_id}:{bound_store_id}:{bound_instance_id}` keyed by a secret
+// stored in the OS keyring — a tampered binding (DB row edited without the
+// keyring secret) fails verification and falls back to the primary store.
+
+/// Arguments for setting a terminal's device binding.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetDeviceBindingArgs {
+    /// ID of the terminal to bind.
+    pub terminal_id: String,
+    /// ID of the associated bound store.
+    pub bound_store_id: String,
+    /// ID of the associated bound instance.
+    pub bound_instance_id: String,
+}
+
+/// Set (or update) a terminal's device binding with HMAC signature.
+///
+/// The caller identity comes from the explicit `user_id` (legacy terminal
+/// command convention on this client). The binding row lives in the GLOBAL
+/// identity DB — the same place the tablet's terminal CRUD and
+/// `resolve_boot_store` read it.
+#[command]
+pub async fn set_device_binding(
+    user_id: String,
+    args: SetDeviceBindingArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    // Acquire the (non-Send) keyring only after the lock so no `.await`
+    // point holds it — Tauri requires command futures to be Send.
+    let keyring = oz_security::default_keyring()
+        .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    run_set_device_binding(&db, keyring.as_ref(), &args)?;
+    drop(db);
+
+    tracing::info!(
+        terminal_id = %args.terminal_id,
+        store_id = %args.bound_store_id,
+        instance_id = %args.bound_instance_id,
+        "device binding set (tablet)"
+    );
+    Ok(())
+}
+
+/// Set a device binding with the caller resolved from a session token.
+///
+/// ADR #7 variant: the session token binds the caller instead of a
+/// client-supplied `user_id`. The binding row still lives in the GLOBAL
+/// identity DB where the tablet's `resolve_boot_store` reads it.
+#[command]
+pub async fn set_device_binding_scoped(
+    session_token: String,
+    args: SetDeviceBindingArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let db = state.db.lock().await;
+    // Acquire the (non-Send) keyring only after the lock so no `.await`
+    // point holds it — Tauri requires command futures to be Send.
+    let keyring = oz_security::default_keyring()
+        .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::TERMINALS_EDIT,
+    )?;
+    run_set_device_binding(&db, keyring.as_ref(), &args)?;
+    drop(db);
+
+    tracing::info!(
+        terminal_id = %args.terminal_id,
+        store_id = %args.bound_store_id,
+        instance_id = %args.bound_instance_id,
+        "device binding set (tablet, scoped)"
+    );
+    Ok(())
+}
+
+/// Shared binding write for `set_device_binding*` (extracted for testing).
+fn run_set_device_binding(
+    conn: &rusqlite::Connection,
+    keyring: &dyn oz_security::Keyring,
+    args: &SetDeviceBindingArgs,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &args.terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("bound_store_id", &args.bound_store_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("bound_instance_id", &args.bound_instance_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let signature = sign_binding(
+        keyring,
+        &args.terminal_id,
+        &args.bound_store_id,
+        &args.bound_instance_id,
+    )?;
+
+    let store = Store::new(conn);
+    store.update_terminal_binding(
+        &args.terminal_id,
+        &args.bound_store_id,
+        &args.bound_instance_id,
+        &signature,
+    )?;
+    Ok(())
 }
 
 // ── Commands ──────────────────────────────────────────────────────────
@@ -707,5 +870,100 @@ mod tests {
         let result = UpdateTerminalResult { id: "t-up".into() };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["id"], "t-up");
+    }
+
+    // ── Device binding (parity with desktop client) ─────────────────────
+
+    #[test]
+    fn sign_binding_roundtrip_matches() {
+        let keyring = oz_security::InMemoryKeyring::new();
+        let sig = sign_binding(&keyring, "term-1", "store-a", "ws-a-1").unwrap();
+        assert!(!sig.is_empty());
+        assert_eq!(
+            sign_binding(&keyring, "term-1", "store-a", "ws-a-1").unwrap(),
+            sig,
+            "signing the same payload with the same keyring must be stable"
+        );
+    }
+
+    #[test]
+    fn sign_binding_different_secret_differs() {
+        let signer = oz_security::InMemoryKeyring::new();
+        let other = oz_security::InMemoryKeyring::new();
+        let sig = sign_binding(&signer, "term-1", "store-a", "ws-a-1").unwrap();
+        assert_ne!(
+            sign_binding(&other, "term-1", "store-a", "ws-a-1").unwrap(),
+            sig,
+            "a signature from a different keyring secret must not match"
+        );
+    }
+
+    #[test]
+    fn sign_binding_differs_for_wrong_payload() {
+        let keyring = oz_security::InMemoryKeyring::new();
+        let sig = sign_binding(&keyring, "term-1", "store-a", "ws-a-1").unwrap();
+        assert_ne!(
+            sign_binding(&keyring, "term-1", "store-a", "ws-a-2").unwrap(),
+            sig,
+            "signature for a different instance must not match"
+        );
+    }
+
+    #[test]
+    fn run_set_device_binding_writes_verifiable_binding() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let t = Terminal::new("Counter", "host-bind");
+        store.create_terminal(&t).unwrap();
+
+        // `bound_store_id` is FK-enforced against the global `store_profiles`.
+        let now = "2026-07-31T00:00:00.000Z";
+        conn.execute(
+            "INSERT INTO store_profiles (id, name, address, tax_id, currency, timezone, is_primary, created_at, updated_at)
+             VALUES ('store-a', 'Store A', '', '', 'USD', 'UTC', 0, ?1, ?1)",
+            [now],
+        )
+        .unwrap();
+
+        let keyring = oz_security::InMemoryKeyring::new();
+        run_set_device_binding(
+            &conn,
+            &keyring,
+            &SetDeviceBindingArgs {
+                terminal_id: t.id.clone(),
+                bound_store_id: "store-a".into(),
+                bound_instance_id: "ws-a-1".into(),
+            },
+        )
+        .unwrap();
+        let (store_id, instance_id, sig) = store.get_terminal_binding(&t.id).unwrap().unwrap();
+        assert_eq!(store_id, "store-a");
+        assert_eq!(instance_id, "ws-a-1");
+        assert_eq!(
+            sign_binding(&keyring, &t.id, &store_id, &instance_id).unwrap(),
+            sig,
+            "persisted binding must match the same keyring's signature"
+        );
+    }
+
+    #[test]
+    fn set_device_binding_args_deserialize() {
+        let json = r##"{"terminalId":"t1","boundStoreId":"store-a","boundInstanceId":"ws-a-1"}"##;
+        let args: SetDeviceBindingArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.terminal_id, "t1");
+        assert_eq!(args.bound_store_id, "store-a");
+        assert_eq!(args.bound_instance_id, "ws-a-1");
+    }
+
+    #[test]
+    fn set_device_binding_args_debug() {
+        let args = SetDeviceBindingArgs {
+            terminal_id: "t1".into(),
+            bound_store_id: "store-a".into(),
+            bound_instance_id: "ws-a-1".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("store-a"));
+        assert!(d.contains("ws-a-1"));
     }
 }

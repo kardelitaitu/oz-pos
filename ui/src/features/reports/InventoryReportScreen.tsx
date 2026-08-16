@@ -3,6 +3,7 @@ import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { printSalesReceipt } from '@/api/sales';
 import { getLowStockAlerts, type LowStockAlert } from '@/api/reports';
+import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -31,10 +32,30 @@ export default function InventoryReportScreen() {
       l10n.getString('inv-report-csv-header-product'),
       l10n.getString('inv-report-csv-header-stock'),
       l10n.getString('inv-report-csv-header-threshold'),
+      l10n.getString('inv-report-csv-header-unit-price'),
+      l10n.getString('inv-report-csv-header-unit-cost'),
+      l10n.getString('inv-report-csv-header-unit-margin'),
+      l10n.getString('inv-report-csv-header-margin'),
+      l10n.getString('inv-report-csv-header-stock-value'),
     ];
-    const rows = items.map((i) =>
-      [i.sku, `"${i.name}"`, i.current_qty, i.threshold].join(','),
-    );
+    const rows = items.map((i) => {
+      const money = { minor_units: i.price_minor, currency: i.currency };
+      const unitMargin = i.price_minor - i.cost_minor;
+      const marginPct = i.price_minor > 0
+        ? `${((unitMargin / i.price_minor) * 100).toFixed(1)}%`
+        : '0.0%';
+      return [
+        i.sku,
+        `"${i.name}"`,
+        i.current_qty,
+        i.threshold,
+        `"${formatMoney(money)}"`,
+        `"${formatMoney({ minor_units: i.cost_minor, currency: i.currency })}"`,
+        `"${formatMoney({ minor_units: unitMargin, currency: i.currency })}"`,
+        `"${marginPct}"`,
+        `"${formatMoney({ minor_units: i.cost_minor * i.current_qty, currency: i.currency })}"`,
+      ].join(',');
+    });
     const bom = '\uFEFF';
     const csv = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });

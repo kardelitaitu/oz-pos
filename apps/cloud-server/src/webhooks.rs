@@ -1,10 +1,18 @@
 //! Webhook receiver — accepts payment events from Stripe and Square,
-//! verifies their signatures, and writes corresponding actions to the
-//! `offline_queue` for the local POS terminal to pick up via sync.
+//! verifies their signatures, and routes them:
+//!
+//! - **Stripe subscription lifecycle events** (`customer.subscription.*`,
+//!   `checkout.session.completed`, `invoice.paid`) update the tenant's
+//!   sync plan via `set_tenant_plan` (ADR sync-plan-gating) — a paid
+//!   subscription upgrades the tenant to `pro`, cancellation downgrades
+//!   to `free`.
+//! - **Payment events** (`payment_intent.*`, `charge.*`, Square
+//!   payments) write a `finalize_sale` action to the `offline_queue` for
+//!   the local POS terminal to pick up via sync.
 //!
 //! # Endpoints
 //!
-//! - `POST /api/webhooks/stripe` — Stripe payment_intent events
+//! - `POST /api/webhooks/stripe` — Stripe events (subscriptions + payments)
 //! - `POST /api/webhooks/square` — Square charge/Payment events
 //!
 //! # Configuration
@@ -18,12 +26,16 @@
 //! # Flow
 //!
 //! 1. Gateway sends event → server verifies HMAC signature
-//! 2. Parses event to extract `payment_intent_id` or `charge_id`
-//! 3. Looks up matching payment record via `gateway_reference`
-//! 4. Creates `offline_queue` item with action `finalize_sale`
-//!    so the next sync cycle finalizes the pending sale
+//! 2. Routes by event type (subscription → plan update, else payment)
+//! 3. Subscription: resolves the tenant (metadata or `stripe_customers`
+//!    mapping) and calls `Store::set_tenant_plan`
+//! 4. Payment: looks up matching payment record via `gateway_reference`
+//!    and creates an `offline_queue` `finalize_sale` action so the next
+//!    sync cycle finalizes the pending sale
 
-use axum::{Router, extract::State, http::StatusCode, routing::post};
+use axum::{
+    Router, extract::State, http::StatusCode, middleware, response::Response, routing::post,
+};
 use hmac::{Hmac, Mac};
 use rusqlite::params;
 use sha2::Sha256;
@@ -35,16 +47,35 @@ type HmacSha256 = Hmac<Sha256>;
 
 /// Build the webhooks router (unauthenticated — Stripe/Square verify
 /// themselves via HMAC signatures, not JWT).
+///
+/// A response-status middleware counts every 5xx into
+/// `webhook_5xx_total` — webhooks are the payment-authenticity boundary,
+/// so a server-side failure (misconfigured secret, DB error, bad event
+/// shape) is an operator-visible signal that payment/plan state may be
+/// stale.
 pub fn webhooks_router(state: CloudServerState) -> Router {
     Router::new()
         .route("/api/webhooks/stripe", post(stripe_webhook_handler))
         .route("/api/webhooks/square", post(square_webhook_handler))
+        .layer(middleware::from_fn(count_webhook_5xx))
         .with_state(state)
+}
+
+/// Axum middleware that counts 5xx responses from the webhook handlers
+/// into the `webhook_5xx_total` Prometheus counter.
+async fn count_webhook_5xx(request: axum::extract::Request, next: middleware::Next) -> Response {
+    let response = next.run(request).await;
+    if response.status().is_server_error() {
+        crate::metrics::WEBHOOK_5XX_TOTAL.inc();
+    }
+    response
 }
 
 /// Stripe webhook event payload (minimal — we only need `type` and `id`).
 #[derive(serde::Deserialize, Debug)]
 struct StripeEvent {
+    /// Unique event identifier for idempotency (Stripe redelivers webhooks).
+    id: String,
     /// Event type (e.g. `payment_intent.succeeded`, `charge.captured`).
     r#type: String,
     /// Event data payload.
@@ -102,6 +133,279 @@ fn extract_stripe_payment_id(object: &serde_json::Value) -> Option<String> {
         return Some(pi.to_owned());
     }
     None
+}
+
+/// Stripe event types that carry subscription lifecycle state.
+///
+/// These update the tenant's sync plan (ADR sync-plan-gating); all other
+/// events (payment_intent.*, charge.*, …) finalise a sale.
+fn is_subscription_event(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "customer.subscription.created"
+            | "customer.subscription.updated"
+            | "customer.subscription.deleted"
+            | "checkout.session.completed"
+            | "invoice.paid"
+    )
+}
+
+/// The sync plan a subscription event implies, from the subscription status.
+///
+/// - `active` / `trialing` / `past_due` → `Pro` (paid or in grace)
+/// - `canceled` / `unpaid` / `incomplete_expired` → `Free` (no access)
+/// - anything else (e.g. `incomplete`) → `None`, meaning "leave the plan
+///   unchanged" — the tenant keeps its current plan until a clearer state.
+fn plan_for_subscription_status(status: Option<&str>) -> Option<oz_core::TenantPlan> {
+    match status {
+        Some("active" | "trialing" | "past_due") => Some(oz_core::TenantPlan::Pro),
+        Some("canceled" | "unpaid" | "incomplete_expired") => Some(oz_core::TenantPlan::Free),
+        _ => None,
+    }
+}
+
+/// Resolve the OZ-POS tenant for a subscription event.
+///
+/// Prefers the `tenant_id` metadata set on the Checkout Session / subscription
+/// (Stripe forwards object metadata onto the subscription). Falls back to the
+/// `stripe_customers` mapping for events that carry only a customer id
+/// (`invoice.paid`, `customer.subscription.deleted`, …). Returns `None` when
+/// the tenant cannot be determined.
+async fn resolve_subscription_tenant(
+    state: &CloudServerState,
+    object: &serde_json::Value,
+) -> Result<Option<String>, (StatusCode, String)> {
+    // 1. Metadata: data.object.metadata.tenant_id
+    if let Some(tenant) = object
+        .get("metadata")
+        .and_then(|m| m.get("tenant_id"))
+        .and_then(|v| v.as_str())
+    {
+        // Also (re)record the customer mapping while we have it — later
+        // events (invoice.paid, deleted) carry only the customer id.
+        if let Some(customer) = object.get("customer").and_then(|v| v.as_str()) {
+            if let Some(pool) = &state.pg {
+                // The tenant is known here (from metadata), so the mapping
+                // write runs as `oz_app` scoped to the tenant (RLS-enforced).
+                let mut client = pool.get().await.map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to record stripe customer mapping: {e}"),
+                    )
+                })?;
+                let tx = client.transaction().await.map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to record stripe customer mapping: {e}"),
+                    )
+                })?;
+                // RLS: scope to the tenant (LOCAL — auto-resets on commit).
+                tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+                    .await
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("failed to record stripe customer mapping: {e}"),
+                        )
+                    })?;
+                tx.execute(
+                    "INSERT INTO stripe_customers (stripe_customer_id, tenant_id, updated_at)
+                     VALUES ($1, $2, $3)
+                     ON CONFLICT (stripe_customer_id) DO UPDATE SET
+                        tenant_id = excluded.tenant_id,
+                        updated_at = excluded.updated_at",
+                    &[
+                        &customer,
+                        &tenant,
+                        &chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                    ],
+                )
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to record stripe customer mapping: {e}"),
+                    )
+                })?;
+                tx.commit().await.map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to record stripe customer mapping: {e}"),
+                    )
+                })?;
+            } else {
+                let conn = state.db.lock().await;
+                oz_core::Store::new(&conn)
+                    .set_stripe_customer(customer, tenant)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("failed to record stripe customer mapping: {e}"),
+                        )
+                    })?;
+            }
+        }
+        return Ok(Some(tenant.to_owned()));
+    }
+
+    // 2. Mapping table via the customer id.
+    if let Some(customer) = object.get("customer").and_then(|v| v.as_str()) {
+        let tenant = if let Some(pool) = &state.pg {
+            let mut client = pool.get().await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to look up stripe customer mapping: {e}"),
+                )
+            })?;
+            let tx = client.transaction().await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to look up stripe customer mapping: {e}"),
+                )
+            })?;
+            // Pre-tenant resolution read: the tenant is the answer, so it
+            // runs under the dedicated BYPASSRLS role (auto-resets on
+            // commit, so the pooled connection never keeps the bypass).
+            // Scope it only when the session user is actually a member
+            // (post-cutover `oz_app`); pre-cutover the app connects as the
+            // table owner, which is not a member and bypasses RLS until
+            // FORCE is applied — the unscoped read below is exactly the
+            // owner's behaviour in that window.
+            let is_resolver_member: bool = tx
+                .query_one(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM pg_roles r
+                        JOIN pg_auth_members m ON m.roleid = r.oid
+                        WHERE r.rolname = 'oz_webhook_resolver'
+                          AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+                     )",
+                    &[],
+                )
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to check webhook resolver membership: {e}"),
+                    )
+                })?
+                .get(0);
+            if is_resolver_member {
+                tx.execute("SET LOCAL ROLE oz_webhook_resolver", &[])
+                    .await
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("failed to scope webhook resolution read: {e}"),
+                        )
+                    })?;
+            }
+            let row = tx
+                .query_opt(
+                    "SELECT tenant_id FROM stripe_customers WHERE stripe_customer_id = $1",
+                    &[&customer],
+                )
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to look up stripe customer mapping: {e}"),
+                    )
+                })?;
+            tx.commit().await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to look up stripe customer mapping: {e}"),
+                )
+            })?;
+            row.map(|r| r.get::<_, String>(0))
+        } else {
+            let conn = state.db.lock().await;
+            oz_core::Store::new(&conn)
+                .get_tenant_for_stripe_customer(customer)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to look up stripe customer mapping: {e}"),
+                    )
+                })?
+        };
+        return Ok(tenant);
+    }
+
+    Ok(None)
+}
+
+/// Handle a subscription lifecycle event by setting the tenant's sync plan.
+///
+/// Returns `{"status":"ignored"}` (200) when the tenant cannot be resolved
+/// so Stripe stops retrying, and `{"status":"accepted","plan":…}` on
+/// success.
+async fn handle_subscription_event(
+    state: &CloudServerState,
+    event: &StripeEvent,
+) -> Result<axum::Json<serde_json::Value>, (StatusCode, String)> {
+    let tenant_id = match resolve_subscription_tenant(state, &event.data.object).await? {
+        Some(t) => t,
+        None => {
+            tracing::warn!(event_type = %event.r#type, "subscription event with unresolvable tenant — ignoring");
+            record_event_processed(state, &event.id, "stripe", Some(&event.r#type)).await;
+            return Ok(axum::Json(serde_json::json!({
+                "status": "ignored",
+                "event_type": event.r#type,
+            })));
+        }
+    };
+
+    // checkout.session.completed and invoice.paid imply an active
+    // subscription even though their object carries no status field.
+    let plan = match event.r#type.as_str() {
+        "checkout.session.completed" | "invoice.paid" => Some(oz_core::TenantPlan::Pro),
+        "customer.subscription.deleted" => Some(oz_core::TenantPlan::Free),
+        _ => plan_for_subscription_status(event.data.object.get("status").and_then(|v| v.as_str())),
+    };
+
+    let Some(plan) = plan else {
+        tracing::debug!(event_type = %event.r#type, tenant_id, "subscription status leaves plan unchanged");
+        record_event_processed(state, &event.id, "stripe", Some(&event.r#type)).await;
+        return Ok(axum::Json(serde_json::json!({
+            "status": "accepted",
+            "tenant_id": tenant_id,
+            "plan": "unchanged",
+            "event_type": event.r#type,
+        })));
+    };
+
+    if let Some(pool) = &state.pg {
+        oz_api::pg::set_tenant_plan(pool, &tenant_id, plan)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to set tenant plan: {e}"),
+                )
+            })?;
+    } else {
+        let conn = state.db.lock().await;
+        oz_core::Store::new(&conn)
+            .set_tenant_plan(&tenant_id, plan)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to set tenant plan: {e}"),
+                )
+            })?;
+        drop(conn);
+    }
+
+    tracing::info!(tenant_id, plan = plan.as_db_str(), event_type = %event.r#type, "stripe subscription updated tenant plan");
+    record_event_processed(state, &event.id, "stripe", Some(&event.r#type)).await;
+
+    Ok(axum::Json(serde_json::json!({
+        "status": "accepted",
+        "tenant_id": tenant_id,
+        "plan": plan.as_db_str(),
+        "event_type": event.r#type,
+    })))
 }
 
 /// Verify a Stripe webhook signature.
@@ -207,7 +511,25 @@ async fn stripe_webhook_handler(
     let event: StripeEvent = serde_json::from_slice(&body_bytes)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid event body: {e}")))?;
 
-    // 5. Extract payment intent ID
+    // 4b. Idempotency: skip already-processed events.
+    //     Stripe guarantees at-least-once delivery; redelivered events
+    //     must not double-count a subscription upgrade or payment capture.
+    if event_already_processed(&state, &event.id).await {
+        tracing::debug!(event_id = %event.id, event_type = %event.r#type, "webhook already processed — skipping");
+        return Ok(axum::Json(serde_json::json!({
+            "status": "already_processed",
+            "event_id": event.id,
+            "event_type": event.r#type,
+        })));
+    }
+
+    // 5. Subscription lifecycle events update the tenant's sync plan
+    //    (ADR sync-plan-gating) instead of finalising a sale.
+    if is_subscription_event(&event.r#type) {
+        return handle_subscription_event(&state, &event).await;
+    }
+
+    // 6. Extract payment intent ID
     let payment_id = extract_stripe_payment_id(&event.data.object).ok_or_else(|| {
         (
             StatusCode::BAD_REQUEST,
@@ -215,13 +537,14 @@ async fn stripe_webhook_handler(
         )
     })?;
 
-    // 6. Look up the sale by gateway_reference
-    let sale_id = lookup_sale_by_gateway_reference(&state, &payment_id).await?;
+    // 7. Look up the sale (and its owner tenant) by gateway_reference
+    let (sale_id, tenant_id) = lookup_sale_by_gateway_reference(&state, &payment_id).await?;
 
-    // 7. Queue a finalize_sale action
-    enqueue_finalize_sale(&state, &sale_id).await?;
+    // 8. Queue a finalize_sale action under the sale's tenant
+    enqueue_finalize_sale(&state, &sale_id, &tenant_id).await?;
 
-    tracing::info!(payment_id, sale_id, event_type = %event.r#type, "stripe webhook processed");
+    tracing::info!(payment_id, sale_id, tenant_id, event_type = %event.r#type, "stripe webhook processed");
+    record_event_processed(&state, &event.id, "stripe", Some(&event.r#type)).await;
 
     Ok(axum::Json(serde_json::json!({
         "status": "accepted",
@@ -292,16 +615,27 @@ async fn square_webhook_handler(
     let event: SquareEvent = serde_json::from_slice(&body_bytes)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid event body: {e}")))?;
 
+    // 6b. Idempotency: skip already-processed events
+    if square_event_already_processed(&state, &event.event_id).await {
+        tracing::debug!(event_id = %event.event_id, event_type = %event.r#type, "square webhook already processed — skipping");
+        return Ok(axum::Json(serde_json::json!({
+            "status": "already_processed",
+            "event_id": event.event_id,
+            "event_type": event.r#type,
+        })));
+    }
+
     // Square uses payment IDs (not pi_xxx prefix). Use the data.id directly.
     let payment_id = event.data.id.clone();
 
-    // 7. Look up the sale by gateway_reference
-    let sale_id = lookup_sale_by_gateway_reference(&state, &payment_id).await?;
+    // 7. Look up the sale (and its owner tenant) by gateway_reference
+    let (sale_id, tenant_id) = lookup_sale_by_gateway_reference(&state, &payment_id).await?;
 
-    // 8. Queue a finalize_sale action
-    enqueue_finalize_sale(&state, &sale_id).await?;
+    // 8. Queue a finalize_sale action under the sale's tenant
+    enqueue_finalize_sale(&state, &sale_id, &tenant_id).await?;
 
-    tracing::info!(payment_id, sale_id, event_type = %event.r#type, "square webhook processed");
+    tracing::info!(payment_id, sale_id, tenant_id, event_type = %event.r#type, "square webhook processed");
+    record_event_processed(&state, &event.event_id, "square", Some(&event.r#type)).await;
 
     Ok(axum::Json(serde_json::json!({
         "status": "accepted",
@@ -310,21 +644,152 @@ async fn square_webhook_handler(
     })))
 }
 
+// ── Webhook idempotency helpers ─────────────────────────────────────
+/// Check whether a webhook event has already been processed.
+///
+/// Pure check -- does not insert. The recording happens in
+/// [`record_event_processed`] after all side effects succeed.
+/// Read `processed_webhooks` dedup state, backend-aware.
+///
+/// Returns `true` when the event id already has a row. Backend failures
+/// degrade to `false` ("not processed") exactly like the historical SQLite
+/// path — a dedup miss is at-least-once, which the webhook contract already
+/// tolerates; the subsequent `record_event_processed` upsert is a no-op on
+/// conflict.
+async fn event_already_processed(state: &CloudServerState, event_id: &str) -> bool {
+    if let Some(pool) = &state.pg {
+        let Ok(client) = pool.get().await else {
+            return false;
+        };
+        return client
+            .query_one(
+                "SELECT EXISTS(SELECT 1 FROM processed_webhooks WHERE event_id = $1)",
+                &[&event_id],
+            )
+            .await
+            .map(|r| r.get::<_, bool>(0))
+            .unwrap_or(false);
+    }
+    let conn = state.db.lock().await;
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM processed_webhooks WHERE event_id = ?1",
+            rusqlite::params![event_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    count > 0
+}
+
+/// Like [`event_already_processed`] but for Square events.
+async fn square_event_already_processed(state: &CloudServerState, event_id: &str) -> bool {
+    event_already_processed(state, event_id).await
+}
+
+/// Record a webhook event as successfully processed.
+///
+/// Called after all side effects (plan update, sale finalization) have
+/// succeeded. If the row was already inserted by [`event_already_processed`]
+/// this is a no-op.
+async fn record_event_processed(
+    state: &CloudServerState,
+    event_id: &str,
+    provider: &str,
+    event_type: Option<&str>,
+) {
+    if let Some(pool) = &state.pg {
+        if let Ok(client) = pool.get().await {
+            let _ = client
+                .execute(
+                    "INSERT INTO processed_webhooks (event_id, provider, event_type) VALUES ($1, $2, $3)
+                     ON CONFLICT (event_id) DO NOTHING",
+                    &[&event_id, &provider, &event_type],
+                )
+                .await;
+        }
+        return;
+    }
+    let conn = state.db.lock().await;
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO processed_webhooks (event_id, provider, event_type) VALUES (?1, ?2, ?3)",
+        rusqlite::params![event_id, provider, event_type],
+    );
+}
+
 /// Look up a sale by its `gateway_reference` in the payments table.
 async fn lookup_sale_by_gateway_reference(
     state: &CloudServerState,
     gateway_ref: &str,
-) -> Result<String, (StatusCode, String)> {
-    let conn = state.db.lock().await;
-    let sale_id: Option<String> = conn
-        .query_row(
-            "SELECT sale_id FROM payments WHERE gateway_reference = ?1 LIMIT 1",
+) -> Result<(String, String), (StatusCode, String)> {
+    // Returns `(sale_id, tenant_id)` so the caller can enqueue the
+    // finalize action under the sale's owner.
+    let row: Option<(String, String)> = if let Some(pool) = &state.pg {
+        let Ok(mut client) = pool.get().await else {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to acquire database connection".into(),
+            ));
+        };
+        let Ok(tx) = client.transaction().await else {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to acquire database transaction".into(),
+            ));
+        };
+        // Pre-tenant resolution read (same reasoning as
+        // `resolve_subscription_tenant`): scope to the dedicated BYPASSRLS
+        // role only when the session user is a member (post-cutover
+        // `oz_app`); the owner window runs unscoped.
+        let is_resolver_member: bool = tx
+            .query_one(
+                "SELECT EXISTS(
+                    SELECT 1 FROM pg_roles r
+                    JOIN pg_auth_members m ON m.roleid = r.oid
+                    WHERE r.rolname = 'oz_webhook_resolver'
+                      AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+                 )",
+                &[],
+            )
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to check webhook resolver membership: {e}"),
+                )
+            })?
+            .get(0);
+        if is_resolver_member {
+            tx.execute("SET LOCAL ROLE oz_webhook_resolver", &[])
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to scope webhook resolution read: {e}"),
+                    )
+                })?;
+        }
+        let row = tx
+            .query_opt(
+                "SELECT p.sale_id, s.tenant_id FROM payments p\n                 JOIN sales s ON p.sale_id = s.id\n                 WHERE p.gateway_reference = $1 LIMIT 1",
+                &[&gateway_ref],
+            )
+            .await
+            .ok()
+            .flatten()
+            .map(|r| (r.get::<_, String>(0), r.get::<_, String>(1)));
+        let _ = tx.commit().await;
+        row
+    } else {
+        let conn = state.db.lock().await;
+        conn.query_row(
+            "SELECT p.sale_id, s.tenant_id FROM payments p\n             JOIN sales s ON p.sale_id = s.id\n             WHERE p.gateway_reference = ?1 LIMIT 1",
             params![gateway_ref],
-            |row| row.get(0),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
-        .ok();
+        .ok()
+    };
 
-    sale_id.ok_or_else(|| {
+    row.ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
             format!("no sale found for gateway reference: {gateway_ref}"),
@@ -337,8 +802,8 @@ async fn lookup_sale_by_gateway_reference(
 async fn enqueue_finalize_sale(
     state: &CloudServerState,
     sale_id: &str,
+    tenant_id: &str,
 ) -> Result<(), (StatusCode, String)> {
-    let conn = state.db.lock().await;
     let id = uuid::Uuid::now_v7().to_string();
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
@@ -347,10 +812,56 @@ async fn enqueue_finalize_sale(
     })
     .to_string();
 
+    if let Some(pool) = &state.pg {
+        // The tenant is known here (from the sale lookup), so the write runs
+        // as `oz_app` scoped to the tenant (RLS-enforced).
+        let mut client = pool.get().await.map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to enqueue finalize_sale: {e}"),
+            )
+        })?;
+        let tx = client.transaction().await.map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to enqueue finalize_sale: {e}"),
+            )
+        })?;
+        // RLS: scope to the tenant (LOCAL — auto-resets on commit).
+        tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to enqueue finalize_sale: {e}"),
+                )
+            })?;
+        tx.execute(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+             VALUES ($1, $2, $3, 'pending', $4, $5)",
+            &[&id, &"finalize_sale", &payload, &now, &tenant_id],
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to enqueue finalize_sale: {e}"),
+            )
+        })?;
+        tx.commit().await.map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to enqueue finalize_sale: {e}"),
+            )
+        })?;
+        return Ok(());
+    }
+
+    let conn = state.db.lock().await;
     conn.execute(
         "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
-         VALUES (?1, ?2, ?3, 'pending', ?4, 'default')",
-        params![id, "finalize_sale", payload, now],
+         VALUES (?1, ?2, ?3, 'pending', ?4, ?5)",
+        params![id, "finalize_sale", payload, now, tenant_id],
     )
     .map_err(|e| {
         (
@@ -382,6 +893,7 @@ mod tests {
     fn test_state() -> CloudServerState {
         CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
@@ -392,6 +904,7 @@ mod tests {
     fn test_state_with_stripe(secret: &str) -> CloudServerState {
         CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: Some(secret.to_owned()),
             square_webhook_signature_key: None,
@@ -402,6 +915,7 @@ mod tests {
     fn test_state_with_square(secret: &str, url: &str) -> CloudServerState {
         CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: Some(secret.to_owned()),
@@ -573,10 +1087,14 @@ mod tests {
             let conn = state.db.lock().await;
             seed_payment(&conn, "pi_test_123", "sale-001");
         }
-        let sale_id = lookup_sale_by_gateway_reference(&state, "pi_test_123")
+        let (sale_id, tenant_id) = lookup_sale_by_gateway_reference(&state, "pi_test_123")
             .await
             .unwrap();
         assert_eq!(sale_id, "sale-001");
+        assert_eq!(
+            tenant_id, "default",
+            "unscoped seeded sale belongs to default"
+        );
     }
 
     #[tokio::test]
@@ -630,7 +1148,7 @@ mod tests {
 
         let app = webhooks_router(state.clone());
 
-        let payload = br#"{"type":"payment_intent.succeeded","data":{"object":{"id":"pi_3NcdefghIJklmnOPQRSTUvwx","amount":1000,"status":"succeeded"}}}"#;
+        let payload = br#"{"id":"evt_test_happy","type":"payment_intent.succeeded","data":{"object":{"id":"pi_3NcdefghIJklmnOPQRSTUvwx","amount":1000,"status":"succeeded"}}}"#;
         let signature = stripe_signature(payload, secret);
 
         let req = Request::builder()
@@ -662,6 +1180,216 @@ mod tests {
         }
     }
 
+    // ── Subscription lifecycle → tenant plan (ADR sync-plan-gating) ──
+
+    /// Send a signed Stripe subscription event through the router.
+    async fn post_stripe_subscription(
+        state: &CloudServerState,
+        event_type: &str,
+        object: serde_json::Value,
+    ) -> (StatusCode, serde_json::Value) {
+        let app = webhooks_router(state.clone());
+        let secret = state.stripe_webhook_secret.clone().unwrap();
+        let payload = serde_json::json!({
+            "id": format!("evt_test_{}", uuid::Uuid::now_v7()),
+            "type": event_type,
+            "data": { "object": object },
+        });
+        let bytes = serde_json::to_vec(&payload).unwrap();
+        let signature = stripe_signature(&bytes, &secret);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/stripe")
+            .header("Content-Type", "application/json")
+            .header("Stripe-Signature", &signature)
+            .body(Body::from(bytes))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        let status = resp.status();
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value =
+            serde_json::from_slice(&body_bytes).unwrap_or(serde_json::json!({}));
+        (status, json)
+    }
+
+    fn tenant_plan(state: &CloudServerState, tenant_id: &str) -> Option<oz_core::TenantPlan> {
+        let conn = state.db.try_lock().unwrap();
+        oz_core::Store::new(&conn)
+            .get_tenant_plan(tenant_id)
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn subscription_created_upgrades_tenant_to_pro() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "customer.subscription.created",
+            serde_json::json!({
+                "id": "sub_abc",
+                "customer": "cus_123",
+                "status": "active",
+                "metadata": { "tenant_id": "tenant-a" },
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["status"], "accepted");
+        assert_eq!(json["plan"], "pro");
+        assert_eq!(
+            tenant_plan(&state, "tenant-a"),
+            Some(oz_core::TenantPlan::Pro),
+            "paid subscription must upgrade the tenant's sync plan"
+        );
+    }
+
+    #[tokio::test]
+    async fn subscription_created_records_customer_mapping() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        post_stripe_subscription(
+            &state,
+            "customer.subscription.created",
+            serde_json::json!({
+                "id": "sub_abc",
+                "customer": "cus_123",
+                "status": "active",
+                "metadata": { "tenant_id": "tenant-a" },
+            }),
+        )
+        .await;
+        let conn = state.db.try_lock().unwrap();
+        let tenant = oz_core::Store::new(&conn)
+            .get_tenant_for_stripe_customer("cus_123")
+            .unwrap();
+        assert_eq!(tenant, Some("tenant-a".to_string()));
+    }
+
+    #[tokio::test]
+    async fn subscription_deleted_downgrades_tenant_to_free_via_mapping() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        // Seed: tenant-a is pro, and we know the customer mapping from the
+        // original checkout (deleted events carry only the customer id).
+        {
+            let conn = state.db.try_lock().unwrap();
+            let store = oz_core::Store::new(&conn);
+            store
+                .set_tenant_plan("tenant-a", oz_core::TenantPlan::Pro)
+                .unwrap();
+            store.set_stripe_customer("cus_123", "tenant-a").unwrap();
+        }
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "customer.subscription.deleted",
+            serde_json::json!({ "id": "sub_abc", "customer": "cus_123" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["status"], "accepted");
+        assert_eq!(json["plan"], "free");
+        assert_eq!(
+            tenant_plan(&state, "tenant-a"),
+            Some(oz_core::TenantPlan::Free),
+            "cancelled subscription must downgrade the tenant's sync plan"
+        );
+    }
+
+    #[tokio::test]
+    async fn checkout_completed_upgrades_tenant_to_pro() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "checkout.session.completed",
+            serde_json::json!({
+                "id": "cs_abc",
+                "customer": "cus_456",
+                "subscription": "sub_abc",
+                "metadata": { "tenant_id": "tenant-b" },
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["plan"], "pro");
+        assert_eq!(
+            tenant_plan(&state, "tenant-b"),
+            Some(oz_core::TenantPlan::Pro)
+        );
+    }
+
+    #[tokio::test]
+    async fn invoice_paid_renews_pro_via_customer_mapping() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        {
+            let conn = state.db.try_lock().unwrap();
+            oz_core::Store::new(&conn)
+                .set_stripe_customer("cus_789", "tenant-c")
+                .unwrap();
+        }
+        // invoice.paid carries only the customer id — resolve via mapping.
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "invoice.paid",
+            serde_json::json!({ "id": "in_abc", "customer": "cus_789", "subscription": "sub_abc" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["plan"], "pro");
+        assert_eq!(
+            tenant_plan(&state, "tenant-c"),
+            Some(oz_core::TenantPlan::Pro)
+        );
+    }
+
+    #[tokio::test]
+    async fn subscription_updated_canceled_downgrades_tenant() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        {
+            let conn = state.db.try_lock().unwrap();
+            oz_core::Store::new(&conn)
+                .set_tenant_plan("tenant-a", oz_core::TenantPlan::Pro)
+                .unwrap();
+        }
+        let (status, _) = post_stripe_subscription(
+            &state,
+            "customer.subscription.updated",
+            serde_json::json!({
+                "id": "sub_abc",
+                "customer": "cus_123",
+                "status": "canceled",
+                "metadata": { "tenant_id": "tenant-a" },
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            tenant_plan(&state, "tenant-a"),
+            Some(oz_core::TenantPlan::Free),
+            "a canceled subscription must downgrade the plan"
+        );
+    }
+
+    #[tokio::test]
+    async fn subscription_event_unknown_tenant_is_ignored_with_200() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "customer.subscription.created",
+            serde_json::json!({
+                "id": "sub_abc",
+                "customer": "cus_unknown",
+                "status": "active",
+                "metadata": {},
+            }),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "unresolvable events must 200 so Stripe stops retrying"
+        );
+        assert_eq!(json["status"], "ignored");
+    }
+
     #[tokio::test]
     async fn stripe_webhook_sale_not_found_returns_404() {
         let secret = "whsec_test_secret";
@@ -669,7 +1397,7 @@ mod tests {
         let state = test_state_with_stripe(secret);
         let app = webhooks_router(state);
 
-        let payload = br#"{"type":"payment_intent.succeeded","data":{"object":{"id":"pi_unknown","amount":1000}}}"#;
+        let payload = br#"{"id":"evt_test_404","type":"payment_intent.succeeded","data":{"object":{"id":"pi_unknown","amount":1000}}}"#;
         let signature = stripe_signature(payload, secret);
 
         let req = Request::builder()
@@ -748,5 +1476,492 @@ mod tests {
                 .unwrap();
             assert_eq!(count, 1, "should have enqueued one finalize_sale action");
         }
+    }
+
+    /// Integration test against a live Postgres (the same Docker service
+    /// `db.rs` uses, port 15432). Skips when unreachable, so the suite stays
+    /// green on machines without a running Postgres.
+    #[tokio::test]
+    async fn pg_integration_webhooks_read_write_postgres() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+            Ok(crate::db::DbPool::Postgres(pool)) => pool,
+            Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+            Err(e) => {
+                eprintln!("PG webhooks integration test skipped: {e}");
+                return;
+            }
+        };
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            pg: Some(pool.clone()),
+            started_at: Instant::now(),
+            stripe_webhook_secret: Some("whsec_test".into()),
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+        };
+        let tenant = format!("pg-webhook-{}", uuid::Uuid::now_v7());
+        let sale_id = format!("sale-{}", uuid::Uuid::now_v7());
+        let gateway_ref = format!("pi_pg_{}", uuid::Uuid::now_v7());
+        let event_id = format!("evt_pg_{}", uuid::Uuid::now_v7());
+
+        // ── Dedup helpers ──
+        assert!(!event_already_processed(&state, &event_id).await);
+        assert!(!square_event_already_processed(&state, &event_id).await);
+        record_event_processed(
+            &state,
+            &event_id,
+            "stripe",
+            Some("payment_intent.succeeded"),
+        )
+        .await;
+        assert!(event_already_processed(&state, &event_id).await);
+        assert!(square_event_already_processed(&state, &event_id).await);
+
+        // ── Payment → sale lookup + finalize_sale enqueue ──
+        {
+            let client = pool.get().await.unwrap();
+            let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            client
+                .execute(
+                    "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, tenant_id)
+                     VALUES ($1, 700, 'USD', 1, 'pending', $2, $2, $3)",
+                    &[&sale_id, &now, &tenant],
+                )
+                .await
+                .unwrap();
+            client
+                .execute(
+                    "INSERT INTO payments (id, sale_id, method, amount_minor, currency, created_at, gateway_reference)
+                     VALUES ($1, $2, 'card', 700, 'USD', $3, $4)",
+                    &[
+                        &format!("pay-{tenant}"),
+                        &sale_id,
+                        &now,
+                        &gateway_ref,
+                    ],
+                )
+                .await
+                .unwrap();
+        }
+        let (found, found_tenant) = lookup_sale_by_gateway_reference(&state, &gateway_ref)
+            .await
+            .expect("sale must resolve via gateway reference");
+        assert_eq!(found, sale_id);
+        assert_eq!(found_tenant, tenant, "lookup must return the sale's tenant");
+        assert!(matches!(
+            lookup_sale_by_gateway_reference(&state, "pi_missing").await,
+            Err((StatusCode::NOT_FOUND, _))
+        ));
+
+        enqueue_finalize_sale(&state, &sale_id, &tenant)
+            .await
+            .expect("enqueue_finalize_sale");
+        {
+            let client = pool.get().await.unwrap();
+            let row = client
+                .query_opt(
+                    "SELECT tenant_id FROM offline_queue WHERE action = 'finalize_sale' AND payload LIKE $1",
+                    &[&format!("%{sale_id}%")],
+                )
+                .await
+                .unwrap();
+            let row = row.expect("one finalize_sale must be enqueued on Postgres");
+            let queued_tenant: String = row.get(0);
+            assert_eq!(
+                queued_tenant, tenant,
+                "finalize_sale must be enqueued under the sale's tenant"
+            );
+        }
+
+        // ── Tenant resolution (metadata → mapping) ──
+        let with_metadata = serde_json::json!({
+            "id": "sub_pg",
+            "customer": format!("cus_pg_{}", uuid::Uuid::now_v7()),
+            "status": "active",
+            "metadata": { "tenant_id": tenant },
+        });
+        let resolved = resolve_subscription_tenant(&state, &with_metadata)
+            .await
+            .expect("metadata resolve");
+        assert_eq!(resolved.as_deref(), Some(tenant.as_str()));
+
+        let customer_only = serde_json::json!({ "customer": with_metadata["customer"] });
+        let resolved = resolve_subscription_tenant(&state, &customer_only)
+            .await
+            .expect("mapping resolve");
+        assert_eq!(resolved.as_deref(), Some(tenant.as_str()));
+
+        // ── Full subscription event → tenant plan upgraded ──
+        let event = StripeEvent {
+            id: format!("evt_upgrade_{}", uuid::Uuid::now_v7()),
+            r#type: "customer.subscription.created".into(),
+            data: StripeEventData {
+                object: serde_json::json!({
+                    "id": "sub_pg",
+                    "customer": "cus_upgrade",
+                    "status": "active",
+                    "metadata": { "tenant_id": tenant },
+                }),
+            },
+        };
+        let resp = handle_subscription_event(&state, &event)
+            .await
+            .expect("handle_subscription_event");
+        assert_eq!(resp.0["plan"], "pro");
+        assert_eq!(
+            oz_api::pg::get_tenant_plan(&pool, &tenant)
+                .await
+                .expect("get_tenant_plan"),
+            Some(oz_core::TenantPlan::Pro)
+        );
+
+        // ── Clean up so a shared dev DB stays tidy ──
+        {
+            let client = pool.get().await.unwrap();
+            client
+                .execute(
+                    "DELETE FROM offline_queue WHERE payload LIKE $1",
+                    &[&format!("%{sale_id}%")],
+                )
+                .await
+                .unwrap();
+            client
+                .execute("DELETE FROM payments WHERE sale_id = $1", &[&sale_id])
+                .await
+                .unwrap();
+            client
+                .execute("DELETE FROM sales WHERE id = $1", &[&sale_id])
+                .await
+                .unwrap();
+            client
+                .execute(
+                    "DELETE FROM stripe_customers WHERE tenant_id = $1",
+                    &[&tenant],
+                )
+                .await
+                .unwrap();
+            client
+                .execute("DELETE FROM tenant_plans WHERE tenant_id = $1", &[&tenant])
+                .await
+                .unwrap();
+            client
+                .execute(
+                    "DELETE FROM processed_webhooks WHERE event_id = $1",
+                    &[&event_id],
+                )
+                .await
+                .unwrap();
+        }
+    }
+
+    /// Integration test: the full webhook path works as the restricted
+    /// `oz_app` role after the RLS cutover.
+    ///
+    /// Webhook handlers are signature-authenticated but NOT tenant-
+    /// authenticated: they must resolve the tenant from the data (the
+    /// `stripe_customers` mapping, or the `payments → sales` join) before
+    /// any tenant-scoped write. Under FORCE RLS as `oz_app` (a non-owner)
+    /// those resolution reads would return zero rows, so the handlers run
+    /// them in a transaction scoped to the dedicated BYPASSRLS role
+    /// (`oz_webhook_resolver`), and every write after resolution runs with
+    /// `SET LOCAL oz.tenant_id`.
+    ///
+    /// Runs on a throwaway database (created + dropped here) so the
+    /// committed cutover cannot race the other PG integration tests on a
+    /// shared dev DB. Skips when Postgres is unreachable or the URL role
+    /// lacks `CREATE DATABASE` (the established pattern).
+    #[tokio::test]
+    async fn pg_integration_webhooks_restricted_role_after_cutover() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        // Admin connection is raw (apply_schema = false): it only sweeps
+        // stale databases/roles and creates the throwaway DB, so it must not
+        // re-apply PG_INIT to the shared base DB (concurrent catalog DDL
+        // across parallel PG test binaries is a flake source).
+        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, false).await {
+            Ok(crate::db::DbPool::Postgres(pool)) => pool,
+            Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+            Err(e) => {
+                eprintln!("PG webhook RLS test skipped: {e}");
+                return;
+            }
+        };
+        let admin = pool.get().await.expect("admin client");
+
+        // ── Throwaway database (isolated from the shared dev DB) ──
+        // Sweep any stale throwaway DBs a crashed run left behind (only this
+        // test creates `oz_wh_rls_%`), then drop a leftover resolver role
+        // whose grants died with those DBs.
+        let stale: Vec<String> = admin
+            .query(
+                "SELECT datname FROM pg_database WHERE datname LIKE 'oz_wh_rls_%'",
+                &[],
+            )
+            .await
+            .expect("stale database query")
+            .iter()
+            .map(|r| r.get::<_, String>(0))
+            .collect();
+        for d in &stale {
+            admin
+                .batch_execute(&format!("DROP DATABASE IF EXISTS {d} WITH (FORCE);"))
+                .await
+                .expect("drop stale test database");
+        }
+        admin
+            .batch_execute("DROP ROLE IF EXISTS oz_webhook_resolver;")
+            .await
+            .expect("drop stale resolver role");
+        let db_name = format!("oz_wh_rls_{}", std::process::id());
+        if let Err(e) = admin
+            .execute(&format!("CREATE DATABASE {db_name}"), &[])
+            .await
+        {
+            eprintln!("PG webhook RLS test skipped: cannot CREATE DATABASE ({e})");
+            return;
+        }
+
+        // URL for the throwaway DB (swap the path segment, keep any query).
+        let (base, query) = match url.split_once('?') {
+            Some((b, q)) => (b, Some(q)),
+            None => (url.as_str(), None),
+        };
+        let (head, _old_db) = base
+            .rsplit_once('/')
+            .expect("URL must have a database path");
+        let db_url = match query {
+            Some(q) => format!("{head}/{db_name}?{q}"),
+            None => format!("{head}/{db_name}"),
+        };
+
+        // Full schema + RLS appendix (ENABLE ROW LEVEL SECURITY + policy).
+        let schema_pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await
+        {
+            Ok(crate::db::DbPool::Postgres(p)) => p,
+            _ => unreachable!("schema pool is postgres"),
+        };
+        let owner = schema_pool.get().await.expect("owner client");
+
+        // ── The real cutover script: roles + FORCE (committed; idempotent) ──
+        const CUTOVER: &str = include_str!("../../../scripts/rls-cutover.sql");
+        owner
+            .batch_execute(CUTOVER)
+            .await
+            .expect("cutover script should execute");
+        owner
+            .batch_execute("ALTER ROLE oz_app LOGIN PASSWORD 'oz_app_test_pw';")
+            .await
+            .expect("enable oz_app login should succeed");
+
+        // ── Seed as owner. FORCE applies to the owner too now, so scope the
+        //    seeding transaction to the tenant. ──
+        let ns = format!("wh-rls-{}", std::process::id());
+        let tenant = format!("{ns}-ten");
+        let sale_id = format!("sale-{}", uuid::Uuid::now_v7());
+        let gateway_ref = format!("pi_{ns}");
+        let customer = format!("cus_{ns}");
+        let event_id = format!("evt_{ns}");
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        {
+            let mut client = schema_pool.get().await.expect("seed client");
+            let tx = client.transaction().await.expect("seed tx");
+            tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+                .await
+                .expect("seed GUC");
+            tx.execute(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, tenant_id)
+                 VALUES ($1, 700, 'USD', 1, 'pending', $2, $2, $3)",
+                &[&sale_id, &now, &tenant],
+            )
+            .await
+            .expect("seed sale");
+            tx.execute(
+                "INSERT INTO payments (id, sale_id, method, amount_minor, currency, created_at, gateway_reference)
+                 VALUES ($1, $2, 'card', 700, 'USD', $3, $4)",
+                &[&format!("pay-{ns}"), &sale_id, &now, &gateway_ref],
+            )
+            .await
+            .expect("seed payment");
+            tx.commit().await.expect("seed commit");
+        }
+
+        // ── Proof 1: RLS is genuinely live for oz_app (no GUC → zero rows) ──
+        {
+            let (raw, conn) = tokio_postgres::connect(&db_url, tokio_postgres::NoTls)
+                .await
+                .expect("dedicated probe connection");
+            tokio::spawn(async move {
+                let _ = conn.await;
+            });
+            raw.batch_execute("SET ROLE oz_app")
+                .await
+                .expect("SET ROLE oz_app should succeed");
+            let visible: i64 = raw
+                .query_one("SELECT COUNT(*) FROM sales", &[])
+                .await
+                .expect("count should succeed")
+                .get(0);
+            assert_eq!(
+                visible, 0,
+                "RLS must hide sales rows from oz_app without the GUC"
+            );
+        }
+
+        // ── The app pool: connects AS the restricted role ──
+        let scheme_end = url.find("://").expect("URL has a scheme") + 3;
+        let at = url.find('@').expect("URL has credentials");
+        let app_url = format!(
+            "{}oz_app:oz_app_test_pw@{}",
+            &db_url[..scheme_end],
+            &db_url[at + 1..]
+        );
+        let app_pool = {
+            use deadpool_postgres::Manager;
+            use std::str::FromStr;
+            let config = tokio_postgres::Config::from_str(&app_url).expect("valid app URL");
+            let manager = Manager::new(config, tokio_postgres::NoTls);
+            deadpool_postgres::Pool::builder(manager)
+                .max_size(2)
+                .build()
+                .expect("app pool build")
+        };
+
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            pg: Some(app_pool.clone()),
+            started_at: Instant::now(),
+            stripe_webhook_secret: Some("whsec_rls_test".into()),
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+        };
+        let app = webhooks_router(state.clone());
+        let secret = "whsec_rls_test";
+
+        // ── Proof 2: payment webhook — resolve sale → enqueue under tenant ──
+        let payload = format!(
+            r#"{{"id":"{event_id}","type":"payment_intent.succeeded","data":{{"object":{{"id":"{gateway_ref}","amount":700}}}}}}"#
+        );
+        let signature = stripe_signature(payload.as_bytes(), secret);
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/stripe")
+            .header("Content-Type", "application/json")
+            .header("Stripe-Signature", &signature)
+            .body(Body::from(payload.clone()))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["status"], "accepted");
+        assert_eq!(json["sale_id"], sale_id);
+
+        // The finalize_sale enqueue landed under the sale's tenant (the
+        // write ran as oz_app with the GUC — the offline_queue row is
+        // visible to the owner only with the same tenant GUC).
+        {
+            let mut client = schema_pool.get().await.expect("queue client");
+            let tx = client.transaction().await.expect("queue tx");
+            tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+                .await
+                .expect("queue GUC");
+            let row = tx
+                .query_opt(
+                    "SELECT action, tenant_id FROM offline_queue WHERE payload LIKE $1",
+                    &[&format!("%{sale_id}%")],
+                )
+                .await
+                .expect("queue query")
+                .expect("one finalize_sale must be enqueued");
+            assert_eq!(row.get::<_, String>(0), "finalize_sale");
+            assert_eq!(row.get::<_, String>(1), tenant);
+            tx.commit().await.expect("queue commit");
+        }
+
+        // ── Proof 3: redelivery is deduplicated (dedup runs as oz_app) ──
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/stripe")
+            .header("Content-Type", "application/json")
+            .header("Stripe-Signature", &signature)
+            .body(Body::from(payload))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["status"], "already_processed");
+
+        // ── Proof 4: subscription event — resolve tenant, update plan, and
+        //    record the stripe_customers mapping (all writes as oz_app) ──
+        let sub_payload = format!(
+            r#"{{"id":"evt_sub_{ns}","type":"customer.subscription.created","data":{{"object":{{"id":"sub_{ns}","customer":"{customer}","status":"active","metadata":{{"tenant_id":"{tenant}"}}}}}}}}"#
+        );
+        let signature = stripe_signature(sub_payload.as_bytes(), secret);
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/stripe")
+            .header("Content-Type", "application/json")
+            .header("Stripe-Signature", &signature)
+            .body(Body::from(sub_payload))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["plan"], "pro");
+        assert_eq!(
+            oz_api::pg::get_tenant_plan(&schema_pool, &tenant)
+                .await
+                .expect("get_tenant_plan"),
+            Some(oz_core::TenantPlan::Pro)
+        );
+        {
+            let mut client = schema_pool.get().await.expect("mapping client");
+            let tx = client.transaction().await.expect("mapping tx");
+            tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+                .await
+                .expect("mapping GUC");
+            let mapped: Option<String> = tx
+                .query_opt(
+                    "SELECT tenant_id FROM stripe_customers WHERE stripe_customer_id = $1",
+                    &[&customer],
+                )
+                .await
+                .expect("mapping query")
+                .map(|r| r.get(0));
+            assert_eq!(
+                mapped.as_deref(),
+                Some(tenant.as_str()),
+                "the metadata-path mapping upsert must land"
+            );
+            tx.commit().await.expect("mapping commit");
+        }
+
+        // ── Cleanup: drop every handle, then the throwaway database, and
+        //    restore the shared cluster's role state ──
+        drop(state);
+        drop(app_pool);
+        drop(owner);
+        drop(schema_pool);
+        drop(pool);
+        admin
+            .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+            .await
+            .expect("drop throwaway database should succeed");
+        // The resolver role's grants died with the throwaway database and its
+        // oz_app membership is auto-revoked on drop — remove it so no
+        // residue lingers in the shared cluster. oz_app predates this test
+        // (it is the documented deployment role); restore it to the
+        // cutover's canonical NOLOGIN state.
+        admin
+            .batch_execute(
+                "DROP ROLE IF EXISTS oz_webhook_resolver;\n\
+                 ALTER ROLE oz_app NOLOGIN;",
+            )
+            .await
+            .expect("role cleanup should succeed");
     }
 }

@@ -15,12 +15,13 @@ use rand::Rng;
 use tokio::sync::{Mutex, RwLock, watch};
 
 use oz_core::db::Store;
+use oz_core::events::SettingsUpdated;
 use oz_core::settings::Settings;
 use oz_core::sync_client::SyncConfig;
 
-use crate::SyncError;
 use crate::queue::SyncQueue;
 use crate::transport::{PushOutcome, SyncTransport};
+use crate::{SyncError, import_snapshot};
 
 /// Base interval; actual per-cycle sleep is randomized 60–120s.
 const DEFAULT_SYNC_INTERVAL: Duration = Duration::from_secs(30);
@@ -64,6 +65,19 @@ pub struct DaemonStatus {
 /// temporary [`Store`] instances inside `spawn_blocking` closures.
 pub type DbConnection = Arc<Mutex<rusqlite::Connection>>;
 
+/// Callback invoked after the daemon applies a remote `settings.update`
+/// (SYNC-10) so the app can re-emit `SettingsUpdated` for UI reactivity.
+///
+/// The desktop client wires this to emit the `settings_updated` Tauri event
+/// (the same wire shape the frontend `SettingsContext` listens for).
+///
+/// **Contract:** the callback runs on the daemon's blocking apply thread
+/// WHILE the database connection lock is held, so it must NOT acquire the
+/// database lock itself (that would deadlock against the mutex it already
+/// owns). Keep it to side effects without DB access — a Tauri emit, a bus
+/// publish, a channel send.
+pub type SettingsChangedSink = Arc<dyn Fn(&SettingsUpdated) + Send + Sync>;
+
 /// A background task that periodically syncs the local offline queue with a
 /// remote server.
 ///
@@ -73,6 +87,7 @@ pub struct SyncDaemon {
     interval: Duration,
     status: Arc<RwLock<DaemonStatus>>,
     shutdown_tx: Arc<Mutex<Option<watch::Sender<bool>>>>,
+    settings_sink: SettingsChangedSink,
 }
 
 /// Read sync configuration and pending offline items from a database
@@ -90,6 +105,114 @@ pub(crate) fn read_config_and_pending(
     (config, pending)
 }
 
+/// ADR sync-auth-hardening P1: request a fresh token and persist it as the
+/// API key. Returns `true` when a new key was stored. Callers invoke this
+/// once after an `AuthExpired` and never loop on it.
+async fn refresh_persisted_api_key(db: &DbConnection, server_url: &str) -> bool {
+    // ADR sync-auth-hardening P3: prefer terminal client credentials when
+    // the device is paired; fall back to the admin key / open mint.
+    let (terminal_id, terminal_secret) = {
+        let db_clone = db.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_clone.blocking_lock();
+            let store = Store::new(&conn);
+            (
+                Settings::get_sync_terminal_id(store.conn()).unwrap_or(None),
+                Settings::get_sync_terminal_secret(store.conn()).unwrap_or(None),
+            )
+        })
+        .await
+        .unwrap_or((None, None))
+    };
+    let token = match (terminal_id, terminal_secret) {
+        (Some(id), Some(secret)) => {
+            oz_core::sync_client::request_token_client_credentials(server_url, &id, &secret).await
+        }
+        _ => {
+            oz_core::sync_client::request_token(
+                server_url,
+                oz_core::sync_client::admin_key_from_env().as_deref(),
+            )
+            .await
+        }
+    };
+    let Some(key) = token.token.filter(|_| token.ok) else {
+        tracing::warn!(
+            status = %token.status,
+            "sync token refresh failed — sync stays on the stored key"
+        );
+        return false;
+    };
+    let db_clone = db.clone();
+    tokio::task::spawn_blocking(move || {
+        let conn = db_clone.blocking_lock();
+        let store = Store::new(&conn);
+        match Settings::set_sync_api_key(store.conn(), &key) {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::error!(error = %e, "persisting refreshed sync API key failed");
+                false
+            }
+        }
+    })
+    .await
+    .unwrap_or(false)
+}
+
+/// Apply push outcomes to the local queue (blocking DB work, spawned off the
+/// async runtime). Returns an error message when the apply phase itself
+/// failed (spawn panic); per-item failures are logged, mirroring the original
+/// inline apply block exactly.
+async fn apply_push_results(
+    db: &DbConnection,
+    pending: Vec<oz_core::offline::OfflineQueueItem>,
+    results: Vec<PushOutcome>,
+) -> Option<String> {
+    let db_clone = db.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let conn = db_clone.blocking_lock();
+        let store = Store::new(&conn);
+        let queue = SyncQueue::new();
+        for (local, outcome) in pending.iter().zip(results.iter()) {
+            match outcome {
+                PushOutcome::Accepted => {
+                    if let Err(e) = store.mark_offline_synced(&local.id) {
+                        tracing::error!(
+                            item_id = %local.id,
+                            error = %e,
+                            "sync daemon: failed to mark item synced"
+                        );
+                    }
+                }
+                PushOutcome::Rejected { reason } => {
+                    if let Err(e) = store.mark_offline_failed(&local.id, reason) {
+                        tracing::error!(
+                            item_id = %local.id,
+                            error = %e,
+                            "sync daemon: failed to mark item failed"
+                        );
+                    }
+                }
+                PushOutcome::Conflict(server_item) => {
+                    if let Err(e) = queue.apply_push_conflict(&store, local, server_item) {
+                        tracing::error!(
+                            item_id = %local.id,
+                            error = %e,
+                            "sync daemon: failed to apply conflict resolution"
+                        );
+                    }
+                }
+            }
+        }
+    })
+    .await;
+
+    match outcome {
+        Ok(()) => None,
+        Err(e) => Some(format!("apply push phase: {e}")),
+    }
+}
+
 impl SyncDaemon {
     /// Create a new sync daemon.
     pub fn new() -> Self {
@@ -97,6 +220,7 @@ impl SyncDaemon {
             interval: DEFAULT_SYNC_INTERVAL,
             status: Arc::new(RwLock::new(DaemonStatus::default())),
             shutdown_tx: Arc::new(Mutex::new(None)),
+            settings_sink: Arc::new(|_: &SettingsUpdated| {}),
         }
     }
 
@@ -106,6 +230,7 @@ impl SyncDaemon {
             interval,
             status: Arc::new(RwLock::new(DaemonStatus::default())),
             shutdown_tx: Arc::new(Mutex::new(None)),
+            settings_sink: Arc::new(|_: &SettingsUpdated| {}),
         }
     }
 
@@ -121,6 +246,23 @@ impl SyncDaemon {
     ///
     /// If the daemon is already running, this is a no-op.
     pub async fn start(&self, db: DbConnection) {
+        self.start_inner(db, self.settings_sink.clone()).await;
+    }
+
+    /// Start the background sync daemon with a custom settings-change sink
+    /// (SYNC-10).
+    ///
+    /// The sink is invoked after each remote `settings.update` the pull
+    /// phase applies, carrying the changed key and its originating terminal
+    /// — the desktop client uses this to emit the `settings_updated` Tauri
+    /// event so the UI refetches a setting changed on another terminal.
+    pub async fn start_with_sink(&self, db: DbConnection, settings_sink: SettingsChangedSink) {
+        self.start_inner(db, settings_sink).await;
+    }
+
+    /// Shared start path used by [`SyncDaemon::start`] and
+    /// [`SyncDaemon::start_with_sink`].
+    async fn start_inner(&self, db: DbConnection, settings_sink: SettingsChangedSink) {
         if self.is_running().await {
             tracing::warn!("sync daemon is already running");
             return;
@@ -183,7 +325,7 @@ impl SyncDaemon {
 
                 tokio::select! {
                     _ = tokio::time::sleep(sleep_dur) => {
-                        Self::run_tick(&db, &daemon_status).await;
+                        Self::run_tick(&db, &daemon_status, &settings_sink).await;
 
                         // Track consecutive failures for backoff on the
                         // next cycle. Reset to 0 on success.
@@ -213,7 +355,15 @@ impl SyncDaemon {
     }
 
     /// Run a single sync tick: read → send → apply.
-    async fn run_tick(db: &DbConnection, daemon_status: &Arc<RwLock<DaemonStatus>>) {
+    ///
+    /// `settings_sink` is invoked after the pull phase applies a remote
+    /// `settings.update` (SYNC-10) so the change is reactive in this
+    /// terminal's UI even though it was made elsewhere.
+    async fn run_tick(
+        db: &DbConnection,
+        daemon_status: &Arc<RwLock<DaemonStatus>>,
+        settings_sink: &SettingsChangedSink,
+    ) {
         // Phase 1: Read config + pending items from DB (blocking)
         let db_clone = db.clone();
         let (config, pending, read_error) = match tokio::task::spawn_blocking(move || {
@@ -268,54 +418,9 @@ impl SyncDaemon {
                             // so a conflict is resolved by the shared ADR #21
                             // conflict-application service — the same strategy the
                             // immediate SyncEngine uses, never a blanket LWW.
-                            let db_clone = db.clone();
-                            let local_items = pending;
-                            let outcome = tokio::task::spawn_blocking(move || {
-                            let conn = db_clone.blocking_lock();
-                            let store = Store::new(&conn);
-                            let queue = SyncQueue::new();
-                            for (local, outcome) in local_items.iter().zip(results.iter()) {
-                                match outcome {
-                                    PushOutcome::Accepted => {
-                                        if let Err(e) = store.mark_offline_synced(&local.id) {
-                                            tracing::error!(
-                                                item_id = %local.id,
-                                                error = %e,
-                                                "sync daemon: failed to mark item synced"
-                                            );
-                                        }
-                                    }
-                                    PushOutcome::Rejected { reason } => {
-                                        if let Err(e) = store.mark_offline_failed(&local.id, reason)
-                                        {
-                                            tracing::error!(
-                                                item_id = %local.id,
-                                                error = %e,
-                                                "sync daemon: failed to mark item failed"
-                                            );
-                                        }
-                                    }
-                                    PushOutcome::Conflict(server_item) => {
-                                        // SYNC-02: shared ADR #21 conflict-application
-                                        // path — version LWW / sale status DAG / stock
-                                        // CRDT merge, identical to the SyncEngine.
-                                        if let Err(e) =
-                                            queue.apply_push_conflict(&store, local, server_item)
-                                        {
-                                            tracing::error!(
-                                                item_id = %local.id,
-                                                error = %e,
-                                                "sync daemon: failed to apply conflict resolution"
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        })
-                        .await;
-
-                            if let Err(e) = outcome {
-                                sync_error = Some(format!("apply push phase: {e}"));
+                            if let Some(apply_err) = apply_push_results(db, pending, results).await
+                            {
+                                sync_error = Some(apply_err);
                             }
                         }
                         Err(e) => {
@@ -333,7 +438,56 @@ impl SyncDaemon {
                                 .await;
                                 tracing::info!(new_url = %new_url, "server migrated — local config updated");
                             }
-                            sync_error = Some(e.to_string());
+                            // ADR sync-auth-hardening P1/P4: stale auth — refresh
+                            // the key once and retry the push batch exactly once.
+                            // An explicit `invalid_token` is a config problem and
+                            // must not be masked by a refresh.
+                            if let SyncError::AuthExpired = e {
+                                tracing::warn!(
+                                    "push rejected (401) — refreshing API key and retrying once"
+                                );
+                                if refresh_persisted_api_key(db, &cfg.server_url).await {
+                                    let (retry_cfg, _) = {
+                                        let db_clone = db.clone();
+                                        tokio::task::spawn_blocking(move || {
+                                            let conn = db_clone.blocking_lock();
+                                            read_config_and_pending(&conn)
+                                        })
+                                        .await
+                                        .unwrap_or((None, Vec::new()))
+                                    };
+                                    if let Some(retry_cfg) = retry_cfg
+                                        && let Ok(transport) = SyncTransport::try_new(
+                                            &retry_cfg.server_url,
+                                            retry_cfg.api_key.as_deref(),
+                                        )
+                                    {
+                                        match transport.push_items(&pending).await {
+                                            Ok(results) => {
+                                                pushed = results.len();
+                                                if let Some(apply_err) =
+                                                    apply_push_results(db, pending, results).await
+                                                {
+                                                    sync_error = Some(apply_err);
+                                                }
+                                            }
+                                            Err(retry_err) => {
+                                                sync_error = Some(retry_err.to_string());
+                                            }
+                                        }
+                                    } else {
+                                        sync_error = Some(
+                                            "push rejected (401) and refreshed key is not usable"
+                                                .into(),
+                                        );
+                                    }
+                                } else {
+                                    sync_error =
+                                        Some("push rejected (401) and token refresh failed".into());
+                                }
+                            } else if sync_error.is_none() {
+                                sync_error = Some(e.to_string());
+                            }
                         }
                     }
                 }
@@ -389,113 +543,178 @@ impl SyncDaemon {
                                 let items = pull_resp.items;
                                 let next_cursor = pull_resp.next_cursor;
                                 let prev_since = pull_since.clone();
+                                let prev_cursor = pull_cursor.clone();
+                                // SYNC-10: own the sink (an owned `Arc`) so the
+                                // `'static` spawn_blocking closure can call it
+                                // after each applied settings item.
+                                let settings_sink = settings_sink.clone();
                                 let outcome = tokio::task::spawn_blocking(move || {
-                                let conn = db_clone.blocking_lock();
-                                let store = Store::new(&conn);
-                                let queue = SyncQueue::new();
-                                let mut has_stock_movements = false;
-                                let mut all_applied = true;
-                                // SYNC-01: captured so anchor-persistence
-                                // failures surface in the daemon status
-                                // (returned from the closure below) instead of
-                                // being silently swallowed by tracing only.
-                                let mut anchor_error: Option<String> = None;
-                                for item in &items {
-                                    if item.action == "stock.movement" {
-                                        has_stock_movements = true;
+                                    let conn = db_clone.blocking_lock();
+                                    let store = Store::new(&conn);
+                                    let queue = SyncQueue::new();
+                                    let mut has_stock_movements = false;
+                                    let mut all_applied = true;
+                                    let mut quarantined_item = false;
+                                    let mut retryable_failure = false;
+                                    // SYNC-01: captured so anchor-persistence
+                                    // failures surface in the daemon status
+                                    // (returned from the closure below) instead of
+                                    // being silently swallowed by tracing only.
+                                    let mut anchor_error: Option<String> = None;
+                                    for item in &items {
+                                        if item.action == "stock.movement" {
+                                            has_stock_movements = true;
+                                        }
+                                        // SYNC-01: the domain mutation and its
+                                        // idempotency receipt commit together. A
+                                        // crash before commit rolls back both, so
+                                        // replay is safe rather than duplicating a
+                                        // committed stock mutation with a missing
+                                        // receipt.
+                                        match queue.apply_remote_atomic_full(&store, item) {
+                                            Ok(outcome) => {
+                                                // SYNC-10: a settings change
+                                                // applied from a remote
+                                                // terminal is re-emitted as
+                                                // `SettingsUpdated` so the UI
+                                                // refetches. The tx committed
+                                                // inside apply_remote_atomic_full
+                                                // before this runs.
+                                                if let Some((key, terminal_id)) =
+                                                    outcome.settings_change
+                                                {
+                                                    let event = SettingsUpdated {
+                                                        changed_keys: vec![key],
+                                                        terminal_id,
+                                                    };
+                                                    settings_sink(&event);
+                                                }
+                                                if !outcome.applied
+                                                    && store
+                                                        .is_remote_failure_dead_lettered(&item.id)
+                                                        .unwrap_or(false)
+                                                {
+                                                    quarantined_item = true;
+                                                    tracing::error!(
+                                                        item_id = %item.id,
+                                                        action = %item.action,
+                                                        "remote item remains quarantined; advancing page anchor"
+                                                    );
+                                                }
+                                            }
+                                            Err(e) => {
+                                                let dead_lettered = store
+                                                    .is_remote_failure_dead_lettered(&item.id)
+                                                    .unwrap_or(false);
+                                                if dead_lettered {
+                                                    quarantined_item = true;
+                                                    tracing::error!(
+                                                        item_id = %item.id,
+                                                        action = %item.action,
+                                                        error = %e,
+                                                        "remote item quarantined after repeated failures; advancing page anchor"
+                                                    );
+                                                } else {
+                                                    all_applied = false;
+                                                    retryable_failure = true;
+                                                    tracing::error!(
+                                                        item_id = %item.id,
+                                                        action = %item.action,
+                                                        error = %e,
+                                                        "failed to atomically apply remote item; retaining page anchor for retry"
+                                                    );
+                                                }
+                                            }
+                                        }
                                     }
-                                    // SYNC-01: idempotency ledger — skip any
-                                    // remote item already applied in a prior
-                                    // cycle (replay is harmless).
-                                    let already = store
-                                        .is_remote_item_applied(&item.id)
-                                        .unwrap_or(false);
-                                    if already {
-                                        continue;
+                                    // ADR #6: Rebuild the materialized stock_summary
+                                    // cache before advancing the pull anchor. If the
+                                    // rebuild fails, the old anchor is retained so a
+                                    // retry can restore the derived state as well.
+                                    let summary_rebuilt = if has_stock_movements {
+                                        match store.rebuild_stock_summary() {
+                                            Ok(_) => true,
+                                            Err(e) => {
+                                                tracing::error!(
+                                                    error = %e,
+                                                    "failed to rebuild stock summary after sync pull"
+                                                );
+                                                anchor_error = Some(format!(
+                                                    "rebuild stock summary after sync pull: {e}"
+                                                ));
+                                                false
+                                            }
+                                        }
+                                    } else {
+                                        true
+                                    };
+                                    // SYNC-01: advance the pull anchor ONLY after
+                                    // the whole page and its derived stock cache
+                                    // applied successfully. A crash mid-pull leaves
+                                    // the old anchor so the ledger absorbs replay.
+                                    if all_applied && !retryable_failure && summary_rebuilt {
+                                        // SYNC-09: re-read the DURABLE pull state
+                                        // before advancing. An operator rewind
+                                        // (`requeue_remote_failure` sets since = NULL
+                                        // to force a full re-pull) can land while this
+                                        // page was in flight; blindly writing new_since
+                                        // would clobber it and the requeued item would
+                                        // never be re-fetched. Skip the advance when
+                                        // the durable (since, cursor) no longer matches
+                                        // what this tick captured — a full-state
+                                        // comparison, not just the Some→None rewind
+                                        // signature, so a concurrent writer moving the
+                                        // anchor (forward or back) can never be
+                                        // overwritten with our now-stale value. The
+                                        // re-read and the write below share the same
+                                        // `blocking_lock()` hold, so no rewind can
+                                        // interleave between them.
+                                        let durable = store
+                                            .get_sync_pull_state()
+                                            .unwrap_or_default();
+                                        let rewound = durable.since.as_deref()
+                                            != prev_since.as_deref()
+                                            || durable.cursor.as_deref()
+                                                != prev_cursor.as_deref();
+                                        if rewound {
+                                            tracing::warn!(
+                                                "operator rewind detected mid-pull — retaining rewound anchor for full re-pull"
+                                            );
+                                        } else {
+                                            let new_since = items
+                                                .iter()
+                                                .map(|i| i.created_at.clone())
+                                                .max()
+                                                .or(prev_since);
+                                            if let Err(e) = store.set_sync_pull_state(
+                                                new_since.as_deref(),
+                                                next_cursor.as_deref(),
+                                            ) {
+                                                tracing::error!(
+                                                    error = %e,
+                                                    "failed to persist sync pull anchor"
+                                                );
+                                                anchor_error = Some(format!(
+                                                    "persist sync pull anchor: {e}"
+                                                ));
+                                            }
+                                        }
                                     }
-                                    // Apply the mutation, then record the
-                                    // ledger receipt. NOTE: we deliberately do
-                                    // NOT wrap these in a single outer
-                                    // transaction — `apply_remote`'s
-                                    // `adjust_stock` path opens its OWN
-                                    // `unchecked_transaction()` internally, so
-                                    // nesting would fail with a SQLite
-                                    // "cannot start a transaction within a
-                                    // transaction" error and roll the item
-                                    // back entirely (observed in the SYNC-01
-                                    // regression test). Instead:
-                                    //  1. If the apply FAILS, `all_applied`
-                                    //     goes false → anchor does not advance
-                                    //     → the item replays next cycle.
-                                    //  2. If the apply SUCCEEDS, the mutation
-                                    //     is committed. The receipt write is
-                                    //     best-effort: even if it fails, we
-                                    //     advance the anchor past the item,
-                                    //     because re-applying an already-
-                                    //     committed mutation is the worse
-                                    //     failure. A lost receipt only matters
-                                    //     if the server replays history after
-                                    //     an anchor reset — which the snapshot
-                                    //     import path handles separately.
-                                    if let Err(e) = queue.apply_remote(&store, item) {
-                                        all_applied = false;
-                                        tracing::error!(
-                                            item_id = %item.id,
-                                            action = %item.action,
-                                            error = %e,
-                                            "failed to apply remote item"
+                                    // Keep quarantine visible in daemon status even
+                                    // though the page is allowed to advance after
+                                    // the configured retry budget is exhausted.
+                                    if quarantined_item && anchor_error.is_none() {
+                                        anchor_error = Some(
+                                            "one or more remote items were dead-lettered"
+                                                .to_owned(),
                                         );
-                                    } else if let Err(e) =
-                                        store.mark_remote_item_applied(&item.id, &item.action)
-                                    {
-                                        tracing::warn!(
-                                            item_id = %item.id,
-                                            action = %item.action,
-                                            error = %e,
-                                            "failed to write ledger receipt (item still applied; anchor advances)"
-                                        );
                                     }
-                                }
-                                // SYNC-01: advance the pull anchor ONLY after
-                                // the whole page applied successfully. A crash
-                                // mid-pull leaves the old anchor so the ledger
-                                // absorbs the replay.
-                                if all_applied {
-                                    let new_since = items
-                                        .iter()
-                                        .map(|i| i.created_at.clone())
-                                        .max()
-                                        .or(prev_since);
-                                    if let Err(e) = store.set_sync_pull_state(
-                                        new_since.as_deref(),
-                                        next_cursor.as_deref(),
-                                    ) {
-                                        tracing::error!(
-                                            error = %e,
-                                            "failed to persist sync pull anchor"
-                                        );
-                                        anchor_error = Some(format!(
-                                            "persist sync pull anchor: {e}"
-                                        ));
-                                    }
-                                }
-                                // ADR #6: Rebuild the materialized stock_summary
-                                // cache after applying remote stock movements.
-                                if has_stock_movements && let Err(e) = store.rebuild_stock_summary()
-                                {
-                                    tracing::error!(
-                                        error = %e,
-                                        "failed to rebuild stock summary after sync pull"
-                                    );
-                                }
-                                // Return the anchor-persistence error (if any)
-                                // so the caller can surface it in the daemon
-                                // status — a lost anchor makes the NEXT cycle
-                                // re-pull the whole page, which is exactly the
-                                // corruption class SYNC-01 prevents.
-                                anchor_error
-                            })
-                            .await;
+                                    // Return the anchor-persistence/quarantine error
+                                    // so the caller surfaces the recovery action in
+                                    // daemon status and logs.
+                                    anchor_error
+                                })
+                                .await;
                                 // SYNC-01: propagate both spawn_blocking panics AND
                                 // anchor-persistence failures into sync_error so the
                                 // daemon status/backoff reflect them.
@@ -514,6 +733,66 @@ impl SyncDaemon {
                                 }
                             }
                         }
+                        Err(SyncError::AnchorExpired { oldest_available }) => {
+                            pulled = 0;
+                            tracing::warn!(
+                                oldest_available = ?oldest_available,
+                                "sync anchor expired — fetching snapshot to recover"
+                            );
+                            match transport.fetch_snapshot().await {
+                                Ok(snapshot) => {
+                                    let db_clone = db.clone();
+                                    let anchor = oldest_available.clone();
+                                    let recovery = tokio::task::spawn_blocking(move || {
+                                        let conn = db_clone.blocking_lock();
+                                        let store = Store::new(&conn);
+                                        let imported = import_snapshot(&store, &snapshot)?;
+                                        store.set_sync_pull_state(anchor.as_deref(), None)?;
+                                        Ok::<usize, SyncError>(imported)
+                                    })
+                                    .await;
+                                    match recovery {
+                                        Ok(Ok(imported)) => {
+                                            tracing::info!(
+                                                imported,
+                                                "snapshot imported after daemon anchor expiry"
+                                            );
+                                        }
+                                        Ok(Err(e)) => {
+                                            if sync_error.is_none() {
+                                                sync_error =
+                                                    Some(format!("snapshot recovery failed: {e}"));
+                                            }
+                                        }
+                                        Err(e) => {
+                                            if sync_error.is_none() {
+                                                sync_error = Some(format!(
+                                                    "snapshot recovery panicked: {e}"
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    if let SyncError::ServerMigrated { new_url } = &e {
+                                        let db = db.clone();
+                                        let url = new_url.clone();
+                                        let _ = tokio::task::spawn_blocking(move || {
+                                            let conn = db.blocking_lock();
+                                            let store = Store::new(&conn);
+                                            let _ =
+                                                Settings::set_sync_server_url(store.conn(), &url);
+                                        })
+                                        .await;
+                                        tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                                    }
+                                    if sync_error.is_none() {
+                                        sync_error =
+                                            Some(format!("snapshot recovery fetch failed: {e}"));
+                                    }
+                                }
+                            }
+                        }
                         Err(e) => {
                             pulled = 0;
                             // ADR #11: Handle server migration redirect.
@@ -528,7 +807,29 @@ impl SyncDaemon {
                                 .await;
                                 tracing::info!(new_url = %new_url, "server migrated — local config updated");
                             }
-                            if sync_error.is_none() {
+                            // ADR sync-auth-hardening P1: stale auth — refresh
+                            // the key once so the next cycle (60–120 s) pulls
+                            // with fresh credentials. No in-tick pull retry: the
+                            // pull apply block is anchor/quarantine-sensitive, so
+                            // a retry would duplicate ~150 lines of application
+                            // logic; recovery one cycle later is automatic.
+                            if let SyncError::AuthExpired = e {
+                                tracing::warn!(
+                                    "pull rejected (401) — refreshing API key for next cycle"
+                                );
+                                if sync_error.is_none() {
+                                    if refresh_persisted_api_key(db, &cfg.server_url).await {
+                                        sync_error = Some(
+                                            "pull rejected (401); key refreshed — will retry next cycle"
+                                                .into(),
+                                        );
+                                    } else {
+                                        sync_error = Some(
+                                            "pull rejected (401) and token refresh failed".into(),
+                                        );
+                                    }
+                                }
+                            } else if sync_error.is_none() {
                                 sync_error = Some(format!("pull phase: {e}"));
                             }
                         }
@@ -649,9 +950,16 @@ impl Default for SyncDaemon {
 mod tests {
     use super::*;
     use crate::transport::{PullResponse, PushOutcome, PushResponse};
-    use axum::{Json, Router, routing::post};
+    use axum::{
+        Json, Router,
+        extract::State,
+        http::StatusCode,
+        response::IntoResponse,
+        routing::{get, post},
+    };
     use oz_core::migrations;
     use oz_core::settings::Settings;
+    use tokio::sync::Notify;
 
     fn setup_db() -> DbConnection {
         Arc::new(Mutex::new(migrations::fresh_db()))
@@ -911,6 +1219,217 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
+    // ── TDD: daemon anchor-expiry recovery ─────────────────────────
+
+    async fn spawn_anchor_expired_daemon_server() -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let snapshot_hits = Arc::new(AtomicUsize::new(0));
+
+        async fn handle_pull(
+            State(_snapshot_hits): State<Arc<AtomicUsize>>,
+            Json(request): Json<crate::transport::PullRequest>,
+        ) -> impl IntoResponse {
+            const OLDEST_AVAILABLE: &str = "2026-02-01T00:00:00.000Z";
+            if request.since.as_deref() == Some("2025-01-01T00:00:00.000Z") {
+                return (
+                    StatusCode::GONE,
+                    Json(serde_json::json!({
+                        "error": "anchor_expired",
+                        "oldest_available": OLDEST_AVAILABLE,
+                    })),
+                )
+                    .into_response();
+            }
+            Json(PullResponse {
+                items: vec![],
+                next_cursor: None,
+            })
+            .into_response()
+        }
+
+        async fn handle_snapshot(
+            State(snapshot_hits): State<Arc<AtomicUsize>>,
+        ) -> Json<crate::transport::SyncSnapshotResponse> {
+            snapshot_hits.fetch_add(1, Ordering::SeqCst);
+            Json(crate::transport::SyncSnapshotResponse {
+                version: 1,
+                products: vec![],
+                tax_rates: vec![],
+                users: vec![],
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/pull", post(handle_pull))
+            .route("/api/sync/snapshot", get(handle_snapshot))
+            .with_state(snapshot_hits.clone());
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), snapshot_hits)
+    }
+
+    /// A stale daemon anchor must recover through the snapshot endpoint and
+    /// advance to the server's oldest retained row. Without this path the
+    /// daemon logs `AnchorExpired` forever and never converges.
+    #[tokio::test]
+    async fn daemon_recovers_expired_anchor_with_snapshot() {
+        use std::sync::atomic::Ordering;
+
+        let (server_url, snapshot_hits) = spawn_anchor_expired_daemon_server().await;
+        let db = setup_db();
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            store
+                .set_sync_pull_state(Some("2025-01-01T00:00:00.000Z"), None)
+                .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
+
+        assert_eq!(snapshot_hits.load(Ordering::SeqCst), 1);
+        let state = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                Store::new(&conn).get_sync_pull_state().unwrap()
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(state.since.as_deref(), Some("2026-02-01T00:00:00.000Z"));
+        assert!(state.cursor.is_none());
+        assert!(status.read().await.last_error.is_none());
+    }
+
+    // ── ADR sync-plan-gating: PlanRequired is terminal ─────────────
+
+    /// Spawn a mock sync server whose push endpoint ALWAYS returns
+    /// `403 {"error":"plan_required"}` and counts how many times it was
+    /// hit. The daemon must treat this as terminal: surface the error,
+    /// keep queued items `pending` (no quarantine), and NOT retry within
+    /// the tick (the refresh path is auth-only).
+    async fn spawn_plan_required_mock_sync_server() -> (String, Arc<std::sync::atomic::AtomicUsize>)
+    {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let hits_for_server = hits.clone();
+
+        async fn handle_push(
+            State(hits): State<Arc<AtomicUsize>>,
+            Json(_items): Json<Vec<serde_json::Value>>,
+        ) -> impl IntoResponse {
+            hits.fetch_add(1, Ordering::SeqCst);
+            (
+                StatusCode::FORBIDDEN,
+                axum::Json(serde_json::json!({"error": "plan_required"})),
+            )
+        }
+        async fn handle_pull(
+            State(hits): State<Arc<AtomicUsize>>,
+            Json(_req): Json<serde_json::Value>,
+        ) -> impl IntoResponse {
+            hits.fetch_add(1, Ordering::SeqCst);
+            (
+                StatusCode::FORBIDDEN,
+                axum::Json(serde_json::json!({"error": "plan_required"})),
+            )
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull))
+            .with_state(hits_for_server);
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), hits)
+    }
+
+    /// A free tenant's push must surface `plan_required`, keep the queued
+    /// item `pending` (never quarantined), and hit the server exactly once
+    /// per endpoint per tick — no refresh-driven retry loop.
+    #[tokio::test]
+    async fn daemon_surfaces_plan_required_without_retry_or_quarantine() {
+        let (server_url, hits) = spawn_plan_required_mock_sync_server().await;
+        let db = setup_db();
+
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            store
+                .enqueue_offline("complete_sale", r#"{"id":"plan-gate-1"}"#)
+                .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
+
+        // The error surfaced with the plan message.
+        {
+            let status_guard = status.read().await;
+            let err = status_guard
+                .last_error
+                .as_deref()
+                .expect("run_tick must surface the plan_required error");
+            assert!(
+                err.contains("paid plan") || err.contains("plan"),
+                "last_error should mention the plan gate, got: {err}"
+            );
+        }
+
+        // The item stays pending — no quarantine, no mark_all_failed.
+        let (_, pending) = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                read_config_and_pending(&conn)
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            pending.len(),
+            1,
+            "a plan-gated push must keep the item pending (never quarantined)"
+        );
+        assert_eq!(
+            pending[0].action, "complete_sale",
+            "the queued item must be untouched"
+        );
+
+        // Each endpoint hit exactly once — no refresh-driven retry.
+        assert_eq!(
+            hits.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "push + pull should each be attempted exactly once (no retry loop)"
+        );
+    }
+
     // ── TDD Bug #1: spawn_blocking panic is not silently swallowed ─
 
     /// Verify that `read_config_and_pending` propagates errors from a
@@ -1011,7 +1530,7 @@ mod tests {
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
 
         // Tick 1: pulls + applies the remote +10 (50 → 60), records ledger.
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
         let after_tick_1 = tokio::task::spawn_blocking({
             let db = db.clone();
             move || {
@@ -1026,7 +1545,7 @@ mod tests {
 
         // Tick 2: the server replays the SAME item. The idempotency ledger
         // must skip it — stock stays 60, not 70.
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
         let after_tick_2 = tokio::task::spawn_blocking({
             let db = db.clone();
             move || {
@@ -1060,6 +1579,335 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(ledger_rows, 1, "ledger must hold one receipt for the item");
+    }
+
+    /// Spawn a mock pull server that continually returns a malformed remote
+    /// sale. It is used to verify that transient failures retain the anchor
+    /// until the retry budget is exhausted, then quarantine the item.
+    async fn spawn_poison_remote_mock_sync_server() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "complete_sale",
+                r#"{"line_items":[{"sku":"MISSING","qty":1}]}"#,
+            );
+            item.id = "remote-poison-1".into();
+            item.created_at = "2026-01-03T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-08 regression: a page containing a quarantined item and a fresh
+    /// retryable item must still retain its anchor for the retryable item.
+    #[tokio::test]
+    async fn daemon_does_not_skip_retryable_item_beside_dead_letter() {
+        let server_url = spawn_poison_remote_mock_server_with_two_items().await;
+        let db = setup_db();
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            conn.execute(
+                "INSERT INTO sync_remote_failures
+                    (item_id, action, payload, attempts, last_error, dead_lettered)
+                 VALUES ('remote-poison-dead', 'complete_sale', '{}', 3, 'permanent', 1)",
+                [],
+            )
+            .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
+
+        let db_check = db.clone();
+        let (anchor, retry_attempts) = tokio::task::spawn_blocking(move || {
+            let conn = db_check.blocking_lock();
+            let store = Store::new(&conn);
+            (
+                store.get_sync_pull_state().unwrap(),
+                conn.query_row(
+                    "SELECT attempts FROM sync_remote_failures WHERE item_id = 'remote-poison-retry'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            )
+        })
+        .await
+        .unwrap();
+
+        assert!(
+            anchor.since.is_none(),
+            "retryable item must retain the anchor"
+        );
+        assert_eq!(retry_attempts, 1);
+    }
+
+    /// Spawn a slow mock sync server whose pull handler BLOCKS on a
+    /// [`tokio::sync::Notify`] until the test releases it, then returns one
+    /// remote `stock.adjusted` item.
+    ///
+    /// The "pull arrived" notify fires as soon as the daemon's pull request
+    /// reaches the handler — by then the daemon has already captured the
+    /// durable anchor, so the test has a deterministic window to rewind it
+    /// mid-pull (the race this regression pins).
+    async fn spawn_slow_mock_sync_server() -> (String, Arc<Notify>, Arc<Notify>) {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let arrived = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(
+            State((arrived, release)): State<(Arc<Notify>, Arc<Notify>)>,
+            Json(_req): Json<serde_json::Value>,
+        ) -> Json<PullResponse> {
+            // Signal that the daemon's pull is in flight (anchor captured),
+            // then block until the test rewinds the anchor and releases us.
+            arrived.notify_one();
+            release.notified().await;
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "stock.adjusted",
+                r#"{"sku":"COFFEE","delta":10}"#,
+            );
+            item.id = "remote-rewind-race-1".into();
+            item.created_at = "2026-01-02T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull))
+            .with_state((arrived.clone(), release.clone()));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), arrived, release)
+    }
+
+    /// SYNC-09 regression: an operator rewind (`requeue_remote_failure`
+    /// sets `sync_pull_state.since = NULL`) landing while a pull page is in
+    /// flight must SURVIVE the daemon's apply phase. Previously the apply
+    /// closure wrote its computed `new_since` blindly, clobbering the
+    /// rewind — the next cycle then pulled from the advanced anchor and
+    /// never re-fetched the requeued dead-lettered item.
+    #[tokio::test]
+    async fn daemon_pull_does_not_clobber_operator_rewind() {
+        let (server_url, pull_arrived, release_pull) = spawn_slow_mock_sync_server().await;
+        let db = setup_db();
+
+        // Seed a product + inventory (so the remote adjustment applies
+        // cleanly), configure sync, and pre-set a DURABLE anchor so the
+        // daemon captures `Some(since)` at tick start.
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            conn.execute_batch(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
+                 VALUES ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+                 INSERT INTO inventory (product_id, qty, updated_at)
+                 VALUES ('prod-coffee', 50, '2026-01-01T00:00:00.000Z');",
+            )
+            .unwrap();
+            store
+                .set_sync_pull_state(Some("2026-01-01T00:00:00.000Z"), None)
+                .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        // Run the tick in the background so the pull is genuinely in flight
+        // when we rewind (the race is between the anchor capture and the
+        // apply-phase write).
+        let tick = {
+            let db = db.clone();
+            let status = status.clone();
+            tokio::spawn(async move {
+                SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
+            })
+        };
+
+        // Wait until the daemon's pull request reached the server — the
+        // anchor is captured by now — then rewind it exactly as an operator
+        // requeue would. Timeout so a daemon regression that never reaches
+        // the pull phase FAILS this test instead of hanging the suite.
+        tokio::time::timeout(Duration::from_secs(10), pull_arrived.notified())
+            .await
+            .expect("daemon never reached the pull phase");
+        let db_rewind = db.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_rewind.blocking_lock();
+            let store = Store::new(&conn);
+            store.set_sync_pull_state(None, None).unwrap();
+        })
+        .await
+        .unwrap();
+        release_pull.notify_one();
+
+        tick.await.unwrap();
+
+        // The page still applied (stock 50 → 60) — only the anchor advance
+        // must be skipped so the rewind survives for a full re-pull.
+        let (anchor, stock) = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                let store = Store::new(&conn);
+                (
+                    store.get_sync_pull_state().unwrap(),
+                    store.get_stock("prod-coffee").unwrap(),
+                )
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(stock, 60, "pull page must still apply despite the rewind");
+        assert!(
+            anchor.since.is_none(),
+            "operator rewind must survive the apply phase (anchor.since = {:?})",
+            anchor.since
+        );
+        assert!(
+            anchor.cursor.is_none(),
+            "rewound cursor must survive the apply phase (cursor = {:?})",
+            anchor.cursor
+        );
+    }
+
+    /// Spawn a mock pull server returning one already-quarantined item and
+    /// one fresh poison item. This pins page-level anchor ordering.
+    async fn spawn_poison_remote_mock_server_with_two_items() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut dead = oz_core::offline::OfflineQueueItem::new(
+                "complete_sale",
+                r#"{"line_items":[{"sku":"MISSING-DEAD","qty":1}]}"#,
+            );
+            dead.id = "remote-poison-dead".into();
+            dead.created_at = "2026-01-03T00:00:00.000Z".into();
+            let mut retry = oz_core::offline::OfflineQueueItem::new(
+                "complete_sale",
+                r#"{"line_items":[{"sku":"MISSING-RETRY","qty":1}]}"#,
+            );
+            retry.id = "remote-poison-retry".into();
+            retry.created_at = "2026-01-03T00:00:01.000Z".into();
+            Json(PullResponse {
+                items: vec![dead, retry],
+                next_cursor: None,
+            })
+        }
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-08 regression: a failing remote item retains the previous anchor
+    /// while it is retryable, then becomes a visible dead letter and allows
+    /// the page anchor to advance after the third failed attempt.
+    #[tokio::test]
+    async fn daemon_retains_anchor_until_remote_item_is_dead_lettered() {
+        let server_url = spawn_poison_remote_mock_sync_server().await;
+        let db = setup_db();
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        for attempt in 1..=3 {
+            SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
+            let db_check = db.clone();
+            let (anchor, dead_lettered, failures) = tokio::task::spawn_blocking(move || {
+                let conn = db_check.blocking_lock();
+                let store = Store::new(&conn);
+                (
+                    store.get_sync_pull_state().unwrap(),
+                    store.is_remote_failure_dead_lettered("remote-poison-1").unwrap(),
+                    conn.query_row(
+                        "SELECT attempts FROM sync_remote_failures WHERE item_id = 'remote-poison-1'",
+                        [],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .unwrap(),
+                )
+            })
+            .await
+            .unwrap();
+
+            if attempt < 3 {
+                assert!(
+                    anchor.since.is_none(),
+                    "retryable failure must retain anchor"
+                );
+                assert!(!dead_lettered);
+                assert_eq!(failures, attempt);
+            } else {
+                assert!(anchor.since.is_some(), "dead letter may advance anchor");
+                assert!(dead_lettered);
+                assert_eq!(failures, 3);
+            }
+        }
+
+        assert!(
+            status.read().await.last_error.is_some(),
+            "dead-lettering must remain visible in daemon status"
+        );
     }
 
     /// Spawn a mock sync server whose push endpoint ALWAYS returns a
@@ -1127,7 +1975,7 @@ mod tests {
         .unwrap();
 
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
 
         let db_check = db.clone();
         let (all, pending) = tokio::task::spawn_blocking(move || {
@@ -1239,7 +2087,7 @@ mod tests {
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
         // One tick: push → conflict → CRDT merge resolved locally; pull →
         // merged winner applied by apply_remote. Both deltas must land.
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
 
         let db_check = db.clone();
         let (stock, all) = tokio::task::spawn_blocking(move || {
@@ -1283,12 +2131,111 @@ mod tests {
         let db = setup_db();
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
 
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
 
         let s = status.read().await;
         assert!(s.last_sync_at.is_some(), "status should be updated");
         assert!(s.last_error.is_none(), "no error expected for empty config");
         assert_eq!(s.last_pushed, 0);
         assert_eq!(s.last_pulled, 0);
+    }
+
+    /// A settings sink that records nothing — for run_tick call sites that
+    /// only care about the sync pipeline, not settings reactivity.
+    fn noop_settings_sink() -> SettingsChangedSink {
+        Arc::new(|_: &SettingsUpdated| {})
+    }
+
+    /// Spawn a mock pull server returning one remote `settings.update` item
+    /// (fixed id + timestamp so the SYNC-01 ledger absorbs replays).
+    async fn spawn_settings_mock_sync_server() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "settings.update",
+                r#"{"key":"store.name","value":"Remote Acme","terminal_id":"term-remote","version":3}"#,
+            );
+            item.id = "remote-setting-sync-1".into();
+            item.created_at = "2026-01-02T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-10: when the pull applies a remote `settings.update`, the
+    /// daemon must invoke its settings sink with the changed key so the app
+    /// can re-emit `SettingsUpdated` — and the value row must actually land.
+    #[tokio::test]
+    async fn daemon_publishes_settings_updated_for_remote_settings_change() {
+        let server_url = spawn_settings_mock_sync_server().await;
+        let db = setup_db();
+
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+        })
+        .await
+        .unwrap();
+
+        let recorded: Arc<std::sync::Mutex<Vec<(String, String)>>> =
+            Arc::new(std::sync::Mutex::new(vec![]));
+        let sink: SettingsChangedSink = Arc::new({
+            let recorded = recorded.clone();
+            move |event: &SettingsUpdated| {
+                for key in &event.changed_keys {
+                    recorded
+                        .lock()
+                        .unwrap()
+                        .push((key.clone(), event.terminal_id.clone()));
+                }
+            }
+        });
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        SyncDaemon::run_tick(&db, &status, &sink).await;
+
+        assert_eq!(
+            *recorded.lock().unwrap(),
+            vec![("store.name".to_string(), "term-remote".to_string())],
+            "the daemon must publish the remote settings change via the sink"
+        );
+
+        let value = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                Settings::get(&conn, "store.name").unwrap()
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            value.as_deref(),
+            Some("Remote Acme"),
+            "the settings row must be applied from the pull"
+        );
     }
 }

@@ -1,5 +1,6 @@
 //! Terminal Repository — database persistence layer for POS terminals.
 
+use crate::error::TerminalError;
 use crate::models::Terminal;
 use rusqlite::{Connection, params};
 
@@ -15,7 +16,7 @@ impl<'a> TerminalRepository<'a> {
     }
 
     /// Retrieve a terminal by ID.
-    pub fn get_terminal(&self, id: &str) -> Result<Option<Terminal>, anyhow::Error> {
+    pub fn get_terminal(&self, id: &str) -> Result<Option<Terminal>, TerminalError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, device_id, terminal_secret, is_active, last_seen_at, metadata, created_at, updated_at
              FROM terminals WHERE id = ?1",

@@ -2,7 +2,6 @@
 
 bundles-title = Product Bundles
 bundles-add = Add Bundle
-bundles-loading = Loading bundles…
 bundles-no-bundles = No bundles yet.
 bundles-name = Name
 bundles-sku = Bundle SKU
@@ -30,12 +29,6 @@ bundles-edit-aria =
     .aria-label = Edit { $name }
 bundles-delete-aria =
     .aria-label = Delete { $name }
-bundles-modal-aria = { $mode ->
-    [add] Add bundle
-   *[edit] Edit bundle
-}
-bundles-close-aria =
-    .aria-label = Close
 bundles-sku-placeholder =
     .placeholder = e.g. GIFT-BOX
 bundles-name-placeholder =
@@ -55,3 +48,7 @@ bundles-item-price-field =
     .aria-label = Item { $number } unit price override
 bundles-item-remove-aria =
     .aria-label = Remove item { $number }
+bundles-error-invalid-price = Bundle price must be a whole, non-negative number
+bundles-error-invalid-item = Item quantities and prices must be whole numbers
+bundles-error-save = Failed to save bundle
+bundles-error-delete = Failed to delete bundle

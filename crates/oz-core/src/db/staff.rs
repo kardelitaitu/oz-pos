@@ -30,21 +30,34 @@ pub struct LoginLimits {
 // ── Role CRUD ───────────────────────────────────────────────────
 
 impl Store<'_> {
-    /// Seed any built-in roles that do not yet exist in the database.
+    /// Seed built-in roles from their presets.
     ///
-    /// Idempotent — uses `INSERT OR IGNORE` so roles that already exist
-    /// (by their fixed id) are skipped. Safe to call on every startup
-    /// or during the setup wizard.
+    /// Idempotent and safe to call on every startup or during the setup
+    /// wizard. Uses an upsert on the fixed preset id, so roles that already
+    /// exist are re-synced to the preset (name, description, permissions) —
+    /// existing databases converge on the current preset model instead of
+    /// keeping stale grants.
     ///
-    /// Returns the number of roles that were newly inserted.
+    /// Returns the number of roles that were created or re-synced.
     pub fn seed_default_roles(&self) -> Result<usize, CoreError> {
         let mut count = 0usize;
         for preset in ROLE_PRESETS {
             let role = preset.into_role();
             let result = self.conn.execute(
-                "INSERT OR IGNORE INTO roles (id, name, description, permissions, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![role.id, role.name, role.description, role.permissions, role.created_at, role.updated_at],
+                "INSERT INTO roles (id, name, description, permissions, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(id) DO UPDATE SET
+                     name = excluded.name,
+                     description = excluded.description,
+                     permissions = excluded.permissions",
+                params![
+                    role.id,
+                    role.name,
+                    role.description,
+                    role.permissions,
+                    role.created_at,
+                    role.updated_at
+                ],
             );
             count += result?;
         }
@@ -99,6 +112,26 @@ impl Store<'_> {
         description: &str,
         permissions: &str,
     ) -> Result<Role, CoreError> {
+        // Every grant must be registered, and sensitive keys must never ride
+        // a family wildcard (ADR #35 D3 / spec 0046). The global `*` wildcard
+        // is reserved for the Owner seed, which uses a direct insert and is
+        // never validated here.
+        let grants: Vec<String> =
+            serde_json::from_str(permissions).map_err(|e| CoreError::Validation {
+                field: "permissions",
+                message: format!("permissions must be a JSON array of strings: {e}"),
+            })?;
+        platform_core::permission_registry::validate_grants(&grants, false).map_err(|errors| {
+            let message = errors
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("; ");
+            CoreError::Validation {
+                field: "permissions",
+                message,
+            }
+        })?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let result = self.conn.execute(
             "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -176,6 +209,85 @@ impl Store<'_> {
         }
     }
 
+    /// The centralized fail-closed authorization gate (ADR #35 D3 / spec
+    /// 0047): resolve `user_id` to their role and verify the role grants
+    /// `required`.
+    ///
+    /// Denies by default: an unregistered permission key is rejected even
+    /// for the `"*"` Owner grant, and an unresolvable user or role denies
+    /// rather than erroring internally. The role resolves through the
+    /// user's assignment when one exists (0048); legacy users without an
+    /// assignment fall back to `users.role_id`.
+    pub fn require_permission(&self, user_id: &str, required: &str) -> Result<(), CoreError> {
+        let assignment = self.assignment_for_user(user_id)?;
+        self.authorize_with(user_id, required, &assignment)
+    }
+
+    /// The scope-aware gate (ADR #35 D5 / spec 0048): same as
+    /// [`require_permission`], plus the assignment's branch/workspace scope
+    /// is evaluated for scoped assignments. Global assignments and legacy
+    /// users without an assignment are not scope-restricted.
+    pub fn require_permission_scoped(
+        &self,
+        user_id: &str,
+        required: &str,
+        branch: Option<&str>,
+        workspace: Option<&str>,
+    ) -> Result<(), CoreError> {
+        let assignment = self.assignment_for_user(user_id)?;
+        // Scoped assignments deny when the requested branch/workspace is out
+        // of scope; global assignments and legacy users (no assignment) are
+        // not scope-restricted (ADR #35 D5).
+        if assignment
+            .as_ref()
+            .is_some_and(|a| !a.matches_scope(branch, workspace))
+        {
+            return Err(CoreError::PermissionDenied(format!(
+                "branch/workspace out of scope for user {user_id}"
+            )));
+        }
+        self.authorize_with(user_id, required, &assignment)
+    }
+
+    /// Shared gate body: registry deny-by-default, user resolution + active
+    /// check, role resolution (assignment first, `users.role_id` fallback),
+    /// then `role.authorize`.
+    fn authorize_with(
+        &self,
+        user_id: &str,
+        required: &str,
+        assignment: &Option<crate::db::assignments::Assignment>,
+    ) -> Result<(), CoreError> {
+        // Deny by default: an unregistered permission key is rejected even
+        // for the global `"*"` Owner grant — the registry is the only
+        // vocabulary authorization speaks (ADR #35 D3 / spec 0046 + 0047).
+        if !platform_core::permission_registry::is_registered(required) {
+            return Err(CoreError::PermissionDenied(format!(
+                "unknown permission: {required}"
+            )));
+        }
+        let user = self
+            .get_user(user_id)?
+            .ok_or_else(|| CoreError::PermissionDenied("user not found".into()))?;
+        if !user.is_active {
+            return Err(CoreError::PermissionDenied("user is inactive".into()));
+        }
+        // The role resolves through the assignment when one exists; legacy
+        // users without an assignment fall back to `users.role_id`.
+        let role_id = assignment
+            .as_ref()
+            .map(|a| a.role_id.as_str())
+            .unwrap_or(user.role_id.as_str());
+        // Fail closed: an unresolvable role is a denial, never an internal
+        // error (a role row deleted out from under a user must not surface
+        // as a crash-adjacent 500 to the frontend).
+        let role = self
+            .get_role(role_id)?
+            .ok_or_else(|| CoreError::PermissionDenied(format!("role {role_id} not found")))?;
+        role.authorize(required)
+            .map_err(|e| CoreError::PermissionDenied(e.to_string()))
+    }
+
     /// Look up a user by username.
     pub fn get_user_by_username(&self, username: &str) -> Result<Option<User>, CoreError> {
         let mut stmt = self.conn.prepare(
@@ -218,10 +330,28 @@ impl Store<'_> {
                 message: "username must not be empty".into(),
             });
         }
+        if username.len() > 100 {
+            return Err(CoreError::Validation {
+                field: "username",
+                message: format!(
+                    "username must not exceed 100 characters, got {}",
+                    username.len()
+                ),
+            });
+        }
         if display_name.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "display_name",
                 message: "display name must not be empty".into(),
+            });
+        }
+        if display_name.len() > 255 {
+            return Err(CoreError::Validation {
+                field: "display_name",
+                message: format!(
+                    "display name must not exceed 255 characters, got {}",
+                    display_name.len()
+                ),
             });
         }
 
@@ -245,6 +375,14 @@ impl Store<'_> {
             Err(e) => return Err(e.into()),
             Ok(_) => {}
         }
+
+        // Every user gets their single effective assignment (ADR #35 D5 /
+        // spec 0048): a default global-mode assignment mirroring the role.
+        self.conn.execute(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
+             VALUES (?1, ?2, 'global', 'all', 'all')",
+            params![id, role_id],
+        )?;
 
         Ok(User {
             id,
@@ -288,6 +426,14 @@ impl Store<'_> {
                 id: id.to_owned(),
             });
         }
+        // Keep the assignment role in sync — the scope columns and scope rows
+        // of an existing assignment are preserved (only the role follows).
+        self.conn.execute(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope, updated_at)
+             VALUES (?1, ?2, 'global', 'all', 'all', ?3)
+             ON CONFLICT(user_id) DO UPDATE SET role_id = excluded.role_id, updated_at = excluded.updated_at",
+            params![id, role_id, now],
+        )?;
         self.get_user(id)?.ok_or_else(|| CoreError::NotFound {
             entity: "user",
             id: id.to_owned(),
@@ -511,12 +657,398 @@ mod tests {
 
     fn seed_users(conn: &Connection) {
         store(conn).seed_default_roles().unwrap();
+        // role-lite: a narrow custom role (sales:view only) standing in for
+        // the retired cashier role � the gate tests below pin its LIMITED
+        // grants (view yes, void no), which role-staff no longer provides.
         conn.execute_batch(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
-                ('user-1', 'alice',   'hash_alice',   'Alice',   'role-cashier', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-                ('user-2', 'bob',     'hash_bob',     'Bob',     'role-owner',   1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-                ('user-3', 'carol',   'hash_carol',   'Carol',   'role-cashier', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited sales view', '[\"sales:view\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                ('user-1', 'alice',   'hash_alice',   'Alice',   'role-lite',   1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('user-2', 'bob',     'hash_bob',     'Bob',     'role-owner',  1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('user-3', 'carol',   'hash_carol',   'Carol',   'role-lite',   0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
         ).unwrap();
+    }
+
+    #[test]
+    fn seed_default_roles_resyncs_stale_builtin_role_permissions() {
+        let conn = fresh();
+        // Simulate a pre-existing database whose role-staff row still carries
+        // the old, too-permissive grant list (folded cashier/kitchen era).
+        conn.execute_batch(
+            r#"INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-staff', 'Staff', 'stale', '["sales:process","sales:void","products:create"]',
+                 '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"#,
+        )
+        .unwrap();
+        store(&conn).seed_default_roles().unwrap();
+        let role = store(&conn)
+            .get_role("role-staff")
+            .unwrap()
+            .expect("role-staff row must exist");
+        // Converged to the preset: checkout-only, stale grants gone.
+        assert!(!role.permissions.contains("sales:void"));
+        assert!(!role.permissions.contains("products:create"));
+        assert!(role.permissions.contains("sales:process"));
+        assert!(role.permissions.contains("payments:cash"));
+        // The gate enforces the converged grants.
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-s', 'sam', 'h', 'Sam', 'role-staff', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        assert!(
+            store(&conn)
+                .require_permission("user-s", "sales:process")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-s", "sales:void")
+                .is_err()
+        );
+    }
+
+    // ── Authorization gate (0047) ──────────────────────────────────
+
+    #[test]
+    fn gate_denies_unregistered_permission_even_for_owner() {
+        let conn = fresh();
+        seed_users(&conn);
+        // bob is role-owner with the global `"*"` grant — a typo'd or
+        // future key must STILL deny: unregistered means deny-by-default.
+        let err = store(&conn)
+            .require_permission("user-2", "sales:typo")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_allows_registered_permission_for_owner() {
+        let conn = fresh();
+        seed_users(&conn);
+        // The global `*` grant covers every registered key.
+        assert!(
+            store(&conn)
+                .require_permission("user-2", "sales:void")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-2", "settings:edit")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-2", "kds:update")
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn gate_denies_unknown_user() {
+        let conn = fresh();
+        seed_users(&conn);
+        let err = store(&conn)
+            .require_permission("no-such-user", "sales:view")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_denies_inactive_user() {
+        let conn = fresh();
+        seed_users(&conn);
+        let err = store(&conn)
+            .require_permission("user-3", "sales:view")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_denies_user_with_unresolvable_role() {
+        let conn = fresh();
+        seed_roles(&conn);
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-ghost', 'ghost', 'h', 'Ghost', 'role-staff', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        // The role row disappears out from under the user. FK enforcement
+        // normally prevents this, but defense-in-depth demands the gate fail
+        // closed even when it happens (FKs off, partial migration, tampered
+        // DB) — so the test simulates it with FK enforcement off.
+        conn.execute_batch("PRAGMA foreign_keys = OFF; DELETE FROM roles WHERE id = 'role-staff';")
+            .unwrap();
+        // Fail-closed: an unresolvable role is a denial, not an internal error.
+        let err = store(&conn)
+            .require_permission("user-ghost", "sales:view")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_denies_permission_not_granted_to_role() {
+        let conn = fresh();
+        seed_users(&conn);
+        // alice is cashier: has sales:view but not sales:void.
+        assert!(
+            store(&conn)
+                .require_permission("user-1", "sales:view")
+                .is_ok()
+        );
+        let err = store(&conn)
+            .require_permission("user-1", "sales:void")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_resolves_wildcard_grants_via_registry() {
+        let conn = fresh();
+        seed_roles(&conn);
+        store(&conn)
+            .create_role("role-wild", "Wild", "tables wildcard", "[\"tables:*\"]")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-op', 'op', 'h', 'Op', 'role-wild', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        // tables:* has no sensitive keys, so the wildcard is a valid grant
+        // and the gate resolves every operational tables action through it.
+        assert!(
+            store(&conn)
+                .require_permission("user-op", "tables:assign")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-op", "tables:close")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-op", "sales:view")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn gate_resolves_sensitive_keys_only_by_explicit_grant() {
+        let conn = fresh();
+        seed_roles(&conn);
+        // Explicit sensitive grant passes; a role without it is denied.
+        store(&conn)
+            .create_role("role-v", "Void", "explicit void", "[\"sales:void\"]")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-v', 'v', 'h', 'V', 'role-v', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        assert!(
+            store(&conn)
+                .require_permission("user-v", "sales:void")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-v", "sales:refund")
+                .is_err()
+        );
+    }
+
+    // ── Assignment-aware gate (0048 cycle 2) ──────────────────────────
+
+    /// Seed a user whose legacy `role_id` and assignment role disagree, so
+    /// the tests prove the gate resolves through the ASSIGNMENT.
+    fn seed_assigned_user(conn: &rusqlite::Connection, user_id: &str, role_id: &str) {
+        seed_roles(conn);
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES (?1, ?2, 'h', ?3, ?4, 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            params![user_id, user_id, user_id, role_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
+             VALUES (?1, 'role-staff', 'global', 'all', 'all')",
+            params![user_id],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn gate_resolves_role_through_assignment_not_role_id() {
+        let conn = fresh();
+        // Legacy column says role-manager; the assignment says role-staff.
+        // role-manager grants settings:edit; role-staff does NOT — so the
+        // denial proves the gate authorized through the ASSIGNMENT.
+        seed_assigned_user(&conn, "user-a", "role-manager");
+        let store = store(&conn);
+        // Staff keeps checkout operations via the assignment.
+        assert!(store.require_permission("user-a", "sales:process").is_ok());
+        assert!(
+            store.require_permission("user-a", "sales:void").is_err(),
+            "assignment role (role-staff) is checkout-only — no sales:void"
+        );
+        assert!(
+            store.require_permission("user-a", "settings:edit").is_err(),
+            "assignment role (role-staff) must win over the legacy role_id (role-manager)"
+        );
+    }
+
+    #[test]
+    fn gate_falls_back_to_role_id_when_no_assignment() {
+        let conn = fresh();
+        seed_users(&conn);
+        // alice (cashier) has no assignment row — legacy fallback applies.
+        assert!(
+            store(&conn)
+                .require_permission("user-1", "sales:view")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-1", "sales:void")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn gate_scoped_denies_workspace_out_of_scope() {
+        let conn = fresh();
+        seed_roles(&conn);
+        // scoped to the kds workspace only.
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-k', 'k', 'h', 'K', 'role-staff', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
+                 VALUES ('user-k', 'role-staff', 'scoped', 'all', 'list');
+             INSERT INTO assignment_workspaces (assignment_user_id, workspace_key)
+                 VALUES ('user-k', 'kds');",
+        )
+        .unwrap();
+        let store = store(&conn);
+        // In the kds workspace the grant holds; anywhere else it denies.
+        assert!(
+            store
+                .require_permission_scoped("user-k", "sales:view", None, Some("kds"))
+                .is_ok()
+        );
+        assert!(
+            store
+                .require_permission_scoped("user-k", "sales:view", None, Some("retail-pos"))
+                .is_err()
+        );
+        assert!(
+            store
+                .require_permission_scoped("user-k", "sales:view", None, None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn gate_scoped_denies_branch_out_of_scope() {
+        let conn = fresh();
+        seed_roles(&conn);
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-b', 'b', 'h', 'B', 'role-staff', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
+                 VALUES ('user-b', 'role-staff', 'scoped', 'list', 'all');
+             INSERT INTO assignment_branches (assignment_user_id, branch_id)
+                 VALUES ('user-b', 'store-a');",
+        )
+        .unwrap();
+        let store = store(&conn);
+        assert!(
+            store
+                .require_permission_scoped("user-b", "sales:view", Some("store-a"), None)
+                .is_ok()
+        );
+        assert!(
+            store
+                .require_permission_scoped("user-b", "sales:view", Some("store-b"), None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn gate_scoped_global_assignment_ignores_scope() {
+        let conn = fresh();
+        seed_assigned_user(&conn, "user-g", "role-staff");
+        let store = store(&conn);
+        // Global assignment: scope context is ignored, like the plain gate.
+        assert!(
+            store
+                .require_permission_scoped("user-g", "sales:view", None, Some("retail-pos"))
+                .is_ok()
+        );
+        assert!(
+            store
+                .require_permission_scoped("user-g", "sales:view", Some("store-z"), None)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn gate_scoped_legacy_user_without_assignment_has_no_scope_restriction() {
+        let conn = fresh();
+        seed_users(&conn);
+        // user-1 (cashier) predates assignments — scope is not evaluated.
+        assert!(
+            store(&conn)
+                .require_permission_scoped("user-1", "sales:view", None, Some("retail-pos"))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn create_user_writes_default_global_assignment() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let store = store(&conn);
+        let user = store
+            .create_user("newbie", "hash", "Newbie", "role-staff")
+            .unwrap();
+        let a = store
+            .assignment_for_user(&user.id)
+            .unwrap()
+            .expect("create_user must write an assignment");
+        assert_eq!(a.role_id, "role-staff");
+        assert_eq!(a.scope_mode, crate::db::assignments::ScopeMode::Global);
+    }
+
+    #[test]
+    fn update_user_syncs_assignment_role() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let store = store(&conn);
+        let user = store
+            .create_user("switcher", "hash", "Switcher", "role-staff")
+            .unwrap();
+        store
+            .update_user(&user.id, "switcher", "Switcher", "role-manager", true)
+            .unwrap();
+        let a = store.assignment_for_user(&user.id).unwrap().unwrap();
+        assert_eq!(
+            a.role_id, "role-manager",
+            "assignment role must follow the update"
+        );
     }
 
     // ── Role CRUD ───────────────────────────────────────────────────
@@ -534,16 +1066,14 @@ mod tests {
         seed_roles(&conn);
         let roles = store(&conn).list_roles().unwrap();
         assert_eq!(roles.len(), 6);
-        // Ordered by name: cashier, custom, kitchen, manager, owner, staff.
-        assert_eq!(roles[0].name, "Cashier");
-        assert_eq!(roles[0].id, "role-cashier");
-        assert_eq!(roles[1].name, "Custom");
-        assert_eq!(roles[1].id, "role-custom");
-        assert_eq!(roles[1].permissions, "[]");
-        assert_eq!(roles[2].name, "Kitchen");
-        assert_eq!(roles[2].id, "role-kitchen");
-        assert!(roles[2].permissions.contains("kds:view"));
-        assert!(roles[2].permissions.contains("kds:update"));
+        // Ordered by name: admin, auditor, custom, manager, owner, staff.
+        assert_eq!(roles[0].name, "Admin");
+        assert_eq!(roles[0].id, "role-admin");
+        assert_eq!(roles[1].name, "Auditor");
+        assert_eq!(roles[1].id, "role-auditor");
+        assert_eq!(roles[2].name, "Custom");
+        assert_eq!(roles[2].id, "role-custom");
+        assert_eq!(roles[2].permissions, "[]");
         assert_eq!(roles[3].name, "Manager");
         assert_eq!(roles[3].id, "role-manager");
         assert_eq!(roles[4].name, "Owner");
@@ -597,6 +1127,47 @@ mod tests {
         assert!(matches!(err, CoreError::Conflict { entity, .. } if entity == "role"));
     }
 
+    #[test]
+    fn create_role_rejects_unregistered_permission() {
+        let conn = fresh();
+        let err = store(&conn)
+            .create_role("role-x", "X", "x", "[\"sales:typo\"]")
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "permissions"),
+            "unregistered key must fail validation: {err}"
+        );
+    }
+
+    #[test]
+    fn create_role_rejects_sensitive_family_wildcard() {
+        let conn = fresh();
+        let err = store(&conn)
+            .create_role("role-x", "X", "x", "[\"sales:*\"]")
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "permissions"),
+            "a wildcard covering sensitive keys must fail validation: {err}"
+        );
+    }
+
+    #[test]
+    fn create_role_accepts_valid_permission_set() {
+        let conn = fresh();
+        let r = store(&conn)
+            .create_role(
+                "role-x",
+                "X",
+                "x",
+                "[\"sales:process\", \"products:*\", \"sales:void\"]",
+            )
+            .unwrap();
+        assert_eq!(
+            r.permissions,
+            "[\"sales:process\", \"products:*\", \"sales:void\"]"
+        );
+    }
+
     // ── User CRUD ───────────────────────────────────────────────────
 
     #[test]
@@ -625,7 +1196,7 @@ mod tests {
         let u = store(&conn).get_user("user-1").unwrap().unwrap();
         assert_eq!(u.username, "alice");
         assert_eq!(u.display_name, "Alice");
-        assert_eq!(u.role_id, "role-cashier");
+        assert_eq!(u.role_id, "role-lite");
         assert!(u.is_active);
     }
 
@@ -666,11 +1237,11 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let u = store(&conn)
-            .create_user("diana", "hash_diana", "Diana", "role-cashier")
+            .create_user("diana", "hash_diana", "Diana", "role-staff")
             .unwrap();
         assert_eq!(u.username, "diana");
         assert_eq!(u.display_name, "Diana");
-        assert_eq!(u.role_id, "role-cashier");
+        assert_eq!(u.role_id, "role-staff");
         assert!(u.is_active);
         assert!(!u.id.is_empty());
     }
@@ -680,7 +1251,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let err = store(&conn)
-            .create_user("", "hash", "Diana", "role-cashier")
+            .create_user("", "hash", "Diana", "role-staff")
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "username"));
     }
@@ -690,7 +1261,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let err = store(&conn)
-            .create_user("diana", "hash", "   ", "role-cashier")
+            .create_user("diana", "hash", "   ", "role-staff")
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "display_name"));
     }
@@ -724,7 +1295,7 @@ mod tests {
         let conn = fresh();
         seed_users(&conn);
         let updated = store(&conn)
-            .update_user("user-1", "alice", "Alice", "role-cashier", false)
+            .update_user("user-1", "alice", "Alice", "role-staff", false)
             .unwrap();
         assert!(!updated.is_active);
     }
@@ -743,7 +1314,7 @@ mod tests {
         let conn = fresh();
         seed_users(&conn);
         let err = store(&conn)
-            .update_user("user-1", "alice", "", "role-cashier", true)
+            .update_user("user-1", "alice", "", "role-staff", true)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "display_name"));
     }
@@ -771,7 +1342,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let u = store(&conn)
-            .create_user("ALICE_UPPER", "hash", "Alice Upper", "role-cashier")
+            .create_user("ALICE_UPPER", "hash", "Alice Upper", "role-staff")
             .unwrap();
         assert_eq!(u.username, "alice_upper", "username should be lowercased");
     }
@@ -781,7 +1352,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let u = store(&conn)
-            .create_user("MiXeDcAsE", "hash", "Mixed", "role-cashier")
+            .create_user("MiXeDcAsE", "hash", "Mixed", "role-staff")
             .unwrap();
         assert_eq!(u.username, "mixedcase");
     }
@@ -791,7 +1362,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         store(&conn)
-            .create_user("CASE_USER", "hash", "Case User", "role-cashier")
+            .create_user("CASE_USER", "hash", "Case User", "role-staff")
             .unwrap();
         // Lookup with the normalized (lowercase) form should find it.
         let u = store(&conn)

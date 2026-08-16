@@ -50,3 +50,7 @@ kernel.start_all()?;
   "permissions": ["terminal:view", "terminal:edit"]
 }
 ```
+
+> last audited 09-08-26 by buffy
+> audit: Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)

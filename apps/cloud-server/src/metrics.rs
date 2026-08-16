@@ -40,12 +40,76 @@ pub static SYNC_ANCHOR_EXPIRED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
 
 /// Total number of offline_queue rows that failed to decode during a pull
 /// (SYNC-10). A non-zero count indicates schema drift between the server
-/// and the `row_to_item` converter — the client receives a 5xx rather than
+/// and the sync-store row decoder — the client receives a 5xx rather than
 /// a silently truncated page, so this is an operator-visible failure signal.
 pub static SYNC_PULL_ROW_DECODE_FAILURES_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
     let c = Counter::new(
         "sync_pull_row_decode_failures_total",
         "Total offline_queue rows that failed to decode during pull",
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    c
+});
+
+/// Total number of `offline_queue` rows deleted by the hourly prune loop
+/// (P-1 Retention). A rising count over time confirms old rows are being
+/// aged out; a flat count while rows age past the 90-day horizon signals
+/// the retention path is not covering them (round 121 made the prune
+/// status-agnostic, so this counter is the observability counterpart).
+pub static PRUNE_QUEUE_DELETED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new(
+        "prune_queue_deleted_total",
+        "Total offline_queue rows deleted by the hourly prune",
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    c
+});
+
+/// Total number of `sent_reports` claims deleted by the hourly prune loop.
+/// The dedup table grows one row per (tenant, period) forever; claims are
+/// only useful while a crash-recovery retry window could still collide, so
+/// they are aged out at the same 90-day horizon as `offline_queue`. A flat
+/// count while claims age past the horizon signals the retention path is
+/// not covering them.
+pub static PRUNE_SENT_REPORTS_DELETED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new(
+        "prune_sent_reports_deleted_total",
+        "Total sent_reports claims deleted by the hourly prune",
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    c
+});
+
+/// Total number of `429 Too Many Requests` responses returned by the rate
+/// limiters, labelled by limiter. Alerting keys off this: a sustained rate
+/// of 429s on `token` means the mint endpoint is being brute-forced; a
+/// sustained rate on `sync` means a tenant is misbehaving (or a buggy
+/// client is hammering push/pull).
+pub static RATE_LIMIT_429_TOTAL: LazyLock<CounterVec> = LazyLock::new(|| {
+    let c = CounterVec::new(
+        Opts::new(
+            "rate_limit_429_total",
+            "Total 429 Too Many Requests responses, by limiter",
+        ),
+        &["limiter"], // sync | token
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    c
+});
+
+/// Total number of `5xx` responses from the webhook handlers (Stripe /
+/// Square). Webhooks are the payment-authenticity boundary: a non-zero
+/// count means real events are failing server-side (misconfigured secret,
+/// DB error, bad event shape) and the payment/plan state may be stale.
+/// Alert on any sustained increase.
+pub static WEBHOOK_5XX_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new(
+        "webhook_5xx_total",
+        "Total 5xx responses from webhook handlers",
     )
     .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
     REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
@@ -152,6 +216,11 @@ fn ensure_registered() {
     let _ = &*HEALTH_CHECK_FAILURES_TOTAL;
     let _ = &*HEALTH_DB_LATENCY_MICROS;
     let _ = &*DB_CONTENTION_SECONDS;
+    let _ = &*PRUNE_QUEUE_DELETED_TOTAL;
+    let _ = &*PRUNE_SENT_REPORTS_DELETED_TOTAL;
+    let _ = RATE_LIMIT_429_TOTAL.with_label_values(&["sync"]);
+    let _ = RATE_LIMIT_429_TOTAL.with_label_values(&["token"]);
+    let _ = &*WEBHOOK_5XX_TOTAL;
 }
 
 /// Render all registered metrics in Prometheus text format.

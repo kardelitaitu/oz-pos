@@ -1,7 +1,7 @@
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/kardelitaitu/oz-pos?style=flat-square) ![GitHub repo size](https://img.shields.io/github/repo-size/kardelitaitu/oz-pos?style=flat-square) [![Nightly CI](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml/badge.svg)](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml)
 
 
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE · ADR #30 domain modularization complete across modules/* · ADR #31 decentralized UI self-registration active via registerAllFeatures() · F1: 101 .sql migration files · F2: 5,212 Rust tests; 228 UI test files (3,476 tests) · F3: 48 .ftl Fluent translation files (5,700+ IDs) · F4: payment drivers (Stripe, Mock, QRIS, Square) · F5: 618 #[tauri::command] IPC endpoints -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE · ADR #30 domain modularization complete across modules/* · ADR #31 decentralized UI self-registration active via registerAllFeatures() · F1: 101 .sql migration files · F2: 5,212 Rust tests; 228 UI test files (3,476 tests) · F3: 48 .ftl Fluent translation files (5,700+ IDs) · F4: payment drivers (Stripe, Mock, QRIS, Square) · F5: 618 #[tauri::command] IPC endpoints · re-audited 2026-08-08 by docs-auditor: 117 .sql migrations, 5,860 Rust test markers, 265 UI test files, 48 .ftl (7,152 IDs), 435 #[tauri::command] endpoints, release v0.0.25 -->
 
 # OZ-POS
 
@@ -95,14 +95,19 @@ Business logic, UI, hardware drivers, and platform services are isolated — new
 oz-pos/
 ├── apps/
 │   ├── desktop-client/     # Tauri v2 shell: IPC commands, app state, plugins
-│   └── tablet-client/      # Tablet-optimised Tauri shell
+│   ├── tablet-client/      # Tablet-optimised Tauri shell
+│   ├── cloud-server/       # Cloud HTTP API (axum, hosted tenants)
+│   └── license-server/     # License activation & validation
 ├── crates/
+│   ├── oz-api/             # HTTP API server (axum)
 │   ├── oz-cli/             # CLI tool (backup, export/import .ozpkg, migrations)
 │   ├── oz-core/            # Domain models, SQLite Store, migrations, settings
 │   ├── oz-hal/             # Hardware Abstraction Layer (printer, scanner, drawer, display)
 │   ├── oz-logging/         # Structured logging (console, file, syslog, eventlog)
-│   ├── oz-lua/             # Lua scripting engine (rlua — discount, tax, validation)
-│   ├── oz-payment/         # Payment gateway integrations (Stripe, mock)
+│   ├── oz-lua/             # Lua scripting engine (mlua — discount, tax, validation)
+│   ├── oz-notification/    # Email & push notification dispatching
+│   ├── oz-payment/         # Payment gateway integrations (Stripe, Square, QRIS, mock)
+│   ├── oz-plugin/          # Plugin sandbox & lifecycle (Lua scripting bridge)
 │   ├── oz-reporting/       # Report generation (EOD, sales summaries)
 │   └── oz-security/        # TLS config, PAN masking, platform keychains
 ├── foundation/             # Shared primitives: Money, SKU, Cart, contracts
@@ -129,12 +134,12 @@ oz-pos/
 | Backend | Rust | Domain logic, DB access, hardware control |
 | Desktop Shell | Tauri v2 | Native window, IPC bridge, updater |
 | Frontend | React 18 + TypeScript + Vite 6 | POS UI |
-| Database | SQLite (rusqlite) | On-device persistence, 101 migrations |
+| Database | SQLite (rusqlite) | On-device persistence, 117 migrations |
 | Localization | @fluent/react | All UI strings in `.ftl` files |
 | Hardware | oz-hal traits | USB/TCP/BT/serial/mock drivers |
 | Money | `i64` minor units | Never `f32`/`f64` — `Currency`, `Money` structs |
 | Security | Argon2id + AES-256-GCM + zstd | Encrypted `.ozpkg` snapshots |
-| Automation | Lua (rlua) | Discount, tax, validation rules |
+| Automation | Lua (mlua) | Discount, tax, validation rules |
 
 ---
 
@@ -197,7 +202,7 @@ Every PR must pass `cargo fmt`, Clippy, `tsc --noEmit`, and all tests before mer
 
 ## Status
 
-**Phase 4 (CRM, Restaurant, Accounting) in progress.** 101 migrations, 200+ IPC commands, 55 audited screen components, 228 front-end test files (3,476 tests), 5,200+ Rust tests.
+**Phase 4 (CRM, Restaurant, Accounting) in progress.** 117 migrations, 435+ IPC commands, 55+ audited screen components, 265 front-end test files, 5,800+ Rust tests.
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -205,9 +210,9 @@ Every PR must pass `cargo fmt`, Clippy, `tsc --noEmit`, and all tests before mer
 | 2 | Complete | Inventory & Products |
 | 3 | Complete | Transactions & Staff |
 | 4 | In Progress | CRM, Restaurant, Accounting |
-| 5 | Planned | Multi-store, Cloud Sync, Plugin Marketplace |
+| 5 | In Progress | Multi-store topology, Cloud Sync, Plugin system |
 
-Latest release: **v0.0.21** (on branch `0.0.21`).
+Latest release: **v0.0.25** (on branch `0.0.25`).
 
 See [ROADMAP.md](./docs/ROADMAP.md) for the full phased delivery plan, and [MODULAR_APP_PLAN.md](./docs/MODULAR_APP_PLAN.md) for detailed granular checklists covering feature presets, restaurant workflows, LAN KDS discovery, and Docker cloud server containerization (`apps/cloud-server`).
 
@@ -234,3 +239,9 @@ New contributors are encouraged to start with documentation improvements, UI pol
 This software (`oz-pos`) is **NOT open source**. No part of this codebase, associated binaries, or documentation may be copied, modified, distributed, sublicensed, hosted, or deployed in any commercial, non-commercial, or production setting without explicit written permission and a valid executed Commercial License Agreement.
 
 See [LICENSE](./LICENSE) for terms and restrictions. For commercial licensing and pricing inquiries, contact: **adikaradwiatmaja@gmail.com**.
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (verified against actual codebase) · verified accurate: all test counts, modules, crates, security features, and feature capabilities confirmed; version 0.0.25 matches Cargo.toml
+

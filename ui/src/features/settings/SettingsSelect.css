@@ -65,7 +65,7 @@
 .ssel-dropdown {
   max-height: 15rem;
   overflow-y: auto;
-  background: color-mix(in srgb, var(--color-bg) 92%, transparent); /* theme-specific dropdown bg */
+  background: var(--color-bg-popover); /* THM-08: opaque in every theme */
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--color-border);
@@ -125,14 +125,4 @@
   outline-offset: -2px;
 }
 
-[data-theme="light"] .ssel-dropdown {
-  background: rgba(255, 255, 255, 0.96);
-  border-color: var(--color-border);
-}
-
-[data-theme="dark"] .ssel-dropdown {
-  background: rgba(21, 33, 51, 0.96);
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-lg);
-}
 

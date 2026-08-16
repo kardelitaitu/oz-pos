@@ -49,6 +49,8 @@ use crate::error::CoreError;
 use crate::money::Currency;
 
 /// Audit log queries (read / write).
+pub mod analytics;
+pub mod assignments;
 pub mod audit;
 /// Active cart persistence (survives restarts).
 pub mod cart;
@@ -66,12 +68,18 @@ pub mod kds;
 pub mod loyalty;
 /// Offline queue and sync state.
 pub mod offline;
+pub mod plans;
+pub mod stripe;
+pub use offline::RemoteSyncFailure;
 /// Payment CRUD (tenders, transactions).
 pub mod payments;
+/// Popularity recompute (ADR #37) — sale/activity aggregation + score writes.
+pub mod popularity;
 /// CRUD for product bundles (group selling).
 pub mod product_bundles;
 /// Product CRUD and search.
 pub mod products;
+pub mod profile;
 /// Promotion / discount CRUD.
 pub mod promotions;
 /// CRUD for purchase orders.
@@ -113,7 +121,7 @@ pub mod workspaces;
 
 // ── Re-exports ──────────────────────────────────────────────────────
 
-pub use products::ProductWithDetails;
+pub use products::{CreateProductAttributes, ProductWithDetails, UpdateProductAttributes};
 pub use reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
@@ -264,6 +272,53 @@ impl Store<'_> {
         }
     }
 
+    /// Check for tenant-foreign rows in a desktop store database.
+    ///
+    /// Desktop POS databases are scoped by construction to a single store
+    /// (`default` tenant) — every `products` / `users` row is expected to
+    /// carry `tenant_id = 'default'`. A row with any other tenant means a
+    /// sync/restore mishap planted another tenant's data into this store
+    /// (the audit in the plan doc: don't sprinkle 40+ `WHERE tenant_id`
+    /// clauses; scope by construction + fail loudly if a foreign row ever
+    /// appears).
+    ///
+    /// Returns `Ok(())` when no foreign rows exist (the normal state).
+    /// Returns `Err(CoreError)` naming the offending table(s) — the caller
+    /// should refuse to start until the data is reconciled.
+    ///
+    /// # Performance
+    ///
+    /// Two indexed COUNT queries (`idx_products_tenant` / `idx_users_tenant`)
+    /// — effectively O(log n) each, so safe to call at every startup.
+    pub fn check_tenant_integrity(&self) -> Result<(), CoreError> {
+        let mut violations: Vec<String> = Vec::new();
+
+        for (table, index) in [
+            ("products", "idx_products_tenant"),
+            ("users", "idx_users_tenant"),
+        ] {
+            let count: i64 = self.conn.query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE tenant_id != 'default'"),
+                [],
+                |row| row.get(0),
+            )?;
+            if count > 0 {
+                violations.push(format!(
+                    "{table}: {count} row(s) with tenant_id != 'default' (index {index} exists)"
+                ));
+            }
+        }
+
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(CoreError::Internal(format!(
+                "foreign-tenant rows detected in desktop store database — refusing to start: {}",
+                violations.join("; ")
+            )))
+        }
+    }
+
     /// Attempt to repair a corrupted database by rebuilding it via `VACUUM INTO`.
     ///
     /// Creates a clean copy of the database at `output_path`. The original
@@ -324,5 +379,12 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
             .and_then(crate::ProductType::parse_str)
             .unwrap_or_default(),
         version: row.get("version").unwrap_or(1),
+        cost_minor: row.get("cost_minor").unwrap_or(0),
+        brand: row.get("brand").unwrap_or(None),
+        rack_location: row.get("rack_location").unwrap_or(None),
+        notes: row.get("notes").unwrap_or(None),
+        unit: row.get("unit").unwrap_or(None),
+        is_active: row.get("is_active").unwrap_or(1i64) != 0,
+        default_supplier_id: row.get("default_supplier_id").unwrap_or(None),
     })
 }

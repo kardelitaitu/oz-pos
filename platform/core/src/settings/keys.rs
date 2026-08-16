@@ -77,6 +77,13 @@ pub const SYNC_SERVER_URL: &str = "sync_server_url";
 pub const SYNC_API_KEY: &str = "sync_api_key";
 /// Whether cloud sync is enabled. `"1"` or `"0"`. Default `"0"`.
 pub const SYNC_ENABLED: &str = "sync_enabled";
+/// Registered terminal identifier used for client-credentials minting
+/// (ADR sync-auth-hardening P3).
+pub const SYNC_TERMINAL_ID: &str = "sync_terminal_id";
+/// Registered terminal device secret used for client-credentials minting
+/// (ADR sync-auth-hardening P3). Plaintext secret stored client-side only;
+/// the server keeps only its SHA-256 hash.
+pub const SYNC_TERMINAL_SECRET: &str = "sync_terminal_secret";
 
 // ── PostgreSQL Sync settings ─────────────────────────────────
 /// Whether PostgreSQL sync is enabled. `"1"` or `"0"`. Default `"0"`.

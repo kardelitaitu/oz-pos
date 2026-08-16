@@ -38,11 +38,11 @@ test.describe('Workspace Picker', () => {
     const allNames = await cardNames.allTextContents();
     expect(allNames.some((n) => n.includes('Store POS'))).toBe(true);
     expect(allNames.some((n) => n.includes('Kitchen Display'))).toBe(true);
-    expect(allNames.some((n) => n.includes('Inventory'))).toBe(true);
+    expect(allNames.some((n) => n.includes('Warehouse'))).toBe(true);
     expect(allNames.some((n) => n.includes('Admin'))).toBe(true);
 
-    // Click "Inventory Management" and verify it navigates.
-    const inventoryCard = cards.filter({ hasText: 'Inventory Management' });
+    // Click "Warehouse" and verify it navigates.
+    const inventoryCard = cards.filter({ hasText: 'Warehouse' });
     await inventoryCard.click();
     await page.waitForTimeout(2_000);
 

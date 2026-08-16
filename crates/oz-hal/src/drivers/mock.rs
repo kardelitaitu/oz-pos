@@ -13,12 +13,12 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 
-use crate::drivers::scale::{WeightReading, WeightScale};
 use crate::error::HalError;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
 use crate::traits::customer_display::{CustomerDisplay, DisplayContent};
 use crate::traits::printer::{PaperStatus, PrinterStatus, ReceiptPrinter};
+use crate::traits::weight_scale::{WeightReading, WeightScale};
 use crate::types::{Barcode, DeviceInfo};
 
 // --- Barcode scanner mock -----------------------------------------------
@@ -306,7 +306,7 @@ impl CustomerDisplay for MockCustomerDisplay {
 // --- Cash drawer mock ---------------------------------------------------
 
 /// Programmable mock for `CashDrawer`. Counts `open` calls; can be
-/// programmed to fail.
+/// programmed to fail or to report drawer-open state.
 #[derive(Clone)]
 pub struct MockCashDrawer {
     /// Number of times `open` has been called.
@@ -315,6 +315,10 @@ pub struct MockCashDrawer {
     pub info: DeviceInfo,
     /// If set, the next `open` call returns this error.
     pub fail_with: Arc<Mutex<Option<HalError>>>,
+    /// Programmable response for `is_open()`. `None` means "use the
+    /// trait default" (which returns `Disconnected`). Set to
+    /// `Some(Ok(true))` to simulate an open drawer, etc.
+    is_open_response: Arc<Mutex<Option<Result<bool, HalError>>>>,
 }
 
 impl MockCashDrawer {
@@ -331,6 +335,7 @@ impl MockCashDrawer {
             open_calls: Arc::new(AtomicUsize::new(0)),
             info,
             fail_with: Arc::new(Mutex::new(None)),
+            is_open_response: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -338,6 +343,16 @@ impl MockCashDrawer {
     pub fn set_next_error(&self, err: HalError) {
         // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         *self.fail_with.lock().expect("poisoned") = Some(err);
+    }
+
+    /// Program what `is_open()` returns.
+    ///
+    /// Pass `None` to revert to the trait default (`Disconnected`).
+    /// Pass `Some(Ok(true))` for an open drawer, `Some(Ok(false))` for
+    /// a closed one, or `Some(Err(...))` to simulate a hardware error.
+    pub fn set_is_open(&self, response: Option<Result<bool, HalError>>) {
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
+        *self.is_open_response.lock().expect("poisoned") = response;
     }
 }
 
@@ -356,6 +371,18 @@ impl CashDrawer for MockCashDrawer {
             return Err(err);
         }
         Ok(())
+    }
+
+    async fn is_open(&self) -> Result<bool, HalError> {
+        // SAFETY: mock driver — lock poison is the intended failure signal
+        match self.is_open_response.lock().expect("poisoned").clone() {
+            Some(response) => response,
+            None => {
+                // Fall through to the trait default: most drawers don't
+                // report state, so this is the realistic default.
+                Err(HalError::Disconnected)
+            }
+        }
     }
 
     fn device_info(&self) -> DeviceInfo {
@@ -504,11 +531,42 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn drawer_is_open_uses_default() {
-        // MockCashDrawer doesn't override is_open, so it returns default.
+    async fn drawer_is_open_defaults_to_disconnected() {
+        // When no response is programmed, is_open returns Disconnected.
         let d = MockCashDrawer::new();
         let result = d.is_open().await;
         assert!(matches!(result, Err(HalError::Disconnected)));
+    }
+
+    #[tokio::test]
+    async fn drawer_is_open_programmable_closed() {
+        let d = MockCashDrawer::new();
+        d.set_is_open(Some(Ok(false)));
+        assert!(!d.is_open().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn drawer_is_open_programmable_open() {
+        let d = MockCashDrawer::new();
+        d.set_is_open(Some(Ok(true)));
+        assert!(d.is_open().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn drawer_is_open_programmable_error() {
+        let d = MockCashDrawer::new();
+        d.set_is_open(Some(Err(HalError::Timeout(50))));
+        assert!(matches!(d.is_open().await, Err(HalError::Timeout(50))));
+    }
+
+    #[tokio::test]
+    async fn drawer_is_open_reverts_to_disconnected() {
+        let d = MockCashDrawer::new();
+        d.set_is_open(Some(Ok(true)));
+        assert!(d.is_open().await.unwrap());
+        // Revert to default.
+        d.set_is_open(None);
+        assert!(matches!(d.is_open().await, Err(HalError::Disconnected)));
     }
 
     #[tokio::test]

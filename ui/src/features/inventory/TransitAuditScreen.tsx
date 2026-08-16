@@ -20,6 +20,8 @@ export default function TransitAuditScreen() {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // Date formatting follows the active Fluent locale.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
 
@@ -131,7 +133,7 @@ export default function TransitAuditScreen() {
                     <Localized id="inv-transit-col-sent">
                       <span>Sent At</span>
                     </Localized>
-                    : <strong>{transfer.sent_at ? new Date(transfer.sent_at).toLocaleString() : (requiredLocalized(l10n, 'inv-transit-unknown'))}</strong>
+                    : <strong>{transfer.sent_at ? new Date(transfer.sent_at).toLocaleString(numLocale) : (requiredLocalized(l10n, 'inv-transit-unknown'))}</strong>
                   </div>
                 </div>
 

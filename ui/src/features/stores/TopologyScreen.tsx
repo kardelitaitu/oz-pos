@@ -1,25 +1,62 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
-import { listStores, type StoreProfile } from '@/api/stores';
+import { listStores, createStore, updateStore, deleteStore, type StoreProfile } from '@/api/stores';
 import {
   listWorkspacesScoped,
+  updateWorkspaceInstanceScoped,
   type WorkspaceDto,
 } from '@/api/workspaces';
 import {
   applyTopologyDiff,
-  type CreateInstanceRequest,
-  type UpdateInstanceRequest,
+  canSaveTopology as checkTopologySaveCapability,
+  loadTopology,
+  type TopologyApplyResult,
 } from '@/api/topology';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { checkLicenseStatus } from '@/api/license';
 import { plainErrorMessage } from '@/utils/app-error';
+import SettingsSelect from '@/features/settings/SettingsSelect';
+import { Button } from '@/components/Button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import './TopologyScreen.css';
 import NodeTopologyEditor, {
   type TopologyNodeData,
   type TopologyWireData,
   type WorkspaceInstanceSeed,
+  type BranchLocationSeed,
 } from './NodeTopologyEditor';
+import {
+  normalizeTopologyGraph,
+  topologyIssueKey,
+  validateTopologyGraph,
+} from './topologyContract';
+import { computeTopologyDiff } from './topologyDiff';
+import {
+  buildTopologyOverlay,
+  compareBranchTopologies,
+  type TopologyOverlay,
+  type BranchTopologyComparison,
+} from './topologyBranchCompare';
+
+/**
+ * Workspace instances that are physical nodes in the store topology.
+ *
+ * The 'admin' instance is a system workspace surfaced automatically for
+ * owner/manager roles — it is NOT a store node. It must never seed the
+ * topology canvas, and it must never reach the save diff's archive sweep
+ * either: the sweep archives any instance missing from the canvas, so an
+ * unseeded admin instance would be archived on every save.
+ */
+const isTopologyInstance = (w: Pick<WorkspaceDto, 'type_key'>) =>
+  // Admin workspaces are app management, not routing endpoints. Inventory
+  // Management workspaces are likewise excluded: the topology's storage
+  // concept is the Warehouse node (the stock-routing target), and two
+  // storage-flavored cards on one canvas confused users. The instance row
+  // itself still exists — it just never seeds the canvas (and the save
+  // sweep never sees it, so it is never archived).
+  w.type_key !== 'admin' && w.type_key !== 'inventory';
 
 /**
  * Dedicated topology screen — the single home for the node-based store
@@ -31,13 +68,86 @@ import NodeTopologyEditor, {
  * store profiles only, while topology is its own concern (ADR #7 IA cleanup).
  */
 export default function TopologyScreen() {
-  const { sessionToken } = useWorkspace();
+  const { sessionToken, resolvedStoreId } = useWorkspace();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
+  /** Whether the session user may persist topology changes. The backend
+   *  capability probe is authoritative for Apply and rename actions. */
+  const [canSaveTopology, setCanSaveTopology] = useState(false);
+  const [storesUnavailable, setStoresUnavailable] = useState(false);
+  const [instancesUnavailable, setInstancesUnavailable] = useState(false);
+  const [topologyUnavailable, setTopologyUnavailable] = useState(false);
+  const handleTopologyLoadError = useCallback(() => {
+    setTopologyUnavailable(true);
+  }, []);
+  const handleTopologyLoadSuccess = useCallback(() => {
+    setTopologyUnavailable(false);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    if (!sessionToken) {
+      setCanSaveTopology(false);
+      return () => { cancelled = true; };
+    }
+    void checkTopologySaveCapability(sessionToken)
+      .then((allowed) => { if (!cancelled) setCanSaveTopology(allowed); })
+      .catch(() => { if (!cancelled) setCanSaveTopology(false); });
+    return () => { cancelled = true; };
+  }, [sessionToken]);
   const [licenseTier, setLicenseTier] = useState('standard');
   /** Real workspace instances loaded from the backend, used to seed the editor. */
   const [workspaceInstances, setWorkspaceInstances] = useState<WorkspaceDto[]>([]);
   const [stores, setStores] = useState<StoreProfile[]>([]);
+  /** Branch (store profile) whose topology graph is on canvas. */
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  /** Latest dirty flag from the editor (a ref: the branch selector's
+   *  onChange is not a render path, and the flag changes on every edit).
+   *  The editor reports it via onDirtyChange — the guard for a dirty
+   *  branch switch must live HERE because the editor cannot veto its own
+   *  keyed remount. */
+  const editorDirtyRef = useRef(false);
+  /** Branch id stashed when a dirty switch is intercepted — the confirm
+   *  dialog's target. Null while no discard prompt is pending. */
+  const [discardPendingBranchId, setDiscardPendingBranchId] = useState<string | null>(null);
+  const handleEditorDirtyChange = useCallback((dirty: boolean) => {
+    editorDirtyRef.current = dirty;
+  }, []);
+  const [addingBranch, setAddingBranch] = useState(false);
+  const [newBranchName, setNewBranchName] = useState('');
+  /** Two-step branch deletion: armed state + in-flight guard. The target
+   *  id is captured at arm time so a mid-confirm branch switch can neither
+   *  change what the confirm message names nor what the button deletes. */
+  const [deletingBranch, setDeletingBranch] = useState(false);
+  const [deleteBranchSaving, setDeleteBranchSaving] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
+  /** ── Branch-to-branch comparison panel (round 154) ────────────
+   *  Compares the selected branch's saved diagram against another
+   *  branch's, so an operator can see how two locations' topologies
+   *  differ before editing either one. Display-only — it never
+   *  resolves store ownership or builds apply payloads. */
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareOtherBranchId, setCompareOtherBranchId] = useState<string | null>(null);
+  const [compareResult, setCompareResult] = useState<BranchTopologyComparison | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  /** Spatial overlay (round 158): the other branch's topology rendered over
+   *  the canvas while the compare panel is open — other-only workspaces as
+   *  ghost cards at their saved positions, current-only and differing ones
+   *  as card markers. Computed from the same saved-vs-saved comparison the
+   *  panel summarises, so the canvas and the name lists can never disagree. */
+  const [compareOverlay, setCompareOverlay] = useState<TopologyOverlay | null>(null);
+  /** Compare-focus mode (round 162): dim shared-identical cards so only
+   *  the differences stay bright. Lives with the panel — cleared on close. */
+  const [compareFocus, setCompareFocus] = useState(false);
+
+  /** Set once the first stores/listStores resolution lands — before that,
+   *  the seeds must read as undefined ("not supplied yet") rather than the
+   *  initial empty array, or the editor's load would treat the not-yet-
+   *  loaded placeholder as an authoritative empty store and wipe the canvas
+   *  (or flash the onboarding hint) before the real data arrives. */
+  const storesResolvedRef = useRef(false);
+  /** Same gate for the workspace-instances list (setWorkspaceInstances). */
+  const instancesResolvedRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -47,34 +157,298 @@ export default function TopologyScreen() {
       ]);
       setLicenseTier(licStatus.tier.toLowerCase());
       setStores(storeData);
-      if (sessionToken) {
-        try {
-          setWorkspaceInstances(await listWorkspacesScoped(sessionToken));
-        } catch {
-          setWorkspaceInstances([]);
-        }
-      }
-    } catch {
-      /* non-fatal — the editor still renders with the preset fallback */
+      setStoresUnavailable(false);
+      storesResolvedRef.current = true;
+    } catch (err) {
+      // A failed authoritative fetch is not an empty store list. Preserve
+      // last-known data and disable Apply until the user can retry safely.
+      setStoresUnavailable(true);
+      addToast({
+        message: `${l10n.getString('topology-toast-load-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
     }
-  }, [sessionToken]);
+  }, [addToast, l10n]);
 
-  useEffect(() => { load(); }, [load]);
+  /** Fetch the workspace instances for the selected branch. Runs on mount
+   *  AND whenever the branch selector changes: each branch owns its own
+   *  topology graph, so switching branches must load that branch's
+   *  instances (and, via the editor's workspaceInstances effect, its saved
+   *  diagram) instead of showing the previous branch's canvas. The default
+   *  null→first-branch transition is NOT a user switch — it is the initial
+   *  resolution, and the mount effect already loaded the instances. */
+  const loadWorkspaceInstances = useCallback(async () => {
+    if (!sessionToken) {
+      setWorkspaceInstances([]);
+      return;
+    }
+    try {
+      setWorkspaceInstances((await listWorkspacesScoped(sessionToken)).filter(isTopologyInstance));
+      instancesResolvedRef.current = true;
+      setInstancesUnavailable(false);
+    } catch (err) {
+      // Never turn a transient workspace-list failure into an authoritative
+      // empty list; that could make Apply persist an incomplete graph.
+      setInstancesUnavailable(true);
+      addToast({
+        message: `${l10n.getString('topology-toast-load-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
+    }
+  }, [sessionToken, addToast, l10n]);
 
-  /** Seed the topology editor with real workspace instances. */
-  const workspaceSeed: WorkspaceInstanceSeed[] = useMemo(
-    () => workspaceInstances.map((w) => {
-      const seed: WorkspaceInstanceSeed = {
-        instanceId: w.instance_id,
-        typeKey: w.type_key,
-        name: w.name,
-      };
-      if (w.description) seed.subtitle = w.description;
-      if (w.colour) seed.colour = w.colour;
-      return seed;
-    }),
-    [workspaceInstances],
+  /** Load both diagrams and compute the comparison. Fetching both fresh
+   *  from the backend keeps the panel honest — it compares the saved
+   *  states, not the possibly-unsaved canvas in front of the user. */
+  const loadCompare = useCallback(async (otherBranchId: string) => {
+    setCompareLoading(true);
+    try {
+      const [currentData, otherData] = await Promise.all([
+        loadTopology(selectedBranchId ?? undefined),
+        loadTopology(otherBranchId),
+      ]);
+      setCompareResult(compareBranchTopologies(currentData, otherData));
+      setCompareOverlay(buildTopologyOverlay(currentData, otherData));
+    } catch (err) {
+      setCompareResult(null);
+      addToast({
+        message: `${l10n.getString('topology-compare-load-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
+    } finally {
+      setCompareLoading(false);
+    }
+  }, [selectedBranchId, addToast, l10n]);
+
+  /** Open the compare panel against the first other branch. */
+  const openCompare = useCallback(() => {
+    const otherId = stores.find((s) => s.id !== selectedBranchId)?.id ?? null;
+    setCompareOtherBranchId(otherId);
+    setCompareOpen(true);
+    if (otherId !== null) void loadCompare(otherId);
+  }, [stores, selectedBranchId, loadCompare]);
+
+  const closeCompare = useCallback(() => {
+    setCompareOpen(false);
+    setCompareResult(null);
+    setCompareOverlay(null);
+    setCompareFocus(false);
+  }, []);
+
+  // Keep the comparison honest across branch changes. The target is
+  // captured once by openCompare and only edited through the panel's own
+  // select — nothing re-derives it when the SELECTED branch moves, so a
+  // main-selector switch onto the target (or a deletion that moves
+  // selection onto it) would compare a branch with itself. Whenever the
+  // selected branch changes: close the panel when no other branch remains,
+  // otherwise re-point a null/self/stale target at the first other branch
+  // (a user-chosen target that still exists is preserved).
+  useEffect(() => {
+    if (!compareOpen) return;
+    const others = stores.filter((s) => s.id !== selectedBranchId);
+    if (others.length === 0) {
+      closeCompare();
+      return;
+    }
+    if (
+      compareOtherBranchId === null ||
+      compareOtherBranchId === selectedBranchId ||
+      !others.some((s) => s.id === compareOtherBranchId)
+    ) {
+      setCompareOtherBranchId(others[0]!.id);
+    }
+  }, [compareOpen, stores, selectedBranchId, compareOtherBranchId, closeCompare]);
+
+  // Recompute when the user picks a different comparison target. Never
+  // fetch when the target IS the selected branch — the re-derive effect
+  // above re-points that state; this guard just keeps a transient
+  // intermediate render from issuing a self-comparison fetch.
+  useEffect(() => {
+    if (!compareOpen || compareOtherBranchId === null || compareOtherBranchId === selectedBranchId) return;
+    void loadCompare(compareOtherBranchId);
+  }, [compareOpen, compareOtherBranchId, selectedBranchId, loadCompare]);
+
+  useEffect(() => { void load(); }, [load]);
+  // Mount: load the default branch's instances once.
+  useEffect(() => { void loadWorkspaceInstances(); }, [loadWorkspaceInstances]);
+  // Branch switch: reload that branch's graph. The ref ignores the initial
+  // null→default resolution (already loaded on mount) so a genuine change
+  // is the only thing that triggers a refetch.
+  useEffect(() => {
+    if (selectedBranchId === null || selectedBranchId === lastBranchRef.current) return;
+    lastBranchRef.current = selectedBranchId;
+    void loadWorkspaceInstances();
+  }, [selectedBranchId, loadWorkspaceInstances]);
+
+  /** The branch whose graph is currently loaded on canvas. Lets the
+   *  branch-switch refetch effect below distinguish a genuine user switch
+   *  from the initial null→default resolution (whose instances were already
+   *  loaded on mount). Initialized by the defaulting effect below. */
+  const lastBranchRef = useRef<string | null>(null);
+
+  /** Default the selector to the session's resolved store when available.
+   *  The default branch is resolved ONCE — record it so the branch-switch
+   *  refetch effect skips the initial null→default transition (the mount
+   *  effect already loaded those instances). */
+  useEffect(() => {
+    setSelectedBranchId((prev) => {
+      if (prev) {
+        if (lastBranchRef.current === null) lastBranchRef.current = prev;
+        return prev;
+      }
+      const next = resolvedStoreId && stores.some((s) => s.id === resolvedStoreId)
+        ? resolvedStoreId
+        : stores[0]?.id ?? null;
+      if (next !== null) lastBranchRef.current = next;
+      return next;
+    });
+  }, [resolvedStoreId, stores]);
+
+  /** Name of the branch armed for deletion, for the delete-confirm message. */
+  const deleteTargetName = stores.find((s) => s.id === deleteTargetId)?.name ?? '';
+
+  /** Seed the topology editor with real workspace instances for the selected branch. */
+  const branchLocationSeed: BranchLocationSeed[] | undefined = useMemo(
+    () => storesResolvedRef.current
+      ? stores
+        // A topology is branch-scoped: exactly one Branch Location root per
+        // graph. The selector picks which branch's graph is on canvas; without
+        // a selected branch the graph stays visibly unowned and is blocked by
+        // semantic validation rather than guessing a fallback.
+        .filter((store) => selectedBranchId === null || store.id === selectedBranchId)
+        .map((store) => ({ id: store.id, name: store.name }))
+      : undefined,
+    [stores, selectedBranchId],
   );
+
+  const workspaceSeed: WorkspaceInstanceSeed[] | undefined = useMemo(
+    () => instancesResolvedRef.current
+      ? workspaceInstances
+        .filter((w) => selectedBranchId === null || w.store_id === selectedBranchId)
+        .map((w) => {
+          const seed: WorkspaceInstanceSeed = {
+            instanceId: w.instance_id,
+            typeKey: w.type_key,
+            purposeKey: w.purpose_key,
+            storeId: w.store_id,
+            storeName: w.store_name,
+            name: w.name,
+          };
+          if (w.description) seed.subtitle = w.description;
+          if (w.colour) seed.colour = w.colour;
+          return seed;
+        })
+      : undefined,
+    [workspaceInstances, selectedBranchId],
+  );
+
+  const handleAddBranch = async () => {
+    const name = newBranchName.trim();
+    if (!name) return;
+    try {
+      const created = await createStore({ id: `store-${crypto.randomUUID()}`, name });
+      setStores((prev) => [...prev, created]);
+      setSelectedBranchId(created.id);
+      setAddingBranch(false);
+      setNewBranchName('');
+    } catch (err) {
+      addToast({
+        message: `${l10n.getString('topology-branch-add-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
+    }
+  };
+
+  /** Delete the selected store profile. Its card, wires, and selector
+   *  option leave the canvas cleanly: the stores-state update drops the
+   *  selector option and the branchLocations seed, the editor's merge/
+   *  rebuild drops the card + wires, and the selection moves to the next
+   *  branch (or clears the canvas when none remain). */
+  const handleDeleteBranch = async () => {
+    if (!deleteTargetId) return;
+    const id = deleteTargetId;
+    const remaining = stores.filter((s) => s.id !== id);
+    setDeleteBranchSaving(true);
+    try {
+      await deleteStore(id);
+      setStores(remaining);
+      setSelectedBranchId(remaining[0]?.id ?? null);
+      // No branches left: nothing owns the graph — clear the instances so
+      // the remounted editor lands on a clean, unowned canvas.
+      if (remaining.length === 0) setWorkspaceInstances([]);
+      setDeleteTargetId(null);
+      setDeletingBranch(false);
+    } catch (err) {
+      addToast({
+        message: `${l10n.getString('topology-branch-delete-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
+    } finally {
+      setDeleteBranchSaving(false);
+    }
+  };
+
+  /** Persist a Branch Location rename (store profile) from the editor's
+   *  card. Returns true on success so the card can close its inline form;
+   *  false keeps the draft open for a retry. */
+  const handleRenameBranch = useCallback(async (id: string, name: string): Promise<boolean> => {
+    if (!canSaveTopology) {
+      addToast({ message: l10n.getString('topology-rename-permission-error'), type: 'error' });
+      return false;
+    }
+    const store = stores.find((s) => s.id === id);
+    if (!store) return false;
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === store.name) return false;
+    try {
+      const updated = await updateStore({
+        id: store.id,
+        name: trimmed,
+        address: store.address,
+        tax_id: store.tax_id,
+        currency: store.currency,
+        timezone: store.timezone,
+      });
+      setStores((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      return true;
+    } catch (err) {
+      addToast({
+        message: `${l10n.getString('topology-branch-rename-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
+      return false;
+    }
+  }, [stores, canSaveTopology, addToast, l10n]);
+
+  /** Persist a workspace instance rename (the live row, not just the canvas
+   *  label) from the editor's card. Same contract as handleRenameBranch. */
+  const handleRenameWorkspace = useCallback(async (instanceId: string, name: string): Promise<boolean> => {
+    if (!canSaveTopology) {
+      addToast({ message: l10n.getString('topology-rename-permission-error'), type: 'error' });
+      return false;
+    }
+    const ws = workspaceInstances.find((w) => w.instance_id === instanceId);
+    if (!ws || !sessionToken) return false;
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === ws.name) return false;
+    try {
+      // The wrapper nulls omitted description/colour — pass the existing
+      // values through so a rename never wipes the card subtitle/colour.
+      await updateWorkspaceInstanceScoped(sessionToken, instanceId, {
+        name: trimmed,
+        description: ws.description,
+        ...(ws.colour ? { colour: ws.colour } : {}),
+      });
+      setWorkspaceInstances((prev) => prev.map((w) => (w.instance_id === instanceId ? { ...w, name: trimmed } : w)));
+      return true;
+    } catch (err) {
+      addToast({
+        message: `${l10n.getString('topology-workspace-rename-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
+      return false;
+    }
+  }, [workspaceInstances, sessionToken, canSaveTopology, addToast, l10n]);
 
   /**
    * Persist topology edits atomically (Critical #4 + #5):
@@ -92,102 +466,42 @@ export default function TopologyScreen() {
     async (
       nodes: TopologyNodeData[],
       wires: TopologyWireData[],
-    ): Promise<Record<string, string>> => {
-      const idMap: Record<string, string> = {};
-
+      baseRevision = 0,
+      resolvedIssueKeys: string[] = [],
+    ): Promise<TopologyApplyResult & { idMap?: Record<string, string> }> => {
       if (!sessionToken) {
-        addToast({ message: l10n.getString('topology-toast-no-session'), type: 'error' });
-        return idMap;
+        const error = new Error(l10n.getString('topology-toast-no-session'));
+        addToast({ message: plainErrorMessage(error), type: 'error' });
+        throw error;
       }
 
-      const wsNodes = nodes.filter((n) => n.type === 'workspace');
-      const loadedById = new Map(workspaceInstances.map((w) => [w.instance_id, w]));
-      const canvasIds = new Set(wsNodes.map((n) => n.id));
-
-      // ── Wire-based store_id resolution (Critical #5) ─────────────────
-      const storeNodeIds = new Set(nodes.filter((n) => n.type === 'store').map((n) => n.id));
-      const wsToStoreNode = new Map<string, string>();
-      for (const wire of wires) {
-        if (storeNodeIds.has(wire.fromNodeId) && canvasIds.has(wire.toNodeId)) {
-          wsToStoreNode.set(wire.toNodeId, wire.fromNodeId);
-        }
-        if (storeNodeIds.has(wire.toNodeId) && canvasIds.has(wire.fromNodeId)) {
-          wsToStoreNode.set(wire.fromNodeId, wire.toNodeId);
-        }
+      const semanticGraph = normalizeTopologyGraph(nodes, wires);
+      // TopologyScreen is the real, strict boundary. Do not permit the
+      // legacy primary/default fallback to survive into workspace mutation.
+      const validationErrors = validateTopologyGraph(semanticGraph, licenseTier);
+      // Round 81: a DISMISSED missing-stock-routing prompt (intentionally
+      // empty warehouse) stops blocking. The editor sends the same
+      // branch-document dismissal set through this callback, so the local
+      // validation gate and backend Apply payload cannot disagree.
+      const resolvedIssues = new Set(resolvedIssueKeys);
+      const blockingErrors = validationErrors.filter(
+        (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(topologyIssueKey(e.nodeId, e.messageId))),
+      );
+      if (blockingErrors.length > 0) {
+        const firstError = blockingErrors[0]!;
+        const error = new Error(l10n.getString(firstError.messageId));
+        addToast({ message: plainErrorMessage(error), type: 'error' });
+        throw error;
       }
 
-      const resolveStoreId = (node: TopologyNodeData): string => {
-        const storeNodeId = wsToStoreNode.get(node.id);
-        if (storeNodeId) {
-          const storeNode = nodes.find((n) => n.id === storeNodeId);
-          if (storeNode) {
-            const matched = stores.find((s) => s.name === storeNode.name);
-            if (matched) return matched.id;
-          }
-        }
-        return stores.find((s) => s.is_primary)?.id ?? 'default';
-      };
-
-      // ── Type-change detection (Critical #1) ──────────────────────────
+      // ── Build diff vectors (pure) ───────────────────────────────────
       //
-      // Walk persisted workspace nodes. For each one where the inspector's
-      // typeKey differs from the backend's type_key, schedule an archive +
-      // recreate. Generate new UUIDs so the recreated instance gets a fresh
-      // primary key and the topology diagram stays consistent.
-      const typeChanges = new Map<
-        string,
-        { newId: string; newTypeKey: string }
-      >();
-      for (const node of wsNodes) {
-        const existing = loadedById.get(node.id);
-        if (!existing) continue;
-        const newTypeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
-        if (existing.type_key !== newTypeKey) {
-          const newId = `ws-${crypto.randomUUID()}`;
-          typeChanges.set(node.id, { newId, newTypeKey });
-          idMap[node.id] = newId;
-        }
-      }
-
-      // ── Build diff vectors ───────────────────────────────────────────
-
-      const creations: CreateInstanceRequest[] = [];
-      const updates: UpdateInstanceRequest[] = [];
-      const archives: string[] = [];
-
-      for (const node of wsNodes) {
-        const change = typeChanges.get(node.id);
-        if (change) {
-          // Archive old instance, create replacement with new typeKey.
-          archives.push(node.id);
-          creations.push({
-            id: change.newId,
-            type_key: change.newTypeKey,
-            store_id: resolveStoreId(node),
-            name: node.name,
-          });
-          continue;
-        }
-
-        const existing = loadedById.get(node.id);
-        if (!existing) {
-          creations.push({
-            id: node.id,
-            type_key: (node.metadata?.['typeKey'] as string) ?? 'store-pos',
-            store_id: resolveStoreId(node),
-            name: node.name,
-          });
-        } else if (existing.name !== node.name) {
-          updates.push({ id: node.id, name: node.name });
-        }
-      }
-
-      // Archive instances removed from the canvas.
-      for (const inst of workspaceInstances) {
-        if (!canvasIds.has(inst.instance_id)) {
-          archives.push(inst.instance_id);
-        }
-      }
+      // The create/update/archive computation lives in topologyDiff.ts so
+      // the workspace-instance semantics are unit-testable directly; this
+      // handler only owns the screen-level concerns (session, validation,
+      // diagram payloads, the atomic apply).
+      const diff = computeTopologyDiff({ nodes, wires, workspaceInstances, stores });
+      const { creations, updates, archives, typeChanges, idMap } = diff;
 
       // ── Remap diagram for type-changed nodes ─────────────────────────
       //
@@ -207,17 +521,22 @@ export default function TopologyScreen() {
           x: n.x,
           y: n.y,
         };
+        if (n.storeProfileId !== undefined) payload.store_profile_id = n.storeProfileId;
         if (n.subtitle !== undefined) payload.subtitle = n.subtitle;
         if (n.tierRequirement !== undefined) payload.tier_requirement = n.tierRequirement;
         if (n.telemetryBadge !== undefined) payload.telemetry_badge = n.telemetryBadge;
         if (n.telemetryStatus !== undefined) payload.telemetry_status = n.telemetryStatus;
-        if (n.metadata !== undefined) {
-          // For type-changed nodes, reflect the new backend state
-          // (the recreated instance will be persisted).
+        if (n.metadata !== undefined || n.storeProfileId !== undefined) {
+          // Keep the identity in metadata as a compatibility bridge for
+          // backend versions that predate the explicit store_profile_id field.
+          // The semantic compiler still reads the stable identity, never the
+          // display name.
           const change = typeChanges.get(n.id);
-          payload.metadata = change
-            ? { ...n.metadata, persisted: true }
-            : n.metadata;
+          payload.metadata = {
+            ...(n.metadata ?? {}),
+            ...(n.storeProfileId !== undefined ? { storeProfileId: n.storeProfileId } : {}),
+            ...(change ? { persisted: true } : {}),
+          };
         }
         return payload;
       });
@@ -232,22 +551,45 @@ export default function TopologyScreen() {
           direction: w.direction,
         };
         if (w.label !== undefined) payload.label = w.label;
+        if (w.bends !== undefined) payload.bends = w.bends;
         if (w.fromPort !== undefined) payload.from_port = w.fromPort;
         if (w.toPort !== undefined) payload.to_port = w.toPort;
+
+        // Persist the normalized semantic identity, not only the visual
+        // geometry. This upgrades legacy Restaurant POS → KDS wires on the
+        // next Apply so the backend and the reloaded editor both retain the
+        // required Operation feed instead of showing a stale Location error.
+        const semanticWire = semanticGraph.wires.find((candidate) => candidate.id === w.id);
+        if (semanticWire) {
+          payload.from_port_id = semanticWire.fromPortId;
+          payload.to_port_id = semanticWire.toPortId;
+          payload.relationship_type = semanticWire.relationshipType;
+        } else {
+          if (w.fromPortId !== undefined) payload.from_port_id = w.fromPortId;
+          if (w.toPortId !== undefined) payload.to_port_id = w.toPortId;
+          if (w.relationshipType !== undefined) payload.relationship_type = w.relationshipType;
+        }
         return payload;
       });
 
       // ── Atomic apply ─────────────────────────────────────────────────
 
       try {
-        await applyTopologyDiff(
+        const result = await applyTopologyDiff(
           sessionToken,
           creations,
           updates,
           archives,
           diagramNodes,
           diagramWires,
+          selectedBranchId ?? undefined,
+          baseRevision,
+          crypto.randomUUID(),
+          resolvedIssueKeys,
         );
+        if (!result || !Number.isSafeInteger(result.revision) || result.revision < 0) {
+          throw new Error('topology Apply returned no committed revision');
+        }
 
         const created = creations.length;
         const updated = updates.length;
@@ -268,21 +610,21 @@ export default function TopologyScreen() {
 
         // Refresh loaded instances so subsequent saves diff against truth.
         try {
-          setWorkspaceInstances(await listWorkspacesScoped(sessionToken));
+          setWorkspaceInstances((await listWorkspacesScoped(sessionToken)).filter(isTopologyInstance));
         } catch {
           /* non-fatal */
         }
 
-        return idMap;
+        return { ...result, ...(Object.keys(idMap).length > 0 ? { idMap } : {}) };
       } catch (err) {
         addToast({
           message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
           type: 'error',
         });
-        return {};
+        throw err;
       }
     },
-    [sessionToken, workspaceInstances, stores, addToast, l10n],
+    [sessionToken, workspaceInstances, stores, addToast, l10n, licenseTier, selectedBranchId],
   );
 
   return (
@@ -290,10 +632,192 @@ export default function TopologyScreen() {
       className="settings-topology-container"
       aria-label={requiredLocalized(l10n, 'settings-nav-topology')}
     >
+      {/* Keying by branch makes each branch's topology a fresh editor
+          session: switching branches remounts the canvas and loads that
+          branch's saved diagram instead of leaking the previous branch's
+          nodes onto the new graph. */}
       <NodeTopologyEditor
-        currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'}
-        workspaceInstances={workspaceSeed}
+        key={selectedBranchId ?? 'unassigned'}
+        branchId={selectedBranchId ?? 'unassigned'}
+        currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'premium' | 'enterprise'}
+        compareOverlay={compareOverlay}
+        compareFocus={compareFocus}
+        {...(workspaceSeed !== undefined ? { workspaceInstances: workspaceSeed } : {})}
+        {...(branchLocationSeed !== undefined ? { branchLocations: branchLocationSeed } : {})}
+        onRenameBranch={handleRenameBranch}
+        onRenameWorkspace={handleRenameWorkspace}
+        allowLegacyApply={false}
         onSave={handleTopologySave}
+        canSave={canSaveTopology && !storesUnavailable && !instancesUnavailable && !topologyUnavailable}
+        onDirtyChange={handleEditorDirtyChange}
+        onLoadError={handleTopologyLoadError}
+        onLoadSuccess={handleTopologyLoadSuccess}
+        branchToolbar={(
+          /* ── Branch (graph) selector toolbar, merged into the editor header ── */
+          <div className="topology-branch-toolbar">
+            <div className="topology-branch-selector">
+              <label className="topology-branch-label" htmlFor="topology-branch-select">
+                {l10n.getString('topology-branch-selector-label')}
+              </label>
+              <SettingsSelect
+                id="topology-branch-select"
+                value={selectedBranchId ?? ''}
+                onChange={(id) => {
+                  if (id === selectedBranchId) return;
+                  if (editorDirtyRef.current) {
+                    // The canvas holds unsaved edits — switching would
+                    // silently discard them (the editor remounts keyed by
+                    // branch). Intercept and ask first.
+                    setDiscardPendingBranchId(id);
+                  } else {
+                    setSelectedBranchId(id);
+                  }
+                }}
+                options={stores.map((s) => ({ value: s.id, label: s.name }))}
+                ariaLabel={l10n.getString('topology-branch-selector-aria')}
+                placeholder={l10n.getString('topology-branch-selector-label')}
+                disabled={deletingBranch}
+              />
+            </div>
+            {deletingBranch ? null : addingBranch ? (
+              <div className="topology-branch-add-form">
+                <input
+                  className="topology-branch-add-input"
+                  value={newBranchName}
+                  onChange={(e) => setNewBranchName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void handleAddBranch(); if (e.key === 'Escape') { setAddingBranch(false); setNewBranchName(''); } }}
+                  aria-label={l10n.getString('topology-branch-add-name-placeholder')}
+                  placeholder={l10n.getString('topology-branch-add-name-placeholder')}
+                />
+                <Button variant="primary" onClick={() => void handleAddBranch()} disabled={!newBranchName.trim()}>
+                  {l10n.getString('topology-branch-add-confirm')}
+                </Button>
+                <Button variant="secondary" onClick={() => { setAddingBranch(false); setNewBranchName(''); }}>
+                  {l10n.getString('topology-branch-add-cancel')}
+                </Button>
+              </div>
+            ) : (
+              <Button variant="secondary" onClick={() => { setDeleteTargetId(null); setDeletingBranch(false); setAddingBranch(true); }}>
+                {l10n.getString('topology-branch-add')}
+              </Button>
+            )}
+            {deletingBranch ? (
+              <div className="topology-branch-delete-form">
+                <span className="topology-branch-delete-msg">
+                  {l10n.getString('topology-branch-delete-confirm', { name: deleteTargetName })}
+                </span>
+                <Button variant="danger" onClick={() => void handleDeleteBranch()} disabled={deleteBranchSaving}>
+                  {l10n.getString('topology-branch-delete-confirm-btn')}
+                </Button>
+                <Button variant="secondary" onClick={() => { setDeleteTargetId(null); setDeletingBranch(false); }}>
+                  {l10n.getString('topology-branch-add-cancel')}
+                </Button>
+              </div>
+            ) : !addingBranch ? (
+              <Button
+                variant="secondary"
+                onClick={() => { setAddingBranch(false); setDeleteTargetId(selectedBranchId); setDeletingBranch(true); }}
+                disabled={!selectedBranchId}
+              >
+                {l10n.getString('topology-branch-delete')}
+              </Button>
+            ) : null}
+            {stores.length >= 2 && selectedBranchId ? (
+              <Button variant="secondary" onClick={() => openCompare()} disabled={compareOpen}>
+                {l10n.getString('topology-compare-open')}
+              </Button>
+            ) : null}
+          </div>
+        )}
+      />
+
+      {/* ── Branch-to-branch comparison panel ───────────────────────
+          Summarises how the selected branch's saved topology differs
+          from another branch's — workspaces only here / only there /
+          shared-but-differing — so an operator can see how locations
+          differ before editing. Display-only. */}
+      {compareOpen ? (
+        <div className="topology-compare-panel" role="region" aria-label={l10n.getString('topology-compare-title')}>
+          <div className="topology-compare-header">
+            <h3>{l10n.getString('topology-compare-title')}</h3>
+            <div className="topology-compare-header-actions">
+              <Button
+                variant="secondary"
+                aria-pressed={compareFocus}
+                onClick={() => setCompareFocus((f) => !f)}
+              >
+                {l10n.getString('topology-compare-focus')}
+              </Button>
+              <Button variant="secondary" onClick={() => closeCompare()}>
+                {l10n.getString('topology-compare-close')}
+              </Button>
+            </div>
+          </div>
+          <div className="topology-compare-other">
+            <label htmlFor="topology-compare-other-select">
+              {l10n.getString('topology-compare-other-label')}
+            </label>
+            <SettingsSelect
+              id="topology-compare-other-select"
+              value={compareOtherBranchId ?? ''}
+              onChange={(id) => setCompareOtherBranchId(id)}
+              options={stores.filter((s) => s.id !== selectedBranchId).map((s) => ({ value: s.id, label: s.name }))}
+              ariaLabel={l10n.getString('topology-compare-other-label')}
+            />
+          </div>
+          {compareLoading ? (
+            <p>{l10n.getString('topology-compare-loading')}</p>
+          ) : compareResult ? (
+            compareResult.onlyInCurrent.length === 0 &&
+            compareResult.onlyInOther.length === 0 &&
+            compareResult.differing.length === 0 ? (
+              <p>{l10n.getString('topology-compare-none')}</p>
+            ) : (
+              <div className="topology-compare-summary">
+                <p>
+                  {l10n.getString('topology-compare-counts', {
+                    onlyInCurrent: compareResult.onlyInCurrent.length,
+                    onlyInOther: compareResult.onlyInOther.length,
+                    differ: compareResult.differing.length,
+                    otherBranch: stores.find((s) => s.id === compareOtherBranchId)?.name ?? compareOtherBranchId ?? '',
+                  })}
+                </p>
+                {compareResult.onlyInCurrent.length > 0 ? (
+                  <p>{l10n.getString('topology-compare-only-here', { names: compareResult.onlyInCurrent.map((w) => w.name).join(', ') })}</p>
+                ) : null}
+                {compareResult.onlyInOther.length > 0 ? (
+                  <p>{l10n.getString('topology-compare-only-there', {
+                    names: compareResult.onlyInOther.map((w) => w.name).join(', '),
+                    otherBranch: stores.find((s) => s.id === compareOtherBranchId)?.name ?? compareOtherBranchId ?? '',
+                  })}</p>
+                ) : null}
+                {compareResult.differing.length > 0 ? (
+                  <p>{l10n.getString('topology-compare-differing', { names: compareResult.differing.map((w) => w.name).join(', ') })}</p>
+                ) : null}
+              </div>
+            )
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* ── Dirty branch-switch guard: confirm before discarding unsaved
+             edits. The controlled selector never changed — cancel leaves
+             the current branch; confirm applies the stashed target. ── */}
+      <ConfirmDialog
+        open={discardPendingBranchId !== null}
+        variant="warning"
+        onCancel={() => setDiscardPendingBranchId(null)}
+        onConfirm={() => {
+          if (discardPendingBranchId !== null) {
+            setSelectedBranchId(discardPendingBranchId);
+          }
+          setDiscardPendingBranchId(null);
+        }}
+        title={l10n.getString('topology-discard-changes-title')}
+        message={l10n.getString('topology-discard-changes-msg', {
+          name: stores.find((s) => s.id === discardPendingBranchId)?.name ?? discardPendingBranchId ?? '',
+        })}
+        confirmLabel={l10n.getString('topology-discard-changes-confirm')}
       />
     </div>
   );

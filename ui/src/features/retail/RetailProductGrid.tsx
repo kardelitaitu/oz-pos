@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useCallback, memo } from 'react';
+import { useEffect, useMemo, useRef, useCallback, memo, useState } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization, Localized } from '@fluent/react';
-import { formatMoney, type Money, type Sku } from '@/types/domain';
+import { DEFAULT_LOW_STOCK_THRESHOLD, DEFAULT_HIGH_STOCK_THRESHOLD, formatMoney, type Money, type Sku } from '@/types/domain';
 import type { ProductDto, CategoryDto } from '@/api/products';
+import type { RetailColumn } from './hooks/useRetailColumnPrefs';
 import ScaleIndicator from './ScaleIndicator';
 
 // ── Price volatility ───────────────────────────────────────────────
@@ -17,7 +18,7 @@ function isPriceRecent(p: ProductDto): boolean {
 
 // ── Sort types ─────────────────────────────────────────────────────
 
-export type SortField = 'sku' | 'name' | 'stock' | 'price';
+export type SortField = 'popularity' | 'sku' | 'name' | 'stock' | 'price';
 export type SortOrder = 'asc' | 'desc';
 
 // ── Grouped prop interfaces ────────────────────────────────────────
@@ -40,6 +41,10 @@ export interface ProductGridData {
   weighTarget: { sku: Sku; name: string } | null;
   /** Whether the low-stock filter is active (shows a filter-specific empty state). */
   filterLowStock: boolean;
+  /** Visible grid columns (ADR #36 D4), in display order. */
+  visibleColumns: readonly RetailColumn[];
+  /** Whether retired (inactive) products are hidden from the grid. */
+  hideInactive: boolean;
 }
 
 export interface ProductGridActions {
@@ -57,6 +62,12 @@ export interface ProductGridActions {
   onSkuInputChange: (val: string) => void;
   onSkuSubmit: () => void;
   onWeighAdd: (sku: Sku, weightGrams: number) => void;
+  /** Toggle a grid column's visibility (ADR #36 D4). */
+  onToggleColumn: (col: RetailColumn) => void;
+  /** Toggle the hide-inactive filter. */
+  onToggleHideInactive: (hide: boolean) => void;
+  /** Open the row context menu at a viewport position (ADR #38 D1). */
+  onRowContextMenu: (product: ProductDto, x: number, y: number) => void;
 }
 
 export interface RetailProductGridProps {
@@ -67,13 +78,100 @@ export interface RetailProductGridProps {
   skuInputRef: React.Ref<HTMLInputElement>;
 }
 
+// ── Column render helpers ──────────────────────────────────────────
+// `is_active` can be undefined in legacy/dev-mock DTOs — treat as active.
+
+export const isProductActive = (p: ProductDto): boolean => p.is_active !== false;
+
+/** Placeholder shown for an empty table cell (em-dash). */
+const EMPTY_CELL = '—';
+
+function cellValue(v: string | null | undefined): string {
+  return v && v.trim() ? v : EMPTY_CELL;
+}
+
+// ── Column toggle menu ─────────────────────────────────────────────
+
+function ColumnToggleMenu({
+  visibleColumns,
+  hideInactive,
+  onToggleColumn,
+  onToggleHideInactive,
+  onClose,
+}: {
+  visibleColumns: readonly RetailColumn[];
+  hideInactive: boolean;
+  onToggleColumn: (col: RetailColumn) => void;
+  onToggleHideInactive: (hide: boolean) => void;
+  onClose: () => void;
+}) {
+  const { l10n } = useLocalization();
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div ref={menuRef} className="retail-col-toggle-menu" role="menu" aria-label={requiredLocalized(l10n, 'retail-col-toggle-aria')}>
+      {RETAIL_COLUMN_ORDER.map((col) => {
+        const checked = visibleColumns.includes(col);
+        return (
+          <button
+            key={col}
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={checked}
+            className="retail-col-toggle-item"
+            onClick={() => onToggleColumn(col)}
+          >
+            <span className={`retail-col-toggle-check${checked ? ' retail-col-toggle-check--on' : ''}`} aria-hidden="true">
+              {checked ? '✓' : ''}
+            </span>
+            {requiredLocalized(l10n, `retail-col-${col}`)}
+          </button>
+        );
+      })}
+      <div className="retail-col-toggle-divider" />
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={hideInactive}
+        className="retail-col-toggle-item"
+        onClick={() => onToggleHideInactive(!hideInactive)}
+      >
+        <span className={`retail-col-toggle-check${hideInactive ? ' retail-col-toggle-check--on' : ''}`} aria-hidden="true">
+          {hideInactive ? '✓' : ''}
+        </span>
+        {requiredLocalized(l10n, 'retail-col-hide-inactive')}
+      </button>
+    </div>
+  );
+}
+
+/** Display order of toggleable columns (Cost is never a column — ADR #36 D4). */
+export const RETAIL_COLUMN_ORDER: readonly RetailColumn[] = [
+  'sku', 'barcode', 'category', 'brand', 'name', 'rack', 'stock', 'price', 'notes',
+];
+
 // ── ProductCard sub-component ──────────────────────────────────────
 // Memoized: props are referentially stable (handlers are useCallbacks,
 // catHue is a useCallback, formatMoney is module-level, and product
 // objects come from the memoized pagedProducts slice) so cards skip
 // re-renders when cart/totals change (P4).
 
-const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget, outOfStockLabel, addToCartTitle, addToCartAria, editProductTitle, editProductAria, weighProductAria, priceChangedHint }: {
+const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget, onRowContextMenu, visibleColumns, outOfStockLabel, addToCartTitle, addToCartAria, editProductTitle, editProductAria, weighProductAria, priceChangedHint }: {
   product: ProductDto;
   catHue: (catId: string | null) => number;
   formatMoney: (m: Money) => string;
@@ -82,6 +180,8 @@ const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, ha
   handleOpenQtyPicker: (p: ProductDto) => void;
   scaleEnabled: boolean;
   onSetWeighTarget: (p: ProductDto) => void;
+  onRowContextMenu: (p: ProductDto, x: number, y: number) => void;
+  visibleColumns: readonly RetailColumn[];
   outOfStockLabel: string;
   addToCartTitle: string;
   addToCartAria: string;
@@ -102,8 +202,8 @@ const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, ha
   const handleAddRef = useRef(handleAdd);
   handleAddRef.current = handleAdd;
 
-  const lowThreshold = product.low_stock_threshold ?? 5;
-  const highThreshold = product.high_stock_threshold ?? 10;
+  const lowThreshold = product.low_stock_threshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
+  const highThreshold = product.high_stock_threshold ?? DEFAULT_HIGH_STOCK_THRESHOLD;
   const stockLevel =
     product.stock_qty != null && product.stock_qty <= lowThreshold
       ? 'low'
@@ -112,18 +212,19 @@ const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, ha
       : 'high';
 
   const handlePointerDown = useCallback(() => {
-    if (isOutOfStock) return;
+    // The button is `disabled` when out of stock, so pointer events only
+    // reach here for in-stock products.
     isLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
       handleOpenQtyPickerRef.current(productRef.current);
     }, 400);
-  }, [isOutOfStock]);
+  }, []);
 
   const handlePointerUp = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    if (!isLongPress.current && !isOutOfStock) handleAddRef.current(productRef.current);
-  }, [isOutOfStock]);
+    if (!isLongPress.current) handleAddRef.current(productRef.current);
+  }, []);
 
   const handlePointerLeave = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -136,35 +237,88 @@ const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, ha
     };
   }, []);
 
+  // ADR #38 D1: right-click opens the row context menu; the Menu key
+  // (bubbled from any focused control inside the row) opens it too.
+  const openContextMenu = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    onRowContextMenu(
+      productRef.current,
+      'clientX' in e ? e.clientX : rect.left + rect.width / 2,
+      'clientY' in e ? e.clientY : rect.bottom,
+    );
+  }, [onRowContextMenu]);
+
+  const handleRowKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Menu' || e.key === 'ContextMenu') {
+      openContextMenu(e);
+    }
+  }, [openContextMenu]);
+
   return (
-    <tr className={`retail-product-row${isOutOfStock ? ' retail-product-row--out-of-stock' : ''}`}>
-      <td className="retail-col-sku">{product.sku}</td>
-      <td className="retail-col-stock">
-        {product.stock_qty != null && product.stock_qty > 0 ? (
-          <span className={`retail-product-stock-badge retail-stock-${stockLevel}`}>
-            {product.stock_qty}
-          </span>
-        ) : (
-          <span className="retail-product-out-label">{outOfStockLabel}</span>
-        )}
-      </td>
-      <td className="retail-col-name">
-        <button
-          type="button"
-          className={`retail-product-btn${isOutOfStock ? ' retail-product-btn--out-of-stock' : ''}`}
-          style={{ '--cat-hue': catHue(product.category) } as React.CSSProperties}
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerLeave}
-          aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ` (${outOfStockLabel.toLowerCase()})` : ''}`}
-          aria-disabled={isOutOfStock}
-          disabled={isOutOfStock}
-        >
-          <span>{product.name}</span>
-          {priceRecent && <span className="retail-price-volatility-hint" title={priceChangedHint} />}
-        </button>
-      </td>
-      <td className="retail-col-price">{formatMoney(product.price)}</td>
+    <tr
+      className={`retail-product-row${isOutOfStock ? ' retail-product-row--out-of-stock' : ''}`}
+      onContextMenu={openContextMenu}
+      onKeyDown={handleRowKeyDown}
+    >
+      {visibleColumns.includes('sku') && (
+        <td className="retail-col-sku">{product.sku}</td>
+      )}
+      {visibleColumns.includes('barcode') && (
+        <td className="retail-col-barcode">{cellValue(product.barcode)}</td>
+      )}
+      {visibleColumns.includes('category') && (
+        <td className="retail-col-category">{cellValue(product.category)}</td>
+      )}
+      {visibleColumns.includes('brand') && (
+        <td className="retail-col-brand">{cellValue(product.brand)}</td>
+      )}
+      {visibleColumns.includes('name') && (
+        <td className="retail-col-name">
+          <button
+            type="button"
+            className={`retail-product-btn${isOutOfStock ? ' retail-product-btn--out-of-stock' : ''}`}
+            style={{ '--cat-hue': catHue(product.category) } as React.CSSProperties}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
+            onKeyDown={(e) => {
+              // The pointer handlers are touch/mouse-only; Enter/Space would
+              // otherwise leave the name button inert for keyboard users.
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleAddRef.current(productRef.current);
+              }
+            }}
+            aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ` (${outOfStockLabel})` : ''}`}
+            disabled={isOutOfStock}
+          >
+            <span>{product.name}</span>
+            {priceRecent && <span className="retail-price-volatility-hint" title={priceChangedHint} />}
+          </button>
+        </td>
+      )}
+      {visibleColumns.includes('rack') && (
+        <td className="retail-col-rack">{cellValue(product.rack_location)}</td>
+      )}
+      {visibleColumns.includes('stock') && (
+        <td className="retail-col-stock">
+          {product.stock_qty != null && product.stock_qty > 0 ? (
+            <span className={`retail-product-stock-badge retail-stock-${stockLevel}`}>
+              {product.stock_qty}
+            </span>
+          ) : (
+            <span className="retail-product-out-label">{outOfStockLabel}</span>
+          )}
+        </td>
+      )}
+      {visibleColumns.includes('price') && (
+        <td className="retail-col-price">{formatMoney(product.price)}</td>
+      )}
+      {visibleColumns.includes('notes') && (
+        <td className="retail-col-notes" title={product.notes ?? undefined}>{cellValue(product.notes)}</td>
+      )}
       <td className="retail-col-action">
         <div className="retail-col-action-group">
           <button
@@ -226,6 +380,7 @@ export default function RetailProductGrid({
   skuInputRef,
 }: RetailProductGridProps) {
   const { l10n } = useLocalization();
+  const [columnMenuOpen, setColumnMenuOpen] = useState(false);
 
   const {
     productsLoading,
@@ -244,15 +399,42 @@ export default function RetailProductGrid({
     skuInput,
     weighTarget,
     filterLowStock,
+    visibleColumns,
+    hideInactive,
   } = data;
+
+  const renderHeader = (field: SortField, colClass: string, labelId: string, center = false, end = false) => (
+    <th
+      className={`${colClass} retail-col-sortable`}
+      role="columnheader"
+      scope="col"
+      aria-sort={sortField === field ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        className={`retail-th-content${center ? ' retail-th-content--center' : ''}${end ? ' retail-th-content--end' : ''}`}
+        onClick={() => actions.onSort(field)}
+      >
+        <span>{requiredLocalized(l10n, labelId)}</span>
+        <span className="retail-sort-icon" aria-hidden="true">
+          {sortField === field ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+        </span>
+      </button>
+    </th>
+  );
 
   return (
     <div className="retail-products">
       <div
         className="retail-categories"
         onWheel={(e) => {
-          if (e.deltaY) {
-            e.currentTarget.scrollLeft += e.deltaY;
+          // Map both trackpad horizontal (deltaX) and wheel vertical (deltaY)
+          // scroll to horizontal scrolling, and stop the page from scrolling
+          // vertically underneath the category bar.
+          const delta = e.deltaX || e.deltaY;
+          if (delta) {
+            e.currentTarget.scrollLeft += delta;
+            if (e.cancelable) e.preventDefault();
           }
         }}
       >
@@ -303,6 +485,41 @@ export default function RetailProductGrid({
             &times;
           </button>
         )}
+        {/* ADR #37 D5: popularity is a sortable option — click sorts desc (most
+            popular first), repeat click flips to ascending. */}
+        <button
+          type="button"
+          className={`retail-sort-popularity-btn${sortField === 'popularity' ? ' retail-sort-popularity-btn--active' : ''}`}
+          onClick={() => actions.onSort('popularity')}
+          aria-pressed={sortField === 'popularity'}
+          title={requiredLocalized(l10n, 'retail-col-popularity-title')}
+        >
+          🔥 {requiredLocalized(l10n, 'retail-col-popularity')}
+          <span className="retail-sort-icon">
+            {sortField === 'popularity' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+          </span>
+        </button>
+        <div className="retail-col-toggle-wrap">
+          <button
+            type="button"
+            className="retail-col-toggle-btn"
+            onClick={() => setColumnMenuOpen((o) => !o)}
+            aria-haspopup="menu"
+            aria-expanded={columnMenuOpen}
+            title={requiredLocalized(l10n, 'retail-col-toggle-title')}
+          >
+            {requiredLocalized(l10n, 'retail-col-toggle-btn')}
+          </button>
+          {columnMenuOpen && (
+            <ColumnToggleMenu
+              visibleColumns={visibleColumns}
+              hideInactive={hideInactive}
+              onToggleColumn={actions.onToggleColumn}
+              onToggleHideInactive={actions.onToggleHideInactive}
+              onClose={() => setColumnMenuOpen(false)}
+            />
+          )}
+        </div>
         <Localized id="retail-add-product-btn">
           <button
             type="button"
@@ -324,27 +541,35 @@ export default function RetailProductGrid({
         />
       )}
 
-
-
       {productsLoading || categoriesLoading ? (
         <div className="retail-skeleton-grid">
           <table className="retail-skeleton-table">
             <thead>
               <tr>
-                <th className="retail-col-sku"><span className="retail-skeleton-shimmer">&nbsp;</span></th>
-                <th className="retail-col-stock"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--stock">&nbsp;</span></th>
-                <th className="retail-col-name"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--wide">&nbsp;</span></th>
-                <th className="retail-col-price"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--price">&nbsp;</span></th>
+                {visibleColumns.includes('sku') && <th className="retail-col-sku"><span className="retail-skeleton-shimmer">&nbsp;</span></th>}
+                {visibleColumns.includes('barcode') && <th className="retail-col-barcode"><span className="retail-skeleton-shimmer">&nbsp;</span></th>}
+                {visibleColumns.includes('category') && <th className="retail-col-category"><span className="retail-skeleton-shimmer">&nbsp;</span></th>}
+                {visibleColumns.includes('brand') && <th className="retail-col-brand"><span className="retail-skeleton-shimmer">&nbsp;</span></th>}
+                {visibleColumns.includes('name') && <th className="retail-col-name"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--wide">&nbsp;</span></th>}
+                {visibleColumns.includes('rack') && <th className="retail-col-rack"><span className="retail-skeleton-shimmer">&nbsp;</span></th>}
+                {visibleColumns.includes('stock') && <th className="retail-col-stock"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--stock">&nbsp;</span></th>}
+                {visibleColumns.includes('price') && <th className="retail-col-price"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--price">&nbsp;</span></th>}
+                {visibleColumns.includes('notes') && <th className="retail-col-notes"><span className="retail-skeleton-shimmer">&nbsp;</span></th>}
                 <th className="retail-col-action"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--action">&nbsp;</span></th>
               </tr>
             </thead>
             <tbody role="status" aria-label={requiredLocalized(l10n, 'retail-products-loading')}>
               {Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i} className="retail-skeleton-row">
-                  <td className="retail-col-sku"><span className="retail-skeleton-shimmer">&nbsp;</span></td>
-                  <td className="retail-col-stock"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--stock">&nbsp;</span></td>
-                  <td className="retail-col-name"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--wide">&nbsp;</span></td>
-                  <td className="retail-col-price"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--price">&nbsp;</span></td>
+                  {visibleColumns.includes('sku') && <td className="retail-col-sku"><span className="retail-skeleton-shimmer">&nbsp;</span></td>}
+                  {visibleColumns.includes('barcode') && <td className="retail-col-barcode"><span className="retail-skeleton-shimmer">&nbsp;</span></td>}
+                  {visibleColumns.includes('category') && <td className="retail-col-category"><span className="retail-skeleton-shimmer">&nbsp;</span></td>}
+                  {visibleColumns.includes('brand') && <td className="retail-col-brand"><span className="retail-skeleton-shimmer">&nbsp;</span></td>}
+                  {visibleColumns.includes('name') && <td className="retail-col-name"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--wide">&nbsp;</span></td>}
+                  {visibleColumns.includes('rack') && <td className="retail-col-rack"><span className="retail-skeleton-shimmer">&nbsp;</span></td>}
+                  {visibleColumns.includes('stock') && <td className="retail-col-stock"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--stock">&nbsp;</span></td>}
+                  {visibleColumns.includes('price') && <td className="retail-col-price"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--price">&nbsp;</span></td>}
+                  {visibleColumns.includes('notes') && <td className="retail-col-notes"><span className="retail-skeleton-shimmer">&nbsp;</span></td>}
                   <td className="retail-col-action"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--action">&nbsp;</span></td>
                 </tr>
               ))}
@@ -366,59 +591,16 @@ export default function RetailProductGrid({
           <table className="retail-product-table">
             <thead>
               <tr>
-                <th
-                  className="retail-col-sku retail-col-sortable"
-                  onClick={() => actions.onSort('sku')}
-                  role="columnheader"
-                  aria-sort={sortField === 'sku' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
-                >
-                  <div className="retail-th-content">
-                    <span>{requiredLocalized(l10n, 'retail-col-sku')}</span>
-                    <span className="retail-sort-icon">
-                      {sortField === 'sku' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-                    </span>
-                  </div>
-                </th>
-                <th
-                  className="retail-col-stock retail-col-sortable"
-                  onClick={() => actions.onSort('stock')}
-                  role="columnheader"
-                  aria-sort={sortField === 'stock' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
-                >
-                  <div className="retail-th-content retail-th-content--center">
-                    <span>{requiredLocalized(l10n, 'retail-col-stock')}</span>
-                    <span className="retail-sort-icon">
-                      {sortField === 'stock' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-                    </span>
-                  </div>
-                </th>
-                <th
-                  className="retail-col-name retail-col-sortable"
-                  onClick={() => actions.onSort('name')}
-                  role="columnheader"
-                  aria-sort={sortField === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
-                >
-                  <div className="retail-th-content">
-                    <span>{requiredLocalized(l10n, 'retail-col-name')}</span>
-                    <span className="retail-sort-icon">
-                      {sortField === 'name' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-                    </span>
-                  </div>
-                </th>
-                <th
-                  className="retail-col-price retail-col-sortable"
-                  onClick={() => actions.onSort('price')}
-                  role="columnheader"
-                  aria-sort={sortField === 'price' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
-                >
-                  <div className="retail-th-content retail-th-content--end">
-                    <span>{requiredLocalized(l10n, 'retail-col-price')}</span>
-                    <span className="retail-sort-icon">
-                      {sortField === 'price' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-                    </span>
-                  </div>
-                </th>
-                <th className="retail-col-action">{requiredLocalized(l10n, 'retail-col-action')}</th>
+                {visibleColumns.includes('sku') && renderHeader('sku', 'retail-col-sku', 'retail-col-sku')}
+                {visibleColumns.includes('barcode') && <th scope="col" className="retail-col-barcode">{requiredLocalized(l10n, 'retail-col-barcode')}</th>}
+                {visibleColumns.includes('category') && <th scope="col" className="retail-col-category">{requiredLocalized(l10n, 'retail-col-category')}</th>}
+                {visibleColumns.includes('brand') && <th scope="col" className="retail-col-brand">{requiredLocalized(l10n, 'retail-col-brand')}</th>}
+                {visibleColumns.includes('name') && renderHeader('name', 'retail-col-name', 'retail-col-name')}
+                {visibleColumns.includes('rack') && <th scope="col" className="retail-col-rack">{requiredLocalized(l10n, 'retail-col-rack')}</th>}
+                {visibleColumns.includes('stock') && renderHeader('stock', 'retail-col-stock', 'retail-col-stock', true)}
+                {visibleColumns.includes('price') && renderHeader('price', 'retail-col-price', 'retail-col-price', false, true)}
+                {visibleColumns.includes('notes') && <th scope="col" className="retail-col-notes">{requiredLocalized(l10n, 'retail-col-notes')}</th>}
+                <th scope="col" className="retail-col-action">{requiredLocalized(l10n, 'retail-col-action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -433,6 +615,8 @@ export default function RetailProductGrid({
                   handleOpenQtyPicker={actions.onOpenQtyPicker}
                   scaleEnabled={isScaleEnabled}
                   onSetWeighTarget={actions.onSetWeighTarget}
+                  onRowContextMenu={actions.onRowContextMenu}
+                  visibleColumns={visibleColumns}
                   outOfStockLabel={requiredLocalized(l10n, 'retail-product-out-of-stock')}
                   addToCartTitle={requiredLocalized(l10n, 'retail-product-add-title')}
                   addToCartAria={requiredLocalized(l10n, 'retail-product-add-aria', { name: p.name })}

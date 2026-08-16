@@ -1,0 +1,7 @@
+# Cloudflare Pages redirects (website-plan.md §8, §10). The docs index is a
+# 301 to the first Getting-Started doc so crawlers get a real permanent
+# redirect instead of a meta-refresh (src/pages/[locale]/docs/index.astro
+# stays as the local-dev/preview fallback — keep these targets in sync with
+# its "first gettingStarted doc" logic; both locales resolve to `welcome`).
+/en/docs/  /en/docs/welcome/  301
+/id/docs/  /id/docs/welcome/  301

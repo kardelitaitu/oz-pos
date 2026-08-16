@@ -44,6 +44,9 @@ export function WorkspaceRestaurantPosSettings({
 
   // Originals for dirty tracking — captured after initial load
   const originalsRef = useRef<Record<string, unknown>>({ tableManagement, courseFiring });
+  // Keys the user has edited while the courseFiring load is in flight —
+  // the load must never silently revert them (draft-overwrite race).
+  const touchedRef = useRef<Set<'courseFiring'>>(new Set());
   const [originalsLoaded, setOriginalsLoaded] = useState(false);
 
   const dirty = useMemo(() => hasChanges(
@@ -65,7 +68,7 @@ export function WorkspaceRestaurantPosSettings({
     getSetting('restaurant.course_firing').then((raw) => {
       if (cancelled) return;
       const loaded = raw === 'true';
-      setCourseFiring(loaded);
+      if (!touchedRef.current.has('courseFiring')) setCourseFiring(loaded);
       originalsRef.current = { tableManagement: settings.receipt.showTableNumber, courseFiring: loaded };
       setOriginalsLoaded(true);
     }).catch(() => {
@@ -187,7 +190,10 @@ export function WorkspaceRestaurantPosSettings({
                   role="switch"
                   checked={courseFiring}
                   aria-checked={courseFiring}
-                  onChange={(e) => setCourseFiring(e.target.checked)}
+                  onChange={(e) => {
+                    touchedRef.current.add('courseFiring');
+                    setCourseFiring(e.target.checked);
+                  }}
                 />
                 <span className="settings-toggle-slider" />
               </span>

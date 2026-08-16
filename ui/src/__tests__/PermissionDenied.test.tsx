@@ -19,6 +19,8 @@ permission-denied-title = Access Denied
 permission-denied-desc = { $action } requires a { $requiredRole } role.
 permission-denied-current = You are logged in as { $displayName } ({ $roleName }).
 permission-denied-go-back = Go back
+permission-denied-perm-desc = You don't have permission to access { $action }.
+permission-denied-perm-key = (required permission: { $permission })
 `;
 
 const bundle = new FluentBundle('en');
@@ -94,5 +96,32 @@ describe('PermissionDenied', () => {
     const icon = document.querySelector('.permission-denied-icon');
     expect(icon).toBeTruthy();
     expect(icon!.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('renders a permission message when requiredPermission is provided', () => {
+    // Permission-gated pages (e.g. analytics:view) report the missing key,
+    // not a role — the real gate is the registry grant, not the role name.
+    mockSession.mockReturnValue(null);
+    renderPerm({
+      action: 'Staff Analytics',
+      requiredRole: 'management',
+      requiredPermission: 'analytics:view',
+    });
+    const desc = document.querySelector('.permission-denied-desc');
+    expect(desc).toBeTruthy();
+    expect(desc!.textContent).toContain('Staff Analytics');
+    // The raw permission key is shown as a muted diagnostic detail.
+    const key = document.querySelector('.permission-denied-key');
+    expect(key).toBeTruthy();
+    expect(key!.textContent).toContain('analytics:view');
+  });
+
+  it('falls back to the role message when requiredPermission is absent', () => {
+    mockSession.mockReturnValue(null);
+    renderPerm({ action: 'void orders', requiredRole: 'Manager' });
+    const desc = document.querySelector('.permission-denied-desc');
+    expect(desc!.textContent).toContain('void orders');
+    expect(desc!.textContent).toContain('Manager');
+    expect(document.querySelector('.permission-denied-key')).toBeNull();
   });
 });

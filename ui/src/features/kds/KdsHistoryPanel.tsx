@@ -12,6 +12,7 @@ const STATUS_ORDER: { key: KdsStatus; label: string }[] = [
 /** Displays served and cancelled orders (recall/history view for KDS). */
 export function KdsHistoryPanel() {
   const { l10n } = useLocalization();
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
@@ -132,11 +133,11 @@ export function KdsHistoryPanel() {
               <span className="kds-ticket-items">{order.items_summary}</span>
               <div className="kds-history-card-meta">
                 <span className="kds-history-card-time">
-                  <Localized id="kds-history-received">Received</Localized>: {new Date(order.received_at).toLocaleString()}
+                  <Localized id="kds-history-received">Received</Localized>: {new Date(order.received_at).toLocaleString(numLocale)}
                 </span>
                 {order.served_at && (
                   <span className="kds-history-card-time">
-                    <Localized id="kds-history-served">Served</Localized>: {new Date(order.served_at).toLocaleString()}
+                    <Localized id="kds-history-served">Served</Localized>: {new Date(order.served_at).toLocaleString(numLocale)}
                   </span>
                 )}
                 {order.notes && <span className="kds-ticket-notes">{order.notes}</span>}

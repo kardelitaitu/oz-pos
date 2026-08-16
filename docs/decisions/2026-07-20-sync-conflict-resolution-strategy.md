@@ -1,6 +1,6 @@
 # ADR #21: Sync Conflict Resolution Strategy
 
-**Status:** Proposed (2026-07-20)
+**Status:** Approved — Phase 1 implemented (2026-07-20; re-audited 2026-08-08 by docs-auditor)
 **Date:** 2026-07-20
 **Author:** OZ-POS Contributors
 **Tags:** conflict, sync, lww, crdt, offline, reconciliation
@@ -211,6 +211,8 @@ pub fn resolve_conflict(local: &OfflineQueueItem, remote: &OfflineQueueItem) -> 
 
 ## Implementation Plan
 
+> **Status:** Phase 1 ✅ implemented — all four resolvers + `resolve_conflict()` dispatch are live in `platform/sync/src/conflict.rs`. Phase 2 ❌ **not shipped** — there is no `sync_conflicts` table, `log_conflict`, or `list_sync_conflicts` anywhere in the codebase (checked 2026-08-08). Phase 3 (tombstones) remains future work.
+
 ### Phase 1: Resolver Upgrades (this milestone)
 
 | Step | Description | Files |
@@ -282,4 +284,8 @@ pub fn resolve_conflict(local: &OfflineQueueItem, remote: &OfflineQueueItem) -> 
 - `platform/sync/src/conflict.rs` — Current LWW resolver
 - `platform/sync/src/queue.rs` — `ResolvedItem` struct, `apply_resolution()`
 - `platform/sync/src/lib.rs` — `run_sync_cycle()` conflict usage
-- `crates/oz-core/migrations/065_version_columns.sql` — Existing version columns on products/sales
+- `crates/oz-core/migrations/065_version_optimistic.sql` — Existing version columns on products/sales (renamed from `065_version_columns.sql`)
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).

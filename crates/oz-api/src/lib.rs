@@ -39,18 +39,22 @@ next: None | perf: Arc<Mutex<Connection>> is the standard axum+rusqlite pattern;
 
 /// JWT auth middleware and token generation.
 pub mod auth;
+/// Postgres data layer for the REST handlers (Phase 1.2).
+pub mod pg;
 /// Axum route handlers (health, tokens, products, categories, sales).
 pub mod routes;
 
 use std::sync::Arc;
 
 use axum::{
-    Router, middleware,
-    routing::{get, patch, post},
+    Router,
+    http::HeaderValue,
+    middleware,
+    routing::{get, patch, post, put},
 };
 use rusqlite::Connection;
 use tokio::sync::Mutex;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
@@ -63,6 +67,135 @@ use tracing::info;
 pub struct AppState {
     /// Shared SQLite connection (mutex-guarded for axum handler safety).
     pub db: Arc<Mutex<Connection>>,
+
+    /// Optional Postgres pool (Phase 1.2). When set, backend-aware REST
+    /// handlers read/write Postgres; when `None` (dev, tests, SQLite branch)
+    /// they keep using the SQLite connection. Only the cloud server sets it.
+    pub pg: Option<deadpool_postgres::Pool>,
+
+    /// Admin key that gates `POST /api/v1/tokens` (ADR sync-auth-hardening
+    /// P2). `None` = dev mode, the token endpoint stays open.
+    pub admin_key: Option<String>,
+
+    /// JWT signing secret for token generation.
+    /// Falls back to a dev default when empty.
+    pub api_secret: String,
+
+    /// Database path (default: `oz-pos.db`).
+    pub db_path: String,
+
+    /// HTTP listen port (default: `3099`).
+    pub port: u16,
+
+    /// CORS allowlist (origins that may call this API). An empty list
+    /// denies every cross-origin request (fail closed); `"*"` allows any
+    /// origin (explicit dev opt-in). Defaults to the documented allowlist
+    /// in `unify-auth-and-sync.md` §11; overridable via `OZ_CORS_ORIGINS`.
+    pub cors_origins: Vec<String>,
+}
+
+/// Default CORS allowlist — the documented origins in `unify-auth-and-sync.md`
+/// §11: the website (global + Indonesia), the website dev server, and the
+/// Tauri POS app.
+pub const DEFAULT_CORS_ORIGINS: [&str; 4] = [
+    "https://oz-pos.com",
+    "https://id.oz-pos.com",
+    "http://localhost:4321",
+    "tauri://localhost",
+];
+
+/// Parse `OZ_CORS_ORIGINS` (comma-separated) into an origin list.
+///
+/// - unset / absent → the documented [`DEFAULT_CORS_ORIGINS`] allowlist
+/// - `"*"` → allow-all (explicit opt-in for local dev with arbitrary ports)
+/// - blank → empty list (deny every cross-origin request — fail closed)
+/// - otherwise → trimmed, de-duplicated non-empty entries
+pub fn parse_cors_origins(env: Option<String>) -> Vec<String> {
+    let mut origins: Vec<String> = match env {
+        Some(v) if v.trim() == "*" => vec!["*".to_string()],
+        Some(v) => v
+            .split(',')
+            .map(|o| o.trim().to_string())
+            .filter(|o| !o.is_empty())
+            .collect(),
+        None => DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+    };
+    origins.dedup();
+    origins
+}
+
+/// Build the CORS layer from an origin allowlist.
+///
+/// `"*"` → any origin (explicit dev opt-in); otherwise only listed origins
+/// are echoed back; an empty list denies every cross-origin request.
+pub fn build_cors(origins: &[String]) -> CorsLayer {
+    let cors = CorsLayer::new().allow_methods(Any).allow_headers(Any);
+    if origins.iter().any(|o| o == "*") {
+        return cors.allow_origin(Any);
+    }
+    let values: Vec<HeaderValue> = origins
+        .iter()
+        .filter_map(|o| o.parse::<HeaderValue>().ok())
+        .collect();
+    cors.allow_origin(AllowOrigin::list(values))
+}
+
+/// Resolve the CORS origins from `OZ_CORS_ORIGINS` (see [`parse_cors_origins`]).
+/// Convenience for `serve()` and the cloud server's router.
+pub fn cors_origins_from_env() -> Vec<String> {
+    parse_cors_origins(std::env::var("OZ_CORS_ORIGINS").ok())
+}
+
+/// The `Strict-Transport-Security` value — only in production (browsers
+/// ignore HSTS over plain HTTP, but keeping it out of dev avoids surprises
+/// with local HTTP servers). Pure so tests need no env mutation.
+pub fn security_header_value(production: bool) -> Option<&'static str> {
+    production.then_some("max-age=31536000")
+}
+
+/// Security headers applied to every response (unify-auth-and-sync.md §11):
+/// `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+/// `Content-Security-Policy: default-src 'self'`, and — when
+/// `OZ_PRODUCTION=1` — `Strict-Transport-Security: max-age=31536000`.
+pub async fn security_headers_middleware(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut response = next.run(request).await;
+    let production = std::env::var("OZ_PRODUCTION")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "on" | "yes"))
+        .unwrap_or(false);
+    let headers = response.headers_mut();
+    headers.insert(
+        "X-Content-Type-Options",
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
+    headers.insert(
+        "Content-Security-Policy",
+        HeaderValue::from_static("default-src 'self'"),
+    );
+    if let Some(v) = security_header_value(production) {
+        headers.insert("Strict-Transport-Security", HeaderValue::from_static(v));
+    }
+    response
+}
+
+impl AppState {
+    /// Create an AppState suitable for tests with an in-memory database.
+    /// Uses sensible defaults for all non-db fields.
+    #[cfg(test)]
+    pub fn test(conn: rusqlite::Connection) -> Self {
+        Self {
+            db: Arc::new(Mutex::new(conn)),
+            pg: None,
+            admin_key: None,
+            api_secret: String::new(),
+            db_path: ":memory:".into(),
+            port: 3099,
+            cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+        }
+    }
 }
 
 /// Build the API router with all routes and middleware.
@@ -70,7 +203,8 @@ pub struct AppState {
 /// Public routes (no auth):
 /// - `GET /api/v1/health`
 ///
-/// Token management (no auth in this pass; add admin key later):
+/// Token management (gated by `OZ_ADMIN_KEY` when configured — ADR
+/// sync-auth-hardening P2; open in dev mode):
 /// - `POST /api/v1/tokens`
 ///
 /// Protected routes (JWT required):
@@ -78,14 +212,23 @@ pub struct AppState {
 /// - `GET /api/v1/products/:sku`
 /// - `GET /api/v1/categories`
 pub fn router(state: AppState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .allow_origin(Any);
+    let cors = build_cors(&state.cors_origins);
 
     let public = Router::new()
         .route("/api/v1/health", get(routes::health::health))
-        .route("/api/v1/tokens", post(routes::tokens::create_token_handler));
+        .route("/api/v1/tokens", post(routes::tokens::create_token_handler))
+        .route(
+            "/api/v1/terminals",
+            post(routes::terminals::register_terminal_handler),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/plan",
+            put(routes::plans::set_tenant_plan_handler),
+        )
+        .route(
+            "/api/v1/settings",
+            get(routes::settings::get_settings_handler).put(routes::settings::put_settings_handler),
+        );
 
     let protected = Router::new()
         .route(
@@ -105,6 +248,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/tax-rates",
             post(routes::tax_rates::create_tax_rate),
         )
+        .route(
+            "/api/v1/tenants/me/plan",
+            get(routes::plans::get_my_plan_handler),
+        )
         .route("/api/v1/users", post(routes::users::create_user))
         .route("/api/v1/sales", post(routes::sales::create_sale))
         .route("/api/v1/sales/{id}", get(routes::sales::get_sale))
@@ -119,6 +266,7 @@ pub fn router(state: AppState) -> Router {
         .merge(protected)
         .with_state(state)
         .layer(cors)
+        .layer(middleware::from_fn(security_headers_middleware))
         .layer(TraceLayer::new_for_http())
 }
 
@@ -141,14 +289,23 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .map_err(|e| format!("enabling WAL: {e}"))?;
     oz_core::migrations::run(&mut conn).map_err(|e| format!("running migrations: {e}"))?;
 
+    let admin_key = std::env::var("OZ_ADMIN_KEY")
+        .ok()
+        .filter(|key| !key.trim().is_empty());
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
+        pg: None,
+        admin_key,
+        api_secret: std::env::var("OZ_API_SECRET").ok().unwrap_or_default(),
+        db_path: db_path.clone(),
+        port: std::env::var("OZ_API_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(3099),
+        cors_origins: cors_origins_from_env(),
     };
 
-    let port: u16 = std::env::var("OZ_API_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(3099);
+    let port = state.port;
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
@@ -178,9 +335,7 @@ mod tests {
 
     /// Helper: build a router backed by an empty in-memory database.
     fn test_app() -> Router {
-        let state = AppState {
-            db: Arc::new(Mutex::new(fresh_conn())),
-        };
+        let state = AppState::test(fresh_conn());
         router(state)
     }
 
@@ -202,6 +357,12 @@ mod tests {
         .unwrap();
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
+            pg: None,
+            admin_key: None,
+            api_secret: String::new(),
+            db_path: ":memory:".into(),
+            port: 3099,
+            cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
         };
         router(state)
     }
@@ -381,7 +542,7 @@ mod tests {
 
     #[tokio::test]
     async fn protected_route_accepts_valid_token() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let req = auth_get("/api/v1/products", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -389,7 +550,7 @@ mod tests {
 
     #[tokio::test]
     async fn protected_route_rejects_expired_token() {
-        let token = auth::create_token("expired", Some(-1), None).unwrap();
+        let token = auth::create_token("expired", Some(-1), None, None).unwrap();
         let req = auth_get("/api/v1/products", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -426,17 +587,84 @@ mod tests {
 
     #[tokio::test]
     async fn protected_route_rejects_tampered_token() {
-        let token = auth::create_token("tamper", Some(24), None).unwrap();
+        let token = auth::create_token("tamper", Some(24), None, None).unwrap();
         let req = auth_get("/api/v1/products", &format!("{}x", token.token));
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // ── Structured 401 bodies (ADR sync-auth-hardening P4) ────────
+
+    #[tokio::test]
+    async fn missing_token_reports_missing_token_body() {
+        let req = Request::builder()
+            .uri("/api/v1/products")
+            .body(Body::empty())
+            .unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["error"], "missing_token",
+            "no header must report missing_token, not token_expired"
+        );
+    }
+
+    #[tokio::test]
+    async fn expired_token_reports_token_expired_body() {
+        let token = auth::create_token("expired", Some(-1), None, None).unwrap();
+        let req = auth_get("/api/v1/products", &token.token);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["error"], "token_expired",
+            "an expired signature must report token_expired so the client refreshes"
+        );
+    }
+
+    #[tokio::test]
+    async fn garbage_token_reports_invalid_token_body() {
+        let req = auth_get("/api/v1/products", "not.a.real.jwt");
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["error"], "invalid_token",
+            "a malformed token must NOT report token_expired"
+        );
+    }
+
+    #[tokio::test]
+    async fn tampered_token_reports_invalid_token_body() {
+        let token = auth::create_token("tamper", Some(24), None, None).unwrap();
+        let req = auth_get("/api/v1/products", &format!("{}x", token.token));
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["error"], "invalid_token",
+            "a tampered signature must NOT report token_expired"
+        );
+    }
+
+    #[tokio::test]
+    async fn expired_token_response_carries_www_authenticate() {
+        let token = auth::create_token("expired", Some(-1), None, None).unwrap();
+        let req = auth_get("/api/v1/products", &token.token);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.headers().get(axum::http::header::WWW_AUTHENTICATE),
+            Some(&axum::http::HeaderValue::from_static("Bearer")),
+            "P4 responses must advertise Bearer auth"
+        );
     }
 
     // ── Product endpoints (empty DB) ─────────────────────────────
 
     #[tokio::test]
     async fn products_list_returns_empty_array() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let req = auth_get("/api/v1/products", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -457,7 +685,7 @@ mod tests {
 
     #[tokio::test]
     async fn product_get_by_sku_returns_null_for_unknown() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let req = auth_get("/api/v1/products/ABC123", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -469,7 +697,7 @@ mod tests {
 
     #[tokio::test]
     async fn products_list_returns_seeded_products() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let req = auth_get("/api/v1/products", &token.token);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -480,7 +708,7 @@ mod tests {
 
     #[tokio::test]
     async fn product_get_by_sku_returns_detail_with_stock() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let req = auth_get("/api/v1/products/DRINK-001", &token.token);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -501,7 +729,7 @@ mod tests {
 
     #[tokio::test]
     async fn product_get_by_sku_returns_null_for_existing_but_unstocked() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         // DRINK-002 exists but has no inventory row.
         let req = auth_get("/api/v1/products/DRINK-002", &token.token);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -527,7 +755,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_returns_201() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body =
             r#"{"sku":"NEW-001","name":"New Item","price":{"minor_units":199,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
@@ -537,7 +765,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_returns_fields() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"sku":"NEW-002","name":"Widget","price":{"minor_units":499,"currency":"USD"},"category_id":"cat-drinks","barcode":"5901234123457"}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -556,7 +784,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_with_initial_stock() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"sku":"STOCKED-1","name":"Stocked","price":{"minor_units":100,"currency":"USD"},"initial_stock":25}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -567,7 +795,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_with_zero_stock_no_inventory_row() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"sku":"NOSTOCK-1","name":"NoStock","price":{"minor_units":100,"currency":"USD"},"initial_stock":0}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -578,7 +806,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_duplicate_sku_returns_409() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"sku":"DRINK-001","name":"Duplicate","price":{"minor_units":100,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -595,7 +823,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_empty_sku_returns_400() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"sku":"   ","name":"Bad","price":{"minor_units":100,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -604,7 +832,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_empty_name_returns_400() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"sku":"SKU-OK","name":"","price":{"minor_units":100,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -613,7 +841,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_negative_price_returns_400() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body =
             r#"{"sku":"SKU-OK","name":"Bad Price","price":{"minor_units":-1,"currency":"USD"}}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
@@ -623,7 +851,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_product_negative_initial_stock_returns_400() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"sku":"SKU-OK","name":"Bad Stock","price":{"minor_units":100,"currency":"USD"},"initial_stock":-5}"#;
         let req = auth_post_json("/api/v1/products", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -644,7 +872,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_sell_reduces_qty() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"delta":-10}"#;
         let req = auth_patch_json("/api/v1/products/DRINK-001/stock", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -657,7 +885,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_restock_increases_qty() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"delta":25}"#;
         let req = auth_patch_json("/api/v1/products/DRINK-001/stock", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -669,7 +897,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_oversell_returns_422() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"delta":-100}"#;
         let req = auth_patch_json("/api/v1/products/DRINK-001/stock", &token.token, body);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
@@ -678,7 +906,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_unknown_product_returns_404() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"delta":10}"#;
         let req = auth_patch_json("/api/v1/products/NOPE-999/stock", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -687,7 +915,7 @@ mod tests {
 
     #[tokio::test]
     async fn patch_stock_no_inventory_row_treats_as_zero() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         // DRINK-002 exists but has no inventory row.
         let body = r#"{"delta":30}"#;
         let req = auth_patch_json("/api/v1/products/DRINK-002/stock", &token.token, body);
@@ -715,7 +943,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_tax_rate_returns_201() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"name":"VAT 10%","rate_bps":1000,"is_default":true,"is_inclusive":false}"#;
         let req = auth_post_json("/api/v1/tax-rates", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -724,7 +952,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_tax_rate_returns_fields() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"name":"GST 5%","rate_bps":500,"is_default":false,"is_inclusive":true}"#;
         let req = auth_post_json("/api/v1/tax-rates", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -754,14 +982,20 @@ mod tests {
         oz_core::db::Store::new(&conn).seed_default_roles().unwrap();
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
+            pg: None,
+            admin_key: None,
+            api_secret: String::new(),
+            db_path: ":memory:".into(),
+            port: 3099,
+            cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
         };
         router(state)
     }
 
     #[tokio::test]
     async fn create_user_returns_201() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
-        let body = r#"{"username":"newstaff","pin_hash":"abc123","display_name":"New Staff","role_id":"role-cashier"}"#;
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
+        let body = r#"{"username":"newstaff","pin_hash":"abc123","display_name":"New Staff","role_id":"role-staff"}"#;
         let req = auth_post_json("/api/v1/users", &token.token, body);
         let resp = test_app_with_roles().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
@@ -769,7 +1003,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_user_returns_fields() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"username":"staff-user","pin_hash":"hash456","display_name":"Staff User","role_id":"role-owner"}"#;
         let req = auth_post_json("/api/v1/users", &token.token, body);
         let resp = test_app_with_roles().oneshot(req).await.unwrap();
@@ -785,7 +1019,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_user_requires_auth() {
-        let body = r#"{"username":"staff","pin_hash":"hash","display_name":"Staff","role_id":"role-cashier"}"#;
+        let body = r#"{"username":"staff","pin_hash":"hash","display_name":"Staff","role_id":"role-staff"}"#;
         let req = post_json("/api/v1/users", body);
         let resp = test_app_with_roles().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -805,7 +1039,7 @@ mod tests {
 
     #[tokio::test]
     async fn categories_list_returns_empty_array() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let req = auth_get("/api/v1/categories", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -816,7 +1050,7 @@ mod tests {
 
     #[tokio::test]
     async fn categories_list_returns_seeded_categories() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let req = auth_get("/api/v1/categories", &token.token);
         let resp = test_app_seeded().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -833,7 +1067,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_sale_returns_201() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{
             "lines": [
                 {"sku": "COFFEE", "qty": 2, "unit_price": {"minor_units": 350, "currency": "USD"}}
@@ -853,7 +1087,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_sale_multi_line() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{
             "lines": [
                 {"sku": "COFFEE", "qty": 2, "unit_price": {"minor_units": 350, "currency": "USD"}},
@@ -875,7 +1109,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_sale_empty_lines_rejected() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let body = r#"{"lines": []}"#;
         let req = auth_post_json("/api/v1/sales", &token.token, body);
         let resp = test_app().oneshot(req).await.unwrap();
@@ -893,7 +1127,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_sale_returns_detail() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         // Create a sale first.
         let create_body = r#"{
             "lines": [
@@ -918,7 +1152,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_sale_not_found_returns_null() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let req = auth_get("/api/v1/sales/nonexistent-id", &token.token);
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -938,7 +1172,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_sale_status_pending_to_active() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let app = test_app();
 
         // Create a sale.
@@ -968,7 +1202,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_sale_status_full_flow() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let app = test_app();
 
         let create_body = r#"{
@@ -1002,7 +1236,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_sale_status_invalid_transition_returns_422() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let app = test_app();
 
         let create_body = r#"{
@@ -1027,7 +1261,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_sale_status_not_found_returns_404() {
-        let token = auth::create_token("test", Some(1), None).unwrap();
+        let token = auth::create_token("test", Some(1), None, None).unwrap();
         let req = auth_patch_json(
             "/api/v1/sales/nope-999/status",
             &token.token,
@@ -1068,11 +1302,75 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
+    // ── Security headers (unify-auth-and-sync.md §11) ───────────────
+
+    #[test]
+    fn security_header_hsts_only_in_production() {
+        assert_eq!(security_header_value(true), Some("max-age=31536000"));
+        assert_eq!(security_header_value(false), None);
+    }
+
     #[tokio::test]
-    async fn cors_headers_present_on_health() {
+    async fn security_headers_present_on_health() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.headers()["x-content-type-options"],
+            "nosniff",
+            "X-Content-Type-Options must prevent MIME sniffing"
+        );
+        assert_eq!(resp.headers()["x-frame-options"], "DENY");
+        assert_eq!(
+            resp.headers()["content-security-policy"],
+            "default-src 'self'"
+        );
+        // HSTS is production-gated; the default test env is dev.
+        assert!(resp.headers().get("strict-transport-security").is_none());
+    }
+
+    // ── CORS allowlist (unify-auth-and-sync.md §11) ─────────────────
+
+    #[test]
+    fn parse_cors_origins_defaults_to_documented_allowlist() {
+        assert_eq!(
+            parse_cors_origins(None),
+            DEFAULT_CORS_ORIGINS
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn parse_cors_origins_parses_comma_list() {
+        assert_eq!(
+            parse_cors_origins(Some(" https://a.com ,https://b.com ".into())),
+            vec!["https://a.com".to_string(), "https://b.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_cors_origins_star_means_allow_all() {
+        assert_eq!(parse_cors_origins(Some("*".into())), vec!["*".to_string()]);
+    }
+
+    #[test]
+    fn parse_cors_origins_blank_denies_all() {
+        assert!(parse_cors_origins(Some(" ".into())).is_empty());
+    }
+
+    #[tokio::test]
+    async fn cors_allowed_origin_is_echoed() {
         let req = Request::builder()
             .uri("/api/v1/health")
-            .header("Origin", "http://example.com")
+            .header("Origin", "https://oz-pos.com")
             .body(Body::empty())
             .unwrap();
         let resp = test_app().oneshot(req).await.unwrap();
@@ -1081,19 +1379,57 @@ mod tests {
             .headers()
             .get("access-control-allow-origin")
             .map(|v| v.to_str().unwrap());
-        assert_eq!(allow_origin, Some("*"));
+        assert_eq!(allow_origin, Some("https://oz-pos.com"));
     }
 
     #[tokio::test]
-    async fn cors_preflight_returns_ok() {
+    async fn cors_disallowed_origin_gets_no_header() {
+        let req = Request::builder()
+            .uri("/api/v1/health")
+            .header("Origin", "http://evil.example")
+            .body(Body::empty())
+            .unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "request still served");
+        assert!(
+            resp.headers().get("access-control-allow-origin").is_none(),
+            "disallowed origin must not receive CORS headers"
+        );
+    }
+
+    #[tokio::test]
+    async fn cors_preflight_allowed_origin_returns_allow_header() {
         let req = Request::builder()
             .method("OPTIONS")
             .uri("/api/v1/products")
-            .header("Origin", "http://example.com")
+            .header("Origin", "https://oz-pos.com")
             .header("Access-Control-Request-Method", "GET")
             .body(Body::empty())
             .unwrap();
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers()
+                .get("access-control-allow-origin")
+                .map(|v| v.to_str().unwrap()),
+            Some("https://oz-pos.com")
+        );
+    }
+
+    #[tokio::test]
+    async fn cors_preflight_disallowed_origin_gets_no_allow_header() {
+        let req = Request::builder()
+            .method("OPTIONS")
+            .uri("/api/v1/products")
+            .header("Origin", "http://evil.example")
+            .header("Access-Control-Request-Method", "GET")
+            .body(Body::empty())
+            .unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(
+            resp.headers().get("access-control-allow-origin").is_none(),
+            "preflight from a disallowed origin must not be authorized"
+        );
     }
 }

@@ -42,6 +42,13 @@ import {
   listAllOffline,
   pendingOfflineCount,
   deleteOfflineItem,
+  listRemoteFailures,
+  requeueRemoteFailure,
+  getPgSyncSettings,
+  updatePgSyncSettings,
+  pgSyncStatus,
+  pgSyncStart,
+  pgSyncStop,
   type SyncResult,
 } from '@/api/offline';
 
@@ -215,10 +222,109 @@ describe('offline.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('delete_offline_item', { args: { id: 'oq-1' } });
   });
 
+  // ── SYNC-11: remote dead-letter (quarantined pulls) ────────
+
+  it('listRemoteFailures invokes "list_remote_failures" with no args', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listRemoteFailures();
+    expect(mockInvoke).toHaveBeenCalledWith('list_remote_failures', undefined);
+  });
+
+  it('listRemoteFailures returns the camelCase RemoteSyncFailureDto shape', async () => {
+    mockInvoke.mockResolvedValue([
+      {
+        itemId: 'remote-sale-1',
+        action: 'upsert_sale',
+        payload: '{"id":"remote-sale-1"}',
+        attempts: 3,
+        lastError: 'missing product sku-X',
+        deadLettered: true,
+      },
+    ]);
+    const failures = await listRemoteFailures();
+    expect(failures).toHaveLength(1);
+    const first = failures[0]!;
+    expect(first.itemId).toBe('remote-sale-1');
+    expect(first.deadLettered).toBe(true);
+    expect(first.attempts).toBe(3);
+  });
+
+  it('requeueRemoteFailure invokes "requeue_remote_failure" with camelCase itemId arg', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await requeueRemoteFailure('remote-sale-1');
+    expect(mockInvoke).toHaveBeenCalledWith('requeue_remote_failure', {
+      args: { itemId: 'remote-sale-1' },
+    });
+  });
+
   it('propagates backend errors (does not swallow)', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('confirmDestructive must be true'));
     await expect(syncPull({ confirmDestructive: false })).rejects.toThrow(
       'confirmDestructive must be true',
     );
+  });
+});
+
+describe('offline.ts PG sync IPC contract', () => {
+  beforeEach(() => mockInvoke.mockReset());
+
+  it('getPgSyncSettings invokes "get_pg_sync_settings" with no args', async () => {
+    mockInvoke.mockResolvedValue({
+      enabled: false,
+      host: null,
+      port: null,
+      dbname: null,
+      user: null,
+      hasPassword: false,
+    });
+    await getPgSyncSettings();
+    expect(mockInvoke).toHaveBeenCalledWith('get_pg_sync_settings', undefined);
+  });
+
+  it('updatePgSyncSettings invokes "update_pg_sync_settings" with camelCase args', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await updatePgSyncSettings({
+      enabled: true,
+      host: 'db.example.com',
+      port: '5432',
+      dbname: 'oz_sync',
+      user: 'sync_user',
+      password: 'secret',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('update_pg_sync_settings', {
+      args: {
+        enabled: true,
+        host: 'db.example.com',
+        port: '5432',
+        dbname: 'oz_sync',
+        user: 'sync_user',
+        password: 'secret',
+      },
+    });
+  });
+
+  it('pgSyncStatus invokes "pg_sync_status" and returns the camelCase status DTO', async () => {
+    mockInvoke.mockResolvedValue({
+      running: true,
+      lastSyncAt: '2026-08-09T00:00:00Z',
+      lastPushed: 5,
+      lastPulled: 3,
+      lastError: null,
+      pendingCount: 10,
+    });
+    await pgSyncStatus();
+    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_status', undefined);
+  });
+
+  it('pgSyncStart invokes "pg_sync_start" with no args', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await pgSyncStart();
+    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_start', undefined);
+  });
+
+  it('pgSyncStop invokes "pg_sync_stop" with no args', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await pgSyncStop();
+    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_stop', undefined);
   });
 });

@@ -466,3 +466,19 @@
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
+
+/* ── ADR #36 D6: rack position badge on product cards ─────────── */
+.product-card-rack {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--color-fg-secondary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+}

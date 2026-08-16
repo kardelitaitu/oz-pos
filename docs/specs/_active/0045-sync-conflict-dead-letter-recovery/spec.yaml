@@ -1,0 +1,48 @@
+id: 0045-sync-conflict-dead-letter-recovery
+title: Sync conflict and dead-letter recovery
+status: needs-human-approval
+owner: OZ-POS maintainers
+implementer: Buffy
+priority: P0
+scope:
+  - crates/oz-core/migrations/119_sync_remote_failures.sql
+  - crates/oz-core/src/migrations.rs
+  - crates/oz-core/src/db/offline.rs
+  - crates/oz-core/src/db/products.rs
+  - platform/sync/src/queue.rs
+  - platform/sync/src/daemon.rs
+  - docs/specs/_active/0045-sync-conflict-dead-letter-recovery/
+
+problem:
+  - A product.created replay with an existing but different SKU payload could
+    be acknowledged while silently discarding the remote catalog conflict.
+  - A malformed or permanently incompatible remote item could retain the pull
+    anchor forever and poison every future pull page.
+  - The daemon lacked durable retry/dead-letter state and anchor-order tests for
+    these cases.
+
+implemented_slice:
+  - Compare existing product catalog fields before treating a same-SKU create as
+    an idempotent replay; conflicting fields fail closed.
+  - Persist remote application failures and quarantine an item after three
+    failed attempts while retaining its payload and last error.
+  - Retain the pull anchor for retryable failures; permit anchor advancement
+    only after all page failures are resolved or quarantined.
+  - Clear stale failure diagnostics when a previously failing item eventually
+    applies successfully.
+  - Add focused product-conflict, dead-letter, replay, and daemon anchor tests.
+
+invariants:
+  - A conflicting same-SKU product never records a successful remote receipt.
+  - A retryable remote failure never advances the page anchor.
+  - A dead-lettered item is not repeatedly applied or retried by every page pull.
+  - A page with both a quarantined item and a retryable item retains its anchor.
+  - A successful application records the receipt and removes stale failure state
+    in the same transaction.
+
+non_goals:
+  - Adding a UI operator requeue command; the retained failure ledger is the
+    backend foundation for that follow-up.
+  - Redesigning EventBus delivery or introducing a general outbox.
+  - Changing sync conflict-resolution policy.
+  - Refactoring the PostgreSQL daemon path.

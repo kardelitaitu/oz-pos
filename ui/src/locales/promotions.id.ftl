@@ -44,6 +44,6 @@ promotions-field-category = Kategori
 promotions-error-load = Gagal memuat promosi
 promotions-error-save = Gagal menyimpan promosi
 promotions-error-delete = Gagal menghapus promosi
-promotions-error-toggle = Gagal mengalihkan promosi
+promotions-error-toggle = Gagal mengubah status promosi
 
 # ── Loyalty (remaining) ──

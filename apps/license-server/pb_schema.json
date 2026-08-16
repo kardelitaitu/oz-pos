@@ -140,6 +140,57 @@
         "primaryKey": false
       },
       {
+        "help": "Max stores for this key's tier (0 = unlimited). Populated by the Paddle webhook; manual keys may leave empty.",
+        "hidden": false,
+        "id": "number1415926535",
+        "max": null,
+        "min": 0,
+        "name": "max_stores",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "Max POS instances for this key's tier (0 = unlimited).",
+        "hidden": false,
+        "id": "number2718281828",
+        "max": null,
+        "min": 0,
+        "name": "max_pos_instances",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "JSON array of allowed workspace types for this key's tier.",
+        "hidden": false,
+        "id": "json3141592653",
+        "maxSize": 0,
+        "name": "allowed_types",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
+        "help": "Paddle Billing subscription id (sub_...) that issued this key. Set => webhook-issued; enables email+key activation and expiry sync on subscription.updated.",
+        "hidden": false,
+        "id": "text1618033988",
+        "max": 100,
+        "min": 0,
+        "name": "paddle_sub_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
         "hidden": false,
         "id": "autodate3454440663",
         "name": "created",
@@ -161,7 +212,8 @@
       }
     ],
     "indexes": [
-      "CREATE UNIQUE INDEX idx_license_keys_key ON license_keys (key)"
+      "CREATE UNIQUE INDEX idx_license_keys_key ON license_keys (key)",
+      "CREATE UNIQUE INDEX idx_license_keys_paddle_sub ON license_keys (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''"
     ]
   },
   {
@@ -203,10 +255,25 @@
         "onlyDomains": null
       },
       {
-        "help": "",
+        "help": "Optional — Paddle customers who don't provide a phone (the activation path defaults it to '-').",
         "hidden": false,
         "id": "text5734442841",
         "name": "phone",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Bcrypt hash of the tenant API key (the plaintext is never stored).",
+        "hidden": true,
+        "id": "text5908105184",
+        "name": "api_key",
         "presentable": false,
         "required": true,
         "system": false,
@@ -218,12 +285,12 @@
         "primaryKey": false
       },
       {
-        "help": "",
-        "hidden": false,
-        "id": "text5908105184",
-        "name": "api_key",
+        "help": "Hex SHA-256 lookup hash of the api_key for O(1) tenant resolution (the bcrypt hash is salted and not indexable).",
+        "hidden": true,
+        "id": "text8071130512",
+        "name": "api_key_lookup",
         "presentable": false,
-        "required": true,
+        "required": false,
         "system": false,
         "type": "text",
         "autogeneratePattern": "",
@@ -271,7 +338,8 @@
     ],
     "indexes": [
       "CREATE UNIQUE INDEX idx_tenants_email ON tenants (email)",
-      "CREATE UNIQUE INDEX idx_tenants_api_key ON tenants (api_key)"
+      "CREATE UNIQUE INDEX idx_tenants_api_key ON tenants (api_key)",
+      "CREATE UNIQUE INDEX idx_tenants_api_key_lookup ON tenants (api_key_lookup) WHERE api_key_lookup IS NOT NULL AND api_key_lookup != ''"
     ]
   },
   {
@@ -415,6 +483,20 @@
         "primaryKey": false
       },
       {
+        "help": "Paddle Billing subscription id (sub_...) this record mirrors — the lookup key for subscription.updated / canceled events.",
+        "hidden": false,
+        "id": "text2718281828",
+        "max": 100,
+        "min": 0,
+        "name": "paddle_sub_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
         "hidden": false,
         "id": "autodate7853078470",
         "name": "created",
@@ -435,7 +517,9 @@
         "type": "autodate"
       }
     ],
-    "indexes": []
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_subscriptions_paddle_sub ON subscriptions (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''"
+    ]
   },
   {
     "id": "cc353d653cfd74a",

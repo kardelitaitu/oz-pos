@@ -58,6 +58,17 @@ jobs:
       - name: Verify no hardcoded exp-2 money formatting
         run: python3 scripts/verify-no-hardcoded-money-format.py
 
+  # ── Architecture boundary checker (P1 pilot) ───────────────────────
+  # Static-only enforcement: existing transitional findings are tracked in
+  # the expiring baseline; new, expired, or stale findings block CI.
+  architecture-boundaries:
+    name: Architecture Boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify architecture boundaries
+        run: python3 scripts/verify-architecture-boundaries.py --strict
+
   # ── Rust: Clippy (needs system deps for compilation, all-features) ─
   rust-clippy:
     name: Rust Clippy
@@ -90,6 +101,23 @@ jobs:
     name: Rust Test Fast (${{ matrix.shard }})
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    # Postgres for the cloud-server / oz-api PG integration tests
+    # (`OZ_TEST_PG_URL`). Without it those tests skip-if-unreachable and the
+    # Postgres data layer would never actually run in CI.
+    env:
+      OZ_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       fail-fast: false
       matrix:
@@ -285,6 +313,22 @@ jobs:
   rust-test-apps:
     name: Rust Test Apps
     runs-on: ubuntu-latest
+    # Postgres for the cloud-server PG integration tests (same rationale as
+    # rust-test-fast).
+    env:
+      OZ_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -781,13 +825,19 @@ jobs:
       - name: Fuzz tier-1 targets (60s each, no C deps)
         if: steps.gate.outputs.run == 'true'
         run: |
-          for target in sku_parse money_parse; do
+          for target in sku_parse money_parse lua_sandbox; do
             echo "::group::Fuzzing $target"
             # AUDIT-27 CI-03: no `|| true` — fuzz failures surface to the
             # advisory job and trigger the crash-artifact upload below.
             # The target bins are already built above; `cargo fuzz run` only
             # does a seconds-long incremental rebuild, so the 65s cap now
             # bounds the 60s fuzz run itself.
+            #
+            # lua_sandbox MUST actually run, not just build: it was dropped
+            # from this loop as collateral in the 6e7c37b6 tier split and
+            # stayed build-only until round 171 — the stale os-is-nil assert
+            # (round 170's crash class) survived in the versioned target
+            # exactly because CI compiled but never executed it.
             timeout 65 cargo fuzz run "$target" -- -max_total_time=60
             echo "::endgroup::"
           done

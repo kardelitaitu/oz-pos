@@ -114,6 +114,12 @@ export interface ShiftReportDto {
   saleCount: number;
   voidCount: number;
   refundCount: number;
+  /** Cost of goods sold in minor units (HPP × qty over completed lines). */
+  cogsMinor: number;
+  /** Gross profit in minor units: completed-sale revenue − COGS. */
+  grossProfitMinor: number;
+  /** Gross margin as a percentage of revenue. */
+  grossMarginPercent: number;
 }
 
 /** Payment method totals within a shift. */

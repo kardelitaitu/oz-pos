@@ -61,6 +61,20 @@ if errorlevel 1 (
     echo [WARNING] Could not cleanly free port 1420. Tauri may fail to start.
 )
 
+REM Sync backend pre-check: if the local Docker server (start-local-sync.bat
+REM -> :3099) is not reachable, surface a warning BEFORE launching. The
+REM debug build auto-provisions the connection at startup (see
+REM apps/desktop-client/src/sync_bootstrap.rs); this banner only tells you
+REM why sync would stay unconfigured if the backend is down.
+echo Checking local sync backend on http://localhost:3099...
+curl -s -m 3 -o nul http://localhost:3099/health >nul 2>&1
+if errorlevel 1 (
+    echo [WARNING] Sync backend NOT reachable at http://localhost:3099.
+    echo           Run scripts\start-local-sync.bat to start the local Docker server.
+) else (
+    echo [OK] Sync backend reachable at http://localhost:3099
+)
+
 cargo tauri dev
 
 REM Keep the window open so any startup error from the line above

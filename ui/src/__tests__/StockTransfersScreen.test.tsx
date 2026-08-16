@@ -305,6 +305,38 @@ describe('StockTransfersScreen', () => {
     });
   });
 
+  it('rejects fractional receive quantity instead of silently truncating it', async () => {
+    const user = userEvent.setup();
+    mockListTransfers.mockResolvedValue([sampleTransfers[1]!]);
+    mockGetTransfer.mockResolvedValue(sampleDetailInTransit);
+    renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
+
+    await waitFor(() => {
+      expect(screen.getByText('ST-002')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('ST-002'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /receive transfer/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /receive transfer/i }));
+
+    const qtyInput = screen.getByRole('spinbutton');
+    await user.clear(qtyInput);
+    await user.type(qtyInput, '4.5');
+
+    await user.click(screen.getByRole('button', { name: /confirm receipt/i }));
+
+    // The previous `parseInt('4.5', 10) || 0` would have sent 4 silently;
+    // now the localized validation error surfaces and no receive call fires.
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('Quantities must be whole numbers');
+    });
+    const receiveMock = vi.mocked(await import('@/api/stockTransfers')).receiveStockTransfer as ReturnType<typeof vi.fn>;
+    expect(receiveMock).not.toHaveBeenCalled();
+  });
+
   it('closes detail modal when X close button is clicked', async () => {
     const user = userEvent.setup();
     mockListTransfers.mockResolvedValue(sampleTransfers);

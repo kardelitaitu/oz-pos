@@ -6,6 +6,57 @@ import { cleanup } from '@testing-library/react';
 import { beforeEach, afterEach, vi } from 'vitest';
 import type * as WorkspaceContextModule from '@/contexts/WorkspaceContext';
 
+// ── Global mock: echarts-for-react ────────────────────────────────
+// jsdom lacks Canvas 2D context support, which causes zrender (ECharts'
+// rendering engine) to throw. This mock renders a simple placeholder div
+// so component tests can validate UI structure (KPIs, tables, labels)
+// without real charts. Tests needing actual chart rendering should use
+// Playwright E2E tests instead.
+vi.mock('echarts-for-react', () => ({
+  default: ({ style, ...props }: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { option, notMerge, lazyUpdate, onEvents, onChartReady, theme, ...rest } = props as Record<string, unknown>;
+    return {
+      type: 'div',
+      props: {
+        ...rest,
+        'data-testid': 'echarts-mock',
+        style: { ...(style as object), border: '1px dashed var(--color-border)' },
+      },
+    };
+  },
+}));
+
+// ── Global mock: echarts/core (for the minimal bundle imports) ─────
+vi.mock('echarts/core', () => ({
+  use: vi.fn(),
+  init: vi.fn(() => ({
+    setOption: vi.fn(),
+    dispose: vi.fn(),
+    resize: vi.fn(),
+    getOption: vi.fn(() => ({})),
+  })),
+  graphic: { LinearGradient: vi.fn() },
+}));
+
+vi.mock('echarts/charts', () => ({
+  BarChart: {},
+  LineChart: {},
+  PieChart: {},
+  HeatmapChart: {},
+}));
+
+vi.mock('echarts/components', () => ({
+  GridComponent: {},
+  TooltipComponent: {},
+  LegendComponent: {},
+  VisualMapComponent: {},
+}));
+
+vi.mock('echarts/renderers', () => ({
+  CanvasRenderer: {},
+}));
+
 // ── Global mock: @tauri-apps/api/event ─────────────────────────
 // SettingsContext uses a dynamic import('@tauri-apps/api/event')
 // which per-file vi.mock() cannot intercept.  This global mock
@@ -14,6 +65,9 @@ import type * as WorkspaceContextModule from '@/contexts/WorkspaceContext';
 // jsdom, and throws "Cannot read properties of undefined").
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => {})),
+  once: vi.fn(() => Promise.resolve(() => {})),
+  emit: vi.fn(() => Promise.resolve()),
+  emitTo: vi.fn(() => Promise.resolve()),
 }));
 
 // ── Global mock: @/contexts/WorkspaceContext ──────────────────────
@@ -113,6 +167,42 @@ afterEach(async () => {
   const { invalidateCatalog } = await import('@/utils/catalog-cache');
   invalidateCatalog();
 });
+
+// ── PointerEvent polyfill ────────────────────────────────────────
+// jsdom (even v24) does not implement PointerEvent, so fireEvent.pointer*
+// would throw "PointerEvent is not defined". The topology editor's touch
+// parity uses pointer events; this minimal polyfill (MouseEvent subclass
+// carrying the pointer fields) lets component tests drive touch gestures.
+if (typeof window !== 'undefined' && !window.PointerEvent) {
+  class PointerEventPolyfill extends MouseEvent {
+    pointerId: number;
+    pointerType: string;
+    isPrimary: boolean;
+    width: number;
+    height: number;
+    pressure: number;
+    tangentialPressure: number;
+    tiltX: number;
+    tiltY: number;
+    twist: number;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? 'mouse';
+      this.isPrimary = init.isPrimary ?? true;
+      this.width = init.width ?? 1;
+      this.height = init.height ?? 1;
+      this.pressure = init.pressure ?? 0.5;
+      this.tangentialPressure = init.tangentialPressure ?? 0;
+      this.tiltX = init.tiltX ?? 0;
+      this.tiltY = init.tiltY ?? 0;
+      this.twist = init.twist ?? 0;
+    }
+  }
+  // Expose the same name jsdom would use for the global constructor so
+  // testing-library's createEvent resolves it via window.PointerEvent.
+  window.PointerEvent = PointerEventPolyfill as unknown as typeof PointerEvent;
+}
 
 // matchMedia is not implemented in jsdom; Fluent uses it for
 // responsive layouts. Stub it.

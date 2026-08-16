@@ -8,6 +8,7 @@ description = "OZ-POS Reporting Module: generates and exports sales, inventory, 
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 foundation = { workspace = true }
 rusqlite = { workspace = true }
 chrono = { workspace = true }

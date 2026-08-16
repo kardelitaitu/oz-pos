@@ -103,8 +103,14 @@ export default function ShiftManagementScreen() {
   // ── Open shift ────────────────────────────────────────────────────
 
   const handleOpenShift = useCallback(async () => {
-    const balance = parseInt(openingBalance, 10);
-    const safeBalance = !Number.isNaN(balance) && balance >= 0 ? balance : 0;
+    // SHIFT-03: opening balance is integer minor units — reject fractional
+    // input instead of silently truncating it via parseInt.
+    const balance = openingBalance.trim() === '' ? 0 : Number(openingBalance);
+    if (!Number.isInteger(balance) || balance < 0) {
+      setError(requiredLocalized(l10n, 'shift-invalid-opening-balance'));
+      return;
+    }
+    const safeBalance = balance;
 
     setSaving(true);
     setError(null);
@@ -124,8 +130,8 @@ export default function ShiftManagementScreen() {
 
   const handleCloseShift = useCallback(async () => {
     if (!activeShift) return;
-    const balance = parseInt(closingBalance, 10);
-    if (Number.isNaN(balance) || balance < 0) {
+    const balance = Number(closingBalance);
+    if (!Number.isInteger(balance) || balance < 0) {
       setError(requiredLocalized(l10n, 'shift-invalid-balance'));
       return;
     }
@@ -163,8 +169,8 @@ export default function ShiftManagementScreen() {
 
   const handleCreatePayout = useCallback(async () => {
     if (!activeShift) return;
-    const amount = parseInt(payoutAmount, 10);
-    if (Number.isNaN(amount) || amount <= 0) {
+    const amount = Number(payoutAmount);
+    if (!Number.isInteger(amount) || amount <= 0) {
       setError(requiredLocalized(l10n, 'shift-invalid-payout-amount'));
       return;
     }
@@ -187,11 +193,13 @@ export default function ShiftManagementScreen() {
 
   // ── Format time/date helpers ───────────────────────────────────────
 
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
+
   const time = (iso: string) =>
-    new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    new Date(iso).toLocaleTimeString(numLocale, { hour: '2-digit', minute: '2-digit' });
 
   const dateTime = (iso: string) =>
-    new Date(iso).toLocaleString([], {
+    new Date(iso).toLocaleString(numLocale, {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });
 
@@ -448,7 +456,6 @@ export default function ShiftManagementScreen() {
                             : '';
                       return (
                         <tr key={s.id} className={s.status === 'open' ? 'shift-mgmt-row--open' : ''}>
-                          { }
                           <td>
                             <span className={`shift-mgmt-status-badge shift-mgmt-status-badge--${s.status}`}>
                               <Localized id={s.status === 'open' ? 'shift-status-open' : 'shift-status-closed'}>
@@ -641,7 +648,7 @@ export default function ShiftManagementScreen() {
                   variant="primary"
                   onClick={handleCreatePayout}
                   loading={saving}
-                  disabled={!payoutAmount || parseInt(payoutAmount, 10) <= 0 || Number.isNaN(parseInt(payoutAmount, 10))}
+                  disabled={!payoutAmount || !Number.isInteger(Number(payoutAmount)) || Number(payoutAmount) <= 0}
                 >
                   Record Payout
                 </Button>
@@ -774,7 +781,7 @@ export default function ShiftManagementScreen() {
                   variant="primary"
                   onClick={handleCloseShift}
                   loading={saving}
-                  disabled={!closingBalance || parseInt(closingBalance, 10) < 0 || Number.isNaN(parseInt(closingBalance, 10))}
+                  disabled={!closingBalance || !Number.isInteger(Number(closingBalance)) || Number(closingBalance) < 0}
                 >
                   Close Shift
                 </Button>
@@ -1110,6 +1117,43 @@ export default function ShiftManagementScreen() {
                             <span>Refunds</span>
                           </Localized>
                           <span className="shift-mgmt-cell-mono">{shiftReport.refundCount}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Gross profit summary (HPP) */}
+                  {shiftReport.saleCount > 0 && (
+                    <div className="shift-mgmt-report-section">
+                      <Localized id="shift-report-gross-profit">
+                        <h3 className="shift-mgmt-report-title">Gross Profit</h3>
+                      </Localized>
+                      <div className="shift-mgmt-report-table">
+                        <div className="shift-mgmt-report-table-header">
+                          <Localized id="shift-report-col-metric">
+                            <span>Metric</span>
+                          </Localized>
+                          <Localized id="shift-report-col-total">
+                            <span>Total</span>
+                          </Localized>
+                        </div>
+                        <div className="shift-mgmt-report-row">
+                          <Localized id="shift-report-cogs">
+                            <span>Cost of Goods Sold (HPP)</span>
+                          </Localized>
+                          <span className="shift-mgmt-cell-mono">{fmt(shiftReport.cogsMinor, currency)}</span>
+                        </div>
+                        <div className="shift-mgmt-report-row">
+                          <Localized id="shift-report-gross-profit-value">
+                            <span>Gross Profit</span>
+                          </Localized>
+                          <span className={`shift-mgmt-cell-mono${shiftReport.grossProfitMinor < 0 ? ' shift-mgmt-cell-negative' : ''}`}>{fmt(shiftReport.grossProfitMinor, currency)}</span>
+                        </div>
+                        <div className="shift-mgmt-report-row">
+                          <Localized id="shift-report-gross-margin-pct">
+                            <span>Gross Margin</span>
+                          </Localized>
+                          <span className="shift-mgmt-cell-mono">{shiftReport.grossMarginPercent.toFixed(1)}%</span>
                         </div>
                       </div>
                     </div>

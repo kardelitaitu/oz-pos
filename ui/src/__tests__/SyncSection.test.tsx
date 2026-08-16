@@ -31,6 +31,22 @@ const testL10n = {
       'settings-sync-status-idle': 'Idle',
       'settings-sync-status-ok': 'Sync OK',
       'settings-sync-pending-count': '{count} pending',
+      'settings-sync-summary-pending': 'pending',
+      'settings-sync-summary-synced': 'synced',
+      'settings-sync-summary-failed': 'failed',
+      'settings-sync-summary-conflicts': 'conflicts',
+      'settings-sync-plan-label': 'Plan',
+      'settings-sync-plan-free': 'Free',
+      'settings-sync-plan-pro': 'Pro',
+      'settings-sync-plan-upgrade-hint': 'Upgrade to sync to the cloud',
+      'settings-sync-last-synced': 'Last synced {time}',
+      'settings-sync-last-synced-never': 'Never synced',
+      'settings-sync-oldest-pending': 'Oldest pending {time}',
+      'settings-sync-oldest-pending-none': 'Queue empty',
+      'settings-sync-time-just-now': 'just now',
+      'settings-sync-time-minutes-ago': '{count}m ago',
+      'settings-sync-time-hours-ago': '{count}h ago',
+      'settings-sync-time-days-ago': '{count}d ago',
       'settings-sync-test-connection': 'Test Connection',
       'settings-sync-testing': 'Testing…',
       'settings-sync-test-failed': 'Test failed',
@@ -43,6 +59,8 @@ const testL10n = {
       'settings-sync-success': 'Sync succeeded',
       'settings-sync-nothing': 'Nothing to sync',
       'settings-sync-error': 'Sync failed',
+      'settings-sync-plan-required': 'Cloud sync requires a paid plan',
+      'settings-sync-plan-required-hint': 'Your local sales keep working — upgrade to sync them to the cloud.',
       'settings-sync-request-token': 'Request Token',
       'settings-sync-requesting': 'Requesting…',
       'settings-sync-token-hint': 'Enter a JWT token.',
@@ -134,7 +152,8 @@ function renderSection(overrides: Record<string, unknown> = {}) {
     setSyncResult: vi.fn(),
     pullResult: null,
     setPullResult: vi.fn(),
-    pendingCount: null,
+    queueSummary: null,
+    syncPlan: null,
     testing: false,
     setTesting: vi.fn(),
     pingResult: null,
@@ -145,7 +164,7 @@ function renderSection(overrides: Record<string, unknown> = {}) {
     setTokenExpiresAt: vi.fn(),
     cmInput: {} as React.HTMLAttributes<HTMLInputElement>,
     markDirty: vi.fn(),
-    refreshPendingCount: vi.fn(),
+    refreshQueueSummary: vi.fn(),
     testSyncConnection: vi.fn(),
     syncRun: vi.fn(),
     syncPull: vi.fn(),
@@ -268,12 +287,90 @@ describe('SyncSection', () => {
     expect(document.querySelector('.settings-sync-result-block')).toBeInTheDocument();
   });
 
-  it('shows pending badge when pendingCount > 0', () => {
+  it('shows pending badge when queue summary has pending items', () => {
     renderSection({
       sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
-      pendingCount: 7,
+      queueSummary: {
+        pendingCount: 7,
+        syncedCount: 12,
+        failedCount: 1,
+        conflictCount: 0,
+        lastSyncedAt: null,
+        oldestPendingAt: null,
+      },
     });
     expect(screen.getByText('7 pending')).toBeInTheDocument();
+  });
+
+  it('renders the detailed queue status panel with counts and timestamps', () => {
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      queueSummary: {
+        pendingCount: 3,
+        syncedCount: 41,
+        failedCount: 2,
+        conflictCount: 1,
+        lastSyncedAt: new Date(Date.now() - 5 * 60_000).toISOString(), // 5m ago
+        oldestPendingAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), // 2h ago
+      },
+    });
+    expect(screen.getByTestId('sync-queue-summary')).toBeInTheDocument();
+    // Counts
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('41')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    // Relative timestamps
+    expect(screen.getByText(/Last synced/)).toBeInTheDocument();
+    expect(screen.getByText(/Oldest pending/)).toBeInTheDocument();
+  });
+
+  it('shows "never synced" / "queue empty" when timestamps are missing', () => {
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      queueSummary: {
+        pendingCount: 0,
+        syncedCount: 0,
+        failedCount: 0,
+        conflictCount: 0,
+        lastSyncedAt: null,
+        oldestPendingAt: null,
+      },
+    });
+    expect(screen.getByText(/Never synced/)).toBeInTheDocument();
+    expect(screen.getByText(/Queue empty/)).toBeInTheDocument();
+  });
+
+  it('renders the pro plan row from the server', () => {
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      syncPlan: { ok: true, plan: 'pro', status: 'ok' },
+    });
+    expect(screen.getByTestId('sync-plan-row')).toBeInTheDocument();
+    expect(screen.getByText('Pro')).toBeInTheDocument();
+    expect(screen.queryByText(/Upgrade to sync/)).toBeNull();
+  });
+
+  it('renders the free plan row with the upgrade hint', () => {
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      syncPlan: { ok: true, plan: 'free', status: 'ok' },
+    });
+    expect(screen.getByTestId('sync-plan-row')).toBeInTheDocument();
+    expect(screen.getByText('Free')).toBeInTheDocument();
+    expect(screen.getByText(/Upgrade to sync/)).toBeInTheDocument();
+  });
+
+  it('does NOT render a plan row when the plan read failed (ok=false)', () => {
+    // A failed read (old server 404, network error) carries ok:false,
+    // plan:null — it must not paint as a known "Free" plan.
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      syncPlan: { ok: false, plan: null, status: 'Server returned 404 Not Found' },
+    });
+    expect(screen.queryByTestId('sync-plan-row')).toBeNull();
+    expect(screen.queryByText('Free')).toBeNull();
+    expect(screen.queryByText(/Upgrade to sync/)).toBeNull();
   });
 
   it('renders request token button', () => {
@@ -415,6 +512,35 @@ describe('SyncSection', () => {
     await waitFor(() => {
       expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'info' }));
     });
+  });
+
+  it('shows the localized plan-required toast when syncRun reports planRequired', async () => {
+    // A free tenant's sync_run returns error + planRequired:true. The toast
+    // must surface the localized upgrade prompt — never the raw backend
+    // string "cloud sync requires a paid plan" (ADR sync-plan-gating).
+    const syncRun = vi.fn().mockResolvedValue({
+      synced: 0,
+      failed: 0,
+      error: 'cloud sync requires a paid plan',
+      planRequired: true,
+    });
+    const addToast = vi.fn();
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      syncRun,
+      addToast,
+    });
+
+    fireEvent.click(screen.getByText('Sync Now'));
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalled();
+    });
+    const toastCall = addToast.mock.calls[0]?.[0] as { message: string; type: string };
+    expect(toastCall).toBeDefined();
+    expect(toastCall!.type).toBe('error');
+    // Localized message, not the raw backend error string.
+    expect(toastCall!.message).toBe('Cloud sync requires a paid plan');
+    expect(toastCall!.message).not.toContain('cloud sync requires a paid plan');
   });
 
   it('shows error toast when syncRun throws', async () => {

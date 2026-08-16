@@ -450,6 +450,34 @@ impl Settings {
         )?)
     }
 
+    /// Get the registered sync terminal identifier (ADR sync-auth-hardening P3).
+    pub fn get_sync_terminal_id(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_sync_terminal_id(
+            conn,
+        )?)
+    }
+
+    /// Set the registered sync terminal identifier (ADR sync-auth-hardening P3).
+    pub fn set_sync_terminal_id(conn: &Connection, id: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_sync_terminal_id(
+            conn, id,
+        )?)
+    }
+
+    /// Get the registered sync terminal device secret (ADR sync-auth-hardening P3).
+    pub fn get_sync_terminal_secret(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_sync_terminal_secret(
+            conn,
+        )?)
+    }
+
+    /// Set the registered sync terminal device secret (ADR sync-auth-hardening P3).
+    pub fn set_sync_terminal_secret(conn: &Connection, secret: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_sync_terminal_secret(
+            conn, secret,
+        )?)
+    }
+
     // ── Exchange Rate Auto-Sync ─────────────────────────────────
 
     /// Check if exchange rate auto-sync is enabled.
@@ -853,7 +881,8 @@ mod tests {
         Settings::set(&conn, "a", "1").unwrap();
         Settings::set(&conn, "b", "2").unwrap();
         let all = Settings::load_all(&conn).unwrap();
-        assert_eq!(all.len(), 2);
+        // currency.default is seeded by init migration
+        assert!(all.len() >= 2);
         assert!(all.contains(&("a".into(), "1".into())));
         assert!(all.contains(&("b".into(), "2".into())));
     }

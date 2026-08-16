@@ -8,9 +8,11 @@ import { loginAs } from './helpers';
  * All guards (`if (count > 0)`) removed — tests hard-fail on regressions.
  *
  * Dev-mock credentials:
- *   - "owner" / "1234"  → role: owner, display: "Owner"
- *   - "admin" / "admin123"  → role: manager, display: "Admin"
- *   - "kasir" / "1234"  → role: cashier, display: "Cashier"
+ *   - "owner"   / "1234"  → role: owner,   display: "Owner"
+ *   - "admin"   / "9999"  → role: admin,   display: "Admin"
+ *   - "manager" / "1234"  → role: manager, display: "Manager"
+ *   - "staff"   / "1234"  → role: staff,   display: "Staff"
+ *   - "auditor" / "1234"  → role: auditor, display: "Auditor"
  *
  * CSS contract (StaffLoginScreen.tsx):
  *   .staff-login-screen     — container
@@ -197,15 +199,15 @@ test.describe('Staff Login', () => {
 
   // ── Bonus: Admin login shows correct greeting ───────────────
 
-  test('admin login shows manager greeting', async ({ page }) => {
+  test('admin login shows admin greeting', async ({ page }) => {
     await loginAs(page, 'admin', '9999');
-    await expect(page.locator('.ws-header-greeting')).toContainText('Manager');
+    await expect(page.locator('.ws-header-greeting')).toContainText('Admin');
   });
 
-  // ── Bonus: Cashier login shows cashier greeting ──────────────
+  // ── Bonus: Staff login shows staff greeting ─────────────────
 
-  test('cashier login shows cashier greeting', async ({ page }) => {
-    await loginAs(page, 'kasir', '1234');
-    await expect(page.locator('.ws-header-greeting')).toContainText('Cashier');
+  test('staff login shows staff greeting', async ({ page }) => {
+    await loginAs(page, 'staff', '1234');
+    await expect(page.locator('.ws-header-greeting')).toContainText('Staff');
   });
 });

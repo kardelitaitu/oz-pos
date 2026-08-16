@@ -20,6 +20,7 @@ restaurant-menu-empty = Menu is empty
 restaurant-size-label = Size
 restaurant-sort-label = Sort
 restaurant-card-add = Add
+restaurant-card-unavailable = Unavailable
 restaurant-context-color-label = Color
 restaurant-search-aria = Search menu items
 restaurant-search-clear-aria = Clear search
@@ -28,15 +29,10 @@ restaurant-context-unpin = Unpin from top
 restaurant-context-available = Mark available
 restaurant-context-unavailable = Mark unavailable
 restaurant-card-pin-title = Pinned to top
-restaurant-sort-manual = Manual
-restaurant-sort-a-z = A–Z
-restaurant-sort-date = By Date
-restaurant-sort-popularity = Popularity
 restaurant-menu-items-aria = Menu items
 restaurant-color-swatch-aria = Color { $color }
 
 # Product Lookup
-product-lookup-title = Products
 product-lookup-dev-fallback = Using sample data (IPC unavailable)
 product-lookup-search-placeholder =
     .placeholder = Search products…
@@ -52,7 +48,6 @@ product-lookup-scan-btn-aria =
 product-lookup-no-results = No products found
 product-lookup-clear-search = Clear search
 product-lookup-loading = Loading products…
-product-lookup-add = Add to cart
 product-lookup-in-stock = In stock
 product-lookup-out-of-stock = Out of stock
 product-lookup-all-categories = All Categories
@@ -68,7 +63,6 @@ product-lookup-error-load = Failed to load products
 # Product Management
 product-mgmt-title = Products
 product-mgmt-add = Add Product
-product-mgmt-loading = Loading products…
 product-mgmt-empty = No products yet.
 product-mgmt-empty-cta = Add your first product
 product-mgmt-col-sku = SKU
@@ -83,11 +77,6 @@ product-mgmt-edit = Edit
 product-mgmt-edit-aria = Edit { $name }
 product-mgmt-delete = Delete
 product-mgmt-delete-aria = Delete { $name }
-product-mgmt-deleting =
-    { $count ->
-        [one] Deleting…
-       *[other] …
-    }
 product-mgmt-delete-confirm-title = Delete product?
 product-mgmt-delete-confirm-message = Delete { $name } ({ $sku })? This cannot be undone.
 product-mgmt-delete-confirm-btn = Delete
@@ -100,10 +89,7 @@ product-mgmt-error-invalid-stock = Stock must be a whole, non-negative number
 product-mgmt-modal-add-title = Add Product
 product-mgmt-modal-edit-title = Edit Product
 product-mgmt-modal-close = Close
-product-mgmt-field-sku = SKU
 product-mgmt-field-sku-required = SKU *
-product-mgmt-field-name = Name
-product-mgmt-field-name-required = Name *
 product-mgmt-field-price = Price (minor units)
 product-mgmt-field-currency = Currency
 product-mgmt-field-category = Category
@@ -119,8 +105,7 @@ product-mgmt-table-aria = Product catalog
 product-mgmt-actions-aria =
     .aria-label = Actions
 product-mgmt-variants = Variants
-product-mgmt-variants-aria =
-    .aria-label = Variants for { $name }
+product-mgmt-variants-aria = Variants for { $name }
 product-mgmt-modal-aria = { $mode ->
         [add] Add product
        *[edit] Edit product
@@ -145,7 +130,6 @@ product-mgmt-alert-close = Close
 
 # Product Variants
 variant-mgmt-title = Variants — { $product }
-variant-mgmt-loading = Loading variants…
 variant-mgmt-empty = No variants yet.
 variant-mgmt-empty-cta = Add a variant
 variant-mgmt-add = Add Variant
@@ -158,17 +142,17 @@ variant-mgmt-price-parent = Uses parent price
 variant-mgmt-status-active = Active
 variant-mgmt-status-inactive = Inactive
 variant-mgmt-edit = Edit
-variant-mgmt-edit-aria = Edit { $name }
+variant-mgmt-edit-aria =
+    .aria-label = Edit { $name }
 variant-mgmt-delete = Delete
-variant-mgmt-delete-aria = Delete { $name }
+variant-mgmt-delete-aria =
+    .aria-label = Delete { $name }
 variant-mgmt-delete-confirm-title = Delete Variant
 variant-mgmt-delete-confirm-body = Are you sure you want to delete variant "{ $name }" ({ $sku })? This action cannot be undone.
 variant-mgmt-delete-confirm-cancel = Cancel
 variant-mgmt-delete-confirm-confirm = Delete
 variant-mgmt-modal-add-title = Add Variant
 variant-mgmt-modal-edit-title = Edit Variant
-variant-mgmt-modal-close = Close
-variant-mgmt-close = Close
 variant-mgmt-close-aria =
     .aria-label = Close
 variant-mgmt-field-name-required = Name *
@@ -182,10 +166,6 @@ variant-mgmt-btn-cancel = Cancel
 variant-mgmt-btn-create = Create
 variant-mgmt-btn-update = Update
 variant-mgmt-overlay-aria = Variants for { $name }
-variant-mgmt-dialog-aria = { $mode ->
-    [add] Add variant
-   *[edit] Edit variant
-}
 variant-mgmt-table-aria = Product variants
 variant-mgmt-actions-aria =
     .aria-label = Actions
@@ -201,15 +181,14 @@ variant-mgmt-barcode-placeholder =
     .placeholder = 4901234567890
 variant-mgmt-sort-placeholder =
     .placeholder = 0
-variant-mgmt-delete-confirm-aria =
-    .aria-label = Delete confirmation
 variant-mgmt-error-load = Failed to load variants
 variant-mgmt-error-save = Failed to save variant
 variant-mgmt-error-delete = Failed to delete variant
+variant-mgmt-error-invalid-price = Variant price must be a whole, non-negative number
+variant-mgmt-error-invalid-sort = Sort order must be a whole, non-negative number
 
 # Category Management
 categories-title = Categories
-categories-loading = Loading categories…
 categories-no-categories = No categories yet
 categories-empty-desc = Get started by creating your first category
 categories-add-first = Add your first category
@@ -238,8 +217,7 @@ categories-error-name-required = Category name is required
 categories-error-id-conflict = A category with this ID already exists
 categories-error-colour-invalid = Choose a colour from the palette
 categories-preview = Preview
-categories-name-aria =
-    .aria-label = Category Name
+categories-name-aria = Category Name
 categories-icon-picker-aria = Pick an icon
 categories-colour-picker-aria = Pick a colour
 categories-icon-food = Food

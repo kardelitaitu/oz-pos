@@ -47,6 +47,9 @@ export interface SyncResult {
   failedCount: number;
   /** Total number of items that were attempted. */
   totalCount: number;
+  /** The server rejected the attempt because this tenant is on the free
+   *  plan (ADR sync-plan-gating) — show an upgrade prompt. */
+  planRequired?: boolean;
 }
 
 /** Summary of offline queue status (P1-6 sync observability). */
@@ -91,6 +94,51 @@ export const retryOfflineSync = (): Promise<SyncResult> =>
 export const deleteOfflineItem = (id: string): Promise<void> =>
   loggedInvoke('delete_offline_item', { args: { id } });
 
+// ── Remote Dead-Letter (quarantined pulls) ────────────────────────
+
+/**
+ * A remote sync item that repeatedly failed to apply during a pull and
+ * was quarantined in `sync_remote_failures` (SYNC-09 / SYNC-11).
+ *
+ * Matches the Rust `RemoteSyncFailureDto` serializer exactly
+ * (camelCase `itemId` / `deadLettered`).
+ */
+export interface RemoteSyncFailureDto {
+  /** Remote item identifier. */
+  itemId: string;
+  /** Remote action name. */
+  action: string;
+  /** Original payload retained for operator inspection. */
+  payload: string;
+  /** Number of failed application attempts. */
+  attempts: number;
+  /** Most recent application error. */
+  lastError: string;
+  /** Whether retry is exhausted and the item is quarantined. */
+  deadLettered: boolean;
+}
+
+/**
+ * List remote items quarantined after repeated pull-application failures.
+ *
+ * The listing is not session-scoped: the sync daemon runs server-side in
+ * both clients, so an operator with backend access can inspect the dead
+ * letter without an active POS session (SYNC-11).
+ */
+export const listRemoteFailures = (): Promise<RemoteSyncFailureDto[]> =>
+  loggedInvoke<RemoteSyncFailureDto[]>('list_remote_failures');
+
+/**
+ * Requeue a dead-lettered remote item so the next sync cycle retries it.
+ *
+ * Operators call this after remediating the item's source (e.g. creating
+ * the missing product a remote sale referenced). Returns `NotFound` for
+ * ids that are not currently dead-lettered, so a mistyped id is never a
+ * silent no-op.
+ */
+export const requeueRemoteFailure = (itemId: string): Promise<void> =>
+  loggedInvoke('requeue_remote_failure', { args: { itemId } });
+
 // ── Cloud Sync Settings ──────────────────────────────────────────
 
 /** Cloud sync configuration. */
@@ -112,6 +160,9 @@ export interface SyncAttemptResult {
   synced: number;
   failed: number;
   error: string | null;
+  /** The server rejected the attempt because this tenant is on the free
+   *  plan (ADR sync-plan-gating) — show an upgrade prompt. */
+  planRequired?: boolean;
 }
 
 /** Result of pulling data from the cloud server. */
@@ -142,6 +193,59 @@ export const syncRun = (): Promise<SyncAttemptResult> =>
 export const pendingSyncCount = (): Promise<number> =>
   loggedInvoke<number>('pending_sync_count');
 
+// ── PostgreSQL sync settings & daemon ──────────────────────────────
+
+/** PostgreSQL sync configuration (the PG transport's connection settings). */
+export interface PgSyncSettingsDto {
+  enabled: boolean;
+  host: string | null;
+  port: string | null;
+  dbname: string | null;
+  user: string | null;
+  hasPassword: boolean;
+}
+
+/** Arguments for updating PostgreSQL sync settings. `password` is only
+ *  written when provided — omit it to keep the stored secret untouched
+ *  (the UI sends `undefined` for the unmasked field). */
+export interface UpdatePgSyncSettingsArgs {
+  enabled: boolean;
+  host?: string | null;
+  port?: string | null;
+  dbname?: string | null;
+  user?: string | null;
+  password?: string | null;
+}
+
+/** Snapshot of the PG sync daemon's state (camelCase mirror of the Rust
+ *  `PgDaemonStatus` serializer). */
+export interface PgDaemonStatusDto {
+  running: boolean;
+  lastSyncAt: string | null;
+  lastPushed: number;
+  lastPulled: number;
+  lastError: string | null;
+  pendingCount: number;
+}
+
+/** Get the PostgreSQL sync settings. */
+export const getPgSyncSettings = (): Promise<PgSyncSettingsDto> =>
+  loggedInvoke<PgSyncSettingsDto>('get_pg_sync_settings');
+
+/** Update the PostgreSQL sync settings. */
+export const updatePgSyncSettings = (args: UpdatePgSyncSettingsArgs): Promise<void> =>
+  loggedInvoke<void>('update_pg_sync_settings', { args });
+
+/** Get the PG sync daemon's current status. */
+export const pgSyncStatus = (): Promise<PgDaemonStatusDto> =>
+  loggedInvoke<PgDaemonStatusDto>('pg_sync_status');
+
+/** Start the background PG sync daemon (no-op when already running). */
+export const pgSyncStart = (): Promise<void> => loggedInvoke<void>('pg_sync_start');
+
+/** Stop the background PG sync daemon (no-op when not running). */
+export const pgSyncStop = (): Promise<void> => loggedInvoke<void>('pg_sync_stop');
+
 /**
  * Arguments for a destructive snapshot pull.
  *
@@ -161,6 +265,20 @@ export interface SyncPullArgs {
  */
 export const syncPull = (args: SyncPullArgs): Promise<PullResult> =>
   loggedInvoke<PullResult>('sync_pull', { args });
+
+// ── Tenant plan (ADR sync-plan-gating) ─────────────────────────
+
+/** Result of reading the caller's own sync plan from the server. */
+export interface SyncPlanResult {
+  ok: boolean;
+  /** Effective plan: `free` | `pro` — present when the read succeeded. */
+  plan: 'free' | 'pro' | null;
+  status: string;
+}
+
+/** Read the caller's own sync plan via `GET /api/v1/tenants/me/plan`. */
+export const getSyncPlan = (): Promise<SyncPlanResult> =>
+  loggedInvoke<SyncPlanResult>('get_sync_plan');
 
 // ── Connection Test ──────────────────────────────────────────────
 

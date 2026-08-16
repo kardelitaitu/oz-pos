@@ -243,6 +243,32 @@ describe('VariantManagementScreen', () => {
     expect(createBtn).toBeDisabled();
   });
 
+  it('rejects fractional price instead of silently truncating it', async () => {
+    const user = userEvent.setup();
+    render(<VariantManagementScreen {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Add Variant')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Add Variant'));
+
+    await user.type(screen.getByPlaceholderText('e.g. Large'), 'Large');
+    await user.type(screen.getByPlaceholderText('e.g. TEA-LARGE'), 'PROD-001-XL');
+    await user.type(screen.getByPlaceholderText('450'), '500.5');
+    await user.type(screen.getByPlaceholderText('USD'), 'USD');
+
+    await user.click(screen.getByText('Create').closest('button')!);
+
+    // The previous `parseInt('500.5', 10)` would have sent 500 silently;
+    // now the validation error surfaces (the l10n mock returns the key id)
+    // and no create call fires.
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('variant-mgmt-error-invalid-price');
+    });
+    expect(mockCreateVariant).not.toHaveBeenCalled();
+  });
+
   it('cancel button closes the create modal', async () => {
     const user = userEvent.setup();
     render(<VariantManagementScreen {...defaultProps} />);

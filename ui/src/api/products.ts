@@ -19,6 +19,23 @@ export interface ProductDto {
   product_type: string;
   low_stock_threshold?: number | null;
   high_stock_threshold?: number | null;
+  /** Cost price in minor units (local-only, ADR #36). Optional: legacy
+   *  fixtures / pre-migration backends may omit it; treat missing as 0. */
+  cost_minor?: number;
+  /** Brand (free text). */
+  brand?: string | null;
+  /** Rack position code. */
+  rack_location?: string | null;
+  /** Free-text notes. */
+  notes?: string | null;
+  /** Unit of measure. */
+  unit?: string | null;
+  /** Active/sellable status (missing = active). */
+  is_active?: boolean;
+  /** Default supplier FK (local-only). */
+  default_supplier_id?: string | null;
+  /** Materialized popularity score (ADR #37) — retail grid sort key. */
+  popularity_score?: number;
 }
 
 /** Arguments for creating a new product. */
@@ -28,11 +45,25 @@ export interface CreateProductArgs {
   name: string;
   priceMinor: number;
   currency: string;
-  categoryId?: string | undefined;
-  barcode?: string | undefined;
+  categoryId?: string | null;
+  barcode?: string | null;
   initialStock: number;
   productType?: string;
   taxRateIds: string[];
+  /** Cost price in minor units (ADR #36). */
+  costMinor?: number;
+  /** Brand (free text). */
+  brand?: string | null;
+  /** Rack position code. */
+  rackLocation?: string | null;
+  /** Free-text notes. */
+  notes?: string | null;
+  /** Unit of measure. */
+  unit?: string | null;
+  /** Active/sellable status (default true). */
+  isActive?: boolean;
+  /** Default supplier FK (local-only). */
+  defaultSupplierId?: string | null;
 }
 
 /** Arguments for updating an existing product. */
@@ -42,10 +73,24 @@ export interface UpdateProductArgs {
   name: string;
   priceMinor: number;
   currency: string;
-  categoryId?: string | undefined;
-  barcode?: string | undefined;
+  categoryId?: string | null;
+  barcode?: string | null;
   productType?: string;
   taxRateIds: string[];
+  /** Cost price in minor units (ADR #36). */
+  costMinor?: number;
+  /** Brand (free text). */
+  brand?: string | null;
+  /** Rack position code. */
+  rackLocation?: string | null;
+  /** Free-text notes. */
+  notes?: string | null;
+  /** Unit of measure. */
+  unit?: string | null;
+  /** Active/sellable status (default true). */
+  isActive?: boolean;
+  /** Default supplier FK (local-only). */
+  defaultSupplierId?: string | null;
 }
 
 /** List all products. */
@@ -75,11 +120,25 @@ export interface CreateProductScopedArgs {
   name: string;
   priceMinor: number;
   currency: string;
-  categoryId?: string | undefined;
-  barcode?: string | undefined;
+  categoryId?: string | null | undefined;
+  barcode?: string | null | undefined;
   initialStock: number;
   productType?: string;
   taxRateIds: string[];
+  /** Cost price in minor units (ADR #36). */
+  costMinor?: number;
+  /** Brand (free text). */
+  brand?: string | null;
+  /** Rack position code. */
+  rackLocation?: string | null;
+  /** Free-text notes. */
+  notes?: string | null;
+  /** Unit of measure. */
+  unit?: string | null;
+  /** Active/sellable status (default true). */
+  isActive?: boolean;
+  /** Default supplier FK (local-only). */
+  defaultSupplierId?: string | null;
 }
 
 export const createProductScoped = (sessionToken: string, args: CreateProductScopedArgs): Promise<{ sku: string }> =>
@@ -95,14 +154,40 @@ export interface UpdateProductScopedArgs {
   name: string;
   priceMinor: number;
   currency: string;
-  categoryId?: string | undefined;
-  barcode?: string | undefined;
+  categoryId?: string | null | undefined;
+  barcode?: string | null | undefined;
   productType?: string;
   taxRateIds: string[];
+  /** Cost price in minor units (ADR #36, PATCH: absent/null keeps). */
+  costMinor?: number | null | undefined;
+  /** Brand — `null` clears, string sets, absent keeps (PATCH). */
+  brand?: string | null;
+  /** Rack position code — `null` clears, string sets, absent keeps (PATCH). */
+  rackLocation?: string | null;
+  /** Free-text notes — `null` clears, string sets, absent keeps (PATCH). */
+  notes?: string | null;
+  /** Unit of measure — `null` clears, string sets, absent keeps (PATCH). */
+  unit?: string | null;
+  /** Active status — absent keeps. */
+  isActive?: boolean | null;
+  /** Default supplier — `null` clears, string sets, absent keeps (PATCH). */
+  defaultSupplierId?: string | null;
 }
 
 export const updateProductScoped = (sessionToken: string, args: UpdateProductScopedArgs): Promise<{ sku: string }> =>
   loggedInvoke<{ sku: string }>('update_product_scoped', { sessionToken, args });
+
+/**
+ * Record an acted-upon product search for the popularity index (ADR #37 D2).
+ *
+ * Fire-and-forget: failures are logged server-side and never surfaced.
+ * The UI calls this when a search result is actually added to the cart.
+ */
+export const recordProductSearchScoped = (sessionToken: string, sku: string): Promise<void> =>
+  loggedInvoke<void>('record_product_search_scoped', { sessionToken, sku }).catch((err) => {
+    // ADR #37 D3: non-blocking — a tracking failure must never fail an add-to-cart.
+    console.warn('record_product_search_scoped failed (ignored)', err);
+  });
 
 /** Delete a product by SKU. */
 export const deleteProduct = (args: { userId: string; sku: string }): Promise<void> =>

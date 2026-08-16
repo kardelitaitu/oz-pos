@@ -2,14 +2,20 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { withFluent, withFluentLocale } from '@/locales/test-utils';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import salesFtl from '@/locales/sales.ftl?raw';
+import salesIdFtl from '@/locales/sales.id.ftl?raw';
 import PaymentModal from '@/features/sales/PaymentModal';
 import type { Money, CartLine, Sku, LineId } from '@/types/domain';
 
 async function renderWithFluent(ui: React.ReactElement) {
   const wrapped = withFluent(<ToastProvider>{ui}</ToastProvider>, salesFtl);
+  await renderInAct(wrapped);
+}
+
+async function renderWithFluentId(ui: React.ReactElement) {
+  const wrapped = withFluentLocale('id', <ToastProvider>{ui}</ToastProvider>, salesIdFtl);
   await renderInAct(wrapped);
 }
 
@@ -88,6 +94,52 @@ describe('PaymentModal — rendering & fast interaction', () => {
     );
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('renders every payment input attribute from the id bundle, not getString fallbacks (rounds 99-102 dead-attribute fix)', async () => {
+    await renderWithFluentId(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Default state (method = cash). All attributes must come from the real id
+    // bundle via <Localized attrs> — getString never reads Fluent attributes.
+    expect(document.querySelector('[role="dialog"]')!.getAttribute('aria-label')).toBe('Pembayaran');
+    expect(document.querySelector('.payment-close')!.getAttribute('aria-label')).toBe('Batal pembayaran');
+
+    const tendered = document.querySelector('.payment-tendered-input') as HTMLInputElement | null;
+    expect(tendered, 'tendered input should render in cash mode').not.toBeNull();
+    expect(tendered!.getAttribute('placeholder')).toBe('0,00');
+    expect(tendered!.getAttribute('aria-label')).toBe('Jumlah dibayar');
+
+    const other = document.querySelector('.payment-other-input') as HTMLInputElement | null;
+    expect(other, 'other method input should render (disabled) in cash mode').not.toBeNull();
+    expect(other!.getAttribute('placeholder')).toBe('Lainnya…');
+    expect(other!.getAttribute('aria-label')).toBe('Nama metode pembayaran lain');
+
+    const quickBtns = document.querySelectorAll('.payment-quick-btn');
+    expect(quickBtns.length).toBeGreaterThan(0);
+    expect(quickBtns[quickBtns.length - 1]!.getAttribute('aria-label')).toBe('Bayar tepat');
+
+    // Enter split mode: the split rows (with the amount + other inputs) render.
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('Bagi pembayaran antar metode'));
+
+    const amountInput = document.querySelector('.payment-split-amount-input') as HTMLInputElement | null;
+    expect(amountInput, 'split amount input should render in split mode').not.toBeNull();
+    expect(amountInput!.getAttribute('placeholder')).toBe('0,00');
+    expect(amountInput!.getAttribute('aria-label')).toBe('Jumlah pembagian');
+
+    const splitOther = document.querySelector('.payment-split-other-input') as HTMLInputElement | null;
+    expect(splitOther, 'split other input should render in split mode').not.toBeNull();
+    expect(splitOther!.getAttribute('placeholder')).toBe('Lainnya');
+    expect(splitOther!.getAttribute('aria-label')).toBe('Nama metode pembayaran lain');
   });
 
   it('shows change preview for cash payment', async () => {

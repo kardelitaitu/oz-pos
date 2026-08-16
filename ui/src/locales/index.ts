@@ -28,6 +28,7 @@ import kioskFtl from './kiosk.ftl?raw';
 import loyaltyFtl from './loyalty.ftl?raw';
 import shiftsFtl from './shifts.ftl?raw';
 import reportsFtl from './reports.ftl?raw';
+import analyticsFtl from './analytics.ftl?raw';
 import multiStoreFtl from './multi-store.ftl?raw';
 import stockTransfersFtl from './stock-transfers.ftl?raw';
 import stockCountingFtl from './stock-counting.ftl?raw';
@@ -54,6 +55,7 @@ const ALL_FTL = [
   loyaltyFtl,
   shiftsFtl,
   reportsFtl,
+  analyticsFtl,
   multiStoreFtl,
   stockTransfersFtl,
   stockCountingFtl,

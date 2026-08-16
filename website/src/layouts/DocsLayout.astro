@@ -1,0 +1,126 @@
+---
+import { getAbsoluteLocaleUrl } from 'astro:i18n';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import DocSidebar, { type CategoryGroup } from '../components/DocSidebar.astro';
+import { locales, t } from '../i18n';
+import '../styles/global.css';
+
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface Props {
+  locale: string;
+  title: string;
+  description?: string;
+  updated?: string;
+  entries: CategoryGroup[];
+  currentSlug?: string;
+  headings?: Heading[];
+}
+
+const { locale, title, description, updated, entries, currentSlug, headings } = Astro.props;
+const toc = (headings ?? []).filter((h) => h.depth >= 2 && h.depth <= 3);
+// hreflang alternates for the same doc in the other locale. DocsLayout is
+// never rendered on the 404 page, but keep the same fallback for safety.
+const rawPath = Astro.url.pathname.replace(/^\/(?:en|id)(?:\/|$)/, '');
+const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : rawPath;
+---
+
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Apply the stored theme before first paint (dark is the default). -->
+    <script is:inline>
+      (() => {
+        const t = localStorage.getItem('oz_theme');
+        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+      })();
+    </script>
+    <meta name="description" content={description ?? t(locale, 'docs.title')} />
+    <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    {locales.map((code) => (
+      <link rel="alternate" hreflang={code} href={getAbsoluteLocaleUrl(code, path)} />
+    ))}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OZ-POS" />
+    <meta property="og:locale" content={locale} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description ?? t(locale, 'docs.title')} />
+    <meta property="og:url" content={new URL(Astro.url.pathname, Astro.site)} />
+    <!-- PNG (not SVG): social scrapers don't rasterize SVG; source is public/og-image.svg -->
+    <meta property="og:image" content={new URL('/og-image.png', Astro.site)} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <title>{title} — {t(locale, 'docs.title')}</title>
+  </head>
+  <body class="flex min-h-screen flex-col bg-primary text-ink antialiased">
+    <Header />
+
+    <!-- Mobile sidebar (collapsible) -->
+    <details class="border-b border-ink/5 md:hidden">
+      <summary class="px-4 py-3 text-sm font-semibold">{t(locale, 'docs.title')}</summary>
+      <div class="px-4 pb-4">
+        <DocSidebar locale={locale} entries={entries} currentSlug={currentSlug} />
+      </div>
+    </details>
+
+    <div class="mx-auto flex w-full max-w-7xl flex-1">
+      <!-- Desktop sidebar -->
+      <aside class="sticky top-[4.5rem] hidden h-[calc(100vh-4.5rem)] w-60 shrink-0 overflow-y-auto border-r border-ink/5 px-4 py-8 md:block">
+        <p class="px-2 text-xs font-semibold uppercase tracking-wide text-muted">
+          {t(locale, 'docs.title')}
+        </p>
+        <DocSidebar locale={locale} entries={entries} currentSlug={currentSlug} />
+      </aside>
+
+      <main class="min-w-0 flex-1 px-4 py-10 sm:px-8">
+        <article class="docs-content mx-auto max-w-3xl">
+          <h1 class="text-3xl font-bold">{title}</h1>
+          {description && <p class="mt-3 text-muted">{description}</p>}
+          {updated && (
+            <p class="mt-4 text-xs text-muted">
+              {t(locale, 'docs.updated')} {updated}
+            </p>
+          )}
+          <div class="mt-8">
+            <slot />
+          </div>
+        </article>
+      </main>
+
+      <!-- On-this-page TOC -->
+      {
+        toc.length > 0 && (
+          <aside class="sticky top-[4.5rem] hidden h-[calc(100vh-4.5rem)] w-56 shrink-0 overflow-y-auto px-4 py-8 xl:block">
+            <p class="text-xs font-semibold uppercase tracking-wide text-muted">
+              {t(locale, 'docs.onThisPage')}
+            </p>
+            <ul class="mt-3 space-y-1.5 text-sm">
+              {
+                toc.map((h) => (
+                  <li class:list={[h.depth === 3 ? 'pl-3' : '']}>
+                    <a href={`#${h.slug}`} class="text-muted transition hover:text-ink">
+                      {h.text}
+                    </a>
+                  </li>
+                ))
+              }
+            </ul>
+          </aside>
+        )
+      }
+    </div>
+
+    <Footer />
+  </body>
+</html>

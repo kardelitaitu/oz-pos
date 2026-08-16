@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import { KdsTicketCard } from '@/features/kds/components/KdsTicketCard';
 import kdsFtl from '@/locales/kds.ftl?raw';
@@ -115,6 +115,25 @@ describe('KdsTicketCard', () => {
     renderCard({ status: 'cancelled' });
     screen.getByRole('button').click();
     expect(onAdvance).not.toHaveBeenCalled();
+  });
+
+  it('rejects fractional edit counts at the keystroke level', () => {
+    const onSaveItems = vi.fn();
+    const { container } = renderWithFluentSync(
+      <KdsTicketCard order={baseOrder} onAdvance={onAdvance} onSaveItems={onSaveItems} sessionToken="test-token" />,
+      sharedFtl, kdsFtl,
+    );
+    fireEvent.click(container.querySelector<HTMLButtonElement>('.kds-ticket-edit-btn')!);
+
+    const countInput = container.querySelector<HTMLInputElement>('.kds-ticket-edit-count')!;
+    // Simulate typing "2.5" — the fractional change must be rejected
+    // (the controlled input stays at the previous integer value).
+    fireEvent.change(countInput, { target: { value: '2.5' } });
+    expect(countInput.value).toBe('3');
+
+    // And an integer change is still accepted.
+    fireEvent.change(countInput, { target: { value: '4' } });
+    expect(countInput.value).toBe('4');
   });
 
   it('plays alert when transitioning to red', () => {

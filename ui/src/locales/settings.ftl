@@ -11,8 +11,7 @@ setup-step-hardware = Hardware
 setup-step-business-rules = Business Rules
 setup-step-data-cloud = Data & Cloud
 setup-step-review = Review
-setup-step-aria =
-    .aria-label = Step { $number }: { $label }
+setup-step-aria = Step { $number }: { $label }
 
 setup-progress-aria = Setup progress
 
@@ -173,7 +172,7 @@ lsp-ws-status-inactive = { $name } — inactive
 ws-preview-name-restaurant-pos = Restaurant POS
 ws-preview-name-store-pos = Store POS
 ws-preview-name-kds = Kitchen Display
-ws-preview-name-inventory = Inventory
+ws-preview-name-warehouse = Warehouse
 ws-preview-name-admin = Admin
 
 # Settings Page
@@ -228,7 +227,6 @@ settings-theme-toggle-dark-aria = Switch to dark mode
 settings-theme-toggle-light-aria = Switch to light mode
 settings-loading = Loading settings…
 settings-section-loading = Loading…
-settings-load-failed = Failed to load settings
 settings-load-partial = Some settings could not be loaded. Try again.
 settings-section-store = Store
 settings-section-currency = Currency
@@ -257,14 +255,8 @@ settings-font-size-increase-aria =
     .aria-label = Increase font size
 settings-field-font-smoothing = Font Smoothing
 settings-toggle-show-currency = Show currency symbol on amounts
-settings-toggle-show-currency-aria =
-    .aria-label = Show currency symbol on amounts
 settings-toggle-show-tax = Show tax line on receipts
-settings-toggle-show-tax-aria =
-    .aria-label = Show tax line on receipts
 settings-toggle-show-table-number = Show table number on cart and receipts
-settings-toggle-show-table-number-aria =
-    .aria-label = Show table number on cart and receipts
 settings-btn-save = Save
 settings-btn-revert = Revert
 
@@ -286,6 +278,8 @@ settings-sync-token-request-failed = Token request failed — check server URL
 settings-sync-request-token = Request Token
 settings-sync-requesting = Requesting…
 settings-sync-error = Sync failed
+settings-sync-plan-required = Cloud sync requires a paid plan
+settings-sync-plan-required-hint = Your local sales keep working — upgrade to sync them to the cloud.
 
 # ── Token expiry badge ──────────────────────────────────
 settings-sync-expiry-expired = Expired
@@ -306,12 +300,18 @@ settings-sync-expiry-fallback = Expires { $iso }
 settings-sync-result = Last sync: { $synced } synced, { $failed } failed
 settings-sync-success = Sync complete: { $synced } synced, { $failed } failed
 settings-sync-nothing = Nothing to sync — all caught up
-settings-store-name-placeholder = OZ-POS Store
-settings-address-placeholder = 123 Main Street
-settings-tax-id-placeholder = 12-3456789
-settings-branch-placeholder = Main Branch
-settings-footer-placeholder = Thank you for shopping!
-settings-server-url-placeholder = https://api.example.com
+settings-store-name-placeholder =
+    .placeholder = OZ-POS Store
+settings-address-placeholder =
+    .placeholder = 123 Main Street
+settings-tax-id-placeholder =
+    .placeholder = 12-3456789
+settings-branch-placeholder =
+    .placeholder = Main Branch
+settings-footer-placeholder =
+    .placeholder = Thank you for shopping!
+settings-server-url-placeholder =
+    .placeholder = https://api.example.com
 settings-api-key-placeholder = Enter API key
 settings-api-key-masked = ••••••••
 settings-api-key-show-aria = Show API key
@@ -323,12 +323,28 @@ settings-btn-save-aria =
     }
 settings-save-error = Failed to save settings. Please try again.
 settings-save-partial = Some settings could not be saved. Try again.
+settings-load-failed = Failed to load settings
 settings-retry = Retry
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
 settings-sync-status-idle = Ready
 settings-sync-status-ok = Connected
-settings-sync-status-error = Connection error
 settings-sync-pending-count = { $count } pending
+settings-sync-summary-pending = pending
+settings-sync-summary-synced = synced
+settings-sync-summary-failed = failed
+settings-sync-summary-conflicts = conflicts
+settings-sync-plan-label = Plan
+settings-sync-plan-free = Free
+settings-sync-plan-pro = Pro
+settings-sync-plan-upgrade-hint = Upgrade to sync to the cloud
+settings-sync-last-synced = Last synced { $time }
+settings-sync-last-synced-never = Never synced
+settings-sync-oldest-pending = Oldest pending { $time }
+settings-sync-oldest-pending-none = Queue empty
+settings-sync-time-just-now = just now
+settings-sync-time-minutes-ago = { $count }m ago
+settings-sync-time-hours-ago = { $count }h ago
+settings-sync-time-days-ago = { $count }d ago
 settings-sync-pull = Pull from Server
 settings-sync-pulling = Pulling…
 settings-sync-pull-empty = Server returned empty snapshot — nothing to pull
@@ -356,7 +372,6 @@ settings-license-tenant-id = Tenant ID
 settings-license-allowed-types = Allowed Workspace Types
 settings-license-allowed-types-all = All
 settings-license-not-activated = No license activated. Activate a license to see details here.
-settings-license-check-server = Check Server Status
 settings-license-server-tier = Server Tier
 settings-license-server-active = Server Active
 settings-license-server-expires = Server Expires
@@ -394,7 +409,6 @@ settings-license-load-failed = Failed to load license info
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. All rights reserved.
 
 # Appearance / Brand settings
-settings-appearance = Appearance
 appearance-primary-colour = Primary Colour
 appearance-primary-colour-picker-aria =
     .aria-label = Primary colour picker
@@ -404,7 +418,8 @@ appearance-reset-colour-aria =
     .aria-label = Reset colour to default
 appearance-reset-colour = Reset to default
 appearance-logo = Store Logo
-appearance-logo-alt = Store logo
+appearance-logo-alt =
+    .alt = Store logo
 appearance-choose-logo = Choose Logo
 appearance-choose-logo-aria =
     .aria-label = Pick logo file
@@ -422,8 +437,6 @@ appearance-store-name-fallback = OZ-POS
 appearance-hw-accel = Hardware Acceleration
 appearance-hw-accel-aria =
     .aria-label = Toggle hardware acceleration
-appearance-hw-accel-on = On
-appearance-hw-accel-off = Off
 appearance-hw-accel-hint = Disable if UI animations feel janky on low-end devices. Restart the app for the change to take full effect.
 appearance-preview = Preview
 appearance-preview-btn-label = Primary Button
@@ -504,11 +517,9 @@ data-mgmt-encrypt-export = Export
 data-mgmt-import-wizard-aria = Import wizard
 data-mgmt-import-title = Select a backup file
 data-mgmt-import-desc = Choose an encrypted .ozpkg file to import. The file must have been created by OZ-POS export.
-data-mgmt-import-drop-text = Drag & drop a .ozpkg file here, or
 data-mgmt-import-browse = Browse files…
 data-mgmt-import-preview-title = Preview import
 data-mgmt-import-meta-file = File
-data-mgmt-import-meta-not-selected = Not selected
 data-mgmt-import-meta-store = Store
 data-mgmt-import-meta-version = Version
 data-mgmt-import-meta-created = Created
@@ -559,7 +570,6 @@ data-mgmt-toast-file-picker-fail = Failed to open file picker
 data-mgmt-toast-backup-status-fail = Failed to load backup status
 
 # Aria labels
-data-mgmt-dismiss-aria = Dismiss notification
 
 # Feature Toggles
 feature-toggle-title = Feature Toggles
@@ -596,194 +606,50 @@ feature-toggle-bulk-disabled = All { $group } features disabled
 feature-toggle-requires = Requires: { $deps }
 feature-toggle-group-aria = { $group } features
 feature-toggle-toggle-aria = Toggle { $name }
-feature-toggle-dismiss-aria = Dismiss notification
 
 # ── Data Management ──
 data-mgmt-password-show-aria = Show password
 data-mgmt-password-hide-aria = Hide password
 
 # ── Settings screen ──
-settings-general-tab = General
-settings-receipt-tab = Receipt
-settings-printer-tab = Printer
-settings-scanner-tab = Scanner
-settings-credit-tab = Credit
-settings-system-tab = System
-settings-header-options = Options
-settings-general-heading = General Settings
-settings-branch-label = Branch
-settings-tax-id-label = Tax ID
-settings-currency-options-label = Currency options
-settings-receipt-heading = Receipt Settings
-settings-show-currency-label = Show currency symbol
-settings-show-tax-label = Show tax line
-settings-show-table-label = Show table number
-settings-decimal-sep-label = Decimal separator
-settings-paper-width-label = Paper width
-settings-footer-label = Footer text
 settings-margins-heading = Paper Margins (mm)
 settings-margin-top = Top
 settings-margin-bottom = Bottom
 settings-margin-left = Left
 settings-margin-right = Right
-settings-click-preview = Click to preview
-settings-printer-heading = Receipt Printer
-settings-connection-label = Connection
-settings-printer-connection-auto = Auto-detect
-settings-printer-connection-usb = USB
-settings-printer-connection-serial = Serial (COM)
-settings-printer-connection-network = Network (TCP/IP)
-settings-device-path-label = Device path
-settings-device-path-placeholder =
-    .placeholder = /dev/usb/lp0 or COM1
-settings-printer-paper-size-label = Paper size
-settings-printer-info = Printer configuration is stored on this terminal. Changes apply after restart.
-settings-scanner-heading = Barcode Scanner
-settings-scanner-none = No scanners detected. Connect a scanner and restart.
-settings-scanner-device-label = Scanner device
-settings-auto-add-label = Auto-add product on scan
-settings-input-mode-label = Input mode
-settings-input-mode-auto = Auto-detect
-settings-input-mode-keyboard = Keyboard wedge
-settings-input-mode-serial = Serial/COM
-settings-credit-heading = Credit Settings
-settings-enable-credit-label = Enable credit sales
-settings-reminder-interval-label = Reminder interval (hours)
-settings-reminder-interval-hint = How often the credit reminder badge appears on the POS screen
-settings-max-credit-label = Max credit limit (Rp)
-settings-max-credit-hint = Maximum outstanding balance allowed per customer (0 = unlimited)
-settings-credit-status-enabled = enabled
-settings-credit-status-disabled = disabled
-settings-credit-status-max = Max limit: Rp { $amount }
-settings-credit-status-no-limit = No limit set.
-settings-credit-status-label = Credit sales are currently { $status }.
-settings-app-version-label = App version
-settings-cashier-label = Cashier
-settings-terminal-label = Terminal
-settings-theme-label = Theme
-settings-theme-light = Light
-settings-theme-dark = Dark
-settings-system-heading = System
-settings-auto-lock-label = Auto-lock after (minutes)
-settings-auto-lock-hint = Lock the session after inactivity (1–120 min)
-settings-saving-btn = Saving…
-settings-toast-failed-tax-rates = Failed to load tax rates
-settings-toast-failed-store-settings = Failed to load store settings
-settings-toast-failed-receipt-settings = Failed to load receipt settings
-settings-toast-failed-credit-settings = Failed to load credit settings
-settings-toast-failed-hardware-settings = Failed to load hardware settings
-settings-toast-failed-scanners = Failed to load scanners
-settings-toast-saved = Settings saved
-settings-toast-failed-save = Failed to save settings
 
 # Settings receipt preview
-settings-receipt-preview-store-fallback = Your Store
-settings-receipt-preview-address-fallback = 123 Main Street
-settings-receipt-preview-cashier = Cashier:
-settings-receipt-preview-col-item = Item
-settings-receipt-preview-col-qty = Qty
-settings-receipt-preview-col-price = Price
-settings-receipt-preview-subtotal = Subtotal
-settings-receipt-preview-tax = PPN
-settings-receipt-preview-total = TOTAL
 
 # Settings decimal separator options
-settings-decimal-sep-dot = Dot (.)
-settings-decimal-sep-comma = Comma (,)
-settings-decimal-sep-none = None
 
 # Settings paper width options
-settings-paper-narrow = 58 mm (thermal)
-settings-paper-standard = 80 mm (thermal)
-settings-paper-a4 = A4 (210 × 297 mm)
-settings-paper-letter = Letter (8.5 × 11 in)
-settings-paper-9x11 = 9.5 × 11 in (3-ply NCR / continuous)
-settings-paper-9x5 = 9.5 × 5.5 in (half-sheet continuous)
 
 # Payments tab
-settings-payments-tab = Payments
-settings-payments-heading = Payment Gateways
-settings-payments-no-gateways = No payment gateways configured
-settings-stripe-api-key = Stripe API Key
-settings-stripe-key-placeholder = sk_live_...
-settings-stripe-key-hint = Enter your Stripe secret key to enable card payments
-settings-square-api-key = Square API Key
-settings-square-key-placeholder = sq0atp-...
-settings-square-key-hint = Enter your Square access token to enable card payments
-settings-midtrans-key = Midtrans Server Key
-settings-midtrans-key-placeholder = Mid-server-...
-settings-midtrans-key-hint = Enter your Midtrans server key for QRIS payments
 
 # Tender presets
-settings-tender-presets-heading = Quick Cash Tender Buttons
-settings-tender-presets-desc = Customize the quick tender buttons shown on the cash payment screen. Values are in rupiah (e.g., 50000 = Rp 50,000).
-settings-tender-preset-label = Preset { $n }
-settings-tender-preset-aria = Preset { $n } amount
-settings-tender-preset-remove-aria = Remove preset { $n }
-settings-tender-preset-add = Add preset
 
 # Sound & language
-settings-sound-label = Sound Effects
-settings-language-label = Language
 
 # Quick links
-settings-quick-links-heading = More Configuration
-settings-quick-links-note = Tax rates and feature toggles can be configured from the main Settings page, accessible via the sidebar.
 
 # Customer-facing display
-settings-display-heading = Customer-Facing Display
-settings-display-none = No pole displays detected. Connect a customer-facing display to enable this feature.
-settings-display-count = { $count } display(s) connected
-settings-display-test-label = Test Message
-settings-display-test-placeholder = Welcome to our store!
-settings-display-test-btn = Show
-settings-display-test-sent = Message sent to display
-settings-display-test-failed = Failed to send to display
-settings-display-info = The customer-facing display shows item names and totals as they are scanned during a sale.
-settings-toast-failed-displays = Failed to load displays
 
 # New tab labels
-settings-appearance-tab = Appearance
-settings-features-tab = Features
-settings-data-tab = Data
-settings-sync-tab = Sync
 
 # Section headings (when a sub-screen doesn't render its own)
-settings-appearance-heading = Appearance
-settings-features-heading = Feature Toggles
-settings-data-heading = Data Management
-settings-sync-heading = Cloud Sync
 
 # Sync tab
-settings-sync-enabled-label = Enable cloud sync
-settings-sync-server-label = Server URL
-settings-sync-server-placeholder = https://sync.oz-pos.example.com
-settings-sync-server-hint = The endpoint that receives your encrypted backup snapshots
-settings-sync-token-label = Authentication Token
-settings-sync-token-placeholder = paste sync token here
 settings-sync-token-hint = Stored securely in the database — never in localStorage
-settings-sync-interval-label = Auto-sync interval (minutes)
-settings-sync-interval-hint = Set to 0 to disable automatic sync
-settings-sync-now-btn = Sync now
-settings-sync-testing-btn = Testing…
-settings-sync-test-connection-btn = Test connection
-settings-sync-status-online = Online
-settings-sync-status-offline = Offline
-settings-sync-status-never = Never synced
 settings-sync-last = Last sync
-settings-sync-last-at = Last sync: { $when }
 settings-sync-pending = Pending changes
 settings-sync-toast-success = Sync completed successfully
 settings-sync-toast-fail = Sync failed — check server URL and token
 settings-sync-toast-test-success = Connection test passed
 settings-sync-toast-test-fail = Could not reach server
 settings-sync-confirm-overwrite = Overwrite local data with the server snapshot?
-settings-sync-force-pull-btn = Pull from server
-settings-sync-pulling-btn = Pulling…
 settings-sync-pull-toast-success = Pulled { $products } products, { $tax_rates } tax rates, { $users } users from server
 settings-sync-pull-toast-empty = Server snapshot was empty — nothing to pull
 settings-sync-pull-toast-fail = Pull failed — check server URL and token
-settings-toast-failed-sync = Failed to load sync settings
 settings-field-language = Language
 
 # ── Field validation ──
@@ -933,7 +799,8 @@ workspace-modal-title = Workspace Settings
 workspace-modal-admin-settings = Admin Settings ↗
 workspace-modal-close-aria = Close settings
 workspace-modal-role-manager = Manager
-workspace-modal-role-cashier = Cashier
+workspace-modal-role-staff = Staff
+workspace-modal-role-auditor = Auditor
 
 # ── 4f: Workspace card aria-labels ──
 terminal-sound-volume-aria = Sound volume

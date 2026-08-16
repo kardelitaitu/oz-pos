@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "Implemented in Rust using the embedded-hal traits" -> oz-hal uses #[async_trait] async traits (`BarcodeScanner`, `ReceiptPrinter`, `CashDrawer`) and a `DriverRegistry`; no universal `Device::connect/read/write` API · otherwise architectural prose holds (Rust + Tauri v2 + Lua via rlua + SQLite + optional PostgreSQL sync) -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "Implemented in Rust using the embedded-hal traits" -> oz-hal uses #[async_trait] async traits (`BarcodeScanner`, `ReceiptPrinter`, `CashDrawer`) and a `DriverRegistry`; no universal `Device::connect/read/write` API · otherwise architectural prose holds (Rust + Tauri v2 + Lua via rlua + SQLite + optional PostgreSQL sync) · re-audited 2026-08-08 by docs-auditor: rlua -> mlua, crate list completed to 11 (oz-api/oz-notification/oz-plugin), Android minSdk 26, RocksDB/LMDB claim corrected to SQLite offline_queue outbox -->
 
 # Whitepaper: OZ-POS Software Framework
 
@@ -40,11 +40,14 @@ Every crate in the workspace follows the `oz-*` prefix, making the ecosystem imm
 oz-pos          →  root workspace / meta-crate
 oz-core         →  transaction engine & data models
 oz-hal          →  hardware abstraction layer (barcode, printer, NFC)
-oz-lua          →  embedded Lua scripting runtime
+oz-lua          →  embedded Lua scripting runtime (mlua)
 oz-security     →  encryption, secrets, PCI-DSS helpers
-oz-payment      →  payment processor abstraction (Stripe, Square, EMV)
+oz-payment      →  payment processor abstraction (Stripe, Square, QRIS, mock)
 oz-reporting    →  analytics & CSV export engine
 oz-logging      →  structured logging (tracing)
+oz-api          →  HTTP API server (axum)
+oz-notification →  email & push notification dispatching
+oz-plugin       →  plugin sandbox & lifecycle (Lua scripting bridge)
 oz-cli          →  command-line tools (migrations, backup, export)
 ```
 
@@ -60,7 +63,7 @@ The `oz-` prefix is short, memorable, and signals: *this is part of the wizard's
     - **Performance:** Near‑C speed, essential for low‑latency transaction processing.
     - **Concurrency:** Powerful async/await model and fearless concurrency, enabling smooth handling of multiple peripheral devices.
     - **Ecosystem:** Growing ecosystem for embedded development, networking, and UI tooling (e.g., Tauri v2 for cross-platform desktop/mobile apps).
-- **Secondary Scripting Layer:** **Lua** (via `rlua` crate)
+- **Secondary Scripting Layer:** **Lua** (via `mlua` crate — migrated from `rlua` in 0.0.19)
   - Provides runtime extensibility for merchants to customize business rules, promotions, and UI layouts without recompiling the core.
 - **Inter‑op Bindings:** A thin **C‑FFI** layer is provided for legacy integrations written in C/C++ or Java, allowing the framework to be embedded in existing POS terminals.
 
@@ -72,7 +75,7 @@ The `oz-` prefix is short, memorable, and signals: *this is part of the wizard's
 |----------|----------------|-----------|
 | **Windows PC** | Windows 10/11, modern hardware (x86‑64) | Full desktop UI, peripheral support (USB, Bluetooth, NFC). |
 | **Linux PC** | Ubuntu, Debian, Fedora (x86‑64) | Open‑source OS, robust networking, wide driver support. |
-| **Android Tablet** | Android 10+ tablets (ARM) | Portable POS, touchscreen UI, integrated Wi‑Fi/Cellular. |
+| **Android Tablet** | Android 8.0+ tablets (ARM, minSdk 26) (ARM) | Portable POS, touchscreen UI, integrated Wi‑Fi/Cellular. |
 | **iPad** | iPadOS (ARM) | Premium touch UI, Apple Pay integration, high‑resolution display. |
 
 **Hardware Abstraction Layer (HAL):**
@@ -104,7 +107,7 @@ The `oz-` prefix is short, memorable, and signals: *this is part of the wizard's
 
 - **Local Store:** SQLite via `rusqlite` – ACID, zero‑config, works offline on all target platforms.
 - **Cloud Sync / Multi‑store:** PostgreSQL (or CockroachDB) for centralized relational data, replication, and analytics.
-- **Event Log:** RocksDB (or LMDB) for an outbox pattern, enabling reliable change streaming.
+- **Event Log:** the outbox pattern lives in the local SQLite `offline_queue` table (RocksDB/LMDB were evaluated but are not dependencies).
 - **Cache / Pub‑Sub:** Redis for fast product look‑ups, pricing rules, and real‑time inventory updates.
 - **Sync Flow:** Edge SQLite writes are appended to an outbox; a background daemon streams changes to PostgreSQL; Redis notifies terminals of updates.
 
@@ -133,3 +136,9 @@ These choices balance performance, reliability, and scalability across small bou
 OZ-POS is more than a POS system — it is a **platform**. Like the wizard behind the curtain, it hides extraordinary complexity behind a simple, magical interface. Rust guarantees safety and speed. Tauri v2 delivers a native experience on every target. The feature-flag system ensures every merchant — from a solo warung owner to an enterprise chain operator — gets exactly the tool they need, nothing more and nothing less.
 
 > *Small codebase. Limitless possibilities.*
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

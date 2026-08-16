@@ -26,7 +26,7 @@
 |------|---------|-------|
 | Xcode | 16+ | From Mac App Store or Xcodes.app |
 | Rust | Stable (1.88+) | Via rustup |
-| Node.js | 24+ | Via nvm or fnm |
+| Node.js | 22+ (project floor; 24 recommended) | Via nvm or fnm |
 | Tauri CLI | 2.x | `cargo install tauri-cli --version "^2"` |
 | cocoapods | Latest | `sudo gem install cocoapods` (if needed) |
 
@@ -225,3 +225,7 @@ find target -name "*.ipa" 2>/dev/null
 find apps/tablet-client/gen/apple -name "*.ipa" 2>/dev/null
 find apps/tablet-client/target -name "*.ipa" 2>/dev/null
 ```
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).

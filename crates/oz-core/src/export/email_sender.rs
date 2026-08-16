@@ -102,6 +102,18 @@ pub fn should_send_scheduled(
     store: &Store<'_>,
     schedule: &ReportScheduleConfig,
 ) -> Result<bool, CoreError> {
+    let last_sent = store.get_setting(LAST_SENT_KEY)?;
+    should_send_scheduled_with_last_sent(schedule, last_sent)
+}
+
+/// Store-free variant of [`should_send_scheduled`] — same cadence +
+/// timezone + dedup logic, with the last-sent timestamp supplied by the
+/// caller. Lets the cloud server's Postgres report loop reuse this logic
+/// without a synchronous rusqlite `Store`.
+pub fn should_send_scheduled_with_last_sent(
+    schedule: &ReportScheduleConfig,
+    last_sent: Option<String>,
+) -> Result<bool, CoreError> {
     // Parse send time (HH:MM)
     let send_time =
         NaiveTime::parse_from_str(&schedule.send_at_time, "%H:%M").unwrap_or_else(|_| {
@@ -139,7 +151,7 @@ pub fn should_send_scheduled(
 
     // Deduplication: check last_sent_at
     let today = now_tz.format("%Y-%m-%d").to_string();
-    let last_sent = store.get_setting(LAST_SENT_KEY)?.unwrap_or_default();
+    let last_sent = last_sent.unwrap_or_default();
 
     // Extract date portion of last_sent ISO-8601 timestamp
     let last_date = last_sent.chars().take(10).collect::<String>();
@@ -227,7 +239,9 @@ pub fn generate_filtered_report_email(
 /// Resolve the current date-time in the given IANA timezone name.
 ///
 /// Falls back to UTC if the timezone name is unrecognised or parsing fails.
-fn resolve_now_in_timezone(tz_name: &str) -> chrono::DateTime<chrono::FixedOffset> {
+/// Resolve the current instant in a named IANA timezone (falling back to
+/// UTC when the name is unknown).
+pub fn resolve_now_in_timezone(tz_name: &str) -> chrono::DateTime<chrono::FixedOffset> {
     // Try well-known timezone abbreviations and IANA names.
     // For a full implementation, use the `chrono-tz` crate.
     // This function handles the most common cases.
@@ -439,12 +453,18 @@ mod tests {
                 total_minor: 1000,
                 currency: "USD".into(),
                 sale_count: 1,
+                cogs_minor: 0,
+                gross_profit_minor: 1000,
+                gross_margin_percent: 100.0,
             }],
             weekly_revenue: vec![crate::db::reports::WeeklyRevenueRow {
                 week_start: "2026-01-01".into(),
                 total_minor: 1000,
                 currency: "USD".into(),
                 sale_count: 1,
+                cogs_minor: 0,
+                gross_profit_minor: 1000,
+                gross_margin_percent: 100.0,
             }],
             monthly_revenue: vec![],
             top_products: vec![],
@@ -452,6 +472,8 @@ mod tests {
             category_breakdown: vec![],
             low_stock_alerts: vec![],
             active_stock_alerts: vec![],
+            category_popularity: vec![],
+            category_forecast: vec![],
         };
 
         // Only include weekly_revenue

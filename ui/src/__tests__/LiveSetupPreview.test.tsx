@@ -118,7 +118,7 @@ describe('LiveSetupPreview', () => {
 
   // ── Inventory features ──────────────────────────────────────────
 
-  it('shows Inventory workspace and nav items with inventory-tracking', () => {
+  it('shows Warehouse workspace and inventory nav items with inventory-tracking', () => {
     render(
       <LiveSetupPreview
         selectedFeatures={new Set(['inventory-tracking', 'stock-counting', 'stock-transfers'])}
@@ -126,8 +126,8 @@ describe('LiveSetupPreview', () => {
       { wrapper: FluentWrapper },
     );
 
-    // 'Inventory' appears in both workspace chips and nav chips.
-    expect(screen.getAllByText('Inventory').length).toBeGreaterThanOrEqual(1);
+    // 'Warehouse' appears in the workspace chip; inventory nav chips follow.
+    expect(screen.getAllByText('Warehouse').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Stock Counts')).toBeInTheDocument();
     expect(screen.getByText('Stock Transfers')).toBeInTheDocument();
   });

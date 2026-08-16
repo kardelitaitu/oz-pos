@@ -1,5 +1,6 @@
 //! Tax Repository — database persistence layer for tax configuration.
 
+use crate::error::TaxError;
 use crate::models::TaxRate;
 use rusqlite::{Connection, params};
 
@@ -21,7 +22,7 @@ impl<'a> TaxRepository<'a> {
     /// stay hidden through the module boundary too. The cross-layer
     /// contract test `modules/tax/tests/boundary_contract.rs` pins this
     /// parity.
-    pub fn get_tax_rate(&self, id: &str) -> Result<Option<TaxRate>, anyhow::Error> {
+    pub fn get_tax_rate(&self, id: &str) -> Result<Option<TaxRate>, TaxError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at
              FROM tax_rates WHERE id = ?1 AND is_active = 1",
@@ -51,7 +52,7 @@ impl<'a> TaxRepository<'a> {
     /// are filtered out (`is_active = 1`) so callers across the module
     /// boundary only ever see assignable rates. The cross-layer contract
     /// test `modules/tax/tests/boundary_contract.rs` pins this parity.
-    pub fn list_tax_rates(&self) -> Result<Vec<TaxRate>, anyhow::Error> {
+    pub fn list_tax_rates(&self) -> Result<Vec<TaxRate>, TaxError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at
              FROM tax_rates WHERE is_active = 1 ORDER BY name",

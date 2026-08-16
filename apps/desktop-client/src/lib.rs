@@ -24,6 +24,12 @@ pub mod lan_server;
 /// Global application state (DB, kernel, sync daemon, registry).
 pub mod state;
 
+/// Debug-only bootstrap that connects the desktop client to the local
+/// dev sync server (`scripts/start-local-sync.bat` → `:3099`) without
+/// manual Settings configuration. Excluded from release builds.
+#[cfg(debug_assertions)]
+mod sync_bootstrap;
+
 /// Embed `Microsoft.Windows.Common-Controls` v6 dependency into the
 /// test binary's manifest via an MSVC `.drectve` linker directive
 /// section.  Required by `WebView2Loader.dll` at startup, which the
@@ -48,7 +54,7 @@ static TEST_MANIFEST_DIRECTIVES: [u8; 184] = *b" /MANIFEST:EMBED /MANIFESTDEPEND
 
 use crate::error::AppError;
 use crate::state::AppState;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Application entry point, called by `main.rs`.
 ///
@@ -71,6 +77,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let state = AppState::new(app.handle())
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -78,7 +85,33 @@ pub fn run() {
             // ── Module system lifecycle (shared startup) ──────────────
             platform_startup::init_module_system(&state.kernel, &state.db_path)?;
 
+            // ── settings_updated → Tauri event bridge (ADR #22 Phase 0e) ─
+            // The frontend SettingsContext subscribes to `settings_updated`
+            // and triggers a debounced scoped refetch. Without this the
+            // SettingsUpdated handler only logs "settings_updated Tauri
+            // bridge not yet wired" and settings changes never reach the
+            // UI via the event bus (the save-handler markSettingsUpdated
+            // path covers same-terminal saves; this closes the loop for
+            // the EventBus-published events).
+            let app_handle = app.handle().clone();
+            platform_startup::event_handlers::set_settings_emit_fn(Box::new(
+                move |event_name, payload| {
+                    let _ = app_handle.emit(event_name, payload);
+                },
+            ));
+
             app.manage(state);
+
+            // Recover a journaled cross-database topology Apply at startup,
+            // before the user can issue another mutation. The Apply mutex
+            // also serializes this recovery with any early UI request.
+            let recovery_app_handle = app.handle().clone();
+            platform_startup::spawn_daemon("topology recovery", async move {
+                let state = recovery_app_handle.state::<AppState>();
+                if let Err(error) = commands::topology::recover_pending_topology_apply_at_startup(&state).await {
+                    tracing::error!(error = %error, "topology recovery failed; Apply remains blocked until recovery succeeds");
+                }
+            });
 
             // ── Show the main window after state restore ────────────
             // The window starts with visible:false to prevent initial
@@ -89,12 +122,58 @@ pub fn run() {
                 let _ = main_window.show();
             }
 
+            // ── Auto-provision local sync (debug builds only) ────────
+            // A fresh dev DB ships with an empty `sync_server_url` and sync
+            // disabled, so the background daemon silently no-ops until the
+            // user manually configures Settings → Sync. If the local dev
+            // server (`start-local-sync.bat` → :3099) is up, request a JWT
+            // and persist the connection. Spawned BEFORE the sync daemon
+            // so the daemon's first tick (60–120s out) sees the fresh
+            // config. Never runs in release builds — an existing
+            // configuration is never touched.
+            #[cfg(debug_assertions)]
+            {
+                let bootstrap_db = app.state::<AppState>().db.clone();
+                platform_startup::spawn_daemon("sync auto-provision", async move {
+                    crate::sync_bootstrap::auto_provision_local_sync(bootstrap_db).await;
+                });
+            }
+
             // ── Background sync daemon ────────────────────────────────
             let db = app.state::<AppState>().db.clone();
             let app_handle = app.handle().clone();
+            // SYNC-10: a settings change made on ANOTHER terminal and pulled
+            // by either daemon is re-emitted as the `settings_updated` Tauri
+            // event — the same wire shape the frontend SettingsContext
+            // listens for — so the UI refetches the changed scope. Local
+            // saves already publish the domain event; this closes the loop
+            // for the sync-applied path. The sink is shared by the SQLite
+            // and PostgreSQL daemons.
+            let settings_sink = commands::sync::settings_changed_sink(&app_handle);
+            let sqlite_sink = settings_sink.clone();
+            let pg_sink = settings_sink.clone();
             platform_startup::spawn_daemon("sync daemon", async move {
                 let state = app_handle.state::<AppState>();
-                state.sync_daemon.start(db).await;
+                state
+                    .sync_daemon
+                    .start_with_sink(db, sqlite_sink)
+                    .await;
+            });
+
+            // ── Background PostgreSQL sync daemon ─────────────────────
+            // The optional PG transport. The daemon no-ops on every tick
+            // while `pg_sync.enabled` is off and re-reads the connection
+            // settings each cycle, so this unconditional spawn mirrors the
+            // SQLite daemon's — the pg_sync_start / pg_sync_stop commands
+            // control the same instance.
+            let pg_db = app.state::<AppState>().db.clone();
+            let pg_app_handle = app.handle().clone();
+            platform_startup::spawn_daemon("pg sync daemon", async move {
+                let state = pg_app_handle.state::<AppState>();
+                state
+                    .pg_sync_daemon
+                    .start_with_sink(pg_db, pg_sink)
+                    .await;
             });
 
             // ── Background prune daemon (ADR #6 Q4 / P-1 Ledger Retention) ─
@@ -270,6 +349,7 @@ pub fn run() {
             commands::staff::list_roles_scoped,
             commands::staff::create_staff_scoped,
             commands::staff::update_staff_scoped,
+            commands::staff::get_staff_profile_scoped,
             commands::staff::bootstrap_owner,
             commands::categories::list_categories,
             commands::categories::list_categories_scoped,
@@ -392,6 +472,8 @@ pub fn run() {
             commands::kds::get_kds_order_scoped,
             commands::kds::get_kds_order_lines_scoped,
             commands::kds::update_kds_line_item_status_scoped,
+            commands::kds::update_kds_order_items,
+            commands::kds::update_kds_order_items_scoped,
             commands::kds::print_kds_chit_scoped,
             commands::history::list_sales,
             commands::history::list_sales_scoped,
@@ -460,6 +542,8 @@ pub fn run() {
             commands::products::get_product_track_serial_scoped,
             commands::products::get_product_track_serial_batch,
             commands::products::get_product_track_serial_batch_scoped,
+            commands::products::record_product_search_scoped,
+            commands::browser::open_product_images_scoped,
             commands::promotions::list_promotions,
             commands::promotions::list_promotions_scoped,
             commands::promotions::get_promotion,
@@ -527,6 +611,8 @@ pub fn run() {
             commands::offline::pending_offline_count,
             commands::offline::retry_offline_sync,
             commands::offline::delete_offline_item,
+            commands::offline::requeue_remote_failure,
+            commands::offline::list_remote_failures,
             commands::sync::get_sync_settings,
             commands::sync::get_sync_settings_scoped,
             commands::sync::update_sync_settings,
@@ -535,6 +621,12 @@ pub fn run() {
             commands::sync::pending_sync_count,
             commands::sync::test_sync_connection,
             commands::sync::request_sync_token,
+            commands::sync::get_sync_plan,
+            commands::sync::get_pg_sync_settings,
+            commands::sync::update_pg_sync_settings,
+            commands::sync::pg_sync_status,
+            commands::sync::pg_sync_start,
+            commands::sync::pg_sync_stop,
             commands::refunds::process_refund,
             commands::refunds::process_refund_scoped,
             commands::refunds::list_refunds,
@@ -542,14 +634,31 @@ pub fn run() {
             commands::refunds::lookup_sale_by_receipt_barcode,
             commands::refunds::lookup_sale_by_receipt_barcode_scoped,
             commands::reports::get_menu_engineering_scoped,
+            commands::reports::get_sale_line_margins_scoped,
             commands::reports::get_daily_revenue_scoped,
             commands::reports::get_weekly_revenue_scoped,
             commands::reports::get_monthly_revenue_scoped,
             commands::reports::get_top_products_scoped,
+            commands::reports::get_category_popularity_scoped,
+            commands::reports::get_category_popularity_trend_scoped,
+            commands::reports::get_category_forecast_scoped,
             commands::reports::get_hourly_heatmap_scoped,
             commands::reports::get_low_stock_alerts_scoped,
             commands::reports::get_category_breakdown_scoped,
+            commands::reports::get_payment_method_breakdown_scoped,
+            commands::reports::get_voided_sales_summary_scoped,
+            commands::reports::get_voided_items_scoped,
+            commands::reports::get_basket_size_scoped,
+            commands::reports::get_basket_size_trend_scoped,
+            commands::reports::get_customer_split_scoped,
+            commands::reports::get_discounts_summary_scoped,
+            commands::reports::get_inventory_turnover_scoped,
+            commands::reports::get_inventory_trend_scoped,
+            commands::reports::get_table_turnover_scoped,
+            commands::reports::get_hourly_occupancy_scoped,
             commands::reports::build_custom_report_scoped,
+            commands::analytics::get_staff_analytics_scoped,
+            commands::analytics::get_staff_analytics_daily_scoped,
             commands::security::get_key_rotation_info,
             commands::security::rotate_encryption_key,
             commands::shifts::open_shift,
@@ -595,6 +704,7 @@ pub fn run() {
             commands::tables::list_sections_scoped,
             commands::workspaces::list_workspaces_scoped,
             commands::workspaces::list_workspaces,
+            commands::workspaces::list_workspaces_for_store_scoped,
             commands::workspaces::get_workspace_instance_scoped,
             commands::workspaces::create_workspace_instance_scoped,
             commands::workspaces::update_workspace_instance_scoped,
@@ -602,8 +712,6 @@ pub fn run() {
             commands::workspaces::recover_workspace_instances_scoped,
             commands::workspaces::suspend_surplus_workspace_instances_scoped,
             commands::workspaces::list_all_workspaces_scoped,
-            commands::workspaces::set_user_workspaces_scoped,
-            commands::workspaces::get_user_workspaces_scoped,
             commands::workspaces::set_user_workspace_instances_scoped,
             commands::workspaces::get_user_workspace_instances_scoped,
             commands::workspaces::resolve_boot_store,
@@ -614,8 +722,11 @@ pub fn run() {
             commands::license::renew_license,
             commands::license::get_license_status,
             commands::license::check_license_status,
-            commands::topology::save_topology,
+            // The legacy unscoped save_topology command is intentionally not
+            // registered. All production writes use the authenticated,
+            // revision-aware apply_topology_diff command.
             commands::topology::load_topology,
+            commands::topology::can_save_topology,
             commands::topology::apply_topology_diff,
         ])
         .run(tauri::generate_context!())

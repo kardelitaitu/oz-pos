@@ -117,6 +117,10 @@
   width: 100%;
 }
 
+.sales-report-top-negative {
+  color: var(--color-danger);
+}
+
 .sales-report-totals {
   font-weight: var(--font-weight-bold);
   font-variant-numeric: tabular-nums;
@@ -142,6 +146,33 @@
   font-weight: var(--font-weight-semibold);
   margin: 0 0 var(--space-3) 0;
   color: var(--color-fg);
+}
+
+/* Top-products card heading — title + rank toggle on one row */
+.sales-report-top-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sales-report-top-heading .sales-report-section-title {
+  margin-bottom: var(--space-3);
+}
+
+/* Demand forecast card — trend direction + next-period projection */
+.sales-report-forecast-up {
+  color: var(--color-success, #16a34a);
+  font-weight: var(--font-weight-semibold);
+}
+
+.sales-report-forecast-down {
+  color: var(--color-danger, #dc2626);
+}
+
+.sales-report-forecast-next {
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* ── Heatmap ──────────────────────────────────────────────── */

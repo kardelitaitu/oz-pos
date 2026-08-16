@@ -52,7 +52,14 @@ fi
 
 # ── Generate JWT secret if not set ────────────────────────────────
 if [ -z "${OZ_API_SECRET:-}" ]; then
-  export OZ_API_SECRET=$(openssl rand -hex 32 2>/dev/null || uuidgen | tr -d '-' | head -c 64)
+  if command -v openssl &>/dev/null; then
+    export OZ_API_SECRET="$(openssl rand -hex 32)"
+  else
+    # Fallback without openssl: 32 bytes of /dev/urandom as hex = 64 chars.
+    # (The previous uuidgen fallback produced only 32 hex chars, half the
+    # intended 64-char secret strength.)
+    export OZ_API_SECRET="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+  fi
   echo "🔑 Generated OZ_API_SECRET (64-char hex)"
 fi
 

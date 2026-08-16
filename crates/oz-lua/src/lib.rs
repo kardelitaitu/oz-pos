@@ -336,7 +336,7 @@ impl LuaRuntime {
             }
         };
         let result: mlua::Value = hook
-            .call((sku, qty, unit_price_minor, currency))
+            .call((sku, qty as f64, unit_price_minor as f64, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         Ok(parse_tax_override(result))
     }
@@ -357,7 +357,7 @@ impl LuaRuntime {
             Err(_) => return Ok(None),
         };
         let result: mlua::Value = hook
-            .call((sku, qty, unit_price_minor, currency))
+            .call((sku, qty as f64, unit_price_minor as f64, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         Ok(parse_tax_override(result))
     }
@@ -378,7 +378,7 @@ impl LuaRuntime {
         };
         let table = build_lines_table(&self.lua, lines)?;
         let result: mlua::Value = hook
-            .call((table, total_minor, currency))
+            .call((table, total_minor as f64, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         let mut errors = Vec::new();
         if let mlua::Value::Table(tbl) = &result {
@@ -407,7 +407,7 @@ impl LuaRuntime {
         };
         let table = build_lines_table(&self.lua, lines)?;
         let result: mlua::Value = hook
-            .call((table, total_minor, currency))
+            .call((table, total_minor as f64, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         let mut errors = Vec::new();
         if let mlua::Value::Table(tbl) = &result {
@@ -464,9 +464,15 @@ fn build_lines_table<'lua>(
             .map_err(|e| LuaError::Script(e.to_string()))?;
         row.set("sku", line.sku.as_str())
             .map_err(|e| LuaError::Script(e.to_string()))?;
-        row.set("qty", line.qty)
+        // MONEY-05: hand qty / money values to the VM as Lua *floats*.
+        // Plugin arithmetic such as `qty * unit_price_minor` otherwise runs as
+        // Lua 5.4 integer math, which wraps silently on overflow (confirmed by
+        // apply_discount_with_overflow_scale_qty_runs_cleanly). Realistic
+        // minor-unit values are exact in f64 (below 2^53), so this removes the
+        // wrap class without changing normal plugin behavior.
+        row.set("qty", line.qty as f64)
             .map_err(|e| LuaError::Script(e.to_string()))?;
-        row.set("unit_price_minor", line.unit_price_minor)
+        row.set("unit_price_minor", line.unit_price_minor as f64)
             .map_err(|e| LuaError::Script(e.to_string()))?;
         row.set("currency", line.currency.as_str())
             .map_err(|e| LuaError::Script(e.to_string()))?;
@@ -624,6 +630,45 @@ end
         }];
         let result = lua.apply_discount(&lines).unwrap();
         assert!(result.is_none());
+    }
+
+    /// MONEY-05 evidence pin: the MONEY-03 journal flagged `qty *
+    /// unit_price_minor` inside plugin discount scripts (lib.rs 577/608) as
+    /// the same unchecked-multiply class. Those lines are plugin-authored Lua
+    /// test scripts, not host code: `build_lines_table` hands the i64s to the
+    /// VM and mlua (default `Lua::new()`) evaluates plugin arithmetic as Lua
+    /// numbers (f64), where i64 overflow cannot occur — worst case is f64
+    /// precision loss above 2^53. This test pins that the host passes
+    /// overflow-scale values through cleanly: the hook runs, returns a
+    /// discount decision, and the host never wraps an integer.
+    #[test]
+    fn apply_discount_with_overflow_scale_qty_runs_cleanly() {
+        let lua = runtime();
+        lua.load_str(
+            r#"
+function apply_discount(lines)
+    local total = 0
+    for i = 1, #lines do
+        total = total + lines[i].qty * lines[i].unit_price_minor
+    end
+    if total > 0 then
+        return { percent = 5, label = "Scale" }
+    end
+    return nil
+end
+"#,
+        )
+        .unwrap();
+
+        let lines = vec![CartLineData {
+            sku: "HUGE".into(),
+            qty: i64::MAX / 2,
+            unit_price_minor: i64::MAX / 2,
+            currency: "USD".into(),
+        }];
+        let result = lua.apply_discount(&lines).unwrap();
+        let d = result.expect("f64 total is positive — the hook must run, not wrap");
+        assert_eq!(d.percent, 5);
     }
 
     #[test]
@@ -1117,5 +1162,82 @@ result = factorial(10)
         }];
         let errors = lua.validate_order(&lines, 700, "USD").unwrap();
         assert!(errors.is_empty());
+    }
+
+    /// The fuzz-target sandbox contract, pinned here so the harness and
+    /// the crate can never drift apart again (fuzz crash 20260811-041231:
+    /// the target asserted `os` was nil, but the sandbox deliberately
+    /// keeps a restricted os table — the assert panicked on every input,
+    /// minimized to the 4-byte `loca`). The contract the fuzz target now
+    /// checks after loading malicious input:
+    ///   - `os` → restricted table: date/time/clock present, no
+    ///     execute/remove/rename/exit;
+    ///   - everything else in the dangerous list → nil;
+    ///   - the VM stays recoverable (apply_discount returns Ok).
+    #[test]
+    fn sandbox_contract_survives_the_fuzz_crash_input() {
+        let lua = LuaRuntime::new().unwrap();
+        // The exact crash input: a 4-byte truncated Lua keyword. Loading it
+        // is a syntax error (handled), never a panic or abort.
+        assert!(lua.load_str("loca").is_err());
+
+        let globals = lua.inner().globals();
+
+        let os_val: mlua::Value = globals.get("os").unwrap();
+        let os_table = match os_val {
+            mlua::Value::Table(t) => t,
+            _ => panic!("os must be the restricted table after malicious input"),
+        };
+        for safe_key in ["date", "time", "clock"] {
+            assert!(
+                !matches!(
+                    os_table.get::<_, mlua::Value>(safe_key).unwrap(),
+                    mlua::Value::Nil
+                ),
+                "restricted os.{safe_key} should survive malicious input"
+            );
+        }
+        for dangerous_key in ["execute", "remove", "rename", "exit"] {
+            assert!(
+                matches!(
+                    os_table.get::<_, mlua::Value>(dangerous_key).unwrap(),
+                    mlua::Value::Nil
+                ),
+                "os.{dangerous_key} should be nil after malicious input"
+            );
+        }
+
+        for name in [
+            "io",
+            "loadfile",
+            "dofile",
+            "require",
+            "package",
+            "debug",
+            "rawget",
+            "rawset",
+            "rawequal",
+            "rawlen",
+            "collectgarbage",
+            "module",
+            "load",
+        ] {
+            assert!(
+                matches!(
+                    globals.get::<_, mlua::Value>(name).unwrap(),
+                    mlua::Value::Nil
+                ),
+                "dangerous global '{name}' should be nil after malicious input"
+            );
+        }
+
+        // The VM must stay recoverable after the failed load.
+        let lines = [CartLineData {
+            sku: "loca".to_string(),
+            qty: 1,
+            unit_price_minor: 100,
+            currency: "USD".to_string(),
+        }];
+        assert!(lua.apply_discount(&lines).is_ok());
     }
 }

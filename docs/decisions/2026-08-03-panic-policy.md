@@ -142,3 +142,9 @@ recoverable-set-at-zero rule is enforced mechanically, not by review.
 Remaining ideas (deferred, not planned): a diff-scoped variant that scans only
 files touched by a PR (`git diff --name-only`) for faster feedback, and a
 tracked baseline JSON to chart inventory history over time.
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

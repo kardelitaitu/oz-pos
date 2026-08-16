@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type CSSProperties } from 'react';
+import { useState, useCallback, useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react';
 import { contrastFg } from '@/utils/color';
 import { Localized, useLocalization } from '@fluent/react';
 import {
@@ -55,6 +55,9 @@ const ICON_OPTIONS: IconOption[] = [
   { id: 'dots-2',     label: 'Generic ··' },
   { id: 'dots-3',     label: 'Generic ···'},
 ];
+
+/** Icon ids in display order, for arrow-key navigation over the radiogroup. */
+const ICON_IDS: readonly string[] = ICON_OPTIONS.map((opt) => opt.id);
 
 /** Render the SVG for a given icon id. Returns null for no-icon. */
 function CategoryIconSvg({ icon, size = 18 }: { icon: string; size?: number }) {
@@ -156,6 +159,24 @@ function randomIcon(): string {
   return ICON_OPTIONS[Math.floor(Math.random() * ICON_OPTIONS.length)]!.id;
 }
 
+/** WAI-ARIA radiogroup: Arrow keys move focus AND selection; Tab leaves the
+ *  group. Returns the next value (wrapping) or null for a non-arrow key. */
+function nextRadioValue(
+  options: readonly string[],
+  current: string,
+  key: string,
+): string | null {
+  const idx = options.indexOf(current);
+  if (idx < 0) return null;
+  if (key === 'ArrowRight' || key === 'ArrowDown') {
+    return options[(idx + 1) % options.length]!;
+  }
+  if (key === 'ArrowLeft' || key === 'ArrowUp') {
+    return options[(idx - 1 + options.length) % options.length]!;
+  }
+  return null;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function colourToId(name: string): string {
@@ -212,8 +233,9 @@ export default function CategoryManagementScreen() {
   // ── Create modal state ──────────────────────────────────────────
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newColour, setNewColour] = useState(randomColour());
-  const [newIcon, setNewIcon] = useState(randomIcon());
+  // Lazy initializers so Math.random() runs once (not on every render).
+  const [newColour, setNewColour] = useState(() => randomColour());
+  const [newIcon, setNewIcon] = useState(() => randomIcon());
   const [saving, setSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   // CAT-09: track that the operator has typed into the name field so the
@@ -385,6 +407,45 @@ export default function CategoryManagementScreen() {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Refs for the icon/colour radiogroup options so arrow-key navigation can
+  // move focus to the newly-selected option (roving tabindex, WAI-ARIA radio).
+  const iconRadioRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const editIconRadioRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const colourRadioRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const editColourRadioRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const handleIconKeyDown = useCallback((e: KeyboardEvent<HTMLElement>) => {
+    const next = nextRadioValue(ICON_IDS, newIcon, e.key);
+    if (!next) return;
+    e.preventDefault();
+    setNewIcon(next);
+    iconRadioRefs.current[next]?.focus();
+  }, [newIcon]);
+
+  const handleEditIconKeyDown = useCallback((e: KeyboardEvent<HTMLElement>) => {
+    const next = nextRadioValue(ICON_IDS, editIcon, e.key);
+    if (!next) return;
+    e.preventDefault();
+    setEditIcon(next);
+    editIconRadioRefs.current[next]?.focus();
+  }, [editIcon]);
+
+  const handleColourKeyDown = useCallback((e: KeyboardEvent<HTMLElement>) => {
+    const next = nextRadioValue(COLOURS, newColour, e.key);
+    if (!next) return;
+    e.preventDefault();
+    setNewColour(next);
+    colourRadioRefs.current[next]?.focus();
+  }, [newColour]);
+
+  const handleEditColourKeyDown = useCallback((e: KeyboardEvent<HTMLElement>) => {
+    const next = nextRadioValue(COLOURS, editColour, e.key);
+    if (!next) return;
+    e.preventDefault();
+    setEditColour(next);
+    editColourRadioRefs.current[next]?.focus();
+  }, [editColour]);
 
   // Focus name inputs when modals open.
   useEffect(() => {
@@ -589,6 +650,8 @@ export default function CategoryManagementScreen() {
                 key={opt.id}
                 type="button"
                 role="radio"
+                ref={(el) => { iconRadioRefs.current[opt.id] = el; }}
+                tabIndex={newIcon === opt.id ? 0 : -1}
                 aria-checked={newIcon === opt.id}
                 aria-label={l10n.getString(
                   opt.id === 'food' ? 'categories-icon-food' :
@@ -604,6 +667,7 @@ export default function CategoryManagementScreen() {
                 }
                 style={newIcon === opt.id ? catColourVars(newColour) : undefined}
                 onClick={() => setNewIcon(opt.id)}
+                onKeyDown={handleIconKeyDown}
               >
                 <CategoryIconSvg icon={opt.id} size={20} />
               </button>
@@ -622,6 +686,8 @@ export default function CategoryManagementScreen() {
                   <button
                     type="button"
                     role="radio"
+                    ref={(el) => { colourRadioRefs.current[colour] = el; }}
+                    tabIndex={newColour === colour ? 0 : -1}
                     aria-checked={newColour === colour}
                     className={
                       newColour === colour
@@ -630,6 +696,7 @@ export default function CategoryManagementScreen() {
                     }
                     style={{ '--cat-bg': colour } as CSSProperties}
                     onClick={() => setNewColour(colour)}
+                    onKeyDown={handleColourKeyDown}
                   />
                 </Localized>
               ))}
@@ -701,6 +768,8 @@ export default function CategoryManagementScreen() {
                 key={opt.id}
                 type="button"
                 role="radio"
+                ref={(el) => { editIconRadioRefs.current[opt.id] = el; }}
+                tabIndex={editIcon === opt.id ? 0 : -1}
                 aria-checked={editIcon === opt.id}
                 aria-label={l10n.getString(
                   opt.id === 'food' ? 'categories-icon-food' :
@@ -716,6 +785,7 @@ export default function CategoryManagementScreen() {
                 }
                 style={editIcon === opt.id ? catColourVars(editColour) : undefined}
                 onClick={() => setEditIcon(opt.id)}
+                onKeyDown={handleEditIconKeyDown}
               >
                 <CategoryIconSvg icon={opt.id} size={20} />
               </button>
@@ -734,6 +804,8 @@ export default function CategoryManagementScreen() {
                 <button
                     type="button"
                     role="radio"
+                    ref={(el) => { editColourRadioRefs.current[colour] = el; }}
+                    tabIndex={editColour === colour ? 0 : -1}
                     aria-checked={editColour === colour}
                     className={
                       editColour === colour
@@ -742,6 +814,7 @@ export default function CategoryManagementScreen() {
                     }
                     style={{ '--cat-bg': colour } as CSSProperties}
                     onClick={() => setEditColour(colour)}
+                    onKeyDown={handleEditColourKeyDown}
                   />
               </Localized>
             ))}

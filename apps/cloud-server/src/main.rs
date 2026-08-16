@@ -15,12 +15,16 @@
 //! |---|---|---|
 //! | `OZ_DB_PATH` | `oz-pos.db` | Path to the SQLite database file |
 //! | `OZ_API_PORT` | `3099` | HTTP server listen port |
+//! | `OZ_ADMIN_KEY` | — | Admin key gating `POST /api/v1/tokens` (ADR sync-auth-hardening P2). When unset the token endpoint stays open (dev mode); set it in production so only callers with the matching `X-Admin-Key` header can mint tokens. |
+//! | `OZ_ENFORCE_PLANS` | — | When `1`/`true`/`on`, sync requests from tenants on the `free` plan (or with no plan row) are rejected with `403 plan_required` (ADR sync-plan-gating). When unset, plan gating is off — dev mode keeps working as before. |
 //! | `OZ_REDIRECT_ONLY` | — | Run in redirect-only mode (ADR #11). Requires `OZ_SYNC_REDIRECT_URL`. Skips DB, prune, metrics, API — only serves the migration redirect. |
 //! | `OZ_SYNC_REDIRECT_URL` | — | New server URL for migration redirect. When set, all `/api/sync/*` requests return `{"error":"server_migrated","new_url":"<url>"}` with HTTP 421. |
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
+mod config;
 mod db;
 mod email;
+mod email_pg;
 mod metrics;
 mod openapi;
 mod prune;
@@ -28,6 +32,7 @@ mod rate_limit;
 mod redirect;
 mod shutdown;
 mod sync_api;
+mod sync_store;
 mod webhooks;
 
 use std::sync::Arc;
@@ -39,7 +44,6 @@ use serde::Serialize;
 use tokio::sync::Mutex;
 use tower::limit::ConcurrencyLimitLayer;
 use tower_http::compression::CompressionLayer;
-use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 use crate::rate_limit::{RateLimiterState, start_rate_limit_cleanup};
@@ -52,6 +56,10 @@ use crate::sync_api::{SyncState, sync_router};
 pub struct CloudServerState {
     /// Database connection wrapped for axum's `State` extractor.
     pub db: Arc<Mutex<Connection>>,
+    /// Optional Postgres pool (Phase 1.2). `Some` on the Postgres branch;
+    /// the health handler reads the sync queue from it instead of the
+    /// (empty, in-memory) SQLite fallback.
+    pub pg: Option<deadpool_postgres::Pool>,
     /// Instant captured at startup for uptime calculation.
     pub started_at: Instant,
     /// P5-3: Stripe webhook signing secret (loaded from `STRIPE_WEBHOOK_SECRET` env var).
@@ -65,25 +73,33 @@ pub struct CloudServerState {
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ── tokio-console (RUSTFLAGS="--cfg tokio_unstable" + feature "console") ─
-    #[cfg(feature = "console")]
+    // console-subscriber panics if tokio was not built with `tokio_unstable`,
+    // so the init is gated on BOTH the feature and the cfg — `--all-features`
+    // without RUSTFLAGS must not crash startup.
+    #[cfg(all(feature = "console", tokio_unstable))]
     {
         console_subscriber::init();
         tracing::info!("tokio-console subscriber initialised");
     }
-    #[cfg(not(feature = "console"))]
+    #[cfg(not(all(feature = "console", tokio_unstable)))]
     {
         tracing::debug!(
             "tokio-console disabled — compile with `--features console` + RUSTFLAGS=\"--cfg tokio_unstable\" to enable"
         );
     }
 
+    // ── Configuration ────────────────────────────────────────────────
+    let config =
+        config::CloudServerConfig::from_env().map_err(|e| format!("invalid configuration: {e}"))?;
+
     // ── Logging ──────────────────────────────────────────────────────
-    // RUST-07: startup failures surface as structured errors instead of
-    // panicking the process (the runtime Debug-prints the returned error).
-    if std::env::var("OZ_LOG_FORMAT").as_deref() == Ok("json") {
-        oz_logging::try_init_json().map_err(|e| format!("logging init_json failed: {e}"))?;
-    } else {
-        oz_logging::try_init().map_err(|e| format!("logging init failed: {e}"))?;
+    match config.log_format {
+        config::LogFormat::Json => {
+            oz_logging::try_init_json().map_err(|e| format!("logging init_json failed: {e}"))?;
+        }
+        config::LogFormat::Plain => {
+            oz_logging::try_init().map_err(|e| format!("logging init failed: {e}"))?;
+        }
     }
 
     // ── Config validation (--validate-config skips the server) ───────
@@ -126,23 +142,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // metrics, API) and run a minimal server that only returns the
     // migration redirect. This keeps the old VPS cheap during the
     // 15-30 day migration window.
-    if std::env::var("OZ_REDIRECT_ONLY").as_deref() == Ok("true") {
-        if std::env::var("OZ_SYNC_REDIRECT_URL").is_err() {
-            tracing::error!("OZ_REDIRECT_ONLY=true requires OZ_SYNC_REDIRECT_URL to be set");
-            std::process::exit(1);
-        }
+    if config.redirect_only {
         info!("running in redirect-only mode (ADR #11)");
+        let redirect_url = config
+            .sync_redirect_url
+            .clone()
+            // SAFETY: redirect_only mode validates sync_redirect_url at
+            // construction, so the URL is always present here — SAFETY.
+            .expect("validated at construction");
         let redirect_router = Router::new()
             .fallback(|| async { axum::http::StatusCode::MISDIRECTED_REQUEST })
-            .layer(axum::middleware::from_fn(redirect::redirect_middleware));
-        serve(redirect_router).await?;
+            .layer(axum::middleware::from_fn_with_state(
+                Some(redirect_url),
+                redirect::redirect_middleware,
+            ));
+        serve(redirect_router, config).await?;
         return Ok(());
     }
 
     // ── Database ─────────────────────────────────────────────────────
     // Supports both SQLite (OZ_DB_PATH) and PostgreSQL (DATABASE_URL).
     // SQLite is the default backend.
-    let pool = db::DbPool::from_env()
+    let pool = db::DbPool::from_config(&config)
         .await
         .map_err(|e| format!("failed to initialise database: {e}"))?;
 
@@ -151,10 +172,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             info!("running with SQLite backend");
             let state = CloudServerState {
                 db: conn.clone(),
+                pg: None,
                 started_at: Instant::now(),
-                stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
-                square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
-                square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
+                stripe_webhook_secret: config.stripe_webhook_secret.clone(),
+                square_webhook_signature_key: config.square_webhook_signature_key.clone(),
+                square_webhook_url: config.square_webhook_url.clone(),
             };
             // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
             prune::start_prune_loop(conn.clone());
@@ -166,31 +188,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let rate_limiter = RateLimiterState::new();
             start_rate_limit_cleanup(rate_limiter.clone());
 
-            let app = build_router(state, rate_limiter);
-            serve(app).await?;
+            let app = build_router(state, rate_limiter, &config, None);
+            serve(app, config).await?;
         }
-        db::DbPool::Postgres(_pg_pool) => {
+        db::DbPool::Postgres(pg_pool) => {
             info!("running with PostgreSQL backend");
-            // For PostgreSQL, we use a PostgreSQL-compatible router.
-            // Currently, the oz-api router requires SQLite, so we fall
-            // back to SQLite for the API layer when PostgreSQL is the
-            // primary database. The sync transport layer can use PG.
+            // The oz-api REST handlers dispatch on `state.pg` (Some →
+            // Postgres data layer, None → the SQLite `Store` path), so the
+            // API layer reads/writes Postgres here. The in-memory SQLite is
+            // only a never-touched fallback for handlers that were never
+            // ported (health is PG-aware) — production data never lands in
+            // it.
             let conn = db::DbPool::connect_sqlite_in_memory()
                 .map_err(|e| format!("failed to create in-memory SQLite for API: {e}"))?;
             let state = CloudServerState {
                 db: conn.sqlite_conn(),
+                pg: Some(pg_pool.clone()),
                 started_at: Instant::now(),
-                stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
-                square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
-                square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
+                stripe_webhook_secret: config.stripe_webhook_secret.clone(),
+                square_webhook_signature_key: config.square_webhook_signature_key.clone(),
+                square_webhook_url: config.square_webhook_url.clone(),
             };
 
             // P8-1: Per-tenant rate limiter state + background cleanup.
             let rate_limiter = RateLimiterState::new();
             start_rate_limit_cleanup(rate_limiter.clone());
 
-            let app = build_router(state, rate_limiter);
-            serve(app).await?;
+            // Phase 1.5: P-1 offline-queue retention on Postgres (the SQLite
+            // prune loop does not run on this branch).
+            prune::start_prune_loop_pg(pg_pool.clone());
+
+            // Phase 1.5: scheduled report sender on Postgres (the SQLite
+            // loop reads the same settings/analytics surface via rusqlite).
+            email_pg::start_report_sender_loop_pg(pg_pool.clone());
+
+            let app = build_router(state, rate_limiter, &config, Some(pg_pool.clone()));
+            serve(app, config).await?;
         }
     }
     Ok(())
@@ -202,11 +235,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 /// 1. Stops accepting new connections
 /// 2. Drains in-flight connections with a 30-second timeout
 /// 3. Logs the shutdown and exits cleanly
-async fn serve(app: Router) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let port: u16 = std::env::var("OZ_API_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(3099);
+async fn serve(
+    app: Router,
+    config: config::CloudServerConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let port = config.port;
 
     // RUST-07: a port bind failure (e.g. port already in use) is a recoverable
     // operational error and now propagates to main instead of panicking.
@@ -272,33 +305,63 @@ async fn health_handler(
 ) -> Json<HealthResponse> {
     let uptime = state.started_at.elapsed().as_secs();
 
-    // P8-3: all DB queries in a single lock acquisition.
-    let (db_connected, db_latency_us, sync_queue_depth, last_sync_at) = {
-        let db_start = std::time::Instant::now();
-        let conn = state.db.lock().await;
+    // P8-3: all DB queries in a single lock acquisition. On the Postgres
+    // branch the queue depth / last-sync are read from the real database
+    // (the in-memory SQLite fallback is empty by design).
+    let (db_connected, db_latency_us, sync_queue_depth, last_sync_at, db_kind) =
+        if let Some(pool) = &state.pg {
+            let db_start = std::time::Instant::now();
+            let (connected, depth, last) = match pool.get().await {
+                Ok(client) => {
+                    let depth = client
+                        .query_one(
+                            "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+                            &[],
+                        )
+                        .await
+                        .map(|r| r.get::<_, i64>(0))
+                        .unwrap_or(0);
+                    let last = client
+                        .query_one(
+                            "SELECT MAX(synced_at) FROM offline_queue \
+                             WHERE synced_at IS NOT NULL",
+                            &[],
+                        )
+                        .await
+                        .map(|r| r.get::<_, Option<String>>(0))
+                        .unwrap_or(None);
+                    (true, depth, last)
+                }
+                Err(_) => (false, 0, None),
+            };
+            let latency = db_start.elapsed().as_micros() as u64;
+            (connected, latency, depth, last, "postgres")
+        } else {
+            let db_start = std::time::Instant::now();
+            let conn = state.db.lock().await;
 
-        let ping_result = conn.query_row("SELECT 1", [], |_| Ok(()));
-        let latency = db_start.elapsed().as_micros() as u64;
-        let connected = ping_result.is_ok();
+            let ping_result = conn.query_row("SELECT 1", [], |_| Ok(()));
+            let latency = db_start.elapsed().as_micros() as u64;
+            let connected = ping_result.is_ok();
 
-        let depth = conn
-            .query_row(
-                "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0);
+            let depth = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap_or(0);
 
-        let last = conn
-            .query_row(
-                "SELECT MAX(synced_at) FROM offline_queue WHERE synced_at IS NOT NULL",
-                [],
-                |row| row.get::<_, Option<String>>(0),
-            )
-            .unwrap_or(None);
+            let last = conn
+                .query_row(
+                    "SELECT MAX(synced_at) FROM offline_queue WHERE synced_at IS NOT NULL",
+                    [],
+                    |row| row.get::<_, Option<String>>(0),
+                )
+                .unwrap_or(None);
 
-        (connected, latency, depth, last)
-    };
+            (connected, latency, depth, last, "sqlite")
+        };
 
     // P8-3: record health check Prometheus metrics.
     crate::metrics::HEALTH_CHECKS_TOTAL.inc();
@@ -310,7 +373,7 @@ async fn health_handler(
     Json(HealthResponse {
         status: if db_connected { "ok" } else { "degraded" },
         version: env!("CARGO_PKG_VERSION"),
-        db: "sqlite".into(),
+        db: db_kind.into(),
         uptime_seconds: uptime,
         db_connected,
         db_latency_us,
@@ -320,25 +383,50 @@ async fn health_handler(
 }
 
 /// Build the combined router: REST API + sync endpoints + rate limiting.
-pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .allow_origin(Any);
+///
+/// `pg` is the optional Postgres pool for the sync data layer (Phase 1.2).
+/// When set, push/pull/status/snapshot/plan read and write Postgres; when
+/// `None`, the sync function keeps using the shared SQLite connection.
+pub fn build_router(
+    state: CloudServerState,
+    rate_limiter: RateLimiterState,
+    config: &config::CloudServerConfig,
+    pg: Option<deadpool_postgres::Pool>,
+) -> Router {
+    // CORS allowlist shared with the oz-api router (unify-auth-and-sync.md
+    // §11): documented defaults, overridable via OZ_CORS_ORIGINS.
+    let cors_origins = oz_api::cors_origins_from_env();
+    let cors = oz_api::build_cors(&cors_origins);
 
     // Build the oz-api router (products, categories, sales, health, tokens).
     let api_state = oz_api::AppState {
         db: state.db.clone(),
+        // Phase 1.2: the REST handlers read/write Postgres on the cloud
+        // branch instead of the in-memory SQLite fallback.
+        pg: pg.clone(),
+        // ADR sync-auth-hardening P2: gate token minting with the admin key
+        // when configured; open in dev mode when unset.
+        admin_key: config.admin_key.clone(),
+        api_secret: config.api_secret.clone().unwrap_or_default(),
+        db_path: config.db_path.clone(),
+        port: config.port,
+        cors_origins: cors_origins.clone(),
     };
     let api_router = oz_api::router(api_state);
+
+    // P8-3: Rate-limit token minting per client IP. This needs its own clone
+    // of the limiter because /api/v1/tokens runs BEFORE auth (it mints the
+    // JWT), so the per-tenant limiter has no claims to key on.
+    let token_rate_limiter = rate_limiter.clone();
 
     // Clone state for the health endpoint BEFORE SyncState::from consumes the original.
     let health_state = state.clone();
 
     // Build the sync router (push/pull endpoints) from sync_api module.
     // P8-1: Share the same RateLimiterState with the cleanup task.
-    let sync_state = SyncState::from_with_rate_limiter(state.clone(), rate_limiter);
-    let sync_router = sync_router(sync_state);
+    let mut sync_state = SyncState::from_with_rate_limiter(state.clone(), rate_limiter);
+    sync_state.pg = pg;
+    let sync_router = sync_router(sync_state, config.enforce_plans);
 
     // Build the webhook router (unauthenticated — HMAC signature verification).
     let webhook_router = webhooks::webhooks_router(state.clone());
@@ -346,7 +434,12 @@ pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> 
     // P-2: Per-route-group concurrency limits prevent sync bursts
     // from starving the product/sales/health API routes.
     // API: 10 concurrent, sync: 40 concurrent.
-    let api_router = api_router.layer(ConcurrencyLimitLayer::new(10));
+    let api_router = api_router
+        .layer(ConcurrencyLimitLayer::new(10))
+        .layer(axum::middleware::from_fn(
+            crate::rate_limit::token_rate_limit_middleware,
+        ))
+        .layer(axum::Extension(token_rate_limiter));
     let sync_router = sync_router.layer(ConcurrencyLimitLayer::new(40));
 
     // OpenAPI documentation routes — Swagger UI + Scalar + raw OpenAPI JSON.
@@ -370,9 +463,15 @@ pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> 
         .merge(api_router)
         .merge(sync_router)
         .merge(webhook_router)
-        .layer(axum::middleware::from_fn(redirect::redirect_middleware))
+        .layer(axum::middleware::from_fn_with_state(
+            config.sync_redirect_url.clone(),
+            redirect::redirect_middleware,
+        ))
         .layer(CompressionLayer::new().gzip(true))
         .layer(cors)
+        .layer(axum::middleware::from_fn(
+            oz_api::security_headers_middleware,
+        ))
 } // ── Tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -385,6 +484,54 @@ mod tests {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
+    // ── Admin key env semantics ───────────────────────────────────
+    fn configured_admin_key(raw: Result<String, std::env::VarError>) -> Option<String> {
+        raw.ok().filter(|key| !key.is_empty())
+    }
+
+    #[test]
+    fn configured_admin_key_missing_is_none() {
+        assert_eq!(
+            configured_admin_key(Err(std::env::VarError::NotPresent)),
+            None
+        );
+    }
+
+    #[test]
+    fn configured_admin_key_empty_is_none() {
+        assert_eq!(configured_admin_key(Ok(String::new())), None);
+    }
+
+    #[test]
+    fn configured_admin_key_non_empty_is_some() {
+        assert_eq!(
+            configured_admin_key(Ok("super-secret".to_string())),
+            Some("super-secret".to_string())
+        );
+    }
+
+    /// Helper: create a default config for tests.
+    fn test_config() -> config::CloudServerConfig {
+        config::CloudServerConfig {
+            db_path: ":memory:".into(),
+            database_url: None,
+            require_tls: false,
+            db_pool_size: 20,
+            apply_schema: true,
+            port: 3099,
+            admin_key: None,
+            enforce_plans: false,
+            production: false,
+            log_format: config::LogFormat::Plain,
+            redirect_only: false,
+            sync_redirect_url: None,
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+            api_secret: None,
+        }
+    }
+
     /// Helper: build an in-memory database with migrations applied.
     fn fresh_db() -> Connection {
         oz_core::migrations::fresh_db()
@@ -394,17 +541,24 @@ mod tests {
     fn test_app() -> Router {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        build_router(state, crate::rate_limit::RateLimiterState::new())
+        let config = test_config();
+        build_router(
+            state,
+            crate::rate_limit::RateLimiterState::new(),
+            &config,
+            None,
+        )
     }
 
     /// Create a test JWT token.
     fn test_token(tenant_id: Option<&str>) -> String {
-        oz_api::auth::create_token("test", Some(24), tenant_id)
+        oz_api::auth::create_token("test", Some(24), tenant_id, None)
             .unwrap()
             .token
     }
@@ -445,6 +599,76 @@ mod tests {
         assert!(text.contains("sync_push_duration_ms"));
         assert!(text.contains("sync_pull_duration_ms"));
         assert!(text.contains("sync_anchor_expired_total"));
+    }
+
+    /// Smoke test for the observability counters added with the operations
+    /// runbook (unify-auth-and-sync.md §11.5 item 9): drive a REAL 429 from
+    /// the token-mint rate limiter and a REAL 5xx from an unconfigured
+    /// webhook secret, then assert the /metrics endpoint renders both
+    /// counters at their expected values.
+    #[tokio::test]
+    async fn metrics_render_rate_limit_and_webhook_counters() {
+        let app = test_app();
+
+        // ── 429: exhaust the token-mint limiter (30/min/IP) ──────
+        // The limiter runs BEFORE auth, so no credentials are needed; all
+        // requests share the "unknown" IP bucket (no proxy headers).
+        let mut last_status = StatusCode::OK;
+        for _ in 0..31 {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/v1/tokens")
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"label":"smoke","expiry_hours":1}"#))
+                .unwrap();
+            last_status = app.clone().oneshot(req).await.unwrap().status();
+        }
+        assert_eq!(
+            last_status,
+            StatusCode::TOO_MANY_REQUESTS,
+            "the 31st token mint must be rate-limited"
+        );
+
+        // ── 5xx: webhook with no STRIPE_WEBHOOK_SECRET configured ──
+        // The handler returns 500 before signature verification when the
+        // secret is missing; the response-status middleware counts it.
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/stripe")
+            .header("stripe-signature", "t=1,v1=irrelevant")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                r#"{"id":"evt_smoke","type":"payment_intent.succeeded","data":{"object":{}}}"#,
+            ))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "webhook without a configured secret must 500"
+        );
+
+        // ── Both counters render on /metrics at the expected values ──
+        let req = Request::builder()
+            .uri("/metrics")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let text = String::from_utf8_lossy(&body);
+        // The counters are process-global, so other tests may have
+        // incremented them too; asserting the rendered label lines (the
+        // status-code asserts above already prove the events occurred) is
+        // the robust smoke check.
+        assert!(
+            text.contains("rate_limit_429_total{limiter=\"token\"}"),
+            "expected the token 429 counter, got:\n{text}"
+        );
+        assert!(
+            text.contains("webhook_5xx_total"),
+            "expected the webhook 5xx counter, got:\n{text}"
+        );
     }
 
     #[tokio::test]
@@ -501,12 +725,18 @@ mod tests {
     async fn cloud_health_reports_queue_depth() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        let app = build_router(state.clone(), crate::rate_limit::RateLimiterState::new());
+        let app = build_router(
+            state.clone(),
+            crate::rate_limit::RateLimiterState::new(),
+            &test_config(),
+            None,
+        );
 
         // Seed some pending queue items
         {
@@ -537,12 +767,18 @@ mod tests {
     async fn cloud_health_reports_last_sync_at() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        let app = build_router(state.clone(), crate::rate_limit::RateLimiterState::new());
+        let app = build_router(
+            state.clone(),
+            crate::rate_limit::RateLimiterState::new(),
+            &test_config(),
+            None,
+        );
 
         // Seed some items with various synced_at times
         {
@@ -590,16 +826,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn token_mint_is_rate_limited_per_ip() {
+        let app = test_app();
+        let mint = |ip: &str| {
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tokens")
+                .header("content-type", "application/json")
+                .header("x-forwarded-for", ip)
+                .body(Body::from(r#"{"label":"rate-limit-test"}"#))
+                .unwrap()
+        };
+
+        // Open dev mint (no admin key): 30 mints allowed per IP.
+        for i in 0..30 {
+            let resp = app.clone().oneshot(mint("203.0.113.10")).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "mint {i} should succeed");
+        }
+        // The 31st mint from the same IP is throttled.
+        let resp = app.clone().oneshot(mint("203.0.113.10")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        // A different IP still has its own bucket.
+        let resp = app.oneshot(mint("203.0.113.11")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn sync_push_and_pull_roundtrip() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
         // Seed an item directly with tenant_id
         {
@@ -626,12 +889,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cors_headers_present() {
+    async fn cors_allowed_origin_echoed() {
         let app = test_app();
         let req = Request::builder()
             .uri("/api/sync/status")
             .header("Authorization", format!("Bearer {}", test_token(None)))
-            .header("Origin", "http://example.com")
+            .header("Origin", "tauri://localhost")
             .body(Body::empty())
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
@@ -639,7 +902,23 @@ mod tests {
             .headers()
             .get("access-control-allow-origin")
             .map(|v| v.to_str().unwrap());
-        assert_eq!(allow_origin, Some("*"));
+        assert_eq!(allow_origin, Some("tauri://localhost"));
+    }
+
+    #[tokio::test]
+    async fn cors_disallowed_origin_gets_no_header() {
+        let app = test_app();
+        let req = Request::builder()
+            .uri("/api/sync/status")
+            .header("Authorization", format!("Bearer {}", test_token(None)))
+            .header("Origin", "http://evil.example")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert!(
+            resp.headers().get("access-control-allow-origin").is_none(),
+            "disallowed origin must not receive CORS headers"
+        );
     }
 
     #[tokio::test]
@@ -665,20 +944,26 @@ mod tests {
     async fn multi_tenant_tenant_a_push_invisible_to_tenant_b() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
-        // Tenant A pushes two items
-        let push_body = r#"[
-            {"id":"a-item-1","action":"sale.create","payload":"{\"total\":100}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null},
-            {"id":"a-item-2","action":"sale.void","payload":"{\"reason\":\"test\"}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-02T00:00:00Z","synced_at":null}
-        ]"#;
-        let push_req = authed_post("/api/sync/push", push_body, Some("tenant-a"));
+        // Tenant A pushes two items (real UUID ids — push_handler rejects
+        // non-UUID ids; see round 121)
+        let a_id_1 = uuid::Uuid::now_v7().to_string();
+        let a_id_2 = uuid::Uuid::now_v7().to_string();
+        let push_body = format!(
+            r#"[
+                {{"id":"{a_id_1}","action":"sale.create","payload":"{{\"total\":100}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}},
+                {{"id":"{a_id_2}","action":"sale.void","payload":"{{\"reason\":\"test\"}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-02T00:00:00Z","synced_at":null}}
+            ]"#
+        );
+        let push_req = authed_post("/api/sync/push", &push_body, Some("tenant-a"));
         let push_resp = app.clone().oneshot(push_req).await.unwrap();
         assert_eq!(push_resp.status(), StatusCode::OK);
 
@@ -700,88 +985,100 @@ mod tests {
         let body_a = resp_a.into_body().collect().await.unwrap().to_bytes();
         let json_a: serde_json::Value = serde_json::from_slice(&body_a).unwrap();
         assert_eq!(json_a["items"].as_array().unwrap().len(), 2);
-        assert_eq!(json_a["items"][0]["id"], "a-item-1");
-        assert_eq!(json_a["items"][1]["id"], "a-item-2");
+        assert_eq!(json_a["items"][0]["id"], a_id_1);
+        assert_eq!(json_a["items"][1]["id"], a_id_2);
     }
 
     #[tokio::test]
     async fn multi_tenant_bidirectional_isolation() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
-        // Tenant A pushes one item
+        // Tenant A pushes one item (real UUID id)
+        let id_a = uuid::Uuid::now_v7().to_string();
         let push_a = authed_post(
             "/api/sync/push",
-            r#"[{"id":"only-a","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            &format!(
+                r#"[{{"id":"{id_a}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}]"#
+            ),
             Some("tenant-a"),
         );
         let r = app.clone().oneshot(push_a).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK);
 
-        // Tenant B pushes one item
+        // Tenant B pushes one item (real UUID id)
+        let id_b = uuid::Uuid::now_v7().to_string();
         let push_b = authed_post(
             "/api/sync/push",
-            r#"[{"id":"only-b","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            &format!(
+                r#"[{{"id":"{id_b}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}]"#
+            ),
             Some("tenant-b"),
         );
         let r = app.clone().oneshot(push_b).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK);
 
-        // Tenant A should see ONLY 'only-a'
+        // Tenant A should see ONLY its own item
         let pull_a = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-a"));
         let r_a = app.clone().oneshot(pull_a).await.unwrap();
         let b_a = r_a.into_body().collect().await.unwrap().to_bytes();
         let j_a: serde_json::Value = serde_json::from_slice(&b_a).unwrap();
         let items_a = j_a["items"].as_array().unwrap();
         assert_eq!(items_a.len(), 1, "Tenant A sees only its own items");
-        assert_eq!(items_a[0]["id"], "only-a");
+        assert_eq!(items_a[0]["id"], id_a);
 
-        // Tenant B should see ONLY 'only-b'
+        // Tenant B should see ONLY its own item
         let pull_b = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-b"));
         let r_b = app.oneshot(pull_b).await.unwrap();
         let b_b = r_b.into_body().collect().await.unwrap().to_bytes();
         let j_b: serde_json::Value = serde_json::from_slice(&b_b).unwrap();
         let items_b = j_b["items"].as_array().unwrap();
         assert_eq!(items_b.len(), 1, "Tenant B sees only its own items");
-        assert_eq!(items_b[0]["id"], "only-b");
+        assert_eq!(items_b[0]["id"], id_b);
     }
 
     #[tokio::test]
     async fn multi_tenant_status_scoped_per_tenant() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
-        // Tenant A pushes 3 items
-        let push_a = authed_post(
-            "/api/sync/push",
+        // Tenant A pushes 3 items (real UUID ids)
+        let a_ids: Vec<String> = (0..3).map(|_| uuid::Uuid::now_v7().to_string()).collect();
+        let push_a_body = format!(
             r#"[
-                {"id":"a-1","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null},
-                {"id":"a-2","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null},
-                {"id":"a-3","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}
+                {{"id":"{0}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}},
+                {{"id":"{1}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}},
+                {{"id":"{2}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}
             ]"#,
-            Some("tenant-a"),
+            a_ids[0], a_ids[1], a_ids[2]
         );
+        let push_a = authed_post("/api/sync/push", &push_a_body, Some("tenant-a"));
         let r = app.clone().oneshot(push_a).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK);
 
-        // Tenant B pushes 1 item
+        // Tenant B pushes 1 item (real UUID id)
+        let b_id = uuid::Uuid::now_v7().to_string();
         let push_b = authed_post(
             "/api/sync/push",
-            r#"[{"id":"b-1","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            &format!(
+                r#"[{{"id":"{b_id}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}]"#
+            ),
             Some("tenant-b"),
         );
         let r = app.clone().oneshot(push_b).await.unwrap();
@@ -806,18 +1103,22 @@ mod tests {
     async fn multi_tenant_default_tenant_isolation() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
-        // Push items as default tenant
+        // Push items as default tenant (real UUID id)
+        let def_id = uuid::Uuid::now_v7().to_string();
         let push_d = authed_post(
             "/api/sync/push",
-            r#"[{"id":"def-item","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            &format!(
+                r#"[{{"id":"{def_id}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}]"#
+            ),
             None,
         );
         let r = app.clone().oneshot(push_d).await.unwrap();
@@ -840,6 +1141,109 @@ mod tests {
         let b_d = r_d.into_body().collect().await.unwrap().to_bytes();
         let j_d: serde_json::Value = serde_json::from_slice(&b_d).unwrap();
         assert_eq!(j_d["items"].as_array().unwrap().len(), 1);
-        assert_eq!(j_d["items"][0]["id"], "def-item");
+        assert_eq!(j_d["items"][0]["id"], def_id);
+    }
+
+    /// Full lifecycle: free tenant push → rejected → Stripe webhook
+    /// upgrades plan → same push now accepted.
+    #[tokio::test]
+    async fn lifecycle_free_tenant_upgraded_via_webhook_can_sync() {
+        let secret = "whsec_lifecycle_test";
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
+            started_at: Instant::now(),
+            stripe_webhook_secret: Some(secret.to_string()),
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+        };
+        let mut config = test_config();
+        config.enforce_plans = true;
+        config.stripe_webhook_secret = Some(secret.to_string());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter, &config, None);
+
+        let tenant = "lifecycle-tenant";
+        let sale_id = uuid::Uuid::now_v7().to_string();
+        let body = format!(
+            r#"[{{"id":"{sale_id}","action":"complete_sale","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+        );
+
+        // Step 1: Push as free tenant → rejected
+        let req = authed_post("/api/sync/push", &body, Some(tenant));
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::FORBIDDEN,
+            "free tenant must be rejected when plan enforcement is on"
+        );
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["error"], "plan_required");
+
+        // Step 2: Fire Stripe webhook to upgrade tenant to pro
+        let webhook_payload = serde_json::json!({
+            "id": "evt_lifecycle_test",
+            "type": "customer.subscription.created",
+            "data": { "object": {
+                "id": "sub_lifecycle",
+                "customer": "cus_lifecycle",
+                "status": "active",
+                "metadata": { "tenant_id": tenant },
+            }},
+        });
+        let webhook_bytes = serde_json::to_vec(&webhook_payload).unwrap();
+        let sig = lifecycle_stripe_signature(&webhook_bytes, secret);
+
+        let webhook_req = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/stripe")
+            .header("Content-Type", "application/json")
+            .header("Stripe-Signature", &sig)
+            .body(Body::from(webhook_bytes))
+            .unwrap();
+        let webhook_resp = app.clone().oneshot(webhook_req).await.unwrap();
+        assert_eq!(
+            webhook_resp.status(),
+            StatusCode::OK,
+            "webhook must upgrade tenant successfully"
+        );
+        let wb = webhook_resp.into_body().collect().await.unwrap().to_bytes();
+        let wj: serde_json::Value = serde_json::from_slice(&wb).unwrap();
+        assert_eq!(wj["plan"], "pro", "tenant must be upgraded to pro");
+
+        // Step 3: Push same sale again → now accepted
+        let req2 = authed_post("/api/sync/push", &body, Some(tenant));
+        let resp2 = app.oneshot(req2).await.unwrap();
+        assert_eq!(
+            resp2.status(),
+            StatusCode::OK,
+            "upgraded tenant must be able to sync"
+        );
+        let b2 = resp2.into_body().collect().await.unwrap().to_bytes();
+        let j2: serde_json::Value = serde_json::from_slice(&b2).unwrap();
+        let results = j2["results"]
+            .as_array()
+            .expect("push response must have results array");
+        assert_eq!(results.len(), 1, "one push item → one outcome");
+        assert_eq!(
+            results[0]["outcome"], "accepted",
+            "the sale must be accepted after plan upgrade"
+        );
+    }
+
+    /// HMAC-SHA256 Stripe signature helper for the lifecycle test.
+    fn lifecycle_stripe_signature(payload: &[u8], secret: &str) -> String {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        let timestamp = "1719000000";
+        let mut signed_bytes = Vec::with_capacity(timestamp.len() + 1 + payload.len());
+        signed_bytes.extend_from_slice(timestamp.as_bytes());
+        signed_bytes.push(b'.');
+        signed_bytes.extend_from_slice(payload);
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(&signed_bytes);
+        let expected = hex::encode(mac.finalize().into_bytes());
+        format!("t={},v1={}", timestamp, expected)
     }
 }

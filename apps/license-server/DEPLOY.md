@@ -209,26 +209,63 @@ The license server requires the RSA private key as an environment variable. **Ne
    Get-Content -Raw crates/oz-core/oz-license-private.pem | Set-Clipboard
    ```
 
-4. Click **Save**.
+4. (Optional) Add the support-contact webhook:
+   - **Key:** `OZ_DISCORD_WEBHOOK`
+   - **Value:** The **Discord channel webhook URL** (Discord → channel → Settings → Integrations → Webhooks → New Webhook). This is what `/api/v1/web/contact` forwards website support-form messages to. **Never expose this URL to the browser** — the website only talks to the license server, which keeps the secret server-side. If it is unset, `/api/v1/web/contact` returns `503 not configured` and the website's contact form falls back to a mailto link.
+5. Add the **OTP email sender** (required for the website dashboard login — without it `POST /api/v1/web/request-otp` returns `503 email delivery is not configured` and the login page shows its "not configured" state):
+   - **Key:** `OZ_SMTP_HOST` — e.g. `smtp.postmarkapp.com` or your relay's hostname
+   - **Key:** `OZ_SMTP_PORT` — default `587` (TLS/STARTTLS) if unset
+   - **Key:** `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` — credentials for the relay (omit for unauthenticated relays)
+   - **Key:** `OZ_SMTP_FROM` — sender address, e.g. `noreply@oz-pos.com`
+6. (Optional) Web API CORS allowlist override:
+   - **Key:** `OZ_WEB_ALLOWED_ORIGINS` — comma-separated origins allowed to call the web endpoints. **Defaults are already correct** for the current setup (`https://oz-pos.adikaradwiatmaja.workers.dev`, `https://oz-pos.com`, `http://localhost:4321`); only set this if you deploy the website to a different origin.
+7. (Optional) Session lifetime override:
+   - **Key:** `OZ_WEB_SESSION_TTL` — Go duration, default `24h` (e.g. `72h` to extend dashboard sessions).
+8. Add the **Paddle webhook** secrets (required for the checkout → provisioning flow):
+   - **Key:** `PADDLE_WEBHOOK_SECRET` — the endpoint secret key from Paddle → Developer tools → Notifications → Edit destination. Without it the webhook answers `503 not configured`.
+   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium`. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. Copy the real price IDs from the Paddle dashboard (Catalog → Prices).
+   - **Key:** `PADDLE_API_KEY` (optional) — server-side Paddle API key. Only needed when the customer email isn't passed in `custom_data` at checkout; the webhook falls back to fetching it via `GET /customers/{id}`.
+   - **Key:** `PADDLE_API_URL` (optional) — defaults to `https://api.paddle.com`.
+9. Click **Save**.
 
-### 7.2 Attach to the service
+### 7.2 CORS for the website
+
+The website is currently served from `https://oz-pos.adikaradwiatmaja.workers.dev` (until the `oz-pos.com` domain is bought) and calls the web endpoints (`/api/v1/web/contact`, `request-otp`, `verify-otp`, `/me`, `logout`) cross-origin.
+
+- **Web OTP endpoints** enforce an **in-handler CORS allowlist** read from `OZ_WEB_ALLOWED_ORIGINS` (Step 6 above). Its default already includes the workers.dev origin, `oz-pos.com`, and `http://localhost:4321`, so **no configuration is needed** — just don't set the variable to an empty string, or the allowlist falls back to the default.
+- **`/api/v1/web/contact`** relies on PocketBase's global CORS middleware, which allows all origins by default (stateless, no cookies). No configuration needed for the contact form to work. For hardening, restrict origins by adding the `--origins` flag to the `serve` command in the Dockerfile `CMD` (e.g. `--origins=https://oz-pos.adikaradwiatmaja.workers.dev,https://oz-pos.com,http://localhost:4321`).
+
+### 7.3 Attach to the service
 
 1. Go to your service → **Environment** tab.
 2. Under **Secret Groups**, click **Attach**.
 3. Select `license-server-secrets`.
 4. Click **Save**.
 
-### 7.3 Redeploy
+### 7.4 Redeploy
 
 Click **Redeploy** on the service. After deployment, the service should start without errors.
+
+### 7.5 Configure the Paddle webhook
+
+In the Paddle dashboard (**Developer tools → Notifications**):
+
+1. Create a notification destination of type **URL (webhook)** pointing at `https://license.oz-pos.com/api/v1/paddle/webhook`.
+2. Subscribe to the **Subscription** events: `subscription.created`, `subscription.activated`, `subscription.trialing`, `subscription.updated`, `subscription.canceled`, `subscription.paused`, `subscription.resumed`, `subscription.past_due` — plus `transaction.completed` / `transaction.payment_failed` (currently acknowledged and logged; one-time purchases only provision once a lifetime tier ships).
+3. Copy the **endpoint secret key** into the `PADDLE_WEBHOOK_SECRET` secret (Step 8 in §7.1).
+4. **Signature verification:** every request carries a `Paddle-Signature` header (`ts=<unix>;h1=<hex>`). The server verifies HMAC-SHA256 over `ts:rawBody` with the endpoint secret and rejects timestamps older than 5 minutes. Nothing else is trusted.
+5. **Idempotency:** Paddle retries non-2xx responses; the server dedups by `event_id` (24h in-memory window) and upserts on `paddle_sub_id`, so replays are no-ops.
+6. **Customer email:** the website checkout passes `custom_data.email` (the email the customer types on the pricing card), which the webhook reads to upsert the tenant — **no `PADDLE_API_KEY` needed**. `PADDLE_API_KEY` remains an optional fallback for events whose `custom_data` lacks the email.
 
 ---
 
 ## 8. Import the Collections Schema
 
-PocketBase collections (`license_keys`, `tenants`, `subscriptions`, `tenant_machines`) are defined in `pb_schema.json`. They need to be imported into the running instance.
+PocketBase collections (`license_keys`, `tenants`, `subscriptions`, `tenant_machines`) are defined in `pb_schema.json`.
 
-### 8.1 Via the Admin UI (Recommended)
+> ✅ **No action needed on a fresh deployment.** The server auto-imports the embedded `pb_schema.json` on first boot whenever any required collection is missing (see `ensureCollections` in `main.go`) — verified in the container log: `missing required collection "license_keys" — importing pb_schema.json`. The manual import below is only a fallback if you ever need to inspect or re-import by hand.
+
+### 8.1 Via the Admin UI (Optional verification)
 
 1. Navigate to your service's public URL: `https://<your-service>.code.run/_/`
 2. Log in with the **admin user** created in Step 9 (you need to create it first).
@@ -340,8 +377,13 @@ curl -X POST https://license.oz-pos.com/api/v1/license/activate \
 
 ### 11.3 Test the status endpoint
 
+`/status` is a **POST** endpoint authenticated with `Authorization: Bearer <api_key>` (the credential never appears in URLs, so it can't leak to access logs or Referer headers). Use the `api_key` returned by the activation call in §11.2:
+
 ```bash
-curl https://license.oz-pos.com/api/v1/license/status/test-tenant-001
+curl -X POST https://license.oz-pos.com/api/v1/license/status \
+  -H "Authorization: Bearer <api_key_from_activation>" \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_id": "test-tenant-001"}'
 ```
 
 **Expected response (200):**
@@ -366,6 +408,19 @@ Send 6 activation requests in quick succession. The 6th should return **429 Too 
 
 Send 3 invalid key attempts. The 4th should return **429 Too Many Requests** with a "too many attempts for this key" message.
 
+### 11.6 Test the Paddle webhook
+
+Send a **signed** `subscription.created` event (compute `Paddle-Signature: ts=<now>;h1=<hex HMAC-SHA256 of "ts:body" with the endpoint secret>`):
+
+```bash
+curl -X POST https://license.oz-pos.com/api/v1/paddle/webhook \
+  -H "Paddle-Signature: ts=$(date +%s);h1=..." \
+  -H "Content-Type: application/json" \
+  -d '{"event_id":"evt_test_1","event_type":"subscription.created","data":{"id":"sub_test_1","status":"active","customer_id":"cus_test_1","custom_data":{"email":"buyer@test.com"},"items":[{"price":{"id":"<your_price_id>","product_id":"pro_1"},"quantity":1}],"current_billing_period":{"starts_at":"2026-08-16T00:00:00Z","ends_at":"2027-08-16T00:00:00Z"}}}'
+```
+
+The response must be **200** and a tenant + `OZ-PRO-...` license key + subscription must appear in the admin UI. An unsigned or tampered request must return **401** and create nothing.
+
 ---
 
 ## 12. Ongoing Maintenance
@@ -384,7 +439,7 @@ Alternatively, export manually from the admin UI (`/_/` → **Settings** → **E
 
 - **Northflank Dashboard:** CPU, memory, and request logs are available in the service overview.
 - **PocketBase Logs:** Viewable via the Shell (`less /pb/pb_data/logs.db`) or the admin UI.
-- **Uptime Monitoring:** Add a health check endpoint monitor (e.g., UptimeRobot on `https://license.oz-pos.com/api/v1/license/status/_health`).
+- **Uptime Monitoring:** Add a health check endpoint monitor (e.g., UptimeRobot on `https://license.oz-pos.com/api/health`, which returns `{"status":"ok"}`).
 
 ### Updating the service
 
@@ -433,7 +488,7 @@ Alternatively, export manually from the admin UI (`/_/` → **Settings** → **E
 | `failed to decode PEM block` | The private key is not valid PEM. Ensure you pasted the entire file including `-----BEGIN`/`-----END-----`. |
 | `failed to parse RSA private key` | The key format is wrong. Generate PKCS#8 using the script in Step 2. |
 | Can't log into admin UI | Create the superuser via the Shell (Step 9). |
-| Collections not showing | Import `pb_schema.json` via Settings → Import Collections (Step 8). |
+| Collections not showing | Shouldn't happen on fresh boots — the schema auto-imports on first boot. If collections are missing anyway (e.g. a partially-provisioned volume), import `pb_schema.json` via Settings → Import Collections (Step 8). |
 | Rate limited in testing | Wait 1 hour for IP bucket to refill, or restart the container (rate limiter is in-memory). |
 | Health check failing | The Go healthcheck binary pings `/api/health` with a 5s timeout. If the server is slow to start (e.g., first boot after volume attach), the container may flap as unhealthy for ~15s until PocketBase finishes initialisation. Run `docker inspect` to check `State.Health`. |
 

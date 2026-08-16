@@ -43,6 +43,23 @@ pub struct SyncPullState {
     pub cursor: Option<String>,
 }
 
+/// A retained failure from applying a remote sync item.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteSyncFailure {
+    /// Remote item identifier.
+    pub item_id: String,
+    /// Remote action name.
+    pub action: String,
+    /// Original payload retained for operator inspection.
+    pub payload: String,
+    /// Number of failed application attempts.
+    pub attempts: i64,
+    /// Most recent application error.
+    pub last_error: String,
+    /// Whether retry is exhausted and the item is quarantined.
+    pub dead_lettered: bool,
+}
+
 impl Store<'_> {
     /// Enqueue a transaction for later sync (default tenant).
     pub fn enqueue_offline(
@@ -116,6 +133,54 @@ impl Store<'_> {
         priority: SyncPriority,
     ) -> Result<OfflineQueueItem, CoreError> {
         self.enqueue_offline_inner(action, payload, tenant_id, priority)
+    }
+
+    /// Enqueue a `settings.update` sync item for a local settings write,
+    /// superseding any still-pending items for the same key in the same
+    /// tenant (SYNC-10).
+    ///
+    /// The payload matches `SettingsUpdatePayload` (key/value/terminal_id)
+    /// so the sync apply side can parse it. Items are Low priority —
+    /// settings are low-frequency and the conflict resolver treats
+    /// `settings.*` as version-LWW. Ordering is ENQUEUE-THEN-SUPERSEDE: an
+    /// enqueue failure leaves the older pending items intact (pre-supersede
+    /// behavior), while a supersede failure degrades to a duplicate pair
+    /// that the replay-safe apply side already handles — never a lost update.
+    pub fn enqueue_settings_update_superseding(
+        &self,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+        tenant_id: &str,
+    ) -> Result<(), CoreError> {
+        let payload = serde_json::json!({
+            "key": key,
+            "value": value,
+            "terminal_id": terminal_id,
+        });
+        let fresh = self.enqueue_offline_scoped(
+            "settings.update",
+            &payload.to_string(),
+            tenant_id,
+            SyncPriority::Low,
+        )?;
+        // Supersede older pending items for the SAME key AND SAME
+        // terminal, exempting the item just created — it IS the newest
+        // intent. The terminal filter keeps the supersede per-terminal:
+        // terminal A's re-save must never cancel terminal B's still-pending
+        // save for the same key (version-LWW attributes per terminal).
+        // Malformed payloads are skipped defensively.
+        let pending = self.list_pending_offline_for_tenant(tenant_id)?;
+        for item in pending {
+            if item.id == fresh.id || item.action != "settings.update" {
+                continue;
+            }
+            let v: serde_json::Value = serde_json::from_str(&item.payload).unwrap_or_default();
+            if v["key"].as_str() == Some(key) && v["terminal_id"].as_str() == Some(terminal_id) {
+                self.delete_offline_item_for_tenant(&item.id, tenant_id)?;
+            }
+        }
+        Ok(())
     }
 
     fn enqueue_offline_inner(
@@ -440,6 +505,157 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Record a remote application failure and advance its retry/dead-letter state.
+    ///
+    /// The payload is retained for operator inspection. Once `max_attempts`
+    /// is reached, the item is quarantined and no longer eligible for page
+    /// application until a future explicit operator requeue workflow is added.
+    pub fn record_remote_failure(
+        &self,
+        item_id: &str,
+        action: &str,
+        payload: &str,
+        error: &str,
+        max_attempts: i64,
+    ) -> Result<bool, CoreError> {
+        let max_attempts = max_attempts.max(1);
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "INSERT INTO sync_remote_failures
+                (item_id, action, payload, attempts, last_error, dead_lettered)
+             VALUES (?1, ?2, ?3, 1, ?4, CASE WHEN 1 >= ?5 THEN 1 ELSE 0 END)
+             ON CONFLICT(item_id) DO UPDATE SET
+                action = excluded.action,
+                payload = excluded.payload,
+                attempts = sync_remote_failures.attempts + 1,
+                last_error = excluded.last_error,
+                last_failed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                dead_lettered = CASE
+                    WHEN sync_remote_failures.attempts + 1 >= ?5 THEN 1
+                    ELSE 0
+                END",
+            params![item_id, action, payload, error, max_attempts],
+        )?;
+        let dead_lettered: bool = tx.query_row(
+            "SELECT dead_lettered FROM sync_remote_failures WHERE item_id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )?;
+        tx.commit()?;
+        Ok(dead_lettered)
+    }
+
+    /// List retained remote application failures, newest failure first.
+    pub fn list_remote_failures(&self) -> Result<Vec<RemoteSyncFailure>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT item_id, action, payload, attempts, last_error, dead_lettered
+             FROM sync_remote_failures ORDER BY last_failed_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(RemoteSyncFailure {
+                item_id: row.get(0)?,
+                action: row.get(1)?,
+                payload: row.get(2)?,
+                attempts: row.get(3)?,
+                last_error: row.get(4)?,
+                dead_lettered: row.get::<_, i64>(5)? != 0,
+            })
+        })?;
+        rows.map(|row| row.map_err(CoreError::from)).collect()
+    }
+
+    /// Return whether a remote item has been quarantined as a dead letter.
+    pub fn is_remote_failure_dead_lettered(&self, item_id: &str) -> Result<bool, CoreError> {
+        self.conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sync_remote_failures WHERE item_id = ?1 AND dead_lettered = 1)",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    /// Clear a resolved remote failure after its item is applied successfully.
+    pub fn clear_remote_failure(&self, item_id: &str) -> Result<(), CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        self.clear_remote_failure_in_tx(&tx, item_id)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Clear a remote failure using a caller-owned transaction.
+    pub fn clear_remote_failure_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        item_id: &str,
+    ) -> Result<(), CoreError> {
+        tx.execute(
+            "DELETE FROM sync_remote_failures WHERE item_id = ?1",
+            params![item_id],
+        )?;
+        Ok(())
+    }
+
+    /// Requeue a dead-lettered remote item so the next sync cycle retries it.
+    ///
+    /// Operators call this after remediating the item's source (for example
+    /// creating the missing product a remote sale referenced, or upgrading a
+    /// client whose version rejected the payload). The quarantine row is
+    /// deleted and the durable pull anchor (`sync_pull_state`) is rewound to
+    /// a full re-pull, so the next daemon cycle re-fetches the item and
+    /// retries it with a fresh attempt budget. The re-pull is safe because
+    /// the `sync_applied_items` idempotency ledger skips every already-
+    /// applied item — only the requeued (never-applied) item mutates.
+    ///
+    /// Returns [`CoreError::NotFound`] when the item is not currently
+    /// dead-lettered (either never recorded or still retryable) — a mistyped
+    /// id or a request to requeue an item that is already being retried must
+    /// not be a silent no-op.
+    pub fn requeue_remote_failure(&self, item_id: &str) -> Result<(), CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        // The dead-letter predicate lives in the DELETE so the check and the
+        // mutation are atomic — an id that is not currently quarantined
+        // (never recorded, or still being retried) deletes nothing and fails
+        // with NotFound instead of silently no-op'ing.
+        let affected = tx.execute(
+            "DELETE FROM sync_remote_failures WHERE item_id = ?1 AND dead_lettered = 1",
+            params![item_id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "sync_remote_failures",
+                id: item_id.to_owned(),
+            });
+        }
+        // Rewind the durable pull anchor (single-row table). A NULL `since`
+        // means "pull everything" on the next cycle — the idempotency
+        // ledger makes that safe. No row (pre-114 database) is a no-op.
+        tx.execute(
+            "UPDATE sync_pull_state SET since = NULL, cursor = NULL WHERE id = 1",
+            [],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Record a remote item using a caller-owned transaction.
+    ///
+    /// The sync applier uses this method in the same transaction as the
+    /// domain mutation, preventing a crash between mutation and receipt from
+    /// causing a second application on replay.
+    pub fn mark_remote_item_applied_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        item_id: &str,
+        action: &str,
+    ) -> Result<(), CoreError> {
+        tx.execute(
+            "INSERT OR IGNORE INTO sync_applied_items (item_id, action) VALUES (?1, ?2)",
+            params![item_id, action],
+        )?;
+        Ok(())
+    }
+
     fn row_to_offline_queue_item(row: &rusqlite::Row) -> rusqlite::Result<OfflineQueueItem> {
         let status_str: String = row.get("status")?;
         Ok(OfflineQueueItem {
@@ -510,6 +726,135 @@ mod tests {
 
         let items = s.list_all_offline().unwrap();
         assert_eq!(items.len(), 1);
+    }
+
+    /// SYNC-10 tablet parity: a local settings write must enqueue a
+    /// `settings.update` item with the payload shape the sync apply side
+    /// parses ({key, value, terminal_id}), tenant-scoped at Low priority.
+    #[test]
+    fn enqueue_settings_update_superseding_creates_item() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-x")
+            .unwrap();
+
+        let pending = s.list_pending_offline_for_tenant("store-x").unwrap();
+        assert_eq!(pending.len(), 1);
+        let item = &pending[0];
+        assert_eq!(item.action, "settings.update");
+        assert_eq!(item.priority, SyncPriority::Low);
+        let v: serde_json::Value = serde_json::from_str(&item.payload).unwrap();
+        assert_eq!(v["key"], "theme");
+        assert_eq!(v["value"], "dark");
+        assert_eq!(v["terminal_id"], "term-1");
+    }
+
+    /// A second local save of the same key must replace the still-pending
+    /// item, so a v1→v2→v1 offline sequence pushes the newest value last.
+    #[test]
+    fn enqueue_settings_update_superseding_replaces_same_key() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("theme", "light", "term-1", "store-x")
+            .unwrap();
+
+        let pending = s.list_pending_offline_for_tenant("store-x").unwrap();
+        assert_eq!(
+            pending.len(),
+            1,
+            "second save must replace the pending item"
+        );
+        let v: serde_json::Value = serde_json::from_str(&pending[0].payload).unwrap();
+        assert_eq!(v["value"], "light");
+    }
+
+    /// Superseding one key must leave pending items for OTHER keys intact.
+    #[test]
+    fn enqueue_settings_update_superseding_keeps_other_keys() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("a", "1", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("b", "2", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("a", "3", "term-1", "store-x")
+            .unwrap();
+
+        let pending = s.list_pending_offline_for_tenant("store-x").unwrap();
+        assert_eq!(pending.len(), 2);
+        let mut keyed: Vec<(String, String)> = pending
+            .iter()
+            .map(|i| {
+                let v: serde_json::Value = serde_json::from_str(&i.payload).unwrap();
+                (
+                    v["key"].as_str().unwrap().to_string(),
+                    v["value"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect();
+        keyed.sort();
+        assert_eq!(
+            keyed,
+            vec![
+                ("a".to_string(), "3".to_string()),
+                ("b".to_string(), "2".to_string())
+            ]
+        );
+    }
+
+    /// Supersede must be tenant-scoped — store-y's save of the same key
+    /// must not remove store-x's pending item (multi-store isolation).
+    #[test]
+    fn enqueue_settings_update_superseding_is_tenant_scoped() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-y")
+            .unwrap();
+
+        let pending = s.list_pending_offline().unwrap();
+        assert_eq!(
+            pending.len(),
+            2,
+            "cross-tenant items must not be superseded"
+        );
+    }
+
+    /// Supersede must be per-terminal — term-2's pending save of the same
+    /// key must survive term-1's re-save (version-LWW attributes changes
+    /// per terminal, so neither terminal may cancel the other's intent).
+    #[test]
+    fn enqueue_settings_update_superseding_keeps_other_terminals_items() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("theme", "dark", "term-2", "store-x")
+            .unwrap();
+        // term-1 saves the same key again — only ITS older pending item is
+        // superseded; term-2's item survives.
+        s.enqueue_settings_update_superseding("theme", "light", "term-1", "store-x")
+            .unwrap();
+
+        let pending = s.list_pending_offline_for_tenant("store-x").unwrap();
+        assert_eq!(pending.len(), 2, "term-2's pending item must survive");
+        let terminals: Vec<String> = pending
+            .iter()
+            .map(|i| {
+                let v: serde_json::Value = serde_json::from_str(&i.payload).unwrap();
+                v["terminal_id"].as_str().unwrap_or("").to_string()
+            })
+            .collect();
+        assert!(terminals.iter().any(|t| t == "term-1"));
+        assert!(terminals.iter().any(|t| t == "term-2"));
     }
 
     // ── List pending ────────────────────────────────────────────────
@@ -914,6 +1259,74 @@ mod tests {
         // Verify state unchanged.
         let count = s.pending_offline_count().unwrap();
         assert_eq!(count, 0);
+    }
+
+    // ── requeue_remote_failure (dead-letter requeue workflow) ────────
+
+    #[test]
+    fn requeue_remote_failure_clears_quarantine_and_rewinds_anchor() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Drive a remote item to the dead letter (3 failed attempts).
+        let mut dead_lettered = false;
+        for _ in 0..3 {
+            dead_lettered = s
+                .record_remote_failure(
+                    "remote-item-1",
+                    "complete_sale",
+                    "{}",
+                    "permanent failure",
+                    3,
+                )
+                .unwrap();
+        }
+        assert!(dead_lettered, "third attempt must dead-letter the item");
+        assert!(s.is_remote_failure_dead_lettered("remote-item-1").unwrap());
+
+        // The daemon had already advanced the durable pull anchor past the
+        // item (the anchor is what let it skip the quarantine).
+        s.set_sync_pull_state(Some("2026-06-01T00:00:00Z"), Some("cursor-1"))
+            .unwrap();
+
+        s.requeue_remote_failure("remote-item-1").unwrap();
+
+        // Quarantine cleared: no failure row remains.
+        assert!(!s.is_remote_failure_dead_lettered("remote-item-1").unwrap());
+        assert!(s.list_remote_failures().unwrap().is_empty());
+
+        // Anchor rewound so the next pull re-fetches the requeued item. A
+        // full re-pull is safe: the idempotency ledger skips every
+        // already-applied item, and only the requeued item mutates.
+        let st = s.get_sync_pull_state().unwrap();
+        assert!(st.since.is_none(), "anchor must rewind to a full re-pull");
+        assert!(
+            st.cursor.is_none(),
+            "cursor must be cleared with the anchor"
+        );
+    }
+
+    #[test]
+    fn requeue_remote_failure_refuses_non_dead_lettered() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // A retryable failure (not yet quarantined) cannot be requeued —
+        // the daemon is already retrying it and the anchor is retained.
+        s.record_remote_failure("remote-item-2", "complete_sale", "{}", "transient", 3)
+            .unwrap();
+        assert!(!s.is_remote_failure_dead_lettered("remote-item-2").unwrap());
+
+        let err = s.requeue_remote_failure("remote-item-2").unwrap_err();
+        assert!(
+            matches!(err, CoreError::NotFound { entity, .. } if entity == "sync_remote_failures")
+        );
+
+        // An id that was never recorded is likewise NotFound.
+        let err = s.requeue_remote_failure("never-seen").unwrap_err();
+        assert!(
+            matches!(err, CoreError::NotFound { entity, .. } if entity == "sync_remote_failures")
+        );
     }
 
     // ── Dedup tests ───────────────────────────────────────────────────

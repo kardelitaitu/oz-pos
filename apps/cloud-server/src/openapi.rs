@@ -21,12 +21,17 @@ pub fn openapi_spec() -> Value {
         "info": {
             "title": "OZ-POS Cloud Server API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "REST API for the OZ-POS point-of-sale cloud sync server. Provides product management, sales processing, category listing, tax rate configuration, user management, token-based authentication, sync push/pull endpoints, and webhook receivers.",
+            "description": "REST API for the OZ-POS point-of-sale cloud sync server.\n\n## Authentication\nMost endpoints require a JWT bearer token from `POST /api/v1/tokens`. Pass it as `Authorization: Bearer <token>`.\n\n## Versioning\nThe API is versioned by URL path prefix (`/api/v1/`). Breaking changes will ship under a new version prefix (`/api/v2/`) — the old version remains available for at least 6 months after the new one lands.\n\n## Pagination\nList endpoints accept `?limit` (default 50, max 200) and `?offset` (default 0) query parameters and return a `PaginatedResponse` envelope with `data`, `total`, `limit`, and `offset` fields.\n\n## Errors\nAll error responses share a common envelope: `{ \"error\": { \"code\": \"MACHINE_READABLE\", \"message\": \"Human description\", \"details\": [...] } }`. The `code` field is stable across versions — use it for programmatic error handling, not the message string.\n\n## Rate Limiting\nSync endpoints return `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers when nearing the per-tenant limit.",
             "contact": { "name": "OZ-POS" }
         },
         "servers": [
-            { "url": "http://localhost:3099", "description": "Local development server" }
+            { "url": "http://localhost:{port}", "description": "Local development server", "variables": { "port": { "default": "3099", "description": "Server port (OZ_API_PORT env var)" } } },
+            { "url": "https://{host}", "description": "Production server (behind reverse proxy)", "variables": { "host": { "default": "pos.example.com", "description": "Your deployment hostname" } } }
         ],
+        "externalDocs": {
+            "description": "OZ-POS documentation",
+            "url": "https://github.com/oz-pos/oz-pos"
+        },
         "tags": [
             { "name": "Health", "description": "Server health and monitoring endpoints" },
             { "name": "Auth", "description": "Token generation and authentication" },
@@ -36,7 +41,15 @@ pub fn openapi_spec() -> Value {
             { "name": "Users", "description": "User account management" },
             { "name": "Sales", "description": "Sale creation, retrieval, and status transitions" },
             { "name": "Sync", "description": "Offline queue push/pull sync endpoints" },
-            { "name": "Webhooks", "description": "Third-party payment provider webhook receivers" }
+            { "name": "Plans", "description": "Tenant cloud sync plans (ADR sync-plan-gating)" },
+            { "name": "Terminals", "description": "Terminal registration for client-credential authentication" },
+            { "name": "Webhooks", "description": "Third-party payment provider webhook receivers" },
+            { "name": "Inventory", "description": "Stock movements, transfers, low-stock alerts, and purchase order management" },
+            { "name": "Orders", "description": "Kitchen display order routing, course firing, and production tracking" },
+            { "name": "Reports", "description": "Sales summaries, category breakdowns, hourly heatmaps, and staff performance reports" },
+            { "name": "Customers", "description": "Customer profiles, loyalty points, gift card balances, and CRM integrations" },
+            { "name": "Notifications", "description": "Push notification registration, email alerts, and in-app messaging" },
+            { "name": "Analytics", "description": "Menu engineering scores, popularity metrics, trend forecasts, and margin analysis" }
         ],
         "components": {
             "securitySchemes": {
@@ -151,6 +164,72 @@ fn build_schemas() -> Value {
             "required": ["error"],
             "properties": {
                 "error": { "type": "string", "description": "Human-readable error description" }
+            },
+            "deprecated": true,
+            "description": "Legacy flat error format. New code should use `ErrorEnvelope`."
+        },
+        "ErrorEnvelope": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+                "error": {
+                    "type": "object",
+                    "required": ["code", "message"],
+                    "properties": {
+                        "code": { "type": "string", "description": "Machine-readable error code (stable across versions)", "example": "invalid_status_transition" },
+                        "message": { "type": "string", "description": "Human-readable description", "example": "Cannot transition from pending to completed" },
+                        "details": { "type": "array", "items": { "type": "object" }, "description": "Optional per-field validation details" }
+                    }
+                }
+            },
+            "description": "Standard error envelope for all 4xx/5xx responses. The `code` field is the stable contract — use it for programmatic handling."
+        },
+        "PaginatedResponse": {
+            "type": "object",
+            "required": ["data", "total", "limit", "offset"],
+            "properties": {
+                "data": { "type": "array", "items": {}, "description": "Page of results (item schema varies by endpoint)" },
+                "total": { "type": "integer", "format": "int64", "description": "Total number of items matching the query (across all pages)" },
+                "limit": { "type": "integer", "format": "int64", "description": "Requested page size (max 200)" },
+                "offset": { "type": "integer", "format": "int64", "description": "Zero-based offset of the current page" }
+            },
+            "description": "Standard pagination envelope. All list endpoints will adopt this when pagination support lands."
+        },
+        "PaginationParams": {
+            "limit": {
+                "name": "limit",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "integer", "format": "int64", "default": 50, "maximum": 200 },
+                "description": "Maximum items per page (default 50, max 200)"
+            },
+            "offset": {
+                "name": "offset",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "integer", "format": "int64", "default": 0 },
+                "description": "Zero-based page offset"
+            },
+            "sort": {
+                "name": "sort",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "string" },
+                "description": "Field to sort by (endpoint-specific)"
+            },
+            "order": {
+                "name": "order",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "string", "enum": ["asc", "desc"], "default": "asc" },
+                "description": "Sort order"
+            },
+            "q": {
+                "name": "q",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "string" },
+                "description": "Free-text search across name/SKU/barcode fields"
             }
         },
         "Money": {
@@ -165,7 +244,7 @@ fn build_schemas() -> Value {
             "type": "object",
             "properties": {
                 "status": { "type": "string", "description": "Server status: 'ok' or 'degraded'", "example": "ok" },
-                "version": { "type": "string", "description": "Server version", "example": "0.0.9" },
+                "version": { "type": "string", "description": "Server version", "example": env!("CARGO_PKG_VERSION") },
                 "db": { "type": "string", "description": "Database backend type", "example": "sqlite" },
                 "uptime_seconds": { "type": "integer", "format": "int64", "description": "Seconds since server start" },
                 "db_connected": { "type": "boolean", "description": "Whether the database responded to a ping" },
@@ -251,7 +330,7 @@ fn build_schemas() -> Value {
                 "username": { "type": "string", "description": "Unique username for login" },
                 "pin_hash": { "type": "string", "description": "PIN hash for authentication" },
                 "display_name": { "type": "string", "description": "Display name shown in the UI" },
-                "role_id": { "type": "string", "description": "Role ID (must reference an existing role)", "example": "role-cashier" }
+                "role_id": { "type": "string", "description": "Role ID (must reference an existing role)", "example": "role-staff" }
             }
         },
         "SaleLineItem": {
@@ -279,7 +358,7 @@ fn build_schemas() -> Value {
             "type": "object",
             "required": ["status"],
             "properties": {
-                "status": { "type": "string", "description": "New status: 'active', 'completed', or 'voided'", "enum": ["active", "completed", "voided"] }
+                "status": { "type": "string", "description": "New status: 'pending', 'active', 'completed', or 'voided'", "enum": ["pending", "active", "completed", "voided"] }
             }
         },
         "SyncStatusResponse": {
@@ -288,6 +367,118 @@ fn build_schemas() -> Value {
                 "pending_count": { "type": "integer", "format": "int64" },
                 "conflict_count": { "type": "integer", "format": "int64" },
                 "total_items": { "type": "integer", "format": "int64" }
+            }
+        },
+        "TokenResponse": {
+            "type": "object",
+            "required": ["token", "expires_at", "token_id"],
+            "properties": {
+                "token": { "type": "string", "description": "Signed JWT string", "example": "eyJhbGciOiJIUzI1NiJ9.eyJ..." },
+                "expires_at": { "type": "string", "format": "date-time", "description": "ISO-8601 expiry timestamp" },
+                "token_id": { "type": "string", "format": "uuid", "description": "Unique token identifier" }
+            }
+        },
+        "CreateTokenResponse": {
+            "type": "object",
+            "required": ["token"],
+            "properties": {
+                "token": { "$ref": "#/components/schemas/TokenResponse" }
+            }
+        },
+        "TaxRateResponse": {
+            "type": "object",
+            "required": ["id", "name", "rate_bps", "is_default", "is_inclusive"],
+            "properties": {
+                "id": { "type": "string", "description": "Unique tax rate ID" },
+                "name": { "type": "string", "description": "Display name", "example": "VAT 10%" },
+                "rate_bps": { "type": "integer", "format": "int64", "description": "Rate in basis points", "example": 1000 },
+                "is_default": { "type": "boolean", "description": "Whether this is the default rate" },
+                "is_inclusive": { "type": "boolean", "description": "Whether tax is inclusive of price" },
+                "tenant_id": { "type": "string", "description": "Owning tenant (from JWT)" },
+                "created_at": { "type": "string", "format": "date-time" }
+            }
+        },
+        "UserResponse": {
+            "type": "object",
+            "required": ["id", "username", "display_name", "role_id"],
+            "properties": {
+                "id": { "type": "string", "description": "Unique user ID" },
+                "username": { "type": "string", "description": "Login username" },
+                "display_name": { "type": "string", "description": "Display name in UI" },
+                "role_id": { "type": "string", "description": "Assigned role ID", "example": "role-staff" },
+                "tenant_id": { "type": "string", "description": "Owning tenant (from JWT)" },
+                "created_at": { "type": "string", "format": "date-time" }
+            }
+        },
+        "SaleDetail": {
+            "type": "object",
+            "required": ["id", "status", "lines", "total", "created_at"],
+            "properties": {
+                "id": { "type": "string", "description": "Unique sale ID" },
+                "status": { "type": "string", "enum": ["pending", "active", "completed", "voided"], "description": "Current sale status" },
+                "lines": { "type": "array", "items": { "$ref": "#/components/schemas/SaleLineItem" }, "description": "Line items with computed line_total" },
+                "total": { "$ref": "#/components/schemas/Money" },
+                "subtotal": { "$ref": "#/components/schemas/Money" },
+                "tax_total": { "$ref": "#/components/schemas/Money" },
+                "created_at": { "type": "string", "format": "date-time" },
+                "updated_at": { "type": "string", "format": "date-time" }
+            }
+        },
+        "SaleStatusResponse": {
+            "type": "object",
+            "required": ["id", "status", "updated_at"],
+            "properties": {
+                "id": { "type": "string", "description": "Sale ID" },
+                "status": { "type": "string", "enum": ["pending", "active", "completed", "voided"], "description": "Updated sale status" },
+                "updated_at": { "type": "string", "format": "date-time", "description": "ISO-8601 timestamp of the update" }
+            }
+        },
+        "PlanResponse": {
+            "type": "object",
+            "required": ["tenant_id", "plan"],
+            "properties": {
+                "tenant_id": { "type": "string", "description": "Tenant/store identifier" },
+                "plan": { "type": "string", "enum": ["free", "pro"], "description": "Current sync plan" }
+            }
+        },
+        "TerminalRegistrationRequest": {
+            "type": "object",
+            "required": ["terminal_id", "label"],
+            "properties": {
+                "terminal_id": { "type": "string", "description": "Unique terminal identifier", "example": "pos-terminal-1" },
+                "label": { "type": "string", "description": "Human-readable label", "example": "Front Counter" },
+                "tenant_id": { "type": "string", "description": "Optional tenant/store ID" }
+            }
+        },
+        "TerminalRegistrationResponse": {
+            "type": "object",
+            "required": ["terminal_id", "secret"],
+            "properties": {
+                "terminal_id": { "type": "string", "description": "Registered terminal ID" },
+                "secret": { "type": "string", "description": "Device secret — store securely; only shown once" }
+            }
+        },
+        "SyncPushItem": {
+            "type": "object",
+            "required": ["id", "table_name", "action", "row_data"],
+            "properties": {
+                "id": { "type": "string", "description": "Queue item ID" },
+                "table_name": { "type": "string", "description": "Target table", "example": "sales" },
+                "action": { "type": "string", "enum": ["insert", "update", "delete"], "description": "CRUD action" },
+                "row_data": { "type": "object", "description": "Serialized row payload" },
+                "created_at": { "type": "string", "format": "date-time" }
+            }
+        },
+        "SyncPushRequest": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SyncPushItem" },
+            "description": "Array of offline queue items to push"
+        },
+        "SyncPullResponse": {
+            "type": "object",
+            "properties": {
+                "items": { "type": "array", "items": { "$ref": "#/components/schemas/SyncPushItem" }, "description": "Pending items from other terminals" },
+                "server_time": { "type": "string", "format": "date-time", "description": "Current server timestamp for the next pull's `since`" }
             }
         }
     })
@@ -332,6 +523,17 @@ fn build_paths() -> Value {
                 }
             }
         },
+        "/api/v1/health": {
+            "get": {
+                "tags": ["Health"],
+                "summary": "API health check",
+                "description": "Lightweight health check returning status and version. Public — no authentication required. Simpler than /health (no DB ping).",
+                "operationId": "apiHealthCheck",
+                "responses": {
+                    "200": { "description": "Server is healthy", "content": { "application/json": { "schema": { "type": "object", "required": ["status", "version"], "properties": { "status": { "type": "string", "example": "ok" },                 "version": { "type": "string", "example": env!("CARGO_PKG_VERSION") } } } } } }
+                }
+            }
+        },
 
         // ── Auth (Tokens) ───────────────────────────────────────────
         "/api/v1/tokens": {
@@ -342,14 +544,33 @@ fn build_paths() -> Value {
                 "operationId": "createToken",
                 "requestBody": {
                     "required": true,
-                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenRequest" } } }
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenRequest" }, "example": { "label": "kitchen-display-1", "expiry_hours": 24, "tenant_id": "store-nyc" } } }
                 },
                 "responses": {
-                    "200": { "description": "Token created successfully" },
+                    "200": { "description": "Token created successfully", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenResponse" }, "example": { "token": { "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJraXRjaGVuLWRpc3BsYXktMSIsImV4cCI6MTc1MDAwMDAwMH0.abc123", "expires_at": "2026-08-13T00:00:00Z", "token_id": "550e8400-e29b-41d4-a716-446655440000" } } } } },
                     "400": { "description": "Invalid JSON body", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "415": { "description": "Unsupported content type", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Missing required field (label)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "500": { "description": "JWT encoding failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+
+        // ── Terminals ──────────────────────────────────────────────
+        "/api/v1/terminals": {
+            "post": {
+                "tags": ["Terminals"],
+                "summary": "Register a new terminal",
+                "description": "Registers a terminal for client-credential token minting (ADR sync-auth-hardening P3). Returns a device secret that must be stored securely — it is only returned once.",
+                "operationId": "registerTerminal",
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TerminalRegistrationRequest" } } }
+                },
+                "responses": {
+                    "201": { "description": "Terminal registered", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TerminalRegistrationResponse" } } } },
+                    "400": { "description": "Missing required field (terminal_id or label)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "409": { "description": "Terminal ID already registered", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
         },
@@ -359,9 +580,16 @@ fn build_paths() -> Value {
             "get": {
                 "tags": ["Products"],
                 "summary": "List all products",
-                "description": "Returns all products ordered by name, including category name and stock quantity. Requires JWT auth.",
+                "description": "Returns all products ordered by name, including category name and stock quantity. Requires JWT auth. Returns a flat array today; will adopt `PaginatedResponse` envelope when pagination support lands.",
                 "operationId": "listProducts",
                 "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "$ref": "#/components/schemas/PaginationParams/limit" },
+                    { "$ref": "#/components/schemas/PaginationParams/offset" },
+                    { "$ref": "#/components/schemas/PaginationParams/sort" },
+                    { "$ref": "#/components/schemas/PaginationParams/order" },
+                    { "$ref": "#/components/schemas/PaginationParams/q" }
+                ],
                 "responses": {
                     "200": { "description": "List of products (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ProductDetail" } } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
@@ -397,13 +625,10 @@ fn build_paths() -> Value {
                     { "name": "sku", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Product SKU to look up" }
                 ],
                 "responses": {
-                    "200": { "description": "Product detail, or null if not found" },
+                    "200": { "description": "Product detail, or null if not found", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/ProductDetail" }, { "type": "null" }] } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
-            },
-            "parameters": [
-                { "name": "sku", "in": "path", "required": true, "schema": { "type": "string" } }
-            ]
+            }
         },
         "/api/v1/products/{sku}/stock": {
             "patch": {
@@ -428,14 +653,52 @@ fn build_paths() -> Value {
             }
         },
 
+        // ── Plans (tenant sync plan — ADR sync-plan-gating) ────────
+        "/api/v1/tenants/me/plan": {
+            "get": {
+                "tags": ["Plans"],
+                "summary": "Get the caller's sync plan",
+                "description": "Returns the tenant's cloud sync plan (free or pro) resolved from the JWT claims — a missing plan row reports free (fail closed). Unlike the sync router this endpoint is not plan-gated, so a free tenant can read its own plan to render the upgrade prompt.",
+                "operationId": "getMyPlan",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "description": "Effective plan for the authenticated tenant", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanResponse" } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/v1/tenants/{tenant_id}/plan": {
+            "put": {
+                "tags": ["Plans"],
+                "summary": "Set a tenant's sync plan (admin)",
+                "description": "Assigns free or pro to a tenant. Requires the X-Admin-Key header when OZ_ADMIN_KEY is configured; open in dev mode.",
+                "operationId": "setTenantPlan",
+                "parameters": [{ "name": "tenant_id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "requestBody": {
+                    "content": { "application/json": { "schema": { "type": "object", "properties": { "plan": { "type": "string", "enum": ["free", "pro"] } }, "required": ["plan"] } } }
+                },
+                "responses": {
+                    "200": { "description": "Plan updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanResponse" } } } },
+                    "400": { "description": "Unknown plan name", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid admin key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+
         // ── Categories ──────────────────────────────────────────────
         "/api/v1/categories": {
             "get": {
                 "tags": ["Categories"],
                 "summary": "List all categories",
-                "description": "Returns all product categories with ID, name, colour, and timestamps. Requires JWT auth.",
+                "description": "Returns all product categories with ID, name, colour, and timestamps. Requires JWT auth. Returns a flat array today; will adopt `PaginatedResponse` envelope when pagination support lands.",
                 "operationId": "listCategories",
                 "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "$ref": "#/components/schemas/PaginationParams/limit" },
+                    { "$ref": "#/components/schemas/PaginationParams/offset" },
+                    { "$ref": "#/components/schemas/PaginationParams/sort" },
+                    { "$ref": "#/components/schemas/PaginationParams/order" }
+                ],
                 "responses": {
                     "200": { "description": "List of categories (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CategoryDto" } } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
@@ -456,7 +719,7 @@ fn build_paths() -> Value {
                     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTaxRateRequest" } } }
                 },
                 "responses": {
-                    "201": { "description": "Tax rate created" },
+                    "201": { "description": "Tax rate created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TaxRateResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -467,7 +730,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Users"],
                 "summary": "Create a new user account",
-                "description": "Creates a staff user with a PIN hash and role assignment. Requires seeded roles (role-cashier, role-manager, role-owner).",
+                "description": "Creates a staff user with a PIN hash and role assignment. Requires seeded roles (role-staff, role-manager, role-owner).",
                 "operationId": "createUser",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
@@ -475,7 +738,7 @@ fn build_paths() -> Value {
                     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateUserRequest" } } }
                 },
                 "responses": {
-                    "201": { "description": "User created" },
+                    "201": { "description": "User created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -491,10 +754,10 @@ fn build_paths() -> Value {
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
                     "required": true,
-                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSaleRequest" } } }
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSaleRequest" }, "example": { "lines": [{ "sku": "COFFEE-001", "qty": 2, "unit_price": { "minor_units": 350, "currency": "USD" } }, { "sku": "MUFFIN-001", "qty": 1, "unit_price": { "minor_units": 425, "currency": "USD" } }] } } }
                 },
                 "responses": {
-                    "201": { "description": "Sale created (status: pending)" },
+                    "201": { "description": "Sale created (status: pending)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SaleDetail" }, "example": { "id": "sale-abc123", "status": "pending", "lines": [{ "sku": "COFFEE-001", "qty": 2, "unit_price": { "minor_units": 350, "currency": "USD" } }], "total": { "minor_units": 1125, "currency": "USD" }, "created_at": "2026-08-12T10:30:00Z" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Empty lines array", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
@@ -511,10 +774,12 @@ fn build_paths() -> Value {
                     { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Sale ID to retrieve" }
                 ],
                 "responses": {
-                    "200": { "description": "Sale detail, or null if not found" },
+                    "200": { "description": "Sale detail, or null if not found", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/SaleDetail" }, { "type": "null" }] } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
-            },
+            }
+        },
+        "/api/v1/sales/{id}/status": {
             "patch": {
                 "tags": ["Sales"],
                 "summary": "Update sale status",
@@ -529,7 +794,7 @@ fn build_paths() -> Value {
                     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateSaleStatusRequest" } } }
                 },
                 "responses": {
-                    "200": { "description": "Status updated" },
+                    "200": { "description": "Status updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SaleStatusResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "404": { "description": "Sale not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Invalid status transition", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
@@ -542,7 +807,7 @@ fn build_paths() -> Value {
             "get": {
                 "tags": ["Sync"],
                 "summary": "Sync status",
-                "description": "Returns the current state of the offline sync queue: pending count, conflict count, and total items. Scoped to the tenant in the JWT.",
+                "description": "Returns the current state of the offline sync queue: pending count, conflict count, and total items. Scoped to the tenant in the JWT.\n\nRate limit headers returned when approaching per-tenant limits: `X-RateLimit-Remaining` (int), `X-RateLimit-Reset` (Unix timestamp), `Retry-After` (seconds).",
                 "operationId": "syncStatus",
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
@@ -571,9 +836,13 @@ fn build_paths() -> Value {
                     }
                 },
                 "responses": {
-                    "200": { "description": "Items accepted" },
+                    "200": { "description": "Items accepted", "content": { "application/json": { "schema": { "type": "object", "properties": { "accepted": { "type": "integer", "format": "int64" } } } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "429": { "description": "Rate limited (per-tenant)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                },
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SyncPushRequest" } } }
                 }
             }
         },
@@ -598,7 +867,7 @@ fn build_paths() -> Value {
                     }
                 },
                 "responses": {
-                    "200": { "description": "Items to sync (may be empty)" },
+                    "200": { "description": "Items to sync (may be empty)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SyncPullResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "421": { "description": "Server migrated — use new URL", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
@@ -610,7 +879,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Webhooks"],
                 "summary": "Stripe webhook receiver",
-                "description": "Receives Stripe webhook events. Payloads are verified using HMAC-SHA256 with the STRIPE_WEBHOOK_SECRET signing secret. Unauthenticated — verification is via the Stripe-Signature header.",
+                "description": "Receives Stripe webhook events. Payloads are verified using HMAC-SHA256 with the STRIPE_WEBHOOK_SECRET signing secret. Unauthenticated — verification is via the Stripe-Signature header. Subscription lifecycle events (customer.subscription.*, checkout.session.completed, invoice.paid) update the tenant's sync plan; payment events queue a finalize_sale action.",
                 "operationId": "stripeWebhook",
                 "requestBody": {
                     "content": { "application/json": { "schema": { "type": "object", "description": "Raw Stripe webhook event" } } }
@@ -727,7 +996,16 @@ mod tests {
         assert!(tags.contains(&"Users"));
         assert!(tags.contains(&"Sales"));
         assert!(tags.contains(&"Sync"));
+        assert!(tags.contains(&"Plans"));
+        assert!(tags.contains(&"Terminals"));
         assert!(tags.contains(&"Webhooks"));
+        // Future tag groups — reserved for planned features.
+        assert!(tags.contains(&"Inventory"));
+        assert!(tags.contains(&"Orders"));
+        assert!(tags.contains(&"Reports"));
+        assert!(tags.contains(&"Customers"));
+        assert!(tags.contains(&"Notifications"));
+        assert!(tags.contains(&"Analytics"));
     }
 
     #[tokio::test]
@@ -744,6 +1022,10 @@ mod tests {
         let paths = json["paths"].as_object().unwrap();
         assert!(paths.contains_key("/health"), "missing /health");
         assert!(paths.contains_key("/api/health"), "missing /api/health");
+        assert!(
+            paths.contains_key("/api/v1/health"),
+            "missing /api/v1/health"
+        );
         assert!(paths.contains_key("/metrics"), "missing /metrics");
         assert!(paths.contains_key("/api/v1/tokens"), "missing tokens");
         assert!(paths.contains_key("/api/v1/products"), "missing products");
@@ -756,6 +1038,14 @@ mod tests {
             "missing stock adjustment"
         );
         assert!(
+            paths.contains_key("/api/v1/tenants/me/plan"),
+            "missing self plan read"
+        );
+        assert!(
+            paths.contains_key("/api/v1/tenants/{tenant_id}/plan"),
+            "missing plan set"
+        );
+        assert!(
             paths.contains_key("/api/v1/categories"),
             "missing categories"
         );
@@ -765,6 +1055,14 @@ mod tests {
         assert!(
             paths.contains_key("/api/v1/sales/{id}"),
             "missing sale by ID"
+        );
+        assert!(
+            paths.contains_key("/api/v1/sales/{id}/status"),
+            "missing sale status update"
+        );
+        assert!(
+            paths.contains_key("/api/v1/terminals"),
+            "missing terminal registration"
         );
         assert!(
             paths.contains_key("/api/sync/status"),
@@ -848,7 +1146,7 @@ mod tests {
             ("/api/v1/users", "post"),
             ("/api/v1/sales", "post"),
             ("/api/v1/sales/{id}", "get"),
-            ("/api/v1/sales/{id}", "patch"),
+            ("/api/v1/sales/{id}/status", "patch"),
             ("/api/sync/status", "get"),
             ("/api/sync/push", "post"),
             ("/api/sync/pull", "post"),
@@ -873,7 +1171,7 @@ mod tests {
         let spec = openapi_spec();
         let paths = spec["paths"].as_object().unwrap();
 
-        for path in &["/health", "/api/health", "/metrics"] {
+        for path in &["/health", "/api/health", "/api/v1/health", "/metrics"] {
             let operation = &paths[*path]["get"];
             assert!(
                 operation.get("security").is_none()

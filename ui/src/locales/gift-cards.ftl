@@ -50,3 +50,9 @@ gift-cards-topup-placeholder = Amount (minor units)
 gift-cards-topup-aria = Top-up amount
 gift-cards-issue-to-placeholder = Customer name
 gift-cards-issue-pin-placeholder = For balance checks
+
+# Transaction type labels (backend values: issue/redeem/topup/refund)
+gift-cards-txn-issue = Issued
+gift-cards-txn-redeem = Redeemed
+gift-cards-txn-topup = Top up
+gift-cards-txn-refund = Refunded

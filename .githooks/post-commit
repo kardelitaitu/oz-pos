@@ -1,0 +1,51 @@
+#!/bin/sh
+
+# codebase-memory-mcp auto-index start
+# Run codebase memory indexing in the background for supported subdirectories.
+# Uses the CLI directly (MCP-invoked indexing does not reliably handle all folder types).
+# Note: ui/src is indexed per-subfolder because the full directory is too large for one pass.
+#
+# Performance tuning for high core-count machines:
+#   RAYON_NUM_THREADS  — controls the CBM indexer's internal Rust thread pool.
+#   CBM_MEM_BUDGET_MB  — caps RAM usage (default = 50% of total RAM).
+export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-32}"
+export CBM_MEM_BUDGET_MB="${CBM_MEM_BUDGET_MB:-16384}"
+
+# Resolve the repo root from git itself (portable) rather than a
+# hardcoded machine path — the hook must work when the repo is cloned
+# anywhere or the machine differs.
+_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$_REPO_ROOT" ]; then
+    exit 0
+fi
+
+# Resolve the indexer binary: env override, then PATH, then the
+# standard Windows install location. Previous version hardcoded
+# C:/Users/<user>/... which silently disabled indexing on other machines.
+_CBM_EXE="${CBM_EXE:-}"
+if [ -z "$_CBM_EXE" ]; then
+    if command -v codebase-memory-mcp >/dev/null 2>&1; then
+        _CBM_EXE="$(command -v codebase-memory-mcp)"
+    elif command -v codebase-memory-mcp.exe >/dev/null 2>&1; then
+        _CBM_EXE="$(command -v codebase-memory-mcp.exe)"
+    else
+        for d in /c/Users/*/AppData/Local/Programs/codebase-memory-mcp; do
+            if [ -x "$d/codebase-memory-mcp.exe" ]; then
+                _CBM_EXE="$d/codebase-memory-mcp.exe"
+                break
+            fi
+        done
+    fi
+fi
+
+if [ -n "$_CBM_EXE" ]; then
+    # Index the entire repo as a single unified project.
+    # Root was previously broken by Windows 'nul' ghost device files (now deleted).
+    # .cbmignore at the root excludes node_modules, target, dist, logs, binaries, etc.
+    "$_CBM_EXE" cli index_repository \
+        --repo-path "$_REPO_ROOT" \
+        --mode full \
+        --name "oz-pos" >/dev/null 2>&1 &
+fi
+# codebase-memory-mcp auto-index end
+

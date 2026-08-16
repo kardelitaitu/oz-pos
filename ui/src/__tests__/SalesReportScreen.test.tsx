@@ -28,17 +28,27 @@ sales-report-revenue-chart = Revenue
 sales-report-revenue-label = Revenue (minor units)
 sales-report-total-revenue = Total
 sales-report-total-orders = Orders
+sales-report-total-gross-profit = Gross Profit
 sales-report-category-breakdown = By Category
 sales-report-top-products = Top Products
 sales-report-rank = #
 top-products-name = Name
 top-products-quantity = Qty
 top-products-revenue = Revenue
+top-products-gross-profit = Gross Profit
+top-products-margin = Margin
 heatmap-title = Busiest Hours
 heatmap-no-data = No data
 
 # Sales Report — a11y labels
 sales-report-region-aria = Sales Report
+day-sunday = Sun
+day-monday = Mon
+day-tuesday = Tue
+day-wednesday = Wed
+day-thursday = Thu
+day-friday = Fri
+day-saturday = Sat
 sales-report-start-aria = Start date
 sales-report-end-aria = End date
 sales-report-view-aria = View mode
@@ -47,12 +57,30 @@ sales-report-compare-on-aria = Compare to previous period
 sales-report-print-aria = Print report
 sales-report-export-aria = Export CSV
 sales-report-heatmap-aria = Hourly heatmap
+sales-report-top-rank-aria = Rank top products by
+sales-report-top-rank-revenue-aria = Rank by revenue
+sales-report-top-rank-profit-aria = Rank by gross profit
+sales-report-category-popularity = Category Popularity
+sales-report-category-popularity-category = Category
+sales-report-category-popularity-products = Products
+sales-report-category-popularity-mean = Popularity
+sales-report-category-popularity-mean-tip = Category average vs. catalog average
+sales-report-category-popularity-top = Top Sellers
+sales-report-category-popularity-uncategorized = Uncategorized
+sales-report-popularity-trend = Popularity Trend
+sales-report-demand-forecast = Demand Forecast
+sales-report-demand-forecast-category = Category
+sales-report-demand-forecast-avg = Avg / period
+sales-report-demand-forecast-trend = Trend
+sales-report-demand-forecast-next = Next period
 `;
 
 // ── Mock recharts ─────────────────────────────────────────────────
 vi.mock('recharts', () => ({
   BarChart: ({ children }: { children: React.ReactNode }) => <div data-testid="bar-chart">{children}</div>,
   Bar: (props: { dataKey: string; 'aria-label'?: string }) => <div data-testid="bar" data-key={props.dataKey} aria-label={props['aria-label']} />,
+  LineChart: ({ children }: { children: React.ReactNode }) => <div data-testid="line-chart">{children}</div>,
+  Line: (props: { dataKey?: string }) => <div data-testid="line" data-key={props.dataKey} />,
   XAxis: () => <div data-testid="x-axis" />,
   YAxis: () => <div data-testid="y-axis" />,
   Tooltip: () => <div data-testid="tooltip" />,
@@ -70,6 +98,9 @@ const mockGetMonthlyRevenue = vi.fn();
 const mockGetTopProducts = vi.fn();
 const mockGetHourlyHeatmap = vi.fn();
 const mockGetCategoryBreakdown = vi.fn();
+const mockGetCategoryPopularity = vi.fn();
+const mockGetCategoryPopularityTrend = vi.fn();
+const mockGetCategoryForecast = vi.fn();
 const mockPrintSalesReceipt = vi.fn();
 
 vi.mock('@/api/reports', () => ({
@@ -79,6 +110,9 @@ vi.mock('@/api/reports', () => ({
   getTopProducts: (...args: unknown[]) => mockGetTopProducts(...args),
   getHourlyHeatmap: (...args: unknown[]) => mockGetHourlyHeatmap(...args),
   getCategoryBreakdown: (...args: unknown[]) => mockGetCategoryBreakdown(...args),
+  getCategoryPopularity: (...args: unknown[]) => mockGetCategoryPopularity(...args),
+  getCategoryPopularityTrend: (...args: unknown[]) => mockGetCategoryPopularityTrend(...args),
+  getCategoryForecast: (...args: unknown[]) => mockGetCategoryForecast(...args),
 }));
 
 vi.mock('@/api/sales', () => ({
@@ -103,40 +137,58 @@ vi.mock('@/features/reports/SalesReportScreen.css', () => ({}));
 
 // ── Test helpers ──────────────────────────────────────────────────
 
-function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: number; currency: string; sale_count: number }> = {}) {
+function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+  const total_minor = overrides.total_minor ?? 150000;
+  const cogs_minor = overrides.cogs_minor ?? 60000;
   return {
     date: overrides.date ?? '2026-07-01',
-    total_minor: overrides.total_minor ?? 150000,
+    total_minor,
     currency: overrides.currency ?? 'USD',
     sale_count: overrides.sale_count ?? 12,
+    cogs_minor,
+    gross_profit_minor: overrides.gross_profit_minor ?? total_minor - cogs_minor,
+    gross_margin_percent: overrides.gross_margin_percent ?? 60,
   };
 }
 
-function buildWeeklyRevenue(overrides: Partial<{ week_start: string; total_minor: number; currency: string; sale_count: number }> = {}) {
+function buildWeeklyRevenue(overrides: Partial<{ week_start: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+  const total_minor = overrides.total_minor ?? 500000;
+  const cogs_minor = overrides.cogs_minor ?? 200000;
   return {
     week_start: overrides.week_start ?? '2026-06-29',
-    total_minor: overrides.total_minor ?? 500000,
+    total_minor,
     currency: overrides.currency ?? 'USD',
     sale_count: overrides.sale_count ?? 45,
+    cogs_minor,
+    gross_profit_minor: overrides.gross_profit_minor ?? total_minor - cogs_minor,
+    gross_margin_percent: overrides.gross_margin_percent ?? 60,
   };
 }
 
-function buildMonthlyRevenue(overrides: Partial<{ month: string; total_minor: number; currency: string; sale_count: number }> = {}) {
+function buildMonthlyRevenue(overrides: Partial<{ month: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+  const total_minor = overrides.total_minor ?? 2000000;
+  const cogs_minor = overrides.cogs_minor ?? 800000;
   return {
     month: overrides.month ?? '2026-07',
-    total_minor: overrides.total_minor ?? 2000000,
+    total_minor,
     currency: overrides.currency ?? 'USD',
     sale_count: overrides.sale_count ?? 180,
+    cogs_minor,
+    gross_profit_minor: overrides.gross_profit_minor ?? total_minor - cogs_minor,
+    gross_margin_percent: overrides.gross_margin_percent ?? 60,
   };
 }
 
-function buildTopProduct(overrides: Partial<{ product_id: string; sku: string; name: string; total_qty: number; total_minor: number }> = {}) {
+function buildTopProduct(overrides: Partial<{ product_id: string; sku: string; name: string; total_qty: number; total_minor: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
   return {
     product_id: overrides.product_id ?? 'prod-1',
     sku: overrides.sku ?? 'SKU001',
     name: overrides.name ?? 'Espresso',
     total_qty: overrides.total_qty ?? 45,
     total_minor: overrides.total_minor ?? 90000,
+    cogs_minor: overrides.cogs_minor ?? 30000,
+    gross_profit_minor: overrides.gross_profit_minor ?? 60000,
+    gross_margin_percent: overrides.gross_margin_percent ?? 66.7,
   };
 }
 
@@ -172,11 +224,55 @@ function renderScreen() {
   );
 }
 
+function buildCategoryPopularity(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    category_id: 'cat-drinks',
+    category_name: 'Drinks',
+    product_count: 3,
+    mean_score: 2.5,
+    catalog_ratio: 1.7,
+    top_products: [
+      { sku: 'DRINK-1', name: 'Latte', popularity_score: 4, rank: 1, percentile: 1 },
+      { sku: 'DRINK-2', name: 'Mocha', popularity_score: 2, rank: 2, percentile: 0.5 },
+      { sku: 'DRINK-3', name: 'Tea', popularity_score: 1, rank: 3, percentile: 0 },
+    ],
+    ...overrides,
+  };
+}
+
 function resolveDefaultData() {
   mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
   mockGetTopProducts.mockResolvedValue([buildTopProduct()]);
   mockGetHourlyHeatmap.mockResolvedValue([buildHeatmap()]);
   mockGetCategoryBreakdown.mockResolvedValue([buildCategory()]);
+  mockGetCategoryPopularity.mockResolvedValue([buildCategoryPopularity()]);
+  mockGetCategoryPopularityTrend.mockResolvedValue([
+    buildTrendPoint({ period_start: '2026-07-01', category_id: 'cat-drinks', category_name: 'Drinks', score: 2 }),
+    buildTrendPoint({ period_start: '2026-07-02', category_id: 'cat-drinks', category_name: 'Drinks', score: 3 }),
+  ]);
+  mockGetCategoryForecast.mockResolvedValue([
+    {
+      category_id: 'cat-drinks',
+      category_name: 'Drinks',
+      forecast_units: 18,
+      trend_per_period: 2,
+      recent_avg_units: 13,
+    },
+  ]);
+}
+
+function buildTrendPoint(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    period_start: '2026-07-01',
+    category_id: 'cat-drinks',
+    category_name: 'Drinks',
+    score: 2,
+    units_sold: 4,
+    distinct_transactions: 3,
+    searches: 1,
+    edits: 0,
+    ...overrides,
+  };
 }
 
 // ── Tests ────────────────────────────────────────────────────────
@@ -188,6 +284,11 @@ describe('SalesReportScreen', () => {
     mockGetTopProducts.mockImplementation(() => new Promise(() => {}));
     mockGetHourlyHeatmap.mockImplementation(() => new Promise(() => {}));
     mockGetCategoryBreakdown.mockImplementation(() => new Promise(() => {}));
+    // Category popularity defaults to empty (not pending) so tests that
+    // override only the other mocks still resolve the shared Promise.all.
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([]);
     mockPrintSalesReceipt.mockResolvedValue(undefined);
   });
 
@@ -205,6 +306,9 @@ describe('SalesReportScreen', () => {
     mockGetTopProducts.mockRejectedValue(new Error('Server offline'));
     mockGetHourlyHeatmap.mockRejectedValue(new Error('Server offline'));
     mockGetCategoryBreakdown.mockRejectedValue(new Error('Server offline'));
+    mockGetCategoryPopularity.mockRejectedValue(new Error('Server offline'));
+    mockGetCategoryPopularityTrend.mockRejectedValue(new Error('Server offline'));
+    mockGetCategoryForecast.mockRejectedValue(new Error('Server offline'));
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('An error occurred')).toBeTruthy();
@@ -238,9 +342,9 @@ describe('SalesReportScreen', () => {
     resolveDefaultData();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByRole('radio', { name: 'daily' })).toBeTruthy();
-      expect(screen.getByRole('radio', { name: 'weekly' })).toBeTruthy();
-      expect(screen.getByRole('radio', { name: 'monthly' })).toBeTruthy();
+      expect(screen.getByRole('radio', { name: /daily/i })).toBeTruthy();
+      expect(screen.getByRole('radio', { name: /weekly/i })).toBeTruthy();
+      expect(screen.getByRole('radio', { name: /monthly/i })).toBeTruthy();
     });
   });
 
@@ -248,9 +352,9 @@ describe('SalesReportScreen', () => {
     resolveDefaultData();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByRole('radio', { name: 'daily' }).getAttribute('aria-checked')).toBe('true');
-      expect(screen.getByRole('radio', { name: 'weekly' }).getAttribute('aria-checked')).toBe('false');
-      expect(screen.getByRole('radio', { name: 'monthly' }).getAttribute('aria-checked')).toBe('false');
+      expect(screen.getByRole('radio', { name: /daily/i }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByRole('radio', { name: /weekly/i }).getAttribute('aria-checked')).toBe('false');
+      expect(screen.getByRole('radio', { name: /monthly/i }).getAttribute('aria-checked')).toBe('false');
     });
   });
 
@@ -278,6 +382,95 @@ describe('SalesReportScreen', () => {
       expect(screen.getByText(/\$3,500\.00/)).toBeTruthy();
       // 8 orders (5 + 3)
       expect(screen.getByText(/8/)).toBeTruthy();
+    });
+  });
+
+  it('shows gross profit total in daily view (HPP exposure)', async () => {
+    mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ total_minor: 250000, cogs_minor: 100000, sale_count: 5 }),
+      buildDailyRevenue({ total_minor: 100000, cogs_minor: 40000, sale_count: 3 }),
+    ]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      // Gross profit = (250000 − 100000) + (100000 − 40000) = 210000 → $2,100.00
+      expect(screen.getByText(/\$2,100\.00/)).toBeTruthy();
+      // Margin % = 210000 / 350000 = 60%
+      expect(screen.getByText(/\(60\.0%\)/)).toBeTruthy();
+    });
+  });
+
+  it('shows gross profit total in weekly view too (HPP exposure)', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('bar-chart')).toBeTruthy();
+    });
+
+    // Weekly rows carry the same HPP fields now.
+    mockGetWeeklyRevenue.mockResolvedValue([
+      buildWeeklyRevenue({ total_minor: 500000, cogs_minor: 300000, sale_count: 45 }),
+    ]);
+    mockGetDailyRevenue.mockClear();
+    mockGetWeeklyRevenue.mockClear();
+
+    await userEvent.setup().click(screen.getByRole('radio', { name: /weekly/i }));
+
+    await waitFor(() => {
+      // Gross profit = 500000 − 300000 = 200000 → $2,000.00
+      expect(screen.getByText(/\$2,000\.00/)).toBeTruthy();
+      // Margin % = 200000 / 500000 = 40%
+      expect(screen.getByText(/\(40\.0%\)/)).toBeTruthy();
+    });
+  });
+
+  // ── REP-02: multi-currency periods never collapse into one total ──
+
+  it('shows per-currency totals when the period spans multiple currencies', async () => {
+    // Backend groups by currency, so a two-currency period arrives as two
+    // rows with DIFFERENT currency codes (audit REP-02: the UI must never
+    // sum minor units across currencies). 10000 USD + 500000 IDR collapsed
+    // and formatted as the first row's currency would read "$5,100.00".
+    mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ date: '2026-08-01', total_minor: 10000, currency: 'USD', sale_count: 1 }),
+      buildDailyRevenue({ date: '2026-08-01', total_minor: 500000, currency: 'IDR', sale_count: 2 }),
+    ]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      // Each currency's total renders in its own currency…
+      expect(screen.getByText(/\$100\.00/)).toBeTruthy();
+      expect(screen.getByText(/IDR 500,000/)).toBeTruthy();
+      // …and the collapsed single total (510000 minor units formatted as
+      // USD) must NOT appear.
+      expect(screen.queryByText(/\$5,100\.00/)).toBeNull();
+    });
+  });
+
+  it('hides the collapsed comparison delta when either period spans currencies', async () => {
+    // Both the current and previous period resolve to the same multi-
+    // currency rows; a single percentage over mixed currencies is
+    // meaningless and must not render.
+    mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ date: '2026-08-01', total_minor: 10000, currency: 'USD', sale_count: 1 }),
+      buildDailyRevenue({ date: '2026-08-01', total_minor: 500000, currency: 'IDR', sale_count: 2 }),
+    ]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText(/IDR 500,000/)).toBeTruthy();
+    });
+    // Turn period comparison on; the prev-period fetch uses the same mock.
+    fireEvent.click(screen.getByRole('button', { name: 'Compare to previous period' }));
+    await waitFor(() => {
+      // The totals are per-currency; no single % delta over mixed currencies.
+      expect(screen.queryByText(/%/)).toBeNull();
     });
   });
 
@@ -358,6 +551,63 @@ describe('SalesReportScreen', () => {
     });
   });
 
+  it('renders gross profit and margin per product', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetTopProducts.mockResolvedValue([
+      buildTopProduct({ product_id: 'prod-1', name: 'Latte', total_minor: 120000, cogs_minor: 40000, gross_profit_minor: 80000, gross_margin_percent: 66.7 }),
+      buildTopProduct({ product_id: 'prod-2', name: 'Mocha', total_minor: 100000, cogs_minor: 130000, gross_profit_minor: -30000, gross_margin_percent: -30 }),
+    ]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      // Gross Profit column header (also appears in the totals line)
+      expect(screen.getAllByText('Gross Profit').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText('Margin')).toBeTruthy();
+      // Latte: $800.00 profit, 66.7% margin
+      expect(screen.getByText('$800.00')).toBeTruthy();
+      expect(screen.getByText('66.7%')).toBeTruthy();
+      // Mocha: loss-leader, red class
+      const loss = screen.getByText('-$300.00');
+      expect(loss.className).toContain('sales-report-top-negative');
+      expect(screen.getByText('-30.0%')).toBeTruthy();
+    });
+  });
+
+  it('re-ranks by gross profit when the toggle is clicked', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Top Products')).toBeTruthy();
+    });
+
+    // Default fetch is ranked by revenue
+    expect(mockGetTopProducts).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      10,
+      '',
+      'revenue',
+    );
+
+    mockGetTopProducts.mockClear();
+    resolveDefaultData();
+    await userEvent.click(screen.getByRole('radio', { name: 'Rank by gross profit' }));
+
+    await waitFor(() => {
+      expect(mockGetTopProducts).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        10,
+        '',
+        'profit',
+      );
+      expect(
+        screen.getByRole('radio', { name: 'Rank by gross profit' }).getAttribute('aria-checked'),
+      ).toBe('true');
+    });
+  });
+
   it('shows "No results" when top products is empty', async () => {
     mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
     mockGetTopProducts.mockResolvedValue([]);
@@ -368,6 +618,137 @@ describe('SalesReportScreen', () => {
       const noResultsElements = screen.getAllByText('No results');
       // Top products section should show "No results"
       expect(noResultsElements.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── Category popularity ──────────────────────────────────────
+  it('renders the category popularity leaderboard', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Category Popularity')).toBeTruthy();
+      // Category row: name, count, catalog ratio, ranked top products
+      // ('Drinks' also appears in the Demand Forecast card; '3' is a
+      // heatmap hour header — use getAllByText for both).
+      expect(screen.getAllByText('Drinks').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText('1.7×')).toBeTruthy();
+      expect(screen.getByText('1. Latte · 2. Mocha · 3. Tea')).toBeTruthy();
+    });
+  });
+
+  it('localizes the uncategorized label when category_name is null', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([
+      buildCategoryPopularity({
+        category_id: '',
+        category_name: null,
+        catalog_ratio: 0,
+        top_products: [],
+      }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Uncategorized')).toBeTruthy();
+      expect(screen.getByText('—')).toBeTruthy();
+    });
+  });
+
+  it('shows "No results" when category popularity is empty', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const noResultsElements = screen.getAllByText('No results');
+      expect(noResultsElements.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('renders the popularity trend chart with one line per category', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Popularity Trend')).toBeTruthy();
+      const lines = screen.getAllByTestId('line');
+      // One Line per category series (Drinks here).
+      expect(lines.length).toBeGreaterThanOrEqual(1);
+      expect(lines[0]!.getAttribute('data-key')).toBe('Drinks');
+    });
+  });
+
+  it('re-fetches the trend when the view mode changes granularity', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('bar-chart')).toBeTruthy();
+    });
+
+    expect(mockGetCategoryPopularityTrend).toHaveBeenCalledWith(
+      '',
+      expect.any(String),
+      expect.any(String),
+      'daily',
+      5,
+    );
+
+    mockGetCategoryPopularityTrend.mockClear();
+    resolveDefaultData();
+    await userEvent.click(screen.getByRole('radio', { name: /weekly/i }));
+
+    await waitFor(() => {
+      expect(mockGetCategoryPopularityTrend).toHaveBeenCalledWith(
+        '',
+        expect.any(String),
+        expect.any(String),
+        'weekly',
+        5,
+      );
+    });
+  });
+
+  // ── Demand forecast ──────────────────────────────────────────
+  it('renders the demand forecast table with trend direction', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Demand Forecast')).toBeTruthy();
+      // 'Drinks' also appears in the Category Popularity card.
+      expect(screen.getAllByText('Drinks').length).toBeGreaterThanOrEqual(1);
+      // Avg 13.0, rising trend ▲ 2.0, next period 18 ('18' is also a
+      // heatmap hour header, so use getAllByText).
+      expect(screen.getByText('13.0')).toBeTruthy();
+      expect(screen.getByText('▲ 2.0')).toBeTruthy();
+      expect(screen.getAllByText('18').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows a falling trend indicator for declining categories', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([
+      {
+        category_id: 'cat-x',
+        category_name: 'X',
+        forecast_units: 3,
+        trend_per_period: -1.5,
+        recent_avg_units: 8,
+      },
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('▼ 1.5')).toBeTruthy();
+      const down = screen.getByText('▼ 1.5');
+      expect(down.className).toContain('sales-report-forecast-down');
     });
   });
 
@@ -419,7 +800,8 @@ describe('SalesReportScreen', () => {
     mockGetCategoryBreakdown.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('No data')).toBeTruthy();
+      // Heatmap + popularity trend cards both show "No data" when empty.
+      expect(screen.getAllByText('No data').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -436,11 +818,11 @@ describe('SalesReportScreen', () => {
     mockGetDailyRevenue.mockClear();
     mockGetWeeklyRevenue.mockClear();
 
-    await userEvent.click(screen.getByRole('radio', { name: 'weekly' }));
+    await userEvent.click(screen.getByRole('radio', { name: /weekly/i }));
 
     await waitFor(() => {
       expect(mockGetWeeklyRevenue).toHaveBeenCalled();
-      expect(screen.getByRole('radio', { name: 'weekly' }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByRole('radio', { name: /weekly/i }).getAttribute('aria-checked')).toBe('true');
     });
   });
 
@@ -455,11 +837,11 @@ describe('SalesReportScreen', () => {
     mockGetDailyRevenue.mockClear();
     mockGetMonthlyRevenue.mockClear();
 
-    await userEvent.click(screen.getByRole('radio', { name: 'monthly' }));
+    await userEvent.click(screen.getByRole('radio', { name: /monthly/i }));
 
     await waitFor(() => {
       expect(mockGetMonthlyRevenue).toHaveBeenCalled();
-      expect(screen.getByRole('radio', { name: 'monthly' }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByRole('radio', { name: /monthly/i }).getAttribute('aria-checked')).toBe('true');
     });
   });
 
@@ -621,9 +1003,10 @@ describe('SalesReportScreen', () => {
       // Revenue section still renders (heading + $0.00 total)
       expect(screen.getAllByText('Revenue').length).toBeGreaterThanOrEqual(1);
       // Category breakdown and top products both show "No results"
-      expect(screen.getAllByText('No results').length).toBe(2);
-      // Heatmap shows "No data"
-      expect(screen.getByText('No data')).toBeTruthy();
+      // Top products, category breakdown, and category popularity.
+      expect(screen.getAllByText('No results').length).toBe(3);
+      // Heatmap shows "No data" (also on the trend card)
+      expect(screen.getAllByText('No data').length).toBeGreaterThanOrEqual(1);
     });
   });
 });

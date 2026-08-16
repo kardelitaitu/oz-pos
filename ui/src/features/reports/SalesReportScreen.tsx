@@ -5,6 +5,8 @@ import { Localized, useLocalization } from '@fluent/react';
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -22,17 +24,24 @@ import {
   getTopProducts,
   getHourlyHeatmap,
   getCategoryBreakdown,
+  getCategoryPopularity,
+  getCategoryPopularityTrend,
+  getCategoryForecast,
   type DailyRevenueRow,
   type WeeklyRevenueRow,
   type MonthlyRevenueRow,
   type TopProductRow,
   type HourlyHeatmapRow,
   type CategoryBreakdownRow,
+  type CategoryPopularityRow,
+  type CategoryTrendPoint,
+  type CategoryForecastRow,
 } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { minorUnitExponent } from '@/types/domain';
+import { sumGrossProfitByCurrency, sumRevenueByCurrency } from './revenueTotals';
 import './SalesReportScreen.css';
 
 const PIE_COLORS = [
@@ -47,16 +56,18 @@ const HEATMAP_COLORS = [
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// FTL ids for weekday labels (day-sunday … day-saturday in reports.ftl),
+// indexed by the heatmap's day_of_week column (0 = Sunday).
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 type RevenueRow = DailyRevenueRow | WeeklyRevenueRow | MonthlyRevenueRow;
 
-function fmtCurrency(minor: number, currency: string): string {
+function fmtCurrency(minor: number, currency: string, locale = 'en'): string {
   // Exponent-driven: IDR/JPY = 0 decimals, KWD = 3, USD/EUR = 2 — the
   // shared minorUnitExponent map is the single source of truth (mirrors
   // the Rust Currency::minor_unit_exponent). No hardcoded /100 math.
   const exp = minorUnitExponent(currency);
-  return new Intl.NumberFormat('en', {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     minimumFractionDigits: exp,
@@ -77,6 +88,7 @@ function monthAgo(): string {
 /** Sales report screen — daily/weekly/monthly revenue charts, top products, hourly heatmap, and category breakdown with CSV export. */
 export default function SalesReportScreen() {
   const { l10n } = useLocalization();
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en';
   const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,19 +98,31 @@ export default function SalesReportScreen() {
 
   const [revenueData, setRevenueData] = useState<RevenueRow[]>([]);
   const [topProducts, setTopProducts] = useState<TopProductRow[]>([]);
+  // Rank the top-products table by revenue (default) or gross profit.
+  // Boolean flag keeps className interpolations quote-free (see
+  // screenExtraction: quoted strings inside `${...}` are read as classes).
+  const [rankByProfit, setRankByProfit] = useState(false);
   const [heatmap, setHeatmap] = useState<HourlyHeatmapRow[]>([]);
   const [categoryBreakdown, setCategoryBreakdown] = useState<
     CategoryBreakdownRow[]
   >([]);
+  const [categoryPopularity, setCategoryPopularity] = useState<
+    CategoryPopularityRow[]
+  >([]);
+  const [popularityTrend, setPopularityTrend] = useState<CategoryTrendPoint[]>([]);
+  const [categoryForecast, setCategoryForecast] = useState<CategoryForecastRow[]>([]);
 
   // P9-3: Period comparison
   const [comparePeriod, setComparePeriod] = useState(false);
   const [prevRevenueData, setPrevRevenueData] = useState<RevenueRow[]>([]);
 
-  const currency: string =
-    revenueData.length > 0
-      ? (revenueData[0] as RevenueRow).currency
-      : 'USD';
+  const revenueTotals = sumRevenueByCurrency(revenueData);
+  const multiCurrencyPeriod = revenueTotals.length > 1;
+  // Single-currency periods keep the exact pre-existing display; the chart
+  // tooltip still uses the first-seen currency (multi-currency chart
+  // semantics are a tracked follow-up, not this fix).
+  const currency: string = revenueTotals[0]?.currency ?? 'USD';
+  const totalRevenue = revenueTotals[0]?.total_minor ?? 0;
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -119,15 +143,21 @@ export default function SalesReportScreen() {
 
     Promise.all([
       revenuePromise,
-      getTopProducts(startDate, endDate, 10, sessionToken),
+      getTopProducts(startDate, endDate, 10, sessionToken, rankByProfit ? 'profit' : 'revenue'),
       getHourlyHeatmap(startDate, endDate, sessionToken),
       getCategoryBreakdown(startDate, endDate, sessionToken),
+      getCategoryPopularity(sessionToken, 3),
+      getCategoryPopularityTrend(sessionToken, startDate, endDate, view, 5),
+      getCategoryForecast(sessionToken, startDate, endDate, view, 5),
     ])
-      .then(([rev, top, heat, cat]) => {
+      .then(([rev, top, heat, cat, catPop, trend, forecast]) => {
         setRevenueData(rev);
         setTopProducts(top);
         setHeatmap(heat);
         setCategoryBreakdown(cat);
+        setCategoryPopularity(catPop);
+        setPopularityTrend(trend);
+        setCategoryForecast(forecast);
       })
       .catch((e) => {
         setError(e.message ?? String(e));
@@ -135,7 +165,7 @@ export default function SalesReportScreen() {
       .finally(() => {
         setLoading(false);
       });
-  }, [view, startDate, endDate, sessionToken]);
+  }, [view, startDate, endDate, sessionToken, rankByProfit]);
 
   // P9-3: Fetch previous period data when comparison is enabled
   const calcPrevRange = useCallback(() => {
@@ -243,15 +273,45 @@ export default function SalesReportScreen() {
     });
   };
 
-  // P9-3: Calculate deltas
-  const prevTotalRevenue = useMemo(
-    () => prevRevenueData.reduce((s: number, r) => s + r.total_minor, 0),
+  // P9-3: Calculate deltas — per-currency, never across a collapsed sum.
+  const prevRevenueTotals = useMemo(
+    () => sumRevenueByCurrency(prevRevenueData),
     [prevRevenueData],
   );
+  const prevTotalRevenue = prevRevenueTotals[0]?.total_minor ?? 0;
+  const prevMultiCurrencyPeriod = prevRevenueTotals.length > 1;
   const prevTotalOrders = useMemo(
     () => prevRevenueData.reduce((s: number, r) => r.sale_count + s, 0),
     [prevRevenueData],
   );
+
+  // Reshape the trend points into one row per period for recharts: each
+  // category becomes a series keyed by its display name.
+  const trendData = useMemo(() => {
+    const byPeriod = new Map<string, Record<string, number>>();
+    for (const p of popularityTrend) {
+      const catName =
+        p.category_name ??
+        requiredLocalized(l10n, 'sales-report-category-popularity-uncategorized');
+      if (!byPeriod.has(p.period_start)) {
+        byPeriod.set(p.period_start, {});
+      }
+      byPeriod.get(p.period_start)![catName] = p.score;
+    }
+    return [...byPeriod.entries()]
+      .map(([period_start, cats]) => ({ period_start, ...cats }))
+      .sort((a, b) => a.period_start.localeCompare(b.period_start));
+  }, [popularityTrend, l10n]);
+  const trendCategories = useMemo(() => {
+    const names: string[] = [];
+    for (const p of popularityTrend) {
+      const catName =
+        p.category_name ??
+        requiredLocalized(l10n, 'sales-report-category-popularity-uncategorized');
+      if (!names.includes(catName)) names.push(catName);
+    }
+    return names;
+  }, [popularityTrend, l10n]);
 
   if (loading) {
     return (
@@ -311,16 +371,16 @@ export default function SalesReportScreen() {
 
   const revenueKey =
     view === 'daily' ? 'date' : view === 'weekly' ? 'week_start' : 'month';
-  const totalRevenue = revenueData.reduce(
-    (s: number, r) => s + r.total_minor,
-    0,
-  );
   const totalOrders = revenueData.reduce(
     (s: number, r) => r.sale_count + s,
     0,
   );
 
-  const revenueDelta = comparePeriod && prevTotalRevenue > 0
+  const canCompareRevenue = comparePeriod
+    && !multiCurrencyPeriod
+    && !prevMultiCurrencyPeriod
+    && prevTotalRevenue > 0;
+  const revenueDelta = canCompareRevenue
     ? ((totalRevenue - prevTotalRevenue) / prevTotalRevenue) * 100
     : null;
   const ordersDelta = comparePeriod && prevTotalOrders > 0
@@ -371,7 +431,7 @@ export default function SalesReportScreen() {
                 onClick={() => setView(mode)}
                 role="radio"
                 aria-checked={view === mode}
-                aria-label={mode}
+                aria-label={l10n.getString(`sales-report-${mode}`)}
               >
                 <Localized id={`sales-report-${mode}`}>
                   {mode.charAt(0).toUpperCase() + mode.slice(1)}
@@ -430,7 +490,7 @@ export default function SalesReportScreen() {
             />
             <YAxis tick={{ fontSize: 12 }} />
             <Tooltip
-                  formatter={(value: unknown) => fmtCurrency(Number(value), currency)}
+                  formatter={(value: unknown) => fmtCurrency(Number(value), currency, numLocale)}
             />
             <Bar
               dataKey="total_minor"
@@ -443,13 +503,15 @@ export default function SalesReportScreen() {
         <div className="sales-report-totals">
           <span>
             <Localized id="sales-report-total-revenue">Total</Localized>:{' '}
-            {fmtCurrency(totalRevenue, currency)}
+            {multiCurrencyPeriod
+              ? revenueTotals.map((t) => fmtCurrency(t.total_minor, t.currency, numLocale)).join(' · ')
+              : fmtCurrency(totalRevenue, currency, numLocale)}
             {revenueDelta !== null && (
               <span className={`comparison-delta ${revenueDelta >= 0 ? 'comparison-delta--positive' : 'comparison-delta--negative'}`}>
                 <span>{revenueDelta >= 0 ? '▲' : '▼'}</span>
                 <span>{Math.abs(revenueDelta).toFixed(1)}%</span>
                 <span style={{ fontWeight: 400, opacity: 0.6, fontSize: '0.85em' }}>
-                  vs {fmtCurrency(prevTotalRevenue, currency)}
+                  vs {fmtCurrency(prevTotalRevenue, currency, numLocale)}
                 </span>
               </span>
             )}
@@ -467,6 +529,23 @@ export default function SalesReportScreen() {
               </span>
             )}
           </span>
+          {/* HPP exposure: gross profit per period (daily, weekly, monthly) */}
+          {revenueData.length > 0 && (() => {
+            const profitTotals = sumGrossProfitByCurrency(revenueData);
+            return (
+              <span>
+                <Localized id="sales-report-total-gross-profit">Gross Profit</Localized>:{' '}
+                {profitTotals.map((t) => fmtCurrency(t.gross_profit_minor, t.currency, numLocale)).join(' · ')}
+                <span className={`comparison-delta ${profitTotals.every((t) => t.gross_profit_minor >= 0) ? 'comparison-delta--positive' : 'comparison-delta--negative'}`}>
+                  <span>
+                    {profitTotals.length === 1 && totalRevenue > 0
+                      ? `(${((profitTotals[0]!.gross_profit_minor / totalRevenue) * 100).toFixed(1)}%)`
+                      : ''}
+                  </span>
+                </span>
+              </span>
+            );
+          })()}
         </div>
       </Card>
 
@@ -503,7 +582,7 @@ export default function SalesReportScreen() {
                   ))}
                 </Pie>
                 <Tooltip
-              formatter={(value: unknown) => fmtCurrency(Number(value), currency)}
+              formatter={(value: unknown) => fmtCurrency(Number(value), currency, numLocale)}
                 />
                 <Legend />
               </PieChart>
@@ -512,9 +591,35 @@ export default function SalesReportScreen() {
         </Card>
 
         <Card shadow="sm" className="sales-report-chart-card">
-          <Localized id="sales-report-top-products">
-            <h2 className="sales-report-section-title">Top Products</h2>
-          </Localized>
+          <div className="sales-report-top-heading">
+            <Localized id="sales-report-top-products">
+              <h2 className="sales-report-section-title">Top Products</h2>
+            </Localized>
+            <div
+              className="sales-report-view-toggle"
+              role="radiogroup"
+              aria-label={requiredLocalized(l10n, 'sales-report-top-rank-aria')}
+            >
+              <button
+                className={`sales-report-view-btn ${rankByProfit ? 'active' : ''}`}
+                onClick={() => setRankByProfit(false)}
+                role="radio"
+                aria-checked={!rankByProfit}
+                aria-label={requiredLocalized(l10n, 'sales-report-top-rank-revenue-aria')}
+              >
+                <Localized id="top-products-revenue">Revenue</Localized>
+              </button>
+              <button
+                className={`sales-report-view-btn ${rankByProfit ? 'active' : ''}`}
+                onClick={() => setRankByProfit(true)}
+                role="radio"
+                aria-checked={rankByProfit}
+                aria-label={requiredLocalized(l10n, 'sales-report-top-rank-profit-aria')}
+              >
+                <Localized id="top-products-gross-profit">Gross Profit</Localized>
+              </button>
+            </div>
+          </div>
           {topProducts.length === 0 ? (
             <p className="sales-report-no-data">
               <Localized id="no-results">
@@ -534,19 +639,167 @@ export default function SalesReportScreen() {
                 <span>
                   <Localized id="top-products-revenue">Revenue</Localized>
                 </span>
+                <span>
+                  <Localized id="top-products-gross-profit">Gross Profit</Localized>
+                </span>
+                <span>
+                  <Localized id="top-products-margin">Margin</Localized>
+                </span>
               </div>
               {topProducts.map((p, i) => (
                 <div key={p.product_id} className="sales-report-top-row">
                   <span>{i + 1}</span>
                   <span>{p.name}</span>
                   <span>{p.total_qty}</span>
-                  <span>{fmtCurrency(p.total_minor, currency)}</span>
+                  <span>{fmtCurrency(p.total_minor, currency, numLocale)}</span>
+                  <span className={p.gross_profit_minor < 0 ? 'sales-report-top-negative' : undefined}>
+                    {fmtCurrency(p.gross_profit_minor, currency, numLocale)}
+                  </span>
+                  <span>{`${p.gross_margin_percent.toFixed(1)}%`}</span>
                 </div>
               ))}
             </div>
           )}
         </Card>
       </div>
+
+      <Card shadow="sm" className="sales-report-chart-card">
+        <Localized id="sales-report-category-popularity">
+          <h2 className="sales-report-section-title">Category Popularity</h2>
+        </Localized>
+        {categoryPopularity.length === 0 ? (
+          <p className="sales-report-no-data">
+            <Localized id="no-results">
+              <span>No results</span>
+            </Localized>
+          </p>
+        ) : (
+          <div className="sales-report-top-table">
+            <div className="sales-report-top-header">
+              <span>
+                <Localized id="sales-report-category-popularity-category">Category</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-category-popularity-products">Products</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-category-popularity-mean">Popularity</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-category-popularity-top">Top Products</Localized>
+              </span>
+            </div>
+            {categoryPopularity.map((cat) => (
+              <div key={cat.category_id || 'uncategorized'} className="sales-report-top-row">
+                <span>
+                  {cat.category_name ??
+                    requiredLocalized(l10n, 'sales-report-category-popularity-uncategorized')}
+                </span>
+                <span>{cat.product_count}</span>
+                <span
+                  title={requiredLocalized(l10n, 'sales-report-category-popularity-mean-tip')}
+                >
+                  {cat.catalog_ratio > 0
+                    ? `${cat.catalog_ratio.toFixed(1)}×`
+                    : '—'}
+                </span>
+                <span>
+                  {cat.top_products
+                    .map((t) => `${t.rank}. ${t.name}`)
+                    .join(' · ')}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card shadow="sm" className="sales-report-chart-card">
+        <Localized id="sales-report-popularity-trend">
+          <h2 className="sales-report-section-title">Popularity Trend</h2>
+        </Localized>
+        {trendData.length === 0 ? (
+          <p className="sales-report-no-data">
+            <Localized id="heatmap-no-data">
+              <span>No data</span>
+            </Localized>
+          </p>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={trendData as unknown as Record<string, unknown>[]}>
+              <XAxis dataKey="period_start" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Legend />
+              {trendCategories.map((name, i) => (
+                <Line
+                  key={name}
+                  type="monotone"
+                  dataKey={name}
+                  stroke={PIE_COLORS[i % PIE_COLORS.length]!}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </Card>
+
+      <Card shadow="sm" className="sales-report-chart-card">
+        <Localized id="sales-report-demand-forecast">
+          <h2 className="sales-report-section-title">Demand Forecast</h2>
+        </Localized>
+        {categoryForecast.length === 0 ? (
+          <p className="sales-report-no-data">
+            <Localized id="heatmap-no-data">
+              <span>No data</span>
+            </Localized>
+          </p>
+        ) : (
+          <div className="sales-report-top-table">
+            <div className="sales-report-top-header">
+              <span>
+                <Localized id="sales-report-demand-forecast-category">Category</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-demand-forecast-avg">Avg / period</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-demand-forecast-trend">Trend</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-demand-forecast-next">Next period</Localized>
+              </span>
+            </div>
+            {categoryForecast.map((c) => {
+              const up = c.trend_per_period > 0.1;
+              const down = c.trend_per_period < -0.1;
+              return (
+                <div key={c.category_id || 'uncategorized'} className="sales-report-top-row">
+                  <span>
+                    {c.category_name ??
+                      requiredLocalized(l10n, 'sales-report-category-popularity-uncategorized')}
+                  </span>
+                  <span>{c.recent_avg_units.toFixed(1)}</span>
+                  <span
+                    className={
+                      up
+                        ? 'sales-report-forecast-up'
+                        : down
+                          ? 'sales-report-forecast-down'
+                          : undefined
+                    }
+                  >
+                    {up ? '▲' : down ? '▼' : '—'} {Math.abs(c.trend_per_period).toFixed(1)}
+                  </span>
+                  <span className="sales-report-forecast-next">{c.forecast_units}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       <Card shadow="sm" className="sales-report-chart-card">
         <Localized id="heatmap-title">
@@ -575,7 +828,7 @@ export default function SalesReportScreen() {
             {heatmapGrid.map((row, day) => (
               <div key={day} className="sales-report-heatmap-row" role="row">
                 <div className="sales-report-heatmap-row-label">
-                  {DAY_NAMES[day]}
+                  {l10n.getString(`day-${DAY_KEYS[day]}`)}
                 </div>
                 {row.map((val, hour) => (
                   <div
@@ -596,8 +849,8 @@ export default function SalesReportScreen() {
                           : 'var(--color-bg-hover, #f3f4f6)',
                     }}
                     role="gridcell"
-                    aria-label={`${DAY_NAMES[day]} ${hour}:00 - ${fmtCurrency(val, currency)}`}
-                    title={`${DAY_NAMES[day]} ${hour}:00 - ${fmtCurrency(val, currency)}`}
+                    aria-label={`${l10n.getString(`day-${DAY_KEYS[day]}`)} ${hour}:00 - ${fmtCurrency(val, currency, numLocale)}`}
+                    title={`${l10n.getString(`day-${DAY_KEYS[day]}`)} ${hour}:00 - ${fmtCurrency(val, currency, numLocale)}`}
                   />
                 ))}
               </div>

@@ -4,6 +4,23 @@ import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { BrandProvider } from '@/contexts/BrandContext';
 import { DevToolbar } from '@/features/design/DevToolbar';
 
+vi.mock('@fluent/react', () => ({
+  useLocalization: () => ({
+    l10n: {
+      getString: (id: string) => {
+        const map: Record<string, string> = {
+          'developer-tools-aria': 'Developer tools',
+          'theme-selector-aria': 'Theme selector',
+        };
+        return map[id] || id;
+      },
+    },
+  }),
+  Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
+  LocalizationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ReactLocalization: class {},
+}));
+
 // ── Wrapper with ThemeProvider ─────────────────────────────────────
 
 function renderToolbar() {

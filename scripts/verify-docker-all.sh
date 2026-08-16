@@ -131,7 +131,7 @@ fi
 # rejecting the path — that would otherwise hang the gate on a foreground
 # `docker run`. Exit 124 (timeout) is treated as an explicit failure.
 out=$(MSYS_NO_PATHCONV=1 timeout 60 docker run --rm \
-    -e OZ_DB_PATH='C:/Users/Dika/AppData/Local/Temp/test.db' \
+    -e OZ_DB_PATH='C:/Users/User/AppData/Local/Temp/test.db' \
     "$CLOUD_IMG" 2>&1 || true)
 if echo "$out" | grep -q "looks like a Windows path" \
    && echo "$out" | grep -q "MSYS_NO_PATHCONV=1"; then

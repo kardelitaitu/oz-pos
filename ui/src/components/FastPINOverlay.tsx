@@ -299,8 +299,10 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
       });
       const newSession = result.session;
 
-      // Step 2: Swap the AuthContext session (no workspace reset).
-      swapSession(newSession);
+      // Step 2: Swap the AuthContext session (no workspace reset). Pass the
+      // fresh picker ticket so the pre-session picker stays bound to the new
+      // user (audit/06).
+      swapSession(newSession, result.picker_ticket);
 
       // Step 3: Create a new session token with the new user's identity
       // but the same scope (store, instance, terminal).
@@ -618,7 +620,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
               </p>
             )}
 
-            <Localized id="fastpin-enter-pin">
+            <Localized id="fastpin-enter-pin" vars={{ user: username.trim() }}>
               <p className="fastpin-step-label">
                 Enter PIN for {username.trim()}
               </p>

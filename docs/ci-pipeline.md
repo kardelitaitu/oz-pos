@@ -1,19 +1,20 @@
 # CI Pipeline Dashboard — OZ-POS
 
-<!-- Audit stamp: 2026-08-03 · AUDIT-27 remediation · status: REWRITTEN — matrix and gate policy reconciled with current workflows (ci.yml, e2e-pr.yml, nightly.yml, release.yml, security.yml, docs.yml) and local runners (check.sh, check-ui.mjs) -->
+<!-- Audit stamp: 2026-08-03 · AUDIT-27 remediation · status: REWRITTEN — matrix and gate policy reconciled with current workflows (ci.yml, e2e-pr.yml, nightly.yml, release.yml, security.yml, docs.yml) and local runners (check.sh, check-ui.mjs). Updated 2026-08-16: website.yml added to workflow inventory. -->
 
-> Last updated: 2026-08-05
+> Last updated: 2026-08-16
 
 ## Workflow inventory
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `ci.yml` | PR + push to `main` | Required PR/push gate: Rust fmt/clippy/panic-inventory/tests, UI lint/typecheck/tests, Lighthouse, Docker build+scan+smoke, coverage (advisory), dependency audit, fuzz (advisory), skill drift, flaky-quarantine registry, CI-docs-drift, PR security baseline, E2E (3-shard) |
+| `ci.yml` | PR + push to `main` | Required PR/push gate: Rust fmt/clippy/panic-inventory/tests, architecture-boundaries, UI lint/typecheck/tests, Lighthouse, Docker build+scan+smoke, coverage (advisory), dependency audit, fuzz (advisory), skill drift, flaky-quarantine registry, CI-docs-drift, PR security baseline, E2E (3-shard) |
 | `e2e-pr.yml` | PR (`ui/e2e/**` + E2E infra only) | Fast, changed-spec E2E complement — main CI already runs full E2E on every PR. `run-e2e.mjs` exits 2 (`SKIPPED-NO-SPEC`) when no spec changed; the workflow treats it as a neutral skip with a notice, never a false pass |
 | `nightly.yml` | Daily 03:00 UTC + manual | Full matrix: cross-platform Rust tests, docs, UI shards, E2E shards, release builds, benchmarks, flaky detection |
 | `release.yml` | Tag push `v*` | Build + blocking Trivy scan + publish all artifacts |
 | `security.yml` | Weekly Monday + manual | Full-tree cargo audit, cargo deny, Trivy scans |
 | `docs.yml` | Push to `main` (docs paths) + PR (docs/workflow paths) | cargo doc → GitHub Pages on push, preceded by the required `ci-docs-drift` gate so a stale job matrix can't be published. PRs also run `build-docs` (cargo doc compile) — deploy stays push-only because the `github-pages` environment rejects PR refs (AUDIT-29/30) |
+| `website.yml` | PR (website paths) + push to `main` (website paths) | Marketing site (Astro, `website/`): `check` job runs astro check + i18n audit + build on every PR/push; `deploy` job runs on main only and `wrangler deploy`s to Cloudflare Workers static assets. Fail-closed: a missing `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` secret fails the deploy job loudly instead of silently skipping |
 | `android.yml` / `ios.yml` | Push to `main` | Mobile build pipelines |
 
 ## Job Matrix (ci.yml)
@@ -23,6 +24,7 @@
 | `rust-fmt` | PR + push | ~30s | none | — | ✅ Required |
 | `rust-panic-inventory` | PR + push | ~10s | none | — | ✅ Required |
 | `rust-money-format` | PR + push | ~5s | none | — | ✅ Required (no hardcoded `/100` or `{}.{:02}` money formatting) |
+| `architecture-boundaries` | PR + push | ~5s | none | — | ✅ Required (new boundary violations only; existing debt is expiring-baselined) |
 | `rust-clippy` | PR + push | ~3min | rust-cache + sccache | — | ✅ Required |
 | `rust-test-fast` | PR only | ~2min each | rust-cache + sccache | 5-way | ✅ Required |
 | `rust-test-apps` | PR + push | ~3min | rust-cache + sccache | — | ✅ Required (AUDIT-27 CI-01) |
@@ -49,7 +51,7 @@
 All gate **names** and **status** live in `scripts/gates.json`. It is the one place a gate is added, renamed, or re-leveled:
 
 - **Shared gates** (declared by BOTH `check.sh` and `check:all`): UI lint, UI typecheck, UI unit tests, i18n lint, FTL dedupe.
-- **check.sh-only** (repo gate): Rust fmt/clippy/tests, migration, skill-drift, panic-inventory, hardcoded-money-format, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), CI docs drift.
+- **check.sh-only** (repo gate): Rust fmt/clippy/tests, architecture-boundaries, migration, skill-drift, panic-inventory, hardcoded-money-format, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), CI docs drift.
 - **check:all-only** (UI gate): bundle budget, E2E, perf smoke.
 - **CI-only / nightly** gates carry the enforcing `workflow` + `job` and a `status` of `required` | `advisory` | `required-on-push`.
 
@@ -122,7 +124,7 @@ The canonical local entry points and what each covers:
 
 | Command | Covers | Skips |
 |---------|--------|-------|
-| `bash scripts/check.sh` (root) | Rust fmt/clippy/tests, migration, skill-drift, panic-inventory, hardcoded-money-format, UI lint/typecheck/tests, i18n lint, **FTL dedupe**, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), optional `--docker-dry-run` build | Production UI build, E2E (backend not provisioned) |
+| `bash scripts/check.sh` (root) | Rust fmt/clippy/tests, architecture-boundaries, migration, skill-drift, panic-inventory, hardcoded-money-format, UI lint/typecheck/tests, i18n lint, **FTL dedupe**, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), optional `--docker-dry-run` build | Production UI build, E2E (backend not provisioned) |
 | `cd ui && npm run check:all` | UI lint/typecheck/tests, i18n lint, FTL dedupe, bundle budget, E2E (**provisioned** via `npm run e2e` when Docker is up), perf smoke | Rust gates |
 | `cd ui && npm run e2e` | Full managed E2E (Docker backend + Vite + Playwright + cleanup) | — |
 
@@ -159,3 +161,9 @@ The canonical local entry points and what each covers:
 | UI test (4 shards) | < 2 min | ~1.5 min |
 | E2E (3 shards) | < 8 min | ~6 min |
 | Docker build | < 5 min | ~3 min |
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

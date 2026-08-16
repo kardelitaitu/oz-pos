@@ -258,6 +258,7 @@ describe("FastPINOverlay", () => {
           role_name: "manager",
           role_id: "role-manager",
         },
+        picker_ticket: "ticket-new",
       });
       mockSwapSessionToken.mockResolvedValue(undefined);
 
@@ -281,12 +282,15 @@ describe("FastPINOverlay", () => {
       });
 
       await waitFor(() => {
-        expect(mockSwapSession).toHaveBeenCalledWith({
-          user_id: "user-new",
-          display_name: "Bob",
-          role_name: "manager",
-          role_id: "role-manager",
-        });
+        expect(mockSwapSession).toHaveBeenCalledWith(
+          {
+            user_id: "user-new",
+            display_name: "Bob",
+            role_name: "manager",
+            role_id: "role-manager",
+          },
+          "ticket-new",
+        );
       });
 
       await waitFor(() => {

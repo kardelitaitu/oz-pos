@@ -147,6 +147,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn default_get_status_returns_ok() {
+        // TestPrinter doesn't override get_status, so it uses the trait
+        // default: paper Ok, cover closed, drawer closed.
+        let p = TestPrinter::new();
+        let status = p.get_status().await.unwrap();
+        assert_eq!(status.paper, PaperStatus::Ok);
+        assert!(!status.cover_open);
+        assert!(!status.drawer_open);
+        assert!(status.is_ready());
+        assert!(!status.has_fault());
+    }
+
+    #[tokio::test]
     async fn print_receipt_captures_body() {
         let p = TestPrinter::new();
         p.print_receipt("Test Receipt").await.unwrap();

@@ -50,3 +50,9 @@ gift-cards-topup-placeholder = Jumlah (unit minor)
 gift-cards-topup-aria = Jumlah top-up
 gift-cards-issue-to-placeholder = Nama pelanggan
 gift-cards-issue-pin-placeholder = Untuk pengecekan saldo
+
+# Transaction type labels (backend values: issue/redeem/topup/refund)
+gift-cards-txn-issue = Diterbitkan
+gift-cards-txn-redeem = Ditukarkan
+gift-cards-txn-topup = Isi ulang
+gift-cards-txn-refund = Dikembalikan

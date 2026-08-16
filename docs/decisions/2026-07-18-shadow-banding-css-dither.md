@@ -211,3 +211,9 @@ Replace all multi-layer shadow tokens with single `0 0 12px` uniform blur across
 - `ui/src/__tests__/StaffLoginScreen.test.tsx` — Login screen tests (7 pass)
 - `ui/src/__tests__/DesignSystem.test.tsx` — Design system tests (21 pass)
 - `docs/decisions/2026-03-01-frontend-restructure.md` — ADR #3: Frontend structure
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

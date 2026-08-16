@@ -1,6 +1,5 @@
 bundles-title = Bundel Produk
 bundles-add = Tambah Bundel
-bundles-loading = Memuat bundel…
 bundles-no-bundles = Belum ada bundel.
 bundles-name = Nama
 bundles-sku = SKU Bundel
@@ -28,12 +27,6 @@ bundles-edit-aria =
     .aria-label = Ubah { $name }
 bundles-delete-aria =
     .aria-label = Hapus { $name }
-bundles-modal-aria = { $mode ->
-    [add] Tambah bundel
-   *[edit] Ubah bundel
-}
-bundles-close-aria =
-    .aria-label = Tutup
 bundles-sku-placeholder =
     .placeholder = mis. GIFT-BOX
 bundles-name-placeholder =
@@ -53,5 +46,9 @@ bundles-item-price-field =
     .aria-label = Harga unit item { $number }
 bundles-item-remove-aria =
     .aria-label = Hapus item { $number }
+bundles-error-invalid-price = Harga bundel harus berupa bilangan bulat non-negatif
+bundles-error-invalid-item = Jumlah dan harga item harus berupa bilangan bulat
+bundles-error-save = Gagal menyimpan bundel
+bundles-error-delete = Gagal menghapus bundel
 
 # ── Exchange Rates ──

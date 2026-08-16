@@ -82,9 +82,6 @@ vi.mock('@/api/offline', () => ({
   requestSyncToken: vi.fn(),
 }));
 
-vi.mock('@/api/topology', () => ({
-  saveTopology: vi.fn(),
-}));
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(() => Promise.resolve()),

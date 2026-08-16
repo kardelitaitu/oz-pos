@@ -46,6 +46,11 @@ step "clippy workspace" "cargo clippy --workspace --all-targets -- -D warnings" 
 # ── ADR #7 Phase 4: no raw store_id/user_id in command signatures ───────
 step "no-raw-params (ADR #7 Phase 4)" "bash scripts/verify-no-raw-params.sh" bash scripts/verify-no-raw-params.sh
 
+# ── Architecture boundary checker (P1 pilot) ────────────────────────────
+# Existing transitional debt is reported but only new, expired, or stale
+# baseline entries fail. This is static-only and has no runtime impact.
+step "architecture boundaries" "python3 scripts/verify-architecture-boundaries.py --strict" python3 scripts/verify-architecture-boundaries.py --strict
+
 # ── Money formatting gate (IDR/JPY/KWD exp-2 regression guard) ───────────
 # Fails when production .rs code hardcodes `/ 100` division or `{}.{:02}`
 # format strings instead of foundation::format_minor(). Pure python — no
@@ -164,6 +169,9 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     # validation matches check-ui.mjs and the pre-commit gate.
     step "ftl dedupe" "python3 scripts/dedupe-ftl.py" python3 scripts/dedupe-ftl.py
     step "feature registry parity" "python3 scripts/verify-feature-registry.py" python3 scripts/verify-feature-registry.py
+    # Topology contract parity — the vendored oz-core copy and the UI copy
+    # must stay byte-identical (both sides of the IPC boundary read it).
+    step "topology contract parity" "python3 scripts/verify-topology-parity.py" python3 scripts/verify-topology-parity.py
     # npm run build skipped — typecheck + vitest already cover correctness;
     # the production vite bundle is validated by CI independently.
     # AUDIT-27 CI-07: E2E is NOT run here (Docker backend not provisioned).

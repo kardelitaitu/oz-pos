@@ -23,6 +23,8 @@ interface ShiftSummaryProps {
 
 function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
   const { l10n } = useLocalization();
+  // Times follow the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const today = new Date().toISOString().slice(0, 10);
   const todayClosed = shifts.filter(
     (s) => s.status === 'closed' && s.closedAt && s.closedAt.startsWith(today),
@@ -62,7 +64,7 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
               <span className="eod-report-active-shift-label">Active shift since</span>
             </Localized>
             <span className="eod-report-active-shift-value">
-              {new Date(activeShift.openedAt).toLocaleTimeString([], {
+              {new Date(activeShift.openedAt).toLocaleTimeString(numLocale, {
                 hour: '2-digit',
                 minute: '2-digit',
               })}
@@ -117,14 +119,14 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
               return (
                 <div key={s.id} className="eod-report-shift-row">
                   <span className="eod-report-shift-cell">
-                    {new Date(s.openedAt).toLocaleTimeString([], {
+                    {new Date(s.openedAt).toLocaleTimeString(numLocale, {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
                   </span>
                   <span className="eod-report-shift-cell">
                     {s.closedAt
-                      ? new Date(s.closedAt).toLocaleTimeString([], {
+                      ? new Date(s.closedAt).toLocaleTimeString(numLocale, {
                           hour: '2-digit',
                           minute: '2-digit',
                         })
@@ -461,7 +463,7 @@ export default function EodReportScreen() {
             className="eod-report-refresh-btn"
             onClick={exportCsv}
             disabled={csvExporting || !report}
-            aria-label="Export CSV"
+            aria-label={l10n.getString('export-csv-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

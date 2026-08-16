@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import {
@@ -65,6 +65,25 @@ export default function TaxConfigurationScreen() {
   // Guards against a stale counts response if the user switches rate mid-flight.
   const pendingDeleteIdRef = useRef<string | null>(null);
 
+  // Refs for the Inclusive/Exclusive radio options so arrow-key navigation can
+  // move focus to the newly-selected option (roving tabindex, WAI-ARIA radio).
+  const exclusiveRadioRef = useRef<HTMLButtonElement>(null);
+  const inclusiveRadioRef = useRef<HTMLButtonElement>(null);
+
+  // WAI-ARIA radiogroup: Arrow keys move focus AND selection; Tab leaves the
+  // group. `aria-checked` + `tabIndex` make the roving-tabindex contract work.
+  const handleTaxTypeKeyDown = useCallback((e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      setForm((prev) => ({ ...prev, isInclusive: true }));
+      inclusiveRadioRef.current?.focus();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setForm((prev) => ({ ...prev, isInclusive: false }));
+      exclusiveRadioRef.current?.focus();
+    }
+  }, []);
+
   // ── Category tax rates state ────────────────────────────────────
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [catTaxRates, setCatTaxRates] = useState<Map<string, string[]>>(new Map());
@@ -125,8 +144,11 @@ export default function TaxConfigurationScreen() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const rateBps = parseInt(form.rateBps, 10);
-      if (Number.isNaN(rateBps) || rateBps < 0 || rateBps > MAX_RATE_BPS) {
+      // TAX-04: the rate is an integer in basis points — reject non-integers
+      // (e.g. "825.5") rather than silently truncating via parseInt.
+      const rawRate = form.rateBps.trim();
+      const rateBps = Number(rawRate);
+      if (rawRate === '' || !Number.isInteger(rateBps) || rateBps < 0 || rateBps > MAX_RATE_BPS) {
         addToast({
           message: l10n.getString('tax-config-rate-invalid', { max: String(MAX_RATE_BPS) }),
           type: 'error',
@@ -135,7 +157,7 @@ export default function TaxConfigurationScreen() {
       }
 
       const args = {
-        name: form.name,
+        name: form.name.trim(),
         rateBps,
         isDefault: form.isDefault,
         isInclusive: form.isInclusive,
@@ -238,6 +260,17 @@ export default function TaxConfigurationScreen() {
     );
   }, []);
 
+  // Disable the category save button until the assignment actually changes,
+  // so an untouched "Save" can't round-trip a no-op IPC write.
+  const catSaveDisabled = useMemo(() => {
+    if (!editingCatId) return true;
+    const original = catTaxRates.get(editingCatId) ?? [];
+    if (original.length !== selectedCatRateIds.length) return false;
+    const a = [...original].sort();
+    const b = [...selectedCatRateIds].sort();
+    return a.every((id, i) => id === b[i]);
+  }, [catTaxRates, editingCatId, selectedCatRateIds]);
+
   return (
     <div className="tax-config">
       <div className="tax-config-header">
@@ -315,7 +348,7 @@ export default function TaxConfigurationScreen() {
                     <Localized id="tax-config-col-type"><th>Type</th></Localized>
                     <Localized id="tax-config-col-default"><th>Default</th></Localized>
                     <Localized id="tax-config-col-actions" attrs={{ "aria-label": true }}>
-                      <th aria-label="Actions"> </th>
+                      <th> </th>
                     </Localized>
                   </tr>
                 </thead>
@@ -395,7 +428,7 @@ export default function TaxConfigurationScreen() {
                       <Localized id="tax-config-col-category"><th>Category</th></Localized>
                       <Localized id="tax-config-col-assigned"><th>Assigned Tax Rates</th></Localized>
                       <Localized id="tax-config-col-actions" attrs={{ "aria-label": true }}>
-                        <th aria-label="Actions"> </th>
+                        <th> </th>
                       </Localized>
                     </tr>
                   </thead>
@@ -476,7 +509,7 @@ export default function TaxConfigurationScreen() {
             type="text"
             id="tax-field-name"
             value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
             placeholder={l10n.getString('tax-config-field-name-placeholder')}
           />
         </div>
@@ -495,7 +528,7 @@ export default function TaxConfigurationScreen() {
               id="tax-field-rate"
               min="0"
               value={form.rateBps}
-              onChange={(e) => setForm({ ...form, rateBps: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, rateBps: e.target.value }))}
               placeholder={l10n.getString('tax-config-field-rate-placeholder')}
               max={String(MAX_RATE_BPS)}
             />
@@ -514,10 +547,13 @@ export default function TaxConfigurationScreen() {
             <button
               type="button"
               role="radio"
+              ref={exclusiveRadioRef}
+              tabIndex={!form.isInclusive ? 0 : -1}
               aria-checked={!form.isInclusive}
               aria-label={l10n.getString('tax-config-type-exclusive-label')}
               className={`tax-config-toggle-btn ${!form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
-              onClick={() => setForm({ ...form, isInclusive: false })}
+              onClick={() => setForm((prev) => ({ ...prev, isInclusive: false }))}
+              onKeyDown={handleTaxTypeKeyDown}
             >
               <Localized id="tax-config-type-exclusive-label">
                 <span>Exclusive</span>
@@ -529,10 +565,13 @@ export default function TaxConfigurationScreen() {
             <button
               type="button"
               role="radio"
+              ref={inclusiveRadioRef}
+              tabIndex={form.isInclusive ? 0 : -1}
               aria-checked={form.isInclusive}
               aria-label={l10n.getString('tax-config-type-inclusive-label')}
               className={`tax-config-toggle-btn ${form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
-              onClick={() => setForm({ ...form, isInclusive: true })}
+              onClick={() => setForm((prev) => ({ ...prev, isInclusive: true }))}
+              onKeyDown={handleTaxTypeKeyDown}
             >
               <Localized id="tax-config-type-inclusive-label">
                 <span>Inclusive</span>
@@ -548,7 +587,7 @@ export default function TaxConfigurationScreen() {
           <input
             type="checkbox"
             checked={form.isDefault}
-            onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+            onChange={(e) => setForm((prev) => ({ ...prev, isDefault: e.target.checked }))}
           />
           {l10n.getString('tax-config-set-default')}
         </label>
@@ -607,6 +646,7 @@ export default function TaxConfigurationScreen() {
         title={l10n.getString('tax-config-cat-modal-title', { name: editingCatName })}
         saving={savingCat}
         onSave={handleSaveCat}
+        saveDisabled={catSaveDisabled}
         saveLabel={l10n.getString('tax-config-btn-save')}
         cancelLabel={l10n.getString('tax-config-btn-cancel')}
         size="sm"

@@ -52,7 +52,7 @@
   gap: var(--space-2);
   min-width: 220px;
   padding: var(--space-3);
-  background: var(--kds-header-bg, #16213e);
+  background: var(--color-bg-popover);
   border: 1px solid var(--kds-header-border, #0f3460);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
@@ -64,8 +64,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-1_5) var(--space-1);
-  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-2);
+  min-height: 2.75rem;
   cursor: pointer;
   border-radius: var(--radius-md);
   transition: background var(--duration-100);
@@ -78,8 +78,8 @@
 .kds-settings-toggle input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 2.25rem;
-  height: 1.25rem;
+  width: 2.75rem;
+  height: 1.5rem;
   background: var(--kds-dim);
   border-radius: var(--radius-xl-2);
   position: relative;
@@ -91,10 +91,10 @@
 .kds-settings-toggle input[type="checkbox"]::after {
   content: '';
   position: absolute;
-  top: 0.125rem;
-  left: 0.125rem;
-  width: 1rem;
-  height: 1rem;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 1.125rem;
+  height: 1.125rem;
   background: var(--kds-badge-text);
   border-radius: 50%;
   transition: transform var(--duration-150);
@@ -105,7 +105,7 @@
 }
 
 .kds-settings-toggle input[type="checkbox"]:checked::after {
-  transform: translateX(1rem);
+  transform: translateX(1.25rem);
 }
 
 .kds-settings-toggle input[type="checkbox"]:focus-visible {
@@ -137,7 +137,7 @@
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
-  height: 6px;
+  height: 8px;
   background: var(--kds-dim);
   border-radius: var(--radius-sm);
   outline: none;
@@ -147,25 +147,27 @@
 .kds-settings-slider::-webkit-slider-thumb {
   appearance: none;
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   background: var(--kds-ready);
   border-radius: 50%;
   cursor: pointer;
   transition: transform var(--duration-100);
+  box-shadow: var(--shadow-sm);
 }
 
 .kds-settings-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+  transform: scale(1.15);
 }
 
 .kds-settings-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   background: var(--kds-ready);
   border-radius: 50%;
   border: none;
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
 }
 
 /* ── Density selector ──────────────────────────────────────────────── */
@@ -173,8 +175,8 @@
 .kds-settings-density {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-1_5) var(--space-1);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
 }
 
 .kds-settings-density-options {
@@ -184,12 +186,13 @@
 
 .kds-settings-density-btn {
   flex: 1;
-  padding: var(--space-1_5) var(--space-2);
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--kds-muted);
   background: transparent;
-  border: 1px solid var(--kds-ticket-border);
+  border: 2px solid var(--kds-ticket-border);
   border-radius: var(--radius-md);
   cursor: pointer;
   text-transform: capitalize;
@@ -204,11 +207,11 @@
 
 .kds-settings-density-btn:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 
 .kds-settings-density-btn--active {
-  background: var(--kds-ticket-bg);
+  background: var(--color-accent-subtle);
   color: var(--kds-text);
-  border-color: var(--kds-ready);
+  border-color: var(--color-accent);
 }

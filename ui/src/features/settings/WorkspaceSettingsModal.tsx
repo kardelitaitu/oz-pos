@@ -23,7 +23,7 @@ import styles from './WorkspaceSettingsModal.module.css';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type WorkspaceType = 'store-pos' | 'restaurant-pos' | 'kds' | 'inventory';
+export type WorkspaceType = 'store-pos' | 'restaurant-pos' | 'kds' | 'warehouse';
 export type ModalPresentation = 'overlay' | 'slideover';
 
 export interface WorkspaceSettingsModalProps {
@@ -52,7 +52,7 @@ function renderWorkspaceCard(
       return <WorkspaceRestaurantPosSettings {...cardProps} />;
     case 'kds':
       return <WorkspaceKdsSettings {...cardProps} />;
-    case 'inventory':
+    case 'warehouse':
       return <WorkspaceInventorySettings {...cardProps} />;
     default:
       return <WorkspaceStorePosSettings {...cardProps} />;
@@ -86,7 +86,7 @@ export default function WorkspaceSettingsModal({
   terminalId,
   presentation = 'overlay',
 }: WorkspaceSettingsModalProps) {
-  const { isManager } = useAuth();
+  const { session, isManager } = useAuth();
   const workspaceCtx = useWorkspaceOptional();
   const { l10n } = useLocalization();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -128,6 +128,24 @@ export default function WorkspaceSettingsModal({
 
   // ── Role-gated card selection ───────────────────────────────
   const showFullCard = isManager;
+
+  // ── Footer role badge (the real session role, not a hardcoded label) ──
+  // Managers/above get the full settings card and badge; checkout roles
+  // (staff) and read-only (auditor) get their own badge text. The retired
+  // cashier label is gone (0048 2c).
+  const normalizedRole = session?.role_name.trim().toLowerCase() ?? '';
+  const isAuditor =
+    normalizedRole === 'auditor' || normalizedRole === 'role-auditor';
+  const roleBadgeId = showFullCard
+    ? 'workspace-modal-role-manager'
+    : isAuditor
+      ? 'workspace-modal-role-auditor'
+      : 'workspace-modal-role-staff';
+  const roleBadgeFallback = showFullCard
+    ? 'Manager'
+    : isAuditor
+      ? 'Auditor'
+      : 'Staff';
 
   return createPortal(
     <div
@@ -206,14 +224,8 @@ export default function WorkspaceSettingsModal({
         {/* ── Footer role indicator ─────────────────── */}
         <div className={styles['footer']}>
           <span className={styles['role-badge']}>
-            <Localized
-              id={
-                showFullCard
-                  ? 'workspace-modal-role-manager'
-                  : 'workspace-modal-role-cashier'
-              }
-            >
-              {showFullCard ? 'Manager' : 'Cashier'}
+            <Localized id={roleBadgeId}>
+              {roleBadgeFallback}
             </Localized>
           </span>
         </div>

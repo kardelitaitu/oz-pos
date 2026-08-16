@@ -2,7 +2,6 @@
 
 staff-title = Staff
 staff-add-button = Add Staff
-staff-loading = Loading staff…
 staff-empty = No staff members yet.
 staff-empty-cta = Add your first staff member
 staff-col-name = Name
@@ -23,14 +22,8 @@ staff-deactivate-aria =
 staff-restore = Restore
 staff-restore-aria =
     .aria-label = Reactivate { $name }
-staff-modal-add-aria =
-    .aria-label = Add staff member
-staff-modal-edit-aria =
-    .aria-label = Edit staff member
 staff-modal-add-title = Add Staff Member
 staff-modal-edit-title = Edit Staff Member
-staff-modal-close =
-    .aria-label = Close
 staff-field-username-label = Username *
 staff-username-placeholder =
     .placeholder = e.g. jane
@@ -44,6 +37,7 @@ staff-pin-edit-placeholder =
 staff-pin-placeholder =
     .placeholder = Enter PIN
 staff-field-role-label = Role *
+staff-role-permissions-label = Role permissions
 staff-role-select-default = Select a role…
 staff-btn-cancel = Cancel
 staff-btn-update = Update
@@ -58,7 +52,6 @@ staff-table-aria = Staff members
 staff-field-username-aria = Username
 staff-field-name-aria = Display Name
 staff-field-pin-aria = PIN
-staff-error-generic = { $message }
 staff-error-load = Failed to load staff data
 staff-retry = Retry
 
@@ -78,16 +71,18 @@ staff-toast-updated = { $name } updated successfully
 staff-toast-deactivated = { $name } deactivated
 staff-toast-restored = { $name } restored
 
-# ── Workspace Access ──────────────────────────────────────────────────────
-staff-ws-section-label = Workspace Access
-staff-ws-role-defaults = Use role defaults
-staff-ws-custom = Custom
+# ── Assignment Access (ADR #35 D5 / spec 0048) ──────────────────────────
+staff-assignment-section-label = Assignment Access
+staff-assignment-global = All branches & workspaces
+staff-assignment-scoped = Restrict by branch or workspace
+staff-assignment-branches-label = Branches
+staff-assignment-workspaces-label = Workspaces
+staff-assignment-all-branches = All branches
+staff-assignment-all-workspaces = All workspaces
+staff-assignment-all-workspaces-short = All
 
 # ── Staff Login ──────────────────────────────────────────────────────────
-staff-login-title = OZ-POS
-staff-login-subtitle = Staff Login
 staff-login-step-username = Enter your username
-staff-login-step-pin = Enter your PIN
 staff-login-progress-aria = Login progress
 staff-login-username-placeholder =
     .placeholder = Username
@@ -106,7 +101,6 @@ staff-login-digit-aria =
     .aria-label = { $digit }
 staff-login-submit = Login
 staff-login-submitting = Logging in…
-staff-login-verifying = Verifying...
 staff-login-error-connection = Could not verify username. Check your connection.
 staff-login-back = ← Back
 staff-login-copyright = © 2026 OZ-POS. All rights reserved.
@@ -136,3 +130,55 @@ staff-login-connection-connected = Connected
 staff-login-connection-disconnected = Disconnected
 staff-login-connection-auth = Auth
 staff-login-connection-sync = Sync
+
+# ── ADR #35 D6 user profile (spec 0049) ─────────────────────────────────
+
+staff-col-id = ID
+staff-id-masked-aria = National ID (masked)
+staff-profile-incomplete = Profile incomplete
+staff-profile-incomplete-edit-hint = Complete this member's profile to unlock role and workspace assignment.
+staff-profile-section-label = Profile
+staff-field-dob-label = Date of Birth *
+staff-field-dob-aria = Date of birth (required)
+staff-field-phone-label = Phone *
+staff-field-phone-aria = Phone number (required)
+staff-field-national-id-type-label = National ID Type *
+staff-field-national-id-type-aria = National ID type (required)
+staff-national-id-type-select = Select type
+staff-national-id-type-ssn = SSN (US)
+staff-national-id-type-nik = NIK / KTP (Indonesia)
+staff-field-national-id-label = National ID *
+staff-field-national-id-aria = National ID number (required)
+staff-field-email-label = Email *
+staff-field-email-aria = Email address (required)
+staff-field-pay-label = Monthly Take-Home Pay *
+staff-field-pay-aria = Monthly take-home pay (required)
+staff-field-emergency-name-label = Emergency Contact *
+staff-field-emergency-name-aria = Emergency contact name (required)
+staff-field-emergency-phone-label = Emergency Contact Phone *
+staff-field-emergency-phone-aria = Emergency contact phone (required)
+staff-field-job-title-label = Job Title
+staff-field-job-title-aria = Job title
+staff-field-notes-label = Notes
+staff-field-notes-aria = Notes
+staff-field-address-label = Address
+staff-field-address-aria = Address
+staff-field-tax-id-label = Tax ID
+staff-field-tax-id-aria = Tax ID
+staff-field-hire-date-label = Hire Date
+staff-field-hire-date-aria = Hire date
+
+# Per-field validation errors (localized, shown inline)
+staff-error-dob-required = Date of birth is required.
+staff-error-phone-required = Phone number is required.
+staff-error-national-id-type-required = National ID type is required.
+staff-error-national-id-required = National ID is required.
+staff-error-email-required = Email address is required.
+staff-error-pay-required = Monthly take-home pay is required.
+staff-error-emergency-name-required = Emergency contact name is required.
+staff-error-emergency-phone-required = Emergency contact phone is required.
+staff-error-email-invalid = Enter a valid email address.
+staff-error-phone-invalid = Phone must be in +country number format.
+staff-error-national-id-invalid = National ID must be 9 digits (SSN) or 16 digits (NIK).
+staff-error-pay-invalid = Enter a positive amount.
+staff-error-dob-invalid = Use YYYY-MM-DD format.

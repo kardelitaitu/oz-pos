@@ -37,7 +37,7 @@ vi.mock('@/frontend/shell/StatusBar', () => ({
   // A div (NOT a <footer>) so the status role is aria-allowed-role legal:
   // axe rejects role="status" on <footer> (implicit contentinfo semantics).
   default: () => (
-    <div role="status" aria-label="Application status">v0.0.24</div>
+    <div role="status" aria-label="Application status">v0.0.25</div>
   ),
 }));
 vi.mock('@/frontend/shell/UpdateBanner', () => ({ default: () => null }));

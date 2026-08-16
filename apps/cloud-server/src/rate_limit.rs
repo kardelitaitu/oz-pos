@@ -12,6 +12,7 @@
 //! | `POST /api/sync/pull` | 300 | per minute |
 //! | `GET  /api/sync/status` | 300 | per minute |
 //! | `GET  /api/sync/snapshot` | 50 | per minute |
+//! | `POST /api/v1/tokens` | 30 | per minute, per client IP |
 //!
 //! When exceeded, returns `429 Too Many Requests` with a `Retry-After` header.
 
@@ -73,6 +74,15 @@ const RATE_LIMITS: &[(&str, RateLimitConfig)] = &[
         },
     ),
 ];
+
+/// Rate limit for `POST /api/v1/tokens` — 30 mint attempts per minute per
+/// client IP. Minting is rare in normal operation (once per terminal boot or
+/// on token expiry), so this is generous for legitimate clients while still
+/// blocking brute-force attacks on the admin key / terminal credentials.
+const TOKEN_RATE_LIMIT: RateLimitConfig = RateLimitConfig {
+    capacity: 30,
+    refill_per_sec: 30.0 / 60.0, // 30/min
+};
 
 // ── Token bucket ──────────────────────────────────────────────────
 
@@ -150,30 +160,47 @@ impl RateLimiterState {
     /// Try to consume a token for the given tenant and URI path.
     /// Returns `Ok(())` if allowed, or `Err(retry_after_seconds)` if rate-limited.
     pub async fn check_rate_limit(&self, tenant_id: &str, path: &str) -> Result<(), f64> {
-        // Find matching rate limit config
-        let config = RATE_LIMITS
+        let Some((prefix, config)) = RATE_LIMITS
             .iter()
             .find(|(prefix, _)| path.starts_with(prefix))
-            .map(|(_, config)| config);
-
-        let config = match config {
-            Some(c) => c,
-            None => return Ok(()), // No rate limit configured for this path
+        else {
+            return Ok(()); // No rate limit configured for this path
         };
 
-        let key = format!(
-            "{tenant_id}|{}",
-            RATE_LIMITS
-                .iter()
-                .find(|(prefix, _)| path.starts_with(prefix))
-                .map(|(prefix, _)| *prefix)
-                .unwrap_or(path)
-        );
+        self.check_keyed(
+            format!("{tenant_id}|{prefix}"),
+            config.capacity,
+            config.refill_per_sec,
+        )
+        .await
+    }
 
+    /// Try to consume a token for the token-mint endpoint, keyed by client IP.
+    ///
+    /// `/api/v1/tokens` mints the JWT, so there are no `ApiTokenClaims` to key
+    /// the per-tenant limiter on; it is throttled by client IP instead to stop
+    /// brute-forcing of the admin key / terminal client credentials.
+    pub async fn check_token_rate_limit(&self, ip: &str) -> Result<(), f64> {
+        self.check_keyed(
+            format!("ip:{ip}"),
+            TOKEN_RATE_LIMIT.capacity,
+            TOKEN_RATE_LIMIT.refill_per_sec,
+        )
+        .await
+    }
+
+    /// Consume one token from the bucket identified by `key`, creating it on
+    /// demand with the given capacity and refill rate.
+    async fn check_keyed(
+        &self,
+        key: String,
+        capacity: u32,
+        refill_per_sec: f64,
+    ) -> Result<(), f64> {
         let mut buckets = self.buckets.write().await;
         let bucket = buckets
             .entry(key)
-            .or_insert_with(|| TokenBucket::new(config.capacity, config.refill_per_sec));
+            .or_insert_with(|| TokenBucket::new(capacity, refill_per_sec));
 
         if bucket.try_consume() {
             Ok(())
@@ -232,6 +259,9 @@ pub async fn rate_limit_middleware(
                 retry_after_secs = retry_secs,
                 "rate limit exceeded"
             );
+            crate::metrics::RATE_LIMIT_429_TOTAL
+                .with_label_values(&["sync"])
+                .inc();
             (
                 StatusCode::TOO_MANY_REQUESTS,
                 [("Retry-After", &retry_secs.to_string())],
@@ -243,6 +273,80 @@ pub async fn rate_limit_middleware(
                 .into_response()
         }
     }
+}
+
+/// Axum middleware that rate-limits `POST /api/v1/tokens` per client IP.
+///
+/// Unlike [`rate_limit_middleware`], this runs BEFORE authentication — the
+/// token endpoint mints the JWT, so there are no `ApiTokenClaims` to key on.
+///
+/// The client IP is resolved from the `X-Forwarded-For` / `X-Real-IP` headers,
+/// which the reverse proxy must overwrite (per the plan the proxy is the single
+/// public entry point). Without a proxy header, all requests share one
+/// `"unknown"` bucket.
+pub async fn token_rate_limit_middleware(
+    Extension(rate_limiter): Extension<RateLimiterState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    // Only the token-mint endpoint is throttled here; every other route on
+    // the API router passes straight through.
+    if request.uri().path() != "/api/v1/tokens" {
+        return next.run(request).await;
+    }
+
+    let ip = client_ip(&request);
+    match rate_limiter.check_token_rate_limit(&ip).await {
+        Ok(()) => next.run(request).await,
+        Err(retry_after) => {
+            let retry_secs = retry_after.ceil() as u64;
+            warn!(
+                ip = %ip,
+                path = "/api/v1/tokens",
+                retry_after_secs = retry_secs,
+                "token mint rate limit exceeded"
+            );
+            crate::metrics::RATE_LIMIT_429_TOTAL
+                .with_label_values(&["token"])
+                .inc();
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                [("Retry-After", &retry_secs.to_string())],
+                axum::Json(serde_json::json!({
+                    "error": "rate_limit_exceeded",
+                    "retry_after_seconds": retry_secs,
+                })),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Resolve the client IP for token-mint rate limiting. Prefers the
+/// `X-Forwarded-For` header (first hop, set/overwritten by the reverse proxy),
+/// then `X-Real-IP`, and finally a shared `"unknown"` bucket when neither is
+/// present.
+fn client_ip(request: &Request) -> String {
+    if let Some(ip) = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return ip.to_string();
+    }
+    if let Some(ip) = request
+        .headers()
+        .get("x-real-ip")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return ip.to_string();
+    }
+    "unknown".to_string()
 }
 
 // ── Background cleanup ────────────────────────────────────────────
@@ -526,5 +630,62 @@ mod tests {
             }
             Ok(_) => panic!("should be rate-limited"),
         }
+    }
+
+    // ── Token-mint rate limiting (P8-3) ────────────────────────────
+
+    #[tokio::test]
+    async fn token_rate_limit_allows_then_blocks() {
+        let limiter = RateLimiterState::new();
+        for i in 0..30 {
+            assert!(
+                limiter.check_token_rate_limit("203.0.113.4").await.is_ok(),
+                "mint {i} should be allowed"
+            );
+        }
+        assert!(
+            limiter.check_token_rate_limit("203.0.113.4").await.is_err(),
+            "31st mint should be rate-limited"
+        );
+    }
+
+    #[tokio::test]
+    async fn token_rate_limit_isolates_ips() {
+        let limiter = RateLimiterState::new();
+        for _ in 0..30 {
+            assert!(limiter.check_token_rate_limit("203.0.113.4").await.is_ok());
+        }
+        assert!(limiter.check_token_rate_limit("203.0.113.4").await.is_err());
+        assert!(
+            limiter.check_token_rate_limit("203.0.113.5").await.is_ok(),
+            "a different IP has its own bucket"
+        );
+    }
+
+    #[test]
+    fn client_ip_prefers_x_forwarded_for() {
+        let req = Request::builder()
+            .uri("/api/v1/tokens")
+            .header("x-forwarded-for", "203.0.113.9, 10.0.0.1")
+            .header("x-real-ip", "198.51.100.7")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert_eq!(client_ip(&req), "203.0.113.9");
+    }
+
+    #[test]
+    fn client_ip_falls_back_to_x_real_ip_then_unknown() {
+        let req = Request::builder()
+            .uri("/api/v1/tokens")
+            .header("x-real-ip", "198.51.100.7")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert_eq!(client_ip(&req), "198.51.100.7");
+
+        let bare = Request::builder()
+            .uri("/api/v1/tokens")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert_eq!(client_ip(&bare), "unknown");
     }
 }

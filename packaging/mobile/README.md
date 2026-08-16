@@ -352,17 +352,16 @@ keytool -genkey -v -keystore oz-pos.keystore \
 
 **Security notes:**
 - Keep the keystore **out of version control** — add `*.keystore` to `.gitignore`
-- Use environment variables for passwords at build time (never hardcode)
+- Never hardcode passwords; the CI workflows write `keystore.properties`
+  from the `KEYSTORE_PASSWORD` / `KEY_ALIAS` secrets
 - In CI, restore from `ANDROID_KEYSTORE_BASE64` GitHub secret
 - Best practice: rotate the keystore every 2 years
 
-**Build-time password env vars:**
-
-| Env var | Purpose |
-|---------|---------|
-| `TAURI_ANDROID_KEYSTORE_PASSWORD` | Keystore master password |
-| `TAURI_ANDROID_KEY_PASSWORD` | Key password (defaults to keystore password) |
-| `TAURI_ANDROID_KEY_ALIAS` | Override the alias from config |
+**Signing (official Tauri v2 route):** the CLI has no keystore flags — the
+workflows decode the keystore into `apps/tablet-client/gen/android/` and
+write `keystore.properties` (password / keyAlias / storeFile), which the
+tracked `build.gradle.kts` `signingConfigs` block reads. Without the file
+the APK/AAB builds unsigned.
 
 ### iOS Certificate & Profile
 

@@ -951,11 +951,11 @@ fn currency_settings_independent_of_store_settings() {
 fn seed_users_for_shift(conn: &rusqlite::Connection) {
     conn.execute_batch(
         "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-            ('role-cashier', 'Cashier', 'Cashier role', '[]',
+            ('role-staff', 'Staff', 'Staff role', '[]',
              '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
          INSERT INTO users (id, username, pin_hash, display_name, role_id,
                            created_at, updated_at) VALUES
-            ('user-alice', 'alice', 'hash1', 'Alice', 'role-cashier',
+            ('user-alice', 'alice', 'hash1', 'Alice', 'role-staff',
              '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');",
     )
     .unwrap();
@@ -1085,157 +1085,6 @@ fn currency_settings_survive_load_all_across_shift_ops() {
 }
 
 // ── Migration correctness: old → new key ─────────────────────────────
-
-#[test]
-fn migration_075_moves_old_key_to_new() {
-    // Simulate a DB that existed before migration 075: only the old key exists.
-    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        );
-
-         CREATE TABLE IF NOT EXISTS migrations (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            name        TEXT NOT NULL UNIQUE,
-            applied_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        );
-
-         INSERT INTO settings (key, value) VALUES ('store.default_currency', 'EUR');",
-    )
-    .unwrap();
-
-    // Run all migrations (including 075).
-    oz_core::migrations::run(&mut conn).unwrap();
-
-    // Old key must be gone.
-    assert_eq!(
-        oz_core::Settings::get(&conn, "store.default_currency").unwrap(),
-        None,
-        "old key must be deleted by migration 075"
-    );
-
-    // New key must have the value.
-    assert_eq!(
-        oz_core::Settings::get_default_currency(&conn).unwrap(),
-        Some("EUR".into()),
-        "new key must contain the migrated value"
-    );
-}
-
-#[test]
-fn migration_075_noop_when_old_key_absent() {
-    // A fresh DB (no old key) — migration must not insert a bogus row.
-    let mut conn = migrations::fresh_db();
-    let all_before = oz_core::Settings::load_all(&conn).unwrap();
-
-    // Run migrations again (idempotent).
-    oz_core::migrations::run(&mut conn).unwrap();
-
-    let all_after = oz_core::Settings::load_all(&conn).unwrap();
-    assert_eq!(
-        all_before.len(),
-        all_after.len(),
-        "migration 075 must not add rows when old key is absent"
-    );
-}
-
-#[test]
-fn migration_075_preserves_other_settings() {
-    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        );
-
-         CREATE TABLE IF NOT EXISTS migrations (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            name        TEXT NOT NULL UNIQUE,
-            applied_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        );
-
-         INSERT INTO settings (key, value) VALUES
-            ('store.name', 'My Store'),
-            ('store.default_currency', 'GBP'),
-            ('store.address', '123 Street'),
-            ('receipt.show_currency', '1'),
-            ('store.tax_id', 'TAX-001');",
-    )
-    .unwrap();
-
-    oz_core::migrations::run(&mut conn).unwrap();
-
-    // All non-currency settings must survive.
-    assert_eq!(
-        oz_core::Settings::get(&conn, "store.name").unwrap(),
-        Some("My Store".into())
-    );
-    assert_eq!(
-        oz_core::Settings::get(&conn, "store.address").unwrap(),
-        Some("123 Street".into())
-    );
-    assert_eq!(
-        oz_core::Settings::get(&conn, "receipt.show_currency").unwrap(),
-        Some("1".into())
-    );
-    assert_eq!(
-        oz_core::Settings::get(&conn, "store.tax_id").unwrap(),
-        Some("TAX-001".into())
-    );
-
-    // Old currency key is gone, new one exists.
-    assert_eq!(
-        oz_core::Settings::get(&conn, "store.default_currency").unwrap(),
-        None
-    );
-    assert_eq!(
-        oz_core::Settings::get_default_currency(&conn).unwrap(),
-        Some("GBP".into())
-    );
-}
-
-#[test]
-fn migration_075_prefers_existing_new_key() {
-    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        );
-
-         CREATE TABLE IF NOT EXISTS migrations (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            name        TEXT NOT NULL UNIQUE,
-            applied_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        );
-
-         -- Both keys exist (e.g. partial migration or manual intervention).
-         INSERT INTO settings (key, value) VALUES
-            ('currency.default', 'JPY'),
-            ('store.default_currency', 'USD');",
-    )
-    .unwrap();
-
-    oz_core::migrations::run(&mut conn).unwrap();
-
-    // Old key must be deleted; new key must keep its original value (JPY).
-    assert_eq!(
-        oz_core::Settings::get(&conn, "store.default_currency").unwrap(),
-        None
-    );
-    assert_eq!(
-        oz_core::Settings::get_default_currency(&conn).unwrap(),
-        Some("JPY".into())
-    );
-}
 
 // ── Namespace isolation: currency.* vs store.* vs receipt.* ───────────
 

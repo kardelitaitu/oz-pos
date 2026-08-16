@@ -8,7 +8,6 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/topology', () => ({
   loadTopology: vi.fn(),
-  saveTopology: vi.fn(),
 }));
 
 const TOPOLOGY_EN: Record<string, string> = {
@@ -211,22 +210,24 @@ describe('Inspector drawer integration (Phase 2)', () => {
     });
   });
 
-  // ── P2-I3-4: Warehouse node renders InventorySettings ────
+  // ── P2-I3-4: Warehouse node renders its own settings card ────
 
-  it('selecting a warehouse node renders WorkspaceInventorySettings', async () => {
+  it('selecting a warehouse node renders the Warehouse settings card', async () => {
     renderEditor();
 
     selectNodeByType('warehouse');
 
     await waitFor(() => {
       expect(screen.getByText('Node Inspector')).toBeInTheDocument();
-      expect(screen.getByTestId('workspace-inventory')).toBeInTheDocument();
+      expect(screen.getByTestId('warehouse-inspector')).toBeInTheDocument();
+      expect(screen.getByLabelText(/Capacity/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Low-Stock Threshold/)).toBeInTheDocument();
     });
   });
 
-  // ── P2-I3-5: Hardware node shows no inspector ────────────
+  // ── P2-I3-5: Hardware node renders its own inspector card ──
 
-  it('selecting a hardware node does not show inspector (not implemented)', async () => {
+  it('selecting a hardware node shows the hardware inspector with editable name/subtitle', async () => {
     renderEditor();
 
     // Add a hardware node so we can select it
@@ -238,12 +239,25 @@ describe('Inspector drawer integration (Phase 2)', () => {
 
     selectNodeByType('hardware');
 
+    // The drawer opens with the hardware-specific card and the name prefilled.
     await waitFor(() => {
-      // No inspector drawer for hardware nodes
-      expect(screen.queryByTestId('store-info-card')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('workspace-store-pos')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('workspace-inventory')).not.toBeInTheDocument();
+      expect(screen.getByText('Node Inspector')).toBeInTheDocument();
+      expect(screen.getByTestId('hardware-inspector')).toBeInTheDocument();
+      expect(screen.getByText('Hardware Device')).toBeInTheDocument();
     });
+
+    const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
+    expect(nameInput.value).toBe('New Hardware');
+
+    // Renaming flows through the beginInspectorEdit session — one undo restores.
+    fireEvent.change(nameInput, { target: { value: 'Kitchen Printer' } });
+    expect(screen.getByText('Kitchen Printer')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(
+      (document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement).value,
+    ).toBe('New Hardware');
   });
 
   // ── P2-I6: Ctrl+I focuses first inspector input ──────────

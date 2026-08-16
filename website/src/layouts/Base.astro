@@ -1,0 +1,64 @@
+---
+import { getAbsoluteLocaleUrl } from 'astro:i18n';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import { locales, t } from '../i18n';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+const locale = Astro.currentLocale ?? 'en';
+const desc = description ?? t(locale, 'meta.description');
+// hreflang alternates for the same page in the other locale. Reuse the
+// locale-stripping logic from LocaleSwitcher so /en/docs/x → /id/docs/x.
+// The 404 page is served at /404 (no locale prefix) — fall back to home
+// like LocaleSwitcher so hreflang never points at /en/404/.
+const rawPath = Astro.url.pathname.replace(/^\/(?:en|id)(?:\/|$)/, '');
+const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : rawPath;
+---
+
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Apply the stored theme before first paint (dark is the default). -->
+    <script is:inline>
+      (() => {
+        const t = localStorage.getItem('oz_theme');
+        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+      })();
+    </script>
+    <meta name="description" content={desc} />
+    <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    {locales.map((code) => (
+      <link rel="alternate" hreflang={code} href={getAbsoluteLocaleUrl(code, path)} />
+    ))}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OZ-POS" />
+    <meta property="og:locale" content={locale} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={desc} />
+    <meta property="og:url" content={new URL(Astro.url.pathname, Astro.site)} />
+    <!-- PNG (not SVG): social scrapers (Facebook/Twitter) don't rasterize SVG. The source is public/og-image.svg — regenerate with: magick public/og-image.svg public/og-image.png -->
+    <meta property="og:image" content={new URL('/og-image.png', Astro.site)} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <title>{title}</title>
+  </head>
+  <body class="flex min-h-screen flex-col bg-primary text-ink antialiased">
+    <Header />
+    <main class="flex-1">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

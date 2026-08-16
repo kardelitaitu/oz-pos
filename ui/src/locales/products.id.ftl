@@ -1,14 +1,4 @@
-products-title = Produk
-products-add = Tambah Produk
-products-edit = Ubah Produk
-products-delete = Hapus Produk
 products-name = Nama
-products-sku = SKU
-products-price = Harga
-products-barcode = Barcode
-products-category = Kategori
-products-stock = Stok
-products-no-products = Belum ada produk
 
 restaurant-menu-search-placeholder = Cari Menu
 restaurant-menu-hamburger-aria = Menu
@@ -21,7 +11,7 @@ restaurant-font-size-label = Ukuran Huruf
 restaurant-theme-light = Mode Terang
 restaurant-theme-dark = Mode Gelap
 restaurant-lock-terminal = Kunci Terminal
-restaurant-toggle-fullscreen = Alihkan Layar Penuh
+restaurant-toggle-fullscreen = Aktifkan/nonaktifkan layar penuh
 restaurant-clear-color-aria = Hapus warna
 restaurant-categories-aria = Kategori menu
 restaurant-menu-loading = Memuat menu…
@@ -29,6 +19,7 @@ restaurant-menu-empty = Menu kosong
 restaurant-size-label = Ukuran
 restaurant-sort-label = Urutkan
 restaurant-card-add = Tambah
+restaurant-card-unavailable = Tidak tersedia
 restaurant-context-color-label = Warna
 restaurant-search-aria = Cari item menu
 restaurant-search-clear-aria = Hapus pencarian
@@ -37,15 +28,10 @@ restaurant-context-unpin = Lepas sematan
 restaurant-context-available = Tandai tersedia
 restaurant-context-unavailable = Tandai tidak tersedia
 restaurant-card-pin-title = Disematkan ke atas
-restaurant-sort-manual = Manual
-restaurant-sort-a-z = A–Z
-restaurant-sort-date = Berdasarkan Tanggal
-restaurant-sort-popularity = Popularitas
 restaurant-menu-items-aria = Item menu
 restaurant-color-swatch-aria = Warna { $color }
 
 # Error Boundary
-product-lookup-title = Produk
 product-lookup-dev-fallback = Menggunakan data contoh (IPC tidak tersedia)
 product-lookup-search-placeholder =
     .placeholder = Cari produk…
@@ -61,7 +47,6 @@ product-lookup-scan-btn-aria =
 product-lookup-no-results = Tidak ada produk ditemukan
 product-lookup-clear-search = Hapus pencarian
 product-lookup-loading = Memuat produk…
-product-lookup-add = Tambah ke Keranjang
 product-lookup-in-stock = Tersedia
 product-lookup-out-of-stock = Stok Habis
 product-lookup-all-categories = Semua Kategori
@@ -77,7 +62,6 @@ product-lookup-error-load = Gagal memuat produk
 # POS Cart (remaining)
 product-mgmt-title = Produk
 product-mgmt-add = Tambah Produk
-product-mgmt-loading = Memuat produk…
 product-mgmt-empty = Belum ada produk.
 product-mgmt-empty-cta = Tambah produk pertama
 product-mgmt-col-sku = SKU
@@ -92,11 +76,6 @@ product-mgmt-edit = Ubah
 product-mgmt-edit-aria = Ubah { $name }
 product-mgmt-delete = Hapus
 product-mgmt-delete-aria = Hapus { $name }
-product-mgmt-deleting =
-    { $count ->
-        [one] Menghapus…
-       *[other] …
-    }
 product-mgmt-delete-confirm-title = Hapus produk?
 product-mgmt-delete-confirm-message = Hapus { $name } ({ $sku })? Tindakan ini tidak dapat dibatalkan.
 product-mgmt-delete-confirm-btn = Hapus
@@ -109,10 +88,7 @@ product-mgmt-error-invalid-stock = Stok harus berupa bilangan bulat non-negatif
 product-mgmt-modal-add-title = Tambah Produk
 product-mgmt-modal-edit-title = Ubah Produk
 product-mgmt-modal-close = Tutup
-product-mgmt-field-sku = SKU
 product-mgmt-field-sku-required = SKU *
-product-mgmt-field-name = Nama
-product-mgmt-field-name-required = Nama *
 product-mgmt-field-price = Harga (unit minor)
 product-mgmt-field-currency = Mata Uang
 product-mgmt-field-category = Kategori
@@ -128,8 +104,7 @@ product-mgmt-table-aria = Katalog produk
 product-mgmt-actions-aria =
     .aria-label = Tindakan
 product-mgmt-variants = Varian
-product-mgmt-variants-aria =
-    .aria-label = Varian untuk { $name }
+product-mgmt-variants-aria = Varian untuk { $name }
 product-mgmt-modal-aria = { $mode ->
         [add] Tambah produk
        *[edit] Ubah produk
@@ -154,7 +129,6 @@ product-mgmt-alert-close = Tutup
 
 # ── Product Variants ──
 variant-mgmt-title = Varian — { $product }
-variant-mgmt-loading = Memuat varian…
 variant-mgmt-empty = Belum ada varian.
 variant-mgmt-empty-cta = Tambah varian
 variant-mgmt-add = Tambah Varian
@@ -167,17 +141,17 @@ variant-mgmt-price-parent = Menggunakan harga induk
 variant-mgmt-status-active = Aktif
 variant-mgmt-status-inactive = Tidak Aktif
 variant-mgmt-edit = Ubah
-variant-mgmt-edit-aria = Ubah { $name }
+variant-mgmt-edit-aria =
+    .aria-label = Ubah { $name }
 variant-mgmt-delete = Hapus
-variant-mgmt-delete-aria = Hapus { $name }
+variant-mgmt-delete-aria =
+    .aria-label = Hapus { $name }
 variant-mgmt-delete-confirm-title = Hapus Varian
 variant-mgmt-delete-confirm-body = Apakah Anda yakin ingin menghapus varian "{ $name }" ({ $sku })? Tindakan ini tidak dapat dibatalkan.
 variant-mgmt-delete-confirm-cancel = Batal
 variant-mgmt-delete-confirm-confirm = Hapus
 variant-mgmt-modal-add-title = Tambah Varian
 variant-mgmt-modal-edit-title = Ubah Varian
-variant-mgmt-modal-close = Tutup
-variant-mgmt-close = Tutup
 variant-mgmt-close-aria =
     .aria-label = Tutup
 variant-mgmt-field-name-required = Nama *
@@ -191,10 +165,6 @@ variant-mgmt-btn-cancel = Batal
 variant-mgmt-btn-create = Buat
 variant-mgmt-btn-update = Perbarui
 variant-mgmt-overlay-aria = Varian untuk { $name }
-variant-mgmt-dialog-aria = { $mode ->
-    [add] Tambah varian
-   *[edit] Ubah varian
-}
 variant-mgmt-table-aria = Varian produk
 variant-mgmt-actions-aria =
     .aria-label = Tindakan
@@ -210,15 +180,14 @@ variant-mgmt-barcode-placeholder =
     .placeholder = 4901234567890
 variant-mgmt-sort-placeholder =
     .placeholder = 0
-variant-mgmt-delete-confirm-aria =
-    .aria-label = Konfirmasi hapus
 variant-mgmt-error-load = Gagal memuat varian
 variant-mgmt-error-save = Gagal menyimpan varian
 variant-mgmt-error-delete = Gagal menghapus varian
+variant-mgmt-error-invalid-price = Harga varian harus berupa bilangan bulat non-negatif
+variant-mgmt-error-invalid-sort = Urutan harus berupa bilangan bulat non-negatif
 
 # ── Category Management ──
 categories-title = Kategori
-categories-loading = Memuat kategori…
 categories-no-categories = Belum ada kategori
 categories-empty-desc = Mulai dengan membuat kategori pertama Anda
 categories-add-first = Tambah kategori pertama
@@ -228,8 +197,6 @@ categories-name-placeholder =
     .placeholder = mis. Toko Roti, Barang
 categories-colour = Warna
 categories-icon = Ikon
-categories-icon-aria =
-    .aria-label = Pilih ikon untuk kategori
 categories-id-preview = Pratinjau ID
 categories-edit = Ubah
 categories-create = Buat
@@ -249,8 +216,7 @@ categories-error-name-required = Nama kategori wajib diisi
 categories-error-id-conflict = Kategori dengan ID ini sudah ada
 categories-error-colour-invalid = Pilih warna dari palet
 categories-preview = Pratinjau
-categories-name-aria =
-    .aria-label = Nama Kategori
+categories-name-aria = Nama Kategori
 categories-icon-picker-aria = Pilih ikon
 categories-colour-picker-aria = Pilih warna
 categories-icon-food = Makanan

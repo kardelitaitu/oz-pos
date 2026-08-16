@@ -14,10 +14,17 @@
 // using fireEvent.
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { screen, waitFor, cleanup, fireEvent, configure } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
+
+// The page mounts many IPC-driven sections; under parallel CI load a full
+// render + microtask flush can exceed the default 1s waitFor timeout, which
+// surfaced as intermittent flakes. Give this file's waitFor/findBy calls a
+// comfortable 5s window (vitest isolates module state per file, so this
+// does not leak into other suites).
+configure({ asyncUtilTimeout: 5000 });
 import settingsFtl from '@/locales/settings.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';
@@ -97,6 +104,7 @@ const { invokeMock, defaultImpl, failCommands } = vi.hoisted(() => {
     if (
       cmd === 'set_receipt_settings' || cmd === 'set_store_settings' ||
       cmd === 'set_default_currency' || cmd === 'set_user_preferences' ||
+      cmd === 'set_user_preferences_scoped' ||
       cmd === 'update_sync_settings' || cmd === 'set_brand_primary_colour' ||
       cmd === 'set_brand_store_name'
     ) {
@@ -253,11 +261,11 @@ describe('SettingsPage', () => {
 
   // ── Full error state ─────────────────────────────────────────
 
-  it('renders error with retry button when all APIs fail', async () => {
+  it('renders localized error with retry button when all APIs fail', async () => {
     invokeMock.mockRejectedValue(new Error('IPC error'));
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
+      expect(screen.getByText('Failed to load settings')).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
@@ -347,7 +355,7 @@ describe('SettingsPage', () => {
     failCommands.add('set_receipt_settings');
     failCommands.add('set_store_settings');
     failCommands.add('set_default_currency');
-    failCommands.add('set_user_preferences');
+    failCommands.add('set_user_preferences_scoped');
     failCommands.add('update_sync_settings');
     failCommands.add('set_brand_primary_colour');
     failCommands.add('set_brand_store_name');
@@ -527,7 +535,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/enable cloud sync/i)).toBeInTheDocument();
   });
 
-  it('shows not-configured hint when sync is unconfigured', async () => {
+  it('defaults unconfigured sync to the local server and enabled', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
@@ -535,7 +543,9 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
     fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
 
-    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
+    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/server url/i)).toHaveValue('http://localhost:3099');
+    expect(screen.getByRole('switch', { name: /toggle/i })).toBeChecked();
   });
 
   // ── About section ────────────────────────────────────────────
@@ -875,7 +885,7 @@ describe('SettingsPage', () => {
     failCommands.add('set_receipt_settings');
     failCommands.add('set_store_settings');
     failCommands.add('set_default_currency');
-    failCommands.add('set_user_preferences');
+    failCommands.add('set_user_preferences_scoped');
     failCommands.add('set_brand_primary_colour');
     failCommands.add('set_brand_store_name');
 

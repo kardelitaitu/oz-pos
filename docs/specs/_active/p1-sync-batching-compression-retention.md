@@ -2,7 +2,8 @@
 
 # P-1 — Sync batching, compression, backoff & retention
 
-- **Status:** PENDING
+- **Status:** DONE (core implementation landed; residual items below)
+- **Audit note (2026-08-08 by docs-auditor):** status corrected from PENDING — verified `build_batches()` in `platform/sync/src/lib.rs`, gzip client (`transport.rs:231`) + server (`main.rs:374`), `apps/cloud-server/src/prune.rs`, migration `072_stock_movements_archive.sql`, and `AnchorExpired` handling in `lib.rs`. Residual: snapshot endpoint (Phase 3), configurable retention window, exact `incremental_vacuum` cadence.
 - **Phase:** 1 of 3 (Sync Performance Strategy — ADR #10)
 - **Parent:** `docs/decisions/2026-07-13-sync-performance-compression-batching.md`
 - **Severity:** HIGH
@@ -141,3 +142,7 @@ Audit queries for date ranges older than 90 days use `UNION ALL SELECT … FROM 
 - `crates/oz-core/migrations/018_offline_queue.sql`
 - `crates/oz-core/migrations/063_stock_movements.sql`
 - `crates/oz-core/src/db/products.rs` (`adjust_stock_with_reason`, `insert_stock_movement`, `rebuild_stock_summary`, `get_stock_from_ledger`, `list_stock_movements`)
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).

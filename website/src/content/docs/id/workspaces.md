@@ -1,0 +1,63 @@
+---
+title: Ruang Kerja
+description: Pilih fungsi setiap layar — kasir ritel, layanan restoran, dapur, atau back office.
+category: guides
+order: 7
+updated: "2026-08-16"
+---
+
+## Pemilih ruang kerja
+
+Setelah masuk, staf melihat kisi kartu ruang kerja. Setiap ruang kerja adalah
+peran untuk layar di depan Anda — apa yang bisa dilakukan, bukan di mana
+Anda berada:
+
+| Ruang Kerja     | Fungsinya                                                                  | Status       |
+| --------------- | -------------------------------------------------------------------------- | ------------ |
+| POS Toko        | Kasir ritel — pencarian produk, pelanggan, dan loyalitas                   | Siap         |
+| POS Restoran    | Kasir layanan meja — kategori menu dan manajemen meja                      | Siap         |
+| Tampilan Dapur  | Antrean pesanan untuk dapur — ketuk tiket untuk memajukan statusnya        | Siap         |
+| Gudang          | Produk, tingkat stok, bundel, kategori, dan laporan inventaris             | Siap         |
+| Admin           | Pengaturan, staf, laporan, log audit, dan konfigurasi                      | Siap         |
+
+## Akses berdasarkan penugasan
+
+Setiap anggota staf hanya dapat membuka ruang kerja yang ditugaskan padanya —
+staf kasir biasanya ditugaskan ruang kerja POS, staf dapur Tampilan Dapur.
+Kartu yang tidak bisa Anda buka ditampilkan nonaktif, dan manajer ke atas
+tidak dibatasi penugasan. Penugasan diatur di **Pengaturan → Staf**. Lihat
+[Peran Pengguna](../user-roles/).
+
+## Sematkan & peluncuran cepat
+
+Bintangi ruang kerja untuk menyematkannya ke depan kisi, dan ruang kerja
+yang paling sering dipakai muncul berikutnya. Tombol angka 1–9 meluncurkan
+ruang kerja secara langsung.
+
+## Pengaturan ruang kerja
+
+Setiap ruang kerja memiliki pengaturannya sendiri, sehingga layar berperilaku
+berbeda tergantung perannya. POS Toko mengatur tata letak struk, lebar
+kertas, tampilan mata uang dan pajak, serta pemindai barcode. POS Restoran
+mengatur tata letak meja, pengiriman kursus, dan printer dapur. Tampilan
+Dapur mengatur eskalasi SLA dan suara pesanan baru. Lihat [Pengaturan](../settings/)
+untuk daftar lengkap.
+
+## Ruang kerja milik sebuah toko
+
+Setiap instance ruang kerja terikat ke toko. Saat mulai, perangkat
+menyelesaikan tokonya — dari binding terminal bila ada, jika tidak toko
+utama — lalu menampilkan ruang kerja toko tersebut. Lihat
+[Toko & Topologi](../stores/) dan [Terminal](../terminals/).
+
+## Ruang kerja yang direncanakan
+
+Pemilih menampilkan kartu tempat untuk ruang kerja yang masih ada di peta
+jalan — **Loyalitas**, **Pemasaran**, dan **Pesanan Online**. Ketiganya
+ditandai **Segera hadir** dan akan menjadi ruang kerja siap pakai begitu
+diluncurkan.
+
+**Kiosk** bukan ruang kerja — melainkan mode kasir layanan mandiri yang
+dikunci untuk layar tanpa pengawas. **Laporan** juga bukan ruang kerja:
+dasbor penjualan dan analitik berada di dalam ruang kerja Admin, pada layar
+**Laporan**.

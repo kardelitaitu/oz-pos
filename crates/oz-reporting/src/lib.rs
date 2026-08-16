@@ -14,6 +14,7 @@
 
 pub mod daily_summary;
 pub mod error;
+pub mod margin;
 pub mod menu_engineering;
 #[cfg(feature = "metrics")]
 pub mod metrics;

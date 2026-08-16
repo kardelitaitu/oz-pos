@@ -560,7 +560,7 @@ mod tests {
         store.seed_default_roles().unwrap();
         conn.execute(
             "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
             [],
         )
         .unwrap();
@@ -573,7 +573,7 @@ mod tests {
             "cashier-token".into(),
             SessionContext::new(
                 "user-cashier".into(),
-                "role-cashier".into(),
+                "role-staff".into(),
                 "terminal-1".into(),
                 "store-cashier".into(),
                 "instance-1".into(),

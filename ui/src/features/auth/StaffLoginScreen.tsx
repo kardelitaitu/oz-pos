@@ -442,7 +442,7 @@ export default function StaffLoginScreen() {
               type="button"
               className="staff-login-pad-key staff-login-pad-key--action"
               onClick={handlePinClear}
-              aria-label="Clear"
+              aria-label={l10n.getString('clear-aria')}
               disabled={authLoading || pin.length === 0 || isLocked}
             >
               <Localized id="staff-login-clear">Clear</Localized>
@@ -464,7 +464,7 @@ export default function StaffLoginScreen() {
               type="button"
               className="staff-login-pad-key staff-login-pad-key--action"
               onClick={handlePinBackspace}
-              aria-label="Backspace"
+              aria-label={l10n.getString('backspace-aria')}
               disabled={authLoading || pin.length === 0 || isLocked}
             >
               <BackspaceIcon />
@@ -546,7 +546,7 @@ export default function StaffLoginScreen() {
                       autoCorrect="off"
                       spellCheck={false}
                       data-1p-ignore="true"
-                      aria-label="Username"
+                      aria-label={l10n.getString('username-aria')}
                       disabled={authLoading}
                     />
                   </Localized>
@@ -627,7 +627,7 @@ export default function StaffLoginScreen() {
       {/* ── Footer: version + copyright + sync status ────── */}
       <div className="staff-login-footer">
         <div className="staff-login-footer-left">
-          <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.24</span>
+          <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.25</span>
           <Localized id="staff-login-copyright">
             <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
           </Localized>

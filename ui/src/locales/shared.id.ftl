@@ -1,5 +1,4 @@
 -app-name = OZ-POS
-app-name = { -app-name }
 
 save = Simpan
 cancel = Batal
@@ -24,6 +23,7 @@ export = Ekspor
 download = Unduh
 
 nav-pos = Terminal POS
+app-sidebar-subtitle = Point of Sale
 nav-dashboard = Dasbor
 nav-sales = Riwayat Penjualan
 nav-products = Produk
@@ -35,8 +35,6 @@ nav-general = Umum
 nav-settings = Pengaturan
 nav-reports = Laporan
 nav-design = Sistem Desain
-nav-login = Masuk Staf
-nav-logout = Keluar
 nav-orders = Pesanan
 
 error-boundary-title = Terjadi kesalahan
@@ -45,8 +43,6 @@ error-boundary-retry = Coba Lagi
 # Status Bar
 status-bar-connected = Backend terhubung
 status-bar-disconnected = Backend terputus
-status-bar-checking = Memeriksa koneksi backend
-status-bar-authenticating = Mengautentikasi…
 # Sync connection status
 status-bar-sync-connected = Sinkronisasi cloud terhubung
 status-bar-sync-disconnected = Sinkronisasi cloud terputus
@@ -58,21 +54,16 @@ staff-login-license-inactive = Lisensi tidak aktif
 statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Status aplikasi
-statusbar-version = OZ-POS Enterprise v0.0.24
+statusbar-version = OZ-POS Enterprise v0.0.25
 statusbar-sync-name = Sinkronisasi
 statusbar-gateway-name = Stripe
-statusbar-license = Lisensi Proprieter
+statusbar-license = Lisensi Proprietary
 
 # POS Cart Line Items
 shared-loading = Memuat…
-shell-loading = Memuat…
 ds-title = Sistem Desain
 
 # Badge
-badge-default = Badge
-badge-success = Berhasil
-badge-warning = Peringatan
-badge-danger = Bahaya
 badge-info = Info
 
 # Toast
@@ -86,12 +77,8 @@ modal-close-aria = Tutup dialog
 
 # Empty state
 empty-state-title = Belum ada apa pun di sini
-empty-state-desc = Mulai dengan menambahkan item pertama Anda
-empty-state-cta = Tambah Produk
 
 # Error state
-error-state-title = Terjadi kesalahan
-error-state-desc = Terjadi kesalahan yang tidak terduga. Silakan coba lagi.
 error-state-retry = Coba Lagi
 
 # AppError user-safe copy (ERR-05/ERR-06 — output normalizer terketik)
@@ -107,7 +94,7 @@ app-error-subscription = Tindakan ini tidak termasuk dalam paket Anda saat ini.
 app-error-global = Terjadi hal yang tidak terduga. Jika ini terus berlanjut, mulai ulang aplikasi.
 
 # Theme toggle
-theme-toggle-label = Alihkan tema
+theme-toggle-label = Aktifkan/nonaktifkan tema
 theme-toggle-aria =
     .aria-label = Beralih ke mode { $mode ->
         [dark] gelap
@@ -123,6 +110,8 @@ locale-id = Bahasa Indonesia
 # Permission denied
 permission-denied-title = Akses Ditolak
 permission-denied-desc = { $action } memerlukan peran { $requiredRole }.
+permission-denied-perm-desc = Anda tidak memiliki izin untuk mengakses { $action }.
+permission-denied-perm-key = (izin yang diperlukan: { $permission })
 permission-denied-current = Anda masuk sebagai { $displayName } ({ $roleName }).
 permission-denied-go-back = Kembali
 
@@ -146,15 +135,12 @@ update-banner-title = Pembaruan tersedia
 update-banner-new-version = Versi baru
 update-banner-install = Pasang
 update-banner-installing = Memasang…
-update-banner-install-aria =
-    .aria-label = Unduh dan pasang pembaruan
-update-banner-installing-aria =
-    .aria-label = Memasang pembaruan…
+update-banner-install-aria = Unduh dan pasang pembaruan
+update-banner-installing-aria = Memasang pembaruan…
 update-banner-dismiss-aria = Tutup notifikasi pembaruan
 update-banner-dismiss = Tutup
 update-banner-backing-up = Mencadangkan…
-update-banner-backing-up-aria =
-    .aria-label = Mencadangkan basis data sebelum pembaruan
+update-banner-backing-up-aria = Mencadangkan basis data sebelum pembaruan
 update-banner-backup-error = Cadangan gagal
 update-banner-version-blocked-title = Pembaruan tidak tersedia
 update-banner-version-blocked-desc = Versi Anda { $current } di bawah minimum { $minimum } yang diperlukan. Silakan instal ulang dari situs web.
@@ -197,6 +183,7 @@ nav-offline-queue = Antrian Offline
 nav-shifts = Shift
 nav-bundles = Bundel
 nav-dashboard-report = Dasbor
+nav-analytics = Analitik Staf
 nav-sales-report = Laporan Penjualan
 nav-inventory-report = Laporan Stok
 nav-design-system = Sistem Desain
@@ -208,8 +195,6 @@ nav-suppliers = Pemasok
 nav-purchase-orders = Pesanan Pembelian
 nav-stock-transfers = Transfer Stok
 nav-stock = Stok
-nav-history = Riwayat
-nav-section-app = Aplikasi
 nav-sidebar-collapse = Tutup sidebar
 nav-sidebar-expand = Buka sidebar
 nav-switch-workspace = Ganti Ruang Kerja
@@ -284,18 +269,16 @@ audit-log-outcome-unknown = Tidak Diketahui
 spinner-label = Memuat…
 
 # ── Workspace Home ──
-workspace-home-fullscreen-aria = Alihkan layar penuh
+workspace-home-fullscreen-aria = Aktifkan/nonaktifkan layar penuh
 workspace-home-fullscreen-hint = F11
 fullscreen-enabled = Mode layar penuh aktif
 fullscreen-disabled = Mode layar penuh nonaktif
 workspace-home-user-aria = Masuk sebagai { $name }
 workspace-home-loading = Memuat ruang kerja…
-workspace-home-loading-aria = Memuat ruang kerja
 workspace-home-sr-error = Kesalahan koneksi
 workspace-home-available = { $count } ruang kerja tersedia
 workspace-home-coming-soon = Segera hadir
 workspace-card-active-aria = Ruang kerja aktif
-workspace-home-subtitle = Pilih ruang kerja untuk memulai
 workspace-home-empty = Tidak ada ruang kerja tersedia
 workspace-home-empty-desc = Anda belum memiliki akses ke ruang kerja apa pun. Hubungi administrator.
 workspace-home-logout = Keluar
@@ -306,7 +289,6 @@ workspace-home-logout-confirm-confirm = Keluar
 workspace-home-shortcut-hint = Tekan { $key } untuk membuka
 workspace-card-open-aria = Buka ruang kerja { $name }
 workspace-card-no-access-aria = { $name } — tidak tersedia untuk peran Anda
-workspace-card-no-access-title = Tidak tersedia untuk peran { $role }
 workspace-card-no-access-badge = Tidak tersedia
 workspace-home-error-title = Galat Koneksi
 workspace-home-error-desc = Tidak dapat memuat ruang kerja. Periksa koneksi Anda dan coba lagi.
@@ -348,17 +330,88 @@ auth-error-title = Kesalahan
 auth-create-pin-title = Buat PIN Pemilik
 auth-create-pin-desc = Siapkan akun pemilik pertama untuk mengelola POS Anda
 auth-create-pin-display-name-label = Nama Tampilan
-auth-create-pin-display-name-placeholder = Pemilik Toko
+auth-create-pin-display-name-placeholder =
+    .placeholder = Pemilik Toko
 auth-create-pin-username-label = Nama Pengguna
-auth-create-pin-username-placeholder = pemilik
+auth-create-pin-username-placeholder =
+    .placeholder = pemilik
 auth-create-pin-pin-label = PIN
-auth-create-pin-pin-placeholder = Minimal 4 digit
+auth-create-pin-pin-placeholder =
+    .placeholder = Minimal 4 digit
 auth-create-pin-confirm-label = Konfirmasi PIN
-auth-create-pin-confirm-placeholder = Masukkan ulang PIN
+auth-create-pin-confirm-placeholder =
+    .placeholder = Masukkan ulang PIN
 auth-create-pin-creating = Membuat...
 auth-create-pin-create = Buat Akun Pemilik
+# Common aria-label attributes (Indonesian)
+clear-aria = Hapus
+backspace-aria = Hapus
+username-aria = Nama Pengguna
+actions-aria = Aksi
+collapse-aria = Tutup bilah sisi
+notifications-aria = Notifikasi
+settings-aria = Pengaturan
+export-csv-aria = Ekspor CSV
+search-aria = Cari
+workspaces-aria = Ruang Kerja
+developer-tools-aria = Alat Pengembang
+theme-selector-aria = Pemilih Tema
+cancel-refund-aria = Batalkan pengembalian
+decrease-qty-aria = Kurangi jumlah
+increase-qty-aria = Tambah jumlah
+filter-sales-aria = Filter penjualan
+filter-status-aria = Filter berdasarkan status
+from-date-aria = Dari tanggal
+to-date-aria = Sampai tanggal
+filter-cashier-aria = Filter berdasarkan kasir
+sales-history-aria = Riwayat penjualan
+pagination-aria = Halaman
+badge-tooltip-aria = Lencana dengan keterangan
+
 auth-create-pin-success = Akun pemilik berhasil dibuat!
 auth-create-pin-error-fields = Semua bidang wajib diisi.
 auth-create-pin-error-pin-length = PIN minimal harus 4 karakter.
 auth-create-pin-error-pin-mismatch = PIN tidak cocok.
 auth-create-pin-error-generic = Terjadi kesalahan saat membuat akun pemilik.
+
+# Additional common aria-label attributes (Indonesian)
+close-aria = Tutup
+search-customers-aria = Cari pelanggan
+search-products-aria = Cari produk
+barcode-input-aria = Input kode batang
+submit-barcode-aria = Kirim kode batang
+select-course-aria = Pilih kursus
+revert-changes-aria = Kembalikan perubahan
+add-sample-line-aria = Tambah contoh baris
+previous-page-aria = Halaman sebelumnya
+next-page-aria = Halaman berikutnya
+results-per-page-aria = Hasil per halaman
+void-order-aria = Batalkan pesanan
+close-void-aria = Tutup dialog pembatalan
+void-reason-aria = Alasan pembatalan
+sale-detail-aria = Detail penjualan
+sale-line-items-aria = Item baris penjualan
+refund-line-items-aria = Item baris pengembalian
+orders-aria = Pesanan
+back-to-orders-aria = Kembali ke daftar pesanan
+order-line-items-aria = Item baris pesanan
+decrease-card-size-aria = Kurangi ukuran kartu
+increase-card-size-aria = Tambah ukuran kartu
+decrease-font-size-aria = Kurangi ukuran font
+increase-font-size-aria = Tambah ukuran font
+primary-colour-picker-aria = Pemilih warna utama
+colour-hex-aria = Nilai heksadesimal warna
+reset-colour-aria = Kembalikan warna ke awal
+pick-logo-aria = Pilih file logo
+reset-appearance-aria = Kembalikan semua pengaturan tampilan
+save-appearance-aria = Simpan tampilan
+
+# Workspace home — Insights section (owner/admin only)
+workspace-home-insights-section = Wawasan
+workspace-home-analytics-title = Analitik
+workspace-home-analytics-desc = Performa staf, tren penjualan, dan metrik shift
+workspace-home-analytics-aria = Buka Analitik
+workspace-home-reports-title = Laporan
+workspace-home-reports-desc = Dasbor laporan penjualan, inventaris, dan kustom
+workspace-home-reports-aria = Buka Laporan
+workspace-home-shortcut-open = Buka

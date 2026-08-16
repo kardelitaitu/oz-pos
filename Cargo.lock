@@ -224,6 +224,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-channel"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "924ed96dd52d1b75e9c1a3e6275715fd320f5f9439fb5a4a11fa51f4221158d2"
+dependencies = [
+ "concurrent-queue",
+ "event-listener-strategy",
+ "futures-core",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "async-compression"
 version = "0.4.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -236,6 +248,67 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-executor"
+version = "1.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c96bf972d85afc50bf5ab8fe2d54d1586b4e0b46c97c50a0c9e71e2f7bcd812a"
+dependencies = [
+ "async-task",
+ "concurrent-queue",
+ "fastrand",
+ "futures-lite",
+ "pin-project-lite",
+ "slab",
+]
+
+[[package]]
+name = "async-io"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "456b8a8feb6f42d237746d4b3e9a178494627745c3c56c6ea55d92ba50d026fc"
+dependencies = [
+ "autocfg",
+ "cfg-if",
+ "concurrent-queue",
+ "futures-io",
+ "futures-lite",
+ "parking",
+ "polling 3.11.0",
+ "rustix 1.1.4",
+ "slab",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "async-lock"
+version = "3.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "290f7f2596bd5b78a9fec8088ccd89180d7f9f55b94b0576823bbbdc72ee8311"
+dependencies = [
+ "event-listener",
+ "event-listener-strategy",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "async-process"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc50921ec0055cdd8a16de48773bfeec5c972598674347252c0399676be7da75"
+dependencies = [
+ "async-channel",
+ "async-io",
+ "async-lock",
+ "async-signal",
+ "async-task",
+ "blocking",
+ "cfg-if",
+ "event-listener",
+ "futures-lite",
+ "rustix 1.1.4",
+]
+
+[[package]]
 name = "async-recursion"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -244,6 +317,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",
+]
+
+[[package]]
+name = "async-signal"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52b5aaafa020cf5053a01f2a60e8ff5dccf550f0f77ec54a4e47285ac2bab485"
+dependencies = [
+ "async-io",
+ "async-lock",
+ "atomic-waker",
+ "cfg-if",
+ "futures-core",
+ "futures-io",
+ "rustix 1.1.4",
+ "signal-hook-registry",
+ "slab",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -267,6 +358,12 @@ dependencies = [
  "quote",
  "syn 2.0.118",
 ]
+
+[[package]]
+name = "async-task"
+version = "4.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b75356056920673b02621b35afd0f7dda9306d03c79a30f5c56c44cf256e3de"
 
 [[package]]
 name = "async-trait"
@@ -507,6 +604,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5"
 dependencies = [
  "objc2",
+]
+
+[[package]]
+name = "blocking"
+version = "1.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e83f8d02be6967315521be875afa792a316e28d57b5a2d401897e2a7921b7f21"
+dependencies = [
+ "async-channel",
+ "async-task",
+ "futures-io",
+ "futures-lite",
+ "piper",
 ]
 
 [[package]]
@@ -1302,8 +1412,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
 dependencies = [
  "const-oid 0.9.6",
+ "der_derive",
+ "flagset",
  "pem-rfc7468",
  "zeroize",
+]
+
+[[package]]
+name = "der_derive"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8034092389675178f570469e6c3b0465d3d30b4505c294a6550db47f3c17ad18"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -1725,6 +1848,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
+name = "flagset"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7ac824320a75a52197e8f2d787f6a38b6718bb6897a35142d749af3c0e8f4fe"
+
+[[package]]
 name = "flate2"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1801,7 +1930,7 @@ dependencies = [
 
 [[package]]
 name = "foundation"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "regex",
@@ -2759,6 +2888,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 
 [[package]]
+name = "is-docker"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
+dependencies = [
+ "once_cell",
+]
+
+[[package]]
 name = "is-terminal"
 version = "0.4.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2767,6 +2905,16 @@ dependencies = [
  "hermit-abi",
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "is-wsl"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "173609498df190136aa7dea1a91db051746d339e18476eed5ca40521f02d7aa5"
+dependencies = [
+ "is-docker",
+ "once_cell",
 ]
 
 [[package]]
@@ -3276,7 +3424,7 @@ dependencies = [
  "flume",
  "if-addrs",
  "log",
- "polling",
+ "polling 2.8.0",
  "socket2 0.5.10",
 ]
 
@@ -3363,7 +3511,7 @@ dependencies = [
 
 [[package]]
 name = "modules-crm"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3373,13 +3521,14 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "modules-currency"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3395,7 +3544,7 @@ dependencies = [
 
 [[package]]
 name = "modules-inventory"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3405,13 +3554,14 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "modules-loyalty"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3421,13 +3571,14 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "modules-reporting"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3437,28 +3588,14 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "modules-sales"
-version = "0.0.24"
-dependencies = [
- "anyhow",
- "chrono",
- "foundation",
- "platform-kernel",
- "rusqlite",
- "serde",
- "serde_json",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "modules-settings"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3468,13 +3605,31 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "modules-settings"
+version = "0.0.25"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "foundation",
+ "oz-core",
+ "platform-kernel",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "modules-staff"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3485,13 +3640,14 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "modules-tax"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3501,13 +3657,14 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "modules-terminal"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3517,6 +3674,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
@@ -3985,6 +4143,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
+name = "open"
+version = "5.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9cfef937e9c486488c7e3d949ae31c0f1d06bdacd75b99c086cb35356e30408"
+dependencies = [
+ "dunce",
+ "is-wsl",
+ "libc",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4032,18 +4201,23 @@ dependencies = [
 
 [[package]]
 name = "oz-api"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "axum 0.8.9",
  "chrono",
+ "deadpool-postgres",
+ "foundation",
+ "hex",
  "http-body-util",
  "jsonwebtoken",
  "oz-core",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-postgres",
  "tower 0.5.3",
  "tower-http",
  "tracing",
@@ -4052,7 +4226,7 @@ dependencies = [
 
 [[package]]
 name = "oz-cli"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4067,19 +4241,22 @@ dependencies = [
  "oz-payment",
  "oz-reporting",
  "oz-security",
+ "rand 0.8.6",
  "rusqlite",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "oz-cloud-server"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "axum 0.8.9",
+ "bytes",
  "chrono",
  "console-subscriber",
  "deadpool-postgres",
@@ -4094,13 +4271,17 @@ dependencies = [
  "platform-sync",
  "prometheus",
  "rusqlite",
+ "rustls",
+ "rustls-native-certs",
  "serde",
  "serde_json",
+ "serial_test",
  "sha2 0.10.9",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tokio-postgres",
+ "tokio-postgres-rustls",
  "tower 0.5.3",
  "tower-http",
  "tracing",
@@ -4109,7 +4290,7 @@ dependencies = [
 
 [[package]]
 name = "oz-core"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "aead",
  "aes-gcm",
@@ -4143,6 +4324,7 @@ dependencies = [
  "serial_test",
  "sha2 0.10.9",
  "thiserror 1.0.69",
+ "tokio",
  "tracing",
  "uuid",
  "zstd",
@@ -4150,7 +4332,7 @@ dependencies = [
 
 [[package]]
 name = "oz-hal"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "async-trait",
  "oz-core",
@@ -4164,7 +4346,7 @@ dependencies = [
 
 [[package]]
 name = "oz-logging"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "chrono",
  "filetime",
@@ -4179,7 +4361,7 @@ dependencies = [
 
 [[package]]
 name = "oz-lua"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "mlua",
  "oz-core",
@@ -4192,7 +4374,7 @@ dependencies = [
 
 [[package]]
 name = "oz-notification"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "async-trait",
  "foundation",
@@ -4212,7 +4394,7 @@ dependencies = [
 
 [[package]]
 name = "oz-payment"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4233,7 +4415,7 @@ dependencies = [
 
 [[package]]
 name = "oz-plugin"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "chrono",
  "mlua",
@@ -4254,7 +4436,7 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-app"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4292,6 +4474,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
+ "tauri-plugin-opener",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tempfile",
@@ -4303,11 +4486,13 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-tablet"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
  "foundation",
+ "hex",
+ "hmac 0.12.1",
  "modules-crm",
  "modules-currency",
  "modules-inventory",
@@ -4321,15 +4506,18 @@ dependencies = [
  "oz-hal",
  "oz-logging",
  "oz-reporting",
+ "oz-security",
  "platform-core",
  "platform-kernel",
  "platform-startup",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
+ "tauri-plugin-opener",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tempfile",
@@ -4341,7 +4529,7 @@ dependencies = [
 
 [[package]]
 name = "oz-reporting"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "chrono",
  "oz-core",
@@ -4354,7 +4542,7 @@ dependencies = [
 
 [[package]]
 name = "oz-security"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "chrono",
  "hex",
@@ -4560,6 +4748,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "piper"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c835479a4443ded371d6c535cbfd8d31ad92c5d23ae9770a61bc155e4992a3c1"
+dependencies = [
+ "atomic-waker",
+ "fastrand",
+ "futures-io",
+]
+
+[[package]]
 name = "pkcs1"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4588,7 +4787,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "platform-core"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "argon2",
  "chrono",
@@ -4604,7 +4803,7 @@ dependencies = [
 
 [[package]]
 name = "platform-kernel"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "foundation",
@@ -4617,7 +4816,7 @@ dependencies = [
 
 [[package]]
 name = "platform-startup"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4648,7 +4847,7 @@ dependencies = [
 
 [[package]]
 name = "platform-sync"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -4748,6 +4947,20 @@ dependencies = [
  "log",
  "pin-project-lite",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "polling"
+version = "3.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d0e4f59085d47d8241c88ead0f274e8a0cb551f3625263c05eb8dd897c34218"
+dependencies = [
+ "cfg-if",
+ "concurrent-queue",
+ "hermit-abi",
+ "pin-project-lite",
+ "rustix 1.1.4",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6549,6 +6762,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-opener"
+version = "2.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17e1bea14edce6b793a04e2417e3fd924b9bc4faae83cdee7d714156cceeed29"
+dependencies = [
+ "dunce",
+ "glob",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "open",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
+ "url",
+ "windows",
+ "zbus",
+]
+
+[[package]]
 name = "tauri-plugin-updater"
 version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6848,6 +7083,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
+name = "tls_codec"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0de2e01245e2bb89d6f05801c564fa27624dbd7b1846859876c7dad82e90bf6b"
+dependencies = [
+ "tls_codec_derive",
+ "zeroize",
+]
+
+[[package]]
+name = "tls_codec_derive"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d2e76690929402faae40aebdda620a2c0e25dd6d3b9afe48867dfd95991f4bd"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+]
+
+[[package]]
 name = "tokio"
 version = "1.52.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6899,6 +7155,21 @@ dependencies = [
  "tokio",
  "tokio-util",
  "whoami",
+]
+
+[[package]]
+name = "tokio-postgres-rustls"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27d684bad428a0f2481f42241f821db42c54e2dc81d8c00db8536c506b0a0144"
+dependencies = [
+ "const-oid 0.9.6",
+ "ring",
+ "rustls",
+ "tokio",
+ "tokio-postgres",
+ "tokio-rustls",
+ "x509-cert",
 ]
 
 [[package]]
@@ -8558,6 +8829,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
+name = "x509-cert"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1301e935010a701ae5f8655edc0ad17c44bad3ac5ce8c39185f75453b720ae94"
+dependencies = [
+ "const-oid 0.9.6",
+ "der",
+ "spki",
+ "tls_codec",
+]
+
+[[package]]
 name = "xattr"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8606,8 +8889,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eee682d202a77e4a9f3b2c2bdf48a7b28af5c08c34ddf66f98c93e5e39464285"
 dependencies = [
  "async-broadcast",
+ "async-executor",
+ "async-io",
+ "async-lock",
+ "async-process",
  "async-recursion",
+ "async-task",
  "async-trait",
+ "blocking",
  "enumflags2",
  "event-listener",
  "futures-core",

@@ -1,1 +1,0 @@
-ALTER TABLE products ADD COLUMN track_serial INTEGER NOT NULL DEFAULT 0;

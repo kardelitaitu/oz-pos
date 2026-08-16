@@ -22,7 +22,6 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
   const ANIM_MS = animDuration(200);
   const [exiting, setExiting] = useState(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cardInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,9 +90,9 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
       role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
     >
-      <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="dialog" aria-modal="true" ref={panelRef}>
+      <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="dialog" aria-modal="true" aria-labelledby="gift-cards-modal-title" ref={panelRef}>
         <Localized id="gift-cards-issue-title">
-          <h2 className="gift-cards-modal-title">Issue Gift Card</h2>
+          <h2 id="gift-cards-modal-title" className="gift-cards-modal-title">Issue Gift Card</h2>
         </Localized>
 
         <div className="gift-cards-modal-form">
@@ -102,7 +101,6 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
               <div className="gift-cards-modal-label">Card Number</div>
             </Localized>
             <input
-              ref={cardInputRef}
               type="text"
               className="gift-cards-modal-input"
               id="gift-card-number"

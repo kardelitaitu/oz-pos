@@ -58,6 +58,13 @@
       "ci": { "workflow": "ci.yml", "job": "rust-test-fast" }
     },
     {
+      "id": "architecture-boundaries",
+      "label": "Architecture boundaries",
+      "status": "required",
+      "runners": { "check.sh": ["architecture boundaries"] },
+      "ci": { "workflow": "ci.yml", "job": "architecture-boundaries" }
+    },
+    {
       "id": "no-raw-params",
       "label": "No raw params (ADR #7 Phase 4)",
       "status": "required",

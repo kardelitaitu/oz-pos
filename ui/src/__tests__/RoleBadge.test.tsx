@@ -120,14 +120,14 @@ describe('RoleBadge', () => {
     expect(logout).toHaveBeenCalledTimes(1);
   });
 
-  it('applies role variant class for cashier', () => {
+  it('applies role variant class for auditor', () => {
     mockUseAuth.mockReturnValue({
-      session: { display_name: 'Alice', role_name: 'cashier' },
+      session: { display_name: 'Alice', role_name: 'auditor' },
       logout: vi.fn(),
     });
     renderRoleBadge();
-    const roleEl = screen.getByText('cashier');
-    expect(roleEl.classList.contains('role-badge-role--cashier')).toBe(true);
+    const roleEl = screen.getByText('auditor');
+    expect(roleEl.classList.contains('role-badge-role--auditor')).toBe(true);
   });
 
   it('applies role variant class for manager', () => {

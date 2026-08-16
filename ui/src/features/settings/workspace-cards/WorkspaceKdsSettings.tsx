@@ -56,6 +56,9 @@ export function WorkspaceKdsSettings({
 
   // Originals for dirty tracking — captured after initial load
   const originalsRef = useRef<KdsDraftState>({ ...draft });
+  // Keys the user has edited while the initial load is still in flight —
+  // the load must never silently revert these (draft-overwrite race).
+  const touchedRef = useRef<Set<keyof KdsDraftState>>(new Set());
   const [originalsLoaded, setOriginalsLoaded] = useState(false);
   const dirty = useMemo(() => hasChanges(
     draft as unknown as Record<string, unknown>,
@@ -85,7 +88,17 @@ export function WorkspaceKdsSettings({
         autoAcknowledge: ack === 'true',
         density: (density === 'comfortable' || density === 'compact') ? density : DEFAULT_KDS.density,
       };
-      setDraft(loaded);
+      // Seed the loaded values, but never overwrite fields the user has
+      // already edited while the load was in flight — otherwise a fast
+      // toggle gets silently reverted when the load lands.
+      setDraft((prev) => {
+        if (touchedRef.current.size === 0) return loaded;
+        const merged = { ...loaded };
+        for (const key of touchedRef.current) {
+          Object.assign(merged, { [key]: prev[key] });
+        }
+        return merged;
+      });
       originalsRef.current = loaded;
     }).catch(() => {
       // Fallback: keep DEFAULT_KDS values
@@ -99,6 +112,7 @@ export function WorkspaceKdsSettings({
   // ── Update helpers ───────────────────────────────────────────
 
   const update = useCallback(<K extends keyof KdsDraftState>(key: K, value: KdsDraftState[K]) => {
+    touchedRef.current.add(key);
     setDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
 

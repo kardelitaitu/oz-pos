@@ -72,3 +72,15 @@ export function LockIcon(props: IconProps) {
 export function NodesIcon(props: IconProps) {
   return icon(<><circle cx="6" cy="6" r="3" /><circle cx="18" cy="6" r="3" /><circle cx="12" cy="18" r="3" /><line x1="8.5" y1="7.5" x2="10.5" y2="16.5" /><line x1="15.5" y1="7.5" x2="13.5" y2="16.5" /></>, props);
 }
+
+export function PlusIcon(props: IconProps) {
+  return icon(<><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>, props);
+}
+
+export function MinusIcon(props: IconProps) {
+  return icon(<line x1="5" y1="12" x2="19" y2="12" />, props);
+}
+
+export function WarningIcon(props: IconProps) {
+  return icon(<><path d="M12 3 2.5 20h19L12 3z" /><line x1="12" y1="10" x2="12" y2="14" /><circle cx="12" cy="17" r="0.6" fill="currentColor" /></>, props);
+}

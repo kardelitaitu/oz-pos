@@ -298,3 +298,9 @@ Provide the layout switcher exclusively in the Settings page.
 - `crates/oz-core/src/user_preferences.rs` — Rust `UserPreferences` struct
 - `crates/oz-core/migrations/038_user_preferences.sql` — User preferences table
 - `docs/decisions/2026-07-18-kds-multi-layout-system.md` — This ADR
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

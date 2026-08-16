@@ -1,0 +1,42 @@
+# ── OZ-POS Unified Image — caddy reverse proxy ────────────────────────
+#
+# One public port (:80) path-routes to the two functions inside the
+# container. TLS is terminated at the platform edge (Northflank) for the
+# one-deployment shape; add a `tls` directive here when running the image
+# self-managed with a reachable domain (see gateway/Caddyfile.example).
+#
+#   /api/v1/license/*, /api/v1/web/*, /_/*, /api/collections/* → PocketBase :8080
+#   everything else (sync, REST, webhooks, tokens, health, metrics) → :3099
+
+(security_headers) {
+	header X-Content-Type-Options nosniff
+	header X-Frame-Options DENY
+	header Referrer-Policy no-referrer
+	# Meaningful only once TLS terminates (edge or the `tls` directive).
+	header Strict-Transport-Security "max-age=31536000"
+}
+
+:80 {
+	handle /api/v1/license/* {
+		import security_headers
+		reverse_proxy localhost:8080
+	}
+	handle /api/v1/web/* {
+		import security_headers
+		reverse_proxy localhost:8080
+	}
+	handle /api/collections/* {
+		import security_headers
+		reverse_proxy localhost:8080
+	}
+	handle /_/* {
+		import security_headers
+		reverse_proxy localhost:8080
+	}
+	handle {
+		import security_headers
+		reverse_proxy localhost:3099
+	}
+
+	encode gzip
+}

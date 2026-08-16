@@ -253,3 +253,9 @@ in-place type changes (without archive+recreate) would require:
 3. Validation that the new `type_key` references a valid `workspace_types.key`
 
 Until then, archive+recreate is the only supported path for type changes.
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

@@ -47,31 +47,25 @@ func strDefault(s, d string) string {
 // for C1-pre-audit wire format). Returns:
 //
 //   - apiKey: the resolved api_key, or "" if neither source provided one
-//   - usedBodyFallback: true iff the body field was the actual auth
-//     source (no Bearer header was present). Callers use this to decide
-//     whether to log a deprecation warning nudging the operator toward
-//     the Bearer header — which keeps the credential out of CDN /
-//     webserver access logs that capture request bodies.
-//   - err: non-nil iff both sources were present and disagreed (ambiguous
-//     credential parsing must be rejected; we refuse to guess which the
-//     client intended).
+//   - err: non-nil iff the header is missing, malformed, or empty.
+//
+// The legacy body `api_key` field is deliberately NOT accepted here (the
+// C1-followup hardening removed the backward-compat fallback): a body
+// credential leaks into CDN / webserver access logs that capture request
+// bodies, and a POS client must not have two credential channels to
+// disagree about. The Bearer header is the sole authenticator.
 //
 // The Bearer path trims surrounding whitespace so trailing spaces after
 // the token (a common copy-paste quirk) don't silently invalidate auth.
-func extractAPIKey(reqAPIKey, authHeader string) (apiKey string, usedBodyFallback bool, err error) {
-	if strings.HasPrefix(authHeader, bearerPrefix) {
-		bearerKey := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
-		if reqAPIKey != "" && reqAPIKey != bearerKey {
-			return "", false, errors.New("api_key in body does not match Authorization header")
-		}
-		// Header present (even if empty) — body fallback was NOT used.
-		return bearerKey, false, nil
+func extractAPIKey(authHeader string) (apiKey string, err error) {
+	if !strings.HasPrefix(authHeader, bearerPrefix) {
+		return "", errors.New("missing or malformed Authorization header (expected: Bearer <api_key>)")
 	}
-	// No Authorization: Bearer header — body is the only auth source.
-	// usedBodyFallback is true only when the body actually had a value;
-	// an empty body with no header is a missing-credential case, not a
-	// deprecation case.
-	return reqAPIKey, reqAPIKey != "", nil
+	key := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
+	if key == "" {
+		return "", errors.New("empty api_key in Authorization: Bearer header")
+	}
+	return key, nil
 }
 
 // redactRequestBody returns a JSON-string copy of body with the "api_key"

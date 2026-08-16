@@ -392,17 +392,18 @@ jobs:
       - name: Decode keystore
         if: env.ANDROID_KEYSTORE_BASE64 != ''
         run: |
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > apps/tablet-client/oz-pos.keystore
+          cd apps/tablet-client/gen/android
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > oz-pos-release.keystore
+          echo "keyAlias=$KEY_ALIAS" > keystore.properties
+          echo "password=$KEYSTORE_PASSWORD" >> keystore.properties
+          echo "storeFile=$(pwd)/oz-pos-release.keystore" >> keystore.properties
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       - name: Build Android APK
         run: |
           cd apps/tablet-client
-          cargo tauri android build --apk --target aarch64 \
-            ${TAURI_ANDROID_KEYSTORE_PASSWORD:+--keystore-password "$TAURI_ANDROID_KEYSTORE_PASSWORD"} \
-            ${TAURI_ANDROID_KEY_PASSWORD:+--key-password "$TAURI_ANDROID_KEY_PASSWORD"}
-        env:
-          TAURI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          TAURI_ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          TAURI_ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          cargo tauri android build --apk --target aarch64
       - name: Find APK output
         run: |
           find apps/tablet-client/gen/android -name "*.apk" -o -name "*.aab" 2>/dev/null | head -20

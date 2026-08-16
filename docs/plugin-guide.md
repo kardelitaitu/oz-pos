@@ -112,6 +112,17 @@ plugin's own environment):
 | `calc_line_tax` | `(sku, qty, unit_price_minor, currency) → {rate_bps, is_inclusive} \| nil` | During tax computation |
 | `validate_order` | `(lines_json, total_minor, currency) → string[]` | Before completion |
 
+> **Money & quantity values are Lua numbers (floats).** The runtime hands
+> `qty`, `unit_price_minor`, and `total_minor` to every hook as Lua numbers
+> (floats), not integers. Lua 5.4 executes `qty * unit_price_minor` in
+> **integer** arithmetic when both operands are integers — and integer
+> overflow wraps silently. The float hand-off (MONEY-05) removes that wrap
+> class: realistic minor-unit values are exact in f64 (below 2^53), so
+> normal plugin math and comparisons (`total_minor >= 5000`, `qty == 2`)
+> behave identically. Only values above 2^53 lose exactness, and integer-only
+> Lua operations (e.g. bitwise `qty & 1`) error on floats — avoid them in
+> plugin scripts.
+
 ## Example: Custom Discount
 
 ```lua
@@ -195,3 +206,9 @@ cargo test -p oz-plugin --lib
 | Lua errors on startup | Syntax error in script — check logs |
 | `attempt to call a nil value` on `oz.*` | The plugin lacks the permission for that binding |
 | Hook not firing | `oz.register_hook` needs `cart:read`; check the event name and function name |
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

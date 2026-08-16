@@ -1,5 +1,6 @@
 import Tooltip from '@/frontend/shell/Tooltip';
 import ThemeToggle from '@/frontend/shell/ThemeToggle';
+import { useLocalization } from '@fluent/react';
 import './TooltipPreview.css';
 
 /**
@@ -15,6 +16,7 @@ import './TooltipPreview.css';
  *   7. Production usage — sidebar simulation
  */
 export default function TooltipPreview() {
+  const { l10n } = useLocalization();
   return (
     <div className="tp-page">
       <header className="tp-header">
@@ -293,7 +295,7 @@ export default function TooltipPreview() {
 
           <div className="tp-demo-row">
             <Tooltip content="Icon button — collapse sidebar" position="bottom">
-              <button type="button" className="tp-trigger tp-trigger--icon" aria-label="Collapse sidebar">
+              <button type="button" className="tp-trigger tp-trigger--icon" aria-label={l10n.getString('collapse-aria')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="15 18 9 12 15 6" />
                 </svg>
@@ -301,7 +303,7 @@ export default function TooltipPreview() {
             </Tooltip>
 
             <Tooltip content="Icon button — notifications" position="bottom">
-              <button type="button" className="tp-trigger tp-trigger--icon" aria-label="Notifications">
+              <button type="button" className="tp-trigger tp-trigger--icon" aria-label={l10n.getString('notifications-aria')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
@@ -310,7 +312,7 @@ export default function TooltipPreview() {
             </Tooltip>
 
             <Tooltip content="Icon button — settings" position="bottom">
-              <button type="button" className="tp-trigger tp-trigger--icon" aria-label="Settings">
+              <button type="button" className="tp-trigger tp-trigger--icon" aria-label={l10n.getString('settings-aria')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -336,7 +338,7 @@ export default function TooltipPreview() {
                   fontFamily: 'inherit',
                   lineHeight: 'inherit',
                 }}
-                aria-label="Badge with tooltip"
+                aria-label={l10n.getString('badge-tooltip-aria')}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
@@ -350,7 +352,7 @@ export default function TooltipPreview() {
 
           <code className="tp-code">{`{/* Icon button */}
 <Tooltip content="Collapse sidebar">
-  <button aria-label="Collapse sidebar">
+  <button aria-label={l10n.getString('collapse-aria')}>
     <ChevronLeftIcon />
   </button>
 </Tooltip>
@@ -435,7 +437,7 @@ export default function TooltipPreview() {
                 <Tooltip content="Backend connected" position="top">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-success)', boxShadow: '0 0 4px var(--color-success)', display: 'inline-block' }} />
-                    <span style={{ fontSize: '0.625rem', fontWeight: 600, color: 'var(--color-fg-secondary)' }}>OZ-POS v0.0.24</span>
+                    <span style={{ fontSize: '0.625rem', fontWeight: 600, color: 'var(--color-fg-secondary)' }}>OZ-POS v0.0.25</span>
                   </div>
                 </Tooltip>
 

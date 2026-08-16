@@ -38,6 +38,8 @@ pub enum CoreErrorKind {
     SubscriptionUpgradeRequired,
     /// System clock tampering detected (ADR #5).
     SystemClockTampered,
+    /// Authorization denied for the requested permission (ADR #35 D3).
+    PermissionDenied,
     /// Stock insufficient at a specific location (ADR-19 §3.3).
     InsufficientStockAtLocation,
 }
@@ -116,6 +118,30 @@ pub enum CoreError {
     #[error("system clock tampered: {0}")]
     SystemClockTampered(String),
 
+    /// The caller is not authorized for the requested permission (ADR #35
+    /// D3 / spec 0047). Distinct from [`CoreError::Validation`]: a denial is
+    /// an authorization outcome, not an input error.
+    #[error("permission denied: {0}")]
+    PermissionDenied(String),
+
+    /// Structured validation failure raised by the topology compiler
+    /// (ADR #34 semantic gates). Carries the stable machine-readable code
+    /// and the offending element ids so callers can surface targeted
+    /// guidance instead of a single message string.
+    #[error("topology validation error: {message}")]
+    TopologyValidation {
+        /// Stable machine-readable validation code.
+        code: String,
+        /// Node associated with the failure, when applicable.
+        node_id: Option<String>,
+        /// Wire associated with the failure, when applicable.
+        wire_id: Option<String>,
+        /// Port associated with the failure, when applicable.
+        port_id: Option<String>,
+        /// Human-readable fallback message.
+        message: String,
+    },
+
     /// Requested stock deduction exceeds available quantity at the specified
     /// location (ADR-19 §3.3 — translated from SQLite `CHECK (qty >= 0)`
     /// violation + Rust pre-check in
@@ -169,6 +195,8 @@ impl CoreError {
             }
             CoreError::SubscriptionUpgradeRequired(_) => CoreErrorKind::SubscriptionUpgradeRequired,
             CoreError::SystemClockTampered(_) => CoreErrorKind::SystemClockTampered,
+            CoreError::PermissionDenied(_) => CoreErrorKind::PermissionDenied,
+            CoreError::TopologyValidation { .. } => CoreErrorKind::Validation,
             CoreError::InsufficientStockAtLocation { .. } => {
                 CoreErrorKind::InsufficientStockAtLocation
             }

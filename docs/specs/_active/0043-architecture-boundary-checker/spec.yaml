@@ -1,0 +1,21 @@
+id: 0043-architecture-boundary-checker
+title: Architecture boundary checker v1
+status: needs-human-approval
+owner: OZ-POS maintainers
+implementer: Buffy
+priority: P1
+scope:
+  - scripts/verify-architecture-boundaries.py
+  - scripts/__tests__/verify-architecture-boundaries.test.mjs
+  - scripts/architecture-boundaries-baseline.json
+  - scripts/check.sh
+  - scripts/check.ps1
+  - scripts/gates.json
+  - docs/ci-pipeline.md
+  - docs/ARCHITECTURE.md
+non_goals:
+  - Changing runtime behavior
+  - Refactoring oz-core or business modules
+  - Changing the Tauri command surface
+  - Redesigning the event bus or sync engine
+  - Forcing desktop/tablet feature parity

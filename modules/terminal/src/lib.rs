@@ -30,9 +30,12 @@ next: Migrate terminal commands into this module | perf: N/A.
 //!
 //! See `modules/terminal/manifest.json` for the module metadata.
 
+pub mod error;
 pub mod models;
 pub mod repository;
 pub mod service;
+
+pub use error::TerminalError;
 
 pub use models::{Terminal, TerminalId};
 pub use repository::TerminalRepository;

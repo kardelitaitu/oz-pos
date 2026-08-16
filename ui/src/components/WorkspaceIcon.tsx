@@ -9,7 +9,7 @@ interface WorkspaceIconProps {
  * - restaurant-pos: Fork & Knife Dining Cutlery
  * - store-pos: Retail Shopping Bag
  * - kds: Kitchen Display Terminal with Active Tickets
- * - inventory: Warehouse Isometric Box Cube
+ * - warehouse: Warehouse Isometric Box Cube
  * - admin: Precision Management Gear Hub
  */
 export function WorkspaceIcon({ wsKey, className = '', size = 24 }: WorkspaceIconProps) {
@@ -78,7 +78,7 @@ export function WorkspaceIcon({ wsKey, className = '', size = 24 }: WorkspaceIco
         </svg>
       );
 
-    case 'inventory':
+    case 'warehouse':
       return (
         <svg
           viewBox="0 0 24 24"

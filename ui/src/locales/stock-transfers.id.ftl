@@ -56,3 +56,7 @@ stock-transfers-error-receive = Gagal menerima transfer
 stock-transfers-error-cancel = Gagal membatalkan transfer
 stock-transfers-error-create = Gagal membuat transfer
 stock-transfers-error-no-lines = Tambah setidaknya satu baris item dengan jumlah lebih dari 0.
+stock-transfers-error-qty-integer = Jumlah harus berupa bilangan bulat
+stock-transfers-receive-line = { $sku } — { $product } (dipesan: { $qty })
+stock-transfers-received-qty-aria =
+    .aria-label = Jumlah diterima { $sku }

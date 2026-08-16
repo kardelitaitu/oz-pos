@@ -66,11 +66,18 @@ pub async fn list_customers(state: State<'_, AppState>) -> Result<Vec<CustomerDt
 }
 
 /// List customers for the store resolved from a session token. ADR #7.
+///
+/// CRM-02: gated on `customers:view` like every other customer read — the
+/// frontend registers the screen as manager-only, but the UI role gate is
+/// not a security boundary; the command must enforce the declared
+/// permission itself.
 #[tauri::command]
 pub async fn list_customers_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<CustomerDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_VIEW).await?;
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
@@ -270,8 +277,9 @@ pub async fn create_customer_scoped(
     state: State<'_, AppState>,
 ) -> Result<CustomerDto, AppError> {
     validate_customer_fields(&args.name, args.email.as_deref(), args.phone.as_deref())?;
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_CREATE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -293,8 +301,9 @@ pub async fn update_customer_scoped(
     state: State<'_, AppState>,
 ) -> Result<CustomerDto, AppError> {
     validate_customer_fields(&args.name, args.email.as_deref(), args.phone.as_deref())?;
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_EDIT).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -316,8 +325,9 @@ pub async fn delete_customer_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_DELETE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -350,8 +360,9 @@ pub async fn search_customers_scoped(
     offset: Option<u64>,
     state: State<'_, AppState>,
 ) -> Result<CustomerSearchPage, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_VIEW).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -420,8 +431,9 @@ pub async fn get_customer_history_scoped(
     offset: Option<u64>,
     state: State<'_, AppState>,
 ) -> Result<CustomerHistoryDto, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_VIEW).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -555,14 +567,17 @@ mod tests {
 
     #[tokio::test]
     async fn scoped_customer_command_denies_user_without_permission() {
-        // Kitchen role lacks customers:create (ROLE_PRESETS).
+        // A narrow custom role (no customers:* grants) — the new role-staff
+        // preset includes customers:create, so a limited user must use a
+        // custom role instead (0048 retirement sweep).
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
-        conn.execute(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-kitchen', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
-            [],
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
 
@@ -574,7 +589,7 @@ mod tests {
             "kitchen-token".into(),
             SessionContext::new(
                 "user-kitchen".into(),
-                "role-kitchen".into(),
+                "role-lite".into(),
                 "terminal-1".into(),
                 "store-kitchen".into(),
                 "instance-1".into(),
@@ -590,6 +605,49 @@ mod tests {
 
         let result =
             create_customer_scoped("kitchen-token".into(), create_args("Alice"), app.state()).await;
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn list_customers_scoped_denies_user_without_view_permission() {
+        // The limited role lacks customers:view (CRM-02): the scoped list
+        // must enforce the declared view permission, not just resolve the
+        // store. Before the fix a valid limited session could enumerate
+        // every customer (name, email, phone, notes).
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        state.session_store.write().unwrap().insert(
+            "kitchen-token".into(),
+            SessionContext::new(
+                "user-kitchen".into(),
+                "role-lite".into(),
+                "terminal-1".into(),
+                "store-kitchen".into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = list_customers_scoped("kitchen-token".into(), app.state()).await;
         assert!(matches!(result, Err(AppError::PermissionDenied(_))));
     }
 

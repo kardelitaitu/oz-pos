@@ -1,0 +1,73 @@
+//! Error type for the inventory domain.
+
+use thiserror::Error;
+
+/// Errors that can originate in the inventory domain.
+#[derive(Debug, Error)]
+pub enum InventoryError {
+    /// A database operation failed.
+    #[error("database error: {0}")]
+    Db(#[from] rusqlite::Error),
+
+    /// A lookup by id returned no row.
+    #[error("not found: {entity} {id}")]
+    NotFound {
+        /// The kind of entity that was being looked up.
+        entity: &'static str,
+        /// The id that was looked up.
+        id: String,
+    },
+
+    /// Input validation failure.
+    #[error("validation error on {field}: {message}")]
+    Validation {
+        /// The field that failed validation.
+        field: &'static str,
+        /// Human-readable description of the failure.
+        message: String,
+    },
+}
+
+impl InventoryError {
+    /// Create a validation error for a specific field.
+    pub fn validation(field: &'static str, message: impl Into<String>) -> Self {
+        Self::Validation {
+            field,
+            message: message.into(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inventory_error_validation_message() {
+        let err = InventoryError::validation("sku", "must not be empty");
+        assert!(matches!(
+            err,
+            InventoryError::Validation { field, .. } if field == "sku"
+        ));
+        assert_eq!(
+            format!("{err}"),
+            "validation error on sku: must not be empty"
+        );
+    }
+
+    #[test]
+    fn inventory_error_not_found_message() {
+        let err = InventoryError::NotFound {
+            entity: "product",
+            id: "bad-id".into(),
+        };
+        assert_eq!(format!("{err}"), "not found: product bad-id");
+    }
+
+    #[test]
+    fn inventory_error_from_rusqlite() {
+        let rusqlite_err = rusqlite::Error::QueryReturnedNoRows;
+        let err = InventoryError::from(rusqlite_err);
+        assert!(matches!(err, InventoryError::Db(_)));
+    }
+}

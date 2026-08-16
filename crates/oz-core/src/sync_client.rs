@@ -16,6 +16,7 @@
 //! `send_items_to_server_blocking`) remain available only for
 //! `tokio::task::spawn_blocking` or non-async contexts.
 
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use crate::db::Store;
@@ -55,6 +56,96 @@ pub struct SyncAttemptResult {
     pub failed: usize,
     /// Error message if the entire sync failed (e.g. network error).
     pub error: Option<String>,
+    /// The server rejected the attempt because this tenant is on the
+    /// `free` plan (ADR sync-plan-gating). The UI shows an upgrade prompt
+    /// and queued items stay `pending` — they are valid, just gated.
+    #[serde(default)]
+    pub plan_required: bool,
+}
+
+/// Typed HTTP error from the sync client (ADR sync-auth-hardening P1/P4).
+///
+/// 401 responses are split so callers can refresh the stored token and retry
+/// exactly once when it EXPIRED, while treating a genuinely invalid key as a
+/// configuration problem that must not be masked by a refresh.
+#[derive(Debug, thiserror::Error)]
+pub enum SyncHttpError {
+    /// The server said the token expired (HTTP 401 + `token_expired`, or a
+    /// bare 401 from an older server). Safe to refresh the API key and
+    /// retry once.
+    #[error("sync server rejected authentication: token expired (HTTP 401)")]
+    AuthExpired,
+
+    /// The server said the token is invalid or missing (HTTP 401 +
+    /// `invalid_token` / `missing_token`). A configuration problem — do NOT
+    /// refresh; surface the error.
+    #[error("sync server rejected authentication: invalid token (HTTP 401)")]
+    AuthInvalid,
+
+    /// The tenant is on the `free` plan and cloud sync is gated
+    /// (HTTP 403 + `plan_required`, ADR sync-plan-gating). Terminal: do
+    /// NOT refresh, retry, or quarantine — surface the upgrade prompt.
+    #[error("cloud sync requires a paid plan (HTTP 403 plan_required)")]
+    PlanRequired,
+
+    /// The server returned a non-2xx status other than 401.
+    #[error("sync server returned {status}: {body}")]
+    Server {
+        /// HTTP status code.
+        status: u16,
+        /// Response body for diagnostics.
+        body: String,
+    },
+
+    /// The request failed at the network layer (connect, timeout, DNS).
+    #[error("sync request failed: {0}")]
+    Network(String),
+
+    /// The response could not be parsed.
+    #[error("sync response parse failed: {0}")]
+    Parse(String),
+
+    /// The HTTP client could not be constructed.
+    #[error("failed to build HTTP client: {0}")]
+    Client(String),
+}
+
+/// Classify a 401 response body (ADR sync-auth-hardening P4).
+///
+/// Servers with structured errors say `token_expired` / `invalid_token` /
+/// `missing_token`. A bare 401 (older server) is treated as stale auth so
+/// the refresh-and-retry behaviour from P1 keeps working.
+fn classify_401(body: &str) -> SyncHttpError {
+    if body.contains("token_expired") {
+        SyncHttpError::AuthExpired
+    } else if body.contains("invalid_token") || body.contains("missing_token") {
+        SyncHttpError::AuthInvalid
+    } else {
+        SyncHttpError::AuthExpired
+    }
+}
+
+/// Classify a non-2xx HTTP status into a typed [`SyncHttpError`]
+/// (ADR sync-auth-hardening P4 + ADR sync-plan-gating).
+///
+/// Used by both `send_items_to_server` and `fetch_snapshot_from_server` so
+/// the push and pull paths agree on 401/403 semantics:
+///
+/// - `401` → `AuthExpired` / `AuthInvalid` (refresh only on expiry).
+/// - `403` + `plan_required` → `PlanRequired` (terminal — no refresh,
+///   no retry, no quarantine).
+/// - anything else → `Server { status, body }`.
+fn classify_http_status(status: u16, body: &str) -> SyncHttpError {
+    if status == reqwest::StatusCode::UNAUTHORIZED.as_u16() {
+        classify_401(body)
+    } else if status == reqwest::StatusCode::FORBIDDEN.as_u16() && body.contains("plan_required") {
+        SyncHttpError::PlanRequired
+    } else {
+        SyncHttpError::Server {
+            status,
+            body: body.to_owned(),
+        }
+    }
 }
 
 /// Result of a `pull_snapshot` round-trip.
@@ -141,13 +232,231 @@ pub struct TokenResult {
     pub expires_at: Option<String>,
 }
 
-/// Request a new JWT API token from the cloud server's
-/// `POST /api/v1/tokens` endpoint (async — safe to call from
-/// Tauri async command handlers).
+/// Result of reading the caller's own sync plan (ADR sync-plan-gating).
+///
+/// The plan string is `free` | `pro`, or `None` when the read failed or the
+/// server is unreachable — the UI falls back to showing nothing rather than
+/// guessing.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantPlanResult {
+    /// Whether the server responded successfully.
+    pub ok: bool,
+    /// Effective plan (`free` | `pro`), when the read succeeded.
+    pub plan: Option<String>,
+    /// Human-readable status or error message.
+    pub status: String,
+}
+
+/// Read the caller's own sync plan from `GET /api/v1/tenants/me/plan`.
+///
+/// Uses the stored API key (JWT) so the server resolves the tenant from the
+/// token claims. Unlike the sync endpoints this route is NOT plan-gated, so a
+/// free tenant can read its own plan to render the upgrade prompt.
 #[cfg(feature = "sync-http")]
-pub async fn request_token(url: &str) -> TokenResult {
+pub async fn fetch_tenant_plan(url: &str, api_key: &str) -> TenantPlanResult {
+    let plan_url = format!("{}/api/v1/tenants/me/plan", url.trim_end_matches('/'));
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return TenantPlanResult {
+                ok: false,
+                plan: None,
+                status: format!("Failed to build HTTP client: {e}"),
+            };
+        }
+    };
+
+    match client
+        .get(&plan_url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                #[derive(Deserialize)]
+                struct PlanPayload {
+                    plan: String,
+                }
+                match resp.json::<PlanPayload>().await {
+                    Ok(payload) => TenantPlanResult {
+                        ok: true,
+                        plan: Some(payload.plan),
+                        status: "ok".into(),
+                    },
+                    Err(e) => TenantPlanResult {
+                        ok: false,
+                        plan: None,
+                        status: format!("Failed to parse plan response: {e}"),
+                    },
+                }
+            } else {
+                TenantPlanResult {
+                    ok: false,
+                    plan: None,
+                    status: format!("Server returned {}", resp.status()),
+                }
+            }
+        }
+        Err(e) => TenantPlanResult {
+            ok: false,
+            plan: None,
+            status: format!("Connection failed: {e}"),
+        },
+    }
+}
+
+/// Stub when sync-http is disabled.
+#[cfg(not(feature = "sync-http"))]
+pub async fn fetch_tenant_plan(_url: &str, _api_key: &str) -> TenantPlanResult {
+    TenantPlanResult {
+        ok: false,
+        plan: None,
+        status: "sync-http feature is disabled".into(),
+    }
+}
+
+/// Read the admin key that gates token minting (ADR sync-auth-hardening P2).
+///
+/// Comes from the `OZ_ADMIN_KEY` environment variable; the client sends it as
+/// `X-Admin-Key` so auto-provisioning and refresh keep working against a
+/// gated server. Returns `None` on dev machines without the variable.
+pub fn admin_key_from_env() -> Option<String> {
+    std::env::var("OZ_ADMIN_KEY")
+        .ok()
+        .filter(|key| !key.trim().is_empty())
+}
+
+/// Result of registering a sync terminal (ADR sync-auth-hardening P3).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalRegistrationResult {
+    /// Whether registration succeeded.
+    pub ok: bool,
+    /// Terminal identifier (present on success).
+    pub terminal_id: Option<String>,
+    /// Plaintext device secret (present on success — shown once).
+    pub device_secret: Option<String>,
+    /// Human-readable status or error message.
+    pub status: String,
+}
+
+/// Register this terminal with the sync server (ADR sync-auth-hardening P3).
+///
+/// Posts to `POST /api/v1/terminals` with the optional `X-Admin-Key` header.
+/// Returns the plaintext device secret exactly once; the server only keeps
+/// its SHA-256 hash.
+#[cfg(feature = "sync-http")]
+pub async fn register_terminal(
+    url: &str,
+    admin_key: Option<&str>,
+    terminal_id: &str,
+    label: &str,
+) -> TerminalRegistrationResult {
+    let register_url = format!("{}/api/v1/terminals", url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "terminal_id": terminal_id,
+        "label": label,
+    });
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return TerminalRegistrationResult {
+                ok: false,
+                terminal_id: None,
+                device_secret: None,
+                status: format!("Failed to build HTTP client: {e}"),
+            };
+        }
+    };
+
+    let mut request = client
+        .post(&register_url)
+        .header("Content-Type", "application/json");
+    if let Some(key) = admin_key {
+        request = request.header("X-Admin-Key", key);
+    }
+
+    match request.json(&body).send().await {
+        Ok(resp) if resp.status().is_success() => {
+            #[derive(Deserialize)]
+            struct RegisterPayload {
+                terminal_id: String,
+                device_secret: String,
+            }
+            match resp.json::<RegisterPayload>().await {
+                Ok(payload) => TerminalRegistrationResult {
+                    ok: true,
+                    terminal_id: Some(payload.terminal_id),
+                    device_secret: Some(payload.device_secret),
+                    status: "registered".into(),
+                },
+                Err(e) => TerminalRegistrationResult {
+                    ok: false,
+                    terminal_id: None,
+                    device_secret: None,
+                    status: format!("Failed to parse registration response: {e}"),
+                },
+            }
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            TerminalRegistrationResult {
+                ok: false,
+                terminal_id: None,
+                device_secret: None,
+                status: format!("Server returned {status}: {body}"),
+            }
+        }
+        Err(e) => TerminalRegistrationResult {
+            ok: false,
+            terminal_id: None,
+            device_secret: None,
+            status: format!("Request failed: {e}"),
+        },
+    }
+}
+
+/// Stub when sync-http is disabled.
+#[cfg(not(feature = "sync-http"))]
+pub async fn register_terminal(
+    _url: &str,
+    _admin_key: Option<&str>,
+    _terminal_id: &str,
+    _label: &str,
+) -> TerminalRegistrationResult {
+    TerminalRegistrationResult {
+        ok: false,
+        terminal_id: None,
+        device_secret: None,
+        status: "sync-http feature is disabled".into(),
+    }
+}
+
+/// Request a token using terminal client credentials (ADR sync-auth-hardening
+/// P3) — the client-credentials path, no admin key required.
+#[cfg(feature = "sync-http")]
+pub async fn request_token_client_credentials(
+    url: &str,
+    client_id: &str,
+    client_secret: &str,
+) -> TokenResult {
     let token_url = format!("{}/api/v1/tokens", url.trim_end_matches('/'));
-    let body = serde_json::json!({"label": "pos-terminal"});
+    let body = serde_json::json!({
+        "label": "pos-terminal",
+        "client_id": client_id,
+        "client_secret": client_secret,
+    });
 
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
@@ -171,6 +480,111 @@ pub async fn request_token(url: &str) -> TokenResult {
         .send()
         .await
     {
+        Ok(resp) if resp.status().is_success() => {
+            #[derive(Deserialize)]
+            struct TokenPayload {
+                token: String,
+                #[serde(default)]
+                expires_at: Option<String>,
+            }
+            #[derive(Deserialize)]
+            struct TokenResponse {
+                token: TokenPayload,
+            }
+            match resp.json::<TokenResponse>().await {
+                Ok(tr) => TokenResult {
+                    ok: true,
+                    status: "Token obtained".into(),
+                    token: Some(tr.token.token),
+                    expires_at: tr.token.expires_at,
+                },
+                Err(e) => TokenResult {
+                    ok: false,
+                    token: None,
+                    status: format!("Failed to parse token response: {e}"),
+                    expires_at: None,
+                },
+            }
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            TokenResult {
+                ok: false,
+                token: None,
+                status: format!("Server returned {status}: {body}"),
+                expires_at: None,
+            }
+        }
+        Err(e) => TokenResult {
+            ok: false,
+            token: None,
+            status: format!("Request failed: {e}"),
+            expires_at: None,
+        },
+    }
+}
+
+/// Stub when sync-http is disabled.
+#[cfg(not(feature = "sync-http"))]
+pub async fn request_token_client_credentials(
+    _url: &str,
+    _client_id: &str,
+    _client_secret: &str,
+) -> TokenResult {
+    TokenResult {
+        ok: false,
+        token: None,
+        status: "sync-http feature is disabled".into(),
+        expires_at: None,
+    }
+}
+
+/// Mint a token using the strongest available authentication:
+/// terminal client credentials first, then the admin key env var, then an
+/// open (label-only) mint for dev servers.
+pub async fn mint_token(server_url: &str, client_credentials: Option<(&str, &str)>) -> TokenResult {
+    if let Some((client_id, client_secret)) = client_credentials {
+        return request_token_client_credentials(server_url, client_id, client_secret).await;
+    }
+    let admin_key = admin_key_from_env();
+    request_token(server_url, admin_key.as_deref()).await
+}
+
+/// Request a new JWT API token from the cloud server's
+/// `POST /api/v1/tokens` endpoint (async — safe to call from
+/// Tauri async command handlers).
+///
+/// `admin_key` is sent as `X-Admin-Key` when present (ADR sync-auth-hardening
+/// P2); servers configured with `OZ_ADMIN_KEY` reject minting without it.
+#[cfg(feature = "sync-http")]
+pub async fn request_token(url: &str, admin_key: Option<&str>) -> TokenResult {
+    let token_url = format!("{}/api/v1/tokens", url.trim_end_matches('/'));
+    let body = serde_json::json!({"label": "pos-terminal"});
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return TokenResult {
+                ok: false,
+                token: None,
+                status: format!("Failed to build HTTP client: {e}"),
+                expires_at: None,
+            };
+        }
+    };
+
+    let mut request = client
+        .post(&token_url)
+        .header("Content-Type", "application/json");
+    if let Some(key) = admin_key {
+        request = request.header("X-Admin-Key", key);
+    }
+
+    match request.json(&body).send().await {
         Ok(resp) => {
             if resp.status().is_success() {
                 #[derive(Deserialize)]
@@ -225,13 +639,43 @@ pub async fn request_token(url: &str) -> TokenResult {
 
 /// Stub when sync-http is disabled.
 #[cfg(not(feature = "sync-http"))]
-pub async fn request_token(_url: &str) -> TokenResult {
+pub async fn request_token(_url: &str, _admin_key: Option<&str>) -> TokenResult {
     TokenResult {
         ok: false,
         token: None,
         status: "sync-http feature is disabled".into(),
         expires_at: None,
     }
+}
+
+/// Request a fresh token from the server (ADR sync-auth-hardening P1).
+///
+/// Async-only — performs no DB work, so callers can run it before taking
+/// the DB lock (the same three-phase split the sync commands use). Returns
+/// the new key on success, or `None` when the server refused to mint one.
+pub async fn request_refresh_token(
+    server_url: &str,
+    client_credentials: Option<(&str, &str)>,
+) -> Option<String> {
+    let token = mint_token(server_url, client_credentials).await;
+    if !token.ok {
+        tracing::warn!(
+            status = %token.status,
+            "token refresh failed — sync stays on the stored key"
+        );
+        return None;
+    }
+    token.token
+}
+
+/// Persist a freshly requested API key (ADR sync-auth-hardening P1).
+///
+/// Synchronous write; callers hold the DB lock only for this call so the
+/// guard never crosses an await point and Tauri command futures stay `Send`.
+pub fn persist_refreshed_api_key(conn: &Connection, key: &str) -> Result<(), CoreError> {
+    crate::settings::Settings::set_sync_api_key(conn, key)?;
+    tracing::info!("refreshed sync API key after auth rejection");
+    Ok(())
 }
 
 /// Ping the cloud server's `/health` endpoint to verify connectivity
@@ -369,6 +813,7 @@ pub fn apply_sync_outcomes(
         synced,
         failed,
         error: global_error,
+        plan_required: false,
     })
 }
 
@@ -385,6 +830,7 @@ pub fn mark_all_failed(
         synced: 0,
         failed: pending.len(),
         error: Some(err_msg.into()),
+        plan_required: false,
     })
 }
 
@@ -401,6 +847,7 @@ pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptRes
             synced: 0,
             failed: 0,
             error: None,
+            plan_required: false,
         });
     }
 
@@ -408,6 +855,15 @@ pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptRes
     // non-async contexts. The Tauri commands use the split async path instead.
     match send_items_to_server_blocking(config, &pending) {
         Ok(outcomes) => apply_sync_outcomes(store, &pending, &outcomes),
+        // ADR sync-plan-gating: a free tenant is gated, not broken. Do NOT
+        // mark the items failed — they stay `pending` and sync automatically
+        // once the tenant upgrades.
+        Err(SyncHttpError::PlanRequired) => Ok(SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        }),
         Err(e) => mark_all_failed(store, &pending, &e.to_string()),
     }
 }
@@ -417,13 +873,13 @@ pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptRes
 fn send_items_to_server_blocking(
     config: &SyncConfig,
     items: &[OfflineQueueItem],
-) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error>> {
+) -> Result<Vec<PushOutcome>, SyncHttpError> {
     let url = format!("{}/api/sync/push", config.server_url.trim_end_matches('/'));
 
     let mut request = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("failed to build HTTP client: {e}"))?
+        .map_err(|e| SyncHttpError::Client(format!("failed to build HTTP client: {e}")))?
         .post(&url)
         .header("Content-Type", "application/json");
 
@@ -434,17 +890,17 @@ fn send_items_to_server_blocking(
     let resp = request
         .json(items)
         .send()
-        .map_err(|e| format!("sync HTTP request failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Network(format!("sync HTTP request failed: {e}")))?;
 
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().unwrap_or_default();
-        return Err(format!("sync server returned {status}: {body}").into());
+        return Err(classify_http_status(status.as_u16(), &body));
     }
 
     let push_resp: PushResponse = resp
         .json()
-        .map_err(|e| format!("sync response parse failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Parse(format!("sync response parse failed: {e}")))?;
 
     tracing::info!(
         item_count = items.len(),
@@ -458,7 +914,7 @@ fn send_items_to_server_blocking(
 fn send_items_to_server_blocking(
     config: &SyncConfig,
     items: &[OfflineQueueItem],
-) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error>> {
+) -> Result<Vec<PushOutcome>, SyncHttpError> {
     tracing::info!(
         item_count = items.len(),
         server = %config.server_url,
@@ -473,13 +929,13 @@ fn send_items_to_server_blocking(
 pub async fn send_items_to_server(
     config: &SyncConfig,
     items: &[OfflineQueueItem],
-) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<PushOutcome>, SyncHttpError> {
     let url = format!("{}/api/sync/push", config.server_url.trim_end_matches('/'));
 
     let mut request = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("failed to build HTTP client: {e}"))?
+        .map_err(|e| SyncHttpError::Client(e.to_string()))?
         .post(&url)
         .header("Content-Type", "application/json");
 
@@ -491,18 +947,19 @@ pub async fn send_items_to_server(
         .json(items)
         .send()
         .await
-        .map_err(|e| format!("sync HTTP request failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Network(e.to_string()))?;
 
     if !resp.status().is_success() {
+        // Read the body once; `text()` consumes the response.
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!("sync server returned {status}: {body}").into());
+        return Err(classify_http_status(status.as_u16(), &body));
     }
 
     let push_resp: PushResponse = resp
         .json()
         .await
-        .map_err(|e| format!("sync response parse failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Parse(e.to_string()))?;
 
     tracing::info!(
         item_count = items.len(),
@@ -517,7 +974,7 @@ pub async fn send_items_to_server(
 pub async fn send_items_to_server(
     config: &SyncConfig,
     items: &[OfflineQueueItem],
-) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<PushOutcome>, SyncHttpError> {
     tracing::info!(
         item_count = items.len(),
         server = %config.server_url,
@@ -587,6 +1044,23 @@ struct SnapshotProduct {
     /// the global catalog exactly as before.
     #[serde(default)]
     store_id: Option<String>,
+    /// Product brand (free text, synced — ADR #36 D2).
+    #[serde(default)]
+    brand: Option<String>,
+    /// Rack position code (synced).
+    #[serde(default)]
+    rack_location: Option<String>,
+    /// Free-text notes (synced).
+    #[serde(default)]
+    notes: Option<String>,
+    /// Unit of measure (synced).
+    #[serde(default)]
+    unit: Option<String>,
+    /// Active/sellable status — synced so retirement propagates to every
+    /// store. `cost_minor`, `default_supplier_id`, and `popularity_score` are
+    /// deliberately absent (local-only, ADR #36 D2 / ADR #37 D4).
+    #[serde(default = "default_true")]
+    is_active: bool,
 }
 
 /// Flat tax-rate row matching the `tax_rates` table columns.
@@ -656,9 +1130,7 @@ fn default_true() -> bool {
 
 /// Fetch a snapshot from the server via `GET /api/sync/snapshot` (async).
 #[cfg(feature = "sync-http")]
-pub async fn fetch_snapshot_from_server(
-    config: &SyncConfig,
-) -> Result<Snapshot, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn fetch_snapshot_from_server(config: &SyncConfig) -> Result<Snapshot, SyncHttpError> {
     let url = format!(
         "{}/api/sync/snapshot",
         config.server_url.trim_end_matches('/')
@@ -674,28 +1146,28 @@ pub async fn fetch_snapshot_from_server(
     let resp = request
         .send()
         .await
-        .map_err(|e| format!("snapshot HTTP request failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Network(e.to_string()))?;
 
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!("snapshot server returned {status}: {body}").into());
+        return Err(classify_http_status(status.as_u16(), &body));
     }
 
     let snapshot: Snapshot = resp
         .json()
         .await
-        .map_err(|e| format!("snapshot JSON decode failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Parse(e.to_string()))?;
 
     Ok(snapshot)
 }
 
 /// Stub used when `sync-http` feature is disabled.
 #[cfg(not(feature = "sync-http"))]
-pub async fn fetch_snapshot_from_server(
-    _config: &SyncConfig,
-) -> Result<Snapshot, Box<dyn std::error::Error + Send + Sync>> {
-    Err("sync-http feature is disabled; cannot pull snapshot from server".into())
+pub async fn fetch_snapshot_from_server(_config: &SyncConfig) -> Result<Snapshot, SyncHttpError> {
+    Err(SyncHttpError::Network(
+        "sync-http feature is disabled; cannot pull snapshot from server".into(),
+    ))
 }
 
 /// Apply a fetched snapshot to the local database inside a single
@@ -734,10 +1206,12 @@ fn upsert_products(
     let mut stmt = tx.prepare(
         "INSERT INTO products (id, sku, name, price_minor, currency,
                                category_id, barcode, created_at, updated_at,
-                               price_updated_at, track_serial, store_id)
+                               price_updated_at, track_serial, store_id,
+                               brand, rack_location, notes, unit, is_active)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
-                 COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13)
-         ON CONFLICT(sku) DO UPDATE SET
+                 COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13,
+                 ?14, ?15, ?16, ?17, ?18)
+         ON CONFLICT (tenant_id, sku) DO UPDATE SET
              name            = excluded.name,
              price_minor     = excluded.price_minor,
              currency        = excluded.currency,
@@ -746,7 +1220,12 @@ fn upsert_products(
              updated_at      = COALESCE(excluded.updated_at, ?11),
              price_updated_at = COALESCE(excluded.price_updated_at, ?11),
              track_serial    = excluded.track_serial,
-             store_id        = excluded.store_id",
+             store_id        = excluded.store_id,
+             brand           = excluded.brand,
+             rack_location   = excluded.rack_location,
+             notes           = excluded.notes,
+             unit            = excluded.unit,
+             is_active       = excluded.is_active",
     )?;
     for p in rows {
         let id =
@@ -766,6 +1245,11 @@ fn upsert_products(
             now,
             p.track_serial as i64,
             p.store_id,
+            p.brand,
+            p.rack_location,
+            p.notes,
+            p.unit,
+            p.is_active as i64,
         ])?;
         count += 1;
     }
@@ -821,7 +1305,7 @@ fn upsert_users(tx: &rusqlite::Transaction<'_>, rows: &[SnapshotUser]) -> Result
                             is_active, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6,
                  COALESCE(?7, ?9), COALESCE(?8, ?9))
-         ON CONFLICT(username) DO UPDATE SET
+         ON CONFLICT (tenant_id, username) DO UPDATE SET
              display_name = excluded.display_name,
              role_id      = excluded.role_id,
              is_active    = excluded.is_active,
@@ -906,6 +1390,130 @@ mod tests {
         let all = store.list_all_offline().unwrap();
         assert_eq!(all.len(), 1, "item still in queue with failed status");
         assert_eq!(all[0].status, crate::offline::OfflineQueueStatus::Failed);
+    }
+
+    /// ADR sync-plan-gating: the legacy blocking path must ALSO treat a
+    /// 403 plan_required as a gated state — items stay `pending` (never
+    /// marked failed) so they sync automatically after an upgrade.
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn sync_pending_plan_required_keeps_items_pending() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 8192];
+            let _ = stream.read(&mut buffer).unwrap();
+            let body = r#"{"error":"plan_required"}"#;
+            let response = format!(
+                "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+
+        let store = setup();
+        store
+            .enqueue_offline("complete_sale", r#"{"id":"blocking-plan-gate"}"#)
+            .unwrap();
+        let config = SyncConfig {
+            server_url: format!("http://127.0.0.1:{port}"),
+            api_key: Some("test-jwt".into()),
+        };
+
+        let result = sync_pending(&store, &config).unwrap();
+        server.join().unwrap();
+
+        assert!(result.plan_required, "must flag plan_required");
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 0, "a plan gate is not a failure");
+
+        // The item stays pending — no mark_all_failed.
+        let pending = store.list_pending_offline().unwrap();
+        assert_eq!(pending.len(), 1, "plan-gated item must stay pending");
+        let all = store.list_all_offline().unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(
+            all[0].status,
+            crate::offline::OfflineQueueStatus::Pending,
+            "never marked failed on a plan gate"
+        );
+    }
+
+    /// ADR sync-plan-gating: fetch_tenant_plan reads the caller's own plan
+    /// (free/pro) from the non-gated self-serve endpoint.
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn fetch_tenant_plan_returns_plan_from_server() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 8192];
+            let _ = stream.read(&mut buffer).unwrap();
+            let body = r#"{"tenant_id":"tenant-a","plan":"pro"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = rt.block_on(fetch_tenant_plan(
+            &format!("http://127.0.0.1:{port}"),
+            "test-jwt",
+        ));
+        server.join().unwrap();
+
+        assert!(result.ok);
+        assert_eq!(result.plan.as_deref(), Some("pro"));
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn fetch_tenant_plan_reports_server_error() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 8192];
+            let _ = stream.read(&mut buffer).unwrap();
+            let body = r#"{"error":"invalid_token"}"#;
+            let response = format!(
+                "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = rt.block_on(fetch_tenant_plan(
+            &format!("http://127.0.0.1:{port}"),
+            "bad-jwt",
+        ));
+        server.join().unwrap();
+
+        assert!(!result.ok);
+        assert_eq!(result.plan, None);
     }
 
     #[test]
@@ -1261,6 +1869,7 @@ mod tests {
             synced: 5,
             failed: 1,
             error: Some("network error".into()),
+            plan_required: false,
         };
         let debug = format!("{:?}", result);
         assert!(debug.contains("synced: 5"));
@@ -1273,6 +1882,7 @@ mod tests {
             synced: 10,
             failed: 2,
             error: Some("timeout".into()),
+            plan_required: false,
         };
         let json = serde_json::to_string(&result).unwrap();
         let back: SyncAttemptResult = serde_json::from_str(&json).unwrap();
@@ -1287,8 +1897,53 @@ mod tests {
             synced: 0,
             failed: 0,
             error: None,
+            plan_required: false,
         };
         assert!(result.error.is_none());
+    }
+
+    // ── classify_http_status (ADR sync-plan-gating) ───────────────
+
+    #[test]
+    fn classify_403_plan_required_is_plan_required() {
+        let err = classify_http_status(403, r#"{"error":"plan_required"}"#);
+        assert!(
+            matches!(err, SyncHttpError::PlanRequired),
+            "a 403 plan_required must classify as PlanRequired, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn classify_bare_403_is_server_error_not_plan() {
+        // A 403 without the plan_required body is a generic server error —
+        // never invent a plan gate from the status alone.
+        let err = classify_http_status(403, "Forbidden");
+        assert!(matches!(err, SyncHttpError::Server { status: 403, .. }));
+    }
+
+    #[test]
+    fn classify_401_expired_and_invalid_unchanged() {
+        assert!(matches!(
+            classify_http_status(401, r#"{"error":"token_expired"}"#),
+            SyncHttpError::AuthExpired
+        ));
+        assert!(matches!(
+            classify_http_status(401, r#"{"error":"invalid_token"}"#),
+            SyncHttpError::AuthInvalid
+        ));
+        assert!(matches!(
+            classify_http_status(401, "bare 401"),
+            SyncHttpError::AuthExpired
+        ));
+    }
+
+    #[test]
+    fn classify_500_is_server_error() {
+        let err = classify_http_status(500, "boom");
+        assert!(matches!(err, SyncHttpError::Server { status: 500, .. }));
+        if let SyncHttpError::Server { body, .. } = err {
+            assert_eq!(body, "boom");
+        }
     }
 
     // ── format_expiry tests ────────────────────────────────────

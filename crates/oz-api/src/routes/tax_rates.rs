@@ -73,6 +73,22 @@ pub async fn create_tax_rate(
 ) -> Response {
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
+    if let Some(pool) = &state.pg {
+        return match crate::pg::create_tax_rate(
+            pool,
+            tenant_id,
+            &body.name,
+            body.rate_bps,
+            body.is_default,
+            body.is_inclusive,
+        )
+        .await
+        {
+            Ok(rate) => (StatusCode::CREATED, Json(rate)).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
 

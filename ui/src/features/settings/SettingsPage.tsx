@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
+
+/** Polling cadence for the Cloud Sync status panel while its section is open. */
+const SYNC_STATUS_POLL_MS = 30_000;
 import { Localized, useLocalization } from '@fluent/react';
 import {
   setReceiptSettings,
   setStoreSettings,
-  setUserPreferences,
+  setUserPreferencesScoped,
   setSettingScoped,
   type ReceiptSettingsDto,
   type StoreSettingsDto,
@@ -20,13 +23,16 @@ import {
   updateSyncSettings,
   syncRun,
   syncPull,
-  pendingSyncCount,
+  getOfflineQueueStatusSummary,
+  getSyncPlan,
   testSyncConnection,
   requestSyncToken,
   type SyncSettingsDto,
   type SyncAttemptResult,
   type PullResult,
   type PingResult,
+  type OfflineQueueSummaryDto,
+  type SyncPlanResult,
 } from '@/api/offline';
 
 import {
@@ -101,9 +107,9 @@ interface SettingsSnapshot {
 
 // ── Clock helper ──────────────────────────────────────────────────
 
-function useClock(): string {
+function useClock(locale: string): string {
   const [clock, setClock] = useState(() =>
-    new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+    new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
   );
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -115,7 +121,7 @@ function useClock(): string {
     const timeout = setTimeout(() => {
       const tick = () =>
         setClock(
-          new Date().toLocaleTimeString(undefined, {
+          new Date().toLocaleTimeString(locale, {
             hour: '2-digit',
             minute: '2-digit',
           }),
@@ -127,15 +133,15 @@ function useClock(): string {
       clearTimeout(timeout);
       if (intervalId) clearInterval(intervalId);
     };
-  }, []);
+  }, [locale]);
   return clock;
 }
 
 /** Return today's formatted date. The date only changes at midnight and
  *  the settings page is not expected to stay open across day boundaries,
  *  so we compute once at mount rather than polling every 60 seconds. */
-function getToday(): string {
-  return new Date().toLocaleDateString(undefined, {
+function getToday(locale: string): string {
+  return new Date().toLocaleDateString(locale, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -247,7 +253,8 @@ function SettingsPageContent() {
   const [pulling, setPulling] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncAttemptResult | null>(null);
   const [pullResult, setPullResult] = useState<PullResult | null>(null);
-  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [queueSummary, setQueueSummary] = useState<OfflineQueueSummaryDto | null>(null);
+  const [syncPlan, setSyncPlan] = useState<SyncPlanResult | null>(null);
   const [testing, setTesting] = useState(false);
   const [pingResult, setPingResult] = useState<PingResult | null>(null);
   const [requesting, setRequesting] = useState(false);
@@ -338,8 +345,9 @@ function SettingsPageContent() {
 
   // ── Accordion state moved to SettingsNavTree.tsx ──────────────
 
-  const clock = useClock();
-  const today = getToday();
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
+  const clock = useClock(numLocale);
+  const today = getToday(numLocale);
 
   // ── Snapshot for Revert-to-saved ──────────────────────────
 
@@ -465,11 +473,17 @@ function SettingsPageContent() {
       setReceiptSettings(receipt, session?.user_id ?? ''),
       setStoreSettings(syncedStore, session?.user_id ?? ''),
       setCtxCurrency(defaultCurrency),
-      setUserPreferences(userId, [
-        { key: 'cardsize', value: String(displayCardSize) },
-        { key: 'fontsize', value: String(displayFontSize) },
-        { key: 'font-smoothing', value: displayFontSmoothing },
-      ]),
+      // Scoped write matches the scoped read in SettingsContext: the
+      // unscoped variant writes the global DB while every consumer reads
+      // the store-scoped user_preferences table, so unscoped writes would
+      // silently vanish on the next reload.
+      sessionToken
+        ? setUserPreferencesScoped(sessionToken, [
+            { key: 'cardsize', value: String(displayCardSize) },
+            { key: 'fontsize', value: String(displayFontSize) },
+            { key: 'font-smoothing', value: displayFontSmoothing },
+          ])
+        : Promise.resolve(),
       updateSyncSettings({
         serverUrl: syncServerUrl || null,
         ...(syncApiKey ? { apiKey: syncApiKey } : {}),
@@ -553,21 +567,41 @@ function SettingsPageContent() {
 
   // ── Cloud Sync diagnostics ──────────────────────────────────
 
-  // Load pending offline count when sync section is active
-  const refreshPendingCount = useCallback(async () => {
+  // Load the full offline queue summary (pending/synced/failed/conflict
+  // counts + last-synced/oldest-pending timestamps) when the sync section
+  // is active, so the Cloud Sync panel can show detailed status.
+  const refreshQueueSummary = useCallback(async () => {
     try {
-      const count = await pendingSyncCount();
-      setPendingCount(count);
+      const summary = await getOfflineQueueStatusSummary();
+      setQueueSummary(summary);
     } catch {
-      setPendingCount(null);
+      setQueueSummary(null);
+    }
+  }, []);
+
+  // Poll the summary + plan while the Cloud Sync section is open so the
+  // status panel (counts + last-synced + plan) stays live without manual
+  // refreshes.
+  const refreshSyncPlan = useCallback(async () => {
+    try {
+      setSyncPlan(await getSyncPlan());
+    } catch {
+      setSyncPlan(null);
     }
   }, []);
 
   useEffect(() => {
-    if (activeSection === 'sync') {
-      refreshPendingCount();
+    if (activeSection !== 'sync') {
+      return;
     }
-  }, [activeSection, refreshPendingCount]);
+    refreshQueueSummary();
+    refreshSyncPlan();
+    const id = window.setInterval(() => {
+      void refreshQueueSummary();
+      void refreshSyncPlan();
+    }, SYNC_STATUS_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [activeSection, refreshQueueSummary, refreshSyncPlan]);
 
   // ── Keyboard shortcuts ────────────────────────────────────
 
@@ -641,7 +675,7 @@ function SettingsPageContent() {
     return (
       <div className="settings-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="settings-error" role="alert">
-          <p>{loadError}</p>
+          <p>{l10n.getString(loadError)}</p>
           <Button variant="secondary" onClick={() => { setInitialized(false); settingsCtx.refetch(); }}>
             <Localized id="settings-retry"><span>Retry</span></Localized>
           </Button>
@@ -719,7 +753,8 @@ function SettingsPageContent() {
             setSyncResult={setSyncResult}
             pullResult={pullResult}
             setPullResult={setPullResult}
-            pendingCount={pendingCount}
+            queueSummary={queueSummary}
+            syncPlan={syncPlan}
             testing={testing}
             setTesting={setTesting}
             pingResult={pingResult}
@@ -730,7 +765,7 @@ function SettingsPageContent() {
             setTokenExpiresAt={setTokenExpiresAt}
             cmInput={cmInput}
             markDirty={markDirty}
-            refreshPendingCount={refreshPendingCount}
+            refreshQueueSummary={refreshQueueSummary}
             testSyncConnection={testSyncConnection}
             syncRun={syncRun}
             syncPull={syncPull}
@@ -928,7 +963,7 @@ function SettingsPageContent() {
                 type="button"
                 className={`settings-btn-revert${isDirty && !saving && !saved ? '' : ' settings-btn-revert--hidden'}`}
                 onClick={handleRevert}
-                aria-label="Revert changes"
+                aria-label={l10n.getString('revert-changes-aria')}
                 tabIndex={isDirty && !saving && !saved ? undefined : -1}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">

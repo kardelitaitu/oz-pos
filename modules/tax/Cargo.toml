@@ -8,6 +8,7 @@ description = "OZ-POS Tax Module: tax rate management, product/category tax assi
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 foundation = { workspace = true }
 rusqlite = { workspace = true }
 chrono = { workspace = true }

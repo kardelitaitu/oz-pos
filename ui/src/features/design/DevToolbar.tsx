@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useTheme, type Theme } from '@/frontend/shell/ThemeProvider';
+import { useLocalization } from '@fluent/react';
 import './DevToolbar.css';
 
 // ── SVG icons ──────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ interface ThemeOption {
 
 const THEMES: ThemeOption[] = [
   { key: 'default', label: 'Glass', icon: <GlassIcon />, swatches: ['#132540', '#5a9fd4', '#f0f6ff'] },
-  { key: 'light', label: 'Light', icon: <SunIcon />, swatches: ['#f8fafc', '#1052bc', '#1e293b'] },
+  { key: 'light', label: 'Light', icon: <SunIcon />, swatches: ['#f1f5f9', '#1052bc', '#1e293b'] },
   { key: 'dark', label: 'Dark', icon: <MoonIcon />, swatches: ['#080e16', '#5a9fd4', '#cddff0'] },
 ];
 
@@ -133,6 +134,7 @@ function useDragToolbar() {
  * theme switching. Always visible. Remove when no longer needed.
  */
 export function DevToolbar() {
+  const { l10n } = useLocalization();
   const { theme, setTheme } = useTheme();
   const { pos, onMouseDown } = useDragToolbar();
   const currentTheme = THEMES.find((t) => t.key === theme);
@@ -147,7 +149,7 @@ export function DevToolbar() {
       className="dev-toolbar"
       style={style}
       role="toolbar"
-      aria-label="Developer tools"
+      aria-label={l10n.getString('developer-tools-aria')}
     >
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div className="dev-toolbar-header" onMouseDown={onMouseDown}>
@@ -156,7 +158,7 @@ export function DevToolbar() {
 
       <div className="dev-toolbar-body">
         <p className="dev-toolbar-label">Theme</p>
-        <div className="dev-toolbar-themes" role="radiogroup" aria-label="Theme selector">
+        <div className="dev-toolbar-themes" role="radiogroup" aria-label={l10n.getString('theme-selector-aria')}>
           {THEMES.map((t) => (
             <button
               key={t.key}

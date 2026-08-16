@@ -38,8 +38,32 @@ while IFS= read -r file; do
         line_num=$(echo "$line" | cut -d: -f1)
         content=$(echo "$line" | cut -d: -f2-)
 
-        # Skip struct fields (pub keyword + colon pattern) and comments.
+        # Skip struct fields and comments. Struct fields may be private, so
+        # checking only for the `pub` keyword would misclassify fields such
+        # as `store_id: String` as command parameters.
         if echo "$content" | grep -qE '^[[:space:]]*(pub[[:space:]]+[a-zA-Z_]+[[:space:]]*:|//|///|\*)'; then
+            continue
+        fi
+        in_struct=$(awk -v target="$line_num" '
+            {
+                line = $0
+                if (!in_struct && line ~ /(^|[[:space:]])struct[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{/) {
+                    in_struct = 1
+                    depth = 1
+                }
+                if (NR == target) {
+                    print (in_struct ? "yes" : "no")
+                    exit
+                }
+                if (in_struct) {
+                    opens = gsub(/\{/, "", line)
+                    closes = gsub(/\}/, "", line)
+                    depth += opens - closes
+                    if (depth <= 0) in_struct = 0
+                }
+            }
+        ' "$file")
+        if [ "$in_struct" = "yes" ]; then
             continue
         fi
 

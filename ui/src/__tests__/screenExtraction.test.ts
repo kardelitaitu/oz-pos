@@ -180,6 +180,7 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'offline/OfflineQueueScreen.tsx',
     css: ['offline/OfflineQueueScreen.css'],
     dynamicClassPrefixes: ['status-'],
+    knownDynamicFragments: ['free'],
   },
 
   // ── Promotions ────────────────────────────────────────
@@ -211,6 +212,7 @@ const SCREENS: ScreenEntry[] = [
       'settings-sync-token-actions',
       'settings-sync-status-text',
       'topology',
+      'free',
     ],
     externalClasses: [
       'card',
@@ -321,7 +323,6 @@ const SCREENS: ScreenEntry[] = [
     dynamicClassPrefixes: ['ws-color-', 'role-badge--'],
     externalClasses: [
       'workspace-home-user',
-      'workspace-card--exiting',
       'workspace-card--active',
       'workspace-card-ripple',
     ],
@@ -372,6 +373,10 @@ const SCREENS: ScreenEntry[] = [
     name: 'DashboardScreen',
     tsx: 'reports/DashboardScreen.tsx',
     css: ['reports/DashboardScreen.css'],
+    // `card`/`card-body` belong to the global Card component stylesheet;
+    // `dashboard-kpi-delta--` modifiers are built via template literal.
+    externalClasses: ['card', 'card-body'],
+    dynamicClassPrefixes: ['dashboard-kpi-delta--'],
   },
   {
     name: 'InventoryReportScreen',
@@ -478,6 +483,12 @@ const SCREENS: ScreenEntry[] = [
     css: ['restaurant/RestaurantMenu.css'],
     dynamicClassPrefixes: ['restaurant-hamburger-item--', 'restaurant-card--'],
     externalClasses: ['restaurant-card', 'restaurant-pill-dot'],
+    knownDynamicFragments: [
+      // Global utility from frontend/themes/components.css (not the screen's
+      // own stylesheet) — the menu card's visible "Add" label moved into an
+      // sr-only span when the + Add affordance became an SVG glyph.
+      'sr-only',
+    ],
   },
 
   // ── Appearance Settings ────────────────────────────────

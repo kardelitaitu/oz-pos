@@ -5,7 +5,7 @@
 //! `GET /api/v1/sales/{id}` — get sale detail with line items.
 
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -16,6 +16,7 @@ use oz_core::db::Store;
 use oz_core::{Cart, CartLine, CoreError, Money, Sale, SaleStatus, Sku};
 
 use crate::AppState;
+use crate::auth::ApiTokenClaims;
 
 // ── Error mapping ─────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ pub struct SaleStatusResponse {
 /// header + lines in a single transaction. Returns 201 with the full sale.
 pub async fn create_sale(
     State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
     Json(body): Json<CreateSaleRequest>,
 ) -> Response {
     if body.lines.is_empty() {
@@ -125,6 +127,14 @@ pub async fn create_sale(
         }
     };
 
+    if let Some(pool) = &state.pg {
+        let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+        return match crate::pg::create_sale(pool, tenant_id, &sale).await {
+            Ok(()) => (StatusCode::CREATED, Json(sale)).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -137,7 +147,19 @@ pub async fn create_sale(
 /// Get a single sale by id, including all line items.
 ///
 /// Returns JSON `null` when the sale is not found.
-pub async fn get_sale(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+pub async fn get_sale(
+    State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
+    Path(id): Path<String>,
+) -> Response {
+    if let Some(pool) = &state.pg {
+        let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+        return match crate::pg::get_sale(pool, tenant_id, &id).await {
+            Ok(Some(sale)) => Json(Some(sale)).into_response(),
+            Ok(None) => Json(None as Option<Sale>).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -155,9 +177,30 @@ pub async fn get_sale(State(state): State<AppState>, Path(id): Path<String>) -> 
 /// success, 404 if the sale doesn't exist, 422 for invalid transitions.
 pub async fn update_sale_status(
     State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
     Path(id): Path<String>,
     Json(body): Json<UpdateSaleStatusRequest>,
 ) -> Response {
+    if let Some(pool) = &state.pg {
+        let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+        return match crate::pg::update_sale_status(pool, tenant_id, &id, body.status).await {
+            Ok(sale) => {
+                let resp = SaleStatusResponse {
+                    id: sale.id,
+                    status: sale.status,
+                    updated_at: sale.updated_at,
+                };
+                Json(resp).into_response()
+            }
+            Err(crate::pg::PgError::Validation(message)) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": message})),
+            )
+                .into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
 

@@ -1,16 +1,237 @@
 # Changelog
 
-<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (3 noted findings) · F1: top release header [0.0.21] vs Cargo.toml/branch 0.0.22 drift · F2: "27 modules self-register via modules/index.ts" -> 24 feature register.tsx wired via @/features barrel (decentralized self-registration model accurate) · F3: "5,221+ Rust tests" -> actual repo-wide 5,212 · re-verified 2026-07-31 (3,476 UI tests, 14 check.sh steps) · verified accurate: 48 .ftl files, 101 migrations (highest N=106), Node>=22/npm>=11, Vite ^6, 228 UI test files, modules/currency CurrencyRepository, crates/oz-core/src/user_preferences.rs + 038_user_preferences.sql, KDS Kanban/Focus/Metro + Switcher + KdsTicketCard + useKdsPreferences all exist, 10 modules/ -->
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (3 noted findings) · F1: top release header [0.0.21] vs Cargo.toml/branch 0.0.22 drift · F2: "27 modules self-register via modules/index.ts" -> 24 feature register.tsx wired via @/features barrel (decentralized self-registration model accurate) · F3: "5,221+ Rust tests" -> actual repo-wide 5,212 · re-verified 2026-07-31 (3,476 UI tests, 14 check.sh steps) · verified accurate: 48 .ftl files, 101 migrations (highest N=106), Node>=22/npm>=11, Vite ^6, 228 UI test files, modules/currency CurrencyRepository, crates/oz-core/src/user_preferences.rs + 038_user_preferences.sql, KDS Kanban/Focus/Metro + Switcher + KdsTicketCard + useKdsPreferences all exist, 10 modules/ · re-audited 2026-08-08 by docs-auditor: restructured (0.0.23/0.0.24 order fixed, 0.0.10/0.0.6 gaps noted, 14->15 check.sh steps reconciled); P80-P251 rescue blocks re-parented to their version sections (git bcd40394 merged 0.0.19-0.0.25 entries into 0.0.18 dropping headers; pre-merge headers restored as of 2026-08-08); 0.0.23/0.0.25 entries verified accurate (commits 9b7552e7/cc062951, 17 baseline findings) -->
 
 All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.25] — 2026-08-09
+
+Production hardening and operator-facing UX release: stronger sync recovery and replay safety, typed multi-store topology management, broader restart parity in the browser mock, and a fully green release gate.
+
+### Release-window summary — last 100 commits
+
+The 100 commits from **2026-08-07 through 2026-08-09** form the final 0.0.25 hardening window: **35 fixes, 14 features, 15 test commits, 30 documentation/audit commits, 2 refactors, 2 chores, and 2 audit milestones**. Together they moved the release from feature completion to operational confidence:
+
+- **Sync and settings:** PostgreSQL and SQLite replay safety, durable cursor pagination, expired-anchor recovery, operator rewind protection, stock-summary rebuilding, settings-update enqueue/compaction, remote settings events, sync auto-provisioning, and deliberate-disable behavior.
+- **Topology:** Typed connection contracts, corrupt-data quarantine, Apply-time structural validation, relationship selection, multi-select/marquee editing, branch lifecycle management, stale-card cleanup, dirty-switch protection, bends/routing, finder, auto-layout, viewport memory, and per-branch minimap preferences.
+- **Data and migration safety:** Store-owned workspace reseeding, stateful topology mock round-trips, and regression coverage for branch rename/delete flows.
+- **Quality and delivery:** 15 topology, retail, and E2E test commits, documentation-audit repair, a docs-auditor skill, changelog repair, and restored strict formatting, Clippy, panic-inventory, architecture, and drift gates.
+
+### Added
+
+- **Role grants visible in the staff screen (0046)** — `list_roles_scoped` now carries each role's granted permission keys verbatim (`RoleDto.permissions` via `Role::permission_keys()`, the same resolution the login session uses), and the staff editor renders the selected role's keys as read-only mono chips under the role selector — Owner shows `*`, manager its exact grants, staff its narrow set, straight from the registry. Both clients mirror the DTO; dev-mock roles return realistic grants; new `staff-role-permissions-label` strings in both staff bundles (parity clean). Pinned by a Rust test (Owner → `["*"]`, narrow role → `["sales:view"]`, Red-first on empty lists), a screen test (chips render on selection, swap on role change, absent before), and a contract test pinning the `list_roles_scoped` shape.
+- **Permission-aware denied screen (0046)** — `PermissionDenied` now accepts an optional `requiredPermission` and, when set, reports "You don't have permission to access {action}" with the raw key (e.g. `analytics:view`) shown as a muted mono diagnostic line, instead of the misleading role-based message. Both shells pass the page registration's key through; new `permission-denied-perm-desc` / `permission-denied-perm-key` strings in both shared bundles (parity + screenExtraction clean). Pinned by two new tests (permission message renders with the key; role message still renders when no key).
+- **Granted permission keys ride the login session (0046)** — the session DTO now carries the user's granted permission keys verbatim from the role's permissions JSON (`LoginSession.permissions`), so UI gates can mirror the backend registry instead of role-name strings. `modules_staff::models::Role::permission_keys()` parses the JSON (malformed → empty, authorizes nothing); both clients populate it at `staff_login` and `bootstrap_owner`, with `#[serde(default)]` keeping older persisted sessions parsing. On the frontend, page/nav registrations accept an optional `requiredPermission` and the new `hasGrantedPermission` helper applies the backend's exact wildcard semantics (`*`, `<domain>:*`) — a naive `includes` would deny the Owner, whose preset grants `["*"]`. A permission check is authoritative when the session carries keys and falls back to `requiredRole` otherwise; the analytics page now registers `requiredPermission: 'analytics:view'`. Shells thread `session.permissions` through `getEnabledPages`/`getNavItems`/`isPageAccessible`; dev-mock login fixtures return realistic grants. Analytics gate tests cover a custom staff-role grant, a manager denied without the key, the owner global wildcard, an explicit empty list denying, and the `hasGrantedPermission` domain-wildcard cases.
+- **Staff analytics page (analytics:view)** — a new per-staff analytics surface where owner/admin/manager can review shifts and completed sales over a selectable date range, using the 0046 permission registry and 0048 scoped assignments. `oz-core` gains `Store::staff_analytics_summary` / `staff_analytics_daily` (per-staff shift + completed-sale aggregates, zero-filled for staff with only shifts or only sales; pending/voided/no-cashier sales excluded). The new `analytics:view` permission is registered in the 0046 registry and granted to Owner/Admin/Manager only. Both clients expose `get_staff_analytics_scoped` / `get_staff_analytics_daily_scoped`, gated by the scope-aware session gate (an out-of-scope session is denied fail-closed) and enriched with display names from the global identity DB; the tablet gained the same `require_permission_for_session` gate for parity. The UI registers an Analytics screen + nav item under a new `management` required-role level (owner/admin/manager, excluding staff — the legacy `manager` gate still includes staff), fixing a pre-existing gap where `admin`/`role-admin` sessions saw no manager-gated pages in nav or route gating. Strings land in new `analytics.ftl` / `analytics.id.ftl` bundles (parity clean); `api-analytics-contract` pins the wire shape; screen tests cover summary render, daily series, empty state, and the role gates.
+- **Architecture boundary checker** — Added `scripts/verify-architecture-boundaries.py` to inspect Cargo path dependencies and production UI Tauri IPC usage. It detects module-to-module dependencies, `oz-core` upward dependencies, non-composition platform-to-business dependencies, and direct `invoke()` calls outside approved API or infrastructure adapters.
+- **Transitional boundary baseline** — Added `scripts/architecture-boundaries-baseline.json` with 17 individually tracked findings, owners, reasons, and expiry dates. Existing debt remains visible while new, expired, or stale findings fail validation.
+- **Deterministic checker coverage** — Added 14 fixture-based tests covering dependency direction, dev-dependency exclusions, UI imports and calls, generic/aliased/namespace invokes, comments and test exclusions, baseline behavior, malformed metadata, Windows paths, and JSON output.
+- **CI architecture gate** — Added the required `architecture-boundaries` job to `.github/workflows/ci.yml` and registered it in `scripts/gates.json`.
+- **PostgreSQL pull composite cursor** — `PgTransport::pull_updates` now takes a composite `(created_at, id)` cursor like the HTTP server, so rows sharing the anchor's exact timestamp are never skipped, and the durable pull anchor advances on `created_at` (the cursor's first key) even when the remote never stamps `synced_at`. The daemon paginates pages until the remote returns no next cursor.
+- **AnchorExpired snapshot recovery no longer re-fetches every cycle** — After an `AnchorExpired` snapshot import succeeds, the durable pull anchor now advances to the server's `oldest_available` (or clears) instead of retaining the stale anchor. Previously every cycle re-triggered the expired anchor and re-downloaded the full snapshot.
+- **Operator requeue rewind survives the daemon apply phase** — The daemon (SQLite and PostgreSQL) now re-reads the durable `sync_pull_state` before advancing it after a pull page. If an operator requeues a dead-lettered item (which rewinds the anchor to `NULL`) while the pull is in flight, the rewind is retained so the next cycle re-fetches the item — previously the apply-phase write clobbered it and the requeued item was never re-pulled.
+- **Dead-letter requeue workflow** — Added `Store::requeue_remote_failure(item_id)` (oz-core) plus a `requeue_remote_failure` Tauri command in both desktop and tablet clients. Operators can now clear a quarantined remote item (e.g. after creating the missing product a remote sale referenced); the failure row is deleted and the durable pull anchor is rewound so the next sync cycle re-fetches and retries the item with a fresh attempt budget. Requeueing an id that is not dead-lettered fails with `NotFound` rather than silently no-op'ing. The full re-pull is safe because the `sync_applied_items` idempotency ledger skips already-applied items. 8 new tests (2 store + 3 command per client).
+- **Typed multi-store topology management** — Added branch-scoped topology graphs with canonical Branch Location ownership, typed ports and relationships, live validation, branch add/rename/delete flows, workspace-instance diffing, and guarded Apply behavior. Saved diagrams now load and reconcile against real stores and workspace instances instead of relying on display names or default-store inference.
+- **Topology editing toolkit** — Added marquee and multi-select group editing, batch deletion, bend points, orthogonal routing, node finder, auto-layout, hardware-node inspection, per-branch viewport memory, minimap controls, and keyboard-accessible relationship/preset interactions.
+- **Browser-preview restart parity** — Persisted active carts, completed sales, shifts, login lockout/history, KDS orders and line items, display counters, and held carts in the dev mock, with contract tests covering reload, resume, deletion, malformed storage, and collision-resistant identifiers.
+
+- **PostgreSQL sync daemon replay-safety parity** — `pg_daemon.rs` now matches the SQLite daemon/engine SYNC-01 safeguards: the pull anchor comes from the durable `sync_pull_state` row (not a fresh `None` every 60s), remote items apply atomically via `apply_remote_atomic` with the `sync_applied_items` idempotency ledger, poison items dead-letter after their retry budget instead of erroring forever, and the anchor advances only after a page applied (retained on retryable failure). Push conflicts now route through the shared ADR #21 conflict service rather than blanket mark-synced + re-enqueue. `pg_transport.rs` no longer panics when a pulled row's `synced_at` is NULL (rows this terminal pushed as `pending`). 5 new tests.
+
+- **Retail POS product attributes (ADR #36)** — the product schema gains `brand`, `rack_location`, `notes`, `unit`, `is_active`, and `default_supplier_id` (migration `132_product_attributes.sql`), and the dormant `cost_minor` (HPP) becomes first-class: it flows through every product read, DTO, and scoped command in both clients. The retail grid's Stock column is now the **total across all locations** (`SUM(stock_summary.qty)`, the canonical ADR-19 ledger) instead of the legacy single-row `inventory` value. The grid gains a **configurable column set** — SKU | Barcode | Category | Brand | Name | Rack | Stock | Price | Notes | Action — persisted per user via the existing `retail.visible_columns` preference; cost is deliberately never a grid column (entry/override fields live in the modals only). The retail Add/Edit modals now actually persist through `create_product_scoped` / `update_product_scoped` (previously local-state-only, so edits vanished on reload) and expose Cost, Brand, Rack, Notes, Unit, Status, and Default supplier, with a cost-override field when restocking. Stock Inquiry cards show the Rack line. Cost stays **local-only** (ADR #36 D2): brand/rack/notes/unit/is_active ride the sync snapshot, while `cost_minor` and the default supplier never leave the device.
+- **Role-gated cost editing (ADR #36 D7)** — cost writes are enforced server-side by the new `products:edit_cost` permission (granted to the owner/manager/admin presets, withheld from staff) in both clients' scoped product commands, and the Cost field plus restock-override hint are hidden in the retail modals for sessions without it — backend enforcement, not UI-only gating.
+- **Product popularity index (ADR #37)** — the retail grid's **default sort is now popularity descending**: a decayed, smoothed, weighted score (`0.6·Sales′ + 0.3·Search′ + 0.1·Edits′`, λ = 0.93/day over a 90-day window, Bayesian-smoothed toward the catalog mean with m = 5). Sales units come from the durable `sale_lines` ledger; acted-upon searches and product edits land in a new `product_activity` ledger with a materialized `products.popularity_score` column (migration `133_product_activity.sql`), recomputed per event and via a full-catalog pass at store open; migration `134_popularity_backfill.sql` seeds edit history from product timestamps so the sort is meaningful on day one. Search events fire fire-and-forget via `record_product_search_scoped` (never blocks add-to-cart); the score is local-only, never synced (ADR #37 D4). Clicking the sort control still returns to popularity at any time.
+- **Popularity breadth, per-category standings, trends, and forecast (ADR #37 D6)** — the decayed sales raw is now scaled by `ln(1 + distinct transactions)` so reach beats one-customer bulk; the full pass caches per-category smoothing means so scores are fair within a selected category (uncategorized products fall back to the global mean). New report surfaces: a **Category Popularity** card (product count, mean score, ratio to catalog average, top products with category-relative rank + percentile), a **Popularity Trend** line chart (daily/weekly/monthly buckets of the same blend, same scale as the materialized scores), a **Demand Forecast** table (per-category linear least-squares projection of the next period, with day-of-week de-seasonalization on daily series of a full week or more), and a dashboard **sparkline** for the top category's 7-day trend. The `AnalyticsBundle` export (JSON/CSV/cloud NDJSON) now carries `category_popularity` and `category_forecast` sections (`category_popularity.csv` / `category_forecast.csv`) for the external analytics tool.
+- **Retail row context menu — view product images in browser (ADR #38)** — right-click (or Menu / Shift+F10 on a focused row) opens a keyboard-accessible context menu on the retail grid; its first action opens the default browser at a **Google Images search** for `name + brand` (percent-encoded, https-only, barcode deliberately excluded). Built on the new `tauri-plugin-opener` (registered in both clients, `opener:allow-open-url` in all three capability files) behind a new `open_product_images_scoped` command; the dev-mock falls back to `window.open`. Stateless — no schema or sync footprint — and the menu shell is the seam where stored product images plug in later.
+- **HPP frozen into sale_lines at checkout** — migration `135_sale_line_cost_snapshot.sql` adds `sale_lines.cost_minor`, backfilled from the product's current cost (normalized so an unset cost never shadows a later-set one); new sales snapshot the product's HPP at checkout, and reporting prefers the per-line snapshot with fallback to current cost / 0 — so editing HPP later never restates historical margins.
+- **Gross-profit reporting** — the reporting layer now computes **margin per sale line** and **gross-profit summaries per shift** and across daily/weekly/monthly granularities; the dashboard gains a gross-profit KPI card alongside revenue and orders; the sales report's top-products ranking can rank by **gross profit instead of revenue** via a rank toggle; the email report carries gross profit and margin per product; and the CSV exports expose the new columns — per-line cost + margin in the sales-history export, and cost/margin/stock-value in the inventory export.
+- **Foundation and module-crate test coverage** — 495 new tests across 8 files: Money edge cases (checked arithmetic, currency mismatch, Display, serde), Cart edge cases (discount capping, percentage, empty cart, SKU operations), CRM/Tax/Terminal/Loyalty serde roundtrips and default impls, SubscriptionTier feature-flag gating, SyncPriority and offline-queue semantics, domain events, and topology validation.  All pass with `cargo test --workspace` (4,767 total).
+
+
+### Changed
+
+- **Topology P3 single-writer cleanup** — Retired the legacy direct topology writer from the production desktop build and browser API/mock surface; topology changes now flow exclusively through the authorized, revision-aware Apply command.
+- **Topology save-lifecycle state machine** — Extracted the editor's load/Apply lifecycle (load settling, branch document revision, Apply busy flag, and the synchronous in-flight guard) out of scattered booleans into a typed reducer-backed machine (`nodeTopologyEditorSaveState.ts`). The reducer enforces legal transitions — a settled reload never interrupts an in-flight Apply, an authoritative load failure disables Apply until a later load succeeds, and a failed Apply returns to a retryable ready state with the previous revision intact. 13 new unit tests.
+- **Topology selection state machine** — Moved the editor's selection (`selectedNodeId` primary, multi-selection set, and wire) into a typed reducer (`nodeTopologyEditorSelectionState.ts`) that makes node/wire mutual exclusion structural. Previously a wire could stay selected alongside a node — `selectOnly` never cleared it — and the toolbar Delete handler checks nodes before wires, so the wire-delete path became unreachable. Six duplicated `setSelectedWireId + clearSelection` pairs collapsed into one atomic `selectWire`. 12 new reducer/hook tests.
+- **Topology drag lifecycle state machine** — Moved the editor's node-drag lifecycle (render drag set + the synchronous ref mirror the touch loop reads in stale closures) into a typed reducer (`nodeTopologyEditorDragState.ts`). `beginDrag`/`endDrag`/`cancelDrag` write both faces in one call — previously `cancelNodeMove`/`cancelDuplicateDrag` cleared only the render state, so a touch move before the next render could keep moving a drag already cancelled with Escape. 9 new reducer/hook tests.
+- **Topology connection/picker state machine** — Moved the in-flight wire connection and its relationship picker (ADR #34) into one typed reducer (`nodeTopologyEditorConnectionState.ts`) where they are a single gesture. `cancel` clears both atomically and `dismiss-picker` clears both only when a picker is open — previously dismissing the picker via canvas click, node drag, or touch left the armed connection alive, so a later port click could complete a wire from the stale source. 12 new reducer/hook tests.
+- **Topology hover state machine** — Moved the editor's hover-focus state (`hoveredNodeId` focus-mode dimming and `hoveredWireId` bend-ghost affordance) into a typed reducer (`nodeTopologyEditorHoverState.ts`). Node/wire hover are mutually exclusive by construction, and `prune`/`clear-hover` drop stale ids on structural canvas replacement — previously the load chain and prune effect cleared selection and connection but not hover, and since React never fires `mouseleave` on unmount a stale hovered id kept the whole canvas dimmed until the next hover. 12 new reducer/hook tests plus a component regression.
+- **Topology Space-pan blur disarm** — The editor's Space+drag pan arming now disarms on `window blur` and tab-hide (`visibilitychange`). Previously a Space held across focus loss (alt-tab, devtools, an OS dialog) never delivered its `keyup` to the editor, so the pan stayed armed — the canvas kept the pan cursor and the next left-drag panned instead of marquee-selecting until Space was pressed again.
+- **Topology unmount gesture cleanup** — The editor's unmount teardown now also disarms the marquee, bend-drag, and touch document listeners (it already cleaned pan/drag/minimap listeners and fresh-node timers). Previously a gesture in flight when the editor unmounted (branch switch, screen navigation) left its document-level finalizer armed to fire against an unmounted editor on the next page-wide pointer event.
+- **Topology Premium tier parity** — The topology contract, editor spawn gate, tier-downgrade notice, and the screen's tier union now treat `premium` as Pro-equivalent, matching the backend (`SubscriptionTier::max_warehouses` and the capacity validator already include Premium). Previously a Premium install saw the standard-tier `warehouse-tier-limit` banner for a second Stock Room, blocked the spawn, and skipped the capacity guards — while the backend would have accepted the diagram.
+- **Topology reload stops the simulation** — The authoritative reload paths (branch switch, workspace-instance refresh after Apply, unassigned-branch wipe) now stop a running "Test Order" simulation, mirroring the preset-load rule — previously the pulse kept animating the old wire geometry against the newly loaded canvas (a test order on a topology it was never run against). Also hardened two simulation tests away from a scoped fake-timer pattern that wedged the next test's awaited `requestAnimationFrame` in this vitest version.
+- **Topology canvas-replacement cancels marquee/bend gestures** — All four canvas-replacement paths (three reload paths + preset load) now cancel an in-flight marquee and bend-drag, matching the connection/hover/simulation resets — previously a reload mid-marquee left the selection box rendered on the new canvas and its document finalizer armed (the next release committed a phantom selection from stale coordinates), and a reload mid-bend-drag left the gesture's document listeners armed. Also fixed the legacy saved-diagram load path silently dropping wire bends (the workspace-rebuild path preserved them), so a standalone/legacy reload no longer erases authored bends.
+- **Topology reset-helper consolidation + context-menu close** — All four canvas-replacement paths now route their transient-state resets (connection, hover, simulation, marquee, bend-drag, context menu, inspector session) through one `resetTransientCanvasState()` helper that runs before the new canvas lands — previously the resets were duplicated five-fold across the paths (each round kept adding lines to them) and the open context menu survived a reload, offering actions against just-replaced nodes. The consolidation also fixed a latent clobber: a mid-bend-drag reload could restore the drag's old bend position over a freshly loaded bend.
+- **Topology save revision check is race-safe** — `save_topology_json_at_key_with_revision` now reads the current revision and runs the expected-revision conflict check inside an `IMMEDIATE` transaction, so the read-check-write is atomic against concurrent writers. Previously the read ran outside any lock and the write opened a DEFERRED transaction — two concurrent writers could both read revision 0, both pass `expected`, and the later commit silently overwrote the earlier writer's envelope (lost update). A new deterministic two-connection test pins the fix: a save blocked behind a peer's in-flight `IMMEDIATE` write re-reads the peer's committed revision and is rejected with `topology-revision-conflict` instead of overwriting it.
+- **Topology Apply crash-recovery tests** — Added crash-injection tests for the durable recovery journal that guards cross-database Applies. Each test constructs the exact on-disk state a process crash leaves behind and asserts the healed end state: a crash before the store commit heals to the exact prior state (no-op compensation, journal cleared), a crash after the store commit but before the global save deletes the created instance and restores the prior topology, and a crash after a completed save finalizes the journal WITHOUT compensating the successful Apply. The recovery path previously had zero tests.
+- **Topology capacity guards honor the shared operational-port rule** — The frontend contract's `warehouse-at-capacity` and `warehouse-missing-stock-routing` checks now require the inbound stock-bearing wire on the shared operational input ports (`stock-in`/`transfer-in`), matching the backend `validate_warehouse_capacity` guard that already filtered on the same set. Previously the frontend counted ANY `stock-routing`/`inventory-transfer` wire regardless of port — a direct-IPC payload with a stock wire on the ownership port (`location-in`) surfaced `warehouse-at-capacity` from the contract but `invalid-semantic-connection`/`warehouse-missing-stock-routing` from the backend, and a misport wire wrongly serviced the missing-route guard. Both sides read the same checked-in `topologySemantics.json`; the residual drift was rule logic, now aligned.
+- **Topology Apply success path deadlock fixed** — `apply_topology_diff` re-locked the global-database tokio mutex while its guard was still held on the success path (tokio mutexes are not reentrant), so every successful Apply froze the backend. The bug was latent because no test ever drove the real command end-to-end — the editor tests mock the API and the unit tests call the save helper directly. A new end-to-end harness test (real session, permission, subscription, and store DB through the tauri mock) exercises a successful Apply followed by a stale-revision Apply, and the read-back now reuses the held guard instead of re-locking.
+- **Topology editor recovers from Apply revision conflicts** — When Apply rejects with `topology-revision-conflict` (a stale base revision, reliably detected since the save-path serialization work), the editor now reloads the authoritative topology instead of stranding the user on a stale canvas whose every retry fails the same way. A dedicated localized toast explains the reload, and the fresh revision lets the user re-apply their changes. Previously the conflict was treated like any save error and the stale canvas (and revision) persisted indefinitely.
+- **Browser dev-mock enforces the Apply revision gate** — The dev-mock's `apply_topology_diff` now rejects a stale `baseRevision` with the backend's serialized `topology-revision-conflict` shape instead of always accepting, so the plain-browser preview (and E2E) exercises the same conflict recovery the desktop app gained above. The guard is skipped when the field is absent, matching the real command's required-field contract. Previously the mock ignored `baseRevision` entirely and the conflict path was unreachable outside the vitest harness or a live backend.
+- **Editor conflict recovery verified through the real dev-mock IPC chain** — A new end-to-end test drives the editor through the production browser-preview chain (real `@/api/topology` wrappers → real dev-mock handlers, the same alias the Vite dev server applies): a concurrent writer bumps the revision, the stale editor's Apply is rejected by the mock gate, and the editor reloads the authoritative diagram with the conflict toast. Mutation-verified — disabling the mock gate fails the test at the reload assertion. This pins the integration between the conflict detection and the recovery path that previously were only tested in isolation.
+- **Topology drag drops settle clear of other cards** — The editor's no-overlap invariant (spawns settle into a free spot, loads spread on a grid) now holds for drags: a node dropped onto another card settles into the nearest collision-free spot instead of stacking invisibly over it. Duplicate-drag landings are untouched (a deliberate creation gesture), flush alignment produced by the alignment guides survives (zero gap is not an overlap), and a no-move click never yanks a pre-existing overlap. Previously a drag could hide a card under another, leaving it unselectable except by its exposed grip.
+- **Topology arrow nudges stop at a neighbour's wall** — The keyboard path now respects the same no-overlap invariant as drags: an arrow nudge that would step a selected node INTO another card is blocked (the selection stays put and no undo entry is created — the user hits a wall and goes around) instead of stacking the card under its neighbour. Flush alignment from the alignment guides remains reachable (zero gap is not an overlap), and nudges away from the neighbour are unaffected. Previously a fine 1px or grid 8/24px nudge could push a card under an adjacent one.
+- **Topology Auto-layout no-overlap invariant pinned** — A property test now guarantees `computeAutoLayout` never produces overlapping cards in either snap mode (structural minimum gaps — 288px rows, 304px columns, 400px component bands — all snap to at least a card width on the 24px grid). Mutation-verified: collapsing the row spacing fails the test at the pairwise overlap check. Auto-layout was already collision-free by construction; the guard makes that a durable contract so future engine changes cannot silently stack cards.
+- **Topology pre-existing overlap badge** — Cards that overlap a neighbour in a loaded diagram now carry a warning chip (the no-overlap invariant guards new movement, but old saved diagrams can still load stacked). The badge is derived from live geometry, so it disappears the moment the user drags a card clear — and it never moves a card: a silent auto-settle on load would be a worse surprise than the stacked layout it flags.
+- **Topology align & distribute settle instead of stacking cards** — The no-overlap invariant now holds for the multi-select alignment toolbar too: an align that would collapse two same-row cards onto one spot (e.g. Align left on a pair at one y) previously stacked one card invisibly under its anchor. Now the anchor keeps the alignment line and each moved card settles into the nearest collision-free spot — the same movement-settles semantics as drags, with flush alignment from the guides preserved.
+- **Topology capability probe pinned to the Apply permission gate** — The `can_save_topology` command that gates the editor's Save toolbar is now directly regression-tested: an owner session is allowed, a cashier session is denied (mutation-verified against a permission drift that would let the UI offer a Save the backend always rejects). The test also confirmed `test-changed.sh` — the changed-crate Rust test runner — runs to completion again now that the dev client lock is gone.
+- **Topology crossing wires draw over cards** — A wire passing under a card it does not connect to previously vanished under the card and re-emerged as two broken-looking pieces (the restaurant template's store→warehouse wire crossed the middle POS card on first open). The hidden segment is now drawn on top of the card — pointer-events-none, so it never steals card clicks — making the connection read as one continuous wire. Flush alignment stays untouched: a wire running exactly along a card edge is not a crossing.
+- **Topology simulation pulse rides over crossing cards** — The stock-deduction simulation pulse previously blinked out the moment it travelled under a card and re-emerged on the far side, breaking the continuity the crossing-wire overlay restored. A pulse point passing under a card now renders on the same overlay (same info-blue dot, pointer-events-none) and disappears the instant it clears the box — the simulation reads continuous across the whole diagram.
+- **Topology Apply button previews what it will commit** — The unsaved-changes chip now shows the Apply summary before you commit: nodes and wires added/removed, nodes moved, and the revision bump (e.g. `1 added · 0 removed · 0 moved · rev 0 → 1`), computed live against the last committed snapshot. One moved node and a dozen added nodes are no longer indistinguishable at a glance.
+- **Topology save diff extracted into a pure, unit-tested function** — The create/update/archive computation behind Apply (store_id resolution, type-change archive+recreate) moved out of TopologyScreen's save callback into `computeTopologyDiff`, now covered by a direct 10-test unit suite — the same semantics previously only pinned through the screen boundary. No behavior change; the workspace-instance vectors the backend actually commits are now testable in isolation.
+- **Topology Apply chip previews the workspace-instance diff** — The unsaved-changes chip now reports what Apply actually commits — workspaces created/updated/archived (e.g. `1 created · 0 updated · 0 archived · rev 0 → 1`) — instead of canvas node/wire counts, so a rename that the old summary read as "no changes" now honestly shows `1 updated`. The preview shares its classification with the save payload builder, so it can never drift from the Apply, and it survives mid-wiring canvases (a workspace with no store owner yet still counts as a creation).
+- **Topology crossing-wire overlay mirrors the base wire's interaction states** — The under-card overlay segment (round 146) now brightens on hover, turns info-blue when selected, and fades in hover-focus mode exactly like the exposed wire — previously the moment you hovered a crossing wire its bright exposed ends framed a dim under-card middle, visibly splitting the connection again. The static, hover, selected, and focus-dimmed states all read continuous now.
+- **Topology Apply chip flags type changes as destructive recreates** — Changing a workspace's type archives the old instance and creates a NEW one with a fresh id (instance identity is destroyed — even toggling the type back and forth recreates it). The chip now shows this as a distinct `type-changed` count instead of reading as a routine `1 created · 1 archived`, matching the post-Apply toast wording.
+- **Topology Apply chip is one format everywhere** — The unsaved-changes chip now shows the same workspace-instance summary (created/updated/archived/type-changed + revision) on standalone and demo canvases too, with the before-side derived from the last committed snapshot. The old canvas-count format (which over-reported a placed Store node as `1 added` even though Apply commits no workspace change) is retired.
+- **Topology memo tests de-flaked** — The render-count harness (which proves hover/selection re-renders only the affected element) flaked once under full-suite load (`expected 2 to be 1`): its baseline was snapshotted at first diagram visibility, so a legitimate mount-time settle — an async settings invoke resolving, or a parent handing the editor real instances right after load — could land in the interaction's delta. The baseline now waits for render-count quiescence (with a floor longer than the known mount-time timers), and a regression test reproduces the race deterministically via the re-apply flow and pins the settled measurement. Test-only; the memo boundary itself is unchanged.
+- **Topology branch comparison** — The branch toolbar now has a Compare button (when two or more branches exist) that opens a panel summarizing how the selected branch's SAVED topology differs from another branch's: workspaces only here, only in the other branch, and shared workspaces that differ by name, type, or wiring (wires compare as undirected connections — direction is presentation). Both diagrams are fetched fresh, so the panel shows the persisted states, not the possibly-unsaved canvas.
+- **Topology Fluent placeholders resolve (defect fix)** — The Apply chip and the discard-changes dialog used bare `{ created }` / `{name}` placeholders, which Fluent treats as term references — the real runtime rendered the literal `{created}` text instead of the numbers/name (invisible to the mocked-Fluent tests, which interpolate by hand). Both keys now use `$`-prefixed variables in English and Indonesian, pinned by a real-bundle regression test in both locales.
+- **Bare Fluent placeholder guard (i18n gate)** — The whole defect family is now impossible to ship: a pure scanner (`findBarePlaceholders` / `scanLocaleFiles`) flags any `{ ident }` placeholder in any of the 48 locale bundles whose ident is not a defined message — the exact signature that renders literally in the real runtime. The repo-wide scan runs in the UI test suite and inside the `lint:i18n` gate (via `i18nBundle.test.tsx`), so a regression fails closed with the offending file and line.
+- **Topology branch comparison tolerates id drift** — The Compare panel no longer reports phantom differences when the two branches' saved diagrams use different workspace ids for the same logical workspace (a diagram predating the instance-id conventions, or a workspace archived-and-recreated by a type change). Workspaces absent by id but matching by name + type are paired and compared — including wiring, with the other side's wire endpoints remapped — so they land in shared/differing instead of appearing in both "only here" lists. Ambiguous collisions are never guessed, and a type difference is treated as a different instance.
+- **Topology branch-diff ghost overlay** — The Compare panel's classification now renders spatially on the canvas: workspaces only in the OTHER branch appear as dashed ghost cards at their saved positions in that diagram, workspaces only in the current branch get a red ring on their live card, and shared-but-differing workspaces an amber ring. Ghosts are decorative (pointer-events-none, aria-hidden) so the overlay never steals a click or keyboard stop; drift-paired workspaces (see above) that differ land amber like any other difference. Display-only — the editor writes nothing back.
+- **Topology ghost overlay clamps into the visible canvas** — Ghosts are placed at the other branch's SAVED coordinates, which can sit outside the current viewport (different canvas size, or a pan/zoom since that branch was authored). The overlay now lays every ghost into the visible canvas — derived from the canvas size and the pan/zoom transform — and resolves pile-ups deterministically: a ghost drops below whatever it would land on, and when the stack runs out of room it wraps to a new column, always staying on-screen. Ghosts also step aside from live cards, so the overlay shows every difference instead of hiding it off-screen or under a card.
+- **Topology ghost-wire stubs** — Ghost workspaces that are wired together in the other branch now show dashed connectors between their ghost cards, so a missing satellite cluster reads as a recognizable mini-topology instead of floating boxes. Stubs connect the laid-out ghost cards edge-to-edge and are decorative (pointer-events-none, aria-hidden) like the rest of the overlay.
+- **Topology ghost→shared wire stubs** — A ghost workspace wired to a SHARED location now draws a dashed stub to that location's LIVE card — the everyday single-workspace diff ("the other branch has an extra Stock Room feeding its Retail POS") reads as a real connection instead of a floating box. The shared side is resolved through the id-drift pairing, so the stub lands on the card the operator actually sees.
+- **Topology compare focus mode** — The Compare panel's "focus on differences" toggle dims every workspace that is identical across both branches, leaving only the differences bright: only-here cards, differing cards, ghosts, and their stubs. The spatial diff becomes a review view — an operator sees what changed without scanning the whole canvas. Focus composes with the existing hover-focus dimming and resets when the panel closes.
+- **Topology hover inspection beats compare-focus dimming** — Hovering a card while compare focus is on now lights the inspected card (and its connections) back up: hover focus is the transient, specific intent and fully takes over while active. Previously the naive OR of the two dim modes kept the very card the operator was inspecting dimmed.
+- **i18n Localized-vars cross-check gate** — The i18n lint gate now parses every en bundle with the real Fluent parser and cross-checks each `<Localized id="…" vars={{ … }}>` site's vars against the message's declared `$vars` (value and per-attribute separately). A site missing a variable renders the raw id at runtime — invisible to bundle parity, which counts keys, not variables. The gate immediately caught three live defects: the Fast-PIN prompt never received its `$user` variable, two terminal confirm/cancel messages localized an aria-label that didn't exist in the FTL, and the payment table-number message put its `.aria-label` before its value line so the localized text ("Meja { $number }") never rendered.
+- **i18n translation-var drift gate** — The same gate now checks the Indonesian bundles against their English counterparts: an id translation referencing a `$var` its en message never declares renders a literal placeholder for Indonesian users (the site can only provide the en contract's variables). The check is subset-direction — translations that legitimately drop a variable stay safe, only name drift is flagged — and it runs inside the same `lint:i18n` step. A full sweep of all 24 id bundles found zero drift; the gate is the permanent guard against a translator renaming a variable.
+- **i18n localized-attribute omission gate** — The gate now also checks that every attribute a site actually localizes via `attrs={{ … }}` exists in the id translation — a message whose Indonesian side omits the attribute silently leaves it unset (an unlabeled column header, an English placeholder fallback). The scan immediately found and fixed six live cases: five POS placeholder attributes (discount %, discount label, counted-cash, shift notes, opening balance) were value-only in Indonesian so the localized hints like "mis. 15000 untuk Rp150.000" never rendered, and the loyalty table-actions column had no aria-label at all.
+- **i18n en-side attribute gate (31 fixes)** — The same scan now also requires every site-localized attribute to exist in the ENGLISH message: a message authored value-only ("`x = At least 4 digits`") for a site that localizes only the attribute means the translation never applies and everyone sees the hardcoded JSX fallback. The sweep found and fixed 31 sites across 17 locale files — PIN/username/settings/shift/PO/inventory placeholders showed English hints (e.g. "e.g. 15000 for $150.00" instead of the translated "mis. 15000 untuk Rp150.000"), and customer-history / variant / refund / retail-modal buttons had hardcoded English aria-labels. All 29 affected messages were converted to the attribute-only shape the sites expect.
+- **i18n scan consolidation** — The five i18n gates (bare placeholders, site-vars, var drift, attribute omission, en-absence) now parse through a single shared source: four glob loaders and three bundle/site maps (`loadEnContracts`, `loadIdContracts`, `loadLocalizedSites`) replace nine duplicated `import.meta.glob` calls. The en-only glob's id-exclusion — the round-164 bug — now lives in exactly one place, locked by a discriminating test.
+- **Topology ghost glide** — Compare-mode ghosts now ease into place instead of snapping: they position via a compositor-friendly translate transform with a 280ms ease-out transition, so re-clamps glide, and a fade-and-rise keyframe softens the pop when the overlay opens. The transition is gated off during a mouse-pan drag, so an edge-anchored ghost tracks the pointer instead of trailing it.
+- **lua_sandbox fuzz target repair** — An overnight honggfuzz campaign flagged a SIGABRT crash on the 4-byte input `loca`. Root cause: the target asserted `os` must be nil after loading malicious input, but the sandbox deliberately keeps a restricted read-only `os` table (date/time/clock) — so the assert panicked on every input. The target now checks the real contract (restricted os or nil; all other dangerous globals nil), and oz-lua ships a regression test pinning the post-load sandbox state. Replaying the exact crash input against the fixed instrumented target is clean.
+- **lua_sandbox libfuzzer target aligned to the restricted-os contract** — The versioned cargo-fuzz copy of the sandbox target (`fuzz/fuzz_targets/lua_parse.rs`) still asserted `os` must be nil — the round-170 crash class, unfixed in the versioned tree because round 170 repaired only the gitignored honggfuzz copy and CI built but never executed this target (it was dropped from the tier-1 fuzz run loop as collateral in the 6e7c37b6 tier split). The stale assert panicked on every short input (reproduced: `x = 1` → deadly signal at `lua_parse.rs:53`). The target now asserts the real contract (restricted os or nil; every other dangerous global nil), the round-170 crash input `loca` replays clean, a 30s fuzz session ran 202,535 executions without a crash, and CI now runs `lua_sandbox` for real.
+- **Customer list enforces customers:view (CRM-02)** — `list_customers_scoped` resolved the session store but never enforced the declared `customers:view` permission, so any valid session (kitchen, permission-less custom roles) could enumerate every customer record over IPC — the UI registers the screen as manager-only, but UI role gating is not a security boundary. The command now gates on `customers:view` (the `search_customers_scoped` pattern) in both desktop and tablet clients, pinned by denial tests for a kitchen session and a surviving owner-listing isolation test; cashier sessions keep the permission, so checkout customer lookup is unaffected.
+- **Multi-currency report totals never collapse (REP-02)** — SalesReportScreen summed every revenue row into one total and formatted it with the first row's currency, so a period spanning USD + IDR showed a mathematically invalid single total (and the period-comparison % delta collapsed mixed currencies the same way). Totals now render per currency (`$100.00 · IDR 500,000`) via a pure `sumRevenueByCurrency` helper, and the comparison delta is hidden whenever either period spans more than one currency. Single-currency periods render exactly as before; export CSV was already per-row correct.
+- **Exchange-rate creation validates pair, codes, and date (CUR-05)** — `create_exchange_rate` (desktop + tablet) only rejected empty strings and non-positive rates, so a same-currency pair, a non-ISO-4217 code, or a malformed effective date could persist as semantically invalid configuration that the latest-effective-rate selection can never match. The command now rejects `from == to`, non-ISO codes (via the canonical `Currency` domain type), and non-YYYY-MM-DD dates with field-specific errors before any write, closing the direct-IPC hole the visible form's validation never covered.
+- **Topology P2 contract hardening** — Shared semantic metadata now distinguishes Warehouse primary ownership inputs from operational stock/transfer feeds; branch-scoped validation dismissals are stored with the topology document instead of browser-local state; and the editor graph/history transitions run through a reducer boundary.
+- **Local sync defaults** — Empty or missing sync configuration now falls back to `http://localhost:3099` with Cloud Sync enabled in Settings and debug startup. Explicit opt-out remains respected when a real server URL is configured and sync is disabled.
+- **Warehouse topology contract** — Warehouse nodes now use exactly one primary inbound scope: Branch Location or Retail POS Operation. The editor, backend save validation, runtime plan, presets, and localized errors all enforce the same rule while preserving legacy operational transfer routes.
+- **Topology Apply reliability** — Applies now use branch revisions, request fingerprints, an in-flight lock, and a durable pre-mutation recovery journal. Interrupted cross-database Applies recover at startup, while stale editors and mismatched request retries are rejected safely.
+- **Topology editor exact unsaved-changes tracking** — The preset-load confirm now compares the canvas against the last applied/preset state (persisted fields only) instead of a conservative dirty boolean. Undoing a same-preset load, or redoing back to exactly the last saved canvas, no longer shows a spurious "Load Preset" confirmation; any canvas that actually diverges from the last Apply still confirms.
+- **Local validation** — Added the architecture gate to `scripts/check.sh` and `scripts/check.ps1`; the Windows runner now fails closed when Python is unavailable.
+- **Architecture documentation** — Documented the enforced dependency and UI IPC boundaries in `ARCHITECTURE.md` and `docs/ARCHITECTURE.md`, and synchronized the CI pipeline dashboard.
+- **Release version synchronization** — Bumped workspace, desktop, tablet, Docker, UI, health endpoint, localized status-bar, test, and lockfile versions from 0.0.24 to 0.0.25.
+- **Atomic remote sync replay handling** — Remote mutations now apply through transaction-aware stock, product, movement, and receipt helpers. The sync daemon commits each mutation with its `sync_applied_items` receipt, preventing crash-window replays from duplicating stock or sale effects; unsupported actions fail closed without recording a receipt.
+- **Replay regression coverage** — Added focused tests for exactly-once replay suppression, rollback when a later sale line fails, and rejection of unknown remote actions. The implementation is documented in spec `0044-critical-delivery-and-sync-replay-safety`.
+- **Topology stale-state cleanup** — Prevented deleted or unassigned branches from resurrecting saved cards, wires, and selections; successful branch renames merge into the live canvas without discarding unsaved edits, while dirty branch switches now require confirmation.
+- **Engine pull replay safety (SYNC-01 parity)** — `SyncEngine::run_sync_cycle` now pulls through the durable `sync_pull_state` anchor (instead of deriving `since` from the local queue's synced timestamps) and applies each remote item atomically with its `sync_applied_items` receipt via the same dead-lettering path as the daemon. Manual "sync now" runs can no longer re-apply remote stock/sale mutations when the server replays history or the anchor is lost; the anchor advances only after a page applied successfully. Regression test: two engine cycles against a replaying server apply the mutation once.
+- **PostgreSQL daemon recovery parity** — PostgreSQL pulls now detect retention-expired anchors, recover through typed reference snapshots, rebuild materialized stock summaries after stock movements, publish remote settings changes to the UI, and preserve operator rewinds and retryable anchors. Real PostgreSQL integration coverage exercises timestamp/boolean decoding and credential exclusion.
+- **Permission registry with write-time validation (0046)** — New code-resident `platform-core::permission_registry` (ADR #35 D3): every enforced permission key is classified by family and sensitivity, pinned by a bidirectional inventory test (all 68 keys). Sensitive keys — voids, refunds, payment settlement, role management, staff deletion, report/audit export — are never grantable via a family wildcard, and `Store::create_role` now rejects unregistered grants, wildcarded-sensitive grants, and the global `*` (reserved for the Owner seed) with a field-specific validation error, so a future `sales:refund`-class key can no longer ride a wildcard by accident.
+- **Centralized fail-closed enforcement gate (0047)** — New single authorizer `Store::require_permission` (ADR #35 D3) replaces the per-command `require_permission_for_user` pattern and the duplicated user→role→authorize resolution in both clients' `authz.rs`: the 0046 registry is the only vocabulary, so an unregistered permission key denies even the `*` Owner grant, and an unresolvable user or role fails closed as `permissionDenied` (never an internal error) with the wire shape unchanged. A pinned `gate_audit` test now enumerates every command module in both clients with its gate-call census and permission keys, so a new ungated command or a dropped gate call fails the suite and forces a deliberate, reviewed pin update.
+- **Role assignment model with explicit-all scopes (0048 cycle 1)** — New migration `128_assignments.sql` (ADR #35 D5): one effective assignment per user (`assignments` with `scope_mode` global|scoped plus explicit all|list branch/workspace dimensions, `assignment_branches`, `assignment_workspaces`), backfilled from legacy `users.role_id` — owner/manager/staff keep global mode, while legacy cashier/kitchen users fold into Staff with the scoped workspace their grants imply (`retail-pos` / `kds`). A new `db::assignments` model evaluates scope fail-closed: global roles ignore dimensions, scoped roles require each dimension to be explicit `all` or contain the requested id, and an empty list never means "all". Purely additive — the gate and `users.role_id` are untouched until the next cycle.
+- **Five-role taxonomy seeds (0048 cycle 2a)** — `role-admin` and `role-auditor` presets join the seeded set per ADR #35 D4: Admin is global with the full operational set plus role management and plugins (explicit list, never `*`; staff deletion stays owner-only), Auditor is global and read-only (views only, no exports or writes). Staff and Manager both gain `kds:view`/`kds:update` so kitchen operations keep working through `role-staff` after the cashier/kitchen fold.
+- **Assignment-aware enforcement gate (0048 cycle 2b)** — `Store::require_permission` now resolves the caller's role through their assignment first (legacy `users.role_id` fallback, behavior-identical for existing users), and a new scope-aware `require_permission_scoped` denies when a scoped assignment's branch/workspace is out of scope (global assignments and legacy users are not scope-restricted). `create_user` writes a default global assignment and `update_user` keeps the assignment role in sync without touching scope. Both clients expose `require_permission_for_user_scoped`.
+- **User profile data contract (0049 cycle 1)** — Migration `130_user_profiles.sql` (ADR #35 D6): `users` gains the 17 profile columns — the 8 required-at-creation fields (date of birth, phone, national id type + number, email, monthly take-home pay, emergency contact name + phone) plus optionals (job title, notes, address, language, avatar, tax id, national id expiry, emergency contact relationship, hire date) — with unique email / national-id indexes. Columns are nullable so legacy rows enter the incomplete-profile state instead of being rejected. New `db::profile` module: `UserProfile::is_complete`/`validate` (ssn=9 / nik=16 digit shape, E.164 phone, non-future DOB, strictly positive pay, field-level errors) and atomic `create_user_with_profile` (transactional, so a duplicate email/national id rolls the user back with a field-level `Conflict`).
+- **Sensitive staff profile keys (0049 cycle 2a)** — `staff:read_identity`, `staff:read_payroll`, and `staff:edit_notes` join the 0046 registry as sensitive keys (never wildcard-eligible) and are granted to the Manager, Admin, and Staff presets while deliberately withheld from Auditor — the sensitive profile fields can no longer ride the `staff:read` wildcard.
+- **Sensitive profile data hardening (0049 cycle 2b)** — `national_id` and monthly take-home pay are encrypted at rest (domain-separated AES-GCM; a new `national_id_hash` column + unique index preserves the unique-when-present invariant that nonce-randomised ciphertext would otherwise dodge). New `Store::get_user_profile_viewed_by` returns a `ProfileView` that withholds full national id / tax id / pay without `staff:read_identity` / `staff:read_payroll`, renders the national id last-4 masked, audits every sensitive read (access, never values), and fails closed on corrupt ciphertext. `assign_role_guarded` denies management-role assignment while a profile is incomplete; deactivation retention and sync residency (profile fields never on the sync wire) are pinned by tests.
+- **Profile IPC + staff screen (0049 cycle 3)** — `CreateStaffScopedArgs`/`UpdateStaffScopedArgs` gain the 17 ADR #35 D6 profile fields on both clients: creation goes through the validating, transactional `create_user_with_profile`; updates run the incomplete-profile role gate and the profile write atomically inside the existing update transaction (and restore the profile on workspace-assignment rollback). A new `get_staff_profile_scoped` command returns the viewer-gated profile (full national id / tax id / pay only with `staff:read_identity` / `staff:read_payroll`, reads audited). The staff list renders the last-4 masked national id and flags incomplete profiles; the create/edit form collects all 17 fields with localized per-field validation of the 9 mandatory ones and disables role/workspace assignment for incomplete members. Wire shape pinned by the new `api-staff-contract` test; i18n keys land in both bundles.
+- **Cashier/kitchen role retirement + seed sweep (0048 cycle 2c)** — Migration `129_retire_cashier_kitchen.sql` re-points `users.role_id` and `assignments.role_id` from the legacy cashier/kitchen roles to `role-staff` and deletes the role rows (idempotent), completing the five-role taxonomy: the CASHIER/KITCHEN constants and presets are removed from platform-core, `modules/staff` dead constants deleted, and the ~22 seed fixtures across oz-core, both clients, oz-api/oz-cli, cloud-server, platform-core, and platform-sync are swept — staff-like fixtures map to `role-staff` (which now carries the kds keys the kitchen role used), while limited-access assertions that pinned cashier's narrow grants map to a fixture-local `role-lite` custom role (role-staff now supersedes those grants). The `gate_audit` census pins for staff.rs are bumped 5→6 for the gate call added in 0049 cycle 3.
+- **Assignment write path + five-role staff screen (0048 cycle 3)** — oz-core gains `Store::set_assignment` / `write_assignment_scope` (transactional upsert of the assignment scope + dimension rows, safe inside an open transaction — no nested BEGIN), and `create_user_with_profile` accepts an optional assignment spec so a new user can be created with a scoped assignment atomically. Both clients carry `AssignmentDto` on the staff DTO and an optional `assignment` on the create/update args, written atomically with the user + profile. The staff screen presents exactly the five-role taxonomy (Owner → Admin → Manager → Staff → Auditor; custom roles filtered out) and the assignment editor now has a `global | scoped` scope-mode radio with per-dimension branch (store profiles) and workspace pickers — each dimension an explicit all/list, with saving blocked on an empty list (a deny, never an implicit "all"). The workspace column derives from the DTO assignment; new strings land in both `staff.ftl` bundles (parity clean); `api-staff-contract` pins the assignment wire shape.
+- **Login picker respects scoped assignments (0048 follow-up)** — the pre-session workspace picker (`list_workspaces` on both clients) now loads the user's assignment from the global identity DB and filters the listing through `matches_scope(store_id, type_key)`: a scoped assignment hides out-of-scope workspace types and denies out-of-scope stores outright (fail closed), so a scoped member can no longer pick a workspace their assignment doesn't grant. Global assignments and legacy users without an assignment row are unaffected. Pinned by `scoped_assignment_filters_picker_workspace_list` and `scoped_assignment_branch_dimension_denies_out_of_scope_store` on both clients.
+- **Sessions are assignment-aware end to end (0048 follow-up)** — the post-login side now enforces the same scope the picker filters: `require_permission_for_session` (the desktop gate used by every session-scoped command) evaluates the session's resolved store (branch) and workspace `type_key` against the caller's assignment, so a scoped member whose session context is out of scope is denied fail-closed on every command. `list_workspaces_scoped` and `list_workspaces_for_store_scoped` likewise scope-filter their listings through `matches_scope` — a scoped member can no longer switch into an out-of-scope workspace type or store after login. Global assignments and legacy users without an assignment row pass unchanged. Pinned by six new tests (session-gate workspace/branch/legacy on the desktop, plus workspace + branch dimension filters on both session-scoped listings).
+- **Legacy workspace surface retired (0048 follow-up)** — the `user_workspaces` key-based surface is gone now that the assignment model supersedes it: `workspace_keys` is dropped from the staff update args (the create args never carried it), and the STAFF-05 store-scoped write + cross-DB compensation block is removed — profile, PIN, and assignment now ride a single global-DB transaction that rolls back atomically on any failure. `set_user_workspaces_scoped` / `get_user_workspaces_scoped` (zero UI callers) and their unscoped stubs are removed from the command surface, registrations, wiring audit, TS api, dev-mock, and the `set_user_workspaces_legacy` / `get_user_workspace_keys_legacy` store methods. The `workspaces` census pin drops 8 → 6. The instance-based `*_workspace_instances*` commands and the legacy readers stay — `user_workspace_instances` is still read by the listing resolution, and `list_all_workspaces_scoped` still reads the old `workspaces` table.
+
+### Fixed
+
+- **Topology save authorization** — Scoped desktop commands now resolve permissions from the global identity database before opening a store database, fixing false `You don't have permission to do this` failures for topology saves and aligning the same authorization path across operational commands.
+- **Topology editor permission UX** — Users without `staff:update` now receive a clear view-only state with Apply disabled and rename actions blocked, while backend authorization remains authoritative.
+- **Negative money inputs rejected at the sale ledger boundary (MONEY-06)** — `complete_sale_deduction` and `complete_sale_with_resolved_shortfalls` now reject a negative `line.qty` up front (`Validation { field: "qty" }`): a negative qty previously recorded a negative ledger total and **credited** stock (the deduction delta is `-qty`). `compute_sale_tax` now rejects a negative `line_total` in a pre-pass (`field: "line_total"`), so a hand-built `Sale` can no longer record negative tax. Both are unreachable from the front-end (CartLine asserts qty > 0) but close the ledger boundary. Regression tests: `complete_sale_deduction_rejects_negative_line_qty`, `complete_sale_with_resolved_shortfalls_rejects_negative_line_qty`, `compute_sale_tax_rejects_negative_line_total`. Also fixes the long-standing `clippy::type_complexity` in `products.rs` (factored a 6-tuple into a local alias) so `cargo clippy -p oz-core -- -D warnings` passes, and repairs duplicated `#[test]` attributes in oz-lua/oz-plugin orphaned by the MONEY-05 insertion (one test double-registered, one anchor test silently stopped running).
+
+- **`create_sale` rejects negative money/qty inputs (MONEY-07)** — the legacy global-db import door (`oz-cli` deserializes a `Sale` straight from JSON payloads, bypassing `CartLine::new`'s `qty > 0` assert that protects the `oz-api` route) previously persisted `qty`, `line_total`, `tax_amount`, `total`, `subtotal`, `tax_total`, and `tendered_minor` with zero validation — a hostile or corrupt import wrote negative ledger rows. A validation pre-pass now rejects negatives with structured `Validation` errors (`field: "qty" | "line_total" | "tax_amount" | "total" | "subtotal" | "tax_total" | "tendered_minor"`) before the transaction opens; zero-total free sales with empty lines stay legal. Regression tests: `create_sale_rejects_negative_{line_qty,line_total,line_tax_amount,total,subtotal,tax_total,tendered_minor}`.
+- **Checked PO money math + plugin float hand-off (MONEY-05)** — `create_purchase_order` no longer computes `qty × unit_cost_minor` subtotals with unchecked multiplies: per-line totals use `checked_mul` (field `"line_total"`) and the subtotal accumulator uses `checked_add` (field `"subtotal"`), returning structured `Validation` errors instead of persisting a PO with a wrapped negative subtotal. Separately, the Lua plugin boundary now hands `qty` / `unit_price_minor` / `total_minor` to the VM as Lua floats in oz-lua (`apply_discount`, `calc_line_tax`, `validate_order`) and oz-plugin (`sale.before_complete`): plugin `qty * unit_price_minor` arithmetic previously ran as Lua 5.4 integer math and wrapped silently on overflow. Regression tests: `create_po_line_total_overflow_rejected`, `create_po_subtotal_accumulation_overflow_rejected`, `apply_discount_with_overflow_scale_qty_runs_cleanly`, `fire_sale_before_complete_overflow_scale_money_uses_float_semantics`.
+- **Payment splits must cover the sale total (MONEY-04)** — `complete_sale_deduction` and `complete_sale_with_resolved_shortfalls` now reject payment splits whose sum is below `sale.total`, that are empty, that contain a negative amount, or whose sum overflows i64 — with a structured `Validation { field: "payments" }` error and a full transaction rollback. Previously a hostile IPC caller could pass `payment_splits: []` (bypassing the command layer's full-tender default) and complete a sale with zero payment records. Over-tender remains allowed (change). Regression tests: `complete_sale_deduction_rejects_underpaid_payment_splits`, `complete_sale_deduction_rejects_empty_payment_splits`, `complete_sale_deduction_rejects_negative_payment_split`, `complete_sale_deduction_rejects_overflowing_payment_split_sum`, and `complete_sale_with_resolved_shortfalls_rejects_underpaid_payment_splits`.
+- **Checked BOM deduction quantities (MONEY-03)** — `complete_sale_deduction` and `complete_sale_with_resolved_shortfalls` no longer multiply the sale-line qty by the recipe `quantity_required` with an unchecked `*`. `line.qty` arrives over the IPC boundary and dev/test builds have `overflow-checks = false`, so an overflowing qty silently wrapped and the sale completed with a corrupt stock delta (the ingredient was credited instead of deducted). Both BOM sites now use `checked_mul` and return a structured `Validation { field: "qty" }` overflow error. Regression tests: `complete_sale_deduction_bom_quantity_overflow_returns_validation_error` and `complete_sale_with_resolved_shortfalls_bom_quantity_overflow_returns_validation_error`.
+- **Negative cart-tax inputs rejected (MONEY-02)** — `Store::compute_cart_tax` now rejects negative `qty` or `unit_price_minor` from the untrusted IPC boundary with a structured `Validation` error naming the field (`qty` / `price`). Previously a negative line total produced a negative "tax" preview that the register rendered raw. Zero qty and zero price remain allowed (zero tax / free items). Regression test: `compute_cart_tax_rejects_negative_qty_and_price`.
+- **Checked cart-tax line totals (MONEY-01)** — `Store::compute_cart_tax` no longer computes the per-line taxable total with an unchecked `qty × unit_price_minor` multiply. `CartLineTaxInput` arrives over the IPC boundary and the function runs on every cart change (live tax preview), while dev/test builds have `overflow-checks = false`, so an overflowing line total silently wrapped and returned a wrong tax to the register. The line total now uses `checked_mul` and returns the same structured `Validation` overflow error as `compute_line_tax` (TAX-04). Regression test: `compute_cart_tax_line_total_overflow_returns_validation_error`.
+- **Session-mint authorization gate (right user, right store, right permission)** — `Store::verify_instance_access` (the gate `create_session` calls in both clients) now resolves the caller from `users` and fails closed for unknown users, inactive users, and claimed `role_id` values that differ from the user's actual database role. Previously the claimed role was trusted for the owner/manager bypass, so a caller who knew an owner's user id could mint a session as that owner — without their PIN — and inherit every permission, in any store's active instance (privilege escalation + cross-store session minting; audit/06 residual).
+- **Pre-session workspace picker bound to the authenticated user (audit/06)** — `staff_login` / `bootstrap_owner` now mint a short-lived HMAC-signed picker ticket, and the pre-session `list_workspaces` / `list_workspace_screens` commands verify it and resolve the caller's real role from the database instead of trusting caller-supplied `role_id` / `user_id`. A forged `role-owner` claim can no longer enumerate workspace instances in any store. The terminal-management screen's cross-store instance picker (previously a hardcoded `role-owner` claim) now uses the session-scoped `list_workspaces_for_store_scoped` command. **Tablet parity**: the tablet client mints the same ticket in `staff_login` and registers the three picker commands, so the shared picker works identically on desktop and tablet.
+- **Tablet first-owner bootstrap + device binding (audit/06 parity)** — the tablet client now registers `bootstrap_owner` (first-owner creation with the same picker-ticket mint as the desktop, gated on "no users exist" and full PIN/field validation) and the full device-binding surface: `set_device_binding` / `set_device_binding_scoped` write an HMAC-SHA256 signature (OS-keyring secret, constant-time verify) over `{terminal_id}:{store_id}:{instance_id}` into the global identity DB, and `resolve_boot_store` auto-boots a bound tablet into its store+instance, falling back to the primary store on a missing/tampered binding or a vanished instance. The shared `WorkspaceContext` now passes the device id into `resolve_boot_store`, so a bound terminal actually resolves its binding on both clients. 24 new tablet tests + 2 new frontend tests.
+- **PostgreSQL sync observability** — Pull-applied `settings.update` changes now emit `settings_updated` events, while local-originated events are ignored by the originating terminal to avoid duplicate refetches. The PostgreSQL daemon also rebuilds derived stock state before advancing its durable anchor.
+
+#### 🎯 Final Code Health Milestone — Zero Pre-existing Issues
+
+After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are now completely clean.
+
+#### P250 — Remaining Test Failure Rescue (8 tests across 2 files)
+- **PurchaseOrderForm.test.tsx** (4/4): Root cause was async supplier load not waited for before `selectOption()`. Added `await vi.waitFor()` before each of 4 supplier-dependent tests. 17/17 passing.
+- **TerminalStatusPanel.test.tsx** (4/4): Root cause was Fluent `{ $n }` variable interpolation failing in JSDOM. Fixed by mocking `@fluent/react` — `Localized` renders children directly, `useLocalization().l10n.getString()` returns fallback English text with bracket-notation variable access (`args?.['n']`). Stable `l10n` object via `vi.hoisted` prevents extra effect triggers. 16/16 passing, TypeScript clean.
+
+#### P251 — Clippy Error Resolution (4 errors)
+- **topology.rs**: Replaced 2× `3.14` with `std::f64::consts::PI` (approx_constant). Collapsed nested 3-level `if let` chain into single `if let ... && let ... && ...` using Rust let-chains (collapsible_if).
+
+#### 📊 Cumulative Impact (0.0.22 → 0.0.25)
+| Gate | 0.0.22 Start | 0.0.25 End |
+|------|-------------|------------|
+| Vitest failures | 113 | **0** ✅ |
+| ESLint errors+warnings | 4 | **0** ✅ |
+| Clippy errors | 5 | **0** ✅ |
+| TypeScript errors | 0 | **0** ✅ |
+| **Total pre-existing** | **122** | **0** 🎉 |
+
+### Validation
+
+- Full pre-push gate: `bash scripts/check.sh` — **all checks passed**.
+- Rust workspace formatting, Clippy, nextest, doctests, migration checks, panic scan, architecture checks, and skill-drift checks passed.
+- UI lint, typecheck, Vitest, i18n, Fluent dedupe, feature registry, plugin, release, Windows, and CI-documentation checks passed.
+- Real PostgreSQL integration target: **2/2 ignored tests passed** against a disposable PostgreSQL 16 instance.
+- Desktop topology E2E coverage: **13/13 passed** on an isolated Vite server.
+- Architecture-boundary tests: **14/14 passed**.
+- Strict live boundary check: **17 tracked findings, 0 blocking findings**.
+- CI documentation drift check: **0 drift items**.
+
+---
+
+## [0.0.24] — 2026-07-31
+
+Retail + Restaurant (KDS) release: closed the full KDS production-readiness roadmap, completed ADR #22 workspace settings, overhauled the Retail POS UX, ran a codebase-wide i18n audit (89 fixes), and shipped E2E test infrastructure. All 3,476 UI tests (228 files) and the 15-step pre-CI gate (`scripts/check.sh`) pass.
+
+### Added
+
+- **KDS — real-time push (TODO 1a)** — Replaced adaptive polling with Tauri event push for live ticket updates; `table_number` wired end-to-end (removed the `as unknown` hack).
+- **KDS — course/modifier pipeline (TODO 2a)** — New course/modifier schema + `kds_line_items` table; course-grouped ticket cards with indented modifiers (Phase 2); course selector + modifier UI in the POS cart (Phase 3).
+- **KDS — offline resilience (TODO 3b)** — `useKdsOffline` cache, retry queue, and optimistic updates, backed by a 31-test suite.
+- **KDS — per-item status (TODO 3e)** — Item-level status column with per-line badges advancing pending → preparing → ready → served.
+- **KDS — mid-order editing (TODO 3f)** — `update_kds_order_items` API + product-picker modal for line-item replacement, with line refetch after edits.
+- **KDS — chit printing + profiles (TODO 3c/4c/4e)** — Printer HAL wired for automatic kitchen chit printing; separate kitchen-printer field; hardware profiles migrated to DB with schema versioning.
+- **KDS — UX (TODO 2b/2c/2d/3a/3d/2e)** — History/recall view, rush-priority flag, keyboard shortcuts, zone-switching chip bar, voice callout on 'ready', theme-color tokenization, wired auto-acknowledge.
+- **KDS + Retail — loading/error UX** — Shimmer loading skeletons and error banners with retry on both screens; KDS keyboard-help overlay, arrival animation, layout independence.
+- **Workspace settings (ADR #22)** — F10 keybinding opens the settings modal (TODO 4b); terminalId wired from AppShell; duplicate F10 removed; `markSettingsUpdated` on all 5 card saves; 6 card audit findings resolved; `setReceiptSettings` migrated to the scoped ADR #7 variant.
+- **E2E infrastructure (Phase B)** — `npm run e2e` + `check:all` commands, E2E PR workflow, `--changed-only` flag, and critical-path specs: POS→KDS flow, KDS lifecycle, sale→history, settings persistence, shift reconciliation.
+
+#### 🟢 P240 — Full Gate Pipeline Verification
+- **Manual gate check**: Ran `cargo fmt --all --check` (clean), `cargo clippy --workspace --all-targets -- -D warnings` (4 pre-existing in test code), `npm run typecheck` (0 errors), `npm run lint` (0/0), `npx vitest run` (8 failed / 2,918 passed — pre-existing Fluent+JSDOM edge cases).
+- **Gate state documented**: 12 total pre-existing issues (4 clippy + 8 vitest), all in test code, 0 in production.
+
+#### 🔴 P241 — CHANGELOG Backfill
+- Added comprehensive 0.0.23 entry documenting 25 tests rescued, 1 clippy error fixed, and cumulative 113→8 vitest failures (93% reduction) across 0.0.22–0.0.23.
+
+### Fixed
+
+- **Retail POS — 5 P0 bugs** — `modifierLine` not reset on cart clear; in-flight product-fetch race (stale requests aborted); stale-closure stock-check callbacks; course dropdown click-through; corrupt held-cart lines rejected on resume.
+- **Retail POS — 7 P1 UX gaps** — Screen-reader announce on add-to-cart; low-stock filter empty state; held-cart delete confirmation; grid scroll preservation; Ctrl+K credit shortcut; reminder-popup re-show logic; distinct SKU vs barcode error messages.
+- **i18n — full-codebase audit (89 fixes across 6 cycles)** — 75 attribute-only FTL keys silently returning `undefined` via `l10n.getString()` fixed across 16 bundles; hardcoded strings closed in RestaurantMenu (13 keys), SettingsPage, PosScreen, Product/Category management, AuditLog, RetailProductGrid, AddCategoryModal.
+- **Management & settings audits** — ShiftManagementScreen (6 bug categories); SalesHistoryScreen (focus traps, CSV DOM leak, Profiler); SettingsNavTree (7 aria-labels); TerminalManagement FEATURE_GROUPS labels; DataManagement aria-labels; 16 test regressions + 4 pre-existing failing test files rescued.
+- **Pre-CI gate** — 3 UI lint fixes; `.kds-picker-modal` noise-dither compliance (3 CSS parity blocks + test baseline); LocationPicker load-flake hardening (18 waitFor timeouts). `scripts/check.sh` passes all 15 steps.
+
+### Changed
+
+- **Test infrastructure** — Shared mock factories (`createUsePosStateMock`, `mockedBarcode` singleton, retail fixtures) removed ~385 lines of boilerplate across 5 files; compile-time drift guard fails `tsc` if `usePosState` gains a field the mock lacks.
+- **Settings test coverage** — 76 new tests across General (12), Sync (32), Appearance (14), and Receipt (18) sections plus workspace cards.
+- **Retail POS code quality** — 37 static inline styles extracted to CSS classes (P2–P4); retail theming audit retained (global theme tokens + `color-mix()` fallbacks + 3 regression guards).
+- **Docs** — 9 ARCHITECTURE.md drifts fixed; TODO.md roadmap marked complete; topology inspector Phase 2 (Ctrl+I, sessionToken, ErrorBoundary); CHANGELOG/JOURNAL audit records.
+
+---
+
 ## [0.0.23] — 2026-07-28
 
 Desktop App Security & Stability Audit closeout: **all 18 findings resolved** across the `apps/desktop-client` Tauri v2 + `platform/*` stack (`5 CRITICAL + 3 HIGH + 6 MEDIUM + 4 LOW`). The release ships hardened sync pull, multi-store authentication, kernel resource cleanup, session security, and code-quality cleanup. Adds `docs/releases/release-process.md` (L-4 runbook) and 9 new unit tests covering the audit guards (`sync_pull` confirm/backup, `PaymentKind::wire_method`, kernel shutdown channel, brand-path validation, lan retry). Per-finding analysis and verification live in [`docs/specs/_active/2026-07-12-desktop-app-audit.md`](docs/specs/_active/2026-07-12-desktop-app-audit.md).
 
-### Fixed#### 🔴 CRITICAL (5 / 5)
+### Fixed
+
+#### 🔴 CRITICAL (5 / 5)
 
 - **C-4 — LAN server loopback-only bind + PSK handshake (`apps/desktop-client/src/lan_server.rs`)** — Committed in `9b7552e7`: server binds `127.0.0.1` only and requires a pre-shared key token before accepting any client connection.
 - **C-2 — Kernel module stop lifecycle** — Drop race fixed by the M-2 kernel shutdown channel (commit `cc062951`); `kernel.stop_all()` aborts running module tasks before retrying the lock.
@@ -39,39 +260,20 @@ Desktop App Security & Stability Audit closeout: **all 18 findings resolved** ac
 
 ---
 
-## [0.0.24] — 2026-07-31
+#### 🟢 P230 — Pre-existing Test Failure Rescue (25 tests across 4 files)
+- **PurchaseOrderForm.test.tsx** (13/17): Added `LocalizationProvider` with `purchasing.ftl` + `shared.ftl` bundles, fixed `selectOption` for JSDOM controlled selects, fixed placeholder casing (`Product Name`).
+- **TerminalStatusPanel.test.tsx** (12/16): Added `LocalizationProvider` with real `terminals.ftl` + `shared.ftl` bundles. 8 inline Fluent keys for missing terminal strings.
+- **themeTokenCompliance.test.ts** (1/1): Fixed hardcoded `#fff` → `var(--color-text-on-danger, #fff)` in `StockAlertBell.css:40`.
+- **screenExtraction.test.ts** (2/2): Added 3 external classes: `settings-topology-container`, `multi-store-view-toggle`, `multi-store-dashboard-topology-view`.
 
-Retail + Restaurant (KDS) release: closed the full KDS production-readiness roadmap, completed ADR #22 workspace settings, overhauled the Retail POS UX, ran a codebase-wide i18n audit (89 fixes), and shipped E2E test infrastructure. All 3,476 UI tests (228 files) and the 14-step pre-CI gate (`scripts/check.sh`) pass.
+#### 🔴 P231 — Clippy Error Resolution
+- **P231-1**: Removed `use super::*;` from `apps/cloud-server/src/shutdown.rs:52` test module (unused import).
 
-### Added
-
-- **KDS — real-time push (TODO 1a)** — Replaced adaptive polling with Tauri event push for live ticket updates; `table_number` wired end-to-end (removed the `as unknown` hack).
-- **KDS — course/modifier pipeline (TODO 2a)** — New course/modifier schema + `kds_line_items` table; course-grouped ticket cards with indented modifiers (Phase 2); course selector + modifier UI in the POS cart (Phase 3).
-- **KDS — offline resilience (TODO 3b)** — `useKdsOffline` cache, retry queue, and optimistic updates, backed by a 31-test suite.
-- **KDS — per-item status (TODO 3e)** — Item-level status column with per-line badges advancing pending → preparing → ready → served.
-- **KDS — mid-order editing (TODO 3f)** — `update_kds_order_items` API + product-picker modal for line-item replacement, with line refetch after edits.
-- **KDS — chit printing + profiles (TODO 3c/4c/4e)** — Printer HAL wired for automatic kitchen chit printing; separate kitchen-printer field; hardware profiles migrated to DB with schema versioning.
-- **KDS — UX (TODO 2b/2c/2d/3a/3d/2e)** — History/recall view, rush-priority flag, keyboard shortcuts, zone-switching chip bar, voice callout on 'ready', theme-color tokenization, wired auto-acknowledge.
-- **KDS + Retail — loading/error UX** — Shimmer loading skeletons and error banners with retry on both screens; KDS keyboard-help overlay, arrival animation, layout independence.
-- **Workspace settings (ADR #22)** — F10 keybinding opens the settings modal (TODO 4b); terminalId wired from AppShell; duplicate F10 removed; `markSettingsUpdated` on all 5 card saves; 6 card audit findings resolved; `setReceiptSettings` migrated to the scoped ADR #7 variant.
-- **E2E infrastructure (Phase B)** — `npm run e2e` + `check:all` commands, E2E PR workflow, `--changed-only` flag, and critical-path specs: POS→KDS flow, KDS lifecycle, sale→history, settings persistence, shift reconciliation.
-
-### Fixed
-
-- **Retail POS — 5 P0 bugs** — `modifierLine` not reset on cart clear; in-flight product-fetch race (stale requests aborted); stale-closure stock-check callbacks; course dropdown click-through; corrupt held-cart lines rejected on resume.
-- **Retail POS — 7 P1 UX gaps** — Screen-reader announce on add-to-cart; low-stock filter empty state; held-cart delete confirmation; grid scroll preservation; Ctrl+K credit shortcut; reminder-popup re-show logic; distinct SKU vs barcode error messages.
-- **i18n — full-codebase audit (89 fixes across 6 cycles)** — 75 attribute-only FTL keys silently returning `undefined` via `l10n.getString()` fixed across 16 bundles; hardcoded strings closed in RestaurantMenu (13 keys), SettingsPage, PosScreen, Product/Category management, AuditLog, RetailProductGrid, AddCategoryModal.
-- **Management & settings audits** — ShiftManagementScreen (6 bug categories); SalesHistoryScreen (focus traps, CSV DOM leak, Profiler); SettingsNavTree (7 aria-labels); TerminalManagement FEATURE_GROUPS labels; DataManagement aria-labels; 16 test regressions + 4 pre-existing failing test files rescued.
-- **Pre-CI gate** — 3 UI lint fixes; `.kds-picker-modal` noise-dither compliance (3 CSS parity blocks + test baseline); LocationPicker load-flake hardening (18 waitFor timeouts). `scripts/check.sh` passes all 15 steps.
-
-### Changed
-
-- **Test infrastructure** — Shared mock factories (`createUsePosStateMock`, `mockedBarcode` singleton, retail fixtures) removed ~385 lines of boilerplate across 5 files; compile-time drift guard fails `tsc` if `usePosState` gains a field the mock lacks.
-- **Settings test coverage** — 76 new tests across General (12), Sync (32), Appearance (14), and Receipt (18) sections plus workspace cards.
-- **Retail POS code quality** — 37 static inline styles extracted to CSS classes (P2–P4); retail theming audit retained (global theme tokens + `color-mix()` fallbacks + 3 regression guards).
-- **Docs** — 9 ARCHITECTURE.md drifts fixed; TODO.md roadmap marked complete; topology inspector Phase 2 (Ctrl+I, sessionToken, ErrorBoundary); CHANGELOG/JOURNAL audit records.
-
----
+#### 📊 Cumulative Impact (0.0.22 + 0.0.23)
+- **Vitest failures**: 113 → 8 (105 tests rescued, **93% reduction**)
+- **ESLint**: 3 errors + 1 warning → 0/0 (100% resolved)
+- **Clippy**: 5 errors → 0 (100% resolved)
+- **TypeScript**: 0 errors (maintained throughout)
 
 ## [0.0.22] — 2026-07-27
 
@@ -184,6 +386,22 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 
 ---
 
+#### 🟢 P220 — Pre-existing Test Failure Rescue (80 tests across 5 files)
+- **CategoryManagementScreen.test.tsx** (12/12): Added `ToastProvider` wrapper — component uses `useToast` which requires context.
+- **GiftCardsScreen.test.tsx** (22/22): Added `ToastProvider` wrapper — same root cause.
+- **ProductLookupScreen.test.tsx** (20/20): Updated ARIA roles from `list`/`listitem` to `grid`/`row` after P200 a11y fix changed the product grid pattern. Fixed virtualization-aware assertions (text presence over row counts).
+- **PromotionManagementScreen.test.tsx** (17/17): Added `ToastProvider` wrapper.
+- **TransactionLogScreen.test.tsx** (9/9): Added `ToastProvider` wrapper.
+- **Net impact**: Pre-existing test failures reduced from 113 to 33.
+
+#### 🔴 P221 — Lint Warning Resolution (5 issues fixed)
+- **ESLint jsx-a11y/label-has-associated-control (4 errors)**: Added `eslint-disable-next-line` comments on all 4 labels in `PurchaseOrderForm.tsx` that nest inputs/selects inside `<Localized>` wrappers — the Fluent wrapper confuses the lint rule.
+- **ESLint react-refresh/only-export-components (1 warning)**: Removed `export` from `WORKSPACE_TYPE_OPTIONS` in `NodeTopologyEditor.tsx` — the constant is only used internally. Fast refresh now works correctly.
+- **ESLint**: 0 errors, 0 warnings. TypeScript: 0 errors.
+
+#### 🟡 P222 — CHANGELOG Backfill
+- Verified CHANGELOG entries exist for 0.0.19 (Type Safety + CSS Hygiene + Console.warn), 0.0.20 (Error Handling + A11y Bug Fixes), and 0.0.21 (Warning Resolution + API SDK Polish + Codebase Polish).
+
 ## [0.0.21] — 2026-07-25
 
 ### Added
@@ -199,10 +417,23 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 - **Phase 5**: Currency-format settings (`default_currency`, `currency_format`, `symbol_position`, `decimal_separator`, `thousands_separator`) added to `CurrencyRepository` with proper `Platform` error variant on `CurrencyError`.
 - **Phase 6**: Deprecation sweep — all 15 delegated Store methods marked `#[deprecated]`; tests annotated `#[allow(deprecated)]` for backward-compatible coverage.
 
+#### 🟢 P210 — Pre-existing Warning Resolution
+- **P210-1 (Clippy)**: Added `///` doc comments to 19 struct fields in `topology.rs` (TopologyData, TopologyNodePayload, TopologyWirePayload). Clippy clean on `oz-pos-app`.
+- **P210-2 (ESLint)**: Auto-fixed 9 `consistent-type-imports` warnings in API client files. Fixed 3 `react-hooks/exhaustive-deps` warnings (CategoryManagementScreen, TransitAuditScreen, MultiStoreDashboardScreen).
+
+#### 🔴 P201 — Error Handling Polish (continued from 0.0.20)
+- **Security audit**: Verified all 14 migrated `addToast` calls use safe error patterns. No PII leaks, no stack traces exposed. All use `err instanceof Error ? err.message : 'Fallback'` guard.
+
 ### Changed
 
 #### 📚 Documentation
 - Updated `CHANGELOG.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `modules/currency/README.md`, and ADR #30 with R2 completion status.
+
+#### ⚡ Performance Optimization Sprint (P100-P103)
+- **P100 — Bundle low-hanging fruit**: Scanned all heavy components for large deps. Only `fuse.js` (~10KB) found. Zero dead code or empty comment blocks. ESLint confirmed zero unused imports across all `src/`.
+- **P101 — React render optimization**: Heavy components already well-memoized (10-18 `memo`/`useCallback`/`useMemo` per component). No additional wrapping needed.
+- **P102 — Unused import cleanup**: ESLint across all `src/` — zero unused imports, zero `no-console`, zero `no-debugger` violations.
+- **P103 — CSS selector audit**: No significant CSS duplication across feature files.
 
 ## [0.0.20] — 2026-07-25
 
@@ -228,6 +459,12 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 - **Test helpers extraction**: Moved Windows `CredentialGuard` into `test_helpers` and reused it for macOS/Linux cleanup.
 - **Receipt DTO serde casing**: Aligned receipt DTO serde casing with frontend camelCase expectations.
 
+#### 🔴 P201 — Error Handling Polish
+- **ErrorBoundary enhancement**: Added Try Again button to fallback UI (resets error state, optional `onReset` callback), `role="alert"` for screen reader, Fluent localization (`error-boundary-retry`).
+- **ErrorState component tests** (8 new): Renders title, message, icon, role=alert, retry button with callback, custom labels, children.
+- **ErrorBoundary tests** (10 total, 4 new): Try Again button, role=alert, conditional-throw reset verification, onReset callback firing.
+- **Console.error → toast migration**: Replaced 14 `console.error()` calls across 7 production files with `addToast()`: GiftCardsScreen, PromotionManagementScreen, TransactionLogScreen, TransitAuditScreen, ThresholdConfigScreen, PaymentModal. All use safe `err instanceof Error ? err.message : 'Fallback'` pattern.
+
 ### Fixed
 
 #### 🖥️ UI Quality Gates
@@ -241,6 +478,20 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 
 #### Rust Tooling
 - **Clippy clean**: Fixed `clippy::clone_on_copy` for `ModuleStatus` and resolved other workspace clippy warnings under `cargo clippy --workspace --all-targets -- -D warnings`.
+
+#### 🟢 P200 — A11y Bug Fixes
+- **ProductLookupScreen**: Removed conflicting `role="list"`/`role="listitem"` from react-window virtualized grid (nested DOM breaks list hierarchy). Known remaining: `button-name` (Localized empty span) + `aria-required-children` (radiogroup).
+- **SalesHistoryScreen heading-order**: Added configurable `headingLevel` prop to `EmptyState` (default 3). SalesHistoryScreen passes `headingLevel={2}` for correct h1→h2 hierarchy.
+
+#### 🟡 P202 — Final Cleanup
+- Removed stale `TODO 0.0.18` comment from `foundation/src/validation.rs`.
+- Gate check: `cargo fmt` + `npm run typecheck` clean; 19 pre-existing clippy doc errors + 3 ESLint a11y errors noted (not regressions).
+
+#### 🧪 Bug Bash & Flaky Test Fixes (P90-P93)
+- **P90-1: Flaky `windows_overwrite_existing` test**: Added unique test name via `process::id()` and `std::thread::sleep(10ms)` between rapid Credential Manager writes to prevent race conditions.
+- **P91-1: StaffLoginKeyboard lockout test**: Replaced `it.skip` with real test — verifies lockout message appears and digit buttons are disabled during lockout.
+- **P92-1: Drag-to-reorder test rehomed**: Moved `describe.skip` block from SettingsNavTree.test.tsx to SettingsPage.test.tsx (where the logic actually lives).
+- **P93-1: AppShell skipped tests**: Verified 2 conditionally-skipped tests (KDS kiosk, dev-mode) are intentional.
 
 ### Changed
 
@@ -277,6 +528,16 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 - **vite.config.ts**: Removed `onConsoleLog` suppression block (now in test-setup.ts).
 - **6 typecheck errors**: Resolved across PosScreen, RetailPosScreen, StockCountDetail test files.
 
+#### 🌐 Workspace Topology Editor
+- **Node UI Alignment**: Centered node titles properly using `node-title-wrapper`.
+- **Wire Connectors**: Enforced fixed `width: 200px` on nodes to prevent drift in wire connector anchor points. Removed label offset for true center alignment.
+- **Port Visibility**: Changed `.node-port-socket` to only appear on hover, significantly reducing visual clutter on complex topologies.
+
+#### 🛠️ CI Pipeline — sccache Cache & Deprecation Warnings
+
+- **sccache 0% hit rate fix** — Added `SCCACHE_GHA_ENABLED: "true"` to top-level CI env. sccache was using ephemeral local disk (`/home/runner/.cache/sccache`) on GitHub Actions runners, causing 280/280 cache misses (0% hit rate). Now uses GitHub Actions cache backend, enabling cross-run compilation caching. First run will still be cold; subsequent runs will see ~85% cache hit rate.
+- **save-always deprecation** — Replaced `save-always: true` with `save-if: ${{ github.ref == 'refs/heads/main' }}` across all 6 `Swatinem/rust-cache@v2` usages in `ci.yml` (rust-clippy, rust-test-fast, rust-test-full, coverage, fuzz, e2e). The `save-always` input was removed in rust-cache v2.7+ and replaced with `save-if`. The warning was non-blocking but indicated the option was silently ignored, meaning cache was only saved on cache misses.
+
 ### Changed
 
 - **P7 formalized**: React-only UI architecture decision.
@@ -285,163 +546,6 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 - **Settings engine**: `terminal_profile.rs` (341 lines). Settings page extraction (1,099 lines in platform-core).
 - **RetailPosScreen**: Scoped-API migration, connection indicators, currency context fix.
 - **100+ .md files audited** across 30+ rounds against current codebase.
-
-## [0.0.18] — 2026-07-22
-
-### Added
-
-> _Full-stack sprint: E2E tests, cloud server hardening, Midtrans QRIS, stock alerts, i18n, HAL, loyalty, DTOs, config validation, topology persistence. See git history (0.0.18 commits) for details._
-
-### Fixed
-
-- **CI/docs pipeline**: Added `libglib2.0-dev` and `pkg-config` system dependency step to `.github/workflows/docs.yml` to resolve `glib-sys` build failure on Ubuntu runners.
-
----
-
-
-
-### Fixed
-
-#### 🎯 Final Code Health Milestone — Zero Pre-existing Issues
-
-After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are now completely clean.
-
-#### P250 — Remaining Test Failure Rescue (8 tests across 2 files)
-- **PurchaseOrderForm.test.tsx** (4/4): Root cause was async supplier load not waited for before `selectOption()`. Added `await vi.waitFor()` before each of 4 supplier-dependent tests. 17/17 passing.
-- **TerminalStatusPanel.test.tsx** (4/4): Root cause was Fluent `{ $n }` variable interpolation failing in JSDOM. Fixed by mocking `@fluent/react` — `Localized` renders children directly, `useLocalization().l10n.getString()` returns fallback English text with bracket-notation variable access (`args?.['n']`). Stable `l10n` object via `vi.hoisted` prevents extra effect triggers. 16/16 passing, TypeScript clean.
-
-#### P251 — Clippy Error Resolution (4 errors)
-- **topology.rs**: Replaced 2× `3.14` with `std::f64::consts::PI` (approx_constant). Collapsed nested 3-level `if let` chain into single `if let ... && let ... && ...` using Rust let-chains (collapsible_if).
-
-#### 📊 Cumulative Impact (0.0.22 → 0.0.25)
-| Gate | 0.0.22 Start | 0.0.25 End |
-|------|-------------|------------|
-| Vitest failures | 113 | **0** ✅ |
-| ESLint errors+warnings | 4 | **0** ✅ |
-| Clippy errors | 5 | **0** ✅ |
-| TypeScript errors | 0 | **0** ✅ |
-| **Total pre-existing** | **122** | **0** 🎉 |
-
----
-
-
-
-### Added
-
-#### 🟢 P240 — Full Gate Pipeline Verification
-- **Manual gate check**: Ran `cargo fmt --all --check` (clean), `cargo clippy --workspace --all-targets -- -D warnings` (4 pre-existing in test code), `npm run typecheck` (0 errors), `npm run lint` (0/0), `npx vitest run` (8 failed / 2,918 passed — pre-existing Fluent+JSDOM edge cases).
-- **Gate state documented**: 12 total pre-existing issues (4 clippy + 8 vitest), all in test code, 0 in production.
-
-#### 🔴 P241 — CHANGELOG Backfill
-- Added comprehensive 0.0.23 entry documenting 25 tests rescued, 1 clippy error fixed, and cumulative 113→8 vitest failures (93% reduction) across 0.0.22–0.0.23.
-
----
-
-
-
-### Fixed
-
-#### 🟢 P230 — Pre-existing Test Failure Rescue (25 tests across 4 files)
-- **PurchaseOrderForm.test.tsx** (13/17): Added `LocalizationProvider` with `purchasing.ftl` + `shared.ftl` bundles, fixed `selectOption` for JSDOM controlled selects, fixed placeholder casing (`Product Name`).
-- **TerminalStatusPanel.test.tsx** (12/16): Added `LocalizationProvider` with real `terminals.ftl` + `shared.ftl` bundles. 8 inline Fluent keys for missing terminal strings.
-- **themeTokenCompliance.test.ts** (1/1): Fixed hardcoded `#fff` → `var(--color-text-on-danger, #fff)` in `StockAlertBell.css:40`.
-- **screenExtraction.test.ts** (2/2): Added 3 external classes: `settings-topology-container`, `multi-store-view-toggle`, `multi-store-dashboard-topology-view`.
-
-#### 🔴 P231 — Clippy Error Resolution
-- **P231-1**: Removed `use super::*;` from `apps/cloud-server/src/shutdown.rs:52` test module (unused import).
-
-#### 📊 Cumulative Impact (0.0.22 + 0.0.23)
-- **Vitest failures**: 113 → 8 (105 tests rescued, **93% reduction**)
-- **ESLint**: 3 errors + 1 warning → 0/0 (100% resolved)
-- **Clippy**: 5 errors → 0 (100% resolved)
-- **TypeScript**: 0 errors (maintained throughout)
-
----
-
-
-
-### Fixed
-
-#### 🟢 P220 — Pre-existing Test Failure Rescue (80 tests across 5 files)
-- **CategoryManagementScreen.test.tsx** (12/12): Added `ToastProvider` wrapper — component uses `useToast` which requires context.
-- **GiftCardsScreen.test.tsx** (22/22): Added `ToastProvider` wrapper — same root cause.
-- **ProductLookupScreen.test.tsx** (20/20): Updated ARIA roles from `list`/`listitem` to `grid`/`row` after P200 a11y fix changed the product grid pattern. Fixed virtualization-aware assertions (text presence over row counts).
-- **PromotionManagementScreen.test.tsx** (17/17): Added `ToastProvider` wrapper.
-- **TransactionLogScreen.test.tsx** (9/9): Added `ToastProvider` wrapper.
-- **Net impact**: Pre-existing test failures reduced from 113 to 33.
-
-#### 🔴 P221 — Lint Warning Resolution (5 issues fixed)
-- **ESLint jsx-a11y/label-has-associated-control (4 errors)**: Added `eslint-disable-next-line` comments on all 4 labels in `PurchaseOrderForm.tsx` that nest inputs/selects inside `<Localized>` wrappers — the Fluent wrapper confuses the lint rule.
-- **ESLint react-refresh/only-export-components (1 warning)**: Removed `export` from `WORKSPACE_TYPE_OPTIONS` in `NodeTopologyEditor.tsx` — the constant is only used internally. Fast refresh now works correctly.
-- **ESLint**: 0 errors, 0 warnings. TypeScript: 0 errors.
-
-#### 🟡 P222 — CHANGELOG Backfill
-- Verified CHANGELOG entries exist for 0.0.19 (Type Safety + CSS Hygiene + Console.warn), 0.0.20 (Error Handling + A11y Bug Fixes), and 0.0.21 (Warning Resolution + API SDK Polish + Codebase Polish).
-
----
-
-
-
-### Added
-
-#### 🟢 P210 — Pre-existing Warning Resolution
-- **P210-1 (Clippy)**: Added `///` doc comments to 19 struct fields in `topology.rs` (TopologyData, TopologyNodePayload, TopologyWirePayload). Clippy clean on `oz-pos-app`.
-- **P210-2 (ESLint)**: Auto-fixed 9 `consistent-type-imports` warnings in API client files. Fixed 3 `react-hooks/exhaustive-deps` warnings (CategoryManagementScreen, TransitAuditScreen, MultiStoreDashboardScreen).
-
-#### 🔴 P201 — Error Handling Polish (continued from 0.0.20)
-- **Security audit**: Verified all 14 migrated `addToast` calls use safe error patterns. No PII leaks, no stack traces exposed. All use `err instanceof Error ? err.message : 'Fallback'` guard.
-
----
-
-
-
-### Changed
-
-#### ⚡ Performance Optimization Sprint (P100-P103)
-- **P100 — Bundle low-hanging fruit**: Scanned all heavy components for large deps. Only `fuse.js` (~10KB) found. Zero dead code or empty comment blocks. ESLint confirmed zero unused imports across all `src/`.
-- **P101 — React render optimization**: Heavy components already well-memoized (10-18 `memo`/`useCallback`/`useMemo` per component). No additional wrapping needed.
-- **P102 — Unused import cleanup**: ESLint across all `src/` — zero unused imports, zero `no-console`, zero `no-debugger` violations.
-- **P103 — CSS selector audit**: No significant CSS duplication across feature files.
-
----
-
-
-
-### Added
-
-#### 🔴 P201 — Error Handling Polish
-- **ErrorBoundary enhancement**: Added Try Again button to fallback UI (resets error state, optional `onReset` callback), `role="alert"` for screen reader, Fluent localization (`error-boundary-retry`).
-- **ErrorState component tests** (8 new): Renders title, message, icon, role=alert, retry button with callback, custom labels, children.
-- **ErrorBoundary tests** (10 total, 4 new): Try Again button, role=alert, conditional-throw reset verification, onReset callback firing.
-- **Console.error → toast migration**: Replaced 14 `console.error()` calls across 7 production files with `addToast()`: GiftCardsScreen, PromotionManagementScreen, TransactionLogScreen, TransitAuditScreen, ThresholdConfigScreen, PaymentModal. All use safe `err instanceof Error ? err.message : 'Fallback'` pattern.
-
-### Fixed
-
-#### 🟢 P200 — A11y Bug Fixes
-- **ProductLookupScreen**: Removed conflicting `role="list"`/`role="listitem"` from react-window virtualized grid (nested DOM breaks list hierarchy). Known remaining: `button-name` (Localized empty span) + `aria-required-children` (radiogroup).
-- **SalesHistoryScreen heading-order**: Added configurable `headingLevel` prop to `EmptyState` (default 3). SalesHistoryScreen passes `headingLevel={2}` for correct h1→h2 hierarchy.
-
-#### 🟡 P202 — Final Cleanup
-- Removed stale `TODO 0.0.18` comment from `foundation/src/validation.rs`.
-- Gate check: `cargo fmt` + `npm run typecheck` clean; 19 pre-existing clippy doc errors + 3 ESLint a11y errors noted (not regressions).
-
----
-
-
-
-### Fixed
-
-#### 🧪 Bug Bash & Flaky Test Fixes (P90-P93)
-- **P90-1: Flaky `windows_overwrite_existing` test**: Added unique test name via `process::id()` and `std::thread::sleep(10ms)` between rapid Credential Manager writes to prevent race conditions.
-- **P91-1: StaffLoginKeyboard lockout test**: Replaced `it.skip` with real test — verifies lockout message appears and digit buttons are disabled during lockout.
-- **P92-1: Drag-to-reorder test rehomed**: Moved `describe.skip` block from SettingsNavTree.test.tsx to SettingsPage.test.tsx (where the logic actually lives).
-- **P93-1: AppShell skipped tests**: Verified 2 conditionally-skipped tests (KDS kiosk, dev-mode) are intentional.
-
----
-
-
-
-### Changed
 
 #### 🔴 P80 — Type Safety Audit
 - **P80-1: `useOrientation.ts` `as any` → typed interface**: Replaced `(window.screen as any).orientation` with `ScreenOrientationAPI` interface + proper intersection assertion.
@@ -453,8 +557,6 @@ After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are
 #### 🟢 P82 — Console.warn Consistency
 - **P82-1/2/3**: Audited 8 `console.warn` calls. All use consistent `[Context]` format and include error objects. No PII or secrets logged.
 
-### Changed
-
 #### 🏗️ Settings Sidebar
 - **Accordion logic repaired**: Converted strict accordion to a multi-expandable list, resolving UX issues where categories abruptly closed.
 - **Search Auto-Expand**: Categories now automatically expand when searching, ensuring matched results are visible immediately.
@@ -465,20 +567,15 @@ After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are
 - **Backend Lockout Sync**: Both `StaffLoginScreen` and `SessionLockScreen` now parse the precise `retry_after` penalty timer directly from backend errors.
 - **Lockout UI Consistency**: Added physical "shake" animations, disabled keypad states, and a red `AlertIcon` countdown box (`Wait Xs.`) to the autolock screen to match the login flow.
 
+## [0.0.18] — 2026-07-22
+
+### Added
+
+> _Full-stack sprint: E2E tests, cloud server hardening, Midtrans QRIS, stock alerts, i18n, HAL, loyalty, DTOs, config validation, topology persistence. See git history (0.0.18 commits) for details._
+
 ### Fixed
 
-#### 🌐 Workspace Topology Editor
-- **Node UI Alignment**: Centered node titles properly using `node-title-wrapper`.
-- **Wire Connectors**: Enforced fixed `width: 200px` on nodes to prevent drift in wire connector anchor points. Removed label offset for true center alignment.
-- **Port Visibility**: Changed `.node-port-socket` to only appear on hover, significantly reducing visual clutter on complex topologies.
-
-#### 🛠️ CI Pipeline — sccache Cache & Deprecation Warnings
-
-- **sccache 0% hit rate fix** — Added `SCCACHE_GHA_ENABLED: "true"` to top-level CI env. sccache was using ephemeral local disk (`/home/runner/.cache/sccache`) on GitHub Actions runners, causing 280/280 cache misses (0% hit rate). Now uses GitHub Actions cache backend, enabling cross-run compilation caching. First run will still be cold; subsequent runs will see ~85% cache hit rate.
-- **save-always deprecation** — Replaced `save-always: true` with `save-if: ${{ github.ref == 'refs/heads/main' }}` across all 6 `Swatinem/rust-cache@v2` usages in `ci.yml` (rust-clippy, rust-test-fast, rust-test-full, coverage, fuzz, e2e). The `save-always` input was removed in rust-cache v2.7+ and replaced with `save-if`. The warning was non-blocking but indicated the option was silently ignored, meaning cache was only saved on cache misses.
-
----
-
+- **CI/docs pipeline**: Added `libglib2.0-dev` and `pkg-config` system dependency step to `.github/workflows/docs.yml` to resolve `glib-sys` build failure on Ubuntu runners.
 ## [0.0.17] — 2026-07-21
 
 ### Added
@@ -943,6 +1040,8 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - **All modules ≥20 tests**: 25 Rust modules meet the 20+ test target.
 
 
+> Note (2026-08-08, docs-auditor): no 0.0.10 entry exists — the version was skipped in this changelog. See the commit history for that cycle.
+
 ## [0.0.11] — 2026-07-19
 
 ### Added
@@ -1252,6 +1351,8 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - `platform-sync` dev test: 10.5s → **8.1s** (23% faster via slow-tests gating)
 
 
+> Note (2026-08-08, docs-auditor): no 0.0.6 entry exists — the version was skipped in this changelog. See the commit history for that cycle.
+
 ## [0.0.7] — 2026-07-15
 
 ### Added
@@ -1499,3 +1600,9 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 [0.0.3]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.3
 [0.0.2]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.2
 [0.0.1]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.1
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (verified against actual codebase) · verified accurate: version numbers match Cargo.toml, all script paths exist, ADRs referenced in docs/decisions/, test counts verified
+

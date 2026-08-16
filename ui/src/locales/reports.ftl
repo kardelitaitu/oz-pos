@@ -12,12 +12,31 @@ sales-report-hourly-heatmap = Busiest Hours
 sales-report-top-products = Top Products
 sales-report-total-revenue = Total:
 sales-report-total-orders = Orders:
+sales-report-total-gross-profit = Gross Profit:
 sales-report-export-csv = Export CSV
 sales-report-revenue-label = Revenue
 sales-report-rank = #
 top-products-name = Name
 top-products-quantity = Qty
 top-products-revenue = Revenue
+top-products-gross-profit = Gross Profit
+top-products-margin = Margin
+sales-report-top-rank-aria = Rank top products by
+sales-report-top-rank-revenue-aria = Rank by revenue
+sales-report-top-rank-profit-aria = Rank by gross profit
+sales-report-category-popularity = Category Popularity
+sales-report-category-popularity-category = Category
+sales-report-category-popularity-products = Products
+sales-report-category-popularity-mean = Popularity
+sales-report-category-popularity-mean-tip = Category average vs. catalog average
+sales-report-category-popularity-top = Top Sellers
+sales-report-category-popularity-uncategorized = Uncategorized
+sales-report-popularity-trend = Popularity Trend
+sales-report-demand-forecast = Demand Forecast
+sales-report-demand-forecast-category = Category
+sales-report-demand-forecast-avg = Avg / period
+sales-report-demand-forecast-trend = Trend
+sales-report-demand-forecast-next = Next period
 heatmap-title = Busiest Hours
 heatmap-no-data = No data
 day-sunday = Sun
@@ -30,16 +49,43 @@ day-saturday = Sat
 
 # Dashboard
 dashboard-title = Dashboard
-dashboard-today-revenue = Today's Revenue
-dashboard-orders-today = Orders Today
+dashboard-revenue = Revenue
+dashboard-gross-profit = Gross Profit
+dashboard-orders = Orders
 dashboard-top-product = Top Product
 dashboard-low-stock-alerts = Low Stock Alerts
-dashboard-no-data = No sales data for today
+dashboard-no-data = No data yet
+dashboard-stock-ok = All stock levels are healthy.
+
+# Dashboard — date range
+dashboard-filter-from = From
+dashboard-filter-to = To
+dashboard-btn-apply = Apply
+
+# Dashboard — granularity toggle
+dashboard-granularity-aria = Time granularity
+dashboard-granularity-daily = Daily
+dashboard-granularity-weekly = Weekly
+dashboard-granularity-monthly = Monthly
+
+# Dashboard — charts
+dashboard-chart-revenue = Revenue Trend
+dashboard-chart-revenue-aria = Revenue and profit trend chart
+dashboard-chart-profit = Profit
+dashboard-chart-category-breakdown = Category Breakdown
+dashboard-chart-category-aria = Sales breakdown by product category
+dashboard-chart-category = Categories
+dashboard-chart-heatmap = Sales Heatmap
+dashboard-chart-heatmap-aria = Hourly sales heatmap by day of week
+dashboard-chart-top-products = Top 10 Products
+dashboard-chart-top-products-aria = Top 10 products by revenue
+dashboard-heatmap-empty = No heatmap data yet
+dashboard-heatmap-tooltip = { $day } { $hour }: { $count } orders
 
 # Dashboard — a11y
 dashboard-region-aria = Dashboard
 dashboard-stock-alerts-aria = Low stock alerts
-dashboard-stock-left = left
+dashboard-stock-below-threshold = { $qty } left (below { $threshold })
 
 # Menu Engineering
 menu-eng-title = Menu Engineering
@@ -119,3 +165,19 @@ custom-report-run-aria = Run report
 custom-report-region-aria = Custom Report Builder
 custom-report-export-aria = Export CSV
 custom-report-columns-selected = { $selected } / { $total } selected
+
+# Export
+dashboard-export-csv = CSV
+dashboard-export-csv-aria = Export dashboard data as CSV
+dashboard-category-clear-aria = Clear category selection
+dashboard-back = Back
+dashboard-back-aria = Back to home
+dashboard-error-load = Failed to load dashboard data. Please try again.
+dashboard-refreshing = Refreshing…
+dashboard-delta-new = New
+
+# Dashboard — CSV export columns
+dashboard-export-col-date = Date
+dashboard-export-col-revenue = Revenue
+dashboard-export-col-profit = Gross Profit
+dashboard-export-col-orders = Orders

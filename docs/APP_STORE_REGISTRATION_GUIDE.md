@@ -20,7 +20,7 @@ From your workspace root, run Tauri's Windows bundler:
 cd apps/desktop-client
 cargo tauri build --bundles msi,nsis
 ```
-- **Output Artifacts**: `apps/desktop-client/target/release/bundle/msi/oz-pos_0.0.13_x64_en-US.msi` and `.exe` (NSIS).
+- **Output Artifacts**: `apps/desktop-client/target/release/bundle/msi/oz-pos_0.0.25_x64_en-US.msi` and `.exe` (NSIS).
 
 ### Step 3: Create App Submission on Partner Center
 1. Log into Partner Center → **Apps and Services** → **Windows & Xbox**.
@@ -42,19 +42,19 @@ cargo tauri build --bundles msi,nsis
 2. Register for a **Developer Account**: **$25 USD one-time fee**.
 3. Complete ID verification (requires passport or national identity card / KTP for Indonesia).
 
-### Step 2: Generate Signed Android App Bundle (AAB)
+### Step 2: Generate a Signed Android Build
 Generate your release signing keystore (keep this file safe and never commit to Git):
 ```bash
 keytool -genkey -v -keystore oz-pos-release.keystore \
   -alias oz-pos-alias -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Build the signed Android App Bundle (`.aab`):
+Build the signed APK (the current CI pipeline produces **APKs only** — AAB/Play-bundle support is pending NDK stabilisation):
 ```powershell
 cd apps/tablet-client
-cargo tauri android build --aab
+cargo tauri android build --apk --target aarch64
 ```
-- **Output Artifact**: `apps/tablet-client/gen/android/app/build/outputs/bundle/release/oz-pos-tablet.aab`.
+- **Output Artifact**: `apps/tablet-client/gen/android/app/build/outputs/apk/release/oz-pos-tablet-arm64-v8a.apk`.
 
 ### Step 3: Create Play Store Release Submission
 1. Log into Google Play Console → Click **Create App**.
@@ -73,7 +73,7 @@ cargo tauri android build --aab
 5. Create a **Production Release**:
    - Go to **Release** → **Production** → **Create New Release**.
    - Upload `oz-pos-tablet.aab`.
-   - Add Release Notes: *"Version 0.0.13 - Multi-store management, KDS, Kiosk, and offline SQLite sync."*
+   - Add Release Notes: *"Version 0.0.25 - Multi-store topology, KDS, Kiosk, and offline SQLite sync."*
 6. Click **Review and Roll Out to Production**. Review typically takes **1 to 3 days**.
 
 ---
@@ -82,5 +82,9 @@ cargo tauri android build --aab
 
 OZ-POS provides automated GitHub Actions workflows for continuous integration and release artifacts:
 
-- **Android Automated Build**: [`.github/workflows/android.yml`](file:///c:/My%20Script/oz-pos/.github/workflows/android.yml) builds signed `.apk` and `.aab` bundles automatically on tag push (`v*`).
-- **Desktop Release Automated Build**: [`.github/workflows/release.yml`](file:///c:/My%20Script/oz-pos/.github/workflows/release.yml) compiles Windows MSI installers automatically.
+- **Android Automated Build**: [`.github/workflows/android.yml`](./.github/workflows/android.yml) builds a signed `aarch64` APK on `v*` tag push (AAB/Play bundles pending NDK stabilisation).
+- **Desktop Release Automated Build**: [`.github/workflows/release.yml`](./.github/workflows/release.yml) compiles Windows MSI installers automatically.
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).

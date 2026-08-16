@@ -9,6 +9,8 @@ import type {
   PullResult,
   PingResult,
   TokenResult,
+  OfflineQueueSummaryDto,
+  SyncPlanResult,
 } from '@/api/offline';
 
 /** Structured expiry info for a JWT token. */
@@ -47,6 +49,28 @@ function formatTokenExpiry(expiresAt: string | null): ExpiryInfo | null {
   return { fluentKey: 'settings-sync-expiry-less-than-minute', fluentArgs: {}, tone: 'critical' };
 }
 
+/** Relative-time label for the detailed status panel ("just now", "12m ago", …). */
+function formatRelativeTime(iso: string | null): { fluentKey: string; fluentArgs: Record<string, number | string> } | null {
+  if (!iso) return null;
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return null;
+  // Future timestamps (clock skew) count as "just now".
+  const diffMs = Math.max(0, Date.now() - ts);
+  if (diffMs < 60_000) {
+    return { fluentKey: 'settings-sync-time-just-now', fluentArgs: {} };
+  }
+  const mins = Math.floor(diffMs / 60_000);
+  const hours = Math.floor(diffMs / 3_600_000);
+  const days = Math.floor(diffMs / 86_400_000);
+  if (days >= 1) {
+    return { fluentKey: 'settings-sync-time-days-ago', fluentArgs: { count: days } };
+  }
+  if (hours >= 1) {
+    return { fluentKey: 'settings-sync-time-hours-ago', fluentArgs: { count: hours } };
+  }
+  return { fluentKey: 'settings-sync-time-minutes-ago', fluentArgs: { count: mins } };
+}
+
 export interface SyncSectionProps {
   sync: SyncSettingsDto;
   setSync: (s: SyncSettingsDto | ((prev: SyncSettingsDto) => SyncSettingsDto)) => void;
@@ -64,7 +88,9 @@ export interface SyncSectionProps {
   setSyncResult: (r: SyncAttemptResult | null) => void;
   pullResult: PullResult | null;
   setPullResult: (r: PullResult | null) => void;
-  pendingCount: number | null;
+  queueSummary: OfflineQueueSummaryDto | null;
+  /** The tenant's sync plan read from the server (ADR sync-plan-gating). */
+  syncPlan: SyncPlanResult | null;
   testing: boolean;
   setTesting: (v: boolean) => void;
   pingResult: PingResult | null;
@@ -76,7 +102,7 @@ export interface SyncSectionProps {
    
   cmInput: React.HTMLAttributes<HTMLInputElement>;
   markDirty: () => void;
-  refreshPendingCount: () => Promise<void>;
+  refreshQueueSummary: () => Promise<void>;
   testSyncConnection: (url?: string) => Promise<PingResult>;
   syncRun: () => Promise<SyncAttemptResult>;
   syncPull: (args: { confirmDestructive: boolean }) => Promise<PullResult>;
@@ -102,7 +128,8 @@ export default function SyncSection({
   setSyncResult,
   pullResult,
   setPullResult,
-  pendingCount,
+  queueSummary,
+  syncPlan,
   testing,
   setTesting,
   pingResult,
@@ -113,7 +140,7 @@ export default function SyncSection({
   setTokenExpiresAt,
   cmInput,
   markDirty,
-  refreshPendingCount,
+  refreshQueueSummary,
   testSyncConnection,
   syncRun,
   syncPull,
@@ -280,12 +307,78 @@ export default function SyncSection({
                     ? syncResult.error
                     : l10n.getString('settings-sync-status-ok')}
               </span>
-              {pendingCount !== null && pendingCount > 0 && (
+              {queueSummary && queueSummary.pendingCount > 0 && (
                 <span className="settings-sync-pending-badge">
-                  {l10n.getString('settings-sync-pending-count', { count: pendingCount })}
+                  {l10n.getString('settings-sync-pending-count', { count: queueSummary.pendingCount })}
                 </span>
               )}
             </div>
+
+            {/* ── Tenant plan (ADR sync-plan-gating) ── */}
+            {syncPlan?.ok && syncPlan.plan && (
+              <div
+                className={`settings-sync-plan-row${syncPlan.plan === 'free' ? ' settings-sync-plan-row--free' : ''}`}
+                data-testid="sync-plan-row"
+              >
+                <Localized id="settings-sync-plan-label"><span className="settings-sync-plan-label">Plan</span></Localized>
+                {syncPlan.plan === 'pro' ? (
+                  <span className="settings-sync-plan-badge settings-sync-plan-badge--pro">
+                    <Localized id="settings-sync-plan-pro"><span>Pro</span></Localized>
+                  </span>
+                ) : (
+                  <span className="settings-sync-plan-badge settings-sync-plan-badge--free">
+                    <Localized id="settings-sync-plan-free"><span>Free</span></Localized>
+                  </span>
+                )}
+                {syncPlan.plan === 'free' && (
+                  <Localized id="settings-sync-plan-upgrade-hint">
+                    <span className="settings-sync-plan-upgrade-hint">Upgrade to sync to the cloud</span>
+                  </Localized>
+                )}
+              </div>
+            )}
+
+            {/* ── Detailed queue status ──────────────── */}
+            {queueSummary && (
+              <div className="settings-sync-summary" data-testid="sync-queue-summary">
+                <div className="settings-sync-summary-grid">
+                  <span className="settings-sync-summary-item">
+                    <strong>{queueSummary.pendingCount}</strong>
+                    <Localized id="settings-sync-summary-pending"><span>pending</span></Localized>
+                  </span>
+                  <span className="settings-sync-summary-item">
+                    <strong>{queueSummary.syncedCount}</strong>
+                    <Localized id="settings-sync-summary-synced"><span>synced</span></Localized>
+                  </span>
+                  <span className="settings-sync-summary-item">
+                    <strong>{queueSummary.failedCount}</strong>
+                    <Localized id="settings-sync-summary-failed"><span>failed</span></Localized>
+                  </span>
+                  <span className="settings-sync-summary-item">
+                    <strong>{queueSummary.conflictCount}</strong>
+                    <Localized id="settings-sync-summary-conflicts"><span>conflicts</span></Localized>
+                  </span>
+                </div>
+                <div className="settings-sync-summary-meta">
+                  <span className="settings-sync-summary-time">
+                    {(() => {
+                      const rel = formatRelativeTime(queueSummary.lastSyncedAt);
+                      return rel
+                        ? l10n.getString('settings-sync-last-synced', { time: l10n.getString(rel.fluentKey, rel.fluentArgs) })
+                        : l10n.getString('settings-sync-last-synced-never');
+                    })()}
+                  </span>
+                  <span className="settings-sync-summary-time">
+                    {(() => {
+                      const rel = formatRelativeTime(queueSummary.oldestPendingAt);
+                      return rel
+                        ? l10n.getString('settings-sync-oldest-pending', { time: l10n.getString(rel.fluentKey, rel.fluentArgs) })
+                        : l10n.getString('settings-sync-oldest-pending-none');
+                    })()}
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="settings-actions">
               <Button
@@ -323,8 +416,15 @@ export default function SyncSection({
                   try {
                     const result = await syncRun();
                     setSyncResult(result);
-                    refreshPendingCount();
-                    if (result.error) {
+                    refreshQueueSummary();
+                    if (result.planRequired) {
+                      // ADR sync-plan-gating: surface the localized upgrade
+                      // prompt, never the raw backend error string.
+                      addToast({
+                        message: l10n.getString('settings-sync-plan-required'),
+                        type: 'error',
+                      });
+                    } else if (result.error) {
                       addToast({ message: result.error, type: 'error' });
                     } else if (result.synced > 0 || result.failed > 0) {
                       addToast({
@@ -402,7 +502,21 @@ export default function SyncSection({
                     <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
                   </Localized>
                 </p>
-                {syncResult.error && (
+                {syncResult.planRequired && (
+                  <div className="settings-sync-plan-required" role="status">
+                    <p className="settings-hint settings-hint--error">
+                      <Localized id="settings-sync-plan-required">
+                        <span>Cloud sync requires a paid plan</span>
+                      </Localized>
+                    </p>
+                    <p className="settings-hint">
+                      <Localized id="settings-sync-plan-required-hint">
+                        <span>Your local sales keep working — upgrade to sync them to the cloud.</span>
+                      </Localized>
+                    </p>
+                  </div>
+                )}
+                {syncResult.error && !syncResult.planRequired && (
                   <p className="settings-hint settings-hint--error">{syncResult.error}</p>
                 )}
               </div>

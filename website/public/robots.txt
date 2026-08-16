@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+# Live at a workers.dev URL until the oz-pos.com domain is bought; update
+# this (and astro.config.mjs `site`) when the custom domain goes live.
+Sitemap: https://oz-pos.adikaradwiatmaja.workers.dev/sitemap-index.xml

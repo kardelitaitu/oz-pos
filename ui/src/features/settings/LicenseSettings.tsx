@@ -21,11 +21,11 @@ interface LicensePayload {
   issued_at: string;
 }
 
-/** Format an RFC 3339 date string for display. */
-function formatDate(rfc3339: string): string {
+/** Format an RFC 3339 date string for display in the active locale. */
+function formatDate(rfc3339: string, locale: string): string {
   try {
     const d = new Date(rfc3339);
-    return d.toLocaleDateString(undefined, {
+    return d.toLocaleDateString(locale, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -57,7 +57,7 @@ function relativeTime(ms: number, l10n: ReturnType<typeof useLocalization>['l10n
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return l10n.getString('settings-license-minutes-ago', { minutes: String(minutes) });
   const d = new Date(ms);
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString([...l10n.bundles][0]?.locales[0] ?? 'en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
 /** Duration (ms) for row flash after a server status update. */
@@ -162,6 +162,21 @@ export default function LicenseSettings() {
       if (status.payload) {
         const parsed: LicensePayload = JSON.parse(status.payload);
         setPayload(parsed);
+      } else if (status.tier) {
+        // Payload unavailable (expired/missing) but Rust still returns tier.
+        // Build a minimal payload so the tier row is visible.
+        setPayload({
+          tenant_id: '',
+          tier_key: status.tier,
+          status: status.status,
+          max_stores: 0,
+          max_pos_instances: 0,
+          allowed_types: [],
+          starts_at: '',
+          expires_at: '',
+          grace_until: '',
+          issued_at: '',
+        });
       }
     } catch (err) {
       setLoadError(l10nErrorMessage(err, l10nRef.current, 'settings-license-load-failed'));
@@ -296,7 +311,7 @@ export default function LicenseSettings() {
             <Localized id="settings-license-expires"><span>Expires</span></Localized>
           </span>
           <span className="settings-license-value">
-            {formatDate(payload.expires_at)}
+            {formatDate(payload.expires_at, [...l10n.bundles][0]?.locales[0] ?? 'en-US')}
           </span>
         </div>
 
@@ -305,7 +320,7 @@ export default function LicenseSettings() {
             <Localized id="settings-license-grace"><span>Grace Period Until</span></Localized>
           </span>
           <span className="settings-license-value">
-            {formatDate(payload.grace_until)}
+            {formatDate(payload.grace_until, [...l10n.bundles][0]?.locales[0] ?? 'en-US')}
           </span>
         </div>
 
@@ -421,7 +436,7 @@ export default function LicenseSettings() {
                   <Localized id="settings-license-server-expires"><span>Server Expires</span></Localized>
                 </span>
                 <span className="settings-license-value">
-                  {formatDate(serverStatus.expiresAt)}
+                  {formatDate(serverStatus.expiresAt, [...l10n.bundles][0]?.locales[0] ?? 'en-US')}
                 </span>
               </div>
             )}

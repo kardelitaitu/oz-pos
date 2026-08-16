@@ -151,6 +151,39 @@ impl PartialStockResult {
     }
 }
 
+/// Allocate a requested quantity across topology-selected locations in their
+/// declared route order. The first location is preferred, then later routes
+/// fill the remaining quantity. `None` means the configured routes cannot
+/// fulfill the request and no partial allocation should be committed.
+#[must_use]
+pub fn allocate_stock_in_route_order(
+    requested_qty: i64,
+    locations: &[LocationStock],
+) -> Option<Vec<LocationAllocation>> {
+    if requested_qty < 0 {
+        return None;
+    }
+
+    let mut remaining = requested_qty;
+    let mut allocations = Vec::new();
+    for location in locations {
+        if remaining == 0 {
+            break;
+        }
+        if location.qty_available <= 0 {
+            continue;
+        }
+        let allocated = remaining.min(location.qty_available);
+        allocations.push(LocationAllocation {
+            location_id: location.location_id.clone(),
+            qty: allocated,
+        });
+        remaining = remaining.checked_sub(allocated)?;
+    }
+
+    (remaining == 0).then_some(allocations)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,5 +333,48 @@ mod tests {
         let back: ResolvedShortfall = serde_json::from_str(&json).unwrap();
         assert_eq!(back.sku, "EMPTY-SKU");
         assert!(back.allocations.is_empty());
+    }
+
+    #[test]
+    fn topology_allocation_fills_locations_in_route_order() {
+        let locations = vec![
+            LocationStock {
+                location_id: LocationId::from("warehouse-a"),
+                location_name: "Warehouse A".into(),
+                qty_available: 3,
+            },
+            LocationStock {
+                location_id: LocationId::from("warehouse-b"),
+                location_name: "Warehouse B".into(),
+                qty_available: 10,
+            },
+        ];
+
+        let allocations = allocate_stock_in_route_order(8, &locations).unwrap();
+
+        assert_eq!(
+            allocations,
+            vec![
+                LocationAllocation {
+                    location_id: LocationId::from("warehouse-a"),
+                    qty: 3,
+                },
+                LocationAllocation {
+                    location_id: LocationId::from("warehouse-b"),
+                    qty: 5,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn topology_allocation_rejects_when_routes_cannot_fulfill_quantity() {
+        let locations = vec![LocationStock {
+            location_id: LocationId::from("warehouse-a"),
+            location_name: "Warehouse A".into(),
+            qty_available: 3,
+        }];
+
+        assert_eq!(allocate_stock_in_route_order(4, &locations), None);
     }
 }

@@ -5,6 +5,8 @@
 //! 2. Add `pub mod <feature>;` here.
 //! 3. Add the command(s) to the `invoke_handler!` macro in `lib.rs`.
 
+/// Analytics commands (analytics:view — owner/admin/manager only).
+pub mod analytics;
 /// Audit log commands (view, filter, export).
 pub mod audit;
 /// Authentication commands (login, logout, refresh).
@@ -13,6 +15,8 @@ pub mod auth;
 pub mod authz;
 /// Store branding commands.
 pub mod branding;
+/// External-browser commands (ADR #38).
+pub mod browser;
 /// Product bundle commands.
 pub mod bundles;
 /// Category CRUD commands.
@@ -49,6 +53,8 @@ pub mod license;
 pub mod loyalty;
 /// Offline-mode commands.
 pub mod offline;
+/// Pre-session picker-ticket signing / verification.
+pub mod picker_ticket;
 /// Plugin management commands.
 pub mod plugins;
 /// Point-of-sale flow commands.
@@ -65,8 +71,6 @@ pub mod purchasing;
 pub mod refunds;
 /// Reporting commands.
 pub mod reports;
-/// Sale / transaction commands.
-pub mod sales;
 /// Weight-scale commands.
 pub mod scale;
 /// Security / key-rotation commands.

@@ -91,7 +91,7 @@ Incidents are classified by severity level. The classification determines the re
 | **Legal Counsel** | `legal@oz-pos.com` (retained firm) | Business hours (P1: escalation) |
 | **Internal Slack** | `#security-incidents` channel | All incidents |
 
-> **Emergency contacts file:** `docs/security/EMERGENCY_CONTACTS.md` (maintained quarterly)
+> **Emergency contacts file:** `docs/security/EMERGENCY_CONTACTS.md` (maintained quarterly) — ⚠️ **pending**: this file does not exist yet (verified 2026-08-08 by docs-auditor); create it before relying on this contact plan
 
 ---
 
@@ -266,6 +266,8 @@ Incident artefacts must be retained for **at least 12 months** (PCI-DSS §10.7.1
 ### 7.3 Communication Templates
 
 Pre-approved communication templates are maintained in `docs/security/COMMS_TEMPLATES.md`. All external communications must be reviewed by Legal before sending.
+
+> ⚠️ **Pending (2026-08-08, docs-auditor):** `COMMS_TEMPLATES.md` does not exist yet.
 
 ---
 
@@ -459,17 +461,19 @@ This plan is reviewed and updated:
 
 ### A. Related Documents
 
-| Document | Location |
-|----------|----------|
-| PCI-DSS Compliance Checklist | `docs/security/PCI-DSS_CHECKLIST.md` |
-| Lua Sandbox Audit Report | `docs/security/lua-sandbox-audit.md` |
-| Security Architecture | `docs/security/security_checklist.md` |
-| Audit Log Specifications | `docs/security/audit_log_specifications.md` |
-| Business Continuity Plan | `docs/operations/business_continuity.md` |
+| Document | Location | Status |
+|----------|----------|--------|
+| PCI-DSS Compliance Checklist | `docs/security/PCI-DSS_CHECKLIST.md` | ✅ Exists |
+| Lua Sandbox Audit Report | `docs/security/lua-sandbox-audit.md` | ✅ Exists |
+| Security Architecture | `docs/security/security_checklist.md` | ⚠️ Missing (pending) |
+| Audit Log Specifications | `docs/security/audit_log_specifications.md` | ⚠️ Missing (pending) |
+| Business Continuity Plan | `docs/operations/business_continuity.md` | ⚠️ Missing (pending) |
+
+> ⚠️ Statuses verified 2026-08-08 by docs-auditor: the three ⚠️ documents are referenced but do not exist yet.
 
 ### B. Quick Reference Card
 
-For on-call engineers: a one-page quick reference is maintained at `docs/security/INCIDENT_RESPONSE_QUICKREF.md`.
+For on-call engineers: a one-page quick reference is maintained at `docs/security/INCIDENT_RESPONSE_QUICKREF.md` (⚠️ pending — does not exist yet).
 
 ### C. Version History
 
@@ -481,3 +485,7 @@ For on-call engineers: a one-page quick reference is maintained at `docs/securit
 
 > **This document is maintained by the Security Team.**
 > Questions or suggestions → `security@oz-pos.com`
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).

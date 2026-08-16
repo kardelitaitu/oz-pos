@@ -27,15 +27,20 @@ const mocks = vi.hoisted(() => ({
   resolveBootStore: vi.fn(),
   createSession: vi.fn(),
   destroySession: vi.fn(),
+  getDeviceId: vi.fn(),
 }));
 
 // ── Mock context for AuthContext ───────────────────────────────────────
 
 interface MockAuthCtxValue {
   session: LoginSessionDto | null;
+  pickerTicket: string | null;
 }
 
-const MockAuthCtx = createContext<MockAuthCtxValue>({ session: null });
+const MockAuthCtx = createContext<MockAuthCtxValue>({
+  session: null,
+  pickerTicket: null,
+});
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useContext(MockAuthCtx),
@@ -53,6 +58,10 @@ vi.mock('@/api/staff', () => ({
   destroySession: (...args: unknown[]) => mocks.destroySession(...args),
 }));
 
+vi.mock('@/api/system', () => ({
+  getDeviceId: (...args: unknown[]) => mocks.getDeviceId(...args),
+}));
+
 // ── Test data ─────────────────────────────────────────────────────────
 
 const DEFAULT_SESSION: LoginSessionDto = {
@@ -60,6 +69,7 @@ const DEFAULT_SESSION: LoginSessionDto = {
   display_name: 'Alice',
   role_name: 'cashier',
   role_id: 'role-cashier',
+  permissions: [],
 };
 
 function makeWorkspace(overrides: Partial<WorkspaceDto> = {}): WorkspaceDto {
@@ -67,8 +77,9 @@ function makeWorkspace(overrides: Partial<WorkspaceDto> = {}): WorkspaceDto {
     instance_id: 'inst-restaurant',
     type_key: 'restaurant-pos',
     store_id: 'store-1',
-    store_name: 'Main Store',
-    name: 'Restaurant POS',
+  store_name: 'Main Store',
+  purpose_key: 'general',
+  name: 'Restaurant POS',
     description: 'Restaurant terminal',
     icon: 'restaurant',
     layout_mode: 'fullscreen',
@@ -83,6 +94,7 @@ const STORE_POS: WorkspaceDto = {
   type_key: 'store-pos',
   store_id: 'store-1',
   store_name: 'Main Store',
+  purpose_key: 'general',
   name: 'Store POS',
   description: 'Retail terminal',
   icon: 'store',
@@ -106,19 +118,33 @@ function makeSessionResult(overrides: Partial<CreateSessionResult> = {}): Create
   };
 }
 
+// Picker ticket the backend mints at login (audit/06) — used by the
+// pre-session picker until createSession returns the opaque token.
+const DEFAULT_TICKET = 'ticket-abc';
+
 function MockAuthProvider({
   children,
   session,
+  pickerTicket = DEFAULT_TICKET,
 }: {
   children: ReactNode;
   session: LoginSessionDto | null;
+  pickerTicket?: string | null;
 }) {
-  return <MockAuthCtx.Provider value={{ session }}>{children}</MockAuthCtx.Provider>;
+  return (
+    <MockAuthCtx.Provider value={{ session, pickerTicket }}>
+      {children}
+    </MockAuthCtx.Provider>
+  );
 }
 
-function renderWorkspaceHook(session: LoginSessionDto | null = DEFAULT_SESSION) {
+function renderWorkspaceHook(
+  session: LoginSessionDto | null = DEFAULT_SESSION,
+  // With no session there is no login → no picker ticket either (audit/06).
+  pickerTicket: string | null = session ? DEFAULT_TICKET : null,
+) {
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <MockAuthProvider session={session}>
+    <MockAuthProvider session={session} pickerTicket={pickerTicket}>
       <WorkspaceProvider>{children}</WorkspaceProvider>
     </MockAuthProvider>
   );
@@ -170,6 +196,7 @@ beforeEach(() => {
   ]);
   mocks.createSession.mockResolvedValue(makeSessionResult());
   mocks.destroySession.mockResolvedValue(undefined);
+  mocks.getDeviceId.mockResolvedValue('');
 });
 
 afterEach(() => {
@@ -194,8 +221,30 @@ describe('WorkspaceContext', () => {
       await waitForLoaded(result);
 
       expect(mocks.resolveBootStore).toHaveBeenCalled();
-      expect(mocks.listWorkspaces).toHaveBeenCalledWith('role-cashier', 'store-1', 'user-1');
+      expect(mocks.listWorkspaces).toHaveBeenCalledWith('ticket-abc', 'store-1');
       expect(result.current.workspace.availableWorkspaces).toHaveLength(2);
+    });
+
+    it('passes the device id to boot resolution for bound auto-boot', async () => {
+      // A terminal with a stored device binding must auto-boot into its
+      // bound store+instance; the device id has to reach resolve_boot_store.
+      mocks.getDeviceId.mockResolvedValue('tablet-1');
+      const { result } = renderWorkspaceHook();
+
+      await waitForLoaded(result);
+
+      expect(mocks.resolveBootStore).toHaveBeenCalledWith('tablet-1');
+      expect(mocks.listWorkspaces).toHaveBeenCalledWith('ticket-abc', 'store-1');
+    });
+
+    it('boot resolution receives undefined when no device id resolves', async () => {
+      mocks.getDeviceId.mockRejectedValue(new Error('IPC unavailable'));
+      const { result } = renderWorkspaceHook();
+
+      await waitForLoaded(result);
+
+      expect(mocks.resolveBootStore).toHaveBeenCalledWith(undefined);
+      expect(mocks.listWorkspaces).toHaveBeenCalledWith('ticket-abc', 'store-1');
     });
 
     it('does not load workspaces when session is null', async () => {
@@ -294,7 +343,11 @@ describe('WorkspaceContext', () => {
       await waitFor(() => {
         expect(result.current.workspace.workspaceScreens).toEqual(['pos', 'orders']);
       }, FAST_WAIT);
-      expect(mocks.listWorkspaceScreens).toHaveBeenCalledWith('restaurant-pos', 'store-1');
+      expect(mocks.listWorkspaceScreens).toHaveBeenCalledWith(
+        'ticket-abc',
+        'restaurant-pos',
+        'store-1',
+      );
     });
 
     it('clears screens when instance becomes null', async () => {
@@ -367,7 +420,7 @@ describe('WorkspaceContext', () => {
       expect(result.current.workspace.resolvedStoreId).toBe('store-2');
 
       await waitForLoaded(result);
-      expect(mocks.listWorkspaces).toHaveBeenCalledWith('role-cashier', 'store-2', 'user-1');
+      expect(mocks.listWorkspaces).toHaveBeenCalledWith('ticket-abc', 'store-2');
     });
   });
 
@@ -493,7 +546,7 @@ describe('WorkspaceContext', () => {
       await waitForLoaded(result);
 
       expect(result.current.workspace.resolvedStoreId).toBe('default');
-      expect(mocks.listWorkspaces).toHaveBeenCalledWith('role-cashier', 'default', 'user-1');
+      expect(mocks.listWorkspaces).toHaveBeenCalledWith('ticket-abc', 'default');
     });
 
     it('resolves store and loads workspaces for that store', async () => {
@@ -509,7 +562,7 @@ describe('WorkspaceContext', () => {
       await waitForLoaded(result);
 
       expect(result.current.workspace.resolvedStoreId).toBe('branch-5');
-      expect(mocks.listWorkspaces).toHaveBeenCalledWith('role-cashier', 'branch-5', 'user-1');
+      expect(mocks.listWorkspaces).toHaveBeenCalledWith('ticket-abc', 'branch-5');
     });
   });
 });

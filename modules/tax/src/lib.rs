@@ -46,9 +46,12 @@ next: Migrate tax commands into this module | perf: N/A.
 //! # use modules_tax::{TaxModule, TaxRate};
 //! ```
 
+pub mod error;
 pub mod models;
 pub mod repository;
 pub mod service;
+
+pub use error::TaxError;
 
 pub use models::{RoundingMode, TaxRate};
 pub use repository::TaxRepository;

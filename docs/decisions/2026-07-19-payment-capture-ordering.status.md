@@ -73,3 +73,9 @@
 3. Adding `sale_data_hash` requires a new column on the `sales` table, a hash computation at the API boundary, and a UNIQUE constraint — non-trivial for a low-probability edge case.
 
 **Recommendation:** Implement if merchants report duplicate-sale issues. Estimated effort: 2–3 hours (migration + hash logic + test).
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

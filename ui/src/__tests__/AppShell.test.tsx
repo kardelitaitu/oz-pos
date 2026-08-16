@@ -120,6 +120,7 @@ const mockAuthSession: Mock<() => AuthContextValue> =
     role_name: 'cashier',
     role_id: 'role-1',
     display_name: 'Test User',
+    permissions: [],
   },
   loading: false,
   error: null,
@@ -127,6 +128,7 @@ const mockAuthSession: Mock<() => AuthContextValue> =
   logout: vi.fn(),
   clearError: vi.fn(),
   swapSession: vi.fn(),
+  pickerTicket: null,
   isManager: false,
   isOwner: false,
 }));
@@ -192,6 +194,7 @@ function mockKitchenRole() {
       role_name: 'Kitchen',
       role_id: 'role-kitchen',
       display_name: 'Chef',
+      permissions: ['*'],
     },
     loading: false,
     error: null,
@@ -199,6 +202,7 @@ function mockKitchenRole() {
     logout: vi.fn(),
     clearError: vi.fn(),
     swapSession: vi.fn(),
+  pickerTicket: null,
     isManager: false,
     isOwner: false,
   });
@@ -216,6 +220,7 @@ describe('AppShell — KDS workspace navigation', () => {
         role_name: 'cashier',
         role_id: 'role-1',
         display_name: 'Test User',
+        permissions: [],
       },
       loading: false,
       error: null,
@@ -223,6 +228,7 @@ describe('AppShell — KDS workspace navigation', () => {
       logout: vi.fn(),
       clearError: vi.fn(),
       swapSession: vi.fn(),
+  pickerTicket: null,
       isManager: false,
       isOwner: false,
     });
@@ -245,6 +251,7 @@ describe('AppShell — KDS workspace navigation', () => {
           role_name: 'cashier',
           role_id: 'role-1',
           display_name: 'Test User',
+          permissions: [],
         },
         loading: false,
         error: null,
@@ -252,6 +259,7 @@ describe('AppShell — KDS workspace navigation', () => {
         logout: vi.fn(),
         clearError: vi.fn(),
         swapSession: vi.fn(),
+  pickerTicket: null,
         isManager: false,
         isOwner: false,
       });
@@ -292,6 +300,7 @@ describe('AppShell — KDS workspace navigation', () => {
         logout: vi.fn(),
         clearError: vi.fn(),
         swapSession: vi.fn(),
+  pickerTicket: null,
         isManager: false,
         isOwner: false,
       });
@@ -539,6 +548,7 @@ describe('AppShell — KDS workspace navigation', () => {
         logout: vi.fn(),
         clearError: vi.fn(),
         swapSession: vi.fn(),
+  pickerTicket: null,
         isManager: false,
         isOwner: false,
       });

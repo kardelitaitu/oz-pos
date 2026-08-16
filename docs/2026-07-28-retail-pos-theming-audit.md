@@ -267,3 +267,9 @@ This audit doc is the only deliverable for 0.0.24's theming investigation. No co
    - Brand-locked (recommended): POS keeps its visual identity in any theme; tokens stay brand-stable across themes.
    - Theme-adaptive: POS blends with the rest of the UI; primary colour shifts per theme.
 2. Should `localStorage['oz-pos-theme-v4']` be **retired in favour of themed session** so that POS stops writing its own `retail-theme`? (yes, implicit in Step A — drop the local key entirely).
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

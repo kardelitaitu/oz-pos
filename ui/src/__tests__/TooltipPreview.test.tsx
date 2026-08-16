@@ -3,6 +3,24 @@ import { render, screen } from '@testing-library/react';
 import TooltipPreview from '@/features/design/TooltipPreview';
 
 // ── Mocks ────────────────────────────────────────────────────────
+vi.mock('@fluent/react', () => ({
+  useLocalization: () => ({
+    l10n: {
+      getString: (id: string) => {
+        const map: Record<string, string> = {
+          'collapse-aria': 'Collapse sidebar',
+          'notifications-aria': 'Notifications',
+          'settings-aria': 'Settings',
+          'badge-tooltip-aria': 'Badge with tooltip',
+        };
+        return map[id] || id;
+      },
+    },
+  }),
+  Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
+  LocalizationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ReactLocalization: class {},
+}));
 
 vi.mock('@/frontend/shell/Tooltip', () => ({
   default: ({ children, content }: { children: React.ReactNode; content: unknown; position?: string; showDelay?: number; hideDelay?: number; maxWidth?: string }) => (

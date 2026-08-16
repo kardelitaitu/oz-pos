@@ -14,6 +14,7 @@ use oz_core::session::SessionContext;
 
 use foundation::validate_not_empty;
 
+use crate::commands::picker_ticket;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -37,6 +38,13 @@ pub struct StaffLoginArgs {
 pub struct StaffLoginResult {
     /// Session info including user id, display name, and role.
     pub session: LoginSession,
+    /// Short-lived picker ticket (audit/06 residual).
+    ///
+    /// The pre-session `list_workspaces` / `list_workspace_screens`
+    /// commands verify this ticket and resolve the caller's REAL role
+    /// from the database — caller-supplied `role_id` / `user_id` are
+    /// never trusted for the workspace picker.
+    pub picker_ticket: String,
 }
 
 /// Arguments for the `staff_check_username` command.
@@ -196,13 +204,32 @@ pub async fn staff_login(
 
     drop(db);
 
+    // Mint the short-lived picker ticket bound to this authenticated
+    // user. It is only valid for the pre-session workspace picker;
+    // `create_session` hands out the opaque session token afterwards.
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let picker_ticket = picker_ticket::sign_picker_ticket(
+        &state.picker_ticket_secret,
+        &user.id,
+        now_ts + picker_ticket::PICKER_TICKET_TTL_SECS,
+    );
+
+    // Granted keys ride the session so UI gates mirror the backend
+    // registry (wildcards included) instead of role-name strings.
+    let permissions = role.permission_keys();
+
     Ok(StaffLoginResult {
         session: LoginSession {
             user_id: user.id,
             display_name: user.display_name,
             role_name: role.name,
             role_id: role.id,
+            permissions,
         },
+        picker_ticket,
     })
 }
 
@@ -488,8 +515,12 @@ mod tests {
             display_name: "John".into(),
             role_name: "Manager".into(),
             role_id: "r1".into(),
+            permissions: vec!["analytics:view".into()],
         };
-        let result = StaffLoginResult { session };
+        let result = StaffLoginResult {
+            session,
+            picker_ticket: String::new(),
+        };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["session"]["user_id"], "u1");
         assert_eq!(json["session"]["role_name"], "Manager");
@@ -502,8 +533,12 @@ mod tests {
             display_name: "Alice".into(),
             role_name: "Cashier".into(),
             role_id: "r2".into(),
+            permissions: vec![],
         };
-        let result = StaffLoginResult { session };
+        let result = StaffLoginResult {
+            session,
+            picker_ticket: String::new(),
+        };
         let d = format!("{result:?}");
         assert!(d.contains("Alice"));
     }
@@ -517,8 +552,12 @@ mod tests {
             display_name: "".into(),
             role_name: "Cashier".into(),
             role_id: "r3".into(),
+            permissions: vec![],
         };
-        let result = StaffLoginResult { session };
+        let result = StaffLoginResult {
+            session,
+            picker_ticket: String::new(),
+        };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["session"]["display_name"], "");
     }
@@ -530,10 +569,221 @@ mod tests {
             display_name: "Bob".into(),
             role_name: "".into(),
             role_id: "".into(),
+            permissions: vec![],
         };
-        let result = StaffLoginResult { session };
+        let result = StaffLoginResult {
+            session,
+            picker_ticket: String::new(),
+        };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["session"]["role_name"], "");
         assert_eq!(json["session"]["role_id"], "");
+    }
+
+    // ── Session-mint authorization gate (audit/06 residual) ───────────
+    //
+    // TDD red: `create_session` must fail closed when the caller claims an
+    // identity it has not authenticated — unknown user, or a role_id that
+    // does not match the user's actual database role. Previously the gate
+    // (oz_core `Store::verify_instance_access`) trusted the claimed role
+    // and never resolved the user, so a caller who knew an owner's user id
+    // could mint a session as that owner and inherit every permission.
+
+    use oz_core::migrations;
+    use tauri::Manager as _;
+
+    /// Seed the built-in roles plus one owner user in the GLOBAL identity DB.
+    fn seed_owner(conn: &rusqlite::Connection) {
+        let store = Store::new(conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn staff_login_mints_verifiable_picker_ticket() {
+        // audit/06: the picker ticket returned by a successful login must
+        // verify against the process secret and bind the authenticated user.
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        let hash = oz_core::auth::hash_pin("1234").unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', ?1, 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [hash],
+        )
+        .unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = staff_login(
+            StaffLoginArgs {
+                username: "owner".into(),
+                pin: "1234".into(),
+                device_id: None,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let state = app.state::<AppState>();
+        assert_eq!(
+            picker_ticket::verify_picker_ticket(
+                &state.picker_ticket_secret,
+                &result.picker_ticket,
+                now
+            )
+            .as_deref(),
+            Some("user-owner"),
+            "login must mint a ticket bound to the authenticated user"
+        );
+    }
+
+    #[tokio::test]
+    async fn staff_login_returns_granted_permission_keys() {
+        // The session carries the role's granted keys verbatim so UI gates
+        // can mirror the backend registry. Owner's preset grants the global
+        // `"*"` wildcard — the DTO must surface it as-is.
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        let hash = oz_core::auth::hash_pin("1234").unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', ?1, 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [hash],
+        )
+        .unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = staff_login(
+            StaffLoginArgs {
+                username: "owner".into(),
+                pin: "1234".into(),
+                device_id: None,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.session.permissions,
+            vec!["*".to_string()],
+            "owner login must carry the role's granted keys (global wildcard)"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_session_rejects_forged_role_id() {
+        // A staff user whose REAL role is role-staff claims role-owner.
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = create_session(
+            CreateSessionArgs {
+                user_id: "user-cashier".into(),
+                role_id: "role-owner".into(), // forged
+                store_id: "default".into(),
+                instance_id: "default-restaurant-pos".into(),
+                type_key: "restaurant-pos".into(),
+                terminal_id: "terminal-1".into(),
+            },
+            app.state(),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(AppError::Invalid(_))),
+            "forged role must not mint a session"
+        );
+        let state = app.state::<AppState>();
+        assert_eq!(
+            state.session_store.read().unwrap().len(),
+            0,
+            "no session token may be created for a forged role"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_session_rejects_unknown_user() {
+        let conn = migrations::fresh_db();
+        seed_owner(&conn);
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = create_session(
+            CreateSessionArgs {
+                user_id: "ghost-user".into(),
+                role_id: "role-owner".into(),
+                store_id: "default".into(),
+                instance_id: "default-restaurant-pos".into(),
+                type_key: "restaurant-pos".into(),
+                terminal_id: "terminal-1".into(),
+            },
+            app.state(),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(AppError::Invalid(_))),
+            "unknown user must not be able to open a session"
+        );
+        let state = app.state::<AppState>();
+        assert_eq!(state.session_store.read().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn create_session_allows_real_owner() {
+        let conn = migrations::fresh_db();
+        seed_owner(&conn);
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = create_session(
+            CreateSessionArgs {
+                user_id: "user-owner".into(),
+                role_id: "role-owner".into(),
+                store_id: "default".into(),
+                instance_id: "default-restaurant-pos".into(),
+                type_key: "restaurant-pos".into(),
+                terminal_id: "terminal-1".into(),
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.context.role_id, "role-owner");
+        assert_eq!(result.context.user_id, "user-owner");
+        let state = app.state::<AppState>();
+        assert_eq!(state.session_store.read().unwrap().len(), 1);
     }
 }

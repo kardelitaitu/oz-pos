@@ -1,5 +1,6 @@
 //! Terminal Service — POS terminal business logic.
 
+use crate::error::TerminalError;
 use crate::models::Terminal;
 use crate::repository::TerminalRepository;
 use rusqlite::Connection;
@@ -9,7 +10,7 @@ pub struct TerminalService;
 
 impl TerminalService {
     /// Retrieve terminal by ID.
-    pub fn get_terminal(conn: &Connection, id: &str) -> Result<Option<Terminal>, anyhow::Error> {
+    pub fn get_terminal(conn: &Connection, id: &str) -> Result<Option<Terminal>, TerminalError> {
         let repo = TerminalRepository::new(conn);
         repo.get_terminal(id)
     }

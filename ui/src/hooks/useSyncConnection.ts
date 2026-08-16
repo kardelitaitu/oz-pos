@@ -28,9 +28,13 @@ export interface SyncConnectionStatus {
 }
 
 const POLL_INTERVAL_MS = 60_000;
+const RETRY_INTERVAL_MS = 5_000;
 
 /**
- * Poll the cloud sync server health endpoint on mount and every 60 s.
+ * Poll the cloud sync server health endpoint on mount and every 60 s
+ * while connected. Retry every 5 s while disconnected so a Docker server
+ * or debug auto-provisioner that becomes ready after the UI can recover
+ * without requiring an app restart.
  *
  * Returns `{ state, latencyMs }` suitable for rendering a connection
  * indicator dot in the StatusBar.
@@ -46,8 +50,10 @@ export function useSyncConnection(): SyncConnectionStatus {
 
   useEffect(() => {
     mountedRef.current = true;
+    let timer: number | undefined;
 
     async function check() {
+      let nextDelay = RETRY_INTERVAL_MS;
       try {
         const result = await testSyncConnection();
         if (!mountedRef.current) return;
@@ -55,6 +61,7 @@ export function useSyncConnection(): SyncConnectionStatus {
         if (result.ok) {
           setState('connected');
           setLatencyMs(result.latencyMs);
+          nextDelay = POLL_INTERVAL_MS;
         } else {
           setState('disconnected');
           setLatencyMs(null);
@@ -64,15 +71,18 @@ export function useSyncConnection(): SyncConnectionStatus {
         setState('disconnected');
         setLatencyMs(null);
       }
+
+      if (mountedRef.current) {
+        timer = window.setTimeout(check, nextDelay);
+      }
     }
 
     // Initial check immediately.
-    check();
+    void check();
 
-    const interval = setInterval(check, POLL_INTERVAL_MS);
     return () => {
       mountedRef.current = false;
-      clearInterval(interval);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
 

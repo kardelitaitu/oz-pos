@@ -4,7 +4,6 @@ kiosk-checkout = Pembayaran
 kiosk-checkout-title = Pembayaran
 kiosk-total = Total
 kiosk-pay = Bayar
-kiosk-return = Kembali ke Menu
 
 # ── Kitchen Display System ──
 kiosk-decrease = Kurangi
@@ -17,5 +16,9 @@ kiosk-section-kiosk = Kiosk mandiri
 kiosk-section-categories = Kategori
 kiosk-section-products = Produk
 kiosk-section-cart = Keranjang
+kiosk-load-error = Gagal memuat menu
+kiosk-retry = Coba lagi
+kiosk-price-volatility-title = Harga baru saja berubah
+kiosk-pay-success = Pembayaran berhasil!
 
 # ── Customers (remaining) ──

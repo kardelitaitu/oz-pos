@@ -28,14 +28,27 @@ function renderWithL10n(ui: React.ReactElement, l10n: ReactLocalization) {
 
 describe('LocalizedErrorBoundary (ERR-02)', () => {
   const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
+  // jsdom's Location#reload is non-configurable (cannot be spied), so we
+  // swap the whole window.location object for one with a spyable reload.
+  const originalLocation = window.location;
+  let reloadSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    reloadSpy = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, reload: reloadSpy },
+    });
     vi.spyOn(console, 'error').mockImplementation(() => {});
     window.addEventListener('error', preventJsdomError);
   });
 
   afterEach(() => {
     window.removeEventListener('error', preventJsdomError);
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: originalLocation,
+    });
     vi.restoreAllMocks();
   });
 
@@ -85,8 +98,8 @@ describe('LocalizedErrorBoundary (ERR-02)', () => {
     expect(alert.getAttribute('style')).toBeNull();
   });
 
-  it('clicking the retry button clears the error state', () => {
-    const { rerender } = renderWithL10n(
+  it('clicking the retry button without onReset triggers a hard reload', () => {
+    renderWithL10n(
       <LocalizedErrorBoundary>
         <BrokenComponent />
       </LocalizedErrorBoundary>,
@@ -94,18 +107,11 @@ describe('LocalizedErrorBoundary (ERR-02)', () => {
     );
     expect(screen.getByRole('alert')).toBeInTheDocument();
 
-    rerender(
-      <LocalizationProvider l10n={enL10n}>
-        <LocalizedErrorBoundary>
-          <p>Recovered</p>
-        </LocalizedErrorBoundary>
-      </LocalizationProvider>,
-    );
     fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
-    expect(screen.getByText('Recovered')).toBeInTheDocument();
+    expect(reloadSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('forwards onReset when provided', () => {
+  it('forwards onReset when provided and skips the hard reload', () => {
     const onReset = vi.fn();
     renderWithL10n(
       <LocalizedErrorBoundary onReset={onReset}>
@@ -115,5 +121,6 @@ describe('LocalizedErrorBoundary (ERR-02)', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
     expect(onReset).toHaveBeenCalledTimes(1);
+    expect(reloadSpy).not.toHaveBeenCalled();
   });
 });
