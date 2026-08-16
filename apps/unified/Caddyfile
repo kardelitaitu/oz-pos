@@ -5,9 +5,30 @@
 # one-deployment shape; add a `tls` directive here when running the image
 # self-managed with a reachable domain (see gateway/Caddyfile.example).
 #
-#   /api/v1/license/*, /api/v1/web/*, /api/v1/paddle/*, /_/*,
-#   /api/collections/* → PocketBase :8080
-#   everything else (sync, REST, webhooks, tokens, health, metrics) → :3099
+# Routing — first matching `handle` wins, so most-specific paths come
+# first:
+#
+#   PocketBase :8080
+#     /_/*                                  admin SPA
+#     /api/v1/{license,web,paddle}/*        license-server custom hooks
+#     /api/* (default)                      admin UI API: /api/collections,
+#                                           /api/settings, /api/superusers,
+#                                           /api/logs, /api/backups,
+#                                           /api/files, /api/otp, ...
+#   Rust sync server :3099
+#     /api/v1/*                             REST API (tokens, products,
+#                                           sales, tenants, ...)
+#     /api/sync/*, /api/webhooks/*          sync + webhooks
+#     /api/openapi.json, /api/docs*         API docs
+#     /api/health, /metrics, /health        ops endpoints (catch-all)
+#
+# NOTE: PocketBase's admin API is served under bare /api/<route> paths
+# with NO trailing slash (e.g. /api/collections, /api/settings). The old
+# matchers (`/api/collections/*`) required the trailing slash, so every
+# admin-UI call fell through to the sync server and 404'd — the admin UI
+# showed "something went wrong" on every click. Route the full /api/*
+# surface to PocketBase by default and carve out the sync server's own
+# paths explicitly.
 
 (security_headers) {
 	header X-Content-Type-Options nosniff
@@ -18,6 +39,8 @@
 }
 
 :80 {
+	# ── PocketBase (auth function) — most specific first ─────────────
+	# License-server custom hook prefixes (must precede /api/v1/*).
 	handle /api/v1/license/* {
 		import security_headers
 		reverse_proxy localhost:8080
@@ -26,20 +49,53 @@
 		import security_headers
 		reverse_proxy localhost:8080
 	}
-	handle /api/collections/* {
-		import security_headers
-		reverse_proxy localhost:8080
-	}
-	# Paddle Billing webhook — signature-verified in the Go license server
-	# (apps/license-server/paddle_webhook.go), NOT the Rust sync server.
 	handle /api/v1/paddle/* {
 		import security_headers
 		reverse_proxy localhost:8080
 	}
+	# Admin SPA.
 	handle /_/* {
 		import security_headers
 		reverse_proxy localhost:8080
 	}
+
+	# ── Rust sync server — its explicit /api paths (before /api/*) ───
+	handle /api/v1/* {
+		import security_headers
+		reverse_proxy localhost:3099
+	}
+	handle /api/sync/* {
+		import security_headers
+		reverse_proxy localhost:3099
+	}
+	handle /api/webhooks/* {
+		import security_headers
+		reverse_proxy localhost:3099
+	}
+	handle /api/openapi.json {
+		import security_headers
+		reverse_proxy localhost:3099
+	}
+	handle /api/docs* {
+		import security_headers
+		reverse_proxy localhost:3099
+	}
+	handle /api/health {
+		import security_headers
+		reverse_proxy localhost:3099
+	}
+	handle /metrics {
+		import security_headers
+		reverse_proxy localhost:3099
+	}
+
+	# ── Everything else under /api → PocketBase (admin UI + auth) ────
+	handle /api/* {
+		import security_headers
+		reverse_proxy localhost:8080
+	}
+
+	# ── Catch-all → sync (health, anything else) ─────────────────────
 	handle {
 		import security_headers
 		reverse_proxy localhost:3099
