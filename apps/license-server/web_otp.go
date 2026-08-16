@@ -229,6 +229,7 @@ func windowSweepLoop() {
 		otpRequestLimiter.sweep()
 		otpVerifyLimiter.sweep()
 		otpIPLimiter.sweep()
+		webLoginLimiter.sweep()
 	}
 }
 
@@ -293,6 +294,31 @@ func hashWebToken(token string) string {
 func hashOtpCode(code string) string {
 	sum := sha256.Sum256([]byte(code))
 	return hex.EncodeToString(sum[:])
+}
+
+// issueWebSession mints a session token for the tenant and stores its
+// hash in the in-memory session store (shared by OTP and password login).
+// Returns the raw token (handed to the client once) and its expiry.
+func issueWebSession(tenantID string) (token string, expiresAt time.Time, err error) {
+	token, err = generateWebToken()
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
+	expiresAt = webOtpStore.createSession(hashWebToken(token), tenantID)
+	return token, expiresAt, nil
+}
+
+// webSessionResponse is the success body shared by verify-otp and login:
+// the token plus the tenant/license/subscription summaries the dashboard
+// renders on arrival.
+func webSessionResponse(app core.App, tenant *core.Record, token string, expiresAt time.Time) map[string]any {
+	return map[string]any{
+		"token":        token,
+		"expires_at":   expiresAt.UTC().Format(time.RFC3339),
+		"tenant":       tenantSummary(tenant),
+		"license":      licenseSummary(app, tenant.Id),
+		"subscription": subscriptionSummary(app, tenant.Id),
+	}
 }
 
 // constantTimeHashEq compares two hex hashes in constant time so a wrong
@@ -653,23 +679,16 @@ func handleVerifyOTP(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// ── Issue session token ──────────────────────────────────
-		token, err := generateWebToken()
+		token, expiresAt, err := issueWebSession(tenant.Id)
 		if err != nil {
 			log.Printf("/web/verify-otp: token generation failed: %v", err)
 			return e.JSON(http.StatusInternalServerError, map[string]any{
 				"error": "could not start a session, please try again",
 			})
 		}
-		expiresAt := webOtpStore.createSession(hashWebToken(token), tenant.Id)
 
 		log.Printf("/web/verify-otp: session issued for tenant %q", tenant.Id)
-		return e.JSON(http.StatusOK, map[string]any{
-			"token":        token,
-			"expires_at":   expiresAt.UTC().Format(time.RFC3339),
-			"tenant":       tenantSummary(tenant),
-			"license":      licenseSummary(app, tenant.Id),
-			"subscription": subscriptionSummary(app, tenant.Id),
-		})
+		return e.JSON(http.StatusOK, webSessionResponse(app, tenant, token, expiresAt))
 	}
 }
 

@@ -326,6 +326,21 @@
         "help": "True once the tenant has completed OTP verification (verify-otp). Set false on self-signup and on webhook-created tenants; the dashboard shows this state."
       },
       {
+        "help": "Bcrypt hash of the optional web login password (set via the account dashboard). Empty for OTP-only accounts; login-with-password requires this field.",
+        "hidden": true,
+        "id": "text1618033990",
+        "name": "password_hash",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
         "hidden": false,
         "id": "autodate3976882600",
         "name": "created",

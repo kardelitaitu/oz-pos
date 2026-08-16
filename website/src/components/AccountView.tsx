@@ -44,6 +44,10 @@ export default function AccountView({ locale }: Props) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [subscribeError, setSubscribeError] = useState(false);
+  // Password state: the optional login credential managed via set-password.
+  const [pw, setPw] = useState('');
+  const [pwMsg, setPwMsg] = useState<'idle' | 'saved' | 'error'>('idle');
+  const [pwSaving, setPwSaving] = useState(false);
 
   useEffect(() => {
     if (!API) {
@@ -81,6 +85,31 @@ export default function AccountView({ locale }: Props) {
       cancelled = true;
     };
   }, []);
+
+  const savePassword = async (e: { preventDefault(): void }) => {
+    e.preventDefault();
+    setPwMsg('idle');
+    setPwSaving(true);
+    try {
+      const token = sessionStorage.getItem('oz_session');
+      if (!token) throw new Error('no session');
+      const res = await fetch(`${API}/api/v1/web/set-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ password: pw }),
+      });
+      if (!res.ok) throw new Error('set-password failed');
+      setPw('');
+      setPwMsg('saved');
+    } catch {
+      setPwMsg('error');
+    } finally {
+      setPwSaving(false);
+    }
+  };
 
   const subscribe = async (priceId: string, tierKey: string) => {
     setSubscribing(tierKey);
@@ -166,6 +195,46 @@ export default function AccountView({ locale }: Props) {
               </dd>
             </div>
           </dl>
+        </section>
+      )}
+
+      {tenant && (
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6" aria-label={t(locale, 'account.password')}>
+          <h2 className="text-lg font-semibold">{t(locale, 'account.password')}</h2>
+          <p className="mt-1 text-sm text-muted">{t(locale, 'account.passwordHelp')}</p>
+          <form onSubmit={savePassword} className="mt-4 space-y-3">
+            <label className="block">
+              <span className="mb-1 block text-sm text-muted">{t(locale, 'account.passwordPlaceholder')}</span>
+              <input
+                type="password"
+                required
+                autoComplete="new-password"
+                minLength={8}
+                maxLength={72}
+                value={pw}
+                onChange={(e) => {
+                  setPw(e.target.value);
+                  if (pwMsg !== 'idle') setPwMsg('idle');
+                }}
+                placeholder={t(locale, 'account.passwordPlaceholder')}
+                className="w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent"
+              />
+            </label>
+            {pwMsg === 'saved' && (
+              <p className="text-sm text-link" role="status">{t(locale, 'account.passwordSaved')}</p>
+            )}
+            {pwMsg === 'error' && (
+              <p className="text-sm text-link" role="alert">{t(locale, 'account.passwordError')}</p>
+            )}
+            <p className="text-xs text-muted">{t(locale, 'account.passwordWeak')}</p>
+            <button
+              type="submit"
+              disabled={pwSaving}
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+            >
+              {pwSaving ? '…' : t(locale, 'account.passwordSave')}
+            </button>
+          </form>
         </section>
       )}
 

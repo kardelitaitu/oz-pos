@@ -127,6 +127,15 @@ func main() {
 		if err := ensureEmailVerifiedField(app); err != nil {
 			return err
 		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// password_hash field (added with password login): fresh boots get
+		// it from the embedded pb_schema.json; existing pb_data volumes get
+		// it added without reimporting the schema. Existing tenants keep an
+		// empty password_hash — OTP remains their only login until they set
+		// one from the dashboard.
+		if err := ensurePasswordHashField(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -150,6 +159,12 @@ func main() {
 		// OZ_WEB_ALLOWED_ORIGINS and per-email/IP rate limits in-handler.
 		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		// Password login + set-password (see web_password.go). login is the
+		// email+password alternative to request-otp; set-password is
+		// session-authenticated (the account sets its own password from the
+		// dashboard). Both enforce the same CORS allowlist.
+		se.Router.POST("/api/v1/web/login", handleLoginPassword(app))
+		se.Router.POST("/api/v1/web/set-password", handleSetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		// Paddle Billing webhook — signature-verified, server-to-server (see
@@ -241,6 +256,32 @@ func ensureEmailVerifiedField(app core.App) error {
 		return fmt.Errorf("failed to add email_verified field: %w", err)
 	}
 	log.Println("migrated tenants collection: added email_verified field")
+	return nil
+}
+
+// ensurePasswordHashField adds the hidden tenants.password_hash text field
+// to existing deployments that predate password login (fresh boots get it
+// from the embedded pb_schema.json). Idempotent: no-op once the field
+// exists. Existing records keep an empty password_hash — the correct
+// semantics, since only the account holder (via an authenticated session)
+// can set one.
+func ensurePasswordHashField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		return fmt.Errorf("tenants collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("password_hash") != nil {
+		return nil
+	}
+	collection.Fields.Add(&core.TextField{
+		Name:   "password_hash",
+		Hidden: true,
+		Help:   "Bcrypt hash of the optional web login password (set via the account dashboard). Empty for OTP-only accounts; login-with-password requires this field.",
+	})
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add password_hash field: %w", err)
+	}
+	log.Println("migrated tenants collection: added password_hash field")
 	return nil
 }
 

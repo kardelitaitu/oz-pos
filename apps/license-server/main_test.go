@@ -49,14 +49,17 @@ func TestEnsureCollections_ImportsOnFreshApp(t *testing.T) {
 	}
 
 	// Schema parity: the embedded schema must carry the email_verified
-	// field so fresh boots get it (existing volumes get it from the
-	// ensureEmailVerifiedField migration instead).
+	// and password_hash fields so fresh boots get them (existing volumes
+	// get them from the ensure*Field migrations instead).
 	tenants, err := app.FindCollectionByNameOrId("tenants")
 	if err != nil {
 		t.Fatalf("tenants collection should exist after import: %v", err)
 	}
 	if tenants.Fields.GetByName("email_verified") == nil {
 		t.Error("expected tenants.email_verified to be in the embedded pb_schema.json")
+	}
+	if tenants.Fields.GetByName("password_hash") == nil {
+		t.Error("expected tenants.password_hash to be in the embedded pb_schema.json")
 	}
 }
 

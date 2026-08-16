@@ -141,10 +141,13 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		// the tracker variables are package globals.
 		ipRateLimiter.attachPersistence(app)
 		keyFailTracker.attachPersistence(app)
-		// Mirror production boot: add the email_verified field to the
-		// tenants collection (createTestCollections deliberately omits
-		// it so the migration path is exercised).
+		// Mirror production boot: add the email_verified + password_hash
+		// fields to the tenants collection (createTestCollections
+		// deliberately omits them so the migration paths are exercised).
 		if err := ensureEmailVerifiedField(app); err != nil {
+			return err
+		}
+		if err := ensurePasswordHashField(app); err != nil {
 			return err
 		}
 
@@ -154,6 +157,8 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.POST("/api/v1/web/login", handleLoginPassword(app))
+		se.Router.POST("/api/v1/web/set-password", handleSetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
@@ -372,6 +377,8 @@ func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.POST("/api/v1/web/login", handleLoginPassword(app))
+		se.Router.POST("/api/v1/web/set-password", handleSetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
@@ -876,6 +883,9 @@ func resetRateLimiters() {
 	otpIPLimiter.mu.Lock()
 	otpIPLimiter.entries = make(map[string]*windowEntry)
 	otpIPLimiter.mu.Unlock()
+	webLoginLimiter.mu.Lock()
+	webLoginLimiter.entries = make(map[string]*windowEntry)
+	webLoginLimiter.mu.Unlock()
 
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()

@@ -173,7 +173,7 @@
   },
   "login": {
     "title": "Masuk ke akun Anda",
-    "subtitle": "Kami akan mengirimkan kode sekali pakai lewat email. Tanpa kata sandi untuk diingat atau diatur ulang.",
+    "subtitle": "Masuk dengan kata sandi atau kode sekali pakai yang kami kirimkan lewat email.",
     "email": "Email",
     "emailPlaceholder": "anda@contoh.com",
     "sendCode": "Kirim kode",
@@ -186,7 +186,14 @@
     "newAccount": "Belum punya akun? Verifikasi kode Anda akan membuatkannya.",
     "errorSend": "Tidak dapat mengirim kode. Silakan coba lagi nanti.",
     "errorVerify": "Kode tidak valid atau kedaluwarsa. Silakan coba lagi.",
-    "notConfigured": "API autentikasi belum dikonfigurasi pada deployment ini."
+    "notConfigured": "API autentikasi belum dikonfigurasi pada deployment ini.",
+    "tabEmailCode": "Kode email",
+    "tabPassword": "Kata sandi",
+    "password": "Kata sandi",
+    "passwordPlaceholder": "Kata sandi Anda",
+    "signIn": "Masuk",
+    "errorLogin": "Email atau kata sandi tidak valid.",
+    "forgotPassword": "Tidak punya kata sandi atau lupa? Gunakan kode email."
   },
   "account": {
     "title": "Akun",
@@ -208,7 +215,14 @@
     "grace": "Masa tenggang hingga",
     "emailVerified": "Email terverifikasi",
     "verified": "Terverifikasi",
-    "notVerified": "Belum terverifikasi"
+    "notVerified": "Belum terverifikasi",
+    "password": "Kata sandi",
+    "passwordHelp": "Opsional. Dengan kata sandi, Anda bisa masuk tanpa meminta kode email.",
+    "passwordPlaceholder": "Kata sandi baru",
+    "passwordSave": "Simpan kata sandi",
+    "passwordSaved": "Kata sandi tersimpan. Gunakan untuk masuk lain kali.",
+    "passwordError": "Tidak dapat menyimpan kata sandi. Silakan coba lagi.",
+    "passwordWeak": "Gunakan 8–72 karakter."
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",
