@@ -10,7 +10,7 @@
 #
 #   docker build -f Dockerfile.unified -t oz-pos-unified:latest .
 #   docker run -d -p 80:80 \
-#     -v oz_data:/data -v oz_pb_data:/pb/pb_data \
+#     -v oz_data:/data \
 #     -e OZ_API_SECRET="$(openssl rand -hex 32)" \
 #     -e OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)" \
 #     oz-pos-unified:latest
@@ -160,10 +160,14 @@ RUN apt-get update && \
 
 # DOCKER-01: single non-root user owns both data directories. supervisord
 # runs as root only to bind caddy's :80; each program drops to `ozpos`.
+# DOCKER-11: ONE volume at /data serves both functions — sync SQLite at
+# /data/oz-pos.db and PocketBase at /data/pb_data (supervisord passes
+# `--dir=/data/pb_data`) — so a single persistent volume is sufficient
+# (Northflank free tier grants one volume per service).
 RUN groupadd --system ozpos && \
     useradd --system --gid ozpos --home-dir /app ozpos && \
-    mkdir -p /app /data /pb/pb_data /etc/caddy && \
-    chown -R ozpos:ozpos /app /data /pb
+    mkdir -p /app /data /etc/caddy && \
+    chown -R ozpos:ozpos /app /data
 
 WORKDIR /app
 
@@ -177,8 +181,9 @@ COPY apps/unified/docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY apps/unified/healthcheck.sh /app/healthcheck.sh
 RUN chmod +x /app/docker-entrypoint.sh /app/healthcheck.sh
 
-# Runtime volumes: sync SQLite data + PocketBase data.
-VOLUME ["/data", "/pb/pb_data"]
+# Runtime volume: single /data volume holds both the sync SQLite DB
+# (OZ_DB_PATH=/data/oz-pos.db) and PocketBase's pb_data (/data/pb_data).
+VOLUME ["/data"]
 
 ENV OZ_DB_PATH=/data/oz-pos.db
 ENV OZ_API_PORT=3099

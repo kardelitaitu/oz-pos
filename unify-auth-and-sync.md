@@ -454,12 +454,18 @@ Status: **done** — `Dockerfile.unified`, `apps/unified/supervisord.conf`,
 ### Auth function (PocketBase)
 
 ```bash
-PB_DATA_DIR=/data/pb_data
 PB_URL=https://api.oz-pos.com
 OZ_LICENSE_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----..."
 # SMTP for web_users email (future website)
 SMTP_HOST=... SMTP_PORT=587 SMTP_USERNAME=... SMTP_PASSWORD=...
 ```
+
+> **DOCKER-11 (single volume):** PocketBase's data directory is NOT set via
+> an env var — `apps/unified/supervisord.conf` passes `--dir=/data/pb_data`
+> to `pocketbase serve`, so PocketBase writes inside the SAME `/data`
+> volume as the sync SQLite DB (`/data/oz-pos.db`). One persistent volume
+> therefore covers both functions (Northflank free tier grants one volume
+> per service).
 
 ### Sync function (Rust)
 
