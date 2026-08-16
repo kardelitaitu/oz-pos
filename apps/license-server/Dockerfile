@@ -11,8 +11,9 @@
 
 # ── Stage 1: Build ────────────────────────────────────────────────────
 # Uses golang:1.25-alpine to satisfy fatih/color@v1.19.0 (requires go >= 1.25)
-# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-03).
-FROM golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 AS builder
+# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-16 to
+# Go 1.25.13 — clears the stdlib CVE set fixed in 1.25.13).
+FROM golang:1.25-alpine@sha256:3eb6c2b3db8d55e38537302edb510b4417f8a115efbd5906d131ceba9468e29a AS builder
 
 RUN apk add --no-cache gcc musl-dev
 
