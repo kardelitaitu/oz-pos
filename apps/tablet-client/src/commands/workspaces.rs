@@ -209,7 +209,30 @@ pub async fn resolve_boot_store(
     // The (non-Send) keyring is acquired only after the lock so no `.await`
     // point holds it — Tauri requires command futures to be Send.
     let db = state.db.lock().await;
-    let keyring = oz_security::default_keyring().ok();
+    // Construct the OS keyring only when a binding may need verifying.
+    // On Linux the keyring spawns its own tokio runtime (`Runtime::new`),
+    // which panics when called from inside a runtime (e.g. `#[tokio::test]`
+    // on CI where HOSTNAME is set); eagerly building it for every boot
+    // would also waste a D-Bus connection on the common no-binding path.
+    let binding_info = {
+        let store = Store::new(&db);
+        store
+            .get_terminal_by_device_id(&device_id)?
+            .and_then(|terminal| {
+                let tid = terminal.id;
+                store
+                    .get_terminal_binding(&tid)
+                    .ok()
+                    .flatten()
+                    .map(|(s, i, sig)| (tid, s, i, sig))
+            })
+    };
+    let keyring = if binding_info.is_some() {
+        oz_security::default_keyring().ok()
+    } else {
+        None
+    };
+    drop(binding_info);
     let resolution =
         resolve_boot_store_core(&db, &state.db_manager, &device_id, keyring.as_deref())?;
     drop(db);
