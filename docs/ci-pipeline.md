@@ -40,6 +40,7 @@
 | `security-pr` | PR only | ~40s | — | — | ✅ Required when manifests changed — fail-closed if base SHA can't be resolved (AUDIT-27 CI-10) |
 | `fuzz` | Push + PR (fuzz paths) | ~30min cold / ~8min cached | rust-cache (no sccache) | — | ⚠️ Advisory (crash artifacts uploaded) |
 | `skill-drift-tests` | PR + push | ~20s | — | — | ✅ Required |
+| `unified-healthcheck` | PR + push | ~5s | none | — | ✅ Required (unified image healthcheck SMTP gate, fake-wget harness) |
 | `flaky-quarantine` | PR + push | ~10s | — | — | ✅ Required (AUDIT-27 CI-09) |
 | `windows-config` | PR + push | ~10s | — | — | ✅ Required (AUDIT-28 — NSIS installMode + asInvoker manifests) |
 | `ci-docs-drift` | PR + push | ~10s | — | — | ✅ Required (AUDIT-27 CI-08 — verifies this table stays true) |
@@ -112,6 +113,7 @@ Enforced via GitHub branch protection (`Settings → Branches → main → Requi
 | Flaky quarantine registry | `flaky-quarantine` | ✅ Required |
 | Windows config drift | `windows-config` | ✅ Required |
 | Skill Drift | `skill-drift-tests` | ✅ Required |
+| Unified healthcheck script | `unified-healthcheck` | ✅ Required |
 | CI docs drift | `ci-docs-drift` | ✅ Required |
 | Dependency audit | `audit` | ⚠️ Advisory on PR / ✅ on push |
 | Lighthouse a11y | `lighthouse` | ⚠️ Advisory (≥ 90) |

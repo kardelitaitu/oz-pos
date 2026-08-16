@@ -59,6 +59,17 @@ jobs:
       - name: Run go vet
         run: cd apps/license-server && go vet ./...
 
+  # Unified image healthcheck script test — exercises the SMTP sender-identity
+  # gate counter logic in apps/unified/healthcheck.sh against a fake-wget
+  # harness (apps/unified/test-healthcheck.sh). Pure POSIX sh, no toolchain.
+  unified-healthcheck:
+    name: Unified Healthcheck Script Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unified healthcheck script test
+        run: sh apps/unified/test-healthcheck.sh
+
   # ── Rust: Panic-inventory gate (RUST-07 / ADR #33) — fail-closed ────
   # Fails when any production unwrap()/expect() lacks a documented
   # invariant comment (// SAFETY: / // INVARIANT: on the same or preceding

@@ -136,6 +136,13 @@
       "ci": { "workflow": "ci.yml", "job": "windows-config" }
     },
     {
+      "id": "unified-healthcheck",
+      "label": "Unified healthcheck script test",
+      "status": "required",
+      "runners": { "check.sh": ["healthcheck script test"] },
+      "ci": { "workflow": "ci.yml", "job": "unified-healthcheck" }
+    },
+    {
       "id": "bundle-budget",
       "label": "Bundle budget",
       "status": "required",

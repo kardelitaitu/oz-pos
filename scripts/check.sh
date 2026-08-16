@@ -204,6 +204,13 @@ else
     echo -e "${YELLOW}⚠ release toolchain checks skipped (node not found)${NC}"
 fi
 
+# ── Unified image healthcheck script test ────────────────────────────
+# The Docker HEALTHCHECK in the unified image fails the container when the
+# SMTP sender-identity probe stays broken for N consecutive runs; this
+# exercises that counter logic against a fake-wget harness (see
+# apps/unified/test-healthcheck.sh).
+step "healthcheck script test" "sh apps/unified/test-healthcheck.sh" sh apps/unified/test-healthcheck.sh
+
 # ── CI docs drift (AUDIT-27 CI-08) — docs/ci-pipeline.md must stay in
 # sync with the workflows and the local runner gate vocabulary. The gate
 # names + status derive from scripts/gates.json (the single source of
