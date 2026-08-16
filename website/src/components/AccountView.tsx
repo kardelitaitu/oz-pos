@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
@@ -47,6 +47,32 @@ export default function AccountView({ locale }: Props) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [subscribeError, setSubscribeError] = useState(false);
+  // Post-checkout refresh: 'checking' polls /me after a completed purchase;
+  // 'pending' means the webhook hasn't provisioned yet after the poll window.
+  const [refreshState, setRefreshState] = useState<'idle' | 'checking' | 'pending'>('idle');
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  /** Fetch /me once; returns the payload, or null when signed out (token cleared). */
+  const fetchMe = useCallback(async (): Promise<MeResponse | null> => {
+    const token = sessionStorage.getItem('oz_session');
+    if (!token || !API) return null;
+    const res = await fetch(`${API}/api/v1/web/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401) {
+      // Expired/revoked session — clear the stored token; caller shows anon.
+      sessionStorage.removeItem('oz_session');
+      return null;
+    }
+    if (!res.ok) throw new Error('me failed');
+    return (await res.json()) as MeResponse;
+  }, []);
   // Password state: the optional login credential managed via set-password.
   const [pw, setPw] = useState('');
   const [pwConfirm, setPwConfirm] = useState('');
@@ -63,32 +89,20 @@ export default function AccountView({ locale }: Props) {
       setState('anon');
       return;
     }
-    let cancelled = false;
-    fetch(`${API}/api/v1/web/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (res) => {
-        if (res.status === 401) {
-          // Expired/revoked session — clear the stored token and show the
-          // signed-out state instead of a confusing generic error.
-          sessionStorage.removeItem('oz_session');
-          if (!cancelled) setState('anon');
-          return;
-        }
-        if (!res.ok) throw new Error('me failed');
-        const data = (await res.json()) as MeResponse;
-        if (!cancelled) {
+    fetchMe()
+      .then((data) => {
+        if (!mountedRef.current) return;
+        if (data) {
           setMe(data);
           setState('ready');
+        } else {
+          setState('anon');
         }
       })
       .catch(() => {
-        if (!cancelled) setState('error');
+        if (mountedRef.current) setState('error');
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [fetchMe]);
 
   const savePassword = async (e: { preventDefault(): void }) => {
     e.preventDefault();
@@ -122,7 +136,32 @@ export default function AccountView({ locale }: Props) {
     try {
       const email = await getSessionEmail();
       if (!email) throw new Error('no session email');
-      await openPaddleCheckout(priceId, email);
+      // After the overlay closes, refresh /me so a completed purchase shows
+      // the subscription without a manual reload. The webhook provisions
+      // asynchronously, so poll for it (up to ~20s) instead of a single fetch.
+      await openPaddleCheckout(priceId, email, (completed) => {
+        if (!completed) return;
+        if (!mountedRef.current) return;
+        setRefreshState('checking');
+        void (async () => {
+          let found = false;
+          for (let i = 0; i < 8 && !found; i++) {
+            await new Promise((r) => setTimeout(r, 2500));
+            if (!mountedRef.current) return;
+            try {
+              const data = await fetchMe();
+              if (data) {
+                setMe(data);
+                setState('ready');
+                found = Boolean(data.subscription);
+              }
+            } catch {
+              // Transient network error — keep polling.
+            }
+          }
+          if (mountedRef.current) setRefreshState(found ? 'idle' : 'pending');
+        })();
+      });
     } catch {
       setSubscribeError(true);
     } finally {
@@ -301,6 +340,16 @@ export default function AccountView({ locale }: Props) {
           {subscribeError && (
             <p className="mt-3 text-sm text-link" role="alert">
               {t(locale, 'checkout.error')}
+            </p>
+          )}
+          {refreshState === 'checking' && (
+            <p className="mt-3 text-sm text-muted" role="status">
+              {t(locale, 'account.checkingSubscription')}
+            </p>
+          )}
+          {refreshState === 'pending' && (
+            <p className="mt-3 text-sm text-muted" role="status">
+              {t(locale, 'account.subscriptionPending')}
             </p>
           )}
         </section>

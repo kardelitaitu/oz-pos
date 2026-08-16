@@ -18,12 +18,28 @@
  * redirects to /login until a session exists, and customData.email is the
  * account email the webhook reads to attach the subscription to the
  * tenant (apps/license-server/paddle_webhook.go).
+ *
+ * Completion signaling: the current v2 SDK's Paddle.Checkout.open() does
+ * NOT return a checkout object (no checkout.close(cb) available), so the
+ * reliable completion signal is the global eventCallback passed to
+ * Paddle.Initialize() — which can only be called once per page. The
+ * callback is registered on the first initialize and fans out to the
+ * per-open listener below: `checkout.completed` marks the checkout
+ * successful, `checkout.closed` fires the onClosed listener with that
+ * result (callers use it to refresh the dashboard, see AccountView).
  */
+
+/** Event payload handed to Paddle.Initialize's eventCallback (v2). */
+export interface PaddleEvent {
+  name: string;
+  data?: Record<string, unknown>;
+}
+
 declare global {
   interface Window {
     Paddle?: {
       Environment: { set: (env: 'sandbox' | 'production') => void };
-      Initialize: (opts: { token: string }) => void;
+      Initialize: (opts: { token: string; eventCallback?: (event: PaddleEvent) => void }) => void;
       Checkout: {
         open: (opts: {
           items: { priceId: string; quantity: number }[];
@@ -32,6 +48,29 @@ declare global {
         }) => void;
       };
     };
+  }
+}
+
+/** Called once when the overlay closes, with whether the purchase completed. */
+export type OnCheckoutClosed = (completed: boolean) => void;
+
+// Module-level checkout state: only one overlay can be open at a time, and
+// the SDK's eventCallback is registered on the first (one-shot) Initialize.
+// `checkout.completed` fires on a successful payment; `checkout.closed`
+// fires when the overlay closes (success screen dismissed or cancelled).
+let checkoutCompleted = false;
+let checkoutClosedListener: OnCheckoutClosed | null = null;
+
+/** Registered with Paddle.Initialize on the first call; fans events out. */
+function paddleEventCallback(event: PaddleEvent): void {
+  if (event.name === 'checkout.completed') {
+    checkoutCompleted = true;
+    return;
+  }
+  if (event.name === 'checkout.closed') {
+    const listener = checkoutClosedListener;
+    checkoutClosedListener = null;
+    if (listener) listener(checkoutCompleted);
   }
 }
 
@@ -80,9 +119,15 @@ export function loadPaddle(): Promise<void> {
 /**
  * Open the sandbox/live checkout overlay for a price id, prefilled with
  * the customer's account email (customData.email is what the webhook
- * reads to attach the subscription to the tenant).
+ * reads to attach the subscription to the tenant). When the overlay
+ * closes, `onClosed` is called with whether the purchase completed
+ * (checkout.completed fired before checkout.closed).
  */
-export async function openPaddleCheckout(priceId: string, email: string): Promise<void> {
+export async function openPaddleCheckout(
+  priceId: string,
+  email: string,
+  onClosed?: OnCheckoutClosed,
+): Promise<void> {
   if (!TOKEN) throw new Error('paddle not configured');
   await loadPaddle();
   if (!window.Paddle) throw new Error('paddle unavailable');
@@ -90,7 +135,9 @@ export async function openPaddleCheckout(priceId: string, email: string): Promis
   // otherwise it defaults to production and a sandbox token + sandbox
   // price fail the checkout with "Something went wrong".
   window.Paddle.Environment.set(ENVIRONMENT);
-  window.Paddle.Initialize({ token: TOKEN });
+  checkoutCompleted = false;
+  checkoutClosedListener = onClosed ?? null;
+  window.Paddle.Initialize({ token: TOKEN, eventCallback: paddleEventCallback });
   window.Paddle.Checkout.open({
     items: [{ priceId, quantity: 1 }],
     customer: { email },

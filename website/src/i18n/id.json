@@ -234,7 +234,9 @@
     "passwordPlaceholder": "Kata sandi baru",
     "passwordSave": "Simpan kata sandi",
     "passwordSaved": "Kata sandi tersimpan. Gunakan untuk masuk lain kali.",
-    "passwordError": "Tidak dapat menyimpan kata sandi. Silakan coba lagi."
+    "passwordError": "Tidak dapat menyimpan kata sandi. Silakan coba lagi.",
+    "checkingSubscription": "Memeriksa langganan Anda…",
+    "subscriptionPending": "Pembayaran Anda berhasil, tetapi langganan belum terlihat — mungkin butuh satu menit. Muat ulang untuk memeriksa."
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",

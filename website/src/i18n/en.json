@@ -234,7 +234,9 @@
     "passwordPlaceholder": "New password",
     "passwordSave": "Save password",
     "passwordSaved": "Password saved. Use it to sign in next time.",
-    "passwordError": "Couldn't save the password. Please try again."
+    "passwordError": "Couldn't save the password. Please try again.",
+    "checkingSubscription": "Checking your subscription…",
+    "subscriptionPending": "Your purchase is confirmed, but the subscription isn't visible yet — it can take a minute. Reload to check."
   },
   "footer": {
     "rights": "All rights reserved.",
