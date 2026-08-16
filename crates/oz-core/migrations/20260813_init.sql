@@ -59,12 +59,10 @@ CREATE TABLE IF NOT EXISTS audit_review_checkpoints (
 CREATE TABLE IF NOT EXISTS bundle_items (
     id          TEXT PRIMARY KEY,
     bundle_id   TEXT NOT NULL REFERENCES product_bundles(id),
-    sku         TEXT NOT NULL,
-    tenant_id   TEXT NOT NULL DEFAULT 'default',
+    sku         TEXT NOT NULL REFERENCES products(sku),
     qty         INTEGER NOT NULL DEFAULT 1,
     -- Override the component's individual price (empty = use product's price)
-    unit_price_minor INTEGER,
-    FOREIGN KEY (tenant_id, sku) REFERENCES products(tenant_id, sku)
+    unit_price_minor INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS cash_payouts (
@@ -375,14 +373,12 @@ CREATE TABLE IF NOT EXISTS product_activity (
     id         TEXT PRIMARY KEY,
     sku        TEXT NOT NULL,
     event_type TEXT NOT NULL CHECK (event_type IN ('search', 'edit')),
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    tenant_id  TEXT NOT NULL DEFAULT 'default'
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS product_bundles (
     id          TEXT PRIMARY KEY,
-    bundle_sku  TEXT NOT NULL UNIQUE,
-    tenant_id   TEXT NOT NULL DEFAULT 'default',
+    bundle_sku  TEXT NOT NULL UNIQUE REFERENCES products(sku),
     name        TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     -- The bundle's own price in minor units (overrides the sum of components if set)
@@ -391,8 +387,7 @@ CREATE TABLE IF NOT EXISTS product_bundles (
     currency    TEXT NOT NULL DEFAULT 'USD',
     active      INTEGER NOT NULL DEFAULT 1,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    FOREIGN KEY (tenant_id, bundle_sku) REFERENCES products(tenant_id, sku)
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS product_modifier_groups (
@@ -413,18 +408,15 @@ CREATE TABLE IF NOT EXISTS product_recipes (
 );
 
 CREATE TABLE IF NOT EXISTS product_taxes (
-    product_sku  TEXT NOT NULL,
-    tenant_id    TEXT NOT NULL DEFAULT 'default',
+    product_sku  TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
     tax_rate_id  TEXT NOT NULL REFERENCES tax_rates(id) ON DELETE CASCADE,
     created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (product_sku, tax_rate_id),
-    FOREIGN KEY (tenant_id, product_sku) REFERENCES products(tenant_id, sku) ON DELETE CASCADE
+    PRIMARY KEY (product_sku, tax_rate_id)
 );
 
 CREATE TABLE IF NOT EXISTS product_variants (
     id              TEXT PRIMARY KEY,
-    parent_sku      TEXT NOT NULL,
-    tenant_id       TEXT NOT NULL DEFAULT 'default',
+    parent_sku      TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
     name            TEXT NOT NULL,
     sku             TEXT NOT NULL UNIQUE,
     price_minor     INTEGER,           -- NULL means use parent price
@@ -433,13 +425,12 @@ CREATE TABLE IF NOT EXISTS product_variants (
     sort_order      INTEGER NOT NULL DEFAULT 0,
     is_active       INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    FOREIGN KEY (tenant_id, parent_sku) REFERENCES products(tenant_id, sku) ON DELETE CASCADE
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS "products" (
     id          TEXT PRIMARY KEY,
-    sku         TEXT NOT NULL,
+    sku         TEXT NOT NULL UNIQUE,
     name        TEXT NOT NULL,
     price_minor INTEGER NOT NULL CHECK (price_minor >= 0),
     currency    TEXT NOT NULL,
@@ -455,7 +446,7 @@ CREATE TABLE IF NOT EXISTS "products" (
     store_id    TEXT REFERENCES store_profiles(id) ON DELETE SET NULL ON UPDATE CASCADE,
     tenant_id   TEXT NOT NULL DEFAULT 'default',
     kitchen_zone TEXT
-, brand TEXT, rack_location TEXT, notes TEXT, unit TEXT, is_active INTEGER NOT NULL DEFAULT 1, default_supplier_id TEXT REFERENCES suppliers(id), popularity_score REAL NOT NULL DEFAULT 0, UNIQUE (tenant_id, sku));
+, brand TEXT, rack_location TEXT, notes TEXT, unit TEXT, is_active INTEGER NOT NULL DEFAULT 1, default_supplier_id TEXT REFERENCES suppliers(id), popularity_score REAL NOT NULL DEFAULT 0);
 
 CREATE TABLE IF NOT EXISTS promotion_applications (
     id          TEXT PRIMARY KEY,
@@ -619,8 +610,7 @@ CREATE TABLE IF NOT EXISTS "sales" (
     deduction_locations TEXT,
     pending_expires_at  TEXT,
     payment_reference   TEXT,
-    captured_at         TEXT,
-    tenant_id           TEXT NOT NULL DEFAULT 'default'
+    captured_at         TEXT
 );
 
 CREATE TABLE IF NOT EXISTS setting_updated (
@@ -636,20 +626,6 @@ CREATE TABLE IF NOT EXISTS settings (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-
--- Cloud report-send dedup (sent_reports): one row per (tenant, period),
--- claimed BEFORE the email is sent so a crash between a successful send
--- and the last_report_sent_at stamp can never produce a duplicate. The
--- claim is released only when the send definitively fails (allowing a
--- retry); on success it stays, and a restart or multi-instance race sees
--- the (tenant_id, period) conflict and skips the period.
-CREATE TABLE IF NOT EXISTS sent_reports (
-    tenant_id TEXT NOT NULL,
-    period    TEXT NOT NULL,          -- scheduled slot: YYYY-MM-DD (daily/weekly) or YYYY-MM (monthly)
-    report_id TEXT NOT NULL,          -- UUID of the send attempt that claimed the period
-    sent_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (tenant_id, period)
 );
 
 CREATE TABLE IF NOT EXISTS shifts (
@@ -987,14 +963,14 @@ CREATE TABLE IF NOT EXISTS user_workspaces (
 
 CREATE TABLE IF NOT EXISTS users (
     id          TEXT PRIMARY KEY,
-    username    TEXT NOT NULL,
+    username    TEXT NOT NULL UNIQUE,
     pin_hash    TEXT NOT NULL,                 -- bcrypt or argon2 hash
     display_name TEXT NOT NULL,
     role_id     TEXT NOT NULL REFERENCES roles(id),
     is_active   INTEGER NOT NULL DEFAULT 1,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-, tenant_id TEXT NOT NULL DEFAULT 'default', date_of_birth TEXT, phone TEXT, national_id_type TEXT, national_id TEXT, email TEXT, monthly_take_home_minor INTEGER, emergency_contact_name TEXT, emergency_contact_phone TEXT, job_title TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', address TEXT, language TEXT, avatar TEXT, tax_id TEXT, national_id_expires_at TEXT, emergency_contact_relationship TEXT, hire_date TEXT, national_id_hash TEXT, UNIQUE (tenant_id, username));
+, tenant_id TEXT NOT NULL DEFAULT 'default', date_of_birth TEXT, phone TEXT, national_id_type TEXT, national_id TEXT, email TEXT, monthly_take_home_minor INTEGER, emergency_contact_name TEXT, emergency_contact_phone TEXT, job_title TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', address TEXT, language TEXT, avatar TEXT, tax_id TEXT, national_id_expires_at TEXT, emergency_contact_relationship TEXT, hire_date TEXT, national_id_hash TEXT);
 
 CREATE TABLE IF NOT EXISTS "workspace_instances" (
     id          TEXT PRIMARY KEY,
@@ -1212,8 +1188,6 @@ CREATE INDEX IF NOT EXISTS idx_offline_queue_status ON offline_queue(status);
 
 CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_status ON offline_queue(tenant_id, status);
 
-CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_created ON offline_queue(tenant_id, created_at);
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_idempotency_key ON payments(idempotency_key);
 
 CREATE INDEX IF NOT EXISTS idx_payments_sale_id ON payments(sale_id);
@@ -1255,9 +1229,6 @@ CREATE INDEX IF NOT EXISTS idx_sale_lines_sku ON sale_lines(sku);
 CREATE INDEX IF NOT EXISTS idx_sale_lines_store_sale ON sale_lines(store_id, sale_id);
 
 CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
-
-CREATE INDEX IF NOT EXISTS idx_sales_status_created_date
-    ON sales(status, date(created_at));
 
 CREATE INDEX IF NOT EXISTS idx_sales_pending_expires ON sales(pending_expires_at) WHERE status = 'pending';
 

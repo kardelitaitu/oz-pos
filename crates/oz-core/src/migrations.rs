@@ -24,10 +24,36 @@ use platform_core::database::Migration;
 /// The list is exhaustive at compile time; adding a new migration means
 /// adding a new entry here AND a new file in `crates/oz-core/migrations/`.
 ///
-pub const ALL: &[Migration] = &[Migration {
-    id: "20260813_init.sql",
-    sql: include_str!("../migrations/20260813_init.sql"),
-}];
+pub const ALL: &[Migration] = &[
+    Migration {
+        id: "20260813_init.sql",
+        sql: include_str!("../migrations/20260813_init.sql"),
+    },
+    Migration {
+        id: "20260814_tenant_uniqueness.sql",
+        sql: include_str!("../migrations/20260814_tenant_uniqueness.sql"),
+    },
+    Migration {
+        id: "20260814_offline_queue_index.sql",
+        sql: include_str!("../migrations/20260814_offline_queue_index.sql"),
+    },
+    Migration {
+        id: "20260814_sale_lines_tenant.sql",
+        sql: include_str!("../migrations/20260814_sale_lines_tenant.sql"),
+    },
+    Migration {
+        id: "20260814_sent_reports.sql",
+        sql: include_str!("../migrations/20260814_sent_reports.sql"),
+    },
+    Migration {
+        id: "20260814_sent_reports_tenant.sql",
+        sql: include_str!("../migrations/20260814_sent_reports_tenant.sql"),
+    },
+    Migration {
+        id: "20260814_analytics_index.sql",
+        sql: include_str!("../migrations/20260814_analytics_index.sql"),
+    },
+];
 
 /// Postgres DDL for the full schema, parallel to the SQLite `init.sql`.
 ///
