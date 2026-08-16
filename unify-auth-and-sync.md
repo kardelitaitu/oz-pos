@@ -412,9 +412,12 @@ Status: **done** — `Dockerfile.unified`, `apps/unified/supervisord.conf`,
 
 ### Phase 3.5: Switchover checklist (executed 2026-08-16)
 
-The unified image was deployed to the `oz-sync` Northflank service
-(`Dockerfile.unified`, single volume at `/data`). The old standalone
-`oz-pos-license-service` is decommissioned afterwards.
+The two standalone services (`oz-pos-license-service` + `oz-sync`) were
+deleted and a single fresh unified service `oz-cloud` was created
+(`Dockerfile.unified`, port 80, single volume at `/data`, public URL
+`https://oz--cloud--76cyv4d6bn54.code.run`). The old auth data volume was
+not migrated — the deployment starts with a fresh PocketBase (see
+`docs/operations/runbook.md` §8 for the live config + restore path).
 
 **Client code — auth URL repointed to the unified host** (the old
 `auth--oz-pos-license-service--76cyv4d6bn54.code.run` is gone):

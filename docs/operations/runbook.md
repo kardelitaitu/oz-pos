@@ -375,3 +375,85 @@ docker volume prune
 - **Escalation:** If a data volume (`oz_cloud_data`/`pb_data`) is the
   growth source, run `scripts/backup-db.sh` first, then investigate the
   DB size — never delete the volume as a shortcut
+
+---
+
+## 8. Unified Northflank Deployment (live config)
+
+> **Status:** live since 2026-08-16. One service serves both auth
+> (PocketBase) and sync (Rust) behind a single caddy, replacing the two
+> standalone services (`oz-pos-license-service` + `oz-sync`).
+
+### Service
+
+| Setting | Value |
+|---------|-------|
+| Service name | `oz-cloud` |
+| Public URL | `https://oz--cloud--76cyv4d6bn54.code.run` |
+| Dockerfile | `Dockerfile.unified` (repo root) |
+| Port | `80` (caddy; routes to :8080 PocketBase / :3099 Rust) |
+| Volume | single volume at `/data` (Northflank free tier = 1 volume) |
+| Build trigger | push/merge to `main` (CI builds from the branch) |
+
+**Single-volume layout (DOCKER-11):**
+
+| Function | Data path |
+|----------|-----------|
+| Sync (Rust SQLite) | `/data/oz-pos.db` |
+| Auth (PocketBase) | `/data/pb_data/` (`serve --dir=/data/pb_data`) |
+
+Both live under `/data` so one persistent volume covers the whole service.
+The old `pb_data:/pb/pb_data` mount from the standalone license service no
+longer exists — migrating that data requires a PocketBase backup → restore
+(see `unify-auth-and-sync.md` §Phase 3.5).
+
+### Environment variables
+
+| Variable | Value / source | Notes |
+|----------|----------------|-------|
+| `OZ_LICENSE_PRIVATE_KEY` | RSA PEM | required — Go license server exits without it |
+| `OZ_API_SECRET` | `openssl rand -hex 32` | required when `OZ_PRODUCTION=1` |
+| `OZ_ADMIN_KEY` | random string | required when `OZ_PRODUCTION=1`; gates token mint |
+| `OZ_PRODUCTION` | `1` | fail-closed boot: refuses to start if either secret is unset; implies `OZ_DB_REQUIRE_TLS=1` |
+| `OZ_ENFORCE_PLANS` | `1` | reject free-plan sync (403 plan_required) |
+| `OZ_CORS_ORIGINS` | optional | extra origins beyond the default allowlist |
+| `PADDLE_WEBHOOK_SECRET` | optional | Paddle Billing webhook provisioning |
+| `PADDLE_PRICE_TIERS` | optional | `price_id:tier_key` map |
+| `OZ_SMTP_*`, `OZ_DISCORD_WEBHOOK`, `OZ_WEB_ALLOWED_ORIGINS` | optional | if configured |
+
+> ⚠️ **Do not set `OZ_PRODUCTION=1` unless both `OZ_API_SECRET` and
+> `OZ_ADMIN_KEY` are set** — startup fails fast by design (no dev-secret
+> fallback, no open token mint). Without `OZ_PRODUCTION`, the service runs
+> in dev mode: `/api/v1/tokens` mints freely.
+
+### Verification checklist (post-deploy)
+
+```bash
+BASE="https://oz--cloud--76cyv4d6bn54.code.run"
+curl -s "$BASE/health"                                  # sync pill → 200 ok
+curl -s "$BASE/api/health"                              # auth pill → 200
+curl -s -X POST "$BASE/api/v1/license/activate" \
+  -H 'Content-Type: application/json' -d '{}'           # PocketBase 400 (not 404)
+curl -s -o /dev/null -w '%{http_code}' "$BASE/_/"       # admin UI → 200
+curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "$BASE/api/v1/paddle/webhook"                          # 503 not-configured (not 404)
+```
+
+Also: create the PocketBase superuser via the `/_/` first-boot installer
+link (or shell: `pocketbase superuser upsert EMAIL PASS`).
+
+### App-side URL references (the 5 hardcoded spots)
+
+All point at the unified host; each also has an env-var override:
+
+| File | Change | Override |
+|------|--------|----------|
+| `crates/oz-core/src/license_verification.rs` | `LICENSE_SERVER_URL` const | `OZ_LICENSE_SERVER_URL` |
+| `apps/desktop-client/tauri.conf.json` | CSP `connect-src` | — |
+| `apps/tablet-client/tauri.conf.json` | CSP `connect-src` | — |
+| `ui/src/features/auth/LicenseActivationScreen.tsx` | `AUTH_SERVICE_URL` fallback | `VITE_AUTH_SERVICE_URL` |
+| `ui/src/features/auth/__tests__/LicenseActivationScreen.test.tsx` | pinned URL | — |
+
+The **sync server URL** is per-install user config: Settings → Cloud Sync
+→ enter `https://oz--cloud--76cyv4d6bn54.code.run`. Unlike auth, it is
+stored in the local DB (never compiled in).
