@@ -48,6 +48,32 @@ function mockRoleName(role: string): string {
   }
 }
 
+/**
+ * A staff member row with the assignment the real backend resolves: preset
+ * roles are global all/all (legacy users without an assignment row resolve
+ * the same way per ADR #35 D5 / spec 0048).
+ */
+function mockStaffMember(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    id: 'staff-1',
+    username: 'owner',
+    display_name: 'Owner',
+    role_id: 'role-owner',
+    role_name: 'Owner',
+    is_active: true,
+    national_id_masked: '',
+    is_profile_complete: true,
+    assignment: {
+      scope_mode: 'global',
+      branches_all: true,
+      branch_ids: [],
+      workspaces_all: true,
+      workspace_keys: [],
+    },
+    ...overrides,
+  };
+}
+
 /** Granted permission keys per preset, mirroring platform-core ROLE_PRESETS. */
 const MOCK_ROLE_PERMISSIONS: Record<string, string[]> = {
   // Owner — global wildcard.
@@ -2057,36 +2083,35 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_staff_scoped': () => [
-    { id: 'staff-1', username: 'owner', display_name: 'Owner', role_id: 'role-owner', role_name: 'Owner', is_active: true },
-    { id: 'staff-2', username: 'admin', display_name: 'Admin', role_id: 'role-admin', role_name: 'Admin', is_active: true },
-    { id: 'staff-3', username: 'manager', display_name: 'Manager', role_id: 'role-manager', role_name: 'Manager', is_active: true },
-    { id: 'staff-4', username: 'staff', display_name: 'Staff', role_id: 'role-staff', role_name: 'Staff', is_active: true },
-    { id: 'staff-5', username: 'auditor', display_name: 'Auditor', role_id: 'role-auditor', role_name: 'Auditor', is_active: true },
+    mockStaffMember({ id: 'staff-1', username: 'owner', display_name: 'Owner', role_id: 'role-owner', role_name: 'Owner' }),
+    mockStaffMember({ id: 'staff-2', username: 'admin', display_name: 'Admin', role_id: 'role-admin', role_name: 'Admin' }),
+    mockStaffMember({ id: 'staff-3', username: 'manager', display_name: 'Manager', role_id: 'role-manager', role_name: 'Manager' }),
+    mockStaffMember({ id: 'staff-4', username: 'staff', display_name: 'Staff', role_id: 'role-staff', role_name: 'Staff' }),
+    mockStaffMember({ id: 'staff-5', username: 'auditor', display_name: 'Auditor', role_id: 'role-auditor', role_name: 'Auditor' }),
   ],
   'list_roles_scoped': () => MOCK_ROLES.map((r) => ({ ...r })),
   'create_staff_scoped': (args) => {
     const a = (args as { username?: string; display_name?: string; role_id?: string; pin?: string }) ?? {};
     const roleId = a.role_id && MOCK_ROLE_PERMISSIONS[a.role_id] ? a.role_id : 'role-staff';
-    return {
+    return mockStaffMember({
       id: `staff-${Date.now()}`,
       username: a.username ?? 'newstaff',
       display_name: a.display_name ?? 'New Staff',
       role_id: roleId,
       role_name: mockRoleName(roleId),
-      is_active: true,
-    };
+    });
   },
   'update_staff_scoped': (args) => {
     const a = (args as { id?: string; username?: string; display_name?: string; role_id?: string; is_active?: boolean }) ?? {};
     const roleId = a.role_id && MOCK_ROLE_PERMISSIONS[a.role_id] ? a.role_id : 'role-owner';
-    return {
+    return mockStaffMember({
       id: a.id ?? 'staff-1',
       username: a.username ?? 'owner',
       display_name: a.display_name ?? 'Owner',
       role_id: roleId,
       role_name: mockRoleName(roleId),
       is_active: a.is_active ?? true,
-    };
+    });
   },
 
   // ═══════════════════════════════════════════════════════════════

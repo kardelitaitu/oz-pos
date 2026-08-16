@@ -37,8 +37,8 @@ test.describe('Reporting Screens', () => {
     // KPI cards (revenue, orders, top product) must render.
     await expect(page.locator('.dashboard-kpi-row')).toBeVisible({ timeout: 5_000 });
 
-    // Weekly chart section must be present.
-    await expect(page.locator('.dashboard-weekly-chart')).toBeVisible({ timeout: 5_000 });
+    // Weekly chart section must be present (first chart row = Revenue Trend).
+    await expect(page.locator('.dashboard-chart-row').first()).toBeVisible({ timeout: 5_000 });
   });
 
   // ── Sales Report ─────────────────────────────────────────
