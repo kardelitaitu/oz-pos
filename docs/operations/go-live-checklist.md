@@ -42,6 +42,27 @@ group (see §3), **before** the next deploy.
 
 ---
 
+## 1b. Two Paddle dashboard actions (one-time, only you can click)
+
+Both are dashboard-only clicks that unblock the sandbox end-to-end loop — no API call or
+code change can do them. Do them **before** the §3 deploy so the checkout overlay and
+webhook delivery work the moment the new image is up.
+
+1. **Set the default payment link** — Paddle (sandbox) → **Checkout → Checkout settings →
+   Default payment link** → pick a product (e.g. **Pro — $19 USD**) → Save. Without it the
+   checkout overlay dies with **"Something went wrong"** before Paddle even opens.
+   `localhost` is allowed for sandbox testing, so the local site works too.
+2. **Repoint the webhook destination** — the notification destination
+   `ntfset_01m05htpgfq0qmcvb0er6byrsx` currently posts to
+   `https://license.oz-pos.com/api/v1/paddle/webhook`, a domain we do **not** own yet — so
+   sandbox webhooks are being dropped. Paddle (sandbox) → **Developer tools →
+   Notifications** → edit destination `ntfset_01m05htpgfq0qmcvb0er6byrsx` → **Endpoint
+   URL** → `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook` → Save.
+   While in that same edit screen, copy the **Endpoint secret** into §1 #3 — it is shown
+   once and never returned by any API.
+
+---
+
 ## 2. Full env block (paste-ready)
 
 ```ini
@@ -80,19 +101,22 @@ Notes:
 
 ## 3. Apply order (do this before the next deploy)
 
-1. **Paddle gates** (unconditional boot requirements):
+1. **Paddle dashboard actions** (§1b) — set the default payment link and repoint the
+   webhook destination. Grab the **Endpoint secret** for `PADDLE_WEBHOOK_SECRET` while
+   you're in the Notifications edit screen.
+2. **Paddle gates** (unconditional boot requirements):
    - Copy `PADDLE_WEBHOOK_SECRET` (§1 #3) and `PADDLE_PRICE_TIERS` into the
      `license-server-secrets` secret group (Northflank → project → **Secrets** →
      `license-server-secrets` → Add secrets).
-2. **Verify the Brevo sender** (blocking for SMTP):
+3. **Verify the Brevo sender** (blocking for SMTP):
    - Brevo → **Sender Identity** → verify `adikaradwiatmaja@gmail.com`.
-3. **SMTP vars**: add `OZ_SMTP_HOST`, `OZ_SMTP_PORT`, `OZ_SMTP_USER` (§1 #1),
+4. **SMTP vars**: add `OZ_SMTP_HOST`, `OZ_SMTP_PORT`, `OZ_SMTP_USER` (§1 #1),
    `OZ_SMTP_PASSWORD`, `OZ_SMTP_FROM` to the same secret group.
-4. **Optional extras**: `OZ_DISCORD_WEBHOOK`, session TTL / health max-fails overrides.
+5. **Optional extras**: `OZ_DISCORD_WEBHOOK`, session TTL / health max-fails overrides.
    Skip → defaults.
-5. **Attach + redeploy**: confirm the secret group is linked to the service, then trigger
+6. **Attach + redeploy**: confirm the secret group is linked to the service, then trigger
    the deploy (or restart) that ships the new image.
-6. **Verify** (§4) — do not stop at a green deploy; the gates are *status*, so confirm
+7. **Verify** (§4) — do not stop at a green deploy; the gates are *status*, so confirm
    the payload too.
 
 > Env changes take effect on the next service redeploy/restart — there is no hot reload.
@@ -119,6 +143,10 @@ curl -sS -X POST "$B/api/v1/web/request-otp" \
 #    check), proving PADDLE_WEBHOOK_SECRET is loaded
 curl -sS -X POST "$B/api/v1/paddle/webhook" \
   -H "Content-Type: application/json" -d '{}'
+
+# 4. Real delivery — with the destination repointed (§1b #2), send a test
+#    notification from Paddle → Developer tools → Notifications → destination →
+#    "Send test notification" and confirm the container log logs the event
 ```
 
 | Check | Pass condition |
@@ -126,6 +154,7 @@ curl -sS -X POST "$B/api/v1/paddle/webhook" \
 | `/api/health` | `"smtp":{"configured":true,"verified":true}`, `"paddle":{"secret_configured":true,"price_tiers_configured":true,"price_tiers_mappings":2}`, `"rsa":{"configured":true}` |
 | `request-otp` | `200` and a real 6-digit code email arrives (not spam) |
 | `paddle/webhook` | `401` (not `503`) — secret loaded, signature verified |
+| test notification | Paddle's "Send test notification" reaches the container log (proves the repointed destination + secret) |
 
 Then wire the alerting from `uptime-monitor.md` (`"verified":false` keyword monitor) so
 a broken relay or rotated secret pages someone.
@@ -137,8 +166,7 @@ a broken relay or rotated secret pages someone.
 - **Website secrets** (GitHub Actions → Settings → Secrets, consumed by `website.yml`
   and baked at build time): `PUBLIC_LICENSE_API_URL` (the `code.run` URL),
   `PUBLIC_PADDLE_CLIENT_TOKEN`, `PUBLIC_PADDLE_ENVIRONMENT=sandbox`.
-- **Paddle sandbox checkout** still shows "Something went wrong" until a **default
-  payment link** is set (Paddle → Checkout → Checkout settings → Default payment link;
-  `localhost` is allowed for sandbox testing).
+- **Paddle sandbox checkout** is unblocked by the **default payment link** — now a
+  checklist step in §1b #1 (do it before the §3 deploy).
 - **Domain + SPF/DKIM/DMARC** is the real inbox-not-spam fix once `oz-pos.com` is owned
   (see `DEPLOY.md` §7).
