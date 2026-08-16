@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { t } from '../i18n';
-import PasswordStrength, { isStrongPassword } from './PasswordStrength';
+import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
+import PasswordField from './PasswordField';
+import PasswordStrength from './PasswordStrength';
 
 /**
  * Signup form (website-plan.md §5) — the password-first registration path
@@ -30,6 +32,7 @@ export default function SignupForm({ locale }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -55,7 +58,7 @@ export default function SignupForm({ locale }: Props) {
       const res = await fetch(`${API}/api/v1/web/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, password_confirm: confirm }),
       });
       if (res.status === 409) throw new Error('exists');
       if (!res.ok) throw new Error('register failed');
@@ -148,25 +151,23 @@ export default function SignupForm({ locale }: Props) {
             className={inputClass}
           />
         </label>
-        <label className="block">
-          <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.password')}</span>
-          <input
-            type="password"
-            required
-            autoComplete="new-password"
-            minLength={8}
-            maxLength={72}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={t(locale, 'signup.passwordPlaceholder')}
-            className={inputClass}
-          />
-        </label>
+        <PasswordField
+          locale={locale}
+          id="signup-password"
+          label={t(locale, 'signup.password')}
+          value={password}
+          onChange={setPassword}
+          autoComplete="new-password"
+          placeholder={t(locale, 'signup.passwordPlaceholder')}
+          showConfirm
+          confirmValue={confirm}
+          onConfirmChange={setConfirm}
+        />
         <PasswordStrength locale={locale} password={password} />
         {error && <p className="text-sm text-link" role="alert">{error}</p>}
         <button
           type="submit"
-          disabled={loading || !isStrongPassword(password)}
+          disabled={loading || !isStrongPassword(password) || !passwordsMatch(password, confirm)}
           className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
         >
           {loading ? '…' : t(locale, 'signup.createAccount')}

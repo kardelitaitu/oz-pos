@@ -267,7 +267,12 @@
     "strengthGood": "Bagus",
     "strengthStrong": "Kuat",
     "minLength": "minimal 8 karakter",
-    "hint": "Gunakan minimal 3 dari: huruf kecil, huruf besar, angka, simbol."
+    "hint": "Gunakan minimal 3 dari: huruf kecil, huruf besar, angka, simbol.",
+    "confirmLabel": "Konfirmasi kata sandi",
+    "confirmPlaceholder": "Masukkan ulang kata sandi",
+    "mismatch": "Kata sandi tidak cocok",
+    "show": "Tampilkan kata sandi",
+    "hide": "Sembunyikan kata sandi"
   },
   "signup": {
     "title": "Buat akun Anda",

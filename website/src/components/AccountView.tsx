@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { pricingFor } from '../content/pricing';
+import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import { getSessionEmail, openPaddleCheckout } from './paddle';
-import PasswordStrength, { isStrongPassword } from './PasswordStrength';
+import PasswordField from './PasswordField';
+import PasswordStrength from './PasswordStrength';
 
 /**
  * Account dashboard (website-plan.md §8/§11). Reads the session token from
@@ -47,6 +49,7 @@ export default function AccountView({ locale }: Props) {
   const [subscribeError, setSubscribeError] = useState(false);
   // Password state: the optional login credential managed via set-password.
   const [pw, setPw] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
   const [pwMsg, setPwMsg] = useState<'idle' | 'saved' | 'error'>('idle');
   const [pwSaving, setPwSaving] = useState(false);
 
@@ -100,10 +103,11 @@ export default function AccountView({ locale }: Props) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ password: pw }),
+        body: JSON.stringify({ password: pw, password_confirm: pwConfirm }),
       });
       if (!res.ok) throw new Error('set-password failed');
       setPw('');
+      setPwConfirm('');
       setPwMsg('saved');
     } catch {
       setPwMsg('error');
@@ -204,23 +208,24 @@ export default function AccountView({ locale }: Props) {
           <h2 className="text-lg font-semibold">{t(locale, 'account.password')}</h2>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.passwordHelp')}</p>
           <form onSubmit={savePassword} className="mt-4 space-y-3">
-            <label className="block">
-              <span className="mb-1 block text-sm text-muted">{t(locale, 'account.passwordPlaceholder')}</span>
-              <input
-                type="password"
-                required
-                autoComplete="new-password"
-                minLength={8}
-                maxLength={72}
-                value={pw}
-                onChange={(e) => {
-                  setPw(e.target.value);
-                  if (pwMsg !== 'idle') setPwMsg('idle');
-                }}
-                placeholder={t(locale, 'account.passwordPlaceholder')}
-                className="w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent"
-              />
-            </label>
+            <PasswordField
+              locale={locale}
+              id="account-password"
+              label={t(locale, 'account.passwordPlaceholder')}
+              value={pw}
+              onChange={(v) => {
+                setPw(v);
+                if (pwMsg !== 'idle') setPwMsg('idle');
+              }}
+              autoComplete="new-password"
+              placeholder={t(locale, 'account.passwordPlaceholder')}
+              showConfirm
+              confirmValue={pwConfirm}
+              onConfirmChange={(v) => {
+                setPwConfirm(v);
+                if (pwMsg !== 'idle') setPwMsg('idle');
+              }}
+            />
             {pwMsg === 'saved' && (
               <p className="text-sm text-link" role="status">{t(locale, 'account.passwordSaved')}</p>
             )}
@@ -230,7 +235,7 @@ export default function AccountView({ locale }: Props) {
             <PasswordStrength locale={locale} password={pw} />
             <button
               type="submit"
-              disabled={pwSaving || !isStrongPassword(pw)}
+              disabled={pwSaving || !isStrongPassword(pw) || !passwordsMatch(pw, pwConfirm)}
               className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
             >
               {pwSaving ? '…' : t(locale, 'account.passwordSave')}

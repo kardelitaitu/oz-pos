@@ -267,7 +267,12 @@
     "strengthGood": "Good",
     "strengthStrong": "Strong",
     "minLength": "at least 8 characters",
-    "hint": "Use at least 3 of: lowercase, uppercase, number, symbol."
+    "hint": "Use at least 3 of: lowercase, uppercase, number, symbol.",
+    "confirmLabel": "Confirm password",
+    "confirmPlaceholder": "Re-enter your password",
+    "mismatch": "Passwords don't match",
+    "show": "Show password",
+    "hide": "Hide password"
   },
   "signup": {
     "title": "Create your account",

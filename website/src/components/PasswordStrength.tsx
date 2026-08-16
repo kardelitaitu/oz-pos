@@ -1,28 +1,25 @@
 import { t } from '../i18n';
+import {
+  passwordByteLength,
+  passwordClassCount,
+  passwordMaxBytes,
+  passwordMinClasses,
+  passwordMinLen,
+  passwordRuneCount,
+} from '../lib/passwordPolicy';
 
 /**
- * Password strength meter (mirrors the server policy in web_password.go):
- * at least 8 characters and at least 3 of the 4 character classes
- * (lowercase / uppercase / digit / symbol). Exported for reuse in
- * SignupForm, AuthForm (forgot-password), and AccountView (change).
+ * Password strength meter — the policy itself lives in
+ * ../lib/passwordPolicy.ts (the single client-side source of truth,
+ * mirrored from the server's web_password.go and pinned to the shared
+ * scripts/password-policy-cases.json fixture by both test suites). This
+ * component only renders it.
  *
  * The meter shows 4 segments — one per class — lit in the strength color;
  * the label reads Too short / Weak / Fair / Good / Strong. isStrong is
  * the exact server gate, so the submit button can be disabled on the same
  * rule the server enforces.
  */
-
-const CLASS_RE: RegExp[] = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/];
-
-/** How many of the 4 classes the password satisfies (0–4). */
-export function passwordClassCount(password: string): number {
-  return CLASS_RE.reduce((n, re) => (re.test(password) ? n + 1 : n), 0);
-}
-
-/** Server-mirroring gate: ≥8 chars and ≥3 classes. */
-export function isStrongPassword(password: string): boolean {
-  return password.length >= 8 && passwordClassCount(password) >= 3;
-}
 
 interface Props {
   locale: string;
@@ -31,14 +28,17 @@ interface Props {
 
 export default function PasswordStrength({ locale, password }: Props) {
   const classes = passwordClassCount(password);
-  const minLenOk = password.length >= 8;
+  const minLenOk =
+    passwordByteLength(password) >= passwordMinLen &&
+    passwordByteLength(password) <= passwordMaxBytes &&
+    passwordRuneCount(password) >= passwordMinLen;
 
   let labelKey = 'password.strengthTooShort';
   let color = 'var(--callout-danger)';
   if (minLenOk) {
-    if (classes < 3) {
+    if (classes < passwordMinClasses) {
       labelKey = 'password.strengthWeak';
-    } else if (classes === 3) {
+    } else if (classes === passwordMinClasses) {
       labelKey = 'password.strengthGood';
       color = 'var(--callout-tip)';
     } else {

@@ -156,6 +156,16 @@ func isValidPassword(password string) bool {
 	return passwordClassCount(password) >= webPasswordMinClasses
 }
 
+// passwordConfirmMismatch reports a client-side double-entry mismatch:
+// the UI always sends password_confirm next to password (enforced by
+// website/scripts/check-password-policy.mjs), and the server rejects the
+// pair when confirm was supplied and differs. Absent confirm is allowed
+// (older clients / hand-built calls), so the rule can never break the
+// OTP-only flows — it exists to catch UI bugs, not to gate the API.
+func passwordConfirmMismatch(password, confirm string) bool {
+	return confirm != "" && confirm != password
+}
+
 // passwordResetCooldownUntil returns (until, true) when a NEW reset is
 // still blocked by the 7-day cooldown (password_reset_at < 7 days ago),
 // or (zero, false) when resets are allowed. The field is only stamped by
@@ -179,8 +189,11 @@ func passwordResetCooldownUntil(tenant *core.Record) (time.Time, bool) {
 // path that pairs email + password (the OTP-only self-signup in
 // request-otp remains for the login page's email-code tab).
 //
-//	{ "email": "owner@example.com", "password": "..." }
+//	{ "email": "owner@example.com", "password": "...", "password_confirm": "..." }
 //
+// password_confirm is the UI's double-entry guard: when supplied it must
+// equal password (400 "passwords do not match" otherwise). Absent confirm
+// is tolerated so hand-built calls and the OTP-only paths keep working.
 // Unlike request-otp, registration is NOT register-or-login: an existing
 // account gets a 409 (signup pages universally reveal existence), and the
 // password is required up front. The tenant is created with
@@ -205,8 +218,9 @@ func handleRegister(app core.App) func(e *core.RequestEvent) error {
 
 		clientIP := e.RealIP()
 		var req struct {
-			Email    string `json:"email"`
-			Password string `json:"password"`
+			Email           string `json:"email"`
+			Password        string `json:"password"`
+			PasswordConfirm string `json:"password_confirm"`
 		}
 		if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
 			otpIPLimiter.allow(clientIP)
@@ -226,6 +240,12 @@ func handleRegister(app core.App) func(e *core.RequestEvent) error {
 			otpIPLimiter.allow(clientIP)
 			return e.JSON(http.StatusBadRequest, map[string]any{
 				"error": "password must be at least 8 characters with at least 3 of: lowercase, uppercase, number, symbol",
+			})
+		}
+		if passwordConfirmMismatch(req.Password, req.PasswordConfirm) {
+			otpIPLimiter.allow(clientIP)
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "passwords do not match",
 			})
 		}
 
@@ -400,7 +420,10 @@ func handleLoginPassword(app core.App) func(e *core.RequestEvent) error {
 // handleSetPassword implements POST /api/v1/web/set-password — the way a
 // signed-in account sets its initial password or changes it.
 //
-//	{ "password": "..." }        Authorization: Bearer <session token>
+//	{ "password": "...", "password_confirm": "..." }   Authorization: Bearer <session token>
+//
+// password_confirm is the UI's double-entry guard (400 on mismatch when
+// supplied; absent confirm is tolerated).
 //
 // The session (issued only by verify-otp, login, or reset-password)
 // identifies the account — the body carries no email, so the request can
@@ -439,7 +462,8 @@ func handleSetPassword(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		var req struct {
-			Password string `json:"password"`
+			Password        string `json:"password"`
+			PasswordConfirm string `json:"password_confirm"`
 		}
 		if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
 			return e.JSON(http.StatusBadRequest, map[string]any{
@@ -449,6 +473,11 @@ func handleSetPassword(app core.App) func(e *core.RequestEvent) error {
 		if !isValidPassword(req.Password) {
 			return e.JSON(http.StatusBadRequest, map[string]any{
 				"error": "password must be at least 8 characters with at least 3 of: lowercase, uppercase, number, symbol",
+			})
+		}
+		if passwordConfirmMismatch(req.Password, req.PasswordConfirm) {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "passwords do not match",
 			})
 		}
 
@@ -600,7 +629,10 @@ func handleRequestPasswordReset(app core.App) func(e *core.RequestEvent) error {
 // handleResetPassword implements POST /api/v1/web/reset-password — the
 // second half of the forgot-password flow.
 //
-//	{ "email": "owner@example.com", "code": "123456", "password": "..." }
+//	{ "email": "owner@example.com", "code": "123456", "password": "...", "password_confirm": "..." }
+//
+// password_confirm is the UI's double-entry guard (400 on mismatch when
+// supplied; absent confirm is tolerated).
 //
 // Proves inbox ownership with the emailed code (same single-use store as
 // verify-otp), enforces the password policy, requires the new password to
@@ -630,9 +662,10 @@ func handleResetPassword(app core.App) func(e *core.RequestEvent) error {
 
 		clientIP := e.RealIP()
 		var req struct {
-			Email    string `json:"email"`
-			Code     string `json:"code"`
-			Password string `json:"password"`
+			Email           string `json:"email"`
+			Code            string `json:"code"`
+			Password        string `json:"password"`
+			PasswordConfirm string `json:"password_confirm"`
 		}
 		if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
 			otpIPLimiter.allow(clientIP)
@@ -673,10 +706,15 @@ func handleResetPassword(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// ── Policy + must-differ BEFORE consuming the code ───────
+		// ── Policy + confirm + must-differ BEFORE consuming the code ──
 		if !isValidPassword(req.Password) {
 			return e.JSON(http.StatusBadRequest, map[string]any{
 				"error": "password must be at least 8 characters with at least 3 of: lowercase, uppercase, number, symbol",
+			})
+		}
+		if passwordConfirmMismatch(req.Password, req.PasswordConfirm) {
+			return e.JSON(http.StatusBadRequest, map[string]any{
+				"error": "passwords do not match",
 			})
 		}
 		storedHash := tenant.GetString("password_hash")

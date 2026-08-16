@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { t } from '../i18n';
-import PasswordStrength, { isStrongPassword } from './PasswordStrength';
+import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
+import PasswordField from './PasswordField';
+import PasswordStrength from './PasswordStrength';
 
 /**
  * Sign-in form (website-plan.md §5/§11). Payment is register-first: the
@@ -43,6 +45,7 @@ export default function AuthForm({ locale }: Props) {
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
   const [resetCooldown, setResetCooldown] = useState('');
 
   if (!API) {
@@ -172,7 +175,7 @@ export default function AuthForm({ locale }: Props) {
       const res = await fetch(`${API}/api/v1/web/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: resetEmail, code: resetCode, password: resetPassword }),
+        body: JSON.stringify({ email: resetEmail, code: resetCode, password: resetPassword, password_confirm: resetConfirm }),
       });
       if (!res.ok) throw new Error('reset-password failed');
       const data = (await res.json()) as { token?: string };
@@ -260,25 +263,23 @@ export default function AuthForm({ locale }: Props) {
               className={inputClass}
             />
           </label>
-          <label className="block">
-            <span className="mb-1 block text-sm text-muted">{t(locale, 'login.newPassword')}</span>
-            <input
-              type="password"
-              required
-              autoComplete="new-password"
-              minLength={8}
-              maxLength={72}
-              value={resetPassword}
-              onChange={(e) => setResetPassword(e.target.value)}
-              placeholder={t(locale, 'login.passwordPlaceholder')}
-              className={inputClass}
-            />
-          </label>
+          <PasswordField
+            locale={locale}
+            id="reset-password"
+            label={t(locale, 'login.newPassword')}
+            value={resetPassword}
+            onChange={setResetPassword}
+            autoComplete="new-password"
+            placeholder={t(locale, 'login.passwordPlaceholder')}
+            showConfirm
+            confirmValue={resetConfirm}
+            onConfirmChange={setResetConfirm}
+          />
           <PasswordStrength locale={locale} password={resetPassword} />
           {error && <p className="text-sm text-link" role="alert">{error}</p>}
           <button
             type="submit"
-            disabled={loading || !isStrongPassword(resetPassword)}
+            disabled={loading || !isStrongPassword(resetPassword) || !passwordsMatch(resetPassword, resetConfirm)}
             className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.resetPassword')}
@@ -364,20 +365,15 @@ export default function AuthForm({ locale }: Props) {
               className={inputClass}
             />
           </label>
-          <label className="block">
-            <span className="mb-1 block text-sm text-muted">{t(locale, 'login.password')}</span>
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              minLength={8}
-              maxLength={72}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={t(locale, 'login.passwordPlaceholder')}
-              className={inputClass}
-            />
-          </label>
+          <PasswordField
+            locale={locale}
+            id="login-password"
+            label={t(locale, 'login.password')}
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+            placeholder={t(locale, 'login.passwordPlaceholder')}
+          />
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted">{t(locale, 'login.forgotPassword')}</span>
             <button

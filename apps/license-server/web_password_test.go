@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -809,6 +810,174 @@ func TestPasswordClassCount(t *testing.T) {
 	} {
 		if got := passwordClassCount(tc.in); got != tc.want {
 			t.Errorf("passwordClassCount(%q) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
+// ── password_confirm (UI double-entry guard) ────────────────────────
+//
+// The UI sends password_confirm alongside password on every create/change
+// flow (website/scripts/check-password-policy.mjs fails the build if a
+// component stops sending it). The server rejects a supplied confirm that
+// differs, and tolerates an absent confirm so hand-built calls and the
+// OTP-only paths keep working.
+
+func TestRegister_PasswordConfirmMismatch400(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+		`{"email":"confirmreg@example.com","password":"RegisterPw!1","password_confirm":"RegisterPw!2"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("mismatched confirm should 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "passwords do not match") {
+		t.Errorf("expected 'passwords do not match', got %s", rec.Body.String())
+	}
+	if sentCode != "" {
+		t.Error("no tenant should be created or emailed for a mismatched confirm")
+	}
+
+	// Matching confirm succeeds.
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+		`{"email":"confirmreg@example.com","password":"RegisterPw!1","password_confirm":"RegisterPw!1"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("matching confirm should 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Absent confirm is tolerated (OTP-only / older clients).
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+		`{"email":"confirmreg2@example.com","password":"RegisterPw!1"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("absent confirm should 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSetPassword_PasswordConfirmMismatch400(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "confirmpws00001", "confirmpws00001", "active")
+	token := "confirm-pw-set-token"
+	webOtpStore.createSession(hashWebToken(token), "confirmpws00001")
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/set-password",
+		`{"password":"BrandNewPw!456","password_confirm":"BrandNewPw!789"}`,
+		"http://localhost:4321", "Bearer "+token)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("mismatched confirm should 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "passwords do not match") {
+		t.Errorf("expected 'passwords do not match', got %s", rec.Body.String())
+	}
+
+	// The tenant's password must be untouched.
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "confirmpws00001@example.com")
+	if err != nil || tenant == nil {
+		t.Fatalf("tenant not found: %v", err)
+	}
+	if tenant.GetString("password_hash") != "" {
+		t.Error("a mismatched confirm must not change the stored password")
+	}
+
+	// Matching confirm succeeds.
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/set-password",
+		`{"password":"BrandNewPw!456","password_confirm":"BrandNewPw!456"}`,
+		"http://localhost:4321", "Bearer "+token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("matching confirm should 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestResetPassword_PasswordConfirmMismatch400 pins that a mismatched
+// confirm 400s WITHOUT consuming the single-use code (the confirm check
+// runs before the code is taken), so a corrected retry succeeds.
+func TestResetPassword_PasswordConfirmMismatch400(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenantWithPassword(t, app, "confirmrst00001", "confirmrst00001", "CurrentPw!123")
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	webRequest(t, se, http.MethodPost, "/api/v1/web/request-password-reset",
+		`{"email":"confirmrst00001@example.com"}`, "http://localhost:4321", "")
+	if sentCode == "" {
+		t.Fatal("no reset code captured")
+	}
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/reset-password",
+		`{"email":"confirmrst00001@example.com","code":"`+sentCode+`","password":"NewPassw0rd!2","password_confirm":"NewPassw0rd!3"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("mismatched confirm should 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Same code + matching confirm now succeeds — the mismatch did not burn it.
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/reset-password",
+		`{"email":"confirmrst00001@example.com","code":"`+sentCode+`","password":"NewPassw0rd!2","password_confirm":"NewPassw0rd!2"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("corrected retry with the same code should succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestPasswordPolicyMatchesSharedFixture pins the server policy against
+// scripts/password-policy-cases.json — the SAME fixture the website's
+// check-password-policy.mjs validates the client meter against (npm run
+// precheck/prebuild). If either side changes its notion of a valid
+// password, this test (or the node check) fails, so the two can never
+// drift apart silently.
+func TestPasswordPolicyMatchesSharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("../../scripts/password-policy-cases.json")
+	if err != nil {
+		t.Fatalf("cannot read shared password policy fixture: %v", err)
+	}
+	var fx struct {
+		MinLength  int `json:"minLength"`
+		MaxBytes   int `json:"maxBytes"`
+		MinClasses int `json:"minClasses"`
+		Cases      []struct {
+			Password string `json:"password"`
+			Classes  int    `json:"classes"`
+			Valid    bool   `json:"valid"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatalf("cannot parse shared fixture: %v", err)
+	}
+
+	if fx.MinLength != webPasswordMinLen {
+		t.Errorf("fixture minLength=%d, server webPasswordMinLen=%d", fx.MinLength, webPasswordMinLen)
+	}
+	if fx.MaxBytes != webPasswordMaxBytes {
+		t.Errorf("fixture maxBytes=%d, server webPasswordMaxBytes=%d", fx.MaxBytes, webPasswordMaxBytes)
+	}
+	if fx.MinClasses != webPasswordMinClasses {
+		t.Errorf("fixture minClasses=%d, server webPasswordMinClasses=%d", fx.MinClasses, webPasswordMinClasses)
+	}
+	if len(fx.Cases) == 0 {
+		t.Fatal("fixture has no cases")
+	}
+
+	for _, c := range fx.Cases {
+		if got := passwordClassCount(c.Password); got != c.Classes {
+			t.Errorf("passwordClassCount(%q) = %d, fixture says %d", c.Password, got, c.Classes)
+		}
+		if got := isValidPassword(c.Password); got != c.Valid {
+			t.Errorf("isValidPassword(%q) = %v, fixture says %v", c.Password, got, c.Valid)
 		}
 	}
 }
