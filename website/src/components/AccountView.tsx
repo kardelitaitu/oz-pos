@@ -42,6 +42,28 @@ interface Props {
   locale: string;
 }
 
+/**
+ * Localized label for the raw status values the license server writes
+ * (license_keys + subscriptions collections). Unknown values pass through
+ * unchanged so a new server status never renders blank.
+ */
+function statusLabel(locale: string, status: string | undefined): string {
+  switch (status) {
+    case 'active':
+      return t(locale, 'account.statusActive');
+    case 'unused':
+      return t(locale, 'account.statusUnused');
+    case 'grace_period':
+      return t(locale, 'account.statusGracePeriod');
+    case 'expired':
+      return t(locale, 'account.statusExpired');
+    case 'revoked':
+      return t(locale, 'account.statusRevoked');
+    default:
+      return status ?? '—';
+  }
+}
+
 export default function AccountView({ locale }: Props) {
   const [state, setState] = useState<'loading' | 'anon' | 'error' | 'ready'>('loading');
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -216,7 +238,7 @@ export default function AccountView({ locale }: Props) {
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.status')}</dt>
-              <dd className="capitalize">{license?.status ?? tenant.status}</dd>
+              <dd className="capitalize">{statusLabel(locale, license?.status ?? tenant.status)}</dd>
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.expires')}</dt>
@@ -296,7 +318,7 @@ export default function AccountView({ locale }: Props) {
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.status')}</dt>
-              <dd className="capitalize">{subscription.status}</dd>
+              <dd className="capitalize">{statusLabel(locale, subscription.status)}</dd>
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.starts')}</dt>
@@ -311,6 +333,14 @@ export default function AccountView({ locale }: Props) {
               <dd>{subscription.graceUntil ?? '—'}</dd>
             </div>
           </dl>
+          {subscription.status !== 'active' && (
+            <p className="mt-4 text-sm text-muted">
+              {t(locale, 'account.renewHint')}{' '}
+              <a href={`/${locale}/pricing`} className="text-link underline">
+                {t(locale, 'account.renewLink')}
+              </a>
+            </p>
+          )}
         </section>
       ) : (
         <section className="rounded-xl border border-accent/40 bg-surface/40 p-6" aria-label={t(locale, 'account.subscribe')}>

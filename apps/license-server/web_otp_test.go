@@ -534,6 +534,76 @@ func TestMe_ShowsUnusedKeyViaSubscription(t *testing.T) {
 	}
 }
 
+// TestMe_ShowsGracePeriodSubscription covers the cancel/pause state: the
+// webhook moved the subscription to grace_period (paddleSetGrace), and
+// /me must still surface both the subscription card and the minted key
+// instead of falling back to the "no subscription" shape.
+func TestMe_ShowsGracePeriodSubscription(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const tenantID = "webotpmegrace01"
+	seedTenant(t, app, tenantID, "webotpmegrace01", "active")
+	seedSubscription(t, app, tenantID, "pro", "grace_period")
+	// Link the subscription to a paddle sub id and the minted key to the
+	// same id, exactly as subscription.created then subscription.canceled
+	// would leave it.
+	subs, err := app.FindRecordsByFilter("subscriptions", "tenant_id = {:t}", "", 1, 0, map[string]any{"t": tenantID})
+	if err != nil || len(subs) == 0 {
+		t.Fatalf("seeded subscription not found: %v", err)
+	}
+	subs[0].Set("paddle_sub_id", "sub_01m05grace")
+	subs[0].Set("grace_until", time.Now().UTC().AddDate(0, 0, 7).Format(time.RFC3339))
+	if err := app.Save(subs[0]); err != nil {
+		t.Fatalf("failed to set paddle_sub_id: %v", err)
+	}
+	seedLicenseKey(t, app, "OZ-GRACE-KEY-0001", "pro", "unused", "2099-12-31 23:59:59.000Z")
+	keys, err := app.FindRecordsByFilter("license_keys", "key = 'OZ-GRACE-KEY-0001'", "", 1, 0, nil)
+	if err != nil || len(keys) == 0 {
+		t.Fatalf("seeded key not found: %v", err)
+	}
+	keys[0].Set("paddle_sub_id", "sub_01m05grace")
+	if err := app.Save(keys[0]); err != nil {
+		t.Fatalf("failed to set key paddle_sub_id: %v", err)
+	}
+
+	token := "me-session-grace-0001"
+	webOtpStore.createSession(hashWebToken(token), tenantID)
+
+	rec := webRequest(t, se, http.MethodGet, "/api/v1/web/me", "",
+		"http://localhost:4321", "Bearer "+token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		License map[string]any `json:"license"`
+		Sub     map[string]any `json:"subscription"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp.Sub == nil {
+		t.Fatal("expected the grace_period subscription to be surfaced")
+	}
+	if resp.Sub["status"] != "grace_period" {
+		t.Errorf("expected status grace_period, got %v", resp.Sub["status"])
+	}
+	if resp.Sub["tierKey"] != "pro" {
+		t.Errorf("unexpected subscription tier: %v", resp.Sub["tierKey"])
+	}
+	if _, ok := resp.Sub["graceUntil"]; !ok {
+		t.Error("expected subscription graceUntil in response")
+	}
+	if resp.License == nil {
+		t.Fatal("expected the minted license key to still be surfaced in grace")
+	}
+	if resp.License["key"] != "OZ-GRACE-KEY-0001" {
+		t.Errorf("unexpected license key: %v", resp.License["key"])
+	}
+}
+
 func TestMe_UnauthorizedWithoutToken(t *testing.T) {
 	resetRateLimiters()
 	app, se := setupDirectApp(t)

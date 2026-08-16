@@ -236,7 +236,14 @@
     "passwordSaved": "Password saved. Use it to sign in next time.",
     "passwordError": "Couldn't save the password. Please try again.",
     "checkingSubscription": "Checking your subscription…",
-    "subscriptionPending": "Your purchase is confirmed, but the subscription isn't visible yet — it can take a minute. Reload to check."
+    "subscriptionPending": "Your purchase is confirmed, but the subscription isn't visible yet — it can take a minute. Reload to check.",
+    "statusActive": "Active",
+    "statusUnused": "Not activated",
+    "statusGracePeriod": "In grace period",
+    "statusExpired": "Expired",
+    "statusRevoked": "Revoked",
+    "renewHint": "Your subscription is no longer active.",
+    "renewLink": "Renew on the pricing page"
   },
   "footer": {
     "rights": "All rights reserved.",

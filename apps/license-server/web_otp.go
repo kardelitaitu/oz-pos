@@ -843,11 +843,14 @@ func licenseSummary(app core.App, tenantID string) any {
 	if err != nil || len(keys) == 0 {
 		// Not activated yet: show the key the tenant paid for. The webhook
 		// mints it with status "unused" + paddle_sub_id; the subscription
-		// record links that id to the tenant. (The POS binds it via
-		// activated_by at first activation — activate.go.)
+		// record links that id to the tenant. Any subscription record
+		// counts (active or grace_period) — a canceled customer still owns
+		// the key and the POS honors it through the signed grace payload.
+		// (The POS binds it via activated_by at first activation —
+		// activate.go.)
 		subs, subErr := app.FindRecordsByFilter(
 			"subscriptions",
-			"tenant_id = {:tenant_id} && status = 'active'",
+			"tenant_id = {:tenant_id}",
 			"-starts_at", 1, 0,
 			map[string]any{"tenant_id": tenantID},
 		)
@@ -877,12 +880,16 @@ func licenseSummary(app core.App, tenantID string) any {
 	}
 }
 
-// subscriptionSummary returns the tenant's latest ACTIVE subscription,
-// or nil when none exists. Mirrors the status.go lookup semantics.
+// subscriptionSummary returns the tenant's latest subscription record
+// regardless of status (active, grace_period, expired, revoked) so the
+// account page can show a canceled customer's state instead of falling
+// back to the "subscribe now" prompt, or nil when none exists. This is
+// the dashboard lookup — deliberately broader than status.go's POS
+// /status lookup, which still gates runtime access to active-only.
 func subscriptionSummary(app core.App, tenantID string) any {
 	subs, err := app.FindRecordsByFilter(
 		"subscriptions",
-		"tenant_id = {:tenant_id} && status = 'active'",
+		"tenant_id = {:tenant_id}",
 		"-starts_at", 1, 0,
 		map[string]any{"tenant_id": tenantID},
 	)
