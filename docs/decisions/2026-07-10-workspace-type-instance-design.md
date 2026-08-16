@@ -677,7 +677,7 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 
 ## Phased Implementation & Migration Guide
 
-> **Status (2026-07-10):** All phases complete. Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher), Phase 3 ✅, ADR #7 ✅ (all 84 desktop commands migrated to session token pattern).</toml>
+> **Status (2026-07-10):** All phases complete. Phase 1 ✅, Phase 1b ✅, Phase 2 ✅ (StoreDatabaseManager + migration tooling + store switcher), Phase 3 ✅, ADR #7 ✅ (all 84 desktop commands migrated to session token pattern).
 
 ### Phase 1: Workspace Types + Default Instances + Session Context
 

@@ -107,8 +107,8 @@ because it is read from the local store DB, not the cloud.
 
 - **Core model** (`crates/oz-core/src/db/mod.rs` `row_to_product`, the
   `Product` struct): add `cost_minor: i64`, `brand`, `rack_location`, `notes`,
-  `unit` (Option<String>), `is_active: bool`, `default_supplier_id`
-  (Option<String>).
+  `unit` (`Option<String>`), `is_active: bool`, `default_supplier_id`
+  (`Option<String>`).
 - **`crates/oz-core/src/db/products.rs`**: add the six new columns to every
   `SELECT` (list/get/lookup/update re-read), to `create_product` and
   `create_product_if_absent_in_tx` INSERTs, and to `update_product` UPDATEs
@@ -124,9 +124,9 @@ because it is read from the local store DB, not the cloud.
   column — shows the location total. "Untouched" for the Product Management
   screen means no UI/feature changes, not a different stock value.
 - **Foundation DTOs** (`foundation/src/dto.rs`): `CreateProductDto` gains
-  `cost_minor: i64` (default 0), `brand`, `rack_location`, `notes`, `unit`
-  (Option<String>), `is_active: bool` (default true), `default_supplier_id`
-  (Option<String>). `UpdateProductDto` (PATCH semantics) gains
+  `cost_minor: i64` (default 0), `brand`, `rack_location`, `notes`,  `unit`
+  (`Option<String>`), `is_active: bool` (default true), `default_supplier_id`
+  (`Option<String>`). `UpdateProductDto` (PATCH semantics) gains
   `cost_minor: Option<i64>`, `is_active: Option<bool>`, and clearable
   `Option<Option<String>>` for brand/rack/notes/unit/default_supplier_id —
   `null` clears, absent is a no-op (the existing `deserialize_optional_field`
