@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OZ-POS Documentation — Portal Preview</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f7f8fa;
+    --sidebar-bg: #f7f8fa;
+    --border: #e3e7ec;
+    --text: #333333;
+    --text-muted: #5c6773;
+    --accent: #3b82f6;
+    --accent-soft: rgba(59, 130, 246, 0.1);
+    --topbar-h: 50px;
+    --sidebar-w: 300px;
+  }
+  [data-theme="dark"] {
+    --bg: #1a1d23;
+    --bg-soft: #22262d;
+    --sidebar-bg: #1f232a;
+    --border: #333a44;
+    --text: #e6e8eb;
+    --text-muted: #9aa5b1;
+    --accent: #60a5fa;
+    --accent-soft: rgba(96, 165, 250, 0.14);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+  }
+  /* ── Top bar ─────────────────────────────── */
+  .topbar {
+    height: var(--topbar-h);
+    flex: 0 0 var(--topbar-h);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    position: relative;
+  }
+  .topbar .title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+  }
+  .icon-btn {
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    line-height: 1;
+  }
+  .icon-btn:hover { background: var(--bg-soft); color: var(--text); }
+  .search-wrap { position: relative; margin-left: auto; }
+  .search {
+    flex: 0 1 280px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    background: var(--bg);
+    color: var(--text-muted);
+  }
+  .search input {
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    width: 100%;
+  }
+  .results {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 420px;
+    max-width: 80vw;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
+    z-index: 50;
+    display: none;
+  }
+  .results.open { display: block; }
+  .result-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .result-item:last-child { border-bottom: none; }
+  .result-item:hover, .result-item.active { background: var(--bg-soft); }
+  .r-title { font-size: 14px; font-weight: 600; }
+  .r-cat {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 6px;
+    vertical-align: 1px;
+  }
+  .r-snippet { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.45; }
+  .no-results { padding: 12px 14px; font-size: 13px; color: var(--text-muted); }
+  .results-count {
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  mark { background: rgba(255, 213, 79, 0.55); border-radius: 2px; padding: 0 1px; }
+  [data-theme="dark"] mark { background: rgba(255, 213, 79, 0.28); }
+  /* ── Layout ──────────────────────────────── */
+  .wrapper { flex: 1; display: flex; min-height: 0; }
+  /* ── Sidebar ─────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w);
+    flex: 0 0 var(--sidebar-w);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 12px 0 24px;
+    transition: margin-left 0.2s ease;
+  }
+  .sidebar.collapsed { margin-left: calc(-1 * var(--sidebar-w)); }
+  .side-section { margin-bottom: 18px; }
+  .side-header {
+    padding: 4px 20px 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .side-header .cat { font-size: 12px; }
+  .side-item {
+    display: block;
+    padding: 5px 20px 5px 36px;
+    color: var(--text);
+    font-size: 14px;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+  }
+  .side-item:hover { background: var(--bg-soft); }
+  .side-item.active {
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+  .side-item .tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 8px;
+    vertical-align: 1px;
+  }
+  /* ── Content ─────────────────────────────── */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 40px 48px 80px;
+  }
+  .content-inner { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 32px 0 10px; }
+  p { font-size: 15px; line-height: 1.65; color: var(--text-muted); }
+  .lead { font-size: 16px; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 8px;
+    margin-bottom: 18px;
+  }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 28px; }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 16px;
+    background: var(--bg);
+  }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; font-size: 13px; line-height: 1.5; }
+  .card .emoji { font-size: 22px; display: block; margin-bottom: 8px; }
+  code {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .placeholder {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    padding: 20px;
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-top: 24px;
+  }
+  .placeholder code { background: var(--bg); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  @media (max-width: 760px) {
+    .sidebar { position: absolute; z-index: 10; height: calc(100% - var(--topbar-h)); box-shadow: 0 0 20px rgba(0,0,0,0.15); }
+    .cards { grid-template-columns: 1fr; }
+    .content { padding: 24px 20px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <button class="icon-btn" id="menuBtn" title="Toggle sidebar" aria-label="Toggle sidebar">☰</button>
+  <div class="title">OZ-POS Documentation</div>
+  <div class="search-wrap">
+    <div class="search">
+      <span aria-hidden="true">🔍</span>
+      <input id="searchInput" type="search" placeholder="Search all docs…" aria-label="Search all documentation">
+    </div>
+    <div class="results" id="results" role="listbox" aria-label="Search results"></div>
+  </div>
+  <button class="icon-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle light/dark theme">◐</button>
+</header>
+
+<div class="wrapper">
+  <nav class="sidebar" id="sidebar" aria-label="Table of contents">
+
+    <div class="side-section">
+      <div class="side-header"><span class="cat">📄</span> Docs</div>
+      <a class="side-item" data-page="intro" href="#">Introduction</a>
+      <a class="side-item" data-page="admin" href="#">Admin Guide <span class="tag">placeholder</span></a>
+      <a class="side-item" data-page="user" href="#">User Guide <span class="tag">placeholder</span></a>
+      <a class="side-item" data-page="adr" href="#">ADR Index <span class="tag">placeholder</span></a>
+    </div>
+
+    <div class="side-section">
+      <div class="side-header"><span class="cat">🦀</span> Rust</div>
+      <a class="side-item" data-page="rust" href="#">API Reference <span class="tag">cargo doc</span></a>
+    </div>
+
+    <div class="side-section">
+      <div class="side-header"><span class="cat">⚛️</span> TypeScript</div>
+      <a class="side-item" data-page="ts" href="#">API Reference <span class="tag">typedoc</span></a>
+    </div>
+
+  </nav>
+
+  <main class="content">
+    <div class="content-inner" id="content"></div>
+  </main>
+</div>
+
+<script>
+const PAGES = {
+  intro: `
+    <h1>Documentation Portal</h1>
+    <span class="badge">Design preview — final portal generated by mdBook</span>
+    <p class="lead">A single place for the OZ-POS documentation: hand-written guides on the
+    left, plus API references for the Rust workspace and the TypeScript frontend.</p>
+
+    <div class="cards">
+      <div class="card"><span class="emoji">📄</span><h3>Docs</h3>
+        <p>Hand-written guides and ADRs. <em>Content is placeholder and will be rewritten later.</em></p></div>
+      <div class="card"><span class="emoji">🦀</span><h3>Rust</h3>
+        <p>API reference generated by <code>cargo doc</code> from the workspace crates.</p></div>
+      <div class="card"><span class="emoji">⚛️</span><h3>TypeScript</h3>
+        <p>API reference generated by TypeDoc from <code>ui/src</code> (api, types, hooks).</p></div>
+    </div>
+
+    <h2>Sidebar</h2>
+    <p>Three categories: <b>Docs</b>, <b>Rust</b>, <b>TypeScript</b>. Generated API sites stay
+    self-contained — mdBook copies them into its output, so their CSS and search keep working.</p>
+
+    <div class="placeholder">📝 Docs content will be rewritten later. The sidebar structure is the
+    deliverable for now.</div>
+  `,
+  admin: `
+    <h1>Admin Guide</h1>
+    <span class="badge">placeholder — to be rewritten</span>
+    <p>This page will hold the hand-written admin guide. Its content is copied from the
+    markdown in <code>docs/</code> when the portal is built.</p>
+    <div class="placeholder">Content placeholder. The guide is scheduled for a rewrite.</div>
+  `,
+  user: `
+    <h1>User Guide</h1>
+    <span class="badge">placeholder — to be rewritten</span>
+    <p>This page will hold the hand-written user guide, copied from <code>docs/</code> at build time.</p>
+    <div class="placeholder">Content placeholder. The guide is scheduled for a rewrite.</div>
+  `,
+  adr: `
+    <h1>ADR Index</h1>
+    <span class="badge">placeholder — to be rewritten</span>
+    <p>Architecture Decision Records from <code>docs/decisions/</code> will be listed here
+    (module system, event bus, sync strategy, …).</p>
+    <div class="placeholder">Content placeholder. ADRs are copied in from
+    <code>docs/decisions/</code> at build time.</div>
+  `,
+  rust: `
+    <h1>Rust API Reference</h1>
+    <span class="badge">generated — cargo doc</span>
+    <p>API reference for the Rust workspace, generated with
+    <code>cargo doc --workspace --no-deps</code> and mounted here as a self-contained site.</p>
+    <div class="placeholder">In the final portal this links to <code>api/rust/index.html</code>
+    (rustdoc output copied into the book).</div>
+  `,
+  ts: `
+    <h1>TypeScript API Reference</h1>
+    <span class="badge">generated — typedoc</span>
+    <p>API reference for the frontend, generated by TypeDoc from
+    <code>ui/src/api</code>, <code>ui/src/types</code>, <code>ui/src/hooks</code>.</p>
+    <div class="placeholder">In the final portal this links to <code>api/ts/index.html</code>
+    (TypeDoc output copied into the book).</div>
+  `,
+};
+
+const content = document.getElementById('content');
+const items = Array.from(document.querySelectorAll('.side-item'));
+const resultsBox = document.getElementById('results');
+const searchInput = document.getElementById('searchInput');
+let activeIdx = -1;
+
+const CAT = { intro: 'Docs', admin: 'Docs', user: 'Docs', adr: 'Docs', rust: 'Rust', ts: 'TypeScript' };
+
+const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// ── Tiny search engine: stemming + substring + fuzzy matching ──
+const STOP_WORDS = new Set(['a', 'an', 'the', 'and', 'or', 'for', 'with', 'to', 'of', 'in', 'on', 'is', 'are', 'be']);
+
+// Lightweight suffix stemmer (plurals/tense forms — enough for matching).
+function stem(word) {
+  let w = word.toLowerCase();
+  if (w.length <= 3) return w;
+  if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
+  if (w.endsWith('ing') && w.length > 5) return w.slice(0, -3);
+  if (w.endsWith('ed') && w.length > 4) return w.slice(0, -2);
+  if (w.endsWith('es') && w.length > 3) return w.slice(0, -2);
+  if (w.endsWith('s') && !w.endsWith('ss') && w.length > 3) return w.slice(0, -1);
+  return w;
+}
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp = Array.from({ length: m + 1 }, (_, i) => {
+    const row = new Array(n + 1).fill(0);
+    row[0] = i;
+    return row;
+  });
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+  }
+  return dp[m][n];
+}
+
+function queryTokens(q) {
+  return (q.toLowerCase().match(/[a-z0-9]+/g) || [])
+    .filter(t => t.length > 1 && !STOP_WORDS.has(t));
+}
+
+function pageInfo(key) {
+  const doc = new DOMParser().parseFromString(PAGES[key], 'text/html');
+  const h1 = doc.querySelector('h1');
+  const text = doc.body.textContent.replace(/\s+/g, ' ').trim();
+  const title = h1 ? h1.textContent.trim() : key;
+  const words = Array.from(new Set((title + ' ' + text).toLowerCase().match(/[a-z0-9]+/g) || [])).map(stem);
+  return { key, title, text, cat: CAT[key] || 'Docs', words };
+}
+const INDEX = Object.keys(PAGES).map(pageInfo);
+
+function render(page, tokens) {
+  content.innerHTML = PAGES[page] || PAGES.intro;
+  if (tokens && tokens.length) highlightMatches(content, tokens);
+  items.forEach(el => el.classList.toggle('active', el.dataset.page === page));
+  document.querySelector('.content').scrollTop = 0;
+}
+
+function highlightMatches(root, tokens) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  const re = new RegExp('(' + tokens.map(escapeRegExp).join('|') + ')', 'ig');
+  for (const node of textNodes) {
+    if (!re.test(node.textContent)) continue;
+    re.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    node.textContent.split(re).forEach(part => {
+      if (part === '') return;
+      if (tokens.includes(part.toLowerCase())) {
+        const mark = document.createElement('mark');
+        mark.textContent = part;
+        frag.appendChild(mark);
+      } else {
+        frag.appendChild(document.createTextNode(part));
+      }
+    });
+    node.parentNode.replaceChild(frag, node);
+  }
+}
+
+// Per-token match quality: exact stem > substring/prefix > fuzzy (typo-tolerant).
+function tokenMatches(entry, token) {
+  const t = stem(token);
+  if (entry.words.includes(t)) return 100;
+  for (const w of entry.words) {
+    if (w.startsWith(t) || w.includes(t) || t.startsWith(w)) return 50;
+  }
+  const maxDist = t.length <= 4 ? 1 : 2;
+  for (const w of entry.words) {
+    if (w.length >= 3 && levenshtein(t, w) <= maxDist) return 25;
+  }
+  return 0;
+}
+
+function search(q) {
+  const tokens = queryTokens(q);
+  if (!tokens.length) return [];
+  return INDEX.map(entry => {
+    const titleWords = Array.from(new Set(entry.title.toLowerCase().match(/[a-z0-9]+/g) || [])).map(stem);
+    let total = 0;
+    for (const token of tokens) {
+      const m = tokenMatches(entry, token);
+      if (!m) return null;
+      total += m + (titleWords.includes(stem(token)) ? 40 : 0);
+    }
+    return { entry, score: total };
+  }).filter(Boolean).sort((a, b) => b.score - a.score);
+}
+
+function snippet(entry, tokens) {
+  const lower = entry.text.toLowerCase();
+  let start = -1;
+  let matched = '';
+  for (const t of tokens) {
+    const idx = lower.indexOf(t);
+    if (idx !== -1 && (start === -1 || idx < start)) { start = idx; matched = t; }
+  }
+  if (start === -1) return esc(entry.text.slice(0, 120));
+  const from = Math.max(0, start - 50);
+  const to = Math.min(entry.text.length, start + matched.length + 90);
+  let snip = (from > 0 ? '…' : '') + entry.text.slice(from, to) + (to < entry.text.length ? '…' : '');
+  snip = esc(snip);
+  tokens.forEach(t => { snip = snip.replace(new RegExp(escapeRegExp(esc(t)), 'ig'), m => '<mark>' + m + '</mark>'); });
+  return snip;
+}
+
+function showResults() {
+  const q = searchInput.value;
+  const tokens = queryTokens(q);
+  if (!tokens.length) {
+    resultsBox.classList.remove('open');
+    resultsBox.innerHTML = '';
+    activeIdx = -1;
+    return;
+  }
+  const results = search(q);
+  if (!results.length) {
+    resultsBox.innerHTML = '<div class="no-results">0 results for “' + esc(q.trim()) + '”</div>';
+    resultsBox.classList.add('open');
+    activeIdx = -1;
+    return;
+  }
+  const count = results.length + (results.length === 1 ? ' result' : ' results');
+  resultsBox.innerHTML =
+    '<div class="results-count">' + count + ' for “' + esc(q.trim()) + '”</div>' +
+    results.map((r, i) =>
+      '<div class="result-item' + (i === 0 ? ' active' : '') + '" data-page="' + r.entry.key + '">' +
+        '<div class="r-title">' + esc(r.entry.title) + ' <span class="r-cat">' + esc(r.entry.cat) + '</span></div>' +
+        '<div class="r-snippet">' + snippet(r.entry, tokens) + '</div>' +
+      '</div>'
+    ).join('');
+  resultsBox.classList.add('open');
+  resultsBox.scrollTop = 0;
+  activeIdx = 0;
+}
+
+function selectResult(el) {
+  const tokens = queryTokens(searchInput.value);
+  render(el.dataset.page, tokens);
+  resultsBox.classList.remove('open');
+  searchInput.blur();
+}
+
+searchInput.addEventListener('input', showResults);
+
+searchInput.addEventListener('keydown', e => {
+  const results = Array.from(resultsBox.querySelectorAll('.result-item'));
+  if (!results.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    activeIdx = (activeIdx + (e.key === 'ArrowDown' ? 1 : -1) + results.length) % results.length;
+    results.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    results[activeIdx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Home' || e.key === 'End') {
+    e.preventDefault();
+    activeIdx = e.key === 'Home' ? 0 : results.length - 1;
+    results.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    results[activeIdx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    selectResult(results[activeIdx] || results[0]);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    resultsBox.classList.remove('open');
+    searchInput.blur();
+  }
+});
+
+resultsBox.addEventListener('click', e => {
+  const item = e.target.closest('.result-item');
+  if (item) selectResult(item);
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) resultsBox.classList.remove('open');
+});
+
+// Sidebar navigation
+items.forEach(el => el.addEventListener('click', e => {
+  e.preventDefault();
+  render(el.dataset.page);
+}));
+
+// Sidebar collapse
+document.getElementById('menuBtn').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+});
+
+// Theme toggle
+const themeBtn = document.getElementById('themeBtn');
+themeBtn.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem('oz-pos-preview-theme', next);
+});
+if (localStorage.getItem('oz-pos-preview-theme')) {
+  document.documentElement.dataset.theme = localStorage.getItem('oz-pos-preview-theme');
+}
+
+render('intro');
+</script>
+</body>
+</html>

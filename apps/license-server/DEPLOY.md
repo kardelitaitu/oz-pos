@@ -193,6 +193,11 @@ PocketBase stores its SQLite database and admin credentials in `/pb/pb_data`. Th
 
 ## 7. Set Environment Variables
 
+> **Going live?** The ordered, tick-box checklist of what is still missing (Brevo SMTP
+> login id, verified sender, Paddle webhook secret) and the apply order is in
+> [`go-live-checklist.md`](../../docs/operations/go-live-checklist.md). This section documents every variable
+> in full.
+
 The license server requires the RSA private key as an environment variable. **Never hardcode this in the Dockerfile or commit it.**
 
 ### 7.1 Create a Secret Group
@@ -213,17 +218,32 @@ The license server requires the RSA private key as an environment variable. **Ne
    - **Key:** `OZ_DISCORD_WEBHOOK`
    - **Value:** The **Discord channel webhook URL** (Discord → channel → Settings → Integrations → Webhooks → New Webhook). This is what `/api/v1/web/contact` forwards website support-form messages to. **Never expose this URL to the browser** — the website only talks to the license server, which keeps the secret server-side. If it is unset, `/api/v1/web/contact` returns `503 not configured` and the website's contact form falls back to a mailto link.
 5. Add the **OTP email sender** (required for the website dashboard login — without it `POST /api/v1/web/request-otp` returns `503 email delivery is not configured` and the login page shows its "not configured" state):
-   - **Key:** `OZ_SMTP_HOST` — e.g. `smtp.postmarkapp.com` or your relay's hostname
+   - **Key:** `OZ_SMTP_HOST` — your relay's hostname
    - **Key:** `OZ_SMTP_PORT` — default `587` (TLS/STARTTLS) if unset
    - **Key:** `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` — credentials for the relay (omit for unauthenticated relays)
-   - **Key:** `OZ_SMTP_FROM` — sender address, e.g. `noreply@oz-pos.com`
+   - **Key:** `OZ_SMTP_FROM` — sender address. **Must be set explicitly and verified with your relay** — the code defaults to `no-reply@oz-pos.com`, which relays will reject or flag until that domain is yours. **Boot gate:** when `OZ_SMTP_HOST` is set, the server runs a sender-identity probe at startup (auth + `MAIL FROM` only — nothing is ever queued) and **fails fast** if `OZ_SMTP_FROM` is unset, is still the unowned default, or the relay permanently rejects it (e.g. Brevo `550 Sender address is not verified`). A transient relay outage only logs a warning, so a brief hiccup can't block a deploy. Unset `OZ_SMTP_HOST` skips the gate entirely (the endpoint answers 503 by design then).
+
+   **No custom domain yet?** Northflank does **not** provide SMTP/email to apps — you need a third-party transactional relay, and `code.run` / `workers.dev` are not domains you can add DNS records to (no SPF/DKIM there). Until you own a domain, use a provider that works with a **verified sender email** instead:
+
+   - **Brevo (current choice)** — SMTP login/username is a dedicated **SMTP login email** (Brevo → Settings → SMTP & API → copy the **Login** value; it is NOT your account email), password is the **SMTP key** (`xsmtpsib-…`). The `OZ_SMTP_FROM` address must be a **verified sender** in Brevo (Sender Identity → verify the email or domain) or sends fail. All three Brevo options work — **port 465 uses implicit TLS**, 587/2525 use STARTTLS (`smtp_mail.go` picks the transport by port). Example:
+     ```
+     OZ_SMTP_HOST=smtp-relay.brevo.com
+     OZ_SMTP_PORT=587
+     OZ_SMTP_USER=<brevo-smtp-login-email@smtp-brevo.com>
+     OZ_SMTP_PASSWORD=xsmtpsib-…
+     OZ_SMTP_FROM=<your-verified-sender@example.com>
+     ```
+   - **SendGrid (free tier)** — Settings → Sender Authentication → **Single Sender Verification** → verify the From address (e.g. your own email). SMTP: `smtp.sendgrid.net:587`, user `apikey`, password = your SendGrid API key, From = the verified sender.
+   - **Amazon SES** — verify the sender **email address** (no domain required). Sandbox initially only delivers to verified recipients; request production access when live.
+
+   > **Deliverability honesty:** without your own domain + SPF/DKIM/DMARC, inbox placement is best-effort — codes may land in spam. Once you own a domain: set `OZ_SMTP_FROM=noreply@<domain>`, add the provider's SPF include + DKIM records (and a DMARC policy), then the verified-sender fallback is no longer needed. This is the actual fix for "signup codes never land in spam".
 6. (Optional) Web API CORS allowlist override:
    - **Key:** `OZ_WEB_ALLOWED_ORIGINS` — comma-separated origins allowed to call the web endpoints. **Defaults are already correct** for the current setup (`https://oz-pos.adikaradwiatmaja.workers.dev`, `https://oz-pos.com`, `http://localhost:4321`); only set this if you deploy the website to a different origin.
 7. (Optional) Session lifetime override:
    - **Key:** `OZ_WEB_SESSION_TTL` — Go duration, default `24h` (e.g. `72h` to extend dashboard sessions).
 8. Add the **Paddle webhook** secrets (required for the checkout → provisioning flow):
-   - **Key:** `PADDLE_WEBHOOK_SECRET` — the endpoint secret key from Paddle → Developer tools → Notifications → Edit destination. Without it the webhook answers `503 not configured`.
-   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium`. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. Copy the real price IDs from the Paddle dashboard (Catalog → Prices).
+   - **Key:** `PADDLE_WEBHOOK_SECRET` — the endpoint secret key from Paddle → Developer tools → Notifications → Edit destination. Without it the webhook answers `503 not configured`. **Boot gate:** the server fails fast at startup if this (or `PADDLE_PRICE_TIERS`) is missing or malformed, so a misconfigured deploy can never silently answer 503/500 on every event.
+   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium`. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. Copy the real price IDs from the Paddle dashboard (Catalog → Prices). Both vars are still read per-request, so a redeploy with fixed env recovers without a code change.
    - **Key:** `PADDLE_API_KEY` (optional) — server-side Paddle API key. Only needed when the customer email isn't passed in `custom_data` at checkout; the webhook falls back to fetching it via `GET /customers/{id}`.
    - **Key:** `PADDLE_API_URL` (optional) — defaults to `https://api.paddle.com`.
 9. Click **Save**.
@@ -439,7 +459,7 @@ Alternatively, export manually from the admin UI (`/_/` → **Settings** → **E
 
 - **Northflank Dashboard:** CPU, memory, and request logs are available in the service overview.
 - **PocketBase Logs:** Viewable via the Shell (`less /pb/pb_data/logs.db`) or the admin UI.
-- **Uptime Monitoring:** Add a health check endpoint monitor (e.g., UptimeRobot on `https://license.oz-pos.com/api/health`, which returns `{"status":"ok"}`).
+- **Uptime Monitoring:** Add a health check endpoint monitor (e.g., UptimeRobot on `https://license.oz-pos.com/api/health`, which returns `{"status":"ok"}`). The payload also includes per-gate status objects: `smtp` (`configured`/`verified`/`error` — runtime sender-identity probe, re-run at most every 60s so monitors don't hammer the relay), `paddle` (`secret_configured`/`price_tiers_configured`/`price_tiers_mappings`/`error`), `rsa` (`configured`), and `discord` (`configured`). These are status, not liveness — only a DB outage fails the check. **Copy-paste monitor config (including the keyword monitor that alerts when `smtp.verified` flips to false): see [`uptime-monitor.md`](./uptime-monitor.md).**
 
 ### Updating the service
 
@@ -490,6 +510,6 @@ Alternatively, export manually from the admin UI (`/_/` → **Settings** → **E
 | Can't log into admin UI | Create the superuser via the Shell (Step 9). |
 | Collections not showing | Shouldn't happen on fresh boots — the schema auto-imports on first boot. If collections are missing anyway (e.g. a partially-provisioned volume), import `pb_schema.json` via Settings → Import Collections (Step 8). |
 | Rate limited in testing | Wait 1 hour for IP bucket to refill, or restart the container (rate limiter is in-memory). |
-| Health check failing | The Go healthcheck binary pings `/api/health` with a 5s timeout. If the server is slow to start (e.g., first boot after volume attach), the container may flap as unhealthy for ~15s until PocketBase finishes initialisation. Run `docker inspect` to check `State.Health`. |
+| Health check failing | The Go healthcheck binary pings `/api/health` with a 5s timeout. If the server is slow to start (e.g., first boot after volume attach), the container may flap as unhealthy for ~15s until PocketBase finishes initialisation. In the **unified image**, the shell healthcheck also fails the container after `OZ_HEALTH_SMTP_MAX_FAILS` (default 3) consecutive SMTP `verified:false` probes — check `docker inspect` → `State.Health` and the healthcheck stderr for `SMTP sender identity not verified`. Run `docker inspect` to check `State.Health`. |
 
 > 💡 **Tip:** The Dockerfile healthcheck uses the standalone `/pb/healthcheck` Go binary (no curl dependency). It pings `/api/health` which returns `{"status":"ok"}` when PocketBase is healthy. The healthcheck was set up correctly in the Dockerfile.

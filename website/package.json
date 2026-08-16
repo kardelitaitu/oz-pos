@@ -1,15 +1,15 @@
 {
   "name": "oz-pos-website",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "prebuild": "node scripts/audit-i18n.mjs && bash scripts/import-portal.sh --if-exists",
-    "check": "astro check",
-    "precheck": "node scripts/audit-i18n.mjs",
-    "check:i18n": "node scripts/audit-i18n.mjs",
+  "prebuild": "node scripts/audit-i18n.mjs && node scripts/check-password-policy.mjs && bash scripts/import-portal.sh --if-exists",  "check": "astro check",
+  "precheck": "node scripts/audit-i18n.mjs && node scripts/check-password-policy.mjs",
+  "check:i18n": "node scripts/audit-i18n.mjs",
+  "check:links": "node scripts/check-links.mjs",
     "astro": "astro",
     "deploy": "npm run build && wrangler deploy",
     "preview": "astro preview"

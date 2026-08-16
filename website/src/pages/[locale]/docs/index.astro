@@ -1,4 +1,5 @@
 ---
+import fs from 'node:fs';
 import { getCollection } from 'astro:content';
 import Base from '../../../layouts/Base.astro';
 import { t, dict } from '../../../i18n';
@@ -6,6 +7,12 @@ import { t, dict } from '../../../i18n';
 export async function getStaticPaths() {
   return [{ params: { locale: 'en' } }, { params: { locale: 'id' } }];
 }
+
+// The dev portal (docs-portal/) is generated at build time from docs/book/
+// (scripts/import-portal.sh) and is absent when that source isn't built — e.g.
+// a CI checkout without the portal step. Only render its cards when the files
+// actually exist so the hub never links to 404s (the build degrades to just
+// the Get Started card instead).
 
 const locale = Astro.params.locale ?? 'en';
 const docs = (await getCollection('docs')).filter((d) => d.id.startsWith(`${locale}/`));
@@ -19,8 +26,13 @@ const guideTarget = first
 
 // The dev portal (mdBook) is English-only and served from public/ verbatim —
 // the same targets apply for both locales. See scripts/import-portal.sh.
-const cards = (dict(locale).docs as { hub: { cards: { title: string; description: string; cta: string }[] } })
+const portalExists = fs.existsSync(
+  new URL('../../../public/docs-portal/intro.html', import.meta.url),
+);
+const hubCards = (dict(locale).docs as { hub: { cards: { title: string; description: string; cta: string }[] } })
   .hub.cards;
+// portalExists gates the 3 portal cards; Get Started (index 0) always shows.
+const cards = portalExists ? hubCards : hubCards.slice(0, 1);
 const targets = [
   guideTarget,
   '/docs-portal/intro.html',

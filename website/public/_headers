@@ -8,7 +8,9 @@
   #   'unsafe-inline'. Do NOT remove it now — the theme toggle and the
   #   root "/" redirect will stop working.
   # - frame-src/connect-src cover the Paddle.js checkout overlay and the
-  #   license-server web API (OTP auth, contact form, account page).
+  #   license-server web API (OTP auth, contact form, account page). The
+  #   API host is the unified Northflank service (runbook §8); swap it for
+  #   the oz-pos.com domain once that is bought.
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.paddle.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-src https://*.paddle.com; connect-src 'self' https://license.oz-pos.com https://*.paddle.com; object-src 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.paddle.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-src https://*.paddle.com; connect-src 'self' https://oz--cloud--76cyv4d6bn54.code.run https://*.paddle.com; object-src 'none'; base-uri 'self'; form-action 'self'

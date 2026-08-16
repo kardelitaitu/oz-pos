@@ -24,7 +24,8 @@
     "login": "Sign in to your OZ-POS account with just your email.",
     "account": "Your OZ-POS license, subscription, and billing information.",
     "privacy": "How OZ-POS collects, uses, and protects your data.",
-    "terms": "The terms that govern your use of OZ-POS."
+    "terms": "The terms that govern your use of OZ-POS.",
+    "signup": "Create your OZ-POS account — set a password and verify your email."
   },
   "support": {
     "title": "Support",
@@ -155,9 +156,9 @@
   },
   "download": {
     "title": "Download OZ-POS",
-    "subtitle": "Version 0.0.25 — free 90-day trial, no signup required.",
+    "subtitle": "Version 0.0.26 — free 90-day trial, no signup required.",
     "version": "Current version",
-    "versionValue": "0.0.25",
+    "versionValue": "0.0.26",
     "platformsTitle": "Choose your platform",
     "requirementsTitle": "System requirements",
     "requirements": [
@@ -173,7 +174,7 @@
   },
   "login": {
     "title": "Sign in to your account",
-    "subtitle": "We'll email you a one-time code. No password to remember or reset.",
+    "subtitle": "Sign in with your password or a one-time code we email you.",
     "email": "Email",
     "emailPlaceholder": "you@example.com",
     "sendCode": "Send code",
@@ -183,9 +184,29 @@
     "backToEmail": "Use a different email",
     "codeSent": "We sent a verification code to your email.",
     "otpNote": "Verification is rate-limited to protect your account.",
+    "newAccount": "No account yet? Verifying your code will create one for you.",
     "errorSend": "Couldn't send the code. Please try again later.",
     "errorVerify": "Invalid or expired code. Please try again.",
-    "notConfigured": "The auth API is not configured on this deployment."
+    "notConfigured": "The auth API is not configured on this deployment.",
+    "tabEmailCode": "Email code",
+    "tabPassword": "Password",
+    "password": "Password",
+    "passwordPlaceholder": "Your password",
+    "signIn": "Sign in",
+    "errorLogin": "Invalid email or password.",
+    "forgotPassword": "No password or forgot it? Use the email code instead.",
+    "forgotPasswordLink": "Forgot password?",
+    "newHere": "New here?",
+    "createAccount": "Create an account",
+    "resetTitle": "Reset password",
+    "sendResetCode": "Send reset code",
+    "resetCodeSent": "We sent a reset code to your email. Enter it with your new password.",
+    "newPassword": "New password",
+    "resetPassword": "Reset password",
+    "backToLogin": "Back to sign in",
+    "errorResetRequest": "Couldn't send the reset code. Please try again.",
+    "errorReset": "Couldn't reset the password. Check the code and try again.",
+    "cooldown": "You recently reset your password. New resets are blocked until"
   },
   "account": {
     "title": "Account",
@@ -199,7 +220,30 @@
     "status": "Status",
     "expires": "Expires",
     "logout": "Sign out",
-    "notConfigured": "The license API is not configured on this deployment."
+    "notConfigured": "The license API is not configured on this deployment.",
+    "noSubscription": "You don't have an active subscription yet. Choose a plan to get started.",
+    "subscribe": "Subscribe",
+    "subscription": "Subscription",
+    "starts": "Starts",
+    "grace": "Grace until",
+    "emailVerified": "Email verified",
+    "verified": "Verified",
+    "notVerified": "Not verified",
+    "password": "Password",
+    "passwordHelp": "Optional. With a password you can sign in without requesting an email code.",
+    "passwordPlaceholder": "New password",
+    "passwordSave": "Save password",
+    "passwordSaved": "Password saved. Use it to sign in next time.",
+    "passwordError": "Couldn't save the password. Please try again.",
+    "checkingSubscription": "Checking your subscription…",
+    "subscriptionPending": "Your purchase is confirmed, but the subscription isn't visible yet — it can take a minute. Reload to check.",
+    "statusActive": "Active",
+    "statusUnused": "Not activated",
+    "statusGracePeriod": "In grace period",
+    "statusExpired": "Expired",
+    "statusRevoked": "Revoked",
+    "renewHint": "Your subscription is no longer active.",
+    "renewLink": "Renew on the pricing page"
   },
   "footer": {
     "rights": "All rights reserved.",
@@ -222,8 +266,36 @@
     "noResults": "No results"
   },
   "checkout": {
-    "email": "Email for license delivery",
+    "signInToSubscribe": "Sign in to subscribe",
+    "error": "Couldn't start the checkout. Please try again."
+  },
+  "password": {
+    "meterLabel": "Password strength",
+    "strengthTooShort": "Too short",
+    "strengthWeak": "Weak",
+    "strengthGood": "Good",
+    "strengthStrong": "Strong",
+    "minLength": "at least 8 characters",
+    "hint": "Use at least 3 of: lowercase, uppercase, number, symbol.",
+    "confirmLabel": "Confirm password",
+    "confirmPlaceholder": "Re-enter your password",
+    "mismatch": "Passwords don't match",
+    "show": "Show password",
+    "hide": "Hide password"
+  },
+  "signup": {
+    "title": "Create your account",
+    "subtitle": "Set a password and verify your email with a code we send you.",
+    "email": "Email",
     "emailPlaceholder": "you@example.com",
-    "emailRequired": "Enter a valid email — we'll send your license key to it."
+    "password": "Password",
+    "passwordPlaceholder": "Create a password",
+    "createAccount": "Create account",
+    "codeSent": "We sent a verification code to your email. Enter it to activate your account.",
+    "verify": "Verify and create account",
+    "errorRegister": "Couldn't create the account. Please try again.",
+    "errorExists": "An account with this email already exists. Sign in instead.",
+    "haveAccount": "Already have an account?",
+    "signInLink": "Sign in"
   }
 }

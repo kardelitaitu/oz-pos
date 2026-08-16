@@ -1,7 +1,7 @@
 {
   "name": "oz-pos-ui",
   "private": true,
-  "version": "0.0.25",
+  "version": "0.0.26",
   "type": "module",
   "description": "OZ-POS front-end: React 18 + Vite + TypeScript + @fluent/react.",
   "license": "SEE LICENSE IN ../LICENSE",
@@ -31,7 +31,7 @@
     "e2e:headed": "node ../scripts/run-e2e.mjs --headed",
     "e2e:api": "node ../scripts/run-e2e.mjs --api-only e2e/api.spec.ts",
     "e2e:ui": "node ../scripts/run-e2e.mjs --ui-only",
-    "docs": "npx -y typedoc --skipErrorChecking --entryPointStrategy expand ./src/api ./src/types ./src/hooks --out ../docs/html/ui-docs"
+    "docs": "npx -y typedoc --skipErrorChecking --entryPointStrategy expand ./src/api ./src/types ./src/hooks --out ../docs/src/api/ts"
   },
   "dependencies": {
     "@eslint/js": "^9.39.5",

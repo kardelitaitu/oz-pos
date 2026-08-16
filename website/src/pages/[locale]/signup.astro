@@ -1,0 +1,21 @@
+---
+export function getStaticPaths() {
+  return [{ params: { locale: 'en' } }, { params: { locale: 'id' } }];
+}
+import Base from '../../layouts/Base.astro';
+import SignupForm from '../../components/SignupForm.tsx';
+import { t } from '../../i18n';
+
+const locale = Astro.currentLocale ?? 'en';
+const pageTitle = `OZ-POS — ${t(locale, 'signup.title')}`;
+---
+
+<Base title={pageTitle} description={t(locale, 'pageDesc.signup')}>
+  <section class="mx-auto max-w-6xl px-4 py-20">
+    <div class="mb-10 text-center">
+      <h1 class="text-4xl font-bold">{t(locale, 'signup.title')}</h1>
+      <p class="mx-auto mt-3 max-w-md text-muted">{t(locale, 'signup.subtitle')}</p>
+    </div>
+    <SignupForm client:load locale={locale} />
+  </section>
+</Base>

@@ -1,11 +1,14 @@
 import type { FeatureRow, PricingTier } from './types';
 
-// Placeholder prices — see website-plan.md §6. Prices are per locale.
+// Prices are per locale; this file is the global/USD pricing (en locale).
+// Real Paddle sandbox prices: pro = pri_01m05gdnqp30xze6db73qcracp
+// ($19/mo), premium = pri_01m05gdpk4hmnm0k8e6vxm8cec ($49/mo).
 export const pricing: PricingTier[] = [
   {
     id: 'trial',
     tierKey: 'trial',
     name: 'Free',
+    currency: 'USD',
     price: '$0',
     period: '90-day trial',
     description: 'Everything you need to run one store — fully offline.',
@@ -23,12 +26,13 @@ export const pricing: PricingTier[] = [
     id: 'pro',
     tierKey: 'pro',
     name: 'Pro',
+    currency: 'USD',
     price: '$19',
     period: '/month',
     description: 'For growing stores that want cloud sync and QRIS.',
     cta: 'Choose Pro',
     highlight: true,
-    priceId: 'pri_placeholder_pro',
+    priceId: 'pri_01m05gdnqp30xze6db73qcracp',
     features: [
       { label: '1 store', included: true },
       { label: '2 registers', included: true },
@@ -42,11 +46,12 @@ export const pricing: PricingTier[] = [
     id: 'premium',
     tierKey: 'premium',
     name: 'Premium',
+    currency: 'USD',
     price: '$49',
     period: '/month',
     description: 'Unlimited stores, registers, and automation.',
     cta: 'Choose Premium',
-    priceId: 'pri_placeholder_premium',
+    priceId: 'pri_01m05gdpk4hmnm0k8e6vxm8cec',
     features: [
       { label: 'Unlimited stores', included: true },
       { label: 'Unlimited registers', included: true },
@@ -60,6 +65,7 @@ export const pricing: PricingTier[] = [
     id: 'enterprise',
     tierKey: 'enterprise',
     name: 'Enterprise',
+    currency: 'USD',
     price: 'Custom',
     period: '',
     description: 'Tailored limits, onboarding, and priority support.',

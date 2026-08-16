@@ -316,6 +316,43 @@
         ]
       },
       {
+        "id": "bool2837461529",
+        "name": "email_verified",
+        "hidden": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool",
+        "help": "True once the tenant has completed OTP verification (verify-otp). Set false on self-signup and on webhook-created tenants; the dashboard shows this state."
+      },
+      {
+        "help": "Bcrypt hash of the optional web login password (set via the account dashboard). Empty for OTP-only accounts; login-with-password requires this field.",
+        "hidden": true,
+        "id": "text1618033990",
+        "name": "password_hash",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "RFC 3339 timestamp of the last completed password reset. A new reset is blocked for 7 days after this (see web_password.go); changing the password while signed in does not touch it.",
+        "hidden": false,
+        "id": "date1618033991",
+        "max": "",
+        "min": "",
+        "name": "password_reset_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date"
+      },
+      {
         "hidden": false,
         "id": "autodate3976882600",
         "name": "created",
@@ -495,6 +532,43 @@
         "required": false,
         "system": false,
         "type": "text"
+      },
+      {
+        "help": "Max stores for this subscription's tier (0 = unlimited). Populated by the Paddle webhook; matches the license key's quota block.",
+        "hidden": false,
+        "id": "number1618033988",
+        "max": null,
+        "min": 0,
+        "name": "max_stores",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "Max POS instances for this subscription's tier (0 = unlimited).",
+        "hidden": false,
+        "id": "number2718281829",
+        "max": null,
+        "min": 0,
+        "name": "max_pos_instances",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "JSON array of allowed workspace types for this subscription's tier.",
+        "hidden": false,
+        "id": "json3141592654",
+        "maxSize": 0,
+        "name": "allowed_types",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
       },
       {
         "hidden": false,

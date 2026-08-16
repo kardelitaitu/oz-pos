@@ -262,6 +262,12 @@ fallback, no open token mint) and implies `OZ_DB_REQUIRE_TLS=1` (startup
 fails if `DATABASE_URL` lacks `sslmode=require`). Keep all three in the
 Northflank secret store, never in the image.
 
+The license server has its own fail-fast boot gates (Paddle webhook secret + price
+tiers are unconditional; Brevo SMTP once `OZ_SMTP_HOST` is set) — the ordered,
+paste-ready checklist for taking the deployed instance from pre-gate to sandbox-live
+is [`go-live-checklist.md`](./go-live-checklist.md), with the full variable reference in
+`apps/license-server/DEPLOY.md` §7.
+
 ### 6.3 RLS cutover (one-time deploy step)
 
 Tenant isolation ships in two halves; both must be true before multi-tenant

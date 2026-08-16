@@ -6,6 +6,12 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.26] — 2026-08-16
+
+Release notes: see docs/releases/CHANGELOG-0.0.26.md (reviewed before tagging).
+
+---
+
 ## [0.0.25] — 2026-08-09
 
 Production hardening and operator-facing UX release: stronger sync recovery and replay safety, typed multi-store topology management, broader restart parity in the browser mock, and a fully green release gate.

@@ -4,7 +4,7 @@
 //! [`crate::db::reports`] (daily/weekly/monthly revenue, top products, hourly
 //! heatmap, category breakdown, low-stock alerts, active stock alerts) and
 //! packages them together with export metadata into a serializable
-//! [`AnalyticsBundle`].
+//! [`AnalyticsBundle`](crate::export::AnalyticsBundle).
 
 pub mod cloud_destination;
 pub mod email_report;

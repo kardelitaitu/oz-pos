@@ -3,7 +3,8 @@
 # Builds the Astro marketing site (website/) and deploys it to Cloudflare
 # Workers static assets (workers.dev) via wrangler.
 #
-#   • PRs + pushes to main:  astro check + i18n audit gate + build
+#   • PRs + pushes to main:  astro check + i18n audit gate + docs portal
+#                            build + build + internal-link audit
 #   • Pushes to main only:   deploy to Cloudflare (requires secrets)
 #
 # Fail-closed: if CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not
@@ -13,8 +14,8 @@
 # Required secrets (Settings → Secrets and variables → Actions):
 #   CLOUDFLARE_API_TOKEN   — token with Workers Scripts:Edit
 #                            (wrangler.toml → name "oz-pos")
-#   CLOUDFLARE_ACCOUNT_ID  — Cloudflare account id (dash.cloudflare.com)
-#   PUBLIC_LICENSE_API_URL — https://<license-service>.code.run
+#   CLOUDFLARE_ACCOUNT_ID  — Cloudflare account id (dash.cloudflare.com)  #   PUBLIC_LICENSE_API_URL — https://oz--cloud--76cyv4d6bn54.code.run
+  #                            (unified Northflank service, runbook §8)
 #   PUBLIC_PADDLE_CLIENT_TOKEN — Paddle.js v2 client token (optional:
 #                            without it the checkout buttons degrade to
 #                            the mailto fallback at build time)
@@ -27,10 +28,20 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website.yml'
+      # Portal sources: the built docs-portal ships inside the website bundle,
+      # so a change to any of these must redeploy the site.
+      - 'scripts/build-docs.*'
+      - 'scripts/gen-summary.py'
+      - 'docs/**'
+      - 'ui/src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   pull_request:
     branches: [main]
     paths:
       - 'website/**'
+  # Manual redeploy (e.g. pick up a portal rebuild without a source change).
+  workflow_dispatch:
 
 env:
   # Baked into the JS bundle at build time (import.meta.env) — must be set
@@ -38,6 +49,9 @@ env:
   # CI always injects the real values for main-branch deploys.
   PUBLIC_LICENSE_API_URL: ${{ secrets.PUBLIC_LICENSE_API_URL }}
   PUBLIC_PADDLE_CLIENT_TOKEN: ${{ secrets.PUBLIC_PADDLE_CLIENT_TOKEN }}
+  # Defaults to sandbox so a test_ client token never initializes Paddle
+  # against production; flip the secret to "production" when going live.
+  PUBLIC_PADDLE_ENVIRONMENT: ${{ secrets.PUBLIC_PADDLE_ENVIRONMENT || 'sandbox' }}
 
 jobs:
   check:
@@ -55,7 +69,55 @@ jobs:
       # browser at build only — never shipped to the client.
       - run: cd website && npx playwright install --with-deps chromium
       - run: cd website && npm run check
+      # ── Docs portal build ────────────────────────────────────────────
+      # Build the full portal (mdBook hub + cargo doc + TypeDoc) so the
+      # docs hub renders all 4 cards and the internal-link audit validates
+      # the portal tree. HARD-fail here (unlike the deploy job's soft-fail):
+      # a portal build hiccup on a PR must surface before merge, and a
+      # silently-degraded hub would defeat the purpose of the check. The
+      # steps mirror the deploy job below exactly — keep them in sync.
+      - name: Install Rust toolchain (portal cargo doc)
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Install system dependencies (portal cargo doc)
+        # platform-startup depends on tauri → gdk-sys (gtk3) and oz-hal
+        # depends on serialport → libudev; both must exist even for
+        # --no-deps because the workspace members compile to emit docs.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            libudev-dev
+      - name: Install mdbook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 'latest'
+      - name: Build docs portal
+        run: bash scripts/build-docs.sh
       - run: cd website && npm run build
+      # Internal-link audit — FAILING gate: every href on a built page must
+      # resolve to a file in dist/ (or a known-external/portal-generated
+      # target; see check-links.mjs for the exact skip list). Runs after
+      # build because it audits the rendered output — and with the portal
+      # staged above, it validates the full hub + portal tree.
+      - name: Internal-link audit
+        run: cd website && npm run check:links
+      # The 4-card hub degrades to just Get Started when the portal is
+      # absent (portalExists gate) — assert the portal targets actually
+      # shipped so a silent staging failure can't pass this job.
+      - name: Portal staged (4-card hub targets)
+        run: |
+          test -f website/dist/docs-portal/intro.html && \
+          test -f website/dist/docs-portal/api/rust/index.html && \
+          test -f website/dist/docs-portal/api/ts/index.html && \
+          echo "portal staged: full 4-card docs hub exercised"
 
   deploy:
     name: Deploy to Cloudflare Workers
@@ -72,6 +134,43 @@ jobs:
           cache-dependency-path: 'website/package-lock.json'
       - run: cd website && npm ci --no-audit --no-fund
       - run: cd website && npx playwright install --with-deps chromium
+      # ── Docs portal build ────────────────────────────────────────────
+      # The portal (docs/book/) is generated (mdBook hub + cargo doc + TypeDoc)
+      # and staged into website/public/docs-portal by import-portal.sh during
+      # `npm run build`. docs.yml compiles cargo doc on its own schedule; here
+      # we run the full build-docs.sh so the mdBook hub and TypeDoc ship too.
+      #
+      # SOFT-FAIL (continue-on-error): a docs build hiccup must never block the
+      # marketing site deploy. When it fails, docs/book stays absent, the
+      # import-portal step skips, and the docs hub degrades to the Get Started
+      # card (see src/pages/[locale]/docs/index.astro portalExists gate) —
+      # no dead links, site still ships.
+      - name: Install Rust toolchain (portal cargo doc)
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Install system dependencies (portal cargo doc)
+        # platform-startup depends on tauri → gdk-sys (gtk3) and oz-hal
+        # depends on serialport → libudev; both must exist even for
+        # --no-deps because the workspace members compile to emit docs.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            libudev-dev
+      - name: Install mdbook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 'latest'
+      - name: Build docs portal (soft-fail)
+        continue-on-error: true
+        run: bash scripts/build-docs.sh
       - name: Verify deploy secrets are configured (fail-closed)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

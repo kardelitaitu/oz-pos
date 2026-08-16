@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · pb_schema.json verified to contain all 4 collections (license_keys, tenants, subscriptions, tenant_machines) + the listed fields (key, tier_key, status, expires_at, email, api_key, api_key_lookup, signed_payload, signature, grace_until, first_seen_at, last_seen_at); the "simplified authenticator" framing is consistent with the field subset vs ADR #9's fuller schema · NOTE (2026-08-14): tenants.api_key is now a bcrypt hash + tenants.api_key_lookup is the indexed SHA-256 lookup (see §2) -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · pb_schema.json verified to contain all 4 collections (license_keys, tenants, subscriptions, tenant_machines) + the listed fields (key, tier_key, status, expires_at, email, api_key, api_key_lookup, signed_payload, signature, grace_until, first_seen_at, last_seen_at); the "simplified authenticator" framing is consistent with the field subset vs ADR #9's fuller schema · NOTE (2026-08-14): tenants.api_key is now a bcrypt hash + tenants.api_key_lookup is the indexed SHA-256 lookup (see §2) · NOTE (2026-08-16): subscriptions now carries the tier quota block (max_stores, max_pos_instances, allowed_types) mirrored from license_keys (see §3) -->
 
 # License Server Schema Documentation
 
@@ -62,6 +62,9 @@ Stores the cryptographically signed subscription payload. This record is automat
 | `signature` | Text | **Mandatory** | The base64 cryptographic signature verified by the POS client. |
 | `grace_until` | Date | *Optional* | Secondary date allowing limited offline usage buffering if the POS cannot connect. |
 | `paddle_sub_id` | Text | *Optional* | Paddle Billing `sub_...` id this record mirrors — the lookup key for `subscription.updated` / `canceled` events. Uniquely indexed (partial). |
+| `max_stores` | Number | *Optional* | Tier quota (0 = unlimited). Persisted whenever a subscription record is created (Paddle provisioning, manual activation, renew) and refreshed on Paddle tier change; read back for `/status` and webhook re-signs. |
+| `max_pos_instances` | Number | *Optional* | Tier quota (0 = unlimited). Persisted with the subscription record (Paddle provisioning, manual activation, renew) and refreshed on Paddle tier change. |
+| `allowed_types` | JSON | *Optional* | JSON array of allowed workspace types for the tier. Persisted with the subscription record (Paddle provisioning, manual activation, renew) and refreshed on Paddle tier change. |
 
 ---
 

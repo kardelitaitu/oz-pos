@@ -41,7 +41,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/smtp"
 	"os"
 	"strconv"
 	"strings"
@@ -299,22 +298,66 @@ func resolvePaddleEmail(sub *paddleSubscription) string {
 
 // ── Tier mapping ─────────────────────────────────────────────────────
 
-// paddleTierForPrice maps a Paddle price id to a tier_key via the
-// PADDLE_PRICE_TIERS env var ("pri_x:pro,pri_y:premium"). Returns ("", false)
-// when the price is not in the map — the handler then answers 500 so Paddle
-// retries until the operator fixes the map.
-func paddleTierForPrice(priceID string) (string, bool) {
+// paddlePriceTiers parses PADDLE_PRICE_TIERS ("pri_x:pro,pri_y:premium")
+// into a price→tier map. Returns an error for an unset or malformed value
+// so the boot gate (verifyPaddleConfig) fails fast instead of letting
+// every subscription event 500 during provisioning.
+func paddlePriceTiers() (map[string]string, error) {
 	v := strings.TrimSpace(os.Getenv("PADDLE_PRICE_TIERS"))
-	if v == "" || priceID == "" {
-		return "", false
+	if v == "" {
+		return nil, fmt.Errorf("PADDLE_PRICE_TIERS is required — without it every subscription webhook fails provisioning with 500; set it to comma-separated price_id:tier_key pairs, e.g. pri_01h7abc123:pro,pri_01h7def456:premium")
 	}
+	m := make(map[string]string)
 	for _, pair := range strings.Split(v, ",") {
 		k, tier, ok := strings.Cut(strings.TrimSpace(pair), ":")
-		if ok && strings.TrimSpace(k) == priceID {
-			return strings.TrimSpace(tier), true
+		k = strings.TrimSpace(k)
+		tier = strings.TrimSpace(tier)
+		if !ok || k == "" || tier == "" {
+			return nil, fmt.Errorf("PADDLE_PRICE_TIERS has a malformed entry %q — expected price_id:tier_key pairs, e.g. pri_01h7abc123:pro", strings.TrimSpace(pair))
 		}
+		m[k] = tier
 	}
-	return "", false
+	return m, nil
+}
+
+// paddleTierForPrice maps a Paddle price id to a tier_key via
+// PADDLE_PRICE_TIERS. Returns ("", false) when the price is not in the
+// map — the handler then answers 500 so Paddle retries until the operator
+// fixes the map. Env is re-read per call so a redeploy can fix it.
+func paddleTierForPrice(priceID string) (string, bool) {
+	if priceID == "" {
+		return "", false
+	}
+	m, err := paddlePriceTiers()
+	if err != nil {
+		return "", false
+	}
+	tier, ok := m[priceID]
+	return tier, ok
+}
+
+// verifyPaddleConfig is the boot-time webhook gate (called from main
+// before the server starts serving). It fails fast when the Paddle
+// webhook is configured to answer 503/500 on every event instead of
+// provisioning purchases:
+//
+//   - PADDLE_WEBHOOK_SECRET unset → hard error: every event answers 503
+//     and Paddle retries forever.
+//   - PADDLE_PRICE_TIERS unset or malformed → hard error: every
+//     subscription event 500s during provisioning.
+//
+// Both values are still read per-request afterwards, so a redeploy with
+// fixed env is enough to recover.
+func verifyPaddleConfig() error {
+	if paddleWebhookSecret() == "" {
+		return fmt.Errorf("PADDLE_WEBHOOK_SECRET is required — without it every Paddle webhook answers 503 and Paddle retries forever; set it to the endpoint secret from Paddle → Developer tools → Notifications → Edit destination")
+	}
+	m, err := paddlePriceTiers()
+	if err != nil {
+		return err
+	}
+	log.Printf("Paddle webhook config verified: %d price→tier mapping(s)", len(m))
+	return nil
 }
 
 // tierQuotas returns the subscription quota block for a tier, mirroring
@@ -404,16 +447,8 @@ func sendReceiptEmailSMTP(to, licenseKey, tier, expiresAt string) error {
 		from = "no-reply@oz-pos.com"
 	}
 
-	addr := host + ":" + port
-	var auth smtp.Auth
-	if user != "" {
-		auth = smtp.PlainAuth("", user, password, host)
-	}
 	msg := buildReceiptEmail(from, to, licenseKey, tier, expiresAt)
-	if err := smtp.SendMail(addr, auth, from, []string{to}, msg); err != nil {
-		return fmt.Errorf("smtp.SendMail: %w", err)
-	}
-	return nil
+	return sendMailSMTP(host, port, user, password, from, []string{to}, msg)
 }
 
 // buildReceiptEmail renders the plain-text license-key receipt email
@@ -653,6 +688,11 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		tenant.Set("api_key", hash)
 		tenant.Set("api_key_lookup", lookup)
 		tenant.Set("status", "active")
+		// Purchase-created tenants have not completed OTP verification
+		// (register-first means buyers usually have, but the flag's meaning
+		// is "proved inbox ownership via verify-otp" — they can do that
+		// anytime via request-otp).
+		tenant.Set("email_verified", false)
 		if saveErr := app.Save(tenant); saveErr != nil {
 			return fmt.Errorf("failed to save tenant %q: %w", email, saveErr)
 		}
@@ -749,6 +789,14 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 	subRecord.Set("starts_at", startsAt)
 	subRecord.Set("expires_at", expiresAt)
 	subRecord.Set("grace_until", graceUntil)
+	// Persist the tier's quota block on the subscription so /status and the
+	// subscription.updated / canceled re-signs read current values instead of
+	// zero values (mirrors renew.go's M5-audit fix).
+	subRecord.Set("max_stores", maxStores)
+	subRecord.Set("max_pos_instances", maxPOS)
+	if b, err := json.Marshal(allowedTypes); err == nil {
+		subRecord.Set("allowed_types", string(b))
+	}
 	subRecord.Set("signed_payload", payloadStr)
 	subRecord.Set("signature", signature)
 	if saveErr := app.Save(subRecord); saveErr != nil {
@@ -791,8 +839,21 @@ func paddleUpdate(app core.App, ev paddleEvent) error {
 	if priceID != "" {
 		if tier, ok := paddleTierForPrice(priceID); ok {
 			subRecord.Set("tier_key", tier)
+			// Refresh the tier's quota block so the re-sign below reads the new
+			// tier's limits, not the ones captured at provisioning time.
+			maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+			subRecord.Set("max_stores", maxStores)
+			subRecord.Set("max_pos_instances", maxPOS)
+			if b, err := json.Marshal(allowedTypes); err == nil {
+				subRecord.Set("allowed_types", string(b))
+			}
 			if keyRecord, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", sub.ID); err == nil {
 				keyRecord.Set("tier_key", tier)
+				keyRecord.Set("max_stores", maxStores)
+				keyRecord.Set("max_pos_instances", maxPOS)
+				if b, err := json.Marshal(allowedTypes); err == nil {
+					keyRecord.Set("allowed_types", string(b))
+				}
 				if saveErr := app.Save(keyRecord); saveErr != nil {
 					log.Printf("paddle webhook: failed to sync key tier for %s: %v", sub.ID, saveErr)
 				}
@@ -809,6 +870,11 @@ func paddleUpdate(app core.App, ev paddleEvent) error {
 	startsAt, expiresAt := subscriptionTimes(sub, subRecord.GetString("tier_key"))
 	subRecord.Set("starts_at", startsAt)
 	subRecord.Set("expires_at", expiresAt)
+	// Persist the refreshed grace window too — the dashboard reads
+	// grace_until from this record, so a stale value would make the account
+	// page's "Grace until" disagree with the re-signed payload below.
+	graceUntil := calculateGraceUntil(mustParseTime(expiresAt)).Format(time.RFC3339)
+	subRecord.Set("grace_until", graceUntil)
 	if keyRecord, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", sub.ID); err == nil {
 		keyRecord.Set("expires_at", expiresAt)
 		if saveErr := app.Save(keyRecord); saveErr != nil {
@@ -826,7 +892,7 @@ func paddleUpdate(app core.App, ev paddleEvent) error {
 		AllowedTypes:    parseAllowedTypes(subRecord.GetString("allowed_types")),
 		StartsAt:        startsAt,
 		ExpiresAt:       expiresAt,
-		GraceUntil:      calculateGraceUntil(mustParseTime(expiresAt)).Format(time.RFC3339),
+		GraceUntil:      graceUntil,
 		IssuedAt:        time.Now().UTC().Format(time.RFC3339),
 	}
 	payloadStr, signature, err := signSubscription(payload)
@@ -906,6 +972,18 @@ func paddleResume(app core.App, ev paddleEvent) error {
 	startsAt, expiresAt := subscriptionTimes(sub, subRecord.GetString("tier_key"))
 	subRecord.Set("starts_at", startsAt)
 	subRecord.Set("expires_at", expiresAt)
+	// Resume starts a fresh billing period — persist the refreshed grace
+	// window on the record AND re-sync the license key's expiry, or /me and
+	// the POS would keep the canceled-era dates while the signed payload
+	// says otherwise.
+	graceUntil := calculateGraceUntil(mustParseTime(expiresAt)).Format(time.RFC3339)
+	subRecord.Set("grace_until", graceUntil)
+	if keyRecord, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", sub.ID); err == nil {
+		keyRecord.Set("expires_at", expiresAt)
+		if saveErr := app.Save(keyRecord); saveErr != nil {
+			log.Printf("paddle webhook: failed to sync key expiry on resume for %s: %v", sub.ID, saveErr)
+		}
+	}
 	payload := SubscriptionPayload{
 		TenantID:        subRecord.GetString("tenant_id"),
 		TierKey:         subRecord.GetString("tier_key"),
@@ -915,7 +993,7 @@ func paddleResume(app core.App, ev paddleEvent) error {
 		AllowedTypes:    parseAllowedTypes(subRecord.GetString("allowed_types")),
 		StartsAt:        startsAt,
 		ExpiresAt:       expiresAt,
-		GraceUntil:      calculateGraceUntil(mustParseTime(expiresAt)).Format(time.RFC3339),
+		GraceUntil:      graceUntil,
 		IssuedAt:        time.Now().UTC().Format(time.RFC3339),
 	}
 	payloadStr, signature, err := signSubscription(payload)

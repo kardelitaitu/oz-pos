@@ -120,3 +120,46 @@ if [ -f scripts/dedupe-ftl.py ]; then
         exit 1
     fi
 fi
+
+# ── Go gate: apps/license-server ──────────────────────────────────────
+# gofmt (auto-fix + re-stage, mirroring the cargo fmt step above) and
+# `go vet ./...` (hard fail) for the Go license server. Runs only when
+# the commit stages .go files under apps/license-server/. NOTE: on
+# Windows checkouts (core.autocrlf) the Go sources are CRLF on disk but
+# LF in the repo, so a bare `gofmt -l` would false-positive on every
+# commit; auto-fixing with `gofmt -w` normalizes the file and git
+# re-stores LF, so line-ending-only files produce no staged diff. CI
+# runs the strict `gofmt -l` check on its LF checkout instead
+# (`.github/workflows/ci.yml` # go job).
+STAGED_GO=$(git diff --cached --name-only -- 'apps/license-server/*.go')
+if [ -n "$STAGED_GO" ]; then
+    if ! command -v go >/dev/null 2>&1 || ! command -v gofmt >/dev/null 2>&1; then
+        echo "error: go/gofmt not found — install Go (https://go.dev/dl/) or add its bin dir to PATH. Aborting commit." >&2
+        exit 1
+    fi
+    # Auto-format staged .go files, then re-add only the ones that still
+    # exist and actually changed. gofmt -w on a CRLF-only file normalizes
+    # it to LF; git re-stores LF in the blob, so there is no staged diff
+    # and no line-ending churn. `git diff --quiet` masks the CRLF-only
+    # case (exit 0) and only flags real formatting changes (exit 1).
+    if ! gofmt -w $STAGED_GO 2>/dev/null; then
+        echo "error: gofmt failed — aborting commit." >&2
+        exit 1
+    fi
+    EXISTING_GO=""
+    for f in $STAGED_GO; do
+        if [ -f "$f" ]; then
+            EXISTING_GO="$EXISTING_GO $f"
+        fi
+    done
+    if [ -n "$EXISTING_GO" ] && ! git diff --quiet -- $EXISTING_GO; then
+        echo "gofmt applied changes to:"
+        echo "$EXISTING_GO"
+        git add $EXISTING_GO
+    fi
+    # go vet — read-only module-wide check; hard fail on issues.
+    if ! (cd apps/license-server && go vet ./...); then
+        echo "error: go vet failed — fix issues above or run 'cd apps/license-server && go vet ./...'." >&2
+        exit 1
+    fi
+fi

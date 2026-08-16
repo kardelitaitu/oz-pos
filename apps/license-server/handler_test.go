@@ -141,6 +141,18 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		// the tracker variables are package globals.
 		ipRateLimiter.attachPersistence(app)
 		keyFailTracker.attachPersistence(app)
+		// Mirror production boot: add the email_verified + password_hash
+		// fields to the tenants collection (createTestCollections
+		// deliberately omits them so the migration paths are exercised).
+		if err := ensureEmailVerifiedField(app); err != nil {
+			return err
+		}
+		if err := ensurePasswordHashField(app); err != nil {
+			return err
+		}
+		if err := ensurePasswordResetAtField(app); err != nil {
+			return err
+		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
@@ -148,6 +160,11 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.POST("/api/v1/web/login", handleLoginPassword(app))
+		se.Router.POST("/api/v1/web/set-password", handleSetPassword(app))
+		se.Router.POST("/api/v1/web/register", handleRegister(app))
+		se.Router.POST("/api/v1/web/request-password-reset", handleRequestPasswordReset(app))
+		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
@@ -366,6 +383,11 @@ func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.POST("/api/v1/web/login", handleLoginPassword(app))
+		se.Router.POST("/api/v1/web/set-password", handleSetPassword(app))
+		se.Router.POST("/api/v1/web/register", handleRegister(app))
+		se.Router.POST("/api/v1/web/request-password-reset", handleRequestPasswordReset(app))
+		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
@@ -870,6 +892,18 @@ func resetRateLimiters() {
 	otpIPLimiter.mu.Lock()
 	otpIPLimiter.entries = make(map[string]*windowEntry)
 	otpIPLimiter.mu.Unlock()
+	webLoginLimiter.mu.Lock()
+	webLoginLimiter.entries = make(map[string]*windowEntry)
+	webLoginLimiter.mu.Unlock()
+	webRegisterLimiter.mu.Lock()
+	webRegisterLimiter.entries = make(map[string]*windowEntry)
+	webRegisterLimiter.mu.Unlock()
+	webResetRequestLimiter.mu.Lock()
+	webResetRequestLimiter.entries = make(map[string]*windowEntry)
+	webResetRequestLimiter.mu.Unlock()
+	webResetVerifyLimiter.mu.Lock()
+	webResetVerifyLimiter.entries = make(map[string]*windowEntry)
+	webResetVerifyLimiter.mu.Unlock()
 
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
@@ -1364,6 +1398,15 @@ func TestActivateHandler_Success(t *testing.T) {
 	}
 	if subs[0].GetString("status") != "active" {
 		t.Errorf("subscription status should be active, got %s", subs[0].GetString("status"))
+	}
+	// Quota block must be persisted on the subscription record (mirrors the
+	// signed payload and renew.go's M5-audit fix).
+	if subs[0].GetInt("max_stores") != 5 || subs[0].GetInt("max_pos_instances") != 3 {
+		t.Errorf("expected quota block persisted on subscription, got max_stores=%d max_pos_instances=%d",
+			subs[0].GetInt("max_stores"), subs[0].GetInt("max_pos_instances"))
+	}
+	if got := subs[0].GetString("allowed_types"); !strings.Contains(got, "store-pos") {
+		t.Errorf("expected allowed_types persisted on subscription, got %q", got)
 	}
 
 	// Verify machine was registered.

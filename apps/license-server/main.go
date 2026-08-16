@@ -9,16 +9,17 @@
 //	go generate ./...          (runs: go-winres make --arch amd64)
 //
 // The .syso is committed so `go build` on Windows needs no extra tooling.
+//
 //go:generate go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64
 package main
 
 import (
-	_ "embed"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	_ "embed"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
@@ -85,6 +86,23 @@ func main() {
 	}
 	log.Println("RSA private key loaded successfully")
 
+	// ── Bootstrap: SMTP sender identity ──────────────────────────
+	// Fail fast when email delivery is configured but OZ_SMTP_FROM is
+	// unset or rejected by the relay: signup codes and purchase receipts
+	// would silently fail in production (see verifySMTPConfig). Skipped
+	// when OZ_SMTP_HOST is unset — request-otp answers 503 by design then.
+	if err := verifySMTPConfig(); err != nil {
+		log.Fatal(err)
+	}
+
+	// ── Bootstrap: Paddle webhook config ─────────────────────────
+	// Fail fast when the webhook would answer 503/500 on every event
+	// (missing secret or price→tier map): purchases would provision
+	// nothing and Paddle would retry forever (see verifyPaddleConfig).
+	if err := verifyPaddleConfig(); err != nil {
+		log.Fatal(err)
+	}
+
 	// ── Register custom license API routes ───────────────────────
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		// First boot on an empty pb_data volume: import the embedded
@@ -100,6 +118,30 @@ func main() {
 		// pb_data volumes, so the SHA-256 lookup index used by
 		// findTenantByAPIKey exists on every boot.
 		if err := ensureAPIKeyLookupField(app); err != nil {
+			return err
+		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// email_verified field (added with the register-first dashboard):
+		// fresh boots get it from the embedded pb_schema.json; existing
+		// pb_data volumes get it added without reimporting the schema.
+		if err := ensureEmailVerifiedField(app); err != nil {
+			return err
+		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// password_hash field (added with password login): fresh boots get
+		// it from the embedded pb_schema.json; existing pb_data volumes get
+		// it added without reimporting the schema. Existing tenants keep an
+		// empty password_hash — OTP remains their only login until they set
+		// one from the dashboard.
+		if err := ensurePasswordHashField(app); err != nil {
+			return err
+		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// password_reset_at field (added with the forgot-password flow):
+		// fresh boots get it from the embedded pb_schema.json; existing
+		// pb_data volumes get it added without reimporting the schema.
+		// Existing records keep a zero value — no cooldown, resets allowed.
+		if err := ensurePasswordResetAtField(app); err != nil {
 			return err
 		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
@@ -125,6 +167,20 @@ func main() {
 		// OZ_WEB_ALLOWED_ORIGINS and per-email/IP rate limits in-handler.
 		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		// Password login + set-password (see web_password.go). login is the
+		// email+password alternative to request-otp; set-password is
+		// session-authenticated (the account sets its own password from the
+		// dashboard). Both enforce the same CORS allowlist.
+		se.Router.POST("/api/v1/web/login", handleLoginPassword(app))
+		se.Router.POST("/api/v1/web/set-password", handleSetPassword(app))
+		// Signup + forgot-password (see web_password.go). register pairs
+		// email+password and emails a confirmation code (verify-otp
+		// completes it); request-password-reset / reset-password implement
+		// the OTP-proved password reset with a 7-day cooldown. All enforce
+		// the same CORS allowlist + per-email/IP rate limits.
+		se.Router.POST("/api/v1/web/register", handleRegister(app))
+		se.Router.POST("/api/v1/web/request-password-reset", handleRequestPasswordReset(app))
+		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		// Paddle Billing webhook — signature-verified, server-to-server (see
@@ -133,10 +189,10 @@ func main() {
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
-		// P8-4: /api/health is now served by PocketBase's built-in endpoint (v0.39.6+).
-		// The custom handler (health.go) is retained for reference but NOT registered
-		// to avoid a route-conflict panic with PocketBase's own /api/health route.
-		// se.Router.GET("/api/health", handleHealth(app))
+		// /api/health: PocketBase's built-in endpoint registers before this
+		// hook, so it can't be replaced by re-registering the route; a root
+		// middleware short-circuits it with our extended payload (health.go).
+		bindHealthOverride(app, se)
 		return se.Next()
 	})
 
@@ -192,6 +248,78 @@ func ensureAPIKeyLookupField(app core.App) error {
 		return fmt.Errorf("failed to add api_key_lookup field: %w", err)
 	}
 	log.Println("migrated tenants collection: added api_key_lookup field + unique partial index")
+	return nil
+}
+
+// ensureEmailVerifiedField adds the tenants.email_verified bool to existing
+// deployments that predate it (fresh boots get it from the embedded
+// pb_schema.json). Idempotent: no-op once the field exists. Existing
+// records default to false — which is the correct semantics (only
+// verify-otp flips it to true).
+func ensureEmailVerifiedField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		return fmt.Errorf("tenants collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("email_verified") != nil {
+		return nil
+	}
+	collection.Fields.Add(&core.BoolField{
+		Name: "email_verified",
+		Help: "True once the tenant has completed OTP verification (verify-otp). Set false on self-signup and on webhook-created tenants; the dashboard shows this state.",
+	})
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add email_verified field: %w", err)
+	}
+	log.Println("migrated tenants collection: added email_verified field")
+	return nil
+}
+
+// ensurePasswordHashField adds the hidden tenants.password_hash text field
+// to existing deployments that predate password login (fresh boots get it
+// from the embedded pb_schema.json). Idempotent: no-op once the field
+// exists. Existing records keep an empty password_hash — the correct
+// semantics, since only the account holder (via an authenticated session)
+// can set one.
+func ensurePasswordHashField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		return fmt.Errorf("tenants collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("password_hash") != nil {
+		return nil
+	}
+	collection.Fields.Add(&core.TextField{
+		Name:   "password_hash",
+		Hidden: true,
+		Help:   "Bcrypt hash of the optional web login password (set via the account dashboard). Empty for OTP-only accounts; login-with-password requires this field.",
+	})
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add password_hash field: %w", err)
+	}
+	log.Println("migrated tenants collection: added password_hash field")
+	return nil
+}
+
+// ensurePasswordResetAtField adds the tenants.password_reset_at date field
+// to existing deployments that predate the forgot-password flow (fresh
+// boots get it from the embedded pb_schema.json). Idempotent: no-op once
+// the field exists. Existing records keep a zero value — the correct
+// semantics, since the 7-day reset cooldown only starts after a completed
+// reset (see web_password.go).
+func ensurePasswordResetAtField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		return fmt.Errorf("tenants collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("password_reset_at") != nil {
+		return nil
+	}
+	collection.Fields.Add(&core.DateField{Name: "password_reset_at"})
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add password_reset_at field: %w", err)
+	}
+	log.Println("migrated tenants collection: added password_reset_at field")
 	return nil
 }
 

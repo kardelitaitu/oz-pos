@@ -1,6 +1,6 @@
 //! Authorization helpers for Tauri commands.
 //!
-//! Provides [`require_permission_for_user`] to verify that the caller
+//! Provides [`require_permission_for_user`](crate::commands::authz::require_permission_for_user) to verify that the caller
 //! has the required permission: it looks up the user's actual role from
 //! the database, preventing role‑ID forgery.
 

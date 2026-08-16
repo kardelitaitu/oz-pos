@@ -4,7 +4,7 @@
 //! unapplied migration against a [`rusqlite::Connection`], tracking
 //! applied migrations in a `schema_migrations` table.
 //!
-//! [`rollback_last`] reverts the most recently applied migration by
+//! `rollback_last` reverts the most recently applied migration by
 //! running its `down` SQL (if one exists).
 //!
 //! # Integrity guarantees (audit/29 DB-02 / DB-05)

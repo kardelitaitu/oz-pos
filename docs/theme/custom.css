@@ -1,0 +1,34 @@
+/* docs/theme/custom.css
+ *
+ * Even vertical rhythm in the portal sidebar.
+ *
+ * mdBook 0.5 ships asymmetric margins for the sidebar: chapters get
+ * `margin-block-start: 0.6em` (gap above only), page-outline headers get
+ * `margin-block-end: 0.5em` (gap below only), part titles get 5px on both
+ * sides, and the "---" divider is a 3px bar with 5px margins. The mix makes
+ * the list look unevenly spaced. These overrides normalize the rhythm.
+ */
+
+/* Chapters and nested page-outline headers: uniform gap above AND below. */
+.chapter li.chapter-item,
+.chapter li.header-item {
+    margin-block-start: 0.35em;
+    margin-block-end: 0.35em;
+}
+
+/* Part headers (Docs / Rust / TypeScript): clear separation from the list. */
+.chapter li.part-title {
+    margin-block-start: 1.25em;
+    margin-block-end: 0.5em;
+}
+
+/* The "---" divider between guides and ADRs: same rhythm as a chapter row. */
+.chapter li.spacer {
+    height: 1px;
+    margin-block: 0.35em;
+}
+
+/* The nested page-outline block under the current chapter: no extra offset. */
+.on-this-page {
+    margin-block-start: 0.35em;
+}

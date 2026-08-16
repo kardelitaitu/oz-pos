@@ -10,7 +10,14 @@ interface Props {
 const { tier } = Astro.props;
 const locale = Astro.currentLocale ?? 'en';
 const trialHref = getRelativeLocaleUrl(locale, 'download');
-const hasCheckout = Boolean(tier.priceId && import.meta.env.PUBLIC_PADDLE_CLIENT_TOKEN);
+// Real checkout only when a real price id exists AND a client token is set.
+// Placeholder ids (pri_placeholder_…) fall through to the contact link — see
+// CheckoutButton.isPlaceholderPriceId.
+const hasCheckout = Boolean(
+  tier.priceId &&
+    !tier.priceId.startsWith('pri_placeholder_') &&
+    import.meta.env.PUBLIC_PADDLE_CLIENT_TOKEN,
+);
 const contactHref = 'mailto:sales@oz-pos.com';
 ---
 

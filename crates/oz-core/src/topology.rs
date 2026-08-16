@@ -24,7 +24,7 @@ use crate::error::CoreError;
 /// Vendored into oz-core (see the module doc) so compiling the server never
 /// touches the UI tree; `topology.rs` sits next to the file it embeds. The
 /// UI copy stays canonical for the TypeScript side, and
-/// [`tests::vendored_contract_matches_ui_canonical`] plus
+/// `tests::vendored_contract_matches_ui_canonical` plus
 /// `scripts/verify-topology-parity.py` keep the two byte-identical.
 const SHARED_TOPOLOGY_SEMANTICS_JSON: &str = include_str!("topologySemantics.json");
 

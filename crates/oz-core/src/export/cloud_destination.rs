@@ -76,7 +76,7 @@ impl BigQueryConfig {
 /// Snowflake connection configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnowflakeConfig {
-    /// Snowflake account URL (e.g. "https://xyz12345.us-east-1.snowflakecomputing.com").
+    /// Snowflake account URL (e.g. `https://xyz12345.us-east-1.snowflakecomputing.com`).
     pub account_url: String,
     /// Snowflake warehouse name.
     pub warehouse: String,

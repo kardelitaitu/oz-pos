@@ -2,10 +2,10 @@
 //!
 //! Migrations are `.sql` files under `crates/oz-core/migrations/`. They are
 //! embedded at compile time via [`include_str!`] and run in the
-//! compile-time array order of [`ALL`] on first startup by the generic
+//! compile-time array order of [`ALL`](crate::migrations::ALL) on first startup by the generic
 //! runner in `platform-core`. The array order is canonical — not
 //! lexicographic filename order — and the registry↔filesystem parity test
-//! [`migration_registry_matches_filesystem`] ensures every `.sql` file has
+//! `migration_registry_matches_filesystem` ensures every `.sql` file has
 //! exactly one registry entry.
 //!
 //! # Forward-only contract

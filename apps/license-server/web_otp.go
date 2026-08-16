@@ -5,8 +5,10 @@ package main
 // record — no web_users collection. All browser traffic goes through
 // these Go-router endpoints; PocketBase itself stays internal.
 //
-// Flow: POST request-otp → email 6-digit code → POST verify-otp →
-// short-lived session token → GET /me (Bearer) → POST logout.
+// Flow: POST request-otp (register-or-login — an unknown email self-signs
+// a new ACTIVE tenant, see handleRequestOTP) → email 6-digit code → POST
+// verify-otp → short-lived session token → GET /me (Bearer) → POST
+// logout.
 //
 // OTP codes and sessions are stored in-memory ONLY (short-lived, and the
 // plan explicitly says "no new auth collection"). A server restart
@@ -23,10 +25,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/mail"
-	"net/smtp"
 	"os"
 	"strings"
 	"sync"
@@ -229,6 +229,10 @@ func windowSweepLoop() {
 		otpRequestLimiter.sweep()
 		otpVerifyLimiter.sweep()
 		otpIPLimiter.sweep()
+		webLoginLimiter.sweep()
+		webRegisterLimiter.sweep()
+		webResetRequestLimiter.sweep()
+		webResetVerifyLimiter.sweep()
 	}
 }
 
@@ -293,6 +297,31 @@ func hashWebToken(token string) string {
 func hashOtpCode(code string) string {
 	sum := sha256.Sum256([]byte(code))
 	return hex.EncodeToString(sum[:])
+}
+
+// issueWebSession mints a session token for the tenant and stores its
+// hash in the in-memory session store (shared by OTP and password login).
+// Returns the raw token (handed to the client once) and its expiry.
+func issueWebSession(tenantID string) (token string, expiresAt time.Time, err error) {
+	token, err = generateWebToken()
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
+	expiresAt = webOtpStore.createSession(hashWebToken(token), tenantID)
+	return token, expiresAt, nil
+}
+
+// webSessionResponse is the success body shared by verify-otp and login:
+// the token plus the tenant/license/subscription summaries the dashboard
+// renders on arrival.
+func webSessionResponse(app core.App, tenant *core.Record, token string, expiresAt time.Time) map[string]any {
+	return map[string]any{
+		"token":        token,
+		"expires_at":   expiresAt.UTC().Format(time.RFC3339),
+		"tenant":       tenantSummary(tenant),
+		"license":      licenseSummary(app, tenant.Id),
+		"subscription": subscriptionSummary(app, tenant.Id),
+	}
 }
 
 // constantTimeHashEq compares two hex hashes in constant time so a wrong
@@ -378,17 +407,8 @@ func sendOTPEmailSMTP(to, code string) error {
 		from = "no-reply@oz-pos.com"
 	}
 
-	addr := net.JoinHostPort(host, port)
-	var auth smtp.Auth
-	if user != "" {
-		auth = smtp.PlainAuth("", user, password, host)
-	}
-
 	msg := buildOtpEmail(from, to, code)
-	if err := smtp.SendMail(addr, auth, from, []string{to}, msg); err != nil {
-		return fmt.Errorf("smtp.SendMail: %w", err)
-	}
-	return nil
+	return sendMailSMTP(host, port, user, password, from, []string{to}, msg)
 }
 
 // buildOtpEmail renders the plain-text OTP email (RFC 5322 message bytes).
@@ -436,11 +456,12 @@ func generateOtpCode() (string, error) {
 //
 //	{ "email": "owner@example.com" }
 //
-// Always returns 200 for a well-formed request (no account enumeration):
-// the response is identical whether or not the email maps to a tenant.
-// A code is only generated + emailed when the email matches an ACTIVE
-// tenant. Non-existent / suspended / revoked emails cost the caller one
-// rate-limit token and nothing else.
+// Register-or-login: an email with no tenant yet self-signs a new ACTIVE
+// tenant (the website requires an account before checkout — the dashboard
+// then drives payment). The response is always 200 for a well-formed
+// request, so the endpoint never reveals whether the account existed
+// before; a code is only generated + emailed for an ACTIVE tenant.
+// Suspended / revoked tenants receive no code.
 //
 //   - 429: rate limited (3/email/15min, 10/IP/15min) — checked BEFORE
 //     tenant lookup so probing cannot bypass the budget.
@@ -499,15 +520,23 @@ func handleRequestOTP(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// ── Look up tenant by email (unique index) ─────────────────
-		// NOTE: FindFirstRecordByData returns (nil, err) for a miss —
-		// guard both BEFORE touching tenant (a nil deref here would turn
-		// the no-enumeration 200 into a 500, leaking existence via status
-		// code).
+		// ── Resolve tenant by email (unique index) ────────────────
+		// Self-signup: a miss registers the email as a new ACTIVE tenant
+		// (mirroring the Paddle webhook's tenant shape). FindFirstRecordByData
+		// returns (nil, err) on a miss — guard both before touching tenant.
 		tenant, err := app.FindFirstRecordByData("tenants", "email", email)
-		if tenant == nil || err != nil || tenant.GetString("status") != "active" {
+		if tenant == nil || err != nil {
+			tenant, err = createTenantForEmail(app, email)
+			if err != nil {
+				log.Printf("/web/request-otp: tenant registration failed for %q: %v", email, err)
+				return e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "could not register an account, please try again",
+				})
+			}
+		}
+		if tenant.GetString("status") != "active" {
 			// Same 200 as success — no enumeration.
-			log.Printf("/web/request-otp: no active tenant for request (lookup err: %v)", err)
+			log.Printf("/web/request-otp: tenant %q is not active — no code", email)
 			return e.JSON(http.StatusOK, map[string]any{"status": "ok"})
 		}
 
@@ -534,6 +563,56 @@ func handleRequestOTP(app core.App) func(e *core.RequestEvent) error {
 		log.Printf("/web/request-otp: code sent to tenant %q", tenant.Id)
 		return e.JSON(http.StatusOK, map[string]any{"status": "ok"})
 	}
+}
+
+// createTenantForEmail self-signs a new ACTIVE tenant for the OTP
+// register-or-login flow (no password — the email code is the only
+// credential until the owner sets one). See createTenant.
+func createTenantForEmail(app core.App, email string) (*core.Record, error) {
+	return createTenant(app, email, "")
+}
+
+// createTenant registers a new ACTIVE tenant, mirroring the Paddle
+// webhook's tenant shape (paddle_webhook.go): phone defaults to "-" and
+// api_key holds a bcrypt hash of a throwaway placeholder — the customer's
+// real api_key is minted at first activation (activate.go), which is when
+// the POS learns it. passwordHash is the optional web login credential
+// ("" for OTP-only signups, set by /web/register and the webhook path).
+// If a concurrent request wins the unique-email race, the existing record
+// is returned instead of failing.
+func createTenant(app core.App, email, passwordHash string) (*core.Record, error) {
+	tenantColl, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		return nil, fmt.Errorf("tenants collection not found: %w", err)
+	}
+	tenant := core.NewRecord(tenantColl)
+	tenant.Set("email", email)
+	tenant.Set("phone", "-")
+	placeholder := generateAPIKey()
+	hash, lookup, hashErr := hashAPIKey(placeholder)
+	if hashErr != nil {
+		return nil, fmt.Errorf("failed to hash placeholder api_key: %w", hashErr)
+	}
+	tenant.Set("api_key", hash)
+	tenant.Set("api_key_lookup", lookup)
+	tenant.Set("status", "active")
+	if passwordHash != "" {
+		tenant.Set("password_hash", passwordHash)
+	}
+	// Verification is a separate step: a new account is NOT yet
+	// email-verified until the user proves inbox ownership via verify-otp
+	// (or reset-password).
+	tenant.Set("email_verified", false)
+	if saveErr := app.Save(tenant); saveErr != nil {
+		// Unique-email race: another request registered the tenant first.
+		existing, lookupErr := app.FindFirstRecordByData("tenants", "email", email)
+		if lookupErr != nil || existing == nil {
+			return nil, fmt.Errorf("failed to save tenant %q: %w", email, saveErr)
+		}
+		return existing, nil
+	}
+	log.Printf("registered new tenant %q (id=%s)", email, tenant.Id)
+	return tenant, nil
 }
 
 // ── verify-otp ───────────────────────────────────────────────────────
@@ -603,24 +682,28 @@ func handleVerifyOTP(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Mark the email verified ─────────────────────────────
+		// Proving inbox ownership completes registration. Best-effort:
+		// a persistence hiccup must not block the session (the flag is
+		// cosmetic until the dashboard — the next verify-otp re-runs it).
+		if !tenant.GetBool("email_verified") {
+			tenant.Set("email_verified", true)
+			if err := app.Save(tenant); err != nil {
+				log.Printf("/web/verify-otp: failed to persist email_verified for tenant %q: %v", tenant.Id, err)
+			}
+		}
+
 		// ── Issue session token ──────────────────────────────────
-		token, err := generateWebToken()
+		token, expiresAt, err := issueWebSession(tenant.Id)
 		if err != nil {
 			log.Printf("/web/verify-otp: token generation failed: %v", err)
 			return e.JSON(http.StatusInternalServerError, map[string]any{
 				"error": "could not start a session, please try again",
 			})
 		}
-		expiresAt := webOtpStore.createSession(hashWebToken(token), tenant.Id)
 
 		log.Printf("/web/verify-otp: session issued for tenant %q", tenant.Id)
-		return e.JSON(http.StatusOK, map[string]any{
-			"token":        token,
-			"expires_at":   expiresAt.UTC().Format(time.RFC3339),
-			"tenant":       tenantSummary(tenant),
-			"license":      licenseSummary(app, tenant.Id),
-			"subscription": subscriptionSummary(app, tenant.Id),
-		})
+		return e.JSON(http.StatusOK, webSessionResponse(app, tenant, token, expiresAt))
 	}
 }
 
@@ -736,18 +819,21 @@ func is6DigitCode(code string) bool {
 	return true
 }
 
-// tenantSummary is the /me tenant block.
+// tenantSummary is the /me tenant block. Keys follow the camelCase
+// convention of the license/subscription blocks (tierKey, expiresAt, …).
 func tenantSummary(tenant *core.Record) map[string]any {
 	return map[string]any{
-		"id":     tenant.Id,
-		"email":  tenant.GetString("email"),
-		"status": tenant.GetString("status"),
+		"id":            tenant.Id,
+		"email":         tenant.GetString("email"),
+		"emailVerified": tenant.GetBool("email_verified"),
+		"status":        tenant.GetString("status"),
 	}
 }
 
 // licenseSummary returns the tenant's latest activated license key
 // record, or nil when none exists (account page shows the fallback).
 func licenseSummary(app core.App, tenantID string) any {
+	// Prefer the activated key (bound to the tenant at activation).
 	keys, err := app.FindRecordsByFilter(
 		"license_keys",
 		"activated_by = {:tenant_id}",
@@ -755,7 +841,35 @@ func licenseSummary(app core.App, tenantID string) any {
 		map[string]any{"tenant_id": tenantID},
 	)
 	if err != nil || len(keys) == 0 {
-		return nil
+		// Not activated yet: show the key the tenant paid for. The webhook
+		// mints it with status "unused" + paddle_sub_id; the subscription
+		// record links that id to the tenant. Any subscription record
+		// counts (active or grace_period) — a canceled customer still owns
+		// the key and the POS honors it through the signed grace payload.
+		// (The POS binds it via activated_by at first activation —
+		// activate.go.)
+		subs, subErr := app.FindRecordsByFilter(
+			"subscriptions",
+			"tenant_id = {:tenant_id}",
+			"-starts_at", 1, 0,
+			map[string]any{"tenant_id": tenantID},
+		)
+		if subErr != nil || len(subs) == 0 {
+			return nil
+		}
+		subID := subs[0].GetString("paddle_sub_id")
+		if subID == "" {
+			return nil
+		}
+		keys, err = app.FindRecordsByFilter(
+			"license_keys",
+			"paddle_sub_id = {:sid}",
+			"-created", 1, 0,
+			map[string]any{"sid": subID},
+		)
+		if err != nil || len(keys) == 0 {
+			return nil
+		}
 	}
 	k := keys[0]
 	return map[string]any{
@@ -766,12 +880,16 @@ func licenseSummary(app core.App, tenantID string) any {
 	}
 }
 
-// subscriptionSummary returns the tenant's latest ACTIVE subscription,
-// or nil when none exists. Mirrors the status.go lookup semantics.
+// subscriptionSummary returns the tenant's latest subscription record
+// regardless of status (active, grace_period, expired, revoked) so the
+// account page can show a canceled customer's state instead of falling
+// back to the "subscribe now" prompt, or nil when none exists. This is
+// the dashboard lookup — deliberately broader than status.go's POS
+// /status lookup, which still gates runtime access to active-only.
 func subscriptionSummary(app core.App, tenantID string) any {
 	subs, err := app.FindRecordsByFilter(
 		"subscriptions",
-		"tenant_id = {:tenant_id} && status = 'active'",
+		"tenant_id = {:tenant_id}",
 		"-starts_at", 1, 0,
 		map[string]any{"tenant_id": tenantID},
 	)

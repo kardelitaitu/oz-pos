@@ -1,8 +1,8 @@
 # CI Pipeline Dashboard — OZ-POS
 
-<!-- Audit stamp: 2026-08-03 · AUDIT-27 remediation · status: REWRITTEN — matrix and gate policy reconciled with current workflows (ci.yml, e2e-pr.yml, nightly.yml, release.yml, security.yml, docs.yml) and local runners (check.sh, check-ui.mjs). Updated 2026-08-16: website.yml added to workflow inventory. -->
+<!-- Audit stamp: 2026-08-03 · AUDIT-27 remediation · status: REWRITTEN — matrix and gate policy reconciled with current workflows (ci.yml, e2e-pr.yml, nightly.yml, release.yml, security.yml, docs.yml) and local runners (check.sh, check-ui.mjs). Updated 2026-08-16: website.yml added to workflow inventory. Updated 2026-08-17: website.yml check job catalog (docs portal build + internal-link audit). -->
 
-> Last updated: 2026-08-16
+> Last updated: 2026-08-17
 
 ## Workflow inventory
 
@@ -14,7 +14,7 @@
 | `release.yml` | Tag push `v*` | Build + blocking Trivy scan + publish all artifacts |
 | `security.yml` | Weekly Monday + manual | Full-tree cargo audit, cargo deny, Trivy scans |
 | `docs.yml` | Push to `main` (docs paths) + PR (docs/workflow paths) | cargo doc → GitHub Pages on push, preceded by the required `ci-docs-drift` gate so a stale job matrix can't be published. PRs also run `build-docs` (cargo doc compile) — deploy stays push-only because the `github-pages` environment rejects PR refs (AUDIT-29/30) |
-| `website.yml` | PR (website paths) + push to `main` (website paths) | Marketing site (Astro, `website/`): `check` job runs astro check + i18n audit + build on every PR/push; `deploy` job runs on main only and `wrangler deploy`s to Cloudflare Workers static assets. Fail-closed: a missing `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` secret fails the deploy job loudly instead of silently skipping |
+| `website.yml` | PR (website paths) + push to `main` (website paths) | Marketing site (Astro, `website/`): `check` job runs astro check + i18n audit, **builds the full docs portal** (mdBook hub + cargo doc + TypeDoc via `scripts/build-docs.sh`, hard-fail), `npm run build`, then the **internal-link audit** (`check:links`, failing gate) + a portal-staged smoke — on every PR/push. `deploy` job runs on main only and `wrangler deploy`s to Cloudflare Workers static assets (its portal build is soft-fail; the hub degrades to the Get Started card on failure). Fail-closed: a missing `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` secret fails the deploy job loudly instead of silently skipping. See [Job Matrix (website.yml)](#job-matrix-websiteyml) |
 | `android.yml` / `ios.yml` | Push to `main` | Mobile build pipelines |
 
 ## Job Matrix (ci.yml)
@@ -40,11 +40,41 @@
 | `security-pr` | PR only | ~40s | — | — | ✅ Required when manifests changed — fail-closed if base SHA can't be resolved (AUDIT-27 CI-10) |
 | `fuzz` | Push + PR (fuzz paths) | ~30min cold / ~8min cached | rust-cache (no sccache) | — | ⚠️ Advisory (crash artifacts uploaded) |
 | `skill-drift-tests` | PR + push | ~20s | — | — | ✅ Required |
+| `unified-healthcheck` | PR + push | ~5s | none | — | ✅ Required (unified image healthcheck SMTP gate, fake-wget harness) |
 | `flaky-quarantine` | PR + push | ~10s | — | — | ✅ Required (AUDIT-27 CI-09) |
 | `windows-config` | PR + push | ~10s | — | — | ✅ Required (AUDIT-28 — NSIS installMode + asInvoker manifests) |
 | `ci-docs-drift` | PR + push | ~10s | — | — | ✅ Required (AUDIT-27 CI-08 — verifies this table stays true) |
 | `e2e-docker-image` | Push only | ~4min | Docker GHCR | — | Push path |
 | `e2e` | PR + push | ~6min each | npm + rust-cache + Docker GHCR | 3-way | ✅ Required |
+
+## Job Matrix (website.yml)
+
+`check` is the PR/push gate for the marketing site. Because the docs portal
+ships inside the website bundle, the check builds the portal too — that is what
+makes the 4-card docs hub render in CI (the `portalExists` gate is fs-based at
+build time) and lets the internal-link audit validate the full portal tree, not
+just the site's own pages. `deploy` (main only) mirrors the same portal steps but
+**soft-fails** them (`continue-on-error`) so a docs hiccup can never block the
+marketing deploy; when it fails, `docs/book` stays absent, staging is skipped,
+and the hub degrades to the single Get Started card (no dead links, site still
+ships). Keep the two jobs' portal steps in sync — they are intentionally
+copy-pasted with only the fail mode differing.
+
+| Step | What it runs | Fails |
+|------|--------------|-------|
+| Install deps | `npm ci` + Playwright chromium (build-time Mermaid only) | hard |
+| `npm run check` | astro check + i18n audit (`audit-i18n.mjs`) + password-policy drift guard (`check-password-policy.mjs`) | hard |
+| Rust toolchain + cache | `dtolnay/rust-toolchain@stable` + `rust-cache` (save on main only) + `sccache` — needed for `cargo doc` in the portal build | hard |
+| System deps | gtk3 / libwebkit2gtk / libudev (`platform-startup` → tauri, `oz-hal` → serialport must compile even for `--no-deps` docs) | hard |
+| mdBook + `bash scripts/build-docs.sh` | Full portal: cargo doc → TypeDoc → mdBook hub. **Hard-fail** in `check` (a portal build hiccup on a PR must surface before merge) | hard |
+| `npm run build` | Astro build; `import-portal.sh` stages `docs/book` → `dist/docs-portal`, flipping the hub's `portalExists` gate to 4 cards | hard |
+| `npm run check:links` | **Internal-link audit** (`scripts/check-links.mjs`): every href on a built page must resolve to a file in `dist/`. Tool-generated targets are skipped via documented rules — rustdoc JS template strings (`${…}`), rustdoc unresolved intra-doc identifier links (scoped to `/docs-portal/api/rust/`), mdBook/TypeDoc `assets/` refs, Windows `\` normalization; the portal subtree is skipped entirely when unstaged. Exit 1 on any broken link | hard |
+| Portal staged smoke | Asserts `dist/docs-portal/intro.html` + `api/rust/index.html` + `api/ts/index.html` shipped, so a silent staging failure can't pass the job | hard |
+
+> Path filter note: the `check` job's PR `paths` filter is `website/**` only, so a
+> **docs-only** PR (no `website/` changes) still gets only `docs.yml`'s cargo-doc
+> compile, not the full portal build + link audit. The portal build cost is
+> amortized by `rust-cache`/`sccache` (repeat PRs are warm).
 
 ## Gate manifest — single source of truth (AUDIT-27 CI-08)
 
@@ -112,6 +142,7 @@ Enforced via GitHub branch protection (`Settings → Branches → main → Requi
 | Flaky quarantine registry | `flaky-quarantine` | ✅ Required |
 | Windows config drift | `windows-config` | ✅ Required |
 | Skill Drift | `skill-drift-tests` | ✅ Required |
+| Unified healthcheck script | `unified-healthcheck` | ✅ Required |
 | CI docs drift | `ci-docs-drift` | ✅ Required |
 | Dependency audit | `audit` | ⚠️ Advisory on PR / ✅ on push |
 | Lighthouse a11y | `lighthouse` | ⚠️ Advisory (≥ 90) |

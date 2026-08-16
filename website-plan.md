@@ -13,7 +13,7 @@
 | **Locales** | `en` (global/international) and `id` (Indonesia) |
 | **Hosting** | Cloudflare Pages (free tier) — static files only |
 | **Checkout** | Paddle.js overlay (handles payments, tax, VAT, invoicing) |
-| **Auth** | Tenant-email OTP sessions issued by the **license server** — no new auth collection |
+| **Auth** | Tenant auth on the **license server** — email OTP **or** password, no new auth collection |
 | **Database** | PocketBase (existing license-server datastore on Northflank) — **internal only**, the website never calls it directly |
 | **Pricing** | Real tier enum `free` / `trial` / `pro` / `premium` / `enterprise`; placeholder prices per locale |
 | **Repo location** | `website/` directory in the monorepo |
@@ -52,8 +52,11 @@ auth system** for the same customer — the opposite of futureproof. Instead:
 - all browser traffic goes to the license server's Go router
   (`ratelimit.go`, CORS-controlled) — PocketBase is never exposed to the
   browser (its admin UI and `/api/collections/*` surface stay internal);
-- authentication is **email OTP** — no password field exists on `tenants`
-  today, so OTP avoids adding and resetting a new credential class.
+- authentication is the tenant record itself, with **two login modes**:
+  email OTP (register-or-login) and password (set at signup or from the
+  dashboard). Passwords are bcrypt-hashed on `tenants.password_hash`,
+  reset via email OTP with a 7-day cooldown, and the POS `api_key` stays a
+  separate server-issued credential (never a web password).
 
 ```
 Website (Cloudflare Pages, static)
@@ -93,7 +96,9 @@ website/
 │   │   ├── FeatureTable.astro
 │   │   ├── Hero.astro
 │   │   ├── CheckoutButton.tsx    # Interactive: Paddle.js overlay
-│   │   ├── AuthForm.tsx          # Interactive: OTP request/verify (license server API)
+│   │   ├── AuthForm.tsx          # Interactive: login (Email code | Password tabs + forgot-password)
+│   │   ├── SignupForm.tsx        # Interactive: register (email + password + strength meter)
+│   │   ├── PasswordStrength.tsx  # Shared 4-class meter (signup, reset, dashboard)
 │   │   └── LocaleSwitcher.tsx
 │   ├── content/
 │   │   └── pricing/
@@ -110,6 +115,7 @@ website/
 │       │   ├── features.astro
 │       │   ├── download.astro
 │       │   ├── login.astro
+│       │   ├── signup.astro
 │       │   ├── account.astro
 │       │   └── legal/
 │       │       ├── privacy.astro
@@ -145,12 +151,22 @@ website/
 
 ## 5. Registration & Auth (Tenant Email OTP)
 
-### Why no self-signup
+### Self-signup (register-or-login)
 
-A web account is only useful once a customer has a license. Tenant records
-are **created by the Paddle webhook at first purchase** (email comes from
-Paddle). Trial users who never buy run the offline 90-day trial (`trial`
-tier) and have no web account — nothing to manage.
+Payment is **register-first**. Two entry points create the tenant:
+
+- `/api/v1/web/register` (the `/signup` page) — email + password (min 8
+  chars, at least 3 of lowercase/uppercase/number/symbol), then an emailed
+  6-digit code; `verify-otp` flips `email_verified` and issues the session.
+- `request-otp` (the login page's "Email code" tab) — self-signs an ACTIVE
+  tenant when the email is new (`createTenantForEmail` in
+  `apps/license-server/web_otp.go`, mirroring the webhook's tenant shape),
+  so the checkout always finds a tenant for `custom_data.email`.
+
+The Paddle webhook still upserts by email at first purchase — it just
+attaches the subscription to the account the customer registered instead
+of creating a parallel one. Trial users who never buy have a dormant
+account with no license; there is nothing to manage.
 
 ### Identity = the `tenants` collection (exists today)
 
@@ -161,6 +177,9 @@ tier) and have no web account — nothing to manage.
 | `phone` | email-adjacent, **required today** | ⚠️ webhook must supply it (Paddle custom field) or the schema must relax it |
 | `api_key` | text (bcrypt hash) | POS client credential — not a web password |
 | `api_key_lookup` | text (SHA-256, indexed) | O(1) tenant resolution for the POS API |
+| `password_hash` | text (bcrypt) | Web password login (`/login`; set at signup or from the dashboard) |
+| `password_reset_at` | date | 7-day cooldown after a password reset |
+| `email_verified` | bool | True once OTP verification completes (webhook-created tenants start false) |
 | `status` | select: active / suspended / revoked | Gate web sessions on this |
 
 ### New license-server endpoints (new server work)
@@ -171,18 +190,32 @@ allow-listed) and read/write PocketBase server-side. None are raw
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/v1/web/request-otp` | POST | `{email}` → looks up tenant, sends 6-digit code via SMTP. **Always returns 200** (no account enumeration). |
-| `/api/v1/web/verify-otp` | POST | `{email, code}` → issues a short-lived session token + subscription summary |
+| `/api/v1/web/register` | POST | `{email, password}` → validates the password policy, creates the tenant (`email_verified=false`), emails a 6-digit code. `409` on an existing email. |
+| `/api/v1/web/request-otp` | POST | `{email}` → looks up **or self-signs** the tenant (register-or-login), sends 6-digit code via SMTP. **Always returns 200** (no account enumeration). |
+| `/api/v1/web/verify-otp` | POST | `{email, code}` → issues a short-lived session token + subscription summary, flips `email_verified=true` |
+| `/api/v1/web/login` | POST | `{email, password}` → session. Generic `401 invalid email or password` for every failure (no enumeration). |
+| `/api/v1/web/set-password` | POST | `{password}` (Bearer session) → set/rotate the web password; must differ from the stored hash |
+| `/api/v1/web/request-password-reset` | POST | `{email}` → emails a reset code; skips the send and returns `cooldown_until` when a reset happened <7 days ago (always 200) |
+| `/api/v1/web/reset-password` | POST | `{email, code, password}` → verifies the code, enforces policy + must-differ, stamps `password_reset_at`, sets `email_verified=true`, issues a session |
 | `/api/v1/web/me` | GET | `Authorization: Bearer <token>` → tenant profile + subscription + license status |
 | `/api/v1/web/logout` | POST | Invalidates the session token |
+| `/api/v1/web/contact` | POST | Support form → Discord webhook (`OZ_DISCORD_WEBHOOK`); `503` + mailto fallback when unset |
 
-### Why OTP, not password
+### Two login modes (decision — supersedes "OTP only")
 
-- `tenants` has no password field; OTP means no new credential to store,
-  hash, or reset.
-- The license server already sends email (verification/receipts) — SMTP is
-  already an env-var concern on Northflank.
-- OTP is the natural upgrade path to magic-link / WebAuthn later.
+Auth was originally planned OTP-only because `tenants` had no password
+field. The signup work added passwords as a first-class mode:
+
+- **Password** — set at signup (`/register`) or from the dashboard
+  (`/set-password`); bcrypt-hashed on `tenants.password_hash`.
+- **Email OTP** — always works, including as the fallback when a password
+  is forgotten (OTP is the only reset mechanism).
+
+Password policy (server-enforced AND mirrored by the client meter):
+minimum 8 characters with at least 3 of lowercase / uppercase / number /
+symbol. Password resets stamp a **7-day cooldown** (`password_reset_at`),
+and both reset and in-dashboard changes reject the current password. The
+email-code path remains the magic-link / WebAuthn upgrade path later.
 
 ### Session token storage (decision)
 
@@ -206,14 +239,37 @@ cookie + CSRF header.
 | License receipt | Paddle webhook | Key string + tier + expiry |
 | Subscription events | Created / cancelled / payment failed | Status notices |
 
+**No custom domain yet:** Northflank provides no SMTP — the license server
+sends via **Brevo** (`smtp-relay.brevo.com`: 587 STARTTLS, or 465 implicit
+TLS — both supported), authenticated with the Brevo SMTP login id + key.
+`code.run` / `workers.dev` aren't domains you can add DNS to, so the sender
+must be **verified in Brevo Sender Identity** and set as `OZ_SMTP_FROM`
+explicitly (the code default `no-reply@oz-pos.com` is an unowned domain);
+the server fails fast at boot when `OZ_SMTP_FROM` is missing. SPF/DKIM/DMARC
+on the owned domain is the real inbox-not-spam fix — see
+`apps/license-server/DEPLOY.md` step 5.
+
 ---
 
-## 6. Pricing (Placeholder — mapped to the real tier enum)
+## 6. Pricing (mapped to the real tier enum)
 
-> **Placeholder prices — the user will modify them.** Tier names below are
-> the **actual** `tier_key` values the schema and the client understand
-> (`free`, `trial`, `pro`, `premium`, `enterprise` in
-> `apps/license-server/pb_schema.json` and `crates/oz-core/src/subscription.rs`).
+> Tier names below are the **actual** `tier_key` values the schema and the
+> client understand (`free`, `trial`, `pro`, `premium`, `enterprise` in
+> `apps/license-server/pb_schema.json` and
+> `crates/oz-core/src/subscription.rs`).
+>
+> **Sandbox catalog (live, created 2026-08-16 via the sandbox API):**
+>
+> | Product | Price (USD) |
+> |---------|-------------|
+> | OZ-POS Pro — `pro_01m05gdcbasdrc6wczkdc1bn3v` | `pri_01m05gdnqp30xze6db73qcracp` — $19/mo |
+> | OZ-POS Premium — `pro_01m05gdctj4qcph8a957xwm9nw` | `pri_01m05gdpk4hmnm0k8e6vxm8cec` — $49/mo |
+>
+> **IDR limitation:** Paddle does not support IDR as a billing currency
+> (its price-currency allowlist has no IDR). The `id` locale displays Rp
+> but the checkout charges the USD price id above (Rp 299.000 ≈ $19,
+> Rp 749.000 ≈ $49). True IDR billing would need a local provider
+> (e.g. Midtrans/Xendit).
 
 ### Global (USD)
 
@@ -258,18 +314,39 @@ cookie + CSRF header.
 ### Setup Steps (One-Time)
 
 1. Create Paddle account at [paddle.com](https://paddle.com)
-2. Add products in Paddle dashboard (6 products: Pro/Premium/Enterprise × 2 locales)
-3. Create a webhook pointing at the **license server** (`https://license.oz-pos.com/api/v1/paddle/webhook`)
-4. Get credentials: `PADDLE_VENDOR_ID`, `PADDLE_CLIENT_TOKEN` (site) and
-   `PADDLE_WEBHOOK_SECRET` (server, new env var)
+2. **Sandbox catalog created via API** (2026-08-16): 2 products + 2 USD
+   prices (see §6). Live catalog is the same shape once approved.
+3. **Sandbox notification destination created via API** (2026-08-16):
+   `ntfset_01m05htpgfq0qmcvb0er6byrsx` →
+   `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook`
+   (events: subscription.created/updated/canceled, transaction.completed/
+   payment_failed). The signing secret is **dashboard-only** — copy it from
+   the sandbox dashboard (Settings → Notifications) into
+   `PADDLE_WEBHOOK_SECRET` on the license server.
+4. Credentials: `PUBLIC_PADDLE_CLIENT_TOKEN` (site, sandbox `test_…`),
+   `PADDLE_WEBHOOK_SECRET` (server, dashboard), `PADDLE_PRICE_TIERS`
+   (server — both currency ids per tier), `PADDLE_API_URL`
+   (`https://sandbox-api.paddle.com` for sandbox).
 
-### Checkout Flow
+### Checkout Flow (register-first)
 
 ```
-User clicks "Buy" → Paddle.js overlay → payment + VAT handled by Paddle
-→ Paddle webhook → license server → license key generated + emailed
+User clicks "Choose Pro" → signed out? → /login (self-signup via OTP)
+→ signed in → Paddle.js v2 overlay (Paddle.Initialize + Checkout.open,
+  prefilled with the account email) → payment + VAT handled by Paddle
+→ Paddle webhook → license server → key minted + subscription provisioned
+  onto the registered tenant → dashboard shows the key + subscription
 → customer activates in the POS with the key
 ```
+
+Implementation notes (see `website/src/components/paddle.ts`):
+- The site loads the **v2** SDK (`https://cdn.paddle.com/paddle/v2/paddle.js`).
+  The legacy URL (`cdn.paddle.com/paddle/paddle.js`) serves the v1 SDK whose
+  `Setup`/`Checkout` signatures differ and would break with this code.
+- `custom_data.email` is the **account** email (register-first) — the
+  webhook attaches the subscription to that tenant.
+- `PADDLE_PRICE_TIERS` maps both currencies of a tier to the same tier_key
+  (e.g. `pri_pro_usd:pro,pri_pro_idr:pro`).
 
 ### Paddle Product Mapping (6 products)
 
@@ -349,9 +426,17 @@ https://license.oz-pos.com/api/v1/paddle/webhook        (new server work)
 
 | Element | Detail |
 |---------|--------|
-| Email field | Request OTP (`/api/v1/web/request-otp`) |
-| Code field | Verify (`/api/v1/web/verify-otp`) |
-| Note | No password to reset — OTP only |
+| Email code tab | Email → OTP (`request-otp`) → code (`verify-otp`) — self-signs a new account |
+| Password tab | Email + password (`/login`) |
+| Forgot password | Email → reset code + new password (`request-password-reset` → `reset-password`); 7-day cooldown after a reset |
+
+### Signup Page (`/[locale]/signup`)
+
+| Element | Detail |
+|---------|--------|
+| Email field | Format-validated client-side |
+| Password field | Live strength meter (min 8 chars, ≥3 of 4 classes) — submit disabled until valid |
+| Verify step | Code emailed by `/register` → `verify-otp` → straight into the dashboard |
 
 ### Account Page (`/[locale]/account`)
 
@@ -439,10 +524,11 @@ Live at `https://oz-pos.adikaradwiatmaja.workers.dev` until the custom domain is
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `PADDLE_WEBHOOK_SECRET` | `xxxxx` | Verify webhook signatures (HMAC-SHA256 over `ts:rawBody`, 5-min replay window) |
-| `PADDLE_PRICE_TIERS` | `pri_x:pro,pri_y:premium` | Price id → tier_key map (unmapped prices fail provisioning with 500 → Paddle retries) |
+| `PADDLE_WEBHOOK_SECRET` | `xxxxx` | Verify webhook signatures (HMAC-SHA256 over `ts:rawBody`, 5-min replay window). **Required at boot** — the server fails fast without it |
+| `PADDLE_PRICE_TIERS` | `pri_x:pro,pri_y:premium` | Price id → tier_key map (unmapped prices fail provisioning with 500 → Paddle retries). **Required at boot** |
 | `PADDLE_API_KEY` | optional | Server-side Paddle API key — fallback via `GET /customers/{id}` when `custom_data.email` is absent (the checkout now passes it, so this is rarely needed) |
-| `OZ_SMTP_HOST` / `OZ_SMTP_PORT` / `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` / `OZ_SMTP_FROM` | relay creds | OTP + license-key receipt emails (`net/smtp`, port defaults 587) |
+| `OZ_SMTP_HOST` / `OZ_SMTP_PORT` / `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` / `OZ_SMTP_FROM` | relay creds | OTP + license-key receipt emails. Port 465 = implicit TLS, anything else = STARTTLS (`net/smtp`). `OZ_SMTP_FROM` **required at boot** when SMTP is configured (sender must be verified with the relay) |
+| `OZ_DISCORD_WEBHOOK` | optional | Support-contact target for `/api/v1/web/contact`; unset → `503` + mailto fallback |
 | `OZ_WEB_ALLOWED_ORIGINS` | `https://oz-pos.com,https://oz-pos.adikaradwiatmaja.workers.dev,http://localhost:4321` | Web API CORS allowlist |
 | `OZ_WEB_SESSION_TTL` | `24h` | Web session lifetime (Go duration) |
 
@@ -450,10 +536,30 @@ Live at `https://oz-pos.adikaradwiatmaja.workers.dev` until the custom domain is
 
 | Endpoint | Purpose |
 |----------|---------|
+| `POST /api/v1/web/register` | Email + password → OTP email (`409` on existing) |
 | `POST /api/v1/web/request-otp` | Email → 6-digit code (always 200, no enumeration) |
-| `POST /api/v1/web/verify-otp` | Email + code → session token + summary |
+| `POST /api/v1/web/verify-otp` | Email + code → session token + summary, `email_verified=true` |
+| `POST /api/v1/web/login` | Email + password → session (generic `401`) |
+| `POST /api/v1/web/set-password` | Set/rotate password (Bearer session, must-differ) |
+| `POST /api/v1/web/request-password-reset` | Email → reset code (7-day cooldown, always 200) |
+| `POST /api/v1/web/reset-password` | Code + new password → session |
 | `GET /api/v1/web/me` | Bearer → tenant profile + license + subscription |
 | `POST /api/v1/web/logout` | Invalidate session (idempotent) |
+| `POST /api/v1/web/contact` | Support form → Discord (`503` when unset) |
+
+### Health & monitoring (shipped beyond the original plan)
+
+`GET /api/health` reports every boot-gate status as JSON — `smtp`
+(`configured`/`verified`), `paddle` (`secret_configured`,
+`price_tiers_configured`, `price_tiers_mappings`), `rsa`, `discord` — as
+*status*, not liveness (only a DB outage fails the HTTP check). The unified
+container's shell healthcheck (`apps/unified/healthcheck.sh`) fails the
+container after N consecutive bad probes (`OZ_HEALTH_SMTP_MAX_FAILS` /
+`OZ_HEALTH_PADDLE_MAX_FAILS`, default 3), so a broken relay or a rotated
+Paddle secret eventually flips the container unhealthy; its test harness is
+a registered CI gate (`unified-healthcheck`).
+`apps/license-server/uptime-monitor.md` documents keyword monitors (e.g.
+`"verified":false` on `/api/health`) for UptimeRobot-style alerting.
 
 ---
 
@@ -502,7 +608,14 @@ the web endpoints reuse it:
 |----------|-------|--------|
 | `/api/v1/web/request-otp` | 3 per email | 15 min |
 | `/api/v1/web/verify-otp` | 5 attempts | 15 min |
+| `/api/v1/web/register` | 3 per email | 15 min |
+| `/api/v1/web/login` | 5 per email | 15 min |
+| `/api/v1/web/request-password-reset` | 3 per email | 15 min |
+| `/api/v1/web/reset-password` | 5 attempts | 15 min |
 | `/api/v1/paddle/webhook` | HMAC-verified + event-id dedup | replay-safe |
+
+All web endpoints additionally share a per-IP backstop limiter
+(`apps/license-server/ratelimit.go`).
 
 ### Account Page Auth Guard
 
@@ -611,7 +724,7 @@ Includes the new license-server work the previous plan silently assumed.
 | **2. Pages** | 2-3 days | Homepage, pricing, features, download |
 | **3. License-server web API** | 2 days | `/web/*` OTP endpoints, session, SMTP, CORS |
 | **4. Paddle** | 2 days | Checkout integration + webhook (signature, dedup, key minting, RSA signing) |
-| **5. Auth pages** | 1 day | Login/OTP + account page (reads `/me`) |
+| **5. Auth pages** | 2 days | Login (OTP + password + forgot-password), signup + strength meter, account page (reads `/me`), password reset + 7-day cooldown |
 | **6. Polish** | 1-2 days | Responsive, SEO, analytics |
 | **7. Deploy** | 0.5 day | Cloudflare Pages + custom domain + env vars |
 | **Total** | **~10-12 days** | Full site live + purchase flow end-to-end |

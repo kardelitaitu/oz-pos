@@ -1,6 +1,6 @@
 //! Bluetooth (SPP / RFCOMM) barcode scanner driver.
 //!
-//! Implements [`BarcodeScanner`] over a Bluetooth serial (SPP) connection.
+//! Implements [`BarcodeScanner`](crate::traits::barcode::BarcodeScanner) over a Bluetooth serial (SPP) connection.
 //! Most BT barcode scanners (Honeywell 1450g BT, Zebra DS2278 BT, Datalogic
 //! PowerScan BT) use the Serial Port Profile, which appears as a virtual COM
 //! port (Windows) or `/dev/rfcomm*` (Linux) after pairing.

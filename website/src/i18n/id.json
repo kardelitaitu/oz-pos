@@ -24,7 +24,8 @@
     "login": "Masuk ke akun OZ-POS Anda hanya dengan email.",
     "account": "Lisensi, langganan, dan informasi penagihan OZ-POS Anda.",
     "privacy": "Bagaimana OZ-POS mengumpulkan, menggunakan, dan melindungi data Anda.",
-    "terms": "Ketentuan yang mengatur penggunaan OZ-POS Anda."
+    "terms": "Ketentuan yang mengatur penggunaan OZ-POS Anda.",
+    "signup": "Buat akun OZ-POS Anda — buat kata sandi dan verifikasi email."
   },
   "support": {
     "title": "Dukungan",
@@ -155,9 +156,9 @@
   },
   "download": {
     "title": "Unduh OZ-POS",
-    "subtitle": "Versi 0.0.25 — uji coba gratis 90 hari, tanpa pendaftaran.",
+    "subtitle": "Versi 0.0.26 — uji coba gratis 90 hari, tanpa pendaftaran.",
     "version": "Versi saat ini",
-    "versionValue": "0.0.25",
+    "versionValue": "0.0.26",
     "platformsTitle": "Pilih platform Anda",
     "requirementsTitle": "Persyaratan sistem",
     "requirements": [
@@ -173,7 +174,7 @@
   },
   "login": {
     "title": "Masuk ke akun Anda",
-    "subtitle": "Kami akan mengirimkan kode sekali pakai lewat email. Tanpa kata sandi untuk diingat atau diatur ulang.",
+    "subtitle": "Masuk dengan kata sandi atau kode sekali pakai yang kami kirimkan lewat email.",
     "email": "Email",
     "emailPlaceholder": "anda@contoh.com",
     "sendCode": "Kirim kode",
@@ -183,9 +184,29 @@
     "backToEmail": "Gunakan email lain",
     "codeSent": "Kami mengirim kode verifikasi ke email Anda.",
     "otpNote": "Verifikasi dibatasi kecepatannya untuk melindungi akun Anda.",
+    "newAccount": "Belum punya akun? Verifikasi kode Anda akan membuatkannya.",
     "errorSend": "Tidak dapat mengirim kode. Silakan coba lagi nanti.",
     "errorVerify": "Kode tidak valid atau kedaluwarsa. Silakan coba lagi.",
-    "notConfigured": "API autentikasi belum dikonfigurasi pada deployment ini."
+    "notConfigured": "API autentikasi belum dikonfigurasi pada deployment ini.",
+    "tabEmailCode": "Kode email",
+    "tabPassword": "Kata sandi",
+    "password": "Kata sandi",
+    "passwordPlaceholder": "Kata sandi Anda",
+    "signIn": "Masuk",
+    "errorLogin": "Email atau kata sandi tidak valid.",
+    "forgotPassword": "Tidak punya kata sandi atau lupa? Gunakan kode email.",
+    "forgotPasswordLink": "Lupa kata sandi?",
+    "newHere": "Baru di sini?",
+    "createAccount": "Buat akun",
+    "resetTitle": "Atur ulang kata sandi",
+    "sendResetCode": "Kirim kode reset",
+    "resetCodeSent": "Kami mengirim kode reset ke email Anda. Masukkan bersama kata sandi baru.",
+    "newPassword": "Kata sandi baru",
+    "resetPassword": "Atur ulang kata sandi",
+    "backToLogin": "Kembali ke masuk",
+    "errorResetRequest": "Tidak dapat mengirim kode reset. Silakan coba lagi.",
+    "errorReset": "Tidak dapat mengatur ulang kata sandi. Periksa kode dan coba lagi.",
+    "cooldown": "Anda baru saja mengatur ulang kata sandi. Reset baru diblokir hingga"
   },
   "account": {
     "title": "Akun",
@@ -199,7 +220,30 @@
     "status": "Status",
     "expires": "Berakhir",
     "logout": "Keluar",
-    "notConfigured": "API lisensi belum dikonfigurasi pada deployment ini."
+    "notConfigured": "API lisensi belum dikonfigurasi pada deployment ini.",
+    "noSubscription": "Anda belum memiliki langganan aktif. Pilih paket untuk memulai.",
+    "subscribe": "Berlangganan",
+    "subscription": "Langganan",
+    "starts": "Mulai",
+    "grace": "Masa tenggang hingga",
+    "emailVerified": "Email terverifikasi",
+    "verified": "Terverifikasi",
+    "notVerified": "Belum terverifikasi",
+    "password": "Kata sandi",
+    "passwordHelp": "Opsional. Dengan kata sandi, Anda bisa masuk tanpa meminta kode email.",
+    "passwordPlaceholder": "Kata sandi baru",
+    "passwordSave": "Simpan kata sandi",
+    "passwordSaved": "Kata sandi tersimpan. Gunakan untuk masuk lain kali.",
+    "passwordError": "Tidak dapat menyimpan kata sandi. Silakan coba lagi.",
+    "checkingSubscription": "Memeriksa langganan Anda…",
+    "subscriptionPending": "Pembayaran Anda berhasil, tetapi langganan belum terlihat — mungkin butuh satu menit. Muat ulang untuk memeriksa.",
+    "statusActive": "Aktif",
+    "statusUnused": "Belum diaktifkan",
+    "statusGracePeriod": "Dalam masa tenggang",
+    "statusExpired": "Kedaluwarsa",
+    "statusRevoked": "Dicabut",
+    "renewHint": "Langganan Anda tidak lagi aktif.",
+    "renewLink": "Perpanjang di halaman harga"
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",
@@ -222,8 +266,36 @@
     "noResults": "Tidak ada hasil"
   },
   "checkout": {
-    "email": "Email untuk pengiriman lisensi",
+    "signInToSubscribe": "Masuk untuk berlangganan",
+    "error": "Tidak dapat memulai checkout. Silakan coba lagi."
+  },
+  "password": {
+    "meterLabel": "Kekuatan kata sandi",
+    "strengthTooShort": "Terlalu pendek",
+    "strengthWeak": "Lemah",
+    "strengthGood": "Bagus",
+    "strengthStrong": "Kuat",
+    "minLength": "minimal 8 karakter",
+    "hint": "Gunakan minimal 3 dari: huruf kecil, huruf besar, angka, simbol.",
+    "confirmLabel": "Konfirmasi kata sandi",
+    "confirmPlaceholder": "Masukkan ulang kata sandi",
+    "mismatch": "Kata sandi tidak cocok",
+    "show": "Tampilkan kata sandi",
+    "hide": "Sembunyikan kata sandi"
+  },
+  "signup": {
+    "title": "Buat akun Anda",
+    "subtitle": "Buat kata sandi dan verifikasi email Anda dengan kode yang kami kirim.",
+    "email": "Email",
     "emailPlaceholder": "anda@contoh.com",
-    "emailRequired": "Masukkan email yang valid — kunci lisensi akan dikirim ke email tersebut."
+    "password": "Kata sandi",
+    "passwordPlaceholder": "Buat kata sandi",
+    "createAccount": "Buat akun",
+    "codeSent": "Kami mengirim kode verifikasi ke email Anda. Masukkan untuk mengaktifkan akun.",
+    "verify": "Verifikasi dan buat akun",
+    "errorRegister": "Tidak dapat membuat akun. Silakan coba lagi.",
+    "errorExists": "Akun dengan email ini sudah ada. Masuk saja.",
+    "haveAccount": "Sudah punya akun?",
+    "signInLink": "Masuk"
   }
 }

@@ -572,6 +572,13 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		subRecord.Set("starts_at", sub.StartsAt)
 		subRecord.Set("expires_at", sub.ExpiresAt)
 		subRecord.Set("grace_until", sub.GraceUntil)
+		// Persist the quota block on the subscription record so /status reads
+		// real values (mirrors renew.go's M5-audit fix).
+		subRecord.Set("max_stores", sub.MaxStores)
+		subRecord.Set("max_pos_instances", sub.MaxPOSInstances)
+		if b, err := json.Marshal(sub.AllowedTypes); err == nil {
+			subRecord.Set("allowed_types", string(b))
+		}
 		subRecord.Set("signed_payload", payloadStr)
 		subRecord.Set("signature", signature)
 		if err := app.Save(subRecord); err != nil {

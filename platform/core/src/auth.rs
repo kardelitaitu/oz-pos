@@ -67,7 +67,7 @@ pub struct LoginSession {
     pub role_id: String,
     /// Permission keys granted by the user's role, verbatim from the role's
     /// permissions JSON (may include the `"*"` wildcard — see
-    /// [`crate::rbac::Role::permission_keys`]). Carried on the session so
+    /// `crate::rbac::Role::permission_keys`). Carried on the session so
     /// UI gates can mirror the backend registry instead of role-name
     /// strings. `#[serde(default)]` keeps older persisted sessions and
     /// older clients parsing.

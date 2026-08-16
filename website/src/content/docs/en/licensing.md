@@ -10,7 +10,7 @@ updated: "2026-08-16"
 
 OZ-POS has four tiers: `trial`, `pro`, `premium`, and `enterprise`. What
 each plan unlocks — stores, registers, warehouses, QRIS payments, cloud
-sync, and scripting — is shown on the [pricing page](../pricing/).
+sync, and scripting — is shown on the [pricing page](../../pricing/).
 
 | Capability   | Free              | Pro               | Premium           | Enterprise        |
 | ------------ | ----------------- | ----------------- | ----------------- | ----------------- |
@@ -34,7 +34,7 @@ Paid plans are bought on the website checkout with just your email — no
 account required. The license key and receipt arrive by email, and you paste
 the key into **Settings → License** to activate. See
 [License Activation](../activation/) for the full journey, and the
-[pricing page](../pricing/) for current prices.
+[pricing page](../../pricing/) for current prices.
 
 ## Expiry and grace
 
