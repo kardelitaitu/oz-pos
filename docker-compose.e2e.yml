@@ -54,6 +54,11 @@ services:
       - "8080:8080"
     environment:
       OZ_LICENSE_PRIVATE_KEY: "${OZ_LICENSE_PRIVATE_KEY:-}"
+      # Paddle webhook boot-gates: verifyPaddleConfig fails fast when these
+      # are missing. CI-safe fake values here; production overrides them with
+      # the real PADDLE_WEBHOOK_SECRET / PADDLE_PRICE_TIERS.
+      PADDLE_WEBHOOK_SECRET: "${PADDLE_WEBHOOK_SECRET:-dummy}"
+      PADDLE_PRICE_TIERS: "${PADDLE_PRICE_TIERS:-pri_dummy:pro}"
     volumes:
       - e2e_pb_data:/pb/pb_data
     healthcheck:
