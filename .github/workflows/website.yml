@@ -38,6 +38,9 @@ env:
   # CI always injects the real values for main-branch deploys.
   PUBLIC_LICENSE_API_URL: ${{ secrets.PUBLIC_LICENSE_API_URL }}
   PUBLIC_PADDLE_CLIENT_TOKEN: ${{ secrets.PUBLIC_PADDLE_CLIENT_TOKEN }}
+  # Defaults to sandbox so a test_ client token never initializes Paddle
+  # against production; flip the secret to "production" when going live.
+  PUBLIC_PADDLE_ENVIRONMENT: ${{ secrets.PUBLIC_PADDLE_ENVIRONMENT || 'sandbox' }}
 
 jobs:
   check:
