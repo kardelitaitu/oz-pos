@@ -195,7 +195,7 @@ PocketBase stores its SQLite database and admin credentials in `/pb/pb_data`. Th
 
 > **Going live?** The ordered, tick-box checklist of what is still missing (Brevo SMTP
 > login id, verified sender, Paddle webhook secret) and the apply order is in
-> [`go-live-checklist.md`](./go-live-checklist.md). This section documents every variable
+> [`go-live-checklist.md`](../../docs/operations/go-live-checklist.md). This section documents every variable
 > in full.
 
 The license server requires the RSA private key as an environment variable. **Never hardcode this in the Dockerfile or commit it.**

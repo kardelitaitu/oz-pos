@@ -1,8 +1,8 @@
 # OZ-POS Go-Live — Northflank Env Checklist
 
 > One page to take the deployed license server from "pre-fail-fast image, no SMTP, no
-> Paddle" to "sandbox live". Companion to [`DEPLOY.md`](./DEPLOY.md) §7 (which documents
-> every variable in full) and [`uptime-monitor.md`](./uptime-monitor.md) (how to watch the
+> Paddle" to "sandbox live". Companion to [`DEPLOY.md`](../../apps/license-server/DEPLOY.md) §7 (which documents
+> every variable in full) and [`uptime-monitor.md`](../../apps/license-server/uptime-monitor.md) (how to watch the
 > gates once they're set).
 >
 > **Why order matters:** the current deployed image predates the fail-fast boot gates.
