@@ -3,7 +3,8 @@
 # Builds the Astro marketing site (website/) and deploys it to Cloudflare
 # Workers static assets (workers.dev) via wrangler.
 #
-#   • PRs + pushes to main:  astro check + i18n audit gate + build
+#   • PRs + pushes to main:  astro check + i18n audit gate + docs portal
+#                            build + build + internal-link audit
 #   • Pushes to main only:   deploy to Cloudflare (requires secrets)
 #
 # Fail-closed: if CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not
@@ -68,13 +69,55 @@ jobs:
       # browser at build only — never shipped to the client.
       - run: cd website && npx playwright install --with-deps chromium
       - run: cd website && npm run check
+      # ── Docs portal build ────────────────────────────────────────────
+      # Build the full portal (mdBook hub + cargo doc + TypeDoc) so the
+      # docs hub renders all 4 cards and the internal-link audit validates
+      # the portal tree. HARD-fail here (unlike the deploy job's soft-fail):
+      # a portal build hiccup on a PR must surface before merge, and a
+      # silently-degraded hub would defeat the purpose of the check. The
+      # steps mirror the deploy job below exactly — keep them in sync.
+      - name: Install Rust toolchain (portal cargo doc)
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Install system dependencies (portal cargo doc)
+        # platform-startup depends on tauri → gdk-sys (gtk3) and oz-hal
+        # depends on serialport → libudev; both must exist even for
+        # --no-deps because the workspace members compile to emit docs.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            libudev-dev
+      - name: Install mdbook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 'latest'
+      - name: Build docs portal
+        run: bash scripts/build-docs.sh
       - run: cd website && npm run build
       # Internal-link audit — FAILING gate: every href on a built page must
       # resolve to a file in dist/ (or a known-external/portal-generated
       # target; see check-links.mjs for the exact skip list). Runs after
-      # build because it audits the rendered output.
+      # build because it audits the rendered output — and with the portal
+      # staged above, it validates the full hub + portal tree.
       - name: Internal-link audit
         run: cd website && npm run check:links
+      # The 4-card hub degrades to just Get Started when the portal is
+      # absent (portalExists gate) — assert the portal targets actually
+      # shipped so a silent staging failure can't pass this job.
+      - name: Portal staged (4-card hub targets)
+        run: |
+          test -f website/dist/docs-portal/intro.html && \
+          test -f website/dist/docs-portal/api/rust/index.html && \
+          test -f website/dist/docs-portal/api/ts/index.html && \
+          echo "portal staged: full 4-card docs hub exercised"
 
   deploy:
     name: Deploy to Cloudflare Workers
