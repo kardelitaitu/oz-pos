@@ -8,10 +8,15 @@ import { t, dict } from '../../i18n';
 const locale = Astro.currentLocale ?? 'en';
 const pageTitle = `OZ-POS — ${t(locale, 'download.title')}`;
 const releaseUrl = 'https://github.com/kardelitaitu/oz-pos/releases';
+// Only Windows ships today; the other four are on the roadmap and render a
+// "coming soon" badge instead of a download link. Flip `ready` to true when
+// a platform's installers start publishing (website-plan.md §8).
 const platforms = [
-  { name: 'Windows', os: 'Windows 10 / 11', icon: '🪟' },
-  { name: 'macOS', os: 'macOS 12+', icon: '🍎' },
-  { name: 'Linux', os: 'x86_64 · glibc 2.31+', icon: '🐧' },
+  { name: 'Windows', os: 'Windows 10 / 11', icon: '🪟', ready: true },
+  { name: 'macOS', os: 'macOS 12+', icon: '🍎', ready: false },
+  { name: 'Linux', os: 'x86_64 · glibc 2.31+', icon: '🐧', ready: false },
+  { name: 'Android', os: 'Tablets & phones', icon: '🤖', ready: false },
+  { name: 'iOS', os: 'Tablets & phones', icon: '🍏', ready: false },
 ];
 const reqList = (dict(locale).download as { requirements: string[] }).requirements;
 ---
@@ -24,21 +29,32 @@ const reqList = (dict(locale).download as { requirements: string[] }).requiremen
     </div>
 
     <h2 class="mt-14 text-lg font-semibold">{t(locale, 'download.platformsTitle')}</h2>
-    <div class="mt-6 grid gap-6 sm:grid-cols-3">
+    <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {
         platforms.map((p) => (
           <div class="rounded-xl border border-ink/10 bg-surface/40 p-6 text-center">
             <p class="text-3xl" aria-hidden="true">{p.icon}</p>
             <h3 class="mt-3 font-semibold">{p.name}</h3>
             <p class="mt-1 text-xs text-muted">{p.os}</p>
-            <a
-              href={releaseUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="mt-5 inline-block w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90"
-            >
-              {t(locale, 'download.title')} — {p.name}
-            </a>
+            {
+              p.ready ? (
+                <a
+                  href={releaseUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="mt-5 inline-block w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90"
+                >
+                  {t(locale, 'download.title')} — {p.name}
+                </a>
+              ) : (
+                <span
+                  class="mt-5 inline-block w-full rounded-md border border-ink/10 px-4 py-2.5 text-center text-sm font-semibold text-muted"
+                  aria-hidden="true"
+                >
+                  {t(locale, 'download.comingSoon')}
+                </span>
+              )
+            }
           </div>
         ))
       }

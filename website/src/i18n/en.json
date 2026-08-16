@@ -19,7 +19,7 @@
   "pageDesc": {
     "features": "Offline-first point of sale: sales, shifts, and stock that keep working with zero connectivity.",
     "pricing": "Simple pricing — start free for 90 days. Trial, Pro, Premium, and Enterprise plans.",
-    "download": "Download OZ-POS for Windows, macOS, or Linux. Free 90-day trial, no signup required.",
+    "download": "Download OZ-POS for Windows. macOS, Linux, Android, and iOS are coming soon.",
     "support": "Get help with OZ-POS — email support and answers to the most common questions.",
     "login": "Sign in to your OZ-POS account with just your email.",
     "account": "Your OZ-POS license, subscription, and billing information.",
@@ -136,13 +136,15 @@
     "platformsTitle": "Choose your platform",
     "requirementsTitle": "System requirements",
     "requirements": [
-      "Windows 10 / 11 (64-bit)",
-      "macOS 12 or newer",
-      "Linux (x86_64, glibc 2.31+)",
+      "Windows 10 / 11 (64-bit) — available now",
+      "macOS 12 or newer — coming soon",
+      "Linux (x86_64, glibc 2.31+) — coming soon",
+      "Android · iOS (tablets & phones) — coming soon",
       "4 GB RAM · 1 GB free disk"
     ],
     "note": "Release downloads are published on GitHub Releases.",
-    "releaseLink": "View GitHub Releases"
+    "releaseLink": "View GitHub Releases",
+    "comingSoon": "Coming soon"
   },
   "login": {
     "title": "Sign in to your account",

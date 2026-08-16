@@ -5,6 +5,8 @@ import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 import { unified } from '@astrojs/markdown-remark';
 import rehypeCallouts from './src/plugins/rehype-callouts.mjs';
+import rehypeMermaidClass from './src/plugins/rehype-mermaid-class.mjs';
+import rehypeMermaid from 'rehype-mermaid';
 
 // Static marketing site — two locales, path-prefixed (/en/, /id/), no
 // server runtime. See website-plan.md §10 for the Cloudflare Pages settings.
@@ -38,7 +40,12 @@ export default defineConfig({
   markdown: {
     // Astro 7: remark/rehype plugins now live on the unified() processor
     // (top-level markdown.rehypePlugins is deprecated and prints a warning).
-    processor: unified({ rehypePlugins: [rehypeCallouts] }),
+    // rehypeMermaid renders ```mermaid blocks to inline SVG at build time
+    // (Playwright, browser at build only — zero client JS; see
+    // src/content/docs/en/docs-authoring.md → Charts & diagrams).
+    // rehypeMermaidClass must run first: Astro's shiki marks the block with
+    // data-language="mermaid" and no class, which rehype-mermaid won't match.
+    processor: unified({ rehypePlugins: [rehypeCallouts, rehypeMermaidClass, rehypeMermaid] }),
   },
   vite: {
     plugins: [tailwindcss()],

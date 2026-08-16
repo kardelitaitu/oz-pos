@@ -51,6 +51,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'website/package-lock.json'
       - run: cd website && npm ci --no-audit --no-fund
+      # Build-time Mermaid rendering (rehype-mermaid) needs a Playwright
+      # browser at build only — never shipped to the client.
+      - run: cd website && npx playwright install --with-deps chromium
       - run: cd website && npm run check
       - run: cd website && npm run build
 
@@ -68,6 +71,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'website/package-lock.json'
       - run: cd website && npm ci --no-audit --no-fund
+      - run: cd website && npx playwright install --with-deps chromium
       - name: Verify deploy secrets are configured (fail-closed)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

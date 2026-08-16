@@ -239,3 +239,13 @@
   border: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
   border-radius: 0.5rem;
 }
+/* Branded diagrams (hand-built inline SVGs in markdown, class="docs-flow").
+   Every fill/stroke is a design-token var(), so the diagram follows the
+   dark/light toggle automatically. Outlines use the accent token; see
+   src/content/docs/en/docs-authoring.md → Charts & diagrams → Branded. */
+.docs-content svg.docs-flow {
+  display: block;
+  margin-top: 1rem;
+  max-width: 100%;
+  height: auto;
+}

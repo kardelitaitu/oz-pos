@@ -19,7 +19,7 @@
   "pageDesc": {
     "features": "Kasir offline-first: penjualan, shift, dan stok yang tetap berjalan tanpa koneksi sama sekali.",
     "pricing": "Harga sederhana — mulai gratis 90 hari. Paket Trial, Pro, Premium, dan Enterprise.",
-    "download": "Unduh OZ-POS untuk Windows, macOS, atau Linux. Uji coba gratis 90 hari, tanpa pendaftaran.",
+    "download": "Unduh OZ-POS untuk Windows. macOS, Linux, Android, dan iOS segera hadir.",
     "support": "Dapatkan bantuan OZ-POS — dukungan email dan jawaban untuk pertanyaan paling umum.",
     "login": "Masuk ke akun OZ-POS Anda hanya dengan email.",
     "account": "Lisensi, langganan, dan informasi penagihan OZ-POS Anda.",
@@ -136,13 +136,15 @@
     "platformsTitle": "Pilih platform Anda",
     "requirementsTitle": "Persyaratan sistem",
     "requirements": [
-      "Windows 10 / 11 (64-bit)",
-      "macOS 12 atau lebih baru",
-      "Linux (x86_64, glibc 2.31+)",
+      "Windows 10 / 11 (64-bit) — tersedia sekarang",
+      "macOS 12 atau lebih baru — segera hadir",
+      "Linux (x86_64, glibc 2.31+) — segera hadir",
+      "Android · iOS (tablet & ponsel) — segera hadir",
       "RAM 4 GB · Disk kosong 1 GB"
     ],
     "note": "Unduhan rilis dipublikasikan di GitHub Releases.",
-    "releaseLink": "Lihat GitHub Releases"
+    "releaseLink": "Lihat GitHub Releases",
+    "comingSoon": "Segera hadir"
   },
   "login": {
     "title": "Masuk ke akun Anda",
