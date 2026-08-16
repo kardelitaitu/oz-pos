@@ -454,7 +454,7 @@ Alternatively, export manually from the admin UI (`/_/` → **Settings** → **E
 
 - **Northflank Dashboard:** CPU, memory, and request logs are available in the service overview.
 - **PocketBase Logs:** Viewable via the Shell (`less /pb/pb_data/logs.db`) or the admin UI.
-- **Uptime Monitoring:** Add a health check endpoint monitor (e.g., UptimeRobot on `https://license.oz-pos.com/api/health`, which returns `{"status":"ok"}`). The payload also includes per-gate status objects: `smtp` (`configured`/`verified`/`error` — runtime sender-identity probe, re-run at most every 60s so monitors don't hammer the relay), `paddle` (`secret_configured`/`price_tiers_configured`/`price_tiers_mappings`/`error`), `rsa` (`configured`), and `discord` (`configured`). These are status, not liveness — only a DB outage fails the check.
+- **Uptime Monitoring:** Add a health check endpoint monitor (e.g., UptimeRobot on `https://license.oz-pos.com/api/health`, which returns `{"status":"ok"}`). The payload also includes per-gate status objects: `smtp` (`configured`/`verified`/`error` — runtime sender-identity probe, re-run at most every 60s so monitors don't hammer the relay), `paddle` (`secret_configured`/`price_tiers_configured`/`price_tiers_mappings`/`error`), `rsa` (`configured`), and `discord` (`configured`). These are status, not liveness — only a DB outage fails the check. **Copy-paste monitor config (including the keyword monitor that alerts when `smtp.verified` flips to false): see [`uptime-monitor.md`](./uptime-monitor.md).**
 
 ### Updating the service
 
