@@ -149,3 +149,104 @@ func TestHealth_OtherRoutesPassThrough(t *testing.T) {
 		t.Fatalf("expected 401 from unauthenticated /api/collections (built-in route intact), got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// ── Paddle / RSA / Discord gate statuses ─────────────────────────────
+
+func TestHealth_PaddleStatus_Configured(t *testing.T) {
+	t.Setenv("PADDLE_WEBHOOK_SECRET", "test-webhook-secret")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro,pri_test_premium:premium")
+
+	rec := getHealth(t, "/api/health")
+	var body struct {
+		Paddle struct {
+			SecretConfigured     bool   `json:"secret_configured"`
+			PriceTiersConfigured bool   `json:"price_tiers_configured"`
+			PriceTiersMappings   int    `json:"price_tiers_mappings"`
+			Error                string `json:"error"`
+		} `json:"paddle"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v; body: %s", err, rec.Body.String())
+	}
+	if !body.Paddle.SecretConfigured {
+		t.Error("expected paddle.secret_configured=true")
+	}
+	if !body.Paddle.PriceTiersConfigured {
+		t.Error("expected paddle.price_tiers_configured=true")
+	}
+	if body.Paddle.PriceTiersMappings != 2 {
+		t.Errorf("expected 2 price→tier mappings, got %d", body.Paddle.PriceTiersMappings)
+	}
+	if body.Paddle.Error != "" {
+		t.Errorf("expected no paddle error, got %q", body.Paddle.Error)
+	}
+}
+
+func TestHealth_PaddleStatus_Missing(t *testing.T) {
+	t.Setenv("PADDLE_WEBHOOK_SECRET", "")
+	t.Setenv("PADDLE_PRICE_TIERS", "")
+
+	rec := getHealth(t, "/api/health")
+	var body struct {
+		Paddle struct {
+			SecretConfigured     bool   `json:"secret_configured"`
+			PriceTiersConfigured bool   `json:"price_tiers_configured"`
+			Error                string `json:"error"`
+		} `json:"paddle"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v; body: %s", err, rec.Body.String())
+	}
+	if body.Paddle.SecretConfigured {
+		t.Error("expected paddle.secret_configured=false when the secret is unset")
+	}
+	if body.Paddle.PriceTiersConfigured {
+		t.Error("expected paddle.price_tiers_configured=false when tiers are unset")
+	}
+	if !strings.Contains(body.Paddle.Error, "PADDLE_PRICE_TIERS") {
+		t.Errorf("expected the tiers error to surface, got %q", body.Paddle.Error)
+	}
+}
+
+func TestHealth_RSAStatus(t *testing.T) {
+	// setupDirectApp calls initPrivateKey, so the key is loaded.
+	rec := getHealth(t, "/api/health")
+	var body struct {
+		RSA struct {
+			Configured bool `json:"configured"`
+		} `json:"rsa"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v; body: %s", err, rec.Body.String())
+	}
+	if !body.RSA.Configured {
+		t.Error("expected rsa.configured=true when the signing key is loaded")
+	}
+}
+
+func TestRSAHealthStatus_WhenKeyMissing(t *testing.T) {
+	initPrivateKey(t)
+	if !rsaHealthStatus()["configured"].(bool) {
+		t.Fatal("precondition failed: key should be loaded")
+	}
+	orig := privateKey
+	privateKey = nil
+	defer func() { privateKey = orig }()
+	if rsaHealthStatus()["configured"].(bool) {
+		t.Error("expected rsa.configured=false when the key is not loaded")
+	}
+}
+
+func TestHealth_DiscordStatus(t *testing.T) {
+	t.Setenv("OZ_DISCORD_WEBHOOK", "")
+	rec := getHealth(t, "/api/health")
+	if !strings.Contains(rec.Body.String(), `"discord":{"configured":false}`) {
+		t.Errorf("expected discord.configured=false when unset: %s", rec.Body.String())
+	}
+
+	t.Setenv("OZ_DISCORD_WEBHOOK", "https://discord.com/api/webhooks/123")
+	rec = getHealth(t, "/api/health")
+	if !strings.Contains(rec.Body.String(), `"discord":{"configured":true}`) {
+		t.Errorf("expected discord.configured=true when set: %s", rec.Body.String())
+	}
+}

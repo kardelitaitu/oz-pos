@@ -49,6 +49,9 @@ func handleHealth(app core.App) func(e *core.RequestEvent) error {
 			"db_connected": dbConnected,
 			"db_error":     dbErr,
 			"smtp":         smtpHealthSnapshot(),
+			"paddle":       paddleHealthStatus(),
+			"rsa":          rsaHealthStatus(),
+			"discord":      discordHealthStatus(),
 			"uptime_secs":  int(uptime),
 			"go_version":   runtime.Version(),
 			"go_os":        runtime.GOOS,
@@ -61,6 +64,48 @@ func handleHealth(app core.App) func(e *core.RequestEvent) error {
 // endpoint is registered before the OnServe hook, so it cannot be replaced
 // by re-registering the route) and serves the extended handleHealth payload
 // instead. All other requests pass through to their normal handlers.
+//
+// The gate blocks (paddle, rsa, discord, smtp) are STATUS, not liveness:
+// none of them fail the HTTP check (only a DB outage does), so a broken
+// relay or missing optional webhook shows up for monitors without making
+// the container flap.
+
+// paddleHealthStatus mirrors the boot-time Paddle gate (verifyPaddleConfig)
+// as a read-only status: per-component booleans so monitors can see WHICH
+// piece is missing, the mapping count when the tier map parses, and the
+// parse error when it doesn't.
+func paddleHealthStatus() map[string]any {
+	status := map[string]any{
+		"secret_configured":      paddleWebhookSecret() != "",
+		"price_tiers_configured": false,
+		"price_tiers_mappings":   0,
+		"error":                  "",
+	}
+	m, err := paddlePriceTiers()
+	if err != nil {
+		status["error"] = err.Error()
+	} else {
+		status["price_tiers_configured"] = true
+		status["price_tiers_mappings"] = len(m)
+	}
+	return status
+}
+
+// rsaHealthStatus reports whether the signing key is loaded. The boot
+// gate in main.go exits when it's missing, so this is normally always
+// true at runtime — the field lets monitors confirm the state without
+// reading logs.
+func rsaHealthStatus() map[string]any {
+	return map[string]any{"configured": privateKey != nil}
+}
+
+// discordHealthStatus reports whether the support-contact webhook is
+// configured. It's an optional feature (contact.go answers 503 without
+// it), so this is informational — a missing webhook never fails the
+// health check.
+func discordHealthStatus() map[string]any {
+	return map[string]any{"configured": strings.TrimSpace(os.Getenv("OZ_DISCORD_WEBHOOK")) != ""}
+}
 func bindHealthOverride(app core.App, se *core.ServeEvent) {
 	se.Router.BindFunc(func(e *core.RequestEvent) error {
 		if strings.TrimSuffix(e.Request.URL.Path, "/") == "/api/health" {
