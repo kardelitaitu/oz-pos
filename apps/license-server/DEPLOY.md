@@ -220,17 +220,16 @@ The license server requires the RSA private key as an environment variable. **Ne
 
    **No custom domain yet?** Northflank does **not** provide SMTP/email to apps — you need a third-party transactional relay, and `code.run` / `workers.dev` are not domains you can add DNS records to (no SPF/DKIM there). Until you own a domain, use a provider that works with a **verified sender email** instead:
 
+   - **Brevo (current choice)** — SMTP login/username is a dedicated **SMTP login email** (Brevo → Settings → SMTP & API → copy the **Login** value; it is NOT your account email), password is the **SMTP key** (`xsmtpsib-…`). The `OZ_SMTP_FROM` address must be a **verified sender** in Brevo (Sender Identity → verify the email or domain) or sends fail. **Use Option A (port 587, STARTTLS)** — the license server sends via Go's `net/smtp` (`smtp.SendMail`), which does STARTTLS on 587/2525 but **not** implicit SSL, so Option B (port 465) will not work as-is. Example:
+     ```
+     OZ_SMTP_HOST=smtp-relay.brevo.com
+     OZ_SMTP_PORT=587
+     OZ_SMTP_USER=<brevo-smtp-login-email@smtp-brevo.com>
+     OZ_SMTP_PASSWORD=xsmtpsib-…
+     OZ_SMTP_FROM=<your-verified-sender@example.com>
+     ```
    - **SendGrid (free tier)** — Settings → Sender Authentication → **Single Sender Verification** → verify the From address (e.g. your own email). SMTP: `smtp.sendgrid.net:587`, user `apikey`, password = your SendGrid API key, From = the verified sender.
    - **Amazon SES** — verify the sender **email address** (no domain required). Sandbox initially only delivers to verified recipients; request production access when live.
-
-   Example env (SendGrid, verified sender):
-   ```
-   OZ_SMTP_HOST=smtp.sendgrid.net
-   OZ_SMTP_PORT=587
-   OZ_SMTP_USER=apikey
-   OZ_SMTP_PASSWORD=<sendgrid-api-key>
-   OZ_SMTP_FROM=<your-verified-sender@example.com>
-   ```
 
    > **Deliverability honesty:** without your own domain + SPF/DKIM/DMARC, inbox placement is best-effort — codes may land in spam. Once you own a domain: set `OZ_SMTP_FROM=noreply@<domain>`, add the provider's SPF include + DKIM records (and a DMARC policy), then the verified-sender fallback is no longer needed. This is the actual fix for "signup codes never land in spam".
 6. (Optional) Web API CORS allowlist override:
