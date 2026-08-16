@@ -1,0 +1,144 @@
+# OZ-POS Go-Live — Northflank Env Checklist
+
+> One page to take the deployed license server from "pre-fail-fast image, no SMTP, no
+> Paddle" to "sandbox live". Companion to [`DEPLOY.md`](./DEPLOY.md) §7 (which documents
+> every variable in full) and [`uptime-monitor.md`](./uptime-monitor.md) (how to watch the
+> gates once they're set).
+>
+> **Why order matters:** the current deployed image predates the fail-fast boot gates.
+> The next image built from this branch **will not boot** without
+> `PADDLE_WEBHOOK_SECRET` + `PADDLE_PRICE_TIERS` (and `OZ_SMTP_FROM` when
+> `OZ_SMTP_HOST` is set). So the env must be in Northflank **before or with** the deploy
+> that ships the new image — or the rollout fails fast (by design).
+
+---
+
+## 0. Current state (probed 2026-08-17 against `https://oz--cloud--76cyv4d6bn54.code.run`)
+
+| Endpoint | Result | Meaning |
+|---|---|---|
+| `GET /api/health` | no `smtp` / `paddle` / `rsa` / `discord` fields | deployed image predates the gate-status payload |
+| `POST /api/v1/web/request-otp` | `503 email delivery is not configured` | **no SMTP env** |
+| `POST /api/v1/paddle/webhook` | `503 paddle webhook is not configured` | **no Paddle env** |
+
+`OZ_LICENSE_PRIVATE_KEY` is the one required variable already set (the server boots and
+the RSA path works).
+
+---
+
+## 1. The three values only a human can copy
+
+These are dashboard-only — no API returns them. Copy each into the Northflank secret
+group (see §3), **before** the next deploy.
+
+| # | Variable | Value | Where to copy it from |
+|---|---|---|---|
+| 1 | `OZ_SMTP_USER` | **THE ONE BLOCKER** — Brevo SMTP **login id**, format `7a5647001@smtp-brevo.com` (NOT your Gmail, NOT the key) | Brevo → **Settings → SMTP & API** → copy the **Login** field |
+| 2 | `OZ_SMTP_FROM` | `adikaradwiatmaja@gmail.com` — but only after it is **verified** | Brevo → **Sender Identity** → verify the email (Brevo sends a confirmation link). Until verified, the relay rejects sends with `550 Sender address is not verified` |
+| 3 | `PADDLE_WEBHOOK_SECRET` | (endpoint secret — shown once, never via API) | Paddle (sandbox) → **Developer tools → Notifications** → edit destination `ntfset_01m05htpgfq0qmcvb0er6byrsx` → **Endpoint secret** |
+
+> If the login id is still missing, everything else can be prepared: the remaining
+> values below are all known and can be entered now.
+
+---
+
+## 2. Full env block (paste-ready)
+
+```ini
+# ── Paddle (sandbox) — REQUIRED at boot (fail-fast gates) ────────────
+PADDLE_WEBHOOK_SECRET=<copy from §1 #3>
+PADDLE_PRICE_TIERS=pri_01m05gdnqp30xze6db73qcracp:pro,pri_01m05gdpk4hmnm0k8e6vxm8cec:premium
+PADDLE_API_URL=https://sandbox-api.paddle.com
+PADDLE_API_KEY=<copy from Paddle (sandbox) → Developer tools → Authentication>
+
+# ── SMTP (Brevo) — required once OZ_SMTP_HOST is set ─────────────────
+OZ_SMTP_HOST=smtp-relay.brevo.com
+OZ_SMTP_PORT=587            # or 465 (implicit TLS) — both supported
+OZ_SMTP_USER=<copy from §1 #1>
+OZ_SMTP_PASSWORD=<copy from Brevo → SMTP & API → SMTP key (Master Password)>
+OZ_SMTP_FROM=adikaradwiatmaja@gmail.com   # must be verified in Brevo Sender Identity first
+
+# ── Optional (defaults are fine) ─────────────────────────────────────
+# OZ_DISCORD_WEBHOOK=            # support-contact target (Discord channel webhook); unset → /contact 503s
+# OZ_WEB_ALLOWED_ORIGINS=        # unset = defaults already include the deployed site origin
+# OZ_WEB_SESSION_TTL=24h         # web session lifetime (Go duration)
+# PADDLE_WEBHOOK_MAX_AGE=5m      # replay window for webhook ts
+# OZ_HEALTH_SMTP_MAX_FAILS=3     # container healthcheck: fail after N consecutive smtp.verified:false
+# OZ_HEALTH_PADDLE_MAX_FAILS=3   # container healthcheck: fail after N consecutive paddle.secret_configured:false
+```
+
+Notes:
+- **Sandbox vs live:** the block above is for the sandbox go-live. When the live Paddle
+  catalog exists, swap `PADDLE_API_URL` → `https://api.paddle.com`, the API key → a
+  `pdl_live_…` key, and `PADDLE_PRICE_TIERS` → the **live** price ids (same shape).
+- `OZ_LICENSE_PRIVATE_KEY` is already set — leave it untouched.
+- Do **not** set `OZ_SMTP_STARTTLS` / `OZ_SMTP_IMPLICIT_TLS` — they are not read by the
+  code; the transport is chosen by `OZ_SMTP_PORT` alone (465 = implicit TLS, anything
+  else = STARTTLS).
+
+---
+
+## 3. Apply order (do this before the next deploy)
+
+1. **Paddle gates** (unconditional boot requirements):
+   - Copy `PADDLE_WEBHOOK_SECRET` (§1 #3) and `PADDLE_PRICE_TIERS` into the
+     `license-server-secrets` secret group (Northflank → project → **Secrets** →
+     `license-server-secrets` → Add secrets).
+2. **Verify the Brevo sender** (blocking for SMTP):
+   - Brevo → **Sender Identity** → verify `adikaradwiatmaja@gmail.com`.
+3. **SMTP vars**: add `OZ_SMTP_HOST`, `OZ_SMTP_PORT`, `OZ_SMTP_USER` (§1 #1),
+   `OZ_SMTP_PASSWORD`, `OZ_SMTP_FROM` to the same secret group.
+4. **Optional extras**: `OZ_DISCORD_WEBHOOK`, session TTL / health max-fails overrides.
+   Skip → defaults.
+5. **Attach + redeploy**: confirm the secret group is linked to the service, then trigger
+   the deploy (or restart) that ships the new image.
+6. **Verify** (§4) — do not stop at a green deploy; the gates are *status*, so confirm
+   the payload too.
+
+> Env changes take effect on the next service redeploy/restart — there is no hot reload.
+> If the deploy fails to boot, `/api/health` will 503 and Northflank will show the
+> failing readiness probe; check the container logs for the fail-fast message naming the
+> missing variable.
+
+---
+
+## 4. Post-deploy verification
+
+```bash
+B=https://oz--cloud--76cyv4d6bn54.code.run
+
+# 1. Gate statuses — expect all true (probe is cached ~60s after boot)
+curl -sS "$B/api/health"
+
+# 2. SMTP end-to-end — a real OTP email must land (check the inbox; also
+#    confirms Brevo accepts the verified sender)
+curl -sS -X POST "$B/api/v1/web/request-otp" \
+  -H "Content-Type: application/json" -d '{"email":"you@gmail.com"}'
+
+# 3. Webhook — the 503 is gone; a bogus body now fails with 401 (signature
+#    check), proving PADDLE_WEBHOOK_SECRET is loaded
+curl -sS -X POST "$B/api/v1/paddle/webhook" \
+  -H "Content-Type: application/json" -d '{}'
+```
+
+| Check | Pass condition |
+|---|---|
+| `/api/health` | `"smtp":{"configured":true,"verified":true}`, `"paddle":{"secret_configured":true,"price_tiers_configured":true,"price_tiers_mappings":2}`, `"rsa":{"configured":true}` |
+| `request-otp` | `200` and a real 6-digit code email arrives (not spam) |
+| `paddle/webhook` | `401` (not `503`) — secret loaded, signature verified |
+
+Then wire the alerting from `uptime-monitor.md` (`"verified":false` keyword monitor) so
+a broken relay or rotated secret pages someone.
+
+---
+
+## 5. Remaining go-live items outside Northflank (pointers)
+
+- **Website secrets** (GitHub Actions → Settings → Secrets, consumed by `website.yml`
+  and baked at build time): `PUBLIC_LICENSE_API_URL` (the `code.run` URL),
+  `PUBLIC_PADDLE_CLIENT_TOKEN`, `PUBLIC_PADDLE_ENVIRONMENT=sandbox`.
+- **Paddle sandbox checkout** still shows "Something went wrong" until a **default
+  payment link** is set (Paddle → Checkout → Checkout settings → Default payment link;
+  `localhost` is allowed for sandbox testing).
+- **Domain + SPF/DKIM/DMARC** is the real inbox-not-spam fix once `oz-pos.com` is owned
+  (see `DEPLOY.md` §7).
