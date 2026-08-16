@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
-import { checkLicenseStatus } from '@/api/license';
+import { testAuthConnection } from '@/api/license';
 import { staffLogin } from '@/api/staff';
 import { useLocalization } from '@fluent/react';
 import './SessionLockScreen.css';
@@ -47,15 +47,18 @@ export default function SessionLockScreen({
   const [authOnline, setAuthOnline] = useState<boolean | null>(null);
   const [authLatency, setAuthLatency] = useState<number | null>(null);
 
-  // Check license once on mount (decorative status pill — no continuous polling needed).
+  // Check auth-server reachability once on mount (decorative status pill —
+  // no continuous polling needed). Reachability probe needs no stored
+  // license key, so the pill goes green when the server is up even before
+  // any license is activated.
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const start = performance.now();
-        const result = await checkLicenseStatus();
+        const result = await testAuthConnection();
         if (!mounted) return;
-        if (result.active) {
+        if (result.ok) {
           setAuthLatency(Math.round(performance.now() - start));
           setAuthOnline(true);
         } else {

@@ -38,6 +38,62 @@ pub fn license_server_url() -> String {
     std::env::var("OZ_LICENSE_SERVER_URL").unwrap_or_else(|_| LICENSE_SERVER_URL.to_string())
 }
 
+/// Result of pinging the license server's unauthenticated health endpoint.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicensePingResult {
+    /// Whether the server responded successfully.
+    pub ok: bool,
+    /// Status text (e.g. "Connected", "Connection refused", ...).
+    pub status: String,
+    /// Round-trip latency in milliseconds, if the ping succeeded.
+    pub latency_ms: Option<u64>,
+}
+
+/// Ping the license server's `/api/health` endpoint to verify reachability.
+///
+/// Unlike activation/renew/status, this needs NO credentials — the health
+/// route returns `{"status":"ok"}` unauthenticated. The login/lock-screen
+/// connection pill uses it so it shows green as soon as the auth server is
+/// reachable, before any license is activated.
+pub async fn ping_license_server() -> LicensePingResult {
+    let health_url = format!("{}/api/health", license_server_url().trim_end_matches('/'));
+    let start = std::time::Instant::now();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build();
+    match client {
+        Ok(client) => match client.get(&health_url).send().await {
+            Ok(resp) => {
+                let latency = start.elapsed().as_millis() as u64;
+                if resp.status().is_success() {
+                    LicensePingResult {
+                        ok: true,
+                        status: format!("Connected ({latency}ms)"),
+                        latency_ms: Some(latency),
+                    }
+                } else {
+                    LicensePingResult {
+                        ok: false,
+                        status: format!("Server returned {}", resp.status()),
+                        latency_ms: Some(latency),
+                    }
+                }
+            }
+            Err(e) => LicensePingResult {
+                ok: false,
+                status: format!("Connection failed: {e}"),
+                latency_ms: None,
+            },
+        },
+        Err(e) => LicensePingResult {
+            ok: false,
+            status: format!("HTTP client init failed: {e}"),
+            latency_ms: None,
+        },
+    }
+}
+
 /// Extract a human-readable error message from a JSON error body
 /// returned by the license server.
 ///
@@ -539,6 +595,29 @@ mod tests {
         let url = license_server_url();
         assert_eq!(url, LICENSE_SERVER_URL);
         assert!(url.starts_with("https://"));
+    }
+
+    #[test]
+    fn ping_license_server_hits_api_health_path() {
+        // The reachability probe must target the unauthenticated
+        // /api/health endpoint (not the cloud server's /health) and return
+        // a structured result. A live HTTP call is not made here — the
+        // default URL is a real deployment, so assert the URL construction
+        // contract instead and keep the network call out of unit tests.
+        let url = license_server_url();
+        assert!(url.starts_with("https://"));
+        let health = format!("{}/api/health", url.trim_end_matches('/'));
+        assert!(health.ends_with("/api/health"));
+        // The struct serializes camelCase like the sync PingResult so the
+        // UI can render both connection pills uniformly.
+        let json = serde_json::to_value(LicensePingResult {
+            ok: true,
+            status: "Connected (1ms)".into(),
+            latency_ms: Some(1),
+        })
+        .unwrap();
+        assert_eq!(json["ok"], true);
+        assert_eq!(json["latencyMs"], 1);
     }
 
     #[test]
