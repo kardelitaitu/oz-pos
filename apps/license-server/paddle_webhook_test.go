@@ -601,6 +601,20 @@ func TestPaddleWebhook_SubscriptionUpdated_SyncsTierAndExpiry(t *testing.T) {
 		t.Errorf("expected key expiry synced to sub expiry (%s), got %s",
 			subRec.GetString("expires_at"), keyRec.GetString("expires_at"))
 	}
+
+	// The record's grace_until must be refreshed with the new period: the
+	// re-signed payload already carries calculateGraceUntil(new expires_at),
+	// and /me (subscriptionSummary) reads the record — a stale value would
+	// make the dashboard's "Grace until" disagree with the signed payload.
+	wantGrace := calculateGraceUntil(subRec.GetDateTime("expires_at").Time())
+	gotGrace := subRec.GetDateTime("grace_until").Time()
+	if !wantGrace.Equal(gotGrace) {
+		t.Errorf("expected grace_until refreshed to %s after period extension, got %s",
+			wantGrace.Format(time.RFC3339), gotGrace.Format(time.RFC3339))
+	}
+	if !strings.Contains(subRec.GetString("signed_payload"), fmt.Sprintf(`"grace_until":%q`, wantGrace.Format(time.RFC3339))) {
+		t.Errorf("signed payload should carry the same refreshed grace_until, got: %s", subRec.GetString("signed_payload"))
+	}
 }
 
 func TestPaddleWebhook_SubscriptionCanceled_GracePeriod(t *testing.T) {
@@ -802,6 +816,181 @@ func TestPaddleWebhook_SubscriptionResumed_BackToActive(t *testing.T) {
 	}
 	if !strings.Contains(subRec.GetString("signed_payload"), `"status":"active"`) {
 		t.Errorf("resumed subscription must be re-signed as active, got: %s", subRec.GetString("signed_payload"))
+	}
+
+	// Resume starts a fresh billing period (no period in the test payload →
+	// calculateExpiry from now), so the record's grace_until must be
+	// refreshed and the license key's expiry re-synced — otherwise /me shows
+	// a stale grace date and the key expires at the old date while the
+	// subscription says otherwise.
+	wantGrace := calculateGraceUntil(subRec.GetDateTime("expires_at").Time())
+	gotGrace := subRec.GetDateTime("grace_until").Time()
+	if !wantGrace.Equal(gotGrace) {
+		t.Errorf("expected grace_until refreshed to %s after resume, got %s",
+			wantGrace.Format(time.RFC3339), gotGrace.Format(time.RFC3339))
+	}
+	keyRec, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_res_001")
+	if err != nil {
+		t.Fatalf("license key not found: %v", err)
+	}
+	if keyRec.GetString("expires_at") != subRec.GetString("expires_at") {
+		t.Errorf("expected key expiry re-synced to resumed sub expiry (%s), got %s",
+			subRec.GetString("expires_at"), keyRec.GetString("expires_at"))
+	}
+}
+
+// TestWebhookLifecycle_MeTracksCancelAndResume drives the full subscription
+// lifecycle through the REAL webhook endpoint and asserts the dashboard
+// (/api/v1/web/me) payload after every transition: created → updated (tier
+// change + period extension) → canceled (grace) → resumed (active). This is
+// the surface subscriptionSummary / licenseSummary feed — a stale grace_until
+// or unsynced key expiry here is exactly what the account page would show.
+func TestWebhookLifecycle_MeTracksCancelAndResume(t *testing.T) {
+	resetPaddleDedup()
+	resetRateLimiters()
+	setPaddleEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	provisionForEvents(t, app, se, "sub_life_001")
+
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "lc@example.com")
+	if err != nil {
+		t.Fatalf("webhook-created tenant not found: %v", err)
+	}
+	token := "lifecycle-session-0001"
+	webOtpStore.createSession(hashWebToken(token), tenant.Id)
+
+	me := func(t *testing.T) (license, sub map[string]any) {
+		t.Helper()
+		rec := webRequest(t, se, http.MethodGet, "/api/v1/web/me", "",
+			"http://localhost:4321", "Bearer "+token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected /me 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			License map[string]any `json:"license"`
+			Sub     map[string]any `json:"subscription"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse /me: %v", err)
+		}
+		return resp.License, resp.Sub
+	}
+
+	// 1. created → active pro subscription + minted key surfaced.
+	license, sub := me(t)
+	if sub == nil || sub["status"] != "active" || sub["tierKey"] != "pro" {
+		t.Fatalf("expected active pro sub after created, got %v", sub)
+	}
+	if license == nil || license["key"] == "" {
+		t.Fatalf("expected minted license key after created, got %v", license)
+	}
+
+	// 2. updated → premium + period extended to +2y. PocketBase stores
+	// whole seconds, so truncate the expectation or Equal() fails on the
+	// fractional-second difference Format() hides.
+	newEnds := time.Now().UTC().Truncate(time.Second).AddDate(2, 0, 0)
+	body := fmt.Sprintf(`{
+  "event_id": "evt_life_upd_001",
+  "event_type": "subscription.updated",
+  "data": {
+    "id": "sub_life_001",
+    "status": "active",
+    "customer_id": "cus_lc_001",
+    "items": [{"price": {"id": "pri_test_premium", "product_id": "pro_test"}, "quantity": 1}],
+    "current_billing_period": {"starts_at": %q, "ends_at": %q}
+  }
+}`, time.Now().UTC().Format(time.RFC3339), newEnds.Format(time.RFC3339))
+	if rec := sendPaddleEvent(t, se, body); rec.Code != http.StatusOK {
+		t.Fatalf("updated webhook failed: %d: %s", rec.Code, rec.Body.String())
+	}
+	license, sub = me(t)
+	if sub["tierKey"] != "premium" || sub["status"] != "active" {
+		t.Errorf("expected premium active after update, got %v", sub)
+	}
+	if license["tierKey"] != "premium" {
+		t.Errorf("expected license tier synced to premium, got %v", license["tierKey"])
+	}
+	subRec, err := app.FindFirstRecordByData("subscriptions", "paddle_sub_id", "sub_life_001")
+	if err != nil {
+		t.Fatalf("subscription not found: %v", err)
+	}
+	wantGrace := calculateGraceUntil(newEnds)
+	if got := subRec.GetDateTime("grace_until").Time(); !wantGrace.Equal(got) {
+		t.Errorf("after update: expected record grace_until %s, got %s",
+			wantGrace.Format(time.RFC3339), got.Format(time.RFC3339))
+	}
+	if sub["graceUntil"] != subRec.GetString("grace_until") {
+		t.Errorf("after update: /me graceUntil (%v) must match the record (%s)",
+			sub["graceUntil"], subRec.GetString("grace_until"))
+	}
+
+	// 3. canceled → grace_period until the scheduled change (whole-second
+	// expectation — see note above).
+	effective := time.Now().UTC().Truncate(time.Second).AddDate(0, 2, 0)
+	body = fmt.Sprintf(`{
+  "event_id": "evt_life_can_001",
+  "event_type": "subscription.canceled",
+  "data": {
+    "id": "sub_life_001",
+    "status": "canceled",
+    "customer_id": "cus_lc_001",
+    "items": [{"price": {"id": "pri_test_premium", "product_id": "pro_test"}, "quantity": 1}],
+    "scheduled_change": {"effective_at": %q, "status": "canceled"}
+  }
+}`, effective.Format(time.RFC3339))
+	if rec := sendPaddleEvent(t, se, body); rec.Code != http.StatusOK {
+		t.Fatalf("canceled webhook failed: %d: %s", rec.Code, rec.Body.String())
+	}
+	_, sub = me(t)
+	if sub == nil || sub["status"] != "grace_period" {
+		t.Fatalf("expected grace_period after cancel, got %v", sub)
+	}
+	subRec, err = app.FindFirstRecordByData("subscriptions", "paddle_sub_id", "sub_life_001")
+	if err != nil {
+		t.Fatalf("subscription not found: %v", err)
+	}
+	if got := subRec.GetDateTime("grace_until").Time(); !effective.Equal(got) {
+		t.Errorf("after cancel: expected grace_until %s, got %s",
+			effective.Format(time.RFC3339), got.Format(time.RFC3339))
+	}
+	if sub["graceUntil"] != subRec.GetString("grace_until") {
+		t.Errorf("after cancel: /me graceUntil (%v) must match the record (%s)",
+			sub["graceUntil"], subRec.GetString("grace_until"))
+	}
+
+	// 4. resumed → back to active with a fresh grace window.
+	if rec := sendPaddleEvent(t, se, subEventBody("subscription.resumed", "evt_life_res_001", "sub_life_001", "active")); rec.Code != http.StatusOK {
+		t.Fatalf("resumed webhook failed: %d: %s", rec.Code, rec.Body.String())
+	}
+	license, sub = me(t)
+	if sub == nil || sub["status"] != "active" || sub["tierKey"] != "premium" {
+		t.Fatalf("expected active premium after resume, got %v", sub)
+	}
+	subRec, err = app.FindFirstRecordByData("subscriptions", "paddle_sub_id", "sub_life_001")
+	if err != nil {
+		t.Fatalf("subscription not found: %v", err)
+	}
+	wantGrace = calculateGraceUntil(subRec.GetDateTime("expires_at").Time())
+	if got := subRec.GetDateTime("grace_until").Time(); !wantGrace.Equal(got) {
+		t.Errorf("after resume: expected record grace_until %s, got %s",
+			wantGrace.Format(time.RFC3339), got.Format(time.RFC3339))
+	}
+	if sub["graceUntil"] != subRec.GetString("grace_until") {
+		t.Errorf("after resume: /me graceUntil (%v) must match the record (%s)",
+			sub["graceUntil"], subRec.GetString("grace_until"))
+	}
+	keyRec, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_life_001")
+	if err != nil {
+		t.Fatalf("license key not found: %v", err)
+	}
+	if keyRec.GetString("expires_at") != subRec.GetString("expires_at") {
+		t.Errorf("after resume: key expiry (%s) must match sub expiry (%s)",
+			keyRec.GetString("expires_at"), subRec.GetString("expires_at"))
+	}
+	if license["key"] == "" {
+		t.Error("after resume: license key must still be surfaced")
 	}
 }
 
