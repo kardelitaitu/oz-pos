@@ -122,6 +122,10 @@ func TestRequestOTP_SelfSignupCreatesTenantAndSendsCode(t *testing.T) {
 	if tenant.GetString("api_key") == "" || tenant.GetString("api_key_lookup") == "" {
 		t.Error("expected placeholder api_key + lookup to be set on the new tenant")
 	}
+	// Self-signup does NOT verify the email — that happens at verify-otp.
+	if tenant.GetBool("email_verified") {
+		t.Error("expected a self-signed tenant to start email_verified=false")
+	}
 	webOtpStore.mu.Lock()
 	_, stored := webOtpStore.codes["nobody@example.com"]
 	webOtpStore.mu.Unlock()
@@ -171,6 +175,19 @@ func TestVerifyOTP_AfterSelfSignupIssuesSession(t *testing.T) {
 	}
 	if resp.Tenant["email"] != "newuser@example.com" {
 		t.Errorf("expected tenant email newuser@example.com, got %v", resp.Tenant["email"])
+	}
+	// Completing OTP verification must flip email_verified to true, both
+	// in the response and on the persisted record (the dashboard reads
+	// this from /me).
+	if resp.Tenant["emailVerified"] != true {
+		t.Errorf("expected emailVerified=true in the verify response, got %v", resp.Tenant["emailVerified"])
+	}
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "newuser@example.com")
+	if err != nil || tenant == nil {
+		t.Fatalf("tenant should exist after verify: %v", err)
+	}
+	if !tenant.GetBool("email_verified") {
+		t.Error("expected the persisted tenant record to be email_verified=true after verify-otp")
 	}
 }
 
@@ -438,6 +455,9 @@ func TestMe_ReturnsTenantProfile(t *testing.T) {
 	}
 	if resp.Tenant["status"] != "active" {
 		t.Errorf("unexpected tenant status: %v", resp.Tenant["status"])
+	}
+	if resp.Tenant["emailVerified"] != false {
+		t.Errorf("expected emailVerified=false for a seeded (never-verified) tenant, got %v", resp.Tenant["emailVerified"])
 	}
 	if resp.License["key"] != "OZ-ME-KEY-000001" {
 		t.Errorf("unexpected license key: %v", resp.License["key"])

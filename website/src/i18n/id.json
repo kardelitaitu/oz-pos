@@ -205,7 +205,10 @@
     "subscribe": "Berlangganan",
     "subscription": "Langganan",
     "starts": "Mulai",
-    "grace": "Masa tenggang hingga"
+    "grace": "Masa tenggang hingga",
+    "emailVerified": "Email terverifikasi",
+    "verified": "Terverifikasi",
+    "notVerified": "Belum terverifikasi"
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",

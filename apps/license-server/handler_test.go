@@ -141,6 +141,12 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		// the tracker variables are package globals.
 		ipRateLimiter.attachPersistence(app)
 		keyFailTracker.attachPersistence(app)
+		// Mirror production boot: add the email_verified field to the
+		// tenants collection (createTestCollections deliberately omits
+		// it so the migration path is exercised).
+		if err := ensureEmailVerifiedField(app); err != nil {
+			return err
+		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))

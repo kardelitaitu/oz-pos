@@ -559,6 +559,9 @@ func createTenantForEmail(app core.App, email string) (*core.Record, error) {
 	tenant.Set("api_key", hash)
 	tenant.Set("api_key_lookup", lookup)
 	tenant.Set("status", "active")
+	// Verification is a separate step: a self-signed account is NOT yet
+	// email-verified until the user proves inbox ownership via verify-otp.
+	tenant.Set("email_verified", false)
 	if saveErr := app.Save(tenant); saveErr != nil {
 		// Unique-email race: another request registered the tenant first.
 		existing, lookupErr := app.FindFirstRecordByData("tenants", "email", email)
@@ -636,6 +639,17 @@ func handleVerifyOTP(app core.App) func(e *core.RequestEvent) error {
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "invalid or expired code",
 			})
+		}
+
+		// ── Mark the email verified ─────────────────────────────
+		// Proving inbox ownership completes registration. Best-effort:
+		// a persistence hiccup must not block the session (the flag is
+		// cosmetic until the dashboard — the next verify-otp re-runs it).
+		if !tenant.GetBool("email_verified") {
+			tenant.Set("email_verified", true)
+			if err := app.Save(tenant); err != nil {
+				log.Printf("/web/verify-otp: failed to persist email_verified for tenant %q: %v", tenant.Id, err)
+			}
 		}
 
 		// ── Issue session token ──────────────────────────────────
@@ -771,12 +785,14 @@ func is6DigitCode(code string) bool {
 	return true
 }
 
-// tenantSummary is the /me tenant block.
+// tenantSummary is the /me tenant block. Keys follow the camelCase
+// convention of the license/subscription blocks (tierKey, expiresAt, …).
 func tenantSummary(tenant *core.Record) map[string]any {
 	return map[string]any{
-		"id":     tenant.Id,
-		"email":  tenant.GetString("email"),
-		"status": tenant.GetString("status"),
+		"id":            tenant.Id,
+		"email":         tenant.GetString("email"),
+		"emailVerified": tenant.GetBool("email_verified"),
+		"status":        tenant.GetString("status"),
 	}
 }
 

@@ -688,6 +688,11 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		tenant.Set("api_key", hash)
 		tenant.Set("api_key_lookup", lookup)
 		tenant.Set("status", "active")
+		// Purchase-created tenants have not completed OTP verification
+		// (register-first means buyers usually have, but the flag's meaning
+		// is "proved inbox ownership via verify-otp" — they can do that
+		// anytime via request-otp).
+		tenant.Set("email_verified", false)
 		if saveErr := app.Save(tenant); saveErr != nil {
 			return fmt.Errorf("failed to save tenant %q: %w", email, saveErr)
 		}

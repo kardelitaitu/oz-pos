@@ -120,6 +120,13 @@ func main() {
 		if err := ensureAPIKeyLookupField(app); err != nil {
 			return err
 		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// email_verified field (added with the register-first dashboard):
+		// fresh boots get it from the embedded pb_schema.json; existing
+		// pb_data volumes get it added without reimporting the schema.
+		if err := ensureEmailVerifiedField(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -210,6 +217,30 @@ func ensureAPIKeyLookupField(app core.App) error {
 		return fmt.Errorf("failed to add api_key_lookup field: %w", err)
 	}
 	log.Println("migrated tenants collection: added api_key_lookup field + unique partial index")
+	return nil
+}
+
+// ensureEmailVerifiedField adds the tenants.email_verified bool to existing
+// deployments that predate it (fresh boots get it from the embedded
+// pb_schema.json). Idempotent: no-op once the field exists. Existing
+// records default to false — which is the correct semantics (only
+// verify-otp flips it to true).
+func ensureEmailVerifiedField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		return fmt.Errorf("tenants collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("email_verified") != nil {
+		return nil
+	}
+	collection.Fields.Add(&core.BoolField{
+		Name: "email_verified",
+		Help: "True once the tenant has completed OTP verification (verify-otp). Set false on self-signup and on webhook-created tenants; the dashboard shows this state.",
+	})
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add email_verified field: %w", err)
+	}
+	log.Println("migrated tenants collection: added email_verified field")
 	return nil
 }
 

@@ -17,6 +17,7 @@ const API = import.meta.env.PUBLIC_LICENSE_API_URL as string | undefined;
 interface MeResponse {
   tenant?: {
     email: string;
+    emailVerified: boolean;
     status: string;
   };
   license?: {
@@ -147,6 +148,22 @@ export default function AccountView({ locale }: Props) {
             <div>
               <dt className="text-muted">{t(locale, 'account.expires')}</dt>
               <dd>{license?.expiresAt ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">{t(locale, 'account.emailVerified')}</dt>
+              <dd>
+                {tenant.emailVerified ? (
+                  <span className="inline-flex items-center gap-1.5 text-link">
+                    <span aria-hidden="true">✓</span>
+                    {t(locale, 'account.verified')}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-muted">
+                    <span aria-hidden="true">○</span>
+                    {t(locale, 'account.notVerified')}
+                  </span>
+                )}
+              </dd>
             </div>
           </dl>
         </section>

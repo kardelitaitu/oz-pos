@@ -205,7 +205,10 @@
     "subscribe": "Subscribe",
     "subscription": "Subscription",
     "starts": "Starts",
-    "grace": "Grace until"
+    "grace": "Grace until",
+    "emailVerified": "Email verified",
+    "verified": "Verified",
+    "notVerified": "Not verified"
   },
   "footer": {
     "rights": "All rights reserved.",

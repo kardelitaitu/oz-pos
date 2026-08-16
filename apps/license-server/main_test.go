@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
 )
 
@@ -45,6 +46,17 @@ func TestEnsureCollections_ImportsOnFreshApp(t *testing.T) {
 		if _, err := app.FindCollectionByNameOrId(name); err != nil {
 			t.Errorf("expected %q collection to be auto-created, got: %v", name, err)
 		}
+	}
+
+	// Schema parity: the embedded schema must carry the email_verified
+	// field so fresh boots get it (existing volumes get it from the
+	// ensureEmailVerifiedField migration instead).
+	tenants, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		t.Fatalf("tenants collection should exist after import: %v", err)
+	}
+	if tenants.Fields.GetByName("email_verified") == nil {
+		t.Error("expected tenants.email_verified to be in the embedded pb_schema.json")
 	}
 }
 
@@ -1027,5 +1039,49 @@ func TestJsonMarshal_Error(t *testing.T) {
 	_, err := jsonMarshal(make(chan int)) // channels can't be marshaled
 	if err == nil {
 		t.Error("jsonMarshal should error on unmarshalable type")
+	}
+}
+
+// TestEnsureEmailVerifiedField_MigratesExistingCollection simulates a
+// deployment that predates the field: the tenants collection exists
+// WITHOUT email_verified, and the migration must add it (idempotently)
+// without touching other fields.
+func TestEnsureEmailVerifiedField_MigratesExistingCollection(t *testing.T) {
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatalf("failed to create test app: %v", err)
+	}
+	defer app.Cleanup()
+
+	tenants := core.NewBaseCollection("tenants")
+	tenants.Fields.Add(
+		&core.EmailField{Name: "email", Required: true},
+		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
+	)
+	if err := app.Save(tenants); err != nil {
+		t.Fatalf("failed to create tenants collection: %v", err)
+	}
+	if tenants.Fields.GetByName("email_verified") != nil {
+		t.Fatal("precondition failed: tenants should not have email_verified yet")
+	}
+
+	if err := ensureEmailVerifiedField(app); err != nil {
+		t.Fatalf("ensureEmailVerifiedField failed: %v", err)
+	}
+	after, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		t.Fatalf("find tenants after migration: %v", err)
+	}
+	field := after.Fields.GetByName("email_verified")
+	if field == nil {
+		t.Fatal("expected email_verified field to be added by the migration")
+	}
+	if field.Type() != core.FieldTypeBool {
+		t.Errorf("expected a bool field, got %q", field.Type())
+	}
+
+	// Idempotent: a second run must be a no-op.
+	if err := ensureEmailVerifiedField(app); err != nil {
+		t.Fatalf("second ensureEmailVerifiedField should be a no-op: %v", err)
 	}
 }
