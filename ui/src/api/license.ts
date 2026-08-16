@@ -62,3 +62,20 @@ export async function activateLicense(
 export async function renewLicense(newKey: string): Promise<boolean> {
   return loggedInvoke('renew_license', { newKey });
 }
+
+/** Auth-server reachability probe result (mirrors PingResult). */
+export interface AuthPingResult {
+  ok: boolean;
+  status: string;
+  latencyMs: number | null;
+}
+
+/**
+ * Ping the license server's /api/health endpoint to verify reachability.
+ * Unlike checkLicenseStatus, no stored license key is required — the login
+ * / lock-screen connection pill uses this so it shows green as soon as the
+ * auth server is reachable, before any license is activated.
+ */
+export async function testAuthConnection(): Promise<AuthPingResult> {
+  return loggedInvoke('test_auth_connection');
+}

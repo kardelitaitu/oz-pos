@@ -27,7 +27,14 @@ pub mod state;
 /// Debug-only bootstrap that connects the desktop client to the local
 /// dev sync server (`scripts/start-local-sync.bat` → `:3099`) without
 /// manual Settings configuration. Excluded from release builds.
+///
+/// TEMPORARILY DISABLED (2026-08-16): the auto-provision call site in
+/// `setup` is commented out while testing against the deployed cloud
+/// server, so this module's entry points are dead in non-test builds. The
+/// module stays compiled (with `#[allow(dead_code)]`) so its unit tests
+/// keep running; remove this attribute when the call site is restored.
 #[cfg(debug_assertions)]
+#[allow(dead_code)]
 mod sync_bootstrap;
 
 /// Embed `Microsoft.Windows.Common-Controls` v6 dependency into the
@@ -131,13 +138,18 @@ pub fn run() {
             // so the daemon's first tick (60–120s out) sees the fresh
             // config. Never runs in release builds — an existing
             // configuration is never touched.
-            #[cfg(debug_assertions)]
-            {
-                let bootstrap_db = app.state::<AppState>().db.clone();
-                platform_startup::spawn_daemon("sync auto-provision", async move {
-                    crate::sync_bootstrap::auto_provision_local_sync(bootstrap_db).await;
-                });
-            }
+            //
+            // TEMPORARILY DISABLED (2026-08-16): while testing against the
+            // deployed cloud server the app must NOT auto-connect to the
+            // local Docker dev server. Re-enable by uncommenting the block
+            // below (the sync_bootstrap module + tests are kept intact).
+            // #[cfg(debug_assertions)]
+            // {
+            //     let bootstrap_db = app.state::<AppState>().db.clone();
+            //     platform_startup::spawn_daemon("sync auto-provision", async move {
+            //         crate::sync_bootstrap::auto_provision_local_sync(bootstrap_db).await;
+            //     });
+            // }
 
             // ── Background sync daemon ────────────────────────────────
             let db = app.state::<AppState>().db.clone();
@@ -722,6 +734,7 @@ pub fn run() {
             commands::license::renew_license,
             commands::license::get_license_status,
             commands::license::check_license_status,
+            commands::license::test_auth_connection,
             // The legacy unscoped save_topology command is intentionally not
             // registered. All production writes use the authenticated,
             // revision-aware apply_topology_diff command.

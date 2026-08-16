@@ -412,6 +412,38 @@ pub async fn check_license_status(
     })
 }
 
+/// Data transfer object for the auth-server reachability probe.
+///
+/// Mirrors the shape the sync probe returns so the UI can render both
+/// connection pills uniformly.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthPingResult {
+    /// Whether the auth server responded successfully.
+    pub ok: bool,
+    /// Status text (e.g. "Connected", "Connection refused", ...).
+    pub status: String,
+    /// Round-trip latency in milliseconds, if the ping succeeded.
+    pub latency_ms: Option<u64>,
+}
+
+/// Ping the license server's `/api/health` endpoint to verify reachability.
+///
+/// Unlike [`check_license_status`], this probe needs NO stored license key —
+/// it answers only "is the auth server reachable?" so the login/lock-screen
+/// connection pill can show green before any license is activated. The
+/// endpoint is unauthenticated (the license server's health route returns
+/// `{"status":"ok"}` without credentials).
+#[tauri::command]
+pub async fn test_auth_connection() -> Result<AuthPingResult, AppError> {
+    let result = oz_core::license_verification::ping_license_server().await;
+    Ok(AuthPingResult {
+        ok: result.ok,
+        status: result.status,
+        latency_ms: result.latency_ms,
+    })
+}
+
 /// Analyzes the local license state and returns a comprehensive status response.
 #[tauri::command]
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseStatusDto, AppError> {

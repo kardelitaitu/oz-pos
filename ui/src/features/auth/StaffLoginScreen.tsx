@@ -4,7 +4,7 @@ import { checkUsername } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBrand } from '@/contexts/BrandContext';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
-import { checkLicenseStatus } from '@/api/license';
+import { testAuthConnection } from '@/api/license';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { Localized } from '@/frontend/shared/Localized';
@@ -137,9 +137,11 @@ export default function StaffLoginScreen() {
     const check = async () => {
       try {
         const start = performance.now();
-        const result = await checkLicenseStatus();
+        // Reachability probe — no stored license key required, so the pill
+        // shows green as soon as the auth server is reachable.
+        const result = await testAuthConnection();
         if (!mounted) return;
-        if (result.active) {
+        if (result.ok) {
           setAuthLatency(Math.round(performance.now() - start));
           setAuthOnline(true);
         } else {

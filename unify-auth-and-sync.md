@@ -410,6 +410,51 @@ Status: **done** — `Dockerfile.unified`, `apps/unified/supervisord.conf`,
 | 3.3 | Point the POS at the single URL; keep redirect mode (421) for stragglers |
 | 3.4 | Decommission the two old Northflank services |
 
+### Phase 3.5: Switchover checklist (executed 2026-08-16)
+
+The unified image was deployed to the `oz-sync` Northflank service
+(`Dockerfile.unified`, single volume at `/data`). The old standalone
+`oz-pos-license-service` is decommissioned afterwards.
+
+**Client code — auth URL repointed to the unified host** (the old
+`auth--oz-pos-license-service--76cyv4d6bn54.code.run` is gone):
+
+| File | Change |
+|------|--------|
+| `crates/oz-core/src/license_verification.rs` | `LICENSE_SERVER_URL` → `https://p01--oz-sync--76cyv4d6bn54.code.run` (env override `OZ_LICENSE_SERVER_URL`) |
+| `apps/desktop-client/tauri.conf.json` | CSP `connect-src` adds the unified host |
+| `apps/tablet-client/tauri.conf.json` | CSP `connect-src` adds the unified host |
+| `ui/src/features/auth/LicenseActivationScreen.tsx` | `AUTH_SERVICE_URL` fallback → unified host (`VITE_AUTH_SERVICE_URL` overrides) |
+| `ui/src/features/auth/__tests__/LicenseActivationScreen.test.tsx` | pinned URL updated |
+
+**Unified service env vars (Northflank → Configuration):**
+
+| Variable | Source | Notes |
+|----------|--------|-------|
+| `OZ_LICENSE_PRIVATE_KEY` | copy from old license service | required (Go exits without it) |
+| `OZ_API_SECRET` | `openssl rand -hex 32` | required by `OZ_PRODUCTION=1` |
+| `OZ_ADMIN_KEY` | random string | required by `OZ_PRODUCTION=1`; gates token mint |
+| `OZ_PRODUCTION` | `1` | fail-closed boot (both secrets + TLS posture) |
+| `OZ_CORS_ORIGINS` | optional | extra origins beyond the default allowlist |
+| `OZ_ENFORCE_PLANS` | `1` | reject free-plan sync (403 plan_required) |
+| `PADDLE_WEBHOOK_SECRET` + `PADDLE_PRICE_TIERS` | copy from old license service | Paddle webhook provisioning |
+| `OZ_SMTP_*` / `OZ_DISCORD_WEBHOOK` / `OZ_WEB_ALLOWED_ORIGINS` | copy from old license service | optional, if configured |
+
+**Data migration (PocketBase backup → restore):**
+
+1. On the OLD license service, create a PocketBase backup via the admin UI
+   (`/_/` → Settings → Backups → Create backup) or `POST /api/backups`.
+2. Download the backup zip; keep it until the unified service is verified.
+3. On the UNIFIED service, open its PocketBase admin UI (`/_/`), create the
+   superuser (first-boot installer link), then Settings → Backups → restore
+   the downloaded zip.
+4. Verify: `license_keys`, `tenants`, `subscriptions`, `tenant_machines`
+   collections are populated and `/api/health` is green.
+
+The sync SQLite (`/data/oz-pos.db`) is fresh on the unified volume — any
+pending offline queue is per-install and re-syncs once a sync URL + API key
+are configured.
+
 ---
 
 ## 7. Code Changes Required
@@ -454,12 +499,18 @@ Status: **done** — `Dockerfile.unified`, `apps/unified/supervisord.conf`,
 ### Auth function (PocketBase)
 
 ```bash
-PB_DATA_DIR=/data/pb_data
 PB_URL=https://api.oz-pos.com
 OZ_LICENSE_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----..."
 # SMTP for web_users email (future website)
 SMTP_HOST=... SMTP_PORT=587 SMTP_USERNAME=... SMTP_PASSWORD=...
 ```
+
+> **DOCKER-11 (single volume):** PocketBase's data directory is NOT set via
+> an env var — `apps/unified/supervisord.conf` passes `--dir=/data/pb_data`
+> to `pocketbase serve`, so PocketBase writes inside the SAME `/data`
+> volume as the sync SQLite DB (`/data/oz-pos.db`). One persistent volume
+> therefore covers both functions (Northflank free tier grants one volume
+> per service).
 
 ### Sync function (Rust)
 

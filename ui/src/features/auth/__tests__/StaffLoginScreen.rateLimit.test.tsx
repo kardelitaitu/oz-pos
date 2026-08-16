@@ -40,7 +40,7 @@ vi.mock('@/hooks/useSyncConnection', () => ({
 }));
 
 vi.mock('@/api/license', () => ({
-  checkLicenseStatus: vi.fn().mockResolvedValue({ active: true }),
+  testAuthConnection: vi.fn().mockResolvedValue({ ok: true, status: 'Connected', latencyMs: 10 }),
 }));
 
 vi.mock('@/contexts/BrandContext', () => ({

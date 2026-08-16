@@ -562,7 +562,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     it('46. Renders the ConnectionStatus for the Auth server with the correct URL', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const authConn = screen.getByTestId('conn-status-Auth');
-      expect(authConn).toHaveTextContent('Auth: https://auth--oz-pos-license-service--76cyv4d6bn54.code.run');
+      expect(authConn).toHaveTextContent('Auth: https://p01--oz-sync--76cyv4d6bn54.code.run');
     });
 
     it('47. Renders the ConnectionStatus for the Sync server', () => {

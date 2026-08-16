@@ -1448,6 +1448,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'get_license_status': () => ({ isActive: true, status: 'valid', tier: 'pro', payload: null, message: null }),
   'check_license_status': () => ({ tenantId: 'tenant-1', status: 'active', tier: 'Pro', active: true, expiresAt: null, graceUntil: null, maxStores: 5 }),
+  'test_auth_connection': () => ({ ok: true, status: 'Connected (12ms)', latencyMs: 12 }),
   'get_machine_id': () => 'mock-machine-id-001',
   'get_device_id': () => 'mock-device-id-001',
   'activate_license': () => true,

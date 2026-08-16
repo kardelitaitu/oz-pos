@@ -257,13 +257,15 @@ describe('CloudSyncSettings', () => {
   //  Server URL field
   // ═══════════════════════════════════════════════════════════════
 
-  it('falls back to the local server URL when none is configured', async () => {
+  it('leaves the server URL empty when none is configured', async () => {
     await waitForSyncSection();
 
     const urlInput = getServerUrlInput();
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.type).toBe('url');
-    expect(urlInput).toHaveValue('http://localhost:3099');
+    // TEMPORARILY DISABLED (2026-08-16): no local-Docker pre-fill while
+    // testing against the deployed cloud server.
+    expect(urlInput).toHaveValue('');
   });
 
   it('updates server URL input value when typing', async () => {
@@ -415,12 +417,14 @@ describe('CloudSyncSettings', () => {
   //  Enabled toggle
   // ═══════════════════════════════════════════════════════════════
 
-  it('enables cloud sync by default when no setting is configured', async () => {
+  it('does not enable cloud sync by default when no setting is configured', async () => {
     await waitForSyncSection();
 
     const checkbox = getEnabledCheckbox();
     expect(checkbox).toBeInTheDocument();
-    expect(checkbox.checked).toBe(true);
+    // TEMPORARILY DISABLED (2026-08-16): no local-Docker fallback, so an
+    // unconfigured sync stays disabled.
+    expect(checkbox.checked).toBe(false);
   });
 
   it('toggles enabled state on click', async () => {
@@ -431,10 +435,10 @@ describe('CloudSyncSettings', () => {
     const wrapper = checkbox.closest('.settings-toggle') as HTMLLabelElement;
 
     await user.click(wrapper);
-    expect(checkbox.checked).toBe(false);
+    expect(checkbox.checked).toBe(true);
 
     await user.click(wrapper);
-    expect(checkbox.checked).toBe(true);
+    expect(checkbox.checked).toBe(false);
   });
 
   it('sends enabled flag to backend on save', async () => {
@@ -443,7 +447,7 @@ describe('CloudSyncSettings', () => {
 
     const checkbox = getEnabledCheckbox();
     const wrapper = checkbox.closest('.settings-toggle') as HTMLLabelElement;
-    await user.click(wrapper);
+    // Start disabled (no local fallback) — one click enables.
     await user.click(wrapper);
 
     fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
@@ -461,27 +465,31 @@ describe('CloudSyncSettings', () => {
   //  Not-configured hint
   // ═══════════════════════════════════════════════════════════════
 
-  it('does not show a not-configured hint with the fallback sync settings', async () => {
+  it('shows a not-configured hint when no sync server is configured', async () => {
     await waitForSyncSection();
 
-    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
+    // TEMPORARILY DISABLED (2026-08-16): with the local-Docker fallback
+    // commented out, an unconfigured sync surfaces the hint again.
+    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
   });
 
-  it('keeps the not-configured hint hidden while fallback sync is enabled', async () => {
+  it('keeps the not-configured hint visible while sync is unconfigured', async () => {
     await waitForSyncSection();
 
-    expect(getEnabledCheckbox().checked).toBe(true);
-    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
+    expect(getEnabledCheckbox().checked).toBe(false);
+    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
   });
 
   // ═══════════════════════════════════════════════════════════════
   //  Sync Now button
   // ═══════════════════════════════════════════════════════════════
 
-  it('renders Sync Now when fallback sync is configured', async () => {
+  it('hides Sync Now until a server URL is configured', async () => {
     await waitForSyncSection();
 
-    expect(screen.getByRole('button', { name: /sync now/i })).toBeInTheDocument();
+    // TEMPORARILY DISABLED (2026-08-16): with no local-Docker fallback the
+    // actions row (incl. Sync Now) only renders once a URL is set.
+    expect(screen.queryByRole('button', { name: /sync now/i })).not.toBeInTheDocument();
   });
 
   it('renders Sync Now button when serverUrl is set', async () => {
@@ -615,8 +623,9 @@ describe('CloudSyncSettings', () => {
   it('updates serverUrl in sync state after save so not-configured hint disappears', async () => {
     await waitForSyncSection();
 
-    // The fallback settings are already configured.
-    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
+    // TEMPORARILY DISABLED (2026-08-16): the hint is visible because the
+    // local-Docker fallback no longer pre-fills a URL.
+    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
 
     // Fill server URL and save
     fireEvent.change(getServerUrlInput(), { target: { value: 'https://sync.example.com' } });

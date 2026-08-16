@@ -450,19 +450,23 @@ pub async fn get_sync_plan(
     }
 }
 
+// TEMPORARILY DISABLED (2026-08-16): see the commented fallback in
+// `resolve_sync_probe_url` — the local Docker dev URL must not be used
+// while testing against the deployed cloud server. Re-enable together
+// with the fallback block it feeds.
+// #[cfg(debug_assertions)]
+// const LOCAL_DEV_SYNC_URL: &str = "http://localhost:3099";
+
 /// Resolve the URL used by the status-bar health probe.
 ///
 /// Explicitly supplied and persisted URLs always win. The debug-only local
 /// fallback is intentionally added here rather than in the frontend so the
 /// status indicator can recover even while auto-provisioning is still writing
 /// the persisted settings row.
-#[cfg(debug_assertions)]
-const LOCAL_DEV_SYNC_URL: &str = "http://localhost:3099";
-
 fn resolve_sync_probe_url(
     candidate: Option<String>,
     saved: Option<String>,
-    allow_local_fallback: bool,
+    _allow_local_fallback: bool,
 ) -> Option<String> {
     if let Some(url) = candidate.filter(|url| !url.trim().is_empty()) {
         return Some(url);
@@ -476,10 +480,14 @@ fn resolve_sync_probe_url(
     // Keep this fallback debug-only so production never probes localhost
     // behind the operator's back. An empty URL is unconfigured; an explicit
     // opt-out is represented by keeping a configured URL and disabling sync.
-    #[cfg(debug_assertions)]
-    if allow_local_fallback {
-        return Some(LOCAL_DEV_SYNC_URL.to_string());
-    }
+    //
+    // TEMPORARILY DISABLED (2026-08-16): while testing against the deployed
+    // cloud server the status indicator must not fall back to the local
+    // Docker dev server. Re-enable by uncommenting the block below.
+    // #[cfg(debug_assertions)]
+    // if allow_local_fallback {
+    //     return Some(LOCAL_DEV_SYNC_URL.to_string());
+    // }
 
     None
 }
@@ -688,15 +696,18 @@ mod tests {
         assert_eq!(json["hasApiKey"], false);
         assert_eq!(json["enabled"], false);
     }
-
     #[cfg(debug_assertions)]
     #[test]
-    fn sync_probe_uses_local_dev_server_before_bootstrap_persists_settings() {
+    fn sync_probe_never_uses_local_dev_server_while_cloud_testing() {
+        // TEMPORARILY DISABLED (2026-08-16): the local-Docker fallback is
+        // commented out while testing against the deployed cloud server, so
+        // an unconfigured sync stays unconfigured — the probe resolves None
+        // regardless of the allow_local_fallback flag.
         let resolved = resolve_sync_probe_url(None, None, true);
-        assert_eq!(resolved.as_deref(), Some("http://localhost:3099"));
+        assert_eq!(resolved.as_deref(), None);
         assert_eq!(
             resolve_sync_probe_url(None, Some(String::new()), true).as_deref(),
-            Some("http://localhost:3099")
+            None
         );
         assert_eq!(resolve_sync_probe_url(None, None, false), None);
     }

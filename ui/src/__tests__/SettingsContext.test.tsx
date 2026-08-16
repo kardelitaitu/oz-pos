@@ -223,7 +223,7 @@ describe('SettingsContext', () => {
     expect(result.current.settings.appVersion).toBe('0.0.19');
   });
 
-  it('defaults an unconfigured sync server to local development sync', async () => {
+  it('keeps an unconfigured sync server unconfigured (no local fallback)', async () => {
     Object.assign(mocks.syncSettings, {
       serverUrl: null,
       hasApiKey: true,
@@ -236,8 +236,11 @@ describe('SettingsContext', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.settings.sync.serverUrl).toBe('http://localhost:3099');
-    expect(result.current.settings.sync.enabled).toBe(true);
+    // TEMPORARILY DISABLED (2026-08-16): the local-Docker default is
+    // commented out while testing against the deployed cloud server, so an
+    // unconfigured sync stays unconfigured.
+    expect(result.current.settings.sync.serverUrl).toBeNull();
+    expect(result.current.settings.sync.enabled).toBe(false);
     expect(result.current.settings.sync.hasApiKey).toBe(true);
   });
 

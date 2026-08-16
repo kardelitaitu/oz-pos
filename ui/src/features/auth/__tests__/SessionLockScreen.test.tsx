@@ -23,7 +23,7 @@ vi.mock('@/hooks/useSyncConnection', () => ({
 }));
 
 vi.mock('@/api/license', () => ({
-  checkLicenseStatus: vi.fn().mockResolvedValue({ active: true }),
+  testAuthConnection: vi.fn().mockResolvedValue({ ok: true, status: 'Connected', latencyMs: 10 }),
 }));
 
 vi.mock('@/frontend/shared/Toast', () => ({
@@ -375,12 +375,12 @@ describe('SessionLockScreen', () => {
     });
 
     it('does not call setState after unmount during license check', async () => {
-      let resolveCheck: (v: { active: boolean }) => void = () => {};
-      const { checkLicenseStatus: checkFn } = await import('@/api/license');
+      let resolveCheck: (v: { ok: boolean }) => void = () => {};
+      const { testAuthConnection: checkFn } = await import('@/api/license');
       (checkFn as ReturnType<typeof vi.fn>).mockReturnValue(new Promise(resolve => { resolveCheck = resolve; }));
       const { unmount } = render(<SessionLockScreen onUnlock={mockOnUnlock} />);
       unmount();
-      expect(() => resolveCheck({ active: true })).not.toThrow();
+      expect(() => resolveCheck({ ok: true })).not.toThrow();
     });
   });
 

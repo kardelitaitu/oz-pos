@@ -12,7 +12,7 @@ import SessionLockScreen from '@/features/auth/SessionLockScreen';
 const { mockOnUnlock, mockStaffLogin, mockCheckLicenseStatus } = vi.hoisted(() => ({
   mockOnUnlock: vi.fn(),
   mockStaffLogin: vi.fn(),
-  mockCheckLicenseStatus: vi.fn(() => Promise.resolve({ active: true })),
+  mockCheckLicenseStatus: vi.fn(() => Promise.resolve({ ok: true, status: 'Connected', latencyMs: 10 })),
 }));
 
 vi.mock('@/api/staff', () => ({
@@ -20,7 +20,7 @@ vi.mock('@/api/staff', () => ({
 }));
 
 vi.mock('@/api/license', () => ({
-  checkLicenseStatus: () => mockCheckLicenseStatus(),
+  testAuthConnection: () => mockCheckLicenseStatus(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -95,7 +95,7 @@ function isDotFilled(i: number): boolean {
 beforeEach(() => {
   vi.clearAllMocks();
   mockStaffLogin.mockResolvedValue(undefined);
-  mockCheckLicenseStatus.mockResolvedValue({ active: true });
+  mockCheckLicenseStatus.mockResolvedValue({ ok: true, status: 'Connected', latencyMs: 10 });
   sessionStorage.setItem('current-username', 'testuser');
 });
 
