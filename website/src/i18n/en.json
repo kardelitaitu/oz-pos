@@ -156,9 +156,9 @@
   },
   "download": {
     "title": "Download OZ-POS",
-    "subtitle": "Version 0.0.25 — free 90-day trial, no signup required.",
+    "subtitle": "Version 0.0.26 — free 90-day trial, no signup required.",
     "version": "Current version",
-    "versionValue": "0.0.25",
+    "versionValue": "0.0.26",
     "platformsTitle": "Choose your platform",
     "requirementsTitle": "System requirements",
     "requirements": [

@@ -27,10 +27,20 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website.yml'
+      # Portal sources: the built docs-portal ships inside the website bundle,
+      # so a change to any of these must redeploy the site.
+      - 'scripts/build-docs.*'
+      - 'scripts/gen-summary.py'
+      - 'docs/**'
+      - 'ui/src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   pull_request:
     branches: [main]
     paths:
       - 'website/**'
+  # Manual redeploy (e.g. pick up a portal rebuild without a source change).
+  workflow_dispatch:
 
 env:
   # Baked into the JS bundle at build time (import.meta.env) — must be set
@@ -75,6 +85,43 @@ jobs:
           cache-dependency-path: 'website/package-lock.json'
       - run: cd website && npm ci --no-audit --no-fund
       - run: cd website && npx playwright install --with-deps chromium
+      # ── Docs portal build ────────────────────────────────────────────
+      # The portal (docs/book/) is generated (mdBook hub + cargo doc + TypeDoc)
+      # and staged into website/public/docs-portal by import-portal.sh during
+      # `npm run build`. docs.yml compiles cargo doc on its own schedule; here
+      # we run the full build-docs.sh so the mdBook hub and TypeDoc ship too.
+      #
+      # SOFT-FAIL (continue-on-error): a docs build hiccup must never block the
+      # marketing site deploy. When it fails, docs/book stays absent, the
+      # import-portal step skips, and the docs hub degrades to the Get Started
+      # card (see src/pages/[locale]/docs/index.astro portalExists gate) —
+      # no dead links, site still ships.
+      - name: Install Rust toolchain (portal cargo doc)
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Install system dependencies (portal cargo doc)
+        # platform-startup depends on tauri → gdk-sys (gtk3) and oz-hal
+        # depends on serialport → libudev; both must exist even for
+        # --no-deps because the workspace members compile to emit docs.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            libudev-dev
+      - name: Install mdbook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 'latest'
+      - name: Build docs portal (soft-fail)
+        continue-on-error: true
+        run: bash scripts/build-docs.sh
       - name: Verify deploy secrets are configured (fail-closed)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
