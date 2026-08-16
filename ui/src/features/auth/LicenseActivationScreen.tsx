@@ -13,9 +13,11 @@ import { plainErrorMessage } from '@/utils/app-error';
 import './LicenseActivationScreen.css';
 
 // ── Environment / service URLs (extracted for configurability) ─────
+// Unified deployment (auth + sync on one host, ADR #11) — the old
+// standalone license service URL was folded into this single host.
 const AUTH_SERVICE_URL =
   (import.meta.env['VITE_AUTH_SERVICE_URL'] as string | undefined)
-  ?? 'https://auth--oz-pos-license-service--76cyv4d6bn54.code.run';
+  ?? 'https://p01--oz-sync--76cyv4d6bn54.code.run';
 
 /** Props for the LicenseActivationScreen component. */
 export interface LicenseActivationScreenProps {

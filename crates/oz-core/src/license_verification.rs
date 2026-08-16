@@ -19,9 +19,11 @@ use crate::error::CoreError;
 
 /// The license server URL embedded at build time.
 ///
+/// Points at the unified deployment (auth + sync on one host, ADR #11):
+/// the old standalone `oz-pos-license-service` was folded into it.
 /// Override via the `OZ_LICENSE_SERVER_URL` environment variable
 /// in production, or use `http://localhost:8090` for local testing.
-pub const LICENSE_SERVER_URL: &str = "https://auth--oz-pos-license-service--76cyv4d6bn54.code.run";
+pub const LICENSE_SERVER_URL: &str = "https://p01--oz-sync--76cyv4d6bn54.code.run";
 
 /// The RSA-2048 public key in PEM format, embedded at build time.
 ///
