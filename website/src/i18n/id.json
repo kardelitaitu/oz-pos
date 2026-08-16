@@ -183,6 +183,7 @@
     "backToEmail": "Gunakan email lain",
     "codeSent": "Kami mengirim kode verifikasi ke email Anda.",
     "otpNote": "Verifikasi dibatasi kecepatannya untuk melindungi akun Anda.",
+    "newAccount": "Belum punya akun? Verifikasi kode Anda akan membuatkannya.",
     "errorSend": "Tidak dapat mengirim kode. Silakan coba lagi nanti.",
     "errorVerify": "Kode tidak valid atau kedaluwarsa. Silakan coba lagi.",
     "notConfigured": "API autentikasi belum dikonfigurasi pada deployment ini."
@@ -199,7 +200,12 @@
     "status": "Status",
     "expires": "Berakhir",
     "logout": "Keluar",
-    "notConfigured": "API lisensi belum dikonfigurasi pada deployment ini."
+    "notConfigured": "API lisensi belum dikonfigurasi pada deployment ini.",
+    "noSubscription": "Anda belum memiliki langganan aktif. Pilih paket untuk memulai.",
+    "subscribe": "Berlangganan",
+    "subscription": "Langganan",
+    "starts": "Mulai",
+    "grace": "Masa tenggang hingga"
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",
@@ -222,8 +228,7 @@
     "noResults": "Tidak ada hasil"
   },
   "checkout": {
-    "email": "Email untuk pengiriman lisensi",
-    "emailPlaceholder": "anda@contoh.com",
-    "emailRequired": "Masukkan email yang valid — kunci lisensi akan dikirim ke email tersebut."
+    "signInToSubscribe": "Masuk untuk berlangganan",
+    "error": "Tidak dapat memulai checkout. Silakan coba lagi."
   }
 }

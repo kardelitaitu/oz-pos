@@ -1,11 +1,19 @@
 import type { FeatureRow, PricingTier } from './types';
 
-// Placeholder prices — see website-plan.md §6. Prices are per locale.
+// Prices are per locale; this file is the Indonesian pricing (id locale).
+// NOTE: Paddle does not support IDR as a billing currency (their supported
+// list has no IDR), so the checkout charges the USD price id below and the
+// Rp figures on this page are the display price. Rp 299.000 ≈ $19,
+// Rp 749.000 ≈ $49 — the checkout shows the USD amount. If true IDR billing
+// is required, it needs a local provider (e.g. Midtrans/Xendit), not Paddle.
+// Real Paddle sandbox prices: pro = pri_01m05gdnqp30xze6db73qcracp
+// ($19/mo), premium = pri_01m05gdpk4hmnm0k8e6vxm8cec ($49/mo).
 export const pricing: PricingTier[] = [
   {
     id: 'trial',
     tierKey: 'trial',
     name: 'Gratis',
+    currency: 'IDR',
     price: 'Rp 0',
     period: 'uji coba 90 hari',
     description: 'Semua yang Anda butuhkan untuk satu toko — sepenuhnya offline.',
@@ -23,12 +31,13 @@ export const pricing: PricingTier[] = [
     id: 'pro',
     tierKey: 'pro',
     name: 'Pro',
+    currency: 'IDR',
     price: 'Rp 299.000',
     period: '/bulan',
     description: 'Untuk toko berkembang yang ingin sinkron cloud dan QRIS.',
     cta: 'Pilih Pro',
     highlight: true,
-    priceId: 'pri_placeholder_pro',
+    priceId: 'pri_01m05gdnqp30xze6db73qcracp',
     features: [
       { label: '1 toko', included: true },
       { label: '2 register', included: true },
@@ -42,11 +51,12 @@ export const pricing: PricingTier[] = [
     id: 'premium',
     tierKey: 'premium',
     name: 'Premium',
+    currency: 'IDR',
     price: 'Rp 749.000',
     period: '/bulan',
     description: 'Toko, register, dan otomatisasi tanpa batas.',
     cta: 'Pilih Premium',
-    priceId: 'pri_placeholder_premium',
+    priceId: 'pri_01m05gdpk4hmnm0k8e6vxm8cec',
     features: [
       { label: 'Toko tanpa batas', included: true },
       { label: 'Register tanpa batas', included: true },
@@ -60,6 +70,7 @@ export const pricing: PricingTier[] = [
     id: 'enterprise',
     tierKey: 'enterprise',
     name: 'Enterprise',
+    currency: 'IDR',
     price: 'Kustom',
     period: '',
     description: 'Batas yang disesuaikan, onboarding, dan dukungan prioritas.',

@@ -183,6 +183,7 @@
     "backToEmail": "Use a different email",
     "codeSent": "We sent a verification code to your email.",
     "otpNote": "Verification is rate-limited to protect your account.",
+    "newAccount": "No account yet? Verifying your code will create one for you.",
     "errorSend": "Couldn't send the code. Please try again later.",
     "errorVerify": "Invalid or expired code. Please try again.",
     "notConfigured": "The auth API is not configured on this deployment."
@@ -199,7 +200,12 @@
     "status": "Status",
     "expires": "Expires",
     "logout": "Sign out",
-    "notConfigured": "The license API is not configured on this deployment."
+    "notConfigured": "The license API is not configured on this deployment.",
+    "noSubscription": "You don't have an active subscription yet. Choose a plan to get started.",
+    "subscribe": "Subscribe",
+    "subscription": "Subscription",
+    "starts": "Starts",
+    "grace": "Grace until"
   },
   "footer": {
     "rights": "All rights reserved.",
@@ -222,8 +228,7 @@
     "noResults": "No results"
   },
   "checkout": {
-    "email": "Email for license delivery",
-    "emailPlaceholder": "you@example.com",
-    "emailRequired": "Enter a valid email — we'll send your license key to it."
+    "signInToSubscribe": "Sign in to subscribe",
+    "error": "Couldn't start the checkout. Please try again."
   }
 }

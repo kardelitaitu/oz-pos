@@ -2,15 +2,18 @@ import { useState } from 'react';
 import { t } from '../i18n';
 
 /**
- * Sign-in form (website-plan.md §5). No self-signup: tenant records are
- * created by the Paddle webhook at first purchase, so the only web flow is
- * OTP sign-in for existing tenants:
+ * Register-or-login form (website-plan.md §5). Payment is register-first:
+ * request-otp self-signs a new ACTIVE tenant on first use (the server
+ * never reveals whether the account pre-existed), so this single flow
+ * covers both new accounts and returning tenants:
  *
- *   request-otp → verify-otp → session token
+ *   request-otp → verify-otp → session token (+ cached email)
  *
  * The session token stays in sessionStorage (the v1 choice from §11; the
- * hardening follow-up is an httpOnly cookie). Degrades to a "not configured"
- * notice when PUBLIC_LICENSE_API_URL is unset.
+ * hardening follow-up is an httpOnly cookie). After verify the user is
+ * sent to ?next= (e.g. back to the pricing page to continue checkout) or
+ * the account dashboard by default. Degrades to a "not configured" notice
+ * when PUBLIC_LICENSE_API_URL is unset.
  */
 const API = import.meta.env.PUBLIC_LICENSE_API_URL as string | undefined;
 
@@ -64,7 +67,15 @@ export default function AuthForm({ locale }: Props) {
       const data = (await res.json()) as { token?: string };
       if (!data.token) throw new Error('no token');
       sessionStorage.setItem('oz_session', data.token);
-      window.location.href = `/${locale}/account`;
+      // Cache the verified email so checkout can prefill it without a
+      // round-trip to /me (see paddle.getSessionEmail).
+      sessionStorage.setItem('oz_email', email);
+      // Honor ?next= (e.g. back to pricing after the sign-in gate) but
+      // only for same-site paths — never a protocol-relative or external
+      // URL (open-redirect guard).
+      const next = new URLSearchParams(window.location.search).get('next');
+      const target = next && next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/account`;
+      window.location.href = target;
     } catch {
       setError(t(locale, 'login.errorVerify'));
     } finally {
@@ -137,6 +148,7 @@ export default function AuthForm({ locale }: Props) {
           {loading ? '…' : t(locale, 'login.sendCode')}
         </button>
         <p className="text-xs text-muted">{t(locale, 'login.otpNote')}</p>
+        <p className="text-xs text-muted">{t(locale, 'login.newAccount')}</p>
       </form>
     </div>
   );
