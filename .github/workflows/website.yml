@@ -69,6 +69,12 @@ jobs:
       - run: cd website && npx playwright install --with-deps chromium
       - run: cd website && npm run check
       - run: cd website && npm run build
+      # Internal-link audit — FAILING gate: every href on a built page must
+      # resolve to a file in dist/ (or a known-external/portal-generated
+      # target; see check-links.mjs for the exact skip list). Runs after
+      # build because it audits the rendered output.
+      - name: Internal-link audit
+        run: cd website && npm run check:links
 
   deploy:
     name: Deploy to Cloudflare Workers
