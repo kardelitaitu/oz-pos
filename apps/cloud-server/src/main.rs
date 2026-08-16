@@ -147,6 +147,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let redirect_url = config
             .sync_redirect_url
             .clone()
+            // SAFETY: redirect_only mode validates sync_redirect_url at
+            // construction, so the URL is always present here — SAFETY.
             .expect("validated at construction");
         let redirect_router = Router::new()
             .fallback(|| async { axum::http::StatusCode::MISDIRECTED_REQUEST })

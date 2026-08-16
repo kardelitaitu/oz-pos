@@ -365,6 +365,9 @@ fn seed_retail(conn: &Connection, days: u32) -> Result<()> {
             } else {
                 rng.gen_range(8u32..22)
             };
+            // SAFETY: `hour` is bounded to 8..=21 and minutes/seconds to
+            // 0..59 above, so from_hms_opt is always Some; with_time on a
+            // valid date with a valid time is likewise always Some.
             let sale_time = date
                 .with_time(
                     chrono::NaiveTime::from_hms_opt(
@@ -372,8 +375,10 @@ fn seed_retail(conn: &Connection, days: u32) -> Result<()> {
                         rng.gen_range(0u32..60),
                         rng.gen_range(0u32..60),
                     )
+                    // SAFETY: ranges above always form a valid time.
                     .unwrap(),
                 )
+                // SAFETY: valid date + valid time is always Some.
                 .unwrap()
                 .to_utc()
                 .to_rfc3339();
@@ -573,10 +578,15 @@ fn seed_restaurant(conn: &Connection, days: u32) -> Result<()> {
             } else {
                 rng.gen_range(10u32..22)
             };
+            // SAFETY: `hour` is bounded to 10..=21 and minutes to 0..59
+            // above, so from_hms_opt is always Some; with_time on a valid
+            // date with a valid time is likewise always Some.
             let order_time = date
                 .with_time(
+                    // SAFETY: bounded ranges above always form a valid time.
                     chrono::NaiveTime::from_hms_opt(hour, rng.gen_range(0u32..60), 0).unwrap(),
                 )
+                // SAFETY: valid date + valid time is always Some.
                 .unwrap()
                 .to_utc()
                 .to_rfc3339();

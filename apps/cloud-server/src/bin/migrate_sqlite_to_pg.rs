@@ -404,6 +404,10 @@ fn topo_sort(tables: &[String], edges: &[(String, String)]) -> Vec<String> {
         out.push(t.to_string());
         if let Some(children) = deps.get(t) {
             for child in children {
+                // SAFETY: `deps` is only populated from `edges` whose src and
+                // target are both in `set` (derived from `tables`), and
+                // `indegree` is seeded from the same `tables` — so every
+                // child here is guaranteed to exist in the map — SAFETY.
                 let d = indegree.get_mut(child).unwrap();
                 *d -= 1;
                 if *d == 0 {

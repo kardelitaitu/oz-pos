@@ -40,7 +40,8 @@ pub fn shared_topology_semantics() -> &'static Value {
             // compile-time contract; malformed JSON is a developer/build
             // error, not runtime user data, so initialization must fail
             // closed. Its parity with the UI copy is enforced by the
-            // `vendored_contract_matches_ui_canonical` test.
+            // `vendored_contract_matches_ui_canonical` test — see the
+            // INVARIANT rationale directly above.
             .expect("shared topology semantics JSON must be valid")
     })
 }

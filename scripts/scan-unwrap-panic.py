@@ -44,7 +44,9 @@ DEV_ONLY_PATHS = (
 UNWRAP_RE = re.compile(r"\.unwrap\(\)")
 EXPECT_RE = re.compile(r"\.expect\(")
 CFG_TEST_RE = re.compile(r"#\[cfg\s*\(\s*test\s*\)")
-TEST_ATTR_RE = re.compile(r"#\[test\]")
+# Matches `#[test]`, `#[tokio::test]`, and attribute variants such as
+# `#[tokio::test(flavor = "multi_thread")]` — all of them mark test fns.
+TEST_ATTR_RE = re.compile(r"#\[(?:tokio::)?test(?:\]|\()")
 MOD_TESTS_RE = re.compile(r"^\s*mod\s+(tests?)\b")
 INVARIANT_COMMENT_RE = re.compile(r"(INVARIANT|SAFETY|cannot fail|must not fail|impossible)")
 
@@ -198,6 +200,12 @@ def main() -> int:
             if "tests" in path.parts:
                 continue
             if any(tok in str(path).replace("\\", "/") for tok in DEV_ONLY_PATHS):
+                continue
+            # Split test modules (`#[cfg(test)] mod foo_tests;` in the parent)
+            # carry the `*_tests.rs` / `*_test.rs` filename convention; the
+            # parent's cfg-gate is invisible to this per-file scan, so treat
+            # those filenames as test code (ADR #33: test code is exempt).
+            if re.search(r"_test(s)?\.rs$", path.name):
                 continue
             all_findings.extend(scan_file(path))
 
