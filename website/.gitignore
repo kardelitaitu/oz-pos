@@ -4,3 +4,5 @@ dist/
 .env
 .env.*
 !.env.example
+# Generated docs portal copy (see scripts/import-portal.sh) — rebuilt from docs/book/
+public/docs-portal/

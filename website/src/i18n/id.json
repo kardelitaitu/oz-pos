@@ -68,6 +68,31 @@
       "gettingStarted": "Memulai",
       "guides": "Panduan",
       "reference": "Referensi"
+    },
+    "hub": {
+      "subtitle": "Pilih dokumentasi yang sesuai dengan yang Anda kerjakan.",
+      "cards": [
+        {
+          "title": "Memulai",
+          "description": "Instalasi, transaksi pertama, lisensi, dan panduan harian menjalankan OZ-POS.",
+          "cta": "Buka panduan"
+        },
+        {
+          "title": "Referensi Pengembang",
+          "description": "Keputusan arsitektur, dokumentasi modul, dan panduan pengembang yang mendalam.",
+          "cta": "Buka referensi"
+        },
+        {
+          "title": "API Rust",
+          "description": "Referensi cargo doc untuk crate backend OZ-POS.",
+          "cta": "Jelajahi API"
+        },
+        {
+          "title": "API TypeScript",
+          "description": "Referensi TypeDoc untuk front-end, hooks, dan klien API.",
+          "cta": "Jelajahi API"
+        }
+      ]
     }
   },
   "hero": {
