@@ -595,12 +595,10 @@ export default function StaffManagementScreen() {
       case 'role-admin':   return 'warning';
       case 'manager':
       case 'role-manager': return 'info';
-      case 'kitchen':
-      case 'role-kitchen': return 'success';
-      case 'cashier':
-      case 'role-cashier': return 'default';
       case 'staff':
       case 'role-staff':  return 'default';
+      case 'auditor':
+      case 'role-auditor': return 'success';
       case 'custom':
       case 'role-custom': return 'default';
       default:             return 'default';

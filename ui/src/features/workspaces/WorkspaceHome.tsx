@@ -71,12 +71,11 @@ const WS_ORDER: Record<string, number> = {
 };
 
 // ── Role-scoped workspace access ─────────────────────────────────
-// POS terminals are cashier-facing; KDS is kitchen-facing. Owners,
-// admins, managers and staff get every workspace, matching
-// AuthContext.isManager (which counts `staff` as manager-level).
-
-const POS_WORKSPACE_KEYS = new Set(['restaurant-pos', 'store-pos']);
-const KDS_WORKSPACE_KEYS = new Set(['kds']);
+// All five preset roles (owner, admin, manager, staff, auditor) reach the
+// workspaces they are assigned to — the picker list itself comes from the
+// backend `list_workspaces` (assignment-filtered), so this client-side
+// gate is only a fallback for the demo mock. Cashier/kitchen were retired
+// (0048 2c) and no longer appear.
 
 // ── Dummy coming-soon cards (placeholder for future workspaces) ──
 
@@ -164,12 +163,10 @@ function getRoleColor(role: string): string {
     case 'role-admin':   return 'role-badge--owner';
     case 'manager':
     case 'role-manager': return 'role-badge--manager';
-    case 'cashier':
-    case 'role-cashier': return 'role-badge--cashier';
-    case 'kitchen':
-    case 'role-kitchen': return 'role-badge--kitchen';
     case 'staff':
     case 'role-staff':   return 'role-badge--staff';
+    case 'auditor':
+    case 'role-auditor': return 'role-badge--auditor';
     case 'custom':
     case 'role-custom':  return 'role-badge--custom';
     default:             return 'role-badge--default';
@@ -372,11 +369,13 @@ export default function WorkspaceHome() {
     [setActiveWorkspace],
   );
 
-  // Role-scoped access gate. `roleName` is already lower-cased, and both
-  // the bare and `role-`-prefixed forms are accepted so legacy sessions
-  // and the demo fallback behave identically.
+  // Role-scoped access gate. Every preset role (owner/admin/manager/staff/
+  // auditor) can activate the workspaces assigned to it — the picker list
+  // itself is assignment-filtered by the backend, so this client-side gate
+  // only blocks unknown/legacy roles. The workspace key is accepted for
+  // call-site compatibility but does not restrict access (0048 2c).
   const canAccess = useCallback(
-    (key: string) => {
+    (_key: string): boolean => {
       switch (roleName) {
         case 'owner':
         case 'role-owner':
@@ -386,13 +385,9 @@ export default function WorkspaceHome() {
         case 'role-manager':
         case 'staff':
         case 'role-staff':
+        case 'auditor':
+        case 'role-auditor':
           return true;
-        case 'cashier':
-        case 'role-cashier':
-          return POS_WORKSPACE_KEYS.has(key);
-        case 'kitchen':
-        case 'role-kitchen':
-          return KDS_WORKSPACE_KEYS.has(key);
         default:
           return false;
       }

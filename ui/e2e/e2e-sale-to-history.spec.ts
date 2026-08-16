@@ -21,7 +21,7 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 test.describe('Critical Path: Sale → Sales History', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'kasir', '1234');
+    await loginAs(page, 'staff', '1234');
     await selectWorkspace(page, WORKSPACES.STORE_POS);
   });
 

@@ -58,14 +58,15 @@ describe('dev-mock auth contract (audit/06 picker ticket parity)', () => {
       args: { username: 'new-owner', pin: '1234', display_name: 'New Owner' },
     })) as unknown as BootstrapOwnerResult;
 
-    expect(result.session.role_name).toBe('owner');
+    expect(result.session.role_name).toBe('Owner');
+    expect(result.session.role_id).toBe('role-owner');
     expect(typeof result.picker_ticket).toBe('string');
     expect(result.picker_ticket.length).toBeGreaterThan(0);
   });
 
   it('the picker listing is reachable once a ticket is returned', async () => {
     const login = (await invoke('staff_login', {
-      args: { username: 'kasir', pin: '1234' },
+      args: { username: 'staff', pin: '1234' },
     })) as unknown as StaffLoginResult;
 
     // The mock ignores the ticket (no real verification), but the listing
@@ -585,10 +586,10 @@ describe('dev-mock lockout + shift-history persistence (restart parity)', () => 
 
   it('a lockout survives a module reload so a reloaded page cannot bypass it', async () => {
     const first = await import('@/dev-mock/tauri-api');
-    // Four failed attempts for kasir → the fifth is blocked.
+    // Four failed attempts for staff → the fifth is blocked.
     for (let i = 0; i < 4; i++) {
       await expect(
-        first.invoke('staff_login', { args: { username: 'kasir', pin: '0000' } }),
+        first.invoke('staff_login', { args: { username: 'staff', pin: '0000' } }),
       ).rejects.toThrow(/Invalid credentials/);
     }
 
@@ -598,7 +599,7 @@ describe('dev-mock lockout + shift-history persistence (restart parity)', () => 
     const second = await import('@/dev-mock/tauri-api');
     // Even with the CORRECT pin, the persisted attempt count still blocks.
     await expect(
-      second.invoke('staff_login', { args: { username: 'kasir', pin: '1234' } }),
+      second.invoke('staff_login', { args: { username: 'staff', pin: '1234' } }),
     ).rejects.toThrow(/Account locked/);
   });
 
@@ -606,17 +607,17 @@ describe('dev-mock lockout + shift-history persistence (restart parity)', () => 
     const first = await import('@/dev-mock/tauri-api');
     for (let i = 0; i < 3; i++) {
       await expect(
-        first.invoke('staff_login', { args: { username: 'kasir', pin: '0000' } }),
+        first.invoke('staff_login', { args: { username: 'staff', pin: '0000' } }),
       ).rejects.toThrow(/Invalid credentials/);
     }
     // Correct pin resets the counter (the persisted delete must survive).
-    await first.invoke('staff_login', { args: { username: 'kasir', pin: '1234' } });
+    await first.invoke('staff_login', { args: { username: 'staff', pin: '1234' } });
 
     vi.resetModules();
     const second = await import('@/dev-mock/tauri-api');
     // A wrong pin afterwards is a fresh first failure, not a lockout.
     await expect(
-      second.invoke('staff_login', { args: { username: 'kasir', pin: '0000' } }),
+      second.invoke('staff_login', { args: { username: 'staff', pin: '0000' } }),
     ).rejects.toThrow(/Invalid credentials/);
   });
 

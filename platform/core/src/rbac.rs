@@ -409,71 +409,28 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
     RolePreset {
         id: builtin_roles::STAFF,
         name: "Staff",
-        description: "Operational role with Manager-level access minus settings configuration.",
+        description: "Checkout-operations role — processes sales, payments, discounts, customers and loyalty at the register, opens and closes shifts, and operates assigned workspaces (including KDS). No management access.",
         permissions: &[
             permissions::SALES_PROCESS,
-            permissions::SALES_VOID,
-            permissions::SALES_REFUND,
             permissions::SALES_VIEW,
             permissions::SALES_DISCOUNT,
             permissions::SALES_SPLIT,
-            permissions::SALES_OVERRIDE_PRICE,
-            permissions::PRODUCTS_CREATE,
-            permissions::PRODUCTS_READ,
-            permissions::PRODUCTS_UPDATE,
-            permissions::PRODUCTS_DELETE,
-            permissions::PRODUCTS_IMPORT,
-            permissions::PRODUCTS_EXPORT,
-            permissions::PRODUCTS_CRUD,
-            permissions::INVENTORY_VIEW,
-            permissions::INVENTORY_ADJUST,
-            permissions::INVENTORY_TRANSFER,
-            permissions::INVENTORY_COUNT,
-            permissions::INVENTORY_LOCATIONS_MANAGE,
-            permissions::STAFF_READ,
-            permissions::STAFF_CREATE,
-            permissions::STAFF_UPDATE,
-            permissions::STAFF_READ_IDENTITY,
-            permissions::STAFF_READ_PAYROLL,
-            permissions::STAFF_EDIT_NOTES,
-            permissions::REPORTS_VIEW,
-            permissions::REPORTS_EXPORT,
-            permissions::REPORTS_SCHEDULE,
-            permissions::SHIFTS_OPEN,
-            permissions::SHIFTS_CLOSE,
-            permissions::SHIFTS_VIEW_ANY,
-            permissions::AUDIT_VIEW,
-            permissions::AUDIT_EXPORT,
             permissions::PAYMENTS_CASH,
             permissions::PAYMENTS_CARD,
-            permissions::PAYMENTS_REFUND,
             permissions::PAYMENTS_SETTLE,
+            permissions::DISCOUNTS_APPLY,
             permissions::CUSTOMERS_CREATE,
             permissions::CUSTOMERS_VIEW,
-            permissions::CUSTOMERS_EDIT,
-            permissions::CUSTOMERS_DELETE,
             permissions::LOYALTY_VIEW,
             permissions::LOYALTY_EARN,
             permissions::LOYALTY_REDEEM,
-            permissions::LOYALTY_MANAGE,
+            permissions::SHIFTS_OPEN,
+            permissions::SHIFTS_CLOSE,
             permissions::TABLES_ASSIGN,
             permissions::TABLES_MERGE,
             permissions::TABLES_SPLIT,
             permissions::TABLES_CLOSE,
-            permissions::TABLES_CREATE,
-            permissions::TABLES_EDIT,
-            permissions::TABLES_DELETE,
-            permissions::DISCOUNTS_APPLY,
-            permissions::DISCOUNTS_CREATE,
-            permissions::DISCOUNTS_MANAGE,
             permissions::WORKSPACES_SWITCH,
-            permissions::PROMOTIONS_CREATE,
-            permissions::PROMOTIONS_EDIT,
-            permissions::PROMOTIONS_DELETE,
-            permissions::PROMOTIONS_APPLY,
-            permissions::TERMINALS_REGISTER,
-            permissions::TERMINALS_EDIT,
-            permissions::TERMINALS_DELETE,
             permissions::KDS_VIEW,
             permissions::KDS_UPDATE,
         ],
@@ -610,9 +567,8 @@ mod preset_tests {
     #[test]
     fn location_manage_permission_follows_inventory_roles() {
         // LOC-06: location CRUD/rebind is a management capability, not a sales
-        // one. Manager and Staff (inventory managers) hold it; a bare Custom
-        // role must not be able to create/rename/deactivate or rebind
-        // locations.
+        // one. Manager holds it; Staff is checkout-only and must not manage
+        // inventory locations; a bare Custom role must not either.
         let manager = &ROLE_PRESETS[1];
         assert!(
             manager
@@ -621,9 +577,10 @@ mod preset_tests {
         );
         let staff = &ROLE_PRESETS[2];
         assert!(
-            staff
+            !staff
                 .permissions
-                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
+                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE),
+            "Staff is checkout-only and must not manage inventory locations"
         );
         let custom = ROLE_PRESETS
             .iter()
@@ -662,7 +619,6 @@ mod preset_tests {
             permissions::LOYALTY_EARN,
             permissions::LOYALTY_REDEEM,
             permissions::DISCOUNTS_APPLY,
-            permissions::INVENTORY_VIEW,
             permissions::SHIFTS_OPEN,
             permissions::SHIFTS_CLOSE,
             permissions::WORKSPACES_SWITCH,
@@ -694,17 +650,59 @@ mod preset_tests {
     }
 
     #[test]
-    fn staff_preset_excludes_settings() {
+    fn staff_preset_is_checkout_only() {
         let preset = &ROLE_PRESETS[2];
         assert_eq!(preset.id, builtin_roles::STAFF);
         assert_eq!(preset.name, "Staff");
+        // No settings access.
         assert!(!preset.permissions.contains(&permissions::SETTINGS_READ));
         assert!(!preset.permissions.contains(&permissions::SETTINGS_EDIT));
-        // Staff should still have Manager-level operational permissions
-        assert!(preset.permissions.contains(&permissions::SALES_VOID));
-        assert!(preset.permissions.contains(&permissions::PRODUCTS_CREATE));
-        assert!(preset.permissions.contains(&permissions::STAFF_CREATE));
-        assert!(preset.permissions.contains(&permissions::REPORTS_VIEW));
+        // No management surfaces: voids, refunds, price overrides, products,
+        // inventory, staff, reports, audit, terminals, promotions.
+        assert!(!preset.permissions.contains(&permissions::SALES_VOID));
+        assert!(!preset.permissions.contains(&permissions::SALES_REFUND));
+        assert!(
+            !preset
+                .permissions
+                .contains(&permissions::SALES_OVERRIDE_PRICE)
+        );
+        assert!(!preset.permissions.contains(&permissions::PAYMENTS_REFUND));
+        assert!(!preset.permissions.contains(&permissions::PRODUCTS_CREATE));
+        assert!(!preset.permissions.contains(&permissions::PRODUCTS_READ));
+        assert!(!preset.permissions.contains(&permissions::INVENTORY_VIEW));
+        assert!(!preset.permissions.contains(&permissions::INVENTORY_ADJUST));
+        assert!(!preset.permissions.contains(&permissions::STAFF_CREATE));
+        assert!(!preset.permissions.contains(&permissions::STAFF_READ));
+        assert!(!preset.permissions.contains(&permissions::REPORTS_VIEW));
+        assert!(!preset.permissions.contains(&permissions::AUDIT_VIEW));
+        assert!(
+            !preset
+                .permissions
+                .contains(&permissions::TERMINALS_REGISTER)
+        );
+        // Checkout operations stay.
+        for key in [
+            permissions::SALES_PROCESS,
+            permissions::SALES_VIEW,
+            permissions::SALES_DISCOUNT,
+            permissions::SALES_SPLIT,
+            permissions::PAYMENTS_CASH,
+            permissions::PAYMENTS_CARD,
+            permissions::PAYMENTS_SETTLE,
+            permissions::DISCOUNTS_APPLY,
+            permissions::CUSTOMERS_CREATE,
+            permissions::CUSTOMERS_VIEW,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::SHIFTS_OPEN,
+            permissions::SHIFTS_CLOSE,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
+            permissions::WORKSPACES_SWITCH,
+        ] {
+            assert!(preset.permissions.contains(&key), "Staff must keep {key}");
+        }
     }
 
     #[test]
@@ -786,34 +784,67 @@ mod preset_tests {
     }
 
     #[test]
-    fn staff_preset_has_manager_count_minus_settings() {
+    fn staff_preset_has_no_manager_management_surfaces() {
+        // Staff is checkout-only: it must not inherit any management
+        // permission from Manager (ADR #35 D4 taxonomy — settings, analytics,
+        // and cost editing are manager+; the plan extends this to all
+        // management surfaces).
         let manager = &ROLE_PRESETS[1];
         let staff = &ROLE_PRESETS[2];
-        // Staff should have exactly 4 fewer permissions than Manager
-        // (settings:read, settings:edit, analytics:view, and the manager-only
-        // products:edit_cost) — analytics is a management review tool
-        // deliberately withheld from Staff (owner/admin/manager only,
-        // ADR #35 D4 taxonomy), and cost editing is manager+ only (ADR #36
-        // D7).
-        assert_eq!(
-            staff.permissions.len(),
-            manager.permissions.len() - 4,
-            "Staff should have all Manager permissions except settings, analytics, and edit_cost"
-        );
-        // Verify every Manager permission except settings + analytics +
-        // edit_cost is present in Staff
-        for perm in manager.permissions {
-            if *perm != permissions::SETTINGS_READ
-                && *perm != permissions::SETTINGS_EDIT
-                && *perm != permissions::ANALYTICS_VIEW
-                && *perm != permissions::PRODUCTS_EDIT_COST
-            {
-                assert!(
-                    staff.permissions.contains(perm),
-                    "Staff should inherit Manager permission: {perm}"
-                );
-            }
+        for perm in [
+            permissions::SETTINGS_READ,
+            permissions::SETTINGS_EDIT,
+            permissions::ANALYTICS_VIEW,
+            permissions::PRODUCTS_EDIT_COST,
+            permissions::SALES_VOID,
+            permissions::SALES_REFUND,
+            permissions::SALES_OVERRIDE_PRICE,
+            permissions::PAYMENTS_REFUND,
+            permissions::PRODUCTS_CREATE,
+            permissions::PRODUCTS_READ,
+            permissions::INVENTORY_VIEW,
+            permissions::INVENTORY_ADJUST,
+            permissions::INVENTORY_TRANSFER,
+            permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
+            permissions::STAFF_READ,
+            permissions::STAFF_CREATE,
+            permissions::STAFF_UPDATE,
+            permissions::STAFF_READ_IDENTITY,
+            permissions::STAFF_READ_PAYROLL,
+            permissions::STAFF_EDIT_NOTES,
+            permissions::REPORTS_VIEW,
+            permissions::REPORTS_EXPORT,
+            permissions::REPORTS_SCHEDULE,
+            permissions::SHIFTS_VIEW_ANY,
+            permissions::AUDIT_VIEW,
+            permissions::AUDIT_EXPORT,
+            permissions::CUSTOMERS_EDIT,
+            permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_MANAGE,
+            permissions::TABLES_CREATE,
+            permissions::TABLES_EDIT,
+            permissions::TABLES_DELETE,
+            permissions::DISCOUNTS_CREATE,
+            permissions::DISCOUNTS_MANAGE,
+            permissions::PROMOTIONS_CREATE,
+            permissions::PROMOTIONS_EDIT,
+            permissions::PROMOTIONS_DELETE,
+            permissions::PROMOTIONS_APPLY,
+            permissions::TERMINALS_REGISTER,
+            permissions::TERMINALS_EDIT,
+            permissions::TERMINALS_DELETE,
+        ] {
+            assert!(
+                !staff.permissions.contains(&perm),
+                "Staff must not hold manager-only permission: {perm}"
+            );
         }
+        // Sanity: Manager still holds representative management permissions.
+        assert!(manager.permissions.contains(&permissions::SALES_VOID));
+        assert!(manager.permissions.contains(&permissions::PRODUCTS_CREATE));
+        assert!(manager.permissions.contains(&permissions::STAFF_CREATE));
+        assert!(manager.permissions.contains(&permissions::REPORTS_VIEW));
     }
 }
 

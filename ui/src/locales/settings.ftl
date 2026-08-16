@@ -799,7 +799,8 @@ workspace-modal-title = Workspace Settings
 workspace-modal-admin-settings = Admin Settings ↗
 workspace-modal-close-aria = Close settings
 workspace-modal-role-manager = Manager
-workspace-modal-role-cashier = Cashier
+workspace-modal-role-staff = Staff
+workspace-modal-role-auditor = Auditor
 
 # ── 4f: Workspace card aria-labels ──
 terminal-sound-volume-aria = Sound volume

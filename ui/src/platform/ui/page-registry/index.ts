@@ -22,7 +22,8 @@ import type { ComponentType, LazyExoticComponent } from 'react';
 
 /**
  * Role levels used for page access gating.
- * - 'manager'    — owner, admin, manager, and (legacy) staff.
+ * - 'manager'    — owner, admin, and manager only (Staff is checkout-only and
+ *                  excluded; see the User Roles plan).
  * - 'management' — owner, admin, and manager only (analytics, taxonomy-0046).
  * - 'owner'      — owner only.
  */
@@ -180,13 +181,10 @@ function hasRequiredRole(userRole: string | undefined, required: RequiredRole): 
   const isOwner = role === 'owner' || role === 'role-owner';
   const isAdmin = isOwner || role === 'admin' || role === 'role-admin';
   const isManager = isAdmin || role === 'manager' || role === 'role-manager';
-  // Legacy 'manager' gate: staff keeps report-level pages (backend grants
-  // Staff REPORTS_VIEW / SHIFTS_VIEW_ANY).
-  const isManagerOrStaff = isManager || role === 'staff' || role === 'role-staff';
 
   if (required === 'owner') return isOwner;
   if (required === 'management') return isManager;
-  return isManagerOrStaff;
+  return isManager;
 }
 
 /**

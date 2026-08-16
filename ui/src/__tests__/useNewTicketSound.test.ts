@@ -18,16 +18,22 @@ const { useNewTicketSound } = await import('@/features/kds/hooks/useNewTicketSou
 function makeOrder(id: string): KdsOrder {
   return {
     id,
+    sale_id: 'sale-1',
+    store_id: 'default',
     status: 'pending',
-    ticket_number: 1,
-    order_type: 'dine_in',
-    table_id: null,
-    server_name: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    items: [],
-    channel: 'pos',
-  } as KdsOrder;
+    items_summary: 'Item 1',
+    item_count: 1,
+    display_number: 101,
+    received_at: new Date().toISOString(),
+    started_at: null,
+    ready_at: null,
+    served_at: null,
+    prep_time_seconds: 0,
+    kitchen_zone: null,
+    notes: '',
+    table_number: null,
+    priority: false,
+  };
 }
 
 // ── Tests ────────────────────────────────────────────────────────────

@@ -17,16 +17,103 @@
 import { emit } from './tauri-event';
 
 // ── Mock staff data ────────────────────────────────────────────
+// Five-role taxonomy (ADR #35 D4 / spec 0048): owner, admin, manager,
+// staff, auditor — mirroring platform-core `ROLE_PRESETS`. Cashier and
+// kitchen were retired (0048 2c) and no longer exist; the mock must
+// exercise the same model the real backend seeds so browser previews gate
+// like production. Pins: 1234 for every account (dev convenience) except
+// admin, which keeps the historical 9999 that the E2E suite logs in with.
 const MOCK_STAFF: Record<string, {
   user_id: string;
   pin_hash: string;
   role: string;
   is_active: boolean;
 }> = {
-  'owner': { user_id: 'owner-1', pin_hash: '1234', role: 'owner', is_active: true },
-  'admin': { user_id: 'admin-1', pin_hash: '9999', role: 'manager', is_active: true },
-  'kasir': { user_id: 'kasir-1', pin_hash: '1234', role: 'cashier', is_active: true },
+  'owner':   { user_id: 'owner-1',   pin_hash: '1234', role: 'role-owner',   is_active: true },
+  'admin':   { user_id: 'admin-1',   pin_hash: '9999', role: 'role-admin',   is_active: true },
+  'manager': { user_id: 'manager-1', pin_hash: '1234', role: 'role-manager', is_active: true },
+  'staff':   { user_id: 'staff-1',   pin_hash: '1234', role: 'role-staff',   is_active: true },
+  'auditor': { user_id: 'auditor-1', pin_hash: '1234', role: 'role-auditor', is_active: true },
 };
+
+/** Display name for a preset role id (the real seeded role names). */
+function mockRoleName(role: string): string {
+  switch (role) {
+    case 'role-owner': return 'Owner';
+    case 'role-admin': return 'Admin';
+    case 'role-manager': return 'Manager';
+    case 'role-staff': return 'Staff';
+    case 'role-auditor': return 'Auditor';
+    default: return role.replace('role-', '').charAt(0).toUpperCase() + role.replace('role-', '').slice(1);
+  }
+}
+
+/** Granted permission keys per preset, mirroring platform-core ROLE_PRESETS. */
+const MOCK_ROLE_PERMISSIONS: Record<string, string[]> = {
+  // Owner — global wildcard.
+  'role-owner': ['*'],
+  // Admin — everything except ownership transfer, billing, and irreversible
+  // org actions (staff deletion is owner-only).
+  'role-admin': [
+    'sales:process', 'sales:void', 'sales:refund', 'sales:view', 'sales:discount', 'sales:split', 'sales:override_price',
+    'products:create', 'products:read', 'products:update', 'products:delete', 'products:import', 'products:export', 'products:edit_cost',
+    'inventory:view', 'inventory:adjust', 'inventory:transfer', 'inventory:count', 'inventory:locations_manage',
+    'staff:read', 'staff:create', 'staff:update', 'staff:manage_roles', 'staff:read_identity', 'staff:read_payroll', 'staff:edit_notes',
+    'settings:read', 'settings:edit', 'reports:view', 'reports:export', 'reports:schedule', 'analytics:view',
+    'shifts:open', 'shifts:close', 'shifts:view_any', 'audit:view', 'audit:export',
+    'payments:cash', 'payments:card', 'payments:refund', 'payments:settle',
+    'customers:create', 'customers:view', 'customers:edit', 'customers:delete',
+    'loyalty:view', 'loyalty:earn', 'loyalty:redeem', 'loyalty:manage',
+    'tables:assign', 'tables:merge', 'tables:split', 'tables:close', 'tables:create', 'tables:edit', 'tables:delete',
+    'discounts:apply', 'discounts:create', 'discounts:manage',
+    'workspaces:switch', 'promotions:create', 'promotions:edit', 'promotions:delete', 'promotions:apply',
+    'terminals:register', 'terminals:edit', 'terminals:delete', 'categories:manage', 'plugins:manage',
+    'kds:view', 'kds:update',
+  ],
+  // Manager — products, inventory, sales, staff, and settings.
+  'role-manager': [
+    'sales:process', 'sales:void', 'sales:refund', 'sales:view', 'sales:discount', 'sales:split', 'sales:override_price',
+    'products:create', 'products:read', 'products:update', 'products:delete', 'products:import', 'products:export', 'products:edit_cost',
+    'inventory:view', 'inventory:adjust', 'inventory:transfer', 'inventory:count', 'inventory:locations_manage',
+    'staff:read', 'staff:create', 'staff:update', 'staff:read_identity', 'staff:read_payroll', 'staff:edit_notes',
+    'settings:read', 'settings:edit', 'reports:view', 'reports:export', 'reports:schedule', 'analytics:view',
+    'shifts:open', 'shifts:close', 'shifts:view_any', 'audit:view', 'audit:export',
+    'payments:cash', 'payments:card', 'payments:refund', 'payments:settle',
+    'customers:create', 'customers:view', 'customers:edit', 'customers:delete',
+    'loyalty:view', 'loyalty:earn', 'loyalty:redeem', 'loyalty:manage',
+    'tables:assign', 'tables:merge', 'tables:split', 'tables:close', 'tables:create', 'tables:edit', 'tables:delete',
+    'discounts:apply', 'discounts:create', 'discounts:manage',
+    'workspaces:switch', 'promotions:create', 'promotions:edit', 'promotions:delete', 'promotions:apply',
+    'terminals:register', 'terminals:edit', 'terminals:delete',
+    'kds:view', 'kds:update',
+  ],
+  // Staff — checkout-operations only (the tightened preset): sales,
+  // payments, in-cart discounts, customers/loyalty at the register,
+  // shifts, table service, and KDS for assigned workspaces. No management.
+  'role-staff': [
+    'sales:process', 'sales:view', 'sales:discount', 'sales:split',
+    'payments:cash', 'payments:card', 'payments:settle', 'discounts:apply',
+    'customers:create', 'customers:view', 'loyalty:view', 'loyalty:earn', 'loyalty:redeem',
+    'shifts:open', 'shifts:close',
+    'tables:assign', 'tables:merge', 'tables:split', 'tables:close',
+    'workspaces:switch', 'kds:view', 'kds:update',
+  ],
+  // Auditor — global read-only: view operational data and the audit log,
+  // never manages and never sees sensitive profile fields.
+  'role-auditor': [
+    'sales:view', 'products:read', 'inventory:view', 'staff:read', 'settings:read',
+    'reports:view', 'audit:view', 'shifts:view_any', 'customers:view', 'loyalty:view', 'kds:view',
+  ],
+};
+
+/** The five preset roles, mirroring platform-core ROLE_PRESETS (0048 2c). */
+const MOCK_ROLES = [
+  { id: 'role-owner', name: 'Owner', description: 'Full access to all features and settings.', permissions: ['*'] },
+  { id: 'role-admin', name: 'Admin', description: 'Global scope — everything except ownership transfer, billing, and irreversible org actions (staff deletion).', permissions: MOCK_ROLE_PERMISSIONS['role-admin'] ?? [] },
+  { id: 'role-manager', name: 'Manager', description: 'Can manage products, inventory, sales, staff, and settings.', permissions: MOCK_ROLE_PERMISSIONS['role-manager'] ?? [] },
+  { id: 'role-staff', name: 'Staff', description: 'Checkout-operations role — processes sales, payments, discounts, customers and loyalty at the register, opens and closes shifts, and operates assigned workspaces (including KDS). No management access.', permissions: MOCK_ROLE_PERMISSIONS['role-staff'] ?? [] },
+  { id: 'role-auditor', name: 'Auditor', description: 'Global, read-only — views operational data and the audit log; never manages and never sees sensitive profile fields.', permissions: MOCK_ROLE_PERMISSIONS['role-auditor'] ?? [] },
+] as const;
 
 const RAW_MOCK_PRODUCTS = [
   { sku: 'CPU-R7-7800X3D', name: 'AMD Ryzen 7 7800X3D 8-Core', category: 'Processors (CPU)', price: { minor_units: 6250000, currency: 'IDR' }, barcode: '730143314930', in_stock: true, stock_qty: 15, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
@@ -1251,17 +1338,13 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     return {
       session: {
         user_id: staff.user_id,
-        display_name: staff.role.charAt(0).toUpperCase() + staff.role.slice(1),
-        role_name: staff.role,
-        role_id: staff.role === 'owner' ? '1' : staff.role === 'manager' ? '2' : '3',
+        display_name: mockRoleName(staff.role),
+        role_name: mockRoleName(staff.role),
+        role_id: staff.role,
         // Granted keys mirror the role presets (Owner = global wildcard;
-        // manager carries analytics:view; staff/cashier does not) so the
-        // dev preview gates on permissions like the real backend.
-        permissions: staff.role === 'owner'
-          ? ['*']
-          : staff.role === 'manager'
-            ? ['sales:process', 'sales:view', 'reports:view', 'analytics:view', 'staff:read']
-            : ['sales:process', 'sales:view'],
+        // Staff = checkout-only; Auditor = read-only) so the dev preview
+        // gates on permissions like the real backend.
+        permissions: MOCK_ROLE_PERMISSIONS[staff.role] ?? [],
       },
       // audit/06 parity: the real backend mints a short-lived picker
       // ticket at login; without it the workspace picker never loads
@@ -1276,9 +1359,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       session: {
         user_id: 'owner-1',
         display_name: 'Owner',
-        role_name: 'owner',
-        role_id: '1',
-        permissions: ['*'],
+        role_name: 'Owner',
+        role_id: 'role-owner',
+        permissions: MOCK_ROLE_PERMISSIONS['role-owner'] ?? [],
       },
       // audit/06 parity: the first-owner flow also mints a picker ticket.
       picker_ticket: `mock-picker-owner-1-${Date.now()}`,
@@ -1974,35 +2057,34 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_staff_scoped': () => [
-    { id: 'staff-1', username: 'owner', display_name: 'Owner', role_id: '1', role_name: 'owner', is_active: true },
-    { id: 'staff-2', username: 'admin', display_name: 'Admin', role_id: '2', role_name: 'manager', is_active: true },
-    { id: 'staff-3', username: 'kasir', display_name: 'Cashier', role_id: '3', role_name: 'cashier', is_active: true },
+    { id: 'staff-1', username: 'owner', display_name: 'Owner', role_id: 'role-owner', role_name: 'Owner', is_active: true },
+    { id: 'staff-2', username: 'admin', display_name: 'Admin', role_id: 'role-admin', role_name: 'Admin', is_active: true },
+    { id: 'staff-3', username: 'manager', display_name: 'Manager', role_id: 'role-manager', role_name: 'Manager', is_active: true },
+    { id: 'staff-4', username: 'staff', display_name: 'Staff', role_id: 'role-staff', role_name: 'Staff', is_active: true },
+    { id: 'staff-5', username: 'auditor', display_name: 'Auditor', role_id: 'role-auditor', role_name: 'Auditor', is_active: true },
   ],
-  'list_roles_scoped': () => [
-    { id: '1', name: 'Owner', description: 'Full access to all settings', permissions: ['*'] },
-    { id: '2', name: 'Manager', description: 'Daily operations and reports', permissions: ['sales:view', 'reports:view', 'analytics:view', 'staff:read'] },
-    { id: '3', name: 'Cashier', description: 'Process sales and refunds', permissions: ['sales:process', 'sales:view'] },
-    { id: '4', name: 'Kitchen', description: 'Kitchen display access', permissions: ['kds:view'] },
-  ],
+  'list_roles_scoped': () => MOCK_ROLES.map((r) => ({ ...r })),
   'create_staff_scoped': (args) => {
     const a = (args as { username?: string; display_name?: string; role_id?: string; pin?: string }) ?? {};
+    const roleId = a.role_id && MOCK_ROLE_PERMISSIONS[a.role_id] ? a.role_id : 'role-staff';
     return {
       id: `staff-${Date.now()}`,
       username: a.username ?? 'newstaff',
       display_name: a.display_name ?? 'New Staff',
-      role_id: a.role_id ?? '3',
-      role_name: a.role_id === '1' ? 'owner' : a.role_id === '2' ? 'manager' : 'cashier',
+      role_id: roleId,
+      role_name: mockRoleName(roleId),
       is_active: true,
     };
   },
   'update_staff_scoped': (args) => {
     const a = (args as { id?: string; username?: string; display_name?: string; role_id?: string; is_active?: boolean }) ?? {};
+    const roleId = a.role_id && MOCK_ROLE_PERMISSIONS[a.role_id] ? a.role_id : 'role-owner';
     return {
       id: a.id ?? 'staff-1',
       username: a.username ?? 'owner',
       display_name: a.display_name ?? 'Owner',
-      role_id: a.role_id ?? '1',
-      role_name: a.role_id === '1' ? 'owner' : a.role_id === '2' ? 'manager' : 'cashier',
+      role_id: roleId,
+      role_name: mockRoleName(roleId),
       is_active: a.is_active ?? true,
     };
   },

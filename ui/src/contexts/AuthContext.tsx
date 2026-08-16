@@ -134,15 +134,18 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
   // stable lowercase role keys. Normalize once so authorization-sensitive UI
   // gates behave identically for either representation.
   const normalizedRoleName = session?.role_name.trim().toLowerCase();
+  // Management-level gate (0048): owner/admin/manager only. Staff is a
+  // checkout-operations role and must NOT reach void, refund, price
+  // override, audit export, or full settings — the backend denies those
+  // (sales:void / sales:refund / sales:override_price / audit:export are
+  // not in the Staff preset), so the buttons must be hidden too.
   const isManager =
     normalizedRoleName === "manager" ||
     normalizedRoleName === "owner" ||
     normalizedRoleName === "admin" ||
-    normalizedRoleName === "staff" ||
     normalizedRoleName === "role-manager" ||
     normalizedRoleName === "role-owner" ||
-    normalizedRoleName === "role-admin" ||
-    normalizedRoleName === "role-staff";
+    normalizedRoleName === "role-admin";
   const isOwner =
     normalizedRoleName === "owner" ||
     normalizedRoleName === "role-owner";

@@ -22,24 +22,40 @@ describe('normalizeRole', () => {
     expect(normalizeRole('owner')).toBe('owner');
   });
 
+  it('recognises admin', () => {
+    expect(normalizeRole('admin')).toBe('admin');
+  });
+
   it('recognises manager', () => {
     expect(normalizeRole('manager')).toBe('manager');
   });
 
-  it('recognises cashier', () => {
-    expect(normalizeRole('cashier')).toBe('cashier');
+  it('recognises staff', () => {
+    expect(normalizeRole('staff')).toBe('staff');
   });
 
-  it('recognises kitchen', () => {
-    expect(normalizeRole('kitchen')).toBe('kitchen');
+  it('recognises auditor', () => {
+    expect(normalizeRole('auditor')).toBe('auditor');
   });
 
-  it('maps kds alias to kitchen', () => {
-    expect(normalizeRole('kds')).toBe('kitchen');
+  it('recognises role-prefixed preset ids', () => {
+    expect(normalizeRole('role-owner')).toBe('owner');
+    expect(normalizeRole('role-admin')).toBe('admin');
+    expect(normalizeRole('role-manager')).toBe('manager');
+    expect(normalizeRole('role-staff')).toBe('staff');
+    expect(normalizeRole('role-auditor')).toBe('auditor');
   });
 
-  it('maps chef alias to kitchen', () => {
-    expect(normalizeRole('chef')).toBe('kitchen');
+  it('falls back to staff for retired cashier', () => {
+    expect(normalizeRole('cashier')).toBe('staff');
+    expect(normalizeRole('role-cashier')).toBe('staff');
+  });
+
+  it('falls back to staff for retired kitchen and its aliases', () => {
+    expect(normalizeRole('kitchen')).toBe('staff');
+    expect(normalizeRole('role-kitchen')).toBe('staff');
+    expect(normalizeRole('kds')).toBe('staff');
+    expect(normalizeRole('chef')).toBe('staff');
   });
 
   it('falls back to staff for unknown roles', () => {
@@ -50,11 +66,11 @@ describe('normalizeRole', () => {
 
   it('is case-insensitive', () => {
     expect(normalizeRole('OWNER')).toBe('owner');
+    expect(normalizeRole('Admin')).toBe('admin');
     expect(normalizeRole('Manager')).toBe('manager');
-    expect(normalizeRole('CASHIER')).toBe('cashier');
-    expect(normalizeRole('Kitchen')).toBe('kitchen');
-    expect(normalizeRole('KDS')).toBe('kitchen');
-    expect(normalizeRole('Chef')).toBe('kitchen');
+    expect(normalizeRole('STAFF')).toBe('staff');
+    expect(normalizeRole('Auditor')).toBe('auditor');
+    expect(normalizeRole('CASHIER')).toBe('staff');
   });
 
   it('trims whitespace', () => {
@@ -63,6 +79,6 @@ describe('normalizeRole', () => {
   });
 
   it('handles mixed case with whitespace', () => {
-    expect(normalizeRole('  CaShIeR  ')).toBe('cashier');
+    expect(normalizeRole('  AuDiToR  ')).toBe('auditor');
   });
 });

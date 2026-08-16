@@ -34,12 +34,20 @@ pub const ALL: &[Migration] = &[
         sql: include_str!("../migrations/20260814_tenant_uniqueness.sql"),
     },
     Migration {
+        id: "20260815_tenant_unique_indexes.sql",
+        sql: include_str!("../migrations/20260815_tenant_unique_indexes.sql"),
+    },
+    Migration {
         id: "20260814_offline_queue_index.sql",
         sql: include_str!("../migrations/20260814_offline_queue_index.sql"),
     },
     Migration {
         id: "20260814_sale_lines_tenant.sql",
         sql: include_str!("../migrations/20260814_sale_lines_tenant.sql"),
+    },
+    Migration {
+        id: "20260814_sales_tenant.sql",
+        sql: include_str!("../migrations/20260814_sales_tenant.sql"),
     },
     Migration {
         id: "20260814_sent_reports.sql",
@@ -511,8 +519,10 @@ mod tests {
         );
     }
 
-    /// Pin the consolidated schema surface: 93 tables, 123 indexes, 4
-    /// triggers. (The generated `*.pg.sql` Postgres port is excluded — see
+    /// Pin the consolidated schema surface: 93 tables, 125 indexes (123 in
+    /// init plus the two per-tenant unique indexes from
+    /// `20260815_tenant_unique_indexes.sql`), 4 triggers. (The generated
+    /// `*.pg.sql` Postgres port is excluded — see
     /// [`pg_init_declares_same_table_surface_as_sqlite`].) A count assertion catches a table/index/trigger silently
     /// dropping out of `init.sql` — something a name-list check misses when a
     /// name changes.
@@ -535,7 +545,7 @@ mod tests {
                 &conn,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
             ),
-            123,
+            125,
             "index surface drifted"
         );
         assert_eq!(
@@ -590,9 +600,10 @@ mod tests {
 
     /// Simulate the documented existing-dev-DB upgrade path. A pre-reset
     /// database carries legacy `schema_migrations` rows (now absent from the
-    /// registry) and has already been seeded. Running the consolidated init
-    /// must ignore the old IDs, leave existing schema + seed rows untouched
-    /// (`IF NOT EXISTS` / `INSERT OR IGNORE`), and record only the init row.
+    /// registry) and has already been seeded. Running the incremental
+    /// migrations must ignore the old IDs, leave existing schema + seed rows
+    /// untouched (`IF NOT EXISTS` / `INSERT OR IGNORE`), and record every
+    /// registry migration exactly once.
     #[test]
     fn existing_db_with_legacy_rows_upgrades_idempotently() {
         let mut conn = fresh();
@@ -630,7 +641,18 @@ mod tests {
             .collect();
         assert_eq!(
             ids,
-            vec!["001_sales.sql".to_string(), "20260813_init.sql".to_string()]
+            vec![
+                "001_sales.sql".to_string(),
+                "20260813_init.sql".to_string(),
+                "20260814_analytics_index.sql".to_string(),
+                "20260814_offline_queue_index.sql".to_string(),
+                "20260814_sale_lines_tenant.sql".to_string(),
+                "20260814_sales_tenant.sql".to_string(),
+                "20260814_sent_reports.sql".to_string(),
+                "20260814_sent_reports_tenant.sql".to_string(),
+                "20260814_tenant_uniqueness.sql".to_string(),
+                "20260815_tenant_unique_indexes.sql".to_string(),
+            ]
         );
 
         // INSERT OR IGNORE means the re-run did not duplicate seed rows.
@@ -1303,16 +1325,18 @@ mod tests {
 
     #[test]
     fn pg_init_declares_same_table_surface_as_sqlite() {
-        // The Postgres port must cover every table in the SQLite init and
-        // must not leak SQLite-only dialect through the generator.
+        // The Postgres port must cover every table the SQLite registry
+        // produces (the init plus every incremental migration — e.g.
+        // `sent_reports` lives in 20260814_sent_reports.sql) and must not
+        // leak SQLite-only dialect through the generator.
         fn table_count(sql: &str) -> usize {
             sql.matches("CREATE TABLE IF NOT EXISTS").count()
         }
-        let sqlite = include_str!("../migrations/20260813_init.sql");
+        let sqlite_surface: String = ALL.iter().map(|m| m.sql).collect::<Vec<_>>().join("\n");
         assert_eq!(
             table_count(PG_INIT),
-            table_count(sqlite),
-            "Postgres DDL table count drifted from the SQLite init — regenerate scripts/generate-pg-migration.py"
+            table_count(&sqlite_surface),
+            "Postgres DDL table count drifted from the SQLite registry — regenerate scripts/generate-pg-migration.py"
         );
         for leftover in [
             "strftime",

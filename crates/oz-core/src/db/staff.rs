@@ -30,21 +30,34 @@ pub struct LoginLimits {
 // ── Role CRUD ───────────────────────────────────────────────────
 
 impl Store<'_> {
-    /// Seed any built-in roles that do not yet exist in the database.
+    /// Seed built-in roles from their presets.
     ///
-    /// Idempotent — uses `INSERT OR IGNORE` so roles that already exist
-    /// (by their fixed id) are skipped. Safe to call on every startup
-    /// or during the setup wizard.
+    /// Idempotent and safe to call on every startup or during the setup
+    /// wizard. Uses an upsert on the fixed preset id, so roles that already
+    /// exist are re-synced to the preset (name, description, permissions) —
+    /// existing databases converge on the current preset model instead of
+    /// keeping stale grants.
     ///
-    /// Returns the number of roles that were newly inserted.
+    /// Returns the number of roles that were created or re-synced.
     pub fn seed_default_roles(&self) -> Result<usize, CoreError> {
         let mut count = 0usize;
         for preset in ROLE_PRESETS {
             let role = preset.into_role();
             let result = self.conn.execute(
-                "INSERT OR IGNORE INTO roles (id, name, description, permissions, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![role.id, role.name, role.description, role.permissions, role.created_at, role.updated_at],
+                "INSERT INTO roles (id, name, description, permissions, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(id) DO UPDATE SET
+                     name = excluded.name,
+                     description = excluded.description,
+                     permissions = excluded.permissions",
+                params![
+                    role.id,
+                    role.name,
+                    role.description,
+                    role.permissions,
+                    role.created_at,
+                    role.updated_at
+                ],
             );
             count += result?;
         }
@@ -657,6 +670,46 @@ mod tests {
         ).unwrap();
     }
 
+    #[test]
+    fn seed_default_roles_resyncs_stale_builtin_role_permissions() {
+        let conn = fresh();
+        // Simulate a pre-existing database whose role-staff row still carries
+        // the old, too-permissive grant list (folded cashier/kitchen era).
+        conn.execute_batch(
+            r#"INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-staff', 'Staff', 'stale', '["sales:process","sales:void","products:create"]',
+                 '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"#,
+        )
+        .unwrap();
+        store(&conn).seed_default_roles().unwrap();
+        let role = store(&conn)
+            .get_role("role-staff")
+            .unwrap()
+            .expect("role-staff row must exist");
+        // Converged to the preset: checkout-only, stale grants gone.
+        assert!(!role.permissions.contains("sales:void"));
+        assert!(!role.permissions.contains("products:create"));
+        assert!(role.permissions.contains("sales:process"));
+        assert!(role.permissions.contains("payments:cash"));
+        // The gate enforces the converged grants.
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-s', 'sam', 'h', 'Sam', 'role-staff', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        assert!(
+            store(&conn)
+                .require_permission("user-s", "sales:process")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-s", "sales:void")
+                .is_err()
+        );
+    }
+
     // ── Authorization gate (0047) ──────────────────────────────────
 
     #[test]
@@ -838,7 +891,12 @@ mod tests {
         // denial proves the gate authorized through the ASSIGNMENT.
         seed_assigned_user(&conn, "user-a", "role-manager");
         let store = store(&conn);
-        assert!(store.require_permission("user-a", "sales:void").is_ok());
+        // Staff keeps checkout operations via the assignment.
+        assert!(store.require_permission("user-a", "sales:process").is_ok());
+        assert!(
+            store.require_permission("user-a", "sales:void").is_err(),
+            "assignment role (role-staff) is checkout-only — no sales:void"
+        );
         assert!(
             store.require_permission("user-a", "settings:edit").is_err(),
             "assignment role (role-staff) must win over the legacy role_id (role-manager)"

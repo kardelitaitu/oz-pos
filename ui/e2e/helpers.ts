@@ -17,9 +17,11 @@ export const WORKSPACES = {
  * Log in as a staff member.
  *
  * Uses the dev-mock Tauri IPC which accepts:
- *   - owner / 1234  (role: owner)
- *   - admin / 9999     (role: manager)
- *   - kasir / 1234  (role: cashier)
+ *   - owner   / 1234  (role: owner)
+ *   - admin   / 9999  (role: admin)
+ *   - manager / 1234  (role: manager)
+ *   - staff   / 1234  (role: staff — checkout operations)
+ *   - auditor / 1234  (role: auditor — read-only)
  */
 export async function loginAs(
   page: Page,

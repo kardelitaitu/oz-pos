@@ -75,13 +75,13 @@ function mockDefaultUser() {
   });
 }
 
-function mockCashierUser() {
+function mockAuditorUser() {
   mockAuthSession.mockReturnValue({
     session: {
       user_id: 'user-2',
-      display_name: 'Cashier One',
-      role_name: 'cashier',
-      role_id: 'role-cashier',
+      display_name: 'Auditor One',
+      role_name: 'auditor',
+      role_id: 'role-auditor',
     },
     loading: false,
     error: null,
@@ -379,10 +379,15 @@ describe('WorkspaceHome', () => {
   });
 
   // ── Role-based access ───────────────────────────────────────
+  //
+  // Every preset role (owner/admin/manager/staff/auditor) can activate the
+  // workspaces assigned to it; assignment filtering happens on the backend
+  // `list_workspaces`. The client-side gate only blocks unknown/legacy
+  // roles, so a recognized preset role sees all cards enabled (0048 2c).
 
   describe('role-based access', () => {
-    it('disables workspace cards that are not accessible for cashier role', async () => {
-      mockCashierUser();
+    it('enables all workspace cards for a recognized preset role', async () => {
+      mockAuditorUser();
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: sampleWorkspaces,
         loading: false,
@@ -400,19 +405,14 @@ describe('WorkspaceHome', () => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
-      const cards = Array.from(document.querySelectorAll('.workspace-card--disabled')).filter(c => !c.textContent?.includes('Coming soon'));
-      // Cashier can only access restaurant-pos and store-pos
-      expect(cards.length).toBe(3);
-      const disabledNames = Array.from(cards).map(
-        (c) => c.querySelector('.workspace-card-name')?.textContent,
-      );
-      expect(disabledNames).toContain('Kitchen Display');
-      expect(disabledNames).toContain('Inventory Management');
-      expect(disabledNames).toContain('Admin');
+      const cards = Array.from(document.querySelectorAll('.workspace-card')).filter(c => !c.textContent?.includes('Coming soon'));
+      const disabled = cards.filter((c) => c.classList.contains('workspace-card--disabled'));
+      // Auditor is a recognized preset role — no client-side card disabling.
+      expect(disabled.length).toBe(0);
     });
 
-    it('shows badge on disabled workspace cards', async () => {
-      mockCashierUser();
+    it('shows no availability badge for a recognized preset role', async () => {
+      mockAuditorUser();
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: sampleWorkspaces,
         loading: false,
@@ -433,7 +433,7 @@ describe('WorkspaceHome', () => {
       const badges = Array.from(screen.getAllByText('Not available')).filter(
         (b) => !b.closest('.workspace-card')?.textContent?.includes('Coming soon')
       );
-      expect(badges.length).toBe(3);
+      expect(badges.length).toBe(0);
     });
 
     it('allows owner role to click Admin workspace', async () => {

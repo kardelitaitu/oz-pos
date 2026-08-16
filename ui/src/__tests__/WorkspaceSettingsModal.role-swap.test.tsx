@@ -1,7 +1,7 @@
 // ── WorkspaceSettingsModal role-swap tests ────────────────────────
 //
 // ADR #22 §9 integration test: "WorkspaceSettingsModal role-swap:
-// Manager → Cashier session timeout mid-modal". Verifies the modal
+// Manager → Staff session timeout mid-modal". Verifies the modal
 // reactively switches from full workspace card to TerminalPreferencesCard
 // when the auth session changes role.
 //
@@ -46,10 +46,10 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     session: {
-      user_id: 'user-1', username: 'testuser',
-      role_name: mocks.manager ? 'manager' : 'cashier',
-      token: 'tok-123', role_id: 'role-1',
-      display_name: mocks.manager ? 'Manager Test' : 'Cashier Test',
+      user_id: 'user-1', username: 'testuser',      role_name: mocks.manager ? 'manager' : 'staff',
+      token: 'tok-123',
+      role_id: 'role-1',
+      display_name: mocks.manager ? 'Manager Test' : 'Staff Test',
     },
     loading: false, error: null,
     login: vi.fn(), logout: vi.fn(), clearError: vi.fn(),
@@ -114,7 +114,8 @@ const testL10n = {
       'workspace-modal-title': 'Workspace Settings',
       'workspace-modal-admin-settings': 'Admin Settings',
       'workspace-modal-role-manager': 'Manager',
-      'workspace-modal-role-cashier': 'Cashier',
+      'workspace-modal-role-staff': 'Staff',
+      'workspace-modal-role-auditor': 'Auditor',
     };
     return defaults[id] ?? id;
   },
@@ -155,7 +156,7 @@ describe('WorkspaceSettingsModal role-swap', () => {
     expect(screen.queryByTestId('card-terminal-prefs')).not.toBeInTheDocument();
   });
 
-  it('switches to TerminalPreferencesCard when session downgrades to Cashier', async () => {
+  it('switches to TerminalPreferencesCard when session downgrades to Staff', async () => {
     mocks.manager = true;
     const { rerender } = render(
       <Wrapper>
@@ -167,7 +168,7 @@ describe('WorkspaceSettingsModal role-swap', () => {
       expect(screen.getByTestId('card-store-pos')).toBeInTheDocument();
     });
 
-    // Simulate session timeout: Manager → Cashier
+    // Simulate session timeout: Manager → Staff
     mocks.manager = false;
 
     // Re-render with updated auth context

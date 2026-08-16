@@ -637,13 +637,12 @@ mod tests {
             );
         }
 
-        // Management presets grant them; Auditor is read-only and excluded.
+        // Management presets grant them; Staff (checkout-only) and Auditor
+        // (read-only) are excluded.
         for preset in crate::rbac::ROLE_PRESETS {
             let grants = preset.permissions;
             match preset.id {
-                crate::rbac::builtin_roles::MANAGER
-                | crate::rbac::builtin_roles::ADMIN
-                | crate::rbac::builtin_roles::STAFF => {
+                crate::rbac::builtin_roles::MANAGER | crate::rbac::builtin_roles::ADMIN => {
                     for key in [
                         permissions::STAFF_READ_IDENTITY,
                         permissions::STAFF_READ_PAYROLL,
@@ -654,6 +653,15 @@ mod tests {
                             "{} preset must grant {key}",
                             preset.id
                         );
+                    }
+                }
+                crate::rbac::builtin_roles::STAFF => {
+                    for key in [
+                        permissions::STAFF_READ_IDENTITY,
+                        permissions::STAFF_READ_PAYROLL,
+                        permissions::STAFF_EDIT_NOTES,
+                    ] {
+                        assert!(!grants.contains(&key), "Staff must NOT grant {key}");
                     }
                 }
                 crate::rbac::builtin_roles::AUDITOR => {

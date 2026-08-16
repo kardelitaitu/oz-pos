@@ -786,7 +786,8 @@ workspace-modal-title = Pengaturan Workspace
 workspace-modal-admin-settings = Admin Settings ↗
 workspace-modal-close-aria = Tutup pengaturan
 workspace-modal-role-manager = Manajer
-workspace-modal-role-cashier = Kasir
+workspace-modal-role-staff = Staf
+workspace-modal-role-auditor = Auditor
 
 # ── 4f: Workspace card aria-labels ──
 terminal-sound-volume-aria = Volume suara

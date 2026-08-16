@@ -419,6 +419,9 @@ mod tests {
 
     #[tokio::test]
     async fn session_gate_passes_global_and_legacy_users_unrestricted() {
+        // Note: "unrestricted" refers to SCOPE (no assignment row = global
+        // scope), not permissions — legacy role-staff is checkout-only and is
+        // still denied staff:* grants.
         use oz_core::db::assignments::{AssignmentSpec, ScopeMode};
         use oz_core::session::SessionContext;
 
@@ -466,7 +469,9 @@ mod tests {
             .await
             .expect("global assignments must not be scope-restricted");
 
-        // A legacy user without an assignment passes in any context too.
+        // A legacy user without an assignment is not scope-restricted, so a
+        // checkout grant passes in any context — but the role decides which
+        // grants exist: staff:read is denied (checkout-only).
         let legacy_session = SessionContext::new(
             "user-legacy".into(),
             "role-staff".into(),
@@ -477,8 +482,14 @@ mod tests {
             None,
             0,
         );
-        require_permission_for_session(&state, &legacy_session, permissions::STAFF_READ)
+        require_permission_for_session(&state, &legacy_session, permissions::SALES_PROCESS)
             .await
             .expect("legacy users without an assignment must not be scope-restricted");
+        let denied =
+            require_permission_for_session(&state, &legacy_session, permissions::STAFF_READ).await;
+        assert!(
+            matches!(denied, Err(AppError::PermissionDenied(_))),
+            "legacy role-staff is checkout-only — staff:read must be denied"
+        );
     }
 }

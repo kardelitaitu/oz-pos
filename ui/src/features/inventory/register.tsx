@@ -6,17 +6,18 @@ const InventoryAdjustmentScreen = lazy(() => import('./InventoryAdjustmentScreen
 const StockCountsFlow = lazy(() => import('./StockCountsFlow'));
 
 export function registerInventoryFeature() {
-  registerPage({ route: 'inventory-adjustment', component: InventoryAdjustmentScreen, label: 'Stock Adjust', requiredRole: 'manager' });
+  registerPage({ route: 'inventory-adjustment', component: InventoryAdjustmentScreen, label: 'Stock Adjust', requiredRole: 'manager', requiredPermission: 'inventory:view' });
   registerNavItem({
     route: 'inventory-adjustment',
     label: 'Stock Adjust',
     requiredRole: 'manager',
+    requiredPermission: 'inventory:view',
     i18nKey: 'nav-stock-adjust',
     section: 'products',
     icon: icon('M12 5v14M5 12h14', <line x1="12" y1="5" x2="12" y2="19" />, <line x1="5" y1="12" x2="19" y2="12" />),
   });
 
-  registerPage({ route: 'stock-counts', component: StockCountsFlow, label: 'Stock Counts', feature: 'stock-counting' });
+  registerPage({ route: 'stock-counts', component: StockCountsFlow, label: 'Stock Counts', feature: 'stock-counting', requiredRole: 'manager', requiredPermission: 'inventory:view' });
   registerNavItem({
     route: 'stock-counts',
     label: 'Stock Counts',

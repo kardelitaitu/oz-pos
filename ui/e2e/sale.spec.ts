@@ -22,7 +22,7 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 test.describe('Complete Sale Flow', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'kasir', '1234');
+    await loginAs(page, 'staff', '1234');
     await selectWorkspace(page, WORKSPACES.STORE_POS);
   });
 
@@ -296,7 +296,7 @@ test.describe('Complete Sale Flow', () => {
 
 test.describe('Payment Methods', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'kasir', '1234');
+    await loginAs(page, 'staff', '1234');
     await selectWorkspace(page, WORKSPACES.STORE_POS);
   });
 

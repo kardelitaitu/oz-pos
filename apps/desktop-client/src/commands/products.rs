@@ -1588,18 +1588,23 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
-        // role-staff holds PRODUCTS_CREATE/PRODUCTS_UPDATE but NOT
-        // PRODUCTS_EDIT_COST (ADR #36 D7 — manager+ only).
-        conn.execute(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
-                    ('user-manager', 'manager', 'hash', 'Manager', 'role-manager', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
-            [],
+        // role-costless is a custom role that holds PRODUCTS_CREATE/
+        // PRODUCTS_UPDATE but NOT PRODUCTS_EDIT_COST (ADR #36 D7 — manager+
+        // only); role-staff is checkout-only and holds none of them.
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-costless', 'Costless', 'Custom', '[\"products:create\",\"products:update\"]',
+                 '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                ('user-staff',    'staff',    'hash', 'Staff',    'role-staff',    1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                ('user-costless', 'costless', 'hash', 'Costless', 'role-costless', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                ('user-manager',  'manager',  'hash', 'Manager',  'role-manager',  1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
         let state = AppState::for_test_with_conn(conn);
         for (token, user, role) in [
             ("staff-token", "user-staff", "role-staff"),
+            ("costless-token", "user-costless", "role-costless"),
             ("manager-token", "user-manager", "role-manager"),
         ] {
             state.session_store.write().unwrap().insert(
@@ -1667,25 +1672,35 @@ mod tests {
     async fn create_product_scoped_denies_cost_without_edit_cost_permission() {
         let app = seeded_cost_gate_app();
 
-        // Staff creating a product WITHOUT cost passes the gate (the test
-        // state has no store DB, so the call then fails internally — the
-        // point is it is NOT a permission denial).
+        // A create-capable role (custom: products:create, no edit_cost)
+        // creating a product WITHOUT cost passes the gate (the test state has
+        // no store DB, so the call then fails internally — the point is it is
+        // NOT a permission denial).
         let no_cost = create_product_scoped(
-            "staff-token".into(),
+            "costless-token".into(),
             create_args("SKU-NO-COST", 0),
             app.state(),
         )
         .await;
         assert!(!matches!(no_cost, Err(AppError::PermissionDenied(_))));
 
-        // Staff setting a cost is rejected outright.
+        // The same role setting a cost is rejected outright.
         let with_cost = create_product_scoped(
-            "staff-token".into(),
+            "costless-token".into(),
             create_args("SKU-COST", 100),
             app.state(),
         )
         .await;
         assert!(matches!(with_cost, Err(AppError::PermissionDenied(_))));
+
+        // Staff is checkout-only and cannot create products at all.
+        let staff = create_product_scoped(
+            "staff-token".into(),
+            create_args("SKU-STAFF", 0),
+            app.state(),
+        )
+        .await;
+        assert!(matches!(staff, Err(AppError::PermissionDenied(_))));
 
         // Manager passes the gate (then fails on the missing store DB, not
         // on the permission).
@@ -1702,23 +1717,33 @@ mod tests {
     async fn update_product_scoped_denies_cost_change_without_edit_cost_permission() {
         let app = seeded_cost_gate_app();
 
-        // Staff PATCH without touching cost passes the gate.
+        // A create-capable role (custom: products:update, no edit_cost) PATCH
+        // without touching cost passes the gate.
         let no_cost = update_product_scoped(
-            "staff-token".into(),
+            "costless-token".into(),
             update_args("SKU-1", None),
             app.state(),
         )
         .await;
         assert!(!matches!(no_cost, Err(AppError::PermissionDenied(_))));
 
-        // Staff PATCH that changes cost is rejected.
+        // The same role PATCH that changes cost is rejected.
         let with_cost = update_product_scoped(
-            "staff-token".into(),
+            "costless-token".into(),
             update_args("SKU-1", Some(100)),
             app.state(),
         )
         .await;
         assert!(matches!(with_cost, Err(AppError::PermissionDenied(_))));
+
+        // Staff is checkout-only and cannot update products at all.
+        let staff = update_product_scoped(
+            "staff-token".into(),
+            update_args("SKU-1", None),
+            app.state(),
+        )
+        .await;
+        assert!(matches!(staff, Err(AppError::PermissionDenied(_))));
 
         // Manager PATCH with cost passes the gate.
         let manager = update_product_scoped(

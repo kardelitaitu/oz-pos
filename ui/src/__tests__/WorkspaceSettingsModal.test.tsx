@@ -1,6 +1,6 @@
 // ── WorkspaceSettingsModal tests ───────────────────────────────────
 //
-// Covers: role gating (Manager = full card, Cashier = TerminalPreferencesCard),
+// Covers: role gating (Manager = full card, Staff = TerminalPreferencesCard),
 // Admin Settings button visibility and navigation, exit animation signaling,
 // portal rendering into document.body, workspace type to card routing,
 // nested modal depth tracking, close-on-backdrop-click, open=false renders null.
@@ -44,10 +44,10 @@ vi.mock('@/contexts/AuthContext', () => ({
     session: {
       user_id: 'user-1',
       username: 'testuser',
-      role_name: mocks.manager ? 'manager' : 'cashier',
+      role_name: mocks.manager ? 'manager' : 'staff',
       token: 'tok-123',
       role_id: 'role-1',
-      display_name: mocks.manager ? 'Manager Test' : 'Cashier Test',
+      display_name: mocks.manager ? 'Manager Test' : 'Staff Test',
     },
     loading: false,
     error: null,
@@ -182,7 +182,8 @@ const testL10n = {
       'workspace-modal-admin-settings': 'Admin Settings',
       'workspace-modal-close-aria': 'Close settings',
       'workspace-modal-role-manager': 'Manager',
-      'workspace-modal-role-cashier': 'Cashier',
+      'workspace-modal-role-staff': 'Staff',
+      'workspace-modal-role-auditor': 'Auditor',
     };
     return defaults[id] ?? id;
   },
@@ -276,7 +277,7 @@ describe('WorkspaceSettingsModal', () => {
     expect(screen.queryByTestId('card-terminal-prefs')).not.toBeInTheDocument();
   });
 
-  it('renders TerminalPreferencesCard for cashier role', async () => {
+  it('renders TerminalPreferencesCard for staff role', async () => {
     mocks.manager = false;
     renderModal();
 
@@ -295,7 +296,7 @@ describe('WorkspaceSettingsModal', () => {
     });
   });
 
-  it('hides Admin Settings button for cashier', async () => {
+  it('hides Admin Settings button for staff', async () => {
     mocks.manager = false;
     renderModal();
 
@@ -416,12 +417,12 @@ describe('WorkspaceSettingsModal', () => {
     });
   });
 
-  it('shows Cashier role badge for cashier', async () => {
+  it('shows Staff role badge for staff', async () => {
     mocks.manager = false;
     renderModal();
 
     await waitFor(() => {
-      expect(screen.getByText('Cashier')).toBeInTheDocument();
+      expect(screen.getByText('Staff')).toBeInTheDocument();
     });
   });
 

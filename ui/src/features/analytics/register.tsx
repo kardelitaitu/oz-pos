@@ -5,14 +5,15 @@ import { icon } from '@/platform/ui/icon';
 const AnalyticsScreen = lazy(() => import('./AnalyticsScreen'));
 
 export function registerAnalyticsFeature() {
-  // analytics:view — owner/admin/manager only (0046 registry + 0048 scope).
-  // The permission key is authoritative when the session carries granted
-  // keys; requiredRole is the fallback for environments without them.
-  registerPage({ route: 'analytics', component: AnalyticsScreen, label: 'Analytics', requiredRole: 'management', requiredPermission: 'analytics:view', fullscreen: true });
+  // analytics:view — owner/admin/manager only (0046 registry + 0048 scope,
+  // aligned to the manager+ plan). The permission key is authoritative when
+  // the session carries granted keys; requiredRole is the fallback for
+  // environments without them.
+  registerPage({ route: 'analytics', component: AnalyticsScreen, label: 'Analytics', requiredRole: 'manager', requiredPermission: 'analytics:view', fullscreen: true });
   registerNavItem({
     route: 'analytics',
     label: 'Analytics',
-    requiredRole: 'management',
+    requiredRole: 'manager',
     requiredPermission: 'analytics:view',
     i18nKey: 'nav-analytics',
     section: 'reports',

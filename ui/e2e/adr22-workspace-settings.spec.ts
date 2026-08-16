@@ -4,7 +4,7 @@
 // - F10 modal → Admin Settings shortcut flow (Store POS)
 // - Topology canvas rendering + inspector drawer
 // - Workspace config nav items in SettingsNavTree
-// - Cashier security guard (#/settings URL bar redirect)
+// - Staff security guard (#/settings URL bar redirect)
 //
 // All assertions are hard (no conditionals) per E2E convention.
 
@@ -482,11 +482,11 @@ test.describe('ADR #22 — Workspace config in SettingsNavTree', () => {
   });
 });
 
-// ── Cashier security guard (§7, §9 Security) ──────────────────
+// ── Staff security guard (§7, §9 Security) ────────────────────
 
-test.describe('ADR #22 — Cashier security guard', () => {
-  test('cashier is redirected away from #/settings', async ({ page }) => {
-    await loginAs(page, 'kasir', '1234');
+test.describe('ADR #22 — Staff security guard', () => {
+  test('staff is redirected away from #/settings', async ({ page }) => {
+    await loginAs(page, 'staff', '1234');
 
     // Should land on workspace home.
     await page.getByTestId('workspace-home').waitFor({ timeout: 10_000 });
