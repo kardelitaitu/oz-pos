@@ -91,7 +91,7 @@ func TestRequestOTP_SendsCodeToActiveTenant(t *testing.T) {
 	}
 }
 
-func TestRequestOTP_NoEnumerationForUnknownEmail(t *testing.T) {
+func TestRequestOTP_SelfSignupCreatesTenantAndSendsCode(t *testing.T) {
 	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
@@ -104,16 +104,73 @@ func TestRequestOTP_NoEnumerationForUnknownEmail(t *testing.T) {
 		`{"email":"nobody@example.com"}`, "http://localhost:4321", "")
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 (no enumeration), got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if sentCode != "" {
-		t.Error("no code should be emailed for an unknown email")
+	// Self-signup: an unknown email receives a code AND becomes an
+	// active tenant (register-or-login — the response stays a plain 200,
+	// so the endpoint never reveals whether the account pre-existed).
+	if sentCode == "" || len(sentCode) != 6 {
+		t.Fatalf("expected a 6-digit code to be sent for a new email, got %q", sentCode)
+	}
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "nobody@example.com")
+	if err != nil || tenant == nil {
+		t.Fatalf("expected a tenant to be created by self-signup: %v", err)
+	}
+	if tenant.GetString("status") != "active" {
+		t.Errorf("expected new tenant status active, got %q", tenant.GetString("status"))
+	}
+	if tenant.GetString("api_key") == "" || tenant.GetString("api_key_lookup") == "" {
+		t.Error("expected placeholder api_key + lookup to be set on the new tenant")
 	}
 	webOtpStore.mu.Lock()
 	_, stored := webOtpStore.codes["nobody@example.com"]
 	webOtpStore.mu.Unlock()
-	if stored {
-		t.Error("no code should be stored for an unknown email")
+	if !stored {
+		t.Error("expected a pending code to be stored for the new email")
+	}
+}
+
+// TestVerifyOTP_AfterSelfSignupIssuesSession drives the full register
+// flow: request-otp creates the tenant, verify-otp with the emailed code
+// issues a session token and returns the tenant summary.
+func TestVerifyOTP_AfterSelfSignupIssuesSession(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/request-otp",
+		`{"email":"newuser@example.com"}`, "http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("request-otp expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sentCode == "" {
+		t.Fatal("expected a code to be sent")
+	}
+
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/verify-otp",
+		`{"email":"newuser@example.com","code":"`+sentCode+`"}`, "http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify-otp expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Token  string         `json:"token"`
+		Tenant map[string]any `json:"tenant"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad response JSON: %v", err)
+	}
+	if resp.Token == "" {
+		t.Error("expected a session token")
+	}
+	if resp.Tenant == nil {
+		t.Error("expected a tenant summary in the verify response")
+	}
+	if resp.Tenant["email"] != "newuser@example.com" {
+		t.Errorf("expected tenant email newuser@example.com, got %v", resp.Tenant["email"])
 	}
 }
 
@@ -393,6 +450,67 @@ func TestMe_ReturnsTenantProfile(t *testing.T) {
 	}
 	if _, ok := resp.License["expiresAt"]; !ok {
 		t.Error("expected license expiresAt in response")
+	}
+}
+
+// TestMe_ShowsUnusedKeyViaSubscription covers the register-first purchase
+// state: the webhook minted the license key (status "unused", linked by
+// paddle_sub_id) but the POS hasn't activated it yet — /me must still
+// surface the key the tenant paid for.
+func TestMe_ShowsUnusedKeyViaSubscription(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const tenantID = "webotpmeunused1"
+	seedTenant(t, app, tenantID, "webotpmeunused1", "active")
+	seedSubscription(t, app, tenantID, "pro", "active")
+	// Link the subscription to a paddle sub id, and the key to the same id
+	// (exactly what the webhook does on subscription.created).
+	subs, err := app.FindRecordsByFilter("subscriptions", "tenant_id = {:t}", "", 1, 0, map[string]any{"t": tenantID})
+	if err != nil || len(subs) == 0 {
+		t.Fatalf("seeded subscription not found: %v", err)
+	}
+	subs[0].Set("paddle_sub_id", "sub_01m05unused")
+	if err := app.Save(subs[0]); err != nil {
+		t.Fatalf("failed to set paddle_sub_id: %v", err)
+	}
+	seedLicenseKey(t, app, "OZ-UNUSED-KEY-0001", "pro", "unused", "2099-12-31 23:59:59.000Z")
+	keys, err := app.FindRecordsByFilter("license_keys", "key = 'OZ-UNUSED-KEY-0001'", "", 1, 0, nil)
+	if err != nil || len(keys) == 0 {
+		t.Fatalf("seeded key not found: %v", err)
+	}
+	keys[0].Set("paddle_sub_id", "sub_01m05unused")
+	if err := app.Save(keys[0]); err != nil {
+		t.Fatalf("failed to set key paddle_sub_id: %v", err)
+	}
+
+	token := "me-session-unused-0001"
+	webOtpStore.createSession(hashWebToken(token), tenantID)
+
+	rec := webRequest(t, se, http.MethodGet, "/api/v1/web/me", "",
+		"http://localhost:4321", "Bearer "+token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		License map[string]any `json:"license"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp.License == nil {
+		t.Fatal("expected the unused license key to be surfaced via the subscription link")
+	}
+	if resp.License["key"] != "OZ-UNUSED-KEY-0001" {
+		t.Errorf("unexpected license key: %v", resp.License["key"])
+	}
+	if resp.License["tierKey"] != "pro" {
+		t.Errorf("unexpected license tier: %v", resp.License["tierKey"])
+	}
+	if resp.License["status"] != "unused" {
+		t.Errorf("expected status unused, got %v", resp.License["status"])
 	}
 }
 
