@@ -35,7 +35,7 @@ shown when you manage staff in **Settings → Staff**.
 | Audit log                         | —     | ✓       | view    | ✓     | ✓     |
 | Kitchen Display (view, update)    | ✓     | ✓       | view    | ✓     | ✓     |
 | Terminals (register, edit, delete) | —    | ✓       | —       | ✓     | ✓     |
-| Workspace access                  | assigned | ✓     | —       | ✓     | ✓     |
+| Workspace access                  | assigned | ✓     | ✓       | ✓     | ✓     |
 
 Legend: **✓** full access · **read** view only · **assigned** only the
 workspaces assigned to the account · **—** no access.

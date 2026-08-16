@@ -179,7 +179,9 @@ impl Store<'_> {
             || role_id == "admin"
             || role_id == "role-manager"
             || role_id == "role-staff"
+            || role_id == "role-auditor"
             || role_id == "manager"
+            || role_id == "auditor"
         {
             return self.list_all_workspace_types();
         }
@@ -364,7 +366,9 @@ impl Store<'_> {
             || role_id == "admin"
             || role_id == "role-manager"
             || role_id == "role-staff"
+            || role_id == "role-auditor"
             || role_id == "manager"
+            || role_id == "auditor"
         {
             // Phase 2: check user_store_access for multi-store enforcement.
             if let Some(uid) = user_id {
@@ -1105,7 +1109,9 @@ impl Store<'_> {
             || role_id == "admin"
             || role_id == "role-manager"
             || role_id == "role-staff"
+            || role_id == "role-auditor"
             || role_id == "manager"
+            || role_id == "auditor"
         {
             // Check if user has explicit store access rows (multi-store mode, ADR #4 Phase 2).
             let has_store_access: bool = self
@@ -1283,6 +1289,22 @@ mod tests {
             assert!(!w.name.is_empty());
             assert!(!w.layout_mode.is_empty());
         }
+    }
+
+    #[test]
+    fn list_workspaces_auditor_returns_instances_in_store() {
+        // Auditor is a global read-only role per the five-role taxonomy — it
+        // must resolve the same workspace instances as the management roles
+        // so it can reach its read-only screens (audit log, reports,
+        // inventory) through the workspace picker.
+        let (store, _) = fresh();
+        let dto = store
+            .list_workspaces("role-auditor", None, "default")
+            .unwrap();
+        assert_eq!(dto.len(), 5);
+        assert!(dto.iter().any(|w| w.type_key == "kds"));
+        assert!(dto.iter().any(|w| w.type_key == "restaurant-pos"));
+        assert!(dto.iter().any(|w| w.type_key == "admin"));
     }
 
     #[test]
@@ -2254,6 +2276,35 @@ mod tests {
         assert!(
             ok,
             "a real owner with the matching role keeps instance access"
+        );
+    }
+
+    #[test]
+    fn verify_instance_access_allows_auditor() {
+        // Auditor is a global read-only role — the session-open gate must
+        // admit it into any active instance so it can reach its read-only
+        // screens (the plan's "Auditor is global" claim).
+        let (store, _) = fresh();
+        seed_owner_user(store.conn);
+        store
+            .conn
+            .execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at)
+                 VALUES ('user-auditor', 'auditor', 'hash', 'Auditor', 'role-auditor', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+                [],
+            )
+            .unwrap();
+        let ok = store
+            .verify_instance_access(
+                "role-auditor",
+                "user-auditor",
+                "default-restaurant-pos",
+                "default",
+            )
+            .unwrap();
+        assert!(
+            ok,
+            "a real auditor with the matching role keeps instance access"
         );
     }
 

@@ -35,7 +35,7 @@ preset, yang ditampilkan saat Anda mengelola staf di **Pengaturan → Staf**.
 | Log audit                          | —    | ✓       | lihat   | ✓     | ✓       |
 | Tampilan Dapur (lihat, perbarui)   | ✓    | ✓       | lihat   | ✓     | ✓       |
 | Terminal (daftarkan, ubah, hapus)  | —    | ✓       | —       | ✓     | ✓       |
-| Akses ruang kerja                  | sesuai penugasan | ✓ | — | ✓ | ✓ |
+| Akses ruang kerja                  | sesuai penugasan | ✓ | ✓ | ✓ | ✓ |
 
 Legenda: **✓** akses penuh · **baca** hanya lihat · **sesuai penugasan**
 hanya ruang kerja yang ditugaskan ke akun · **—** tidak ada akses.
