@@ -68,6 +68,31 @@
       "gettingStarted": "Getting Started",
       "guides": "Guides",
       "reference": "Reference"
+    },
+    "hub": {
+      "subtitle": "Choose the documentation that fits what you're doing.",
+      "cards": [
+        {
+          "title": "Get Started",
+          "description": "Setup, your first sale, licensing, and everyday guides for running OZ-POS.",
+          "cta": "Open guide"
+        },
+        {
+          "title": "Developer Reference",
+          "description": "Architecture decisions, module docs, and deep developer guides.",
+          "cta": "Open reference"
+        },
+        {
+          "title": "Rust API",
+          "description": "cargo doc reference for the OZ-POS backend crates.",
+          "cta": "Browse API"
+        },
+        {
+          "title": "TypeScript API",
+          "description": "TypeDoc reference for the front-end, hooks, and API clients.",
+          "cta": "Browse API"
+        }
+      ]
     }
   },
   "hero": {
