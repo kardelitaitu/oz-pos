@@ -176,7 +176,6 @@ pub struct RedeemGiftCardResult {
     pub transaction: GiftCardTransaction,
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

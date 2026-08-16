@@ -222,7 +222,6 @@ mod tests {
     }
 }
 
-
 // Extend existing test module with comprehensive coverage.
 // The existing tests cover permission_keys — we add Role, User, UserId,
 // authorize, has_permission edge cases, and builtin constants.
@@ -256,8 +255,8 @@ fn role_with_description() {
 
 #[test]
 fn role_has_permission_exact_match() {
-    let role = Role::new("r-1", "X")
-        .with_permissions_json(r##"["sales:process", "products:view"]"##);
+    let role =
+        Role::new("r-1", "X").with_permissions_json(r##"["sales:process", "products:view"]"##);
     assert!(role.has_permission("sales:process"));
     assert!(role.has_permission("products:view"));
     assert!(!role.has_permission("settings:edit"));
@@ -292,15 +291,13 @@ fn role_has_permission_malformed_json() {
 
 #[test]
 fn role_authorize_success() {
-    let role = Role::new("r-1", "X")
-        .with_permissions_json(r##"["sales:process"]"##);
+    let role = Role::new("r-1", "X").with_permissions_json(r##"["sales:process"]"##);
     assert!(role.authorize("sales:process").is_ok());
 }
 
 #[test]
 fn role_authorize_failure() {
-    let role = Role::new("r-1", "X")
-        .with_permissions_json(r##"["sales:process"]"##);
+    let role = Role::new("r-1", "X").with_permissions_json(r##"["sales:process"]"##);
     let err = role.authorize("settings:edit").unwrap_err();
     assert_eq!(err.required, "settings:edit");
     assert_eq!(err.role_name, "X");

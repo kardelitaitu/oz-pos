@@ -105,7 +105,6 @@ impl From<&str> for TerminalId {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -63,7 +63,6 @@ impl Customer {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,15 +103,13 @@ mod tests {
 
     #[test]
     fn customer_with_email() {
-        let c = Customer::new("Alice")
-            .with_email(Email::new("alice@example.com").unwrap());
+        let c = Customer::new("Alice").with_email(Email::new("alice@example.com").unwrap());
         assert_eq!(c.email.as_ref().unwrap().as_str(), "alice@example.com");
     }
 
     #[test]
     fn customer_with_phone() {
-        let c = Customer::new("Bob")
-            .with_phone(Phone::new("+1-555-0102").unwrap());
+        let c = Customer::new("Bob").with_phone(Phone::new("+1-555-0102").unwrap());
         assert_eq!(c.phone.as_ref().unwrap().as_str(), "+1-555-0102");
     }
 

@@ -836,15 +836,20 @@ mod tests {
         );
     }
 
-
     // ── shared_topology_semantics ─────────────────────────────────────
 
     #[test]
     fn shared_topology_semantics_loads_and_has_expected_keys() {
         let sem = shared_topology_semantics();
         assert!(sem.get("warehouse").is_some(), "must have warehouse key");
-        assert!(sem.get("semanticPairings").is_some(), "must have semanticPairings key");
-        assert!(sem.get("schemaVersion").is_some(), "must have schemaVersion key");
+        assert!(
+            sem.get("semanticPairings").is_some(),
+            "must have semanticPairings key"
+        );
+        assert!(
+            sem.get("schemaVersion").is_some(),
+            "must have schemaVersion key"
+        );
     }
 
     // ── value_string ──────────────────────────────────────────────────
@@ -921,28 +926,36 @@ mod tests {
     #[test]
     fn semantic_pairing_location_match() {
         assert!(shared_semantic_pairing_contains(
-            Some("location-out"), Some("location-in"), Some("location")
+            Some("location-out"),
+            Some("location-in"),
+            Some("location")
         ));
     }
 
     #[test]
     fn semantic_pairing_stock_routing_match() {
         assert!(shared_semantic_pairing_contains(
-            Some("stock-out"), Some("stock-in"), Some("stock-routing")
+            Some("stock-out"),
+            Some("stock-in"),
+            Some("stock-routing")
         ));
     }
 
     #[test]
     fn semantic_pairing_ticket_routing_match() {
         assert!(shared_semantic_pairing_contains(
-            Some("ticket-out"), Some("ticket-in"), Some("ticket-routing")
+            Some("ticket-out"),
+            Some("ticket-in"),
+            Some("ticket-routing")
         ));
     }
 
     #[test]
     fn semantic_pairing_wrong_port_rejected() {
         assert!(!shared_semantic_pairing_contains(
-            Some("stock-out"), Some("location-in"), Some("location")
+            Some("stock-out"),
+            Some("location-in"),
+            Some("location")
         ));
     }
 
@@ -954,7 +967,9 @@ mod tests {
     #[test]
     fn semantic_pairing_unknown_triple() {
         assert!(!shared_semantic_pairing_contains(
-            Some("unknown-out"), Some("unknown-in"), Some("unknown-rel")
+            Some("unknown-out"),
+            Some("unknown-in"),
+            Some("unknown-rel")
         ));
     }
 
@@ -1055,6 +1070,4 @@ mod tests {
         let node = serde_json::json!({"type": 42});
         assert_eq!(semantic_node_type(&node), None);
     }
-
 }
-

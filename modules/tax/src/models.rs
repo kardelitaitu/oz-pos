@@ -116,7 +116,6 @@ impl TaxRate {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
