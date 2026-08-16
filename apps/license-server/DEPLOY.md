@@ -216,7 +216,7 @@ The license server requires the RSA private key as an environment variable. **Ne
    - **Key:** `OZ_SMTP_HOST` — your relay's hostname
    - **Key:** `OZ_SMTP_PORT` — default `587` (TLS/STARTTLS) if unset
    - **Key:** `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` — credentials for the relay (omit for unauthenticated relays)
-   - **Key:** `OZ_SMTP_FROM` — sender address. **Must be set explicitly** — the code defaults to `no-reply@oz-pos.com`, which relays will reject or flag until that domain is yours.
+   - **Key:** `OZ_SMTP_FROM` — sender address. **Must be set explicitly and verified with your relay** — the code defaults to `no-reply@oz-pos.com`, which relays will reject or flag until that domain is yours. **Boot gate:** when `OZ_SMTP_HOST` is set, the server runs a sender-identity probe at startup (auth + `MAIL FROM` only — nothing is ever queued) and **fails fast** if `OZ_SMTP_FROM` is unset, is still the unowned default, or the relay permanently rejects it (e.g. Brevo `550 Sender address is not verified`). A transient relay outage only logs a warning, so a brief hiccup can't block a deploy. Unset `OZ_SMTP_HOST` skips the gate entirely (the endpoint answers 503 by design then).
 
    **No custom domain yet?** Northflank does **not** provide SMTP/email to apps — you need a third-party transactional relay, and `code.run` / `workers.dev` are not domains you can add DNS records to (no SPF/DKIM there). Until you own a domain, use a provider that works with a **verified sender email** instead:
 

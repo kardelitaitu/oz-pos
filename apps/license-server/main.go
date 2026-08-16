@@ -9,16 +9,17 @@
 //	go generate ./...          (runs: go-winres make --arch amd64)
 //
 // The .syso is committed so `go build` on Windows needs no extra tooling.
+//
 //go:generate go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64
 package main
 
 import (
-	_ "embed"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	_ "embed"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
@@ -84,6 +85,15 @@ func main() {
 		}
 	}
 	log.Println("RSA private key loaded successfully")
+
+	// ── Bootstrap: SMTP sender identity ──────────────────────────
+	// Fail fast when email delivery is configured but OZ_SMTP_FROM is
+	// unset or rejected by the relay: signup codes and purchase receipts
+	// would silently fail in production (see verifySMTPConfig). Skipped
+	// when OZ_SMTP_HOST is unset — request-otp answers 503 by design then.
+	if err := verifySMTPConfig(); err != nil {
+		log.Fatal(err)
+	}
 
 	// ── Register custom license API routes ───────────────────────
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {

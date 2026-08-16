@@ -38,8 +38,10 @@ type smtpCapture struct {
 // its address plus a channel that receives one capture per message. The
 // server advertises AUTH PLAIN/LOGIN but NOT STARTTLS, so the
 // smtp.SendMail path stays on the plaintext connection (it would
-// otherwise try to upgrade to TLS and fail).
-func runSMTPServer(t *testing.T, tlsCfg *tls.Config) (addr string, captures chan smtpCapture) {
+// otherwise try to upgrade to TLS and fail). With rejectMailFrom true it
+// answers MAIL FROM with a permanent 550 (what relays do for an
+// unverified sender identity).
+func runSMTPServer(t *testing.T, tlsCfg *tls.Config, rejectMailFrom bool) (addr string, captures chan smtpCapture) {
 	t.Helper()
 	captures = make(chan smtpCapture, 4)
 
@@ -61,7 +63,7 @@ func runSMTPServer(t *testing.T, tlsCfg *tls.Config) (addr string, captures chan
 			if err != nil {
 				return
 			}
-			go serveSMTPConn(conn, captures)
+			go serveSMTPConn(conn, captures, rejectMailFrom)
 		}
 	}()
 	return ln.Addr().String(), captures
@@ -69,7 +71,7 @@ func runSMTPServer(t *testing.T, tlsCfg *tls.Config) (addr string, captures chan
 
 // serveSMTPConn speaks just enough SMTP for Go's smtp.Client: greeting,
 // EHLO with AUTH, AUTH PLAIN, MAIL/RCPT/DATA, QUIT.
-func serveSMTPConn(conn net.Conn, captures chan smtpCapture) {
+func serveSMTPConn(conn net.Conn, captures chan smtpCapture, rejectMailFrom bool) {
 	defer conn.Close()
 	r := textproto.NewReader(bufio.NewReader(conn))
 	w := textproto.NewWriter(bufio.NewWriter(conn))
@@ -103,7 +105,11 @@ func serveSMTPConn(conn net.Conn, captures chan smtpCapture) {
 			write("235 ok")
 		case strings.HasPrefix(upper, "MAIL FROM:"):
 			cap.from = strings.Trim(strings.TrimPrefix(line, "MAIL FROM:"), "<>")
-			write("250 ok")
+			if rejectMailFrom {
+				write("550 5.7.1 Sender address is not verified")
+			} else {
+				write("250 ok")
+			}
 		case strings.HasPrefix(upper, "RCPT TO:"):
 			cap.rcpt = append(cap.rcpt, strings.Trim(strings.TrimPrefix(line, "RCPT TO:"), "<>"))
 			write("250 ok")
@@ -172,7 +178,7 @@ func testTLSCert(t *testing.T) tls.Certificate {
 // TestSendMailSMTP_PlaintextPort exercises the non-465 branch (what
 // smtp.SendMail handles): delivery on a plaintext listener, unauthenticated.
 func TestSendMailSMTP_PlaintextPort(t *testing.T) {
-	addr, captures := runSMTPServer(t, nil)
+	addr, captures := runSMTPServer(t, nil, false)
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -206,7 +212,7 @@ func TestSendMailSMTP_PlaintextPort(t *testing.T) {
 func TestSendMailImplicitTLS(t *testing.T) {
 	cert := testTLSCert(t)
 	tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}}
-	addr, captures := runSMTPServer(t, tlsCfg)
+	addr, captures := runSMTPServer(t, tlsCfg, false)
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -249,7 +255,7 @@ func TestSendMailImplicitTLS(t *testing.T) {
 // here would mean the branch was NOT taken — we assert the TLS dial fails
 // against a non-TLS listener instead.
 func TestSendMailSMTP_SelectsImplicitTLSForPort465(t *testing.T) {
-	addr, captures := runSMTPServer(t, nil)
+	addr, captures := runSMTPServer(t, nil, false)
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		t.Fatalf("split host/port: %v", err)
@@ -262,5 +268,101 @@ func TestSendMailSMTP_SelectsImplicitTLSForPort465(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "tls") {
 		t.Errorf("error = %q, want a TLS handshake error", err)
+	}
+}
+
+// ── Boot-time sender-identity gate (verifySMTPConfig) ────────────────
+
+func TestVerifySMTPConfig_UnsetHostSkipped(t *testing.T) {
+	t.Setenv("OZ_SMTP_HOST", "")
+	t.Setenv("OZ_SMTP_FROM", "")
+	if err := verifySMTPConfig(); err != nil {
+		t.Fatalf("unset OZ_SMTP_HOST should skip the check, got error: %v", err)
+	}
+}
+
+func TestVerifySMTPConfig_UnsetFromFails(t *testing.T) {
+	t.Setenv("OZ_SMTP_HOST", "smtp-relay.brevo.com")
+	t.Setenv("OZ_SMTP_PORT", "587")
+	t.Setenv("OZ_SMTP_USER", "")
+	t.Setenv("OZ_SMTP_PASSWORD", "")
+	t.Setenv("OZ_SMTP_FROM", "")
+	err := verifySMTPConfig()
+	if err == nil {
+		t.Fatal("unset OZ_SMTP_FROM with a configured host must fail fast")
+	}
+	if !strings.Contains(err.Error(), "OZ_SMTP_FROM is required") {
+		t.Errorf("error = %q, want a clear OZ_SMTP_FROM message", err)
+	}
+}
+
+func TestVerifySMTPConfig_DefaultFromFails(t *testing.T) {
+	t.Setenv("OZ_SMTP_HOST", "smtp-relay.brevo.com")
+	t.Setenv("OZ_SMTP_PORT", "587")
+	t.Setenv("OZ_SMTP_USER", "")
+	t.Setenv("OZ_SMTP_PASSWORD", "")
+	t.Setenv("OZ_SMTP_FROM", smtpDefaultFrom)
+	err := verifySMTPConfig()
+	if err == nil {
+		t.Fatal("the unowned default sender must fail fast")
+	}
+}
+
+func TestVerifySMTPConfig_AcceptedSenderPasses(t *testing.T) {
+	addr, _ := runSMTPServer(t, nil, false)
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("split host/port: %v", err)
+	}
+	t.Setenv("OZ_SMTP_HOST", host)
+	t.Setenv("OZ_SMTP_PORT", port)
+	t.Setenv("OZ_SMTP_USER", "otp-user")
+	t.Setenv("OZ_SMTP_PASSWORD", "otp-pass")
+	t.Setenv("OZ_SMTP_FROM", "verified@example.com")
+	if err := verifySMTPConfig(); err != nil {
+		t.Fatalf("accepted sender should pass the gate, got error: %v", err)
+	}
+}
+
+func TestVerifySMTPConfig_RejectedSenderFails(t *testing.T) {
+	addr, _ := runSMTPServer(t, nil, true) // 550 on MAIL FROM
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("split host/port: %v", err)
+	}
+	t.Setenv("OZ_SMTP_HOST", host)
+	t.Setenv("OZ_SMTP_PORT", port)
+	t.Setenv("OZ_SMTP_USER", "")
+	t.Setenv("OZ_SMTP_PASSWORD", "")
+	t.Setenv("OZ_SMTP_FROM", "unverified@example.com")
+	err = verifySMTPConfig()
+	if err == nil {
+		t.Fatal("a permanent relay rejection of the sender must fail fast")
+	}
+	if !strings.Contains(err.Error(), "permanent rejection") {
+		t.Errorf("error = %q, want the permanent-rejection framing", err)
+	}
+}
+
+func TestVerifySMTPConfig_UnreachableRelayWarnsOnly(t *testing.T) {
+	// Grab a port that is guaranteed closed, then release it: dialing it
+	// fails fast with connection refused instead of hanging.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("split host/port: %v", err)
+	}
+	t.Setenv("OZ_SMTP_HOST", host)
+	t.Setenv("OZ_SMTP_PORT", port)
+	t.Setenv("OZ_SMTP_USER", "")
+	t.Setenv("OZ_SMTP_PASSWORD", "")
+	t.Setenv("OZ_SMTP_FROM", "verified@example.com")
+	if err := verifySMTPConfig(); err != nil {
+		t.Fatalf("a transient relay outage must warn, not fail boot: %v", err)
 	}
 }
