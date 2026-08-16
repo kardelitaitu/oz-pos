@@ -10,7 +10,7 @@ updated: "2026-08-16"
 
 OZ-POS memiliki empat paket: `trial`, `pro`, `premium`, dan `enterprise`.
 Apa yang dibuka setiap paket — toko, register, gudang, pembayaran QRIS,
-sinkron cloud, dan skrip — ditampilkan di [halaman harga](../pricing/).
+sinkron cloud, dan skrip — ditampilkan di [halaman harga](../../pricing/).
 
 | Kapabilitas    | Gratis            | Pro               | Premium           | Enterprise        |
 | -------------- | ----------------- | ----------------- | ----------------- | ----------------- |
@@ -34,7 +34,7 @@ Paket berbayar dibeli di checkout situs web cukup dengan email Anda — tanpa
 akun. Kunci lisensi dan struk tiba melalui email, lalu Anda tempel kunci ke
 **Pengaturan → Lisensi** untuk mengaktifkan. Lihat
 [Aktivasi Lisensi](../activation/) untuk perjalanan lengkap, dan
-[halaman harga](../pricing/) untuk harga terkini.
+[halaman harga](../../pricing/) untuk harga terkini.
 
 ## Kedaluwarsa dan tenggang
 

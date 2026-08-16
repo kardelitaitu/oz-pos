@@ -12,7 +12,8 @@ const releaseUrl = 'https://github.com/kardelitaitu/oz-pos/releases';
 // Only Windows ships today; the other four are on the roadmap and render a
 // "coming soon" badge instead of a download link. Flip `ready` to true when
 // a platform's installers start publishing (website-plan.md §8).
-const platforms = [
+type Platform = 'windows' | 'macos' | 'linux' | 'android' | 'ios';
+const platforms: { name: string; os: string; platform: Platform; ready: boolean }[] = [
   { name: 'Windows', os: 'Windows 10 / 11', platform: 'windows', ready: true },
   { name: 'macOS', os: 'macOS 12+', platform: 'macos', ready: false },
   { name: 'Linux', os: 'x86_64 · glibc 2.31+', platform: 'linux', ready: false },
