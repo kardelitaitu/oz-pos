@@ -4,11 +4,15 @@
  * the checkout overlay. Used by both the pricing-page button and the
  * account dashboard's subscribe section.
  *
- * v2 API: Paddle.Initialize({ token, environment }) then
- * Paddle.Checkout.open({ items, customer, customData }). NOTE: the legacy
- * URL (https://cdn.paddle.com/paddle/paddle.js) serves the v1 SDK whose
- * Setup/Checkout signatures differ — only the /v2/ URL works with this
- * code.
+ * v2 API: Paddle.Environment.set(...) then Paddle.Initialize({ token })
+ * then Paddle.Checkout.open({ items, customer, customData }). NOTE: the
+ * legacy URL (https://cdn.paddle.com/paddle/paddle.js) serves the v1 SDK
+ * whose Setup/Checkout signatures differ — only the /v2/ URL works with
+ * this code. The environment must be set via Paddle.Environment.set()
+ * BEFORE Initialize — the current SDK rejects an `environment` option in
+ * Initialize and defaults to production when Environment.set is never
+ * called (a sandbox token + sandbox price then fail the checkout with
+ * "Something went wrong").
  *
  * Checkout is register-first (website-plan.md §5): the pricing button
  * redirects to /login until a session exists, and customData.email is the
@@ -18,7 +22,8 @@
 declare global {
   interface Window {
     Paddle?: {
-      Initialize: (opts: { token: string; environment: 'sandbox' | 'production' }) => void;
+      Environment: { set: (env: 'sandbox' | 'production') => void };
+      Initialize: (opts: { token: string }) => void;
       Checkout: {
         open: (opts: {
           items: { priceId: string; quantity: number }[];
@@ -81,7 +86,11 @@ export async function openPaddleCheckout(priceId: string, email: string): Promis
   if (!TOKEN) throw new Error('paddle not configured');
   await loadPaddle();
   if (!window.Paddle) throw new Error('paddle unavailable');
-  window.Paddle.Initialize({ token: TOKEN, environment: ENVIRONMENT });
+  // v2 requires the environment to be set explicitly BEFORE Initialize;
+  // otherwise it defaults to production and a sandbox token + sandbox
+  // price fail the checkout with "Something went wrong".
+  window.Paddle.Environment.set(ENVIRONMENT);
+  window.Paddle.Initialize({ token: TOKEN });
   window.Paddle.Checkout.open({
     items: [{ priceId, quantity: 1 }],
     customer: { email },
