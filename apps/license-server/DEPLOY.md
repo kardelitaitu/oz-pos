@@ -213,10 +213,26 @@ The license server requires the RSA private key as an environment variable. **Ne
    - **Key:** `OZ_DISCORD_WEBHOOK`
    - **Value:** The **Discord channel webhook URL** (Discord → channel → Settings → Integrations → Webhooks → New Webhook). This is what `/api/v1/web/contact` forwards website support-form messages to. **Never expose this URL to the browser** — the website only talks to the license server, which keeps the secret server-side. If it is unset, `/api/v1/web/contact` returns `503 not configured` and the website's contact form falls back to a mailto link.
 5. Add the **OTP email sender** (required for the website dashboard login — without it `POST /api/v1/web/request-otp` returns `503 email delivery is not configured` and the login page shows its "not configured" state):
-   - **Key:** `OZ_SMTP_HOST` — e.g. `smtp.postmarkapp.com` or your relay's hostname
+   - **Key:** `OZ_SMTP_HOST` — your relay's hostname
    - **Key:** `OZ_SMTP_PORT` — default `587` (TLS/STARTTLS) if unset
    - **Key:** `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` — credentials for the relay (omit for unauthenticated relays)
-   - **Key:** `OZ_SMTP_FROM` — sender address, e.g. `noreply@oz-pos.com`
+   - **Key:** `OZ_SMTP_FROM` — sender address. **Must be set explicitly** — the code defaults to `no-reply@oz-pos.com`, which relays will reject or flag until that domain is yours.
+
+   **No custom domain yet?** Northflank does **not** provide SMTP/email to apps — you need a third-party transactional relay, and `code.run` / `workers.dev` are not domains you can add DNS records to (no SPF/DKIM there). Until you own a domain, use a provider that works with a **verified sender email** instead:
+
+   - **SendGrid (free tier)** — Settings → Sender Authentication → **Single Sender Verification** → verify the From address (e.g. your own email). SMTP: `smtp.sendgrid.net:587`, user `apikey`, password = your SendGrid API key, From = the verified sender.
+   - **Amazon SES** — verify the sender **email address** (no domain required). Sandbox initially only delivers to verified recipients; request production access when live.
+
+   Example env (SendGrid, verified sender):
+   ```
+   OZ_SMTP_HOST=smtp.sendgrid.net
+   OZ_SMTP_PORT=587
+   OZ_SMTP_USER=apikey
+   OZ_SMTP_PASSWORD=<sendgrid-api-key>
+   OZ_SMTP_FROM=<your-verified-sender@example.com>
+   ```
+
+   > **Deliverability honesty:** without your own domain + SPF/DKIM/DMARC, inbox placement is best-effort — codes may land in spam. Once you own a domain: set `OZ_SMTP_FROM=noreply@<domain>`, add the provider's SPF include + DKIM records (and a DMARC policy), then the verified-sender fallback is no longer needed. This is the actual fix for "signup codes never land in spam".
 6. (Optional) Web API CORS allowlist override:
    - **Key:** `OZ_WEB_ALLOWED_ORIGINS` — comma-separated origins allowed to call the web endpoints. **Defaults are already correct** for the current setup (`https://oz-pos.adikaradwiatmaja.workers.dev`, `https://oz-pos.com`, `http://localhost:4321`); only set this if you deploy the website to a different origin.
 7. (Optional) Session lifetime override:

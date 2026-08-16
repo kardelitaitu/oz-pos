@@ -210,6 +210,15 @@ cookie + CSRF header.
 | License receipt | Paddle webhook | Key string + tier + expiry |
 | Subscription events | Created / cancelled / payment failed | Status notices |
 
+**No custom domain yet:** Northflank provides no SMTP — the license server
+sends via a third-party relay (`OZ_SMTP_*` env, STARTTLS on 587).
+`code.run` / `workers.dev` aren't domains you can add DNS to, so until a
+domain is owned use a provider with **verified-sender** sending (SendGrid
+free Single Sender Verification, or SES email verification) and set
+`OZ_SMTP_FROM` explicitly (the code default `no-reply@oz-pos.com` is an
+unowned domain). SPF/DKIM/DMARC on the owned domain is the real
+inbox-not-spam fix — see `apps/license-server/DEPLOY.md` step 5.
+
 ---
 
 ## 6. Pricing (mapped to the real tier enum)
