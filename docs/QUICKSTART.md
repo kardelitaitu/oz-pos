@@ -2,7 +2,7 @@
 
 <!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (1 finding) · resolved F1: prerequisites table and troubleshooting updated to Node.js >=22 and npm >=11 · F2 (minor): payment drivers listed "Stripe, Square" (line 122) — actual drivers are stripe, square, qris, mock (omits qris + mock; subset still valid) · verified accurate: scripts/setup-dev.ps1 + scripts/check.sh exist, edition="2024", rust-version="1.88", ui/src/api/pos.ts exists, Stripe+Square drivers present · re-audited 2026-08-08 by docs-auditor: structure diagram rlua->mlua, crate list completed to 11 (oz-api/oz-notification/oz-plugin), payment drivers row corrected -->
 
-This guide gets OZ-POS building and running on your machine in under 15 minutes. It's aimed at first-time contributors — for the deeper project conventions, see [`CONTRIBUTING.md`](../CONTRIBUTING.md), [`AGENTS.md`](../AGENTS.md), and the skills under `.agents/skills/`.
+This guide gets OZ-POS building and running on your machine in under 15 minutes. It's aimed at first-time contributors — for the deeper project conventions, see `CONTRIBUTING.md`, `AGENTS.md`, and the skills under `.agents/skills/`.
 
 ---
 
@@ -110,7 +110,7 @@ cd ui && npm run typecheck
 bash scripts/check.sh   # several minutes on a clean tree; faster on a focused subset or after `cargo build`
 ```
 
-For the full sub-step list and what each gate catches, see [`.agents/skills/onboarding-guide/SKILL.md#first-time-setup`](../.agents/skills/onboarding-guide/SKILL.md#first-time-setup) (canonical verbose source). Use the one-liner before opening a PR to catch 90% of issues locally before CI.
+For the full sub-step list and what each gate catches, see `.agents/skills/onboarding-guide/SKILL.md#first-time-setup` (canonical verbose source). Use the one-liner before opening a PR to catch 90% of issues locally before CI.
 
 If you only want the i18n quality gate as a quick pre-flight, run `bash scripts/lint-i18n.sh` once — it fails-closed on Fluent key duplicates + byte-identical `.id.ftl` files.
 
@@ -210,7 +210,7 @@ The CI matrix runs on Linux, Windows, and macOS. If you see a failure on a platf
 
 Make sure you're on Node.js >=22 and npm >=11 (`node --version && npm --version`). The UI pins install-script approvals in `ui/package.json` (`allowScripts`) and requires npm 11+ for `npm approve-scripts`.
 
-If `npm ci` warns about unapproved install scripts, see [`ui/README.md#install-script-approvals`](../ui/README.md#install-script-approvals).
+If `npm ci` warns about unapproved install scripts, see `ui/README.md#install-script-approvals`.
 
 ### "permission denied" running `scripts/check.sh`
 
@@ -226,11 +226,11 @@ Expected. The drift guard no-ops the checks that need code (checks 2–4, 7) in 
 
 ## Where to go next
 
-- [`AGENTS.md`](../AGENTS.md) — the project's coding standards
+- `AGENTS.md` — the project's coding standards
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — the deep layout
 - [`ROADMAP.md`](./ROADMAP.md) — what's being built and in what order
 - [`WHITEPAPER.md`](./WHITEPAPER.md) — the "why" behind the tech choices
-- [`.agents/skills/onboarding-guide`](../.agents/skills/onboarding-guide/SKILL.md) — pick the right skill for the layer you're touching
+- `.agents/skills/onboarding-guide` — pick the right skill for the layer you're touching
 
 Welcome to OZ-POS. Keep the curtain closed, the merchant happy, and the money integer.
 

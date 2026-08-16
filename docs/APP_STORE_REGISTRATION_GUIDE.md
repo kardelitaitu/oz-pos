@@ -82,8 +82,8 @@ cargo tauri android build --apk --target aarch64
 
 OZ-POS provides automated GitHub Actions workflows for continuous integration and release artifacts:
 
-- **Android Automated Build**: [`.github/workflows/android.yml`](./.github/workflows/android.yml) builds a signed `aarch64` APK on `v*` tag push (AAB/Play bundles pending NDK stabilisation).
-- **Desktop Release Automated Build**: [`.github/workflows/release.yml`](./.github/workflows/release.yml) compiles Windows MSI installers automatically.
+- **Android Automated Build**: `.github/workflows/android.yml` builds a signed `aarch64` APK on `v*` tag push (AAB/Play bundles pending NDK stabilisation).
+- **Desktop Release Automated Build**: `.github/workflows/release.yml` compiles Windows MSI installers automatically.
 
 ---
 
