@@ -1,0 +1,183 @@
+import { useState } from 'react';
+import { t } from '../i18n';
+import PasswordStrength, { isStrongPassword } from './PasswordStrength';
+
+/**
+ * Signup form (website-plan.md §5) — the password-first registration path
+ * on /signup, distinct from the login page's OTP self-signup:
+ *
+ *   register (email + password) → confirmation code email →
+ *   verify-otp → session token (+ cached email)
+ *
+ * The server creates the tenant with email_verified=false and emails a
+ * 6-digit code; verify-otp proves inbox ownership, flips the flag, and
+ * issues the session. Registration rejects existing accounts (409), which
+ * is why this page exists separately from request-otp's register-or-login
+ * semantics. The password strength meter mirrors the server policy (≥8
+ * chars, ≥3 of 4 classes) and gates the submit button. After verify the
+ * user is sent to ?next= or the account dashboard. Degrades to a "not
+ * configured" notice when PUBLIC_LICENSE_API_URL is unset.
+ */
+const API = import.meta.env.PUBLIC_LICENSE_API_URL as string | undefined;
+
+interface Props {
+  locale: string;
+}
+
+type Step = 'form' | 'code';
+
+export default function SignupForm({ locale }: Props) {
+  const [step, setStep] = useState<Step>('form');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  if (!API) {
+    return <p className="rounded-md border border-ink/10 p-4 text-sm text-muted">{t(locale, 'login.notConfigured')}</p>;
+  }
+
+  const redirectAfterAuth = () => {
+    // Honor ?next= (e.g. back to pricing after the sign-up gate) but
+    // only for same-site paths — never a protocol-relative or external
+    // URL (open-redirect guard).
+    const next = new URLSearchParams(window.location.search).get('next');
+    const target = next && next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/account`;
+    window.location.href = target;
+  };
+
+  const register = async (e: { preventDefault(): void }) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/v1/web/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.status === 409) throw new Error('exists');
+      if (!res.ok) throw new Error('register failed');
+      setStep('code');
+    } catch (err) {
+      setError(err instanceof Error && err.message === 'exists' ? t(locale, 'signup.errorExists') : t(locale, 'signup.errorRegister'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verify = async (e: { preventDefault(): void }) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/v1/web/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
+      if (!res.ok) throw new Error('verify-otp failed');
+      const data = (await res.json()) as { token?: string };
+      if (!data.token) throw new Error('no token');
+      sessionStorage.setItem('oz_session', data.token);
+      // Cache the verified email so checkout can prefill it without a
+      // round-trip to /me (see paddle.getSessionEmail).
+      sessionStorage.setItem('oz_email', email);
+      redirectAfterAuth();
+    } catch {
+      setError(t(locale, 'login.errorVerify'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputClass =
+    'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
+
+  if (step === 'code') {
+    return (
+      <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+        <p className="mb-4 text-sm text-muted">{t(locale, 'signup.codeSent')}</p>
+        <form onSubmit={verify} className="space-y-4" aria-label={t(locale, 'signup.title')}>
+          <label className="block">
+            <span className="mb-1 block text-sm text-muted">{t(locale, 'login.code')}</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              required
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder={t(locale, 'login.codePlaceholder')}
+              className={inputClass}
+            />
+          </label>
+          {error && <p className="text-sm text-link" role="alert">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+          >
+            {loading ? '…' : t(locale, 'signup.verify')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setStep('form')}
+            className="w-full text-center text-xs text-muted transition hover:text-ink"
+          >
+            {t(locale, 'login.backToEmail')}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+      <form onSubmit={register} className="space-y-4" aria-label={t(locale, 'signup.title')}>
+        <label className="block">
+          <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.email')}</span>
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t(locale, 'signup.emailPlaceholder')}
+            className={inputClass}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.password')}</span>
+          <input
+            type="password"
+            required
+            autoComplete="new-password"
+            minLength={8}
+            maxLength={72}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={t(locale, 'signup.passwordPlaceholder')}
+            className={inputClass}
+          />
+        </label>
+        <PasswordStrength locale={locale} password={password} />
+        {error && <p className="text-sm text-link" role="alert">{error}</p>}
+        <button
+          type="submit"
+          disabled={loading || !isStrongPassword(password)}
+          className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+        >
+          {loading ? '…' : t(locale, 'signup.createAccount')}
+        </button>
+        <p className="text-center text-xs text-muted">
+          {t(locale, 'signup.haveAccount')}{' '}
+          <a href={`/${locale}/login`} className="text-link transition hover:underline">
+            {t(locale, 'signup.signInLink')}
+          </a>
+        </p>
+      </form>
+    </div>
+  );
+}

@@ -341,6 +341,18 @@
         "primaryKey": false
       },
       {
+        "help": "RFC 3339 timestamp of the last completed password reset. A new reset is blocked for 7 days after this (see web_password.go); changing the password while signed in does not touch it.",
+        "hidden": false,
+        "id": "date1618033991",
+        "max": "",
+        "min": "",
+        "name": "password_reset_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date"
+      },
+      {
         "hidden": false,
         "id": "autodate3976882600",
         "name": "created",

@@ -136,6 +136,14 @@ func main() {
 		if err := ensurePasswordHashField(app); err != nil {
 			return err
 		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// password_reset_at field (added with the forgot-password flow):
+		// fresh boots get it from the embedded pb_schema.json; existing
+		// pb_data volumes get it added without reimporting the schema.
+		// Existing records keep a zero value — no cooldown, resets allowed.
+		if err := ensurePasswordResetAtField(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -165,6 +173,14 @@ func main() {
 		// dashboard). Both enforce the same CORS allowlist.
 		se.Router.POST("/api/v1/web/login", handleLoginPassword(app))
 		se.Router.POST("/api/v1/web/set-password", handleSetPassword(app))
+		// Signup + forgot-password (see web_password.go). register pairs
+		// email+password and emails a confirmation code (verify-otp
+		// completes it); request-password-reset / reset-password implement
+		// the OTP-proved password reset with a 7-day cooldown. All enforce
+		// the same CORS allowlist + per-email/IP rate limits.
+		se.Router.POST("/api/v1/web/register", handleRegister(app))
+		se.Router.POST("/api/v1/web/request-password-reset", handleRequestPasswordReset(app))
+		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		// Paddle Billing webhook — signature-verified, server-to-server (see
@@ -282,6 +298,28 @@ func ensurePasswordHashField(app core.App) error {
 		return fmt.Errorf("failed to add password_hash field: %w", err)
 	}
 	log.Println("migrated tenants collection: added password_hash field")
+	return nil
+}
+
+// ensurePasswordResetAtField adds the tenants.password_reset_at date field
+// to existing deployments that predate the forgot-password flow (fresh
+// boots get it from the embedded pb_schema.json). Idempotent: no-op once
+// the field exists. Existing records keep a zero value — the correct
+// semantics, since the 7-day reset cooldown only starts after a completed
+// reset (see web_password.go).
+func ensurePasswordResetAtField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("tenants")
+	if err != nil {
+		return fmt.Errorf("tenants collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("password_reset_at") != nil {
+		return nil
+	}
+	collection.Fields.Add(&core.DateField{Name: "password_reset_at"})
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add password_reset_at field: %w", err)
+	}
+	log.Println("migrated tenants collection: added password_reset_at field")
 	return nil
 }
 

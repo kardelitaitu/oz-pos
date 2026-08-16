@@ -24,7 +24,8 @@
     "login": "Sign in to your OZ-POS account with just your email.",
     "account": "Your OZ-POS license, subscription, and billing information.",
     "privacy": "How OZ-POS collects, uses, and protects your data.",
-    "terms": "The terms that govern your use of OZ-POS."
+    "terms": "The terms that govern your use of OZ-POS.",
+    "signup": "Create your OZ-POS account — set a password and verify your email."
   },
   "support": {
     "title": "Support",
@@ -193,7 +194,19 @@
     "passwordPlaceholder": "Your password",
     "signIn": "Sign in",
     "errorLogin": "Invalid email or password.",
-    "forgotPassword": "No password or forgot it? Use the email code instead."
+    "forgotPassword": "No password or forgot it? Use the email code instead.",
+    "forgotPasswordLink": "Forgot password?",
+    "newHere": "New here?",
+    "createAccount": "Create an account",
+    "resetTitle": "Reset password",
+    "sendResetCode": "Send reset code",
+    "resetCodeSent": "We sent a reset code to your email. Enter it with your new password.",
+    "newPassword": "New password",
+    "resetPassword": "Reset password",
+    "backToLogin": "Back to sign in",
+    "errorResetRequest": "Couldn't send the reset code. Please try again.",
+    "errorReset": "Couldn't reset the password. Check the code and try again.",
+    "cooldown": "You recently reset your password. New resets are blocked until"
   },
   "account": {
     "title": "Account",
@@ -221,8 +234,7 @@
     "passwordPlaceholder": "New password",
     "passwordSave": "Save password",
     "passwordSaved": "Password saved. Use it to sign in next time.",
-    "passwordError": "Couldn't save the password. Please try again.",
-    "passwordWeak": "Use 8–72 characters."
+    "passwordError": "Couldn't save the password. Please try again."
   },
   "footer": {
     "rights": "All rights reserved.",
@@ -247,5 +259,29 @@
   "checkout": {
     "signInToSubscribe": "Sign in to subscribe",
     "error": "Couldn't start the checkout. Please try again."
+  },
+  "password": {
+    "meterLabel": "Password strength",
+    "strengthTooShort": "Too short",
+    "strengthWeak": "Weak",
+    "strengthGood": "Good",
+    "strengthStrong": "Strong",
+    "minLength": "at least 8 characters",
+    "hint": "Use at least 3 of: lowercase, uppercase, number, symbol."
+  },
+  "signup": {
+    "title": "Create your account",
+    "subtitle": "Set a password and verify your email with a code we send you.",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Create a password",
+    "createAccount": "Create account",
+    "codeSent": "We sent a verification code to your email. Enter it to activate your account.",
+    "verify": "Verify and create account",
+    "errorRegister": "Couldn't create the account. Please try again.",
+    "errorExists": "An account with this email already exists. Sign in instead.",
+    "haveAccount": "Already have an account?",
+    "signInLink": "Sign in"
   }
 }

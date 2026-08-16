@@ -230,6 +230,9 @@ func windowSweepLoop() {
 		otpVerifyLimiter.sweep()
 		otpIPLimiter.sweep()
 		webLoginLimiter.sweep()
+		webRegisterLimiter.sweep()
+		webResetRequestLimiter.sweep()
+		webResetVerifyLimiter.sweep()
 	}
 }
 
@@ -563,13 +566,21 @@ func handleRequestOTP(app core.App) func(e *core.RequestEvent) error {
 }
 
 // createTenantForEmail self-signs a new ACTIVE tenant for the OTP
-// register-or-login flow. It mirrors the Paddle webhook's tenant shape
-// (paddle_webhook.go): phone defaults to "-" and api_key holds a bcrypt
-// hash of a throwaway placeholder — the customer's real api_key is minted
-// at first activation (activate.go), which is when the POS learns it. If
-// a concurrent request wins the unique-email race, the existing record is
-// returned instead of failing.
+// register-or-login flow (no password — the email code is the only
+// credential until the owner sets one). See createTenant.
 func createTenantForEmail(app core.App, email string) (*core.Record, error) {
+	return createTenant(app, email, "")
+}
+
+// createTenant registers a new ACTIVE tenant, mirroring the Paddle
+// webhook's tenant shape (paddle_webhook.go): phone defaults to "-" and
+// api_key holds a bcrypt hash of a throwaway placeholder — the customer's
+// real api_key is minted at first activation (activate.go), which is when
+// the POS learns it. passwordHash is the optional web login credential
+// ("" for OTP-only signups, set by /web/register and the webhook path).
+// If a concurrent request wins the unique-email race, the existing record
+// is returned instead of failing.
+func createTenant(app core.App, email, passwordHash string) (*core.Record, error) {
 	tenantColl, err := app.FindCollectionByNameOrId("tenants")
 	if err != nil {
 		return nil, fmt.Errorf("tenants collection not found: %w", err)
@@ -585,8 +596,12 @@ func createTenantForEmail(app core.App, email string) (*core.Record, error) {
 	tenant.Set("api_key", hash)
 	tenant.Set("api_key_lookup", lookup)
 	tenant.Set("status", "active")
-	// Verification is a separate step: a self-signed account is NOT yet
-	// email-verified until the user proves inbox ownership via verify-otp.
+	if passwordHash != "" {
+		tenant.Set("password_hash", passwordHash)
+	}
+	// Verification is a separate step: a new account is NOT yet
+	// email-verified until the user proves inbox ownership via verify-otp
+	// (or reset-password).
 	tenant.Set("email_verified", false)
 	if saveErr := app.Save(tenant); saveErr != nil {
 		// Unique-email race: another request registered the tenant first.
@@ -596,7 +611,7 @@ func createTenantForEmail(app core.App, email string) (*core.Record, error) {
 		}
 		return existing, nil
 	}
-	log.Printf("/web/request-otp: registered new tenant %q (id=%s)", email, tenant.Id)
+	log.Printf("registered new tenant %q (id=%s)", email, tenant.Id)
 	return tenant, nil
 }
 

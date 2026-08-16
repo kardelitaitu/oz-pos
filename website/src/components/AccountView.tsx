@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { pricingFor } from '../content/pricing';
 import { getSessionEmail, openPaddleCheckout } from './paddle';
+import PasswordStrength, { isStrongPassword } from './PasswordStrength';
 
 /**
  * Account dashboard (website-plan.md §8/§11). Reads the session token from
@@ -226,10 +227,10 @@ export default function AccountView({ locale }: Props) {
             {pwMsg === 'error' && (
               <p className="text-sm text-link" role="alert">{t(locale, 'account.passwordError')}</p>
             )}
-            <p className="text-xs text-muted">{t(locale, 'account.passwordWeak')}</p>
+            <PasswordStrength locale={locale} password={pw} />
             <button
               type="submit"
-              disabled={pwSaving}
+              disabled={pwSaving || !isStrongPassword(pw)}
               className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
             >
               {pwSaving ? '…' : t(locale, 'account.passwordSave')}

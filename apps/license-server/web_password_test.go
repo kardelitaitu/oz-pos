@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
@@ -281,6 +282,483 @@ func TestSetPassword_SetsAndRotates(t *testing.T) {
 	}
 }
 
+// ── POST /api/v1/web/register ───────────────────────────────────────
+
+// TestRegister_CreatesTenantAndSendsCode covers the signup-page path:
+// email+password creates an ACTIVE tenant (email_verified=false) with a
+// bcrypt password_hash and emails a confirmation code.
+func TestRegister_CreatesTenantAndSendsCode(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+		`{"email":"newregister@example.com","password":"RegisterPw!1"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sentCode == "" || len(sentCode) != 6 {
+		t.Fatalf("expected a 6-digit confirmation code, got %q", sentCode)
+	}
+
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "newregister@example.com")
+	if err != nil || tenant == nil {
+		t.Fatalf("tenant should exist after register: %v", err)
+	}
+	if tenant.GetString("status") != "active" {
+		t.Errorf("expected status active, got %q", tenant.GetString("status"))
+	}
+	if tenant.GetBool("email_verified") {
+		t.Error("expected email_verified=false until the confirmation code is verified")
+	}
+	// The password must be stored as a bcrypt hash, never plaintext, and
+	// must authenticate the submitted value.
+	stored := tenant.GetString("password_hash")
+	if stored == "RegisterPw!1" {
+		t.Fatal("password must never be stored in plaintext")
+	}
+	if bcrypt.CompareHashAndPassword([]byte(stored), []byte("RegisterPw!1")) != nil {
+		t.Error("stored hash must verify against the submitted password")
+	}
+
+	// The confirmation code is stored (hashed) for verify-otp.
+	webOtpStore.mu.Lock()
+	_, ok := webOtpStore.codes["newregister@example.com"]
+	webOtpStore.mu.Unlock()
+	if !ok {
+		t.Error("expected a pending confirmation code to be stored")
+	}
+}
+
+// TestRegister_ThenVerifyCompletesSignup drives the full signup flow:
+// register → emailed code → verify-otp issues a session and flips
+// email_verified, and the submitted password then works at login.
+func TestRegister_ThenVerifyCompletesSignup(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+		`{"email":"fullsignup@example.com","password":"SignupFlow!2"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("register expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sentCode == "" {
+		t.Fatal("no confirmation code captured")
+	}
+
+	// Complete signup via the shared verify-otp endpoint.
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/verify-otp",
+		`{"email":"fullsignup@example.com","code":"`+sentCode+`"}`, "http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify-otp expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "fullsignup@example.com")
+	if err != nil || tenant == nil {
+		t.Fatalf("tenant should exist: %v", err)
+	}
+	if !tenant.GetBool("email_verified") {
+		t.Error("expected email_verified=true after the confirmation code")
+	}
+
+	// The registered password works at login.
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/login",
+		`{"email":"fullsignup@example.com","password":"SignupFlow!2"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login with the registered password should succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRegister_RejectsExistingAccount(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "existingacct001", "existingacct001", "active")
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+		`{"email":"existingacct001@example.com","password":"RegisterPw!1"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for an existing account, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// The existing tenant's password must NOT have been overwritten.
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "existingacct001@example.com")
+	if err != nil || tenant == nil {
+		t.Fatalf("tenant should still exist: %v", err)
+	}
+	if tenant.GetString("password_hash") != "" {
+		t.Error("409 must not set a password on the existing tenant")
+	}
+}
+
+func TestRegister_WeakPasswordAndBadEmail(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	for _, body := range []string{
+		`{"email":"weakpass@example.com","password":"password123"}`, // 2 classes
+		`{"email":"weakpass@example.com","password":"short"}`,
+		`{"email":"weakpass@example.com","password":""}`,
+		`{"email":"not-an-email","password":"RegisterPw!1"}`,
+		`{"email":"","password":"RegisterPw!1"}`,
+		`not json`,
+	} {
+		rec := webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+			body, "http://localhost:4321", "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("body %q: expected 400, got %d: %s", body, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestRegister_RateLimited(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// 3 attempts allowed per email per 15 min (first creates the tenant,
+	// the next two 409 — the limiter counts every attempt).
+	for i := 0; i < 3; i++ {
+		rec := webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+			`{"email":"regspam0000001@example.com","password":"RegisterPw!1"}`,
+			"http://localhost:4321", "")
+		if rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("call %d should not be rate limited yet", i+1)
+		}
+	}
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+		`{"email":"regspam0000001@example.com","password":"RegisterPw!1"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("4th attempt should be 429, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRegister_MissingSMTPReturns503(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	t.Setenv("OZ_SMTP_HOST", "")
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/register",
+		`{"email":"nosmtpreg@example.com","password":"RegisterPw!1"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when SMTP unconfigured, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ── POST /api/v1/web/request-password-reset ─────────────────────────
+
+func TestRequestPasswordReset_SendsCode(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenantWithPassword(t, app, "resetreq0000001", "resetreq0000001", "ResetPw!123")
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/request-password-reset",
+		`{"email":"resetreq0000001@example.com"}`, "http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sentCode == "" || len(sentCode) != 6 {
+		t.Fatalf("expected a 6-digit reset code, got %q", sentCode)
+	}
+}
+
+func TestRequestPasswordReset_UnknownEmailNoCode(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/request-password-reset",
+		`{"email":"nobody@example.com"}`, "http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (no enumeration), got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sentCode != "" {
+		t.Error("no code should be emailed for an unknown email")
+	}
+}
+
+// TestRequestPasswordReset_CooldownSurfaces pins the 7-day rule: within
+// the cooldown the code is NOT sent and the response carries
+// cooldown_until so the UI can show when a new reset is allowed.
+func TestRequestPasswordReset_CooldownSurfaces(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenantWithPassword(t, app, "resetcooldown01", "resetcooldown01", "ResetPw!123")
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "resetcooldown01@example.com")
+	if err != nil || tenant == nil {
+		t.Fatalf("tenant not found: %v", err)
+	}
+	tenant.Set("password_reset_at", time.Now().UTC().Format(time.RFC3339))
+	if err := app.Save(tenant); err != nil {
+		t.Fatalf("failed to set password_reset_at: %v", err)
+	}
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/request-password-reset",
+		`{"email":"resetcooldown01@example.com"}`, "http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sentCode != "" {
+		t.Error("no code should be sent during the 7-day cooldown")
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	until, ok := resp["cooldown_until"].(string)
+	if !ok || until == "" {
+		t.Error("expected cooldown_until in the response during the cooldown")
+	}
+}
+
+func TestRequestPasswordReset_RateLimited(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// 3 allowed per email per 15 min.
+	for i := 0; i < 3; i++ {
+		rec := webRequest(t, se, http.MethodPost, "/api/v1/web/request-password-reset",
+			`{"email":"resetspam000001@example.com"}`, "http://localhost:4321", "")
+		if rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("call %d should not be rate limited yet", i+1)
+		}
+	}
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/request-password-reset",
+		`{"email":"resetspam000001@example.com"}`, "http://localhost:4321", "")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("4th request should be 429, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ── POST /api/v1/web/reset-password ────────────────────────────────
+
+// TestResetPassword_HappyPath drives forgot-password end to end: request a
+// code, reset with a new valid password → session issued, old password
+// dead, new one works, email marked verified, and the cooldown is stamped.
+func TestResetPassword_HappyPath(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenantWithPassword(t, app, "resetfull000001", "resetfull000001", "OldPassw0rd!")
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/request-password-reset",
+		`{"email":"resetfull000001@example.com"}`, "http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("request-password-reset expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if sentCode == "" {
+		t.Fatal("no reset code captured")
+	}
+
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/reset-password",
+		`{"email":"resetfull000001@example.com","code":"`+sentCode+`","password":"NewPassw0rd!2"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reset-password expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Session issued so the user lands signed in.
+	var resp struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || resp.Token == "" {
+		t.Fatalf("expected a session token in the reset response: %v", err)
+	}
+
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "resetfull000001@example.com")
+	if err != nil || tenant == nil {
+		t.Fatalf("tenant not found: %v", err)
+	}
+	if !tenant.GetBool("email_verified") {
+		t.Error("reset proves inbox ownership — email_verified must be true")
+	}
+	if tenant.GetDateTime("password_reset_at").Time().IsZero() {
+		t.Error("password_reset_at must be stamped to start the 7-day cooldown")
+	}
+
+	// Old password dead, new password works.
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/login",
+		`{"email":"resetfull000001@example.com","password":"OldPassw0rd!"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("old password should 401 after reset, got %d", rec.Code)
+	}
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/login",
+		`{"email":"resetfull000001@example.com","password":"NewPassw0rd!2"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("new password should log in after reset, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestResetPassword_CooldownBlocksSecondReset verifies the defense-in-depth
+// check in reset-password: even if a code exists, a tenant whose last
+// reset was <7 days ago gets 429 with retry info.
+func TestResetPassword_CooldownBlocksSecondReset(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenantWithPassword(t, app, "resetblock00001", "resetblock00001", "CurrentPw!123")
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "resetblock00001@example.com")
+	if err != nil || tenant == nil {
+		t.Fatalf("tenant not found: %v", err)
+	}
+	tenant.Set("password_reset_at", time.Now().UTC().Format(time.RFC3339))
+	if err := app.Save(tenant); err != nil {
+		t.Fatalf("failed to set password_reset_at: %v", err)
+	}
+	// Plant a code directly (request-password-reset would refuse to send
+	// one during the cooldown — this simulates a race or manual state).
+	webOtpStore.storeCode("resetblock00001@example.com", hashOtpCode("123456"))
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/reset-password",
+		`{"email":"resetblock00001@example.com","code":"123456","password":"NewPassw0rd!2"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 during cooldown, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// The password must be untouched.
+	tenant, _ = app.FindFirstRecordByData("tenants", "email", "resetblock00001@example.com")
+	if bcrypt.CompareHashAndPassword([]byte(tenant.GetString("password_hash")), []byte("CurrentPw!123")) != nil {
+		t.Error("cooldown block must not change the password")
+	}
+}
+
+// TestResetPassword_WrongCodeAndWeakPassword covers the failure modes:
+// wrong code → generic 401; weak/same password → 400 WITHOUT consuming
+// the code (a corrected retry with the same code succeeds).
+func TestResetPassword_WrongCodeAndWeakPassword(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenantWithPassword(t, app, "resetfail000001", "resetfail000001", "CurrentPw!123")
+
+	var sentCode string
+	restore := stubOTPEmail(t, &sentCode)
+	defer restore()
+
+	webRequest(t, se, http.MethodPost, "/api/v1/web/request-password-reset",
+		`{"email":"resetfail000001@example.com"}`, "http://localhost:4321", "")
+	if sentCode == "" {
+		t.Fatal("no reset code captured")
+	}
+
+	// Weak password (2 classes) → 400, and the code is NOT consumed
+	// (the policy check runs before the single-use code is taken).
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/reset-password",
+		`{"email":"resetfail000001@example.com","code":"`+sentCode+`","password":"password123"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("weak password should 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Same as current password → 400 (must differ).
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/reset-password",
+		`{"email":"resetfail000001@example.com","code":"`+sentCode+`","password":"CurrentPw!123"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("same password should 400 (must differ), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Same code + a valid different password now succeeds — proving the
+	// policy failures did not burn the single-use code.
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/reset-password",
+		`{"email":"resetfail000001@example.com","code":"`+sentCode+`","password":"NewPassw0rd!2"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("corrected retry with the same code should succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestResetPassword_WrongCode401 pins the generic 401 for a wrong code on
+// a tenant NOT in cooldown: the single-use code is consumed by the attempt
+// (takeCode deletes on any attempt) and the password stays untouched.
+func TestResetPassword_WrongCode401(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenantWithPassword(t, app, "resetwrong00001", "resetwrong00001", "CurrentPw!123")
+	webOtpStore.storeCode("resetwrong00001@example.com", hashOtpCode("654321"))
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/reset-password",
+		`{"email":"resetwrong00001@example.com","code":"000000","password":"NewPassw0rd!2"}`,
+		"http://localhost:4321", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong code should 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+	tenant, _ := app.FindFirstRecordByData("tenants", "email", "resetwrong00001@example.com")
+	if bcrypt.CompareHashAndPassword([]byte(tenant.GetString("password_hash")), []byte("CurrentPw!123")) != nil {
+		t.Error("a wrong code must not change the password")
+	}
+}
+
+// TestSetPassword_MustDiffer pins the change-while-signed-in rule: a new
+// password equal to the current one is rejected with 400.
+func TestSetPassword_MustDiffer(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenantWithPassword(t, app, "setdiff00000001", "setdiff00000001", "CurrentPw!123")
+	token := "set-diff-token-0001"
+	webOtpStore.createSession(hashWebToken(token), "setdiff00000001")
+
+	rec := webRequest(t, se, http.MethodPost, "/api/v1/web/set-password",
+		`{"password":"CurrentPw!123"}`, "http://localhost:4321", "Bearer "+token)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a password equal to the current one, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// A genuinely different password still succeeds.
+	rec = webRequest(t, se, http.MethodPost, "/api/v1/web/set-password",
+		`{"password":"BrandNewPw!456"}`, "http://localhost:4321", "Bearer "+token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("different password should succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // ── Helper unit tests ───────────────────────────────────────────────
 
 func TestIsValidPassword(t *testing.T) {
@@ -288,19 +766,49 @@ func TestIsValidPassword(t *testing.T) {
 		in   string
 		want bool
 	}{
-		{"password123", true},
-		{"8chars!!", true},
-		{strings.Repeat("x", 72), true}, // at the bcrypt byte ceiling
+		// Valid: ≥8 chars and ≥3 of the 4 classes.
+		{"Password1!", true},                   // lower+upper+digit+symbol
+		{"passw0rd!", true},                    // lower+digit+symbol
+		{"PASSWORD1!", true},                   // upper+digit+symbol
+		{strings.Repeat("x", 69) + "A1", true}, // 72 bytes at the ceiling, 3 classes
+		{"abcDEF123", true},                    // lower+upper+digit
+		{"😀😀😀😀😀😀😀😀aA1", true},                  // 8 runes + 3 classes
+		// Invalid: too short, too long, wrong class count, edge whitespace.
 		{"", false},
-		{"short", false},
+		{"short", false},                 // < 8
 		{strings.Repeat("x", 73), false}, // beyond bcrypt's 72-byte input
-		{"  password123", false},         // leading whitespace
-		{"password123  ", false},         // trailing whitespace
-		{"😀😀😀😀", false},                  // 4 runes but 16 bytes — rune floor applies
-		{"😀😀😀😀😀😀😀😀", true},               // 8 runes, 32 bytes — valid
+		{"password123", false},           // lower+digit only = 2 classes
+		{"PASSWORD123", false},           // upper+digit only = 2 classes
+		{"abcdefgh", false},              // lower only = 1 class
+		{"!!!!!!!!", false},              // symbol only = 1 class
+		{strings.Repeat("x", 72), false}, // 72 bytes but lower only
+		{"  password123!", false},        // leading whitespace
+		{"password123!  ", false},        // trailing whitespace
+		{"😀😀😀😀😀😀😀😀", false},              // 8 runes but symbol-only = 1 class
 	} {
 		if got := isValidPassword(tc.in); got != tc.want {
 			t.Errorf("isValidPassword(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestPasswordClassCount(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want int
+	}{
+		{"", 0},
+		{"abcdefgh", 1},   // lower
+		{"ABCDEFGH", 1},   // upper
+		{"12345678", 1},   // digit
+		{"!!!!!!!!", 1},   // symbol
+		{"abcABC", 2},     // lower+upper
+		{"abcABC123", 3},  // lower+upper+digit
+		{"abcABC123!", 4}, // all four
+		{"😀😀😀😀😀😀😀😀", 1},   // symbols only
+	} {
+		if got := passwordClassCount(tc.in); got != tc.want {
+			t.Errorf("passwordClassCount(%q) = %d, want %d", tc.in, got, tc.want)
 		}
 	}
 }

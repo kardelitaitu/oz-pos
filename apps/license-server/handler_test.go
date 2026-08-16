@@ -150,6 +150,9 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		if err := ensurePasswordHashField(app); err != nil {
 			return err
 		}
+		if err := ensurePasswordResetAtField(app); err != nil {
+			return err
+		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
@@ -159,6 +162,9 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
 		se.Router.POST("/api/v1/web/login", handleLoginPassword(app))
 		se.Router.POST("/api/v1/web/set-password", handleSetPassword(app))
+		se.Router.POST("/api/v1/web/register", handleRegister(app))
+		se.Router.POST("/api/v1/web/request-password-reset", handleRequestPasswordReset(app))
+		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
@@ -379,6 +385,9 @@ func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
 		se.Router.POST("/api/v1/web/login", handleLoginPassword(app))
 		se.Router.POST("/api/v1/web/set-password", handleSetPassword(app))
+		se.Router.POST("/api/v1/web/register", handleRegister(app))
+		se.Router.POST("/api/v1/web/request-password-reset", handleRequestPasswordReset(app))
+		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
@@ -886,6 +895,15 @@ func resetRateLimiters() {
 	webLoginLimiter.mu.Lock()
 	webLoginLimiter.entries = make(map[string]*windowEntry)
 	webLoginLimiter.mu.Unlock()
+	webRegisterLimiter.mu.Lock()
+	webRegisterLimiter.entries = make(map[string]*windowEntry)
+	webRegisterLimiter.mu.Unlock()
+	webResetRequestLimiter.mu.Lock()
+	webResetRequestLimiter.entries = make(map[string]*windowEntry)
+	webResetRequestLimiter.mu.Unlock()
+	webResetVerifyLimiter.mu.Lock()
+	webResetVerifyLimiter.entries = make(map[string]*windowEntry)
+	webResetVerifyLimiter.mu.Unlock()
 
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
