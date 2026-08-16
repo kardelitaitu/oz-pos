@@ -42,7 +42,7 @@ OZ-POS processes, transmits, and stores cardholder data when processing credit/d
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| 7.1.1 Restrict access to cardholder data by business need-to-know | ✅ Implemented | RBAC via `StaffRoles` feature (owner/manager/cashier) |
+| 7.1.1 Restrict access to cardholder data by business need-to-know | ✅ Implemented | RBAC via `StaffRoles` feature (owner/admin/manager/staff/auditor) |
 | 7.2.1 Role-based access control matrix | ✅ Implemented | See `oz-core::user` for permission model |
 | 8.2.1 Unique user IDs for all personnel | ✅ Implemented | Each cashier has unique login |
 | 8.3.1 Secure authentication (multi-factor where possible) | 📋 Planned | PIN-based auth → MFA in Phase 3 |
@@ -79,9 +79,9 @@ OZ-POS processes, transmits, and stores cardholder data when processing credit/d
 | **PAN masking** | `oz_security::mask_pan()` — shows first 6 + last 4 digits |
 | **Encrypted storage** | AES-256-GCM via `oz-security` (future: KEK in OS keyring) |
 | **Key management** | OS-level keyring (`oz_security::Keyring`) |
-| **RBAC** | `StaffRoles` feature with owner/manager/cashier roles |
+| **RBAC** | `StaffRoles` feature with owner/admin/manager/staff/auditor roles |
 | **Audit logging** | `AuditLog` feature — immutable, append-only |
 | **Dependency scanning** | `cargo audit` weekly via GitHub Actions |
 | **Coding standards** | `AGENTS.md` with security rules |
 
-> **Last updated:** 2026-07-20
+> **Last updated:** 2026-08-16

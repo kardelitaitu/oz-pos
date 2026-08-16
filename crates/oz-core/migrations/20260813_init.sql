@@ -562,7 +562,7 @@ CREATE TABLE IF NOT EXISTS role_workspaces (
 
 CREATE TABLE IF NOT EXISTS roles (
     id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL UNIQUE,          -- e.g. "owner", "manager", "cashier"
+    name        TEXT NOT NULL UNIQUE,          -- e.g. "owner", "admin", "manager", "staff", "auditor"
     description TEXT NOT NULL DEFAULT '',
     permissions TEXT NOT NULL DEFAULT '[]',     -- JSON array of permission strings
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

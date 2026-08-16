@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub struct Role {
     /// Internal row id.
     pub id: String,
-    /// Unique role name (e.g. "owner", "manager", "cashier").
+    /// Unique role name (e.g. "owner", "admin", "manager", "staff", "auditor").
     pub name: String,
     /// Human-readable description.
     pub description: String,

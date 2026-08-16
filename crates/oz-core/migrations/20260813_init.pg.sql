@@ -167,7 +167,7 @@ CREATE TABLE IF NOT EXISTS promotions (
 
 CREATE TABLE IF NOT EXISTS roles (
     id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL UNIQUE,          -- e.g. "owner", "manager", "cashier"
+    name        TEXT NOT NULL UNIQUE,          -- e.g. "owner", "admin", "manager", "staff", "auditor"
     description TEXT NOT NULL DEFAULT '',
     permissions TEXT NOT NULL DEFAULT '[]',     -- JSON array of permission strings
     created_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
