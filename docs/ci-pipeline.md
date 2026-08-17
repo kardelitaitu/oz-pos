@@ -92,7 +92,7 @@ workflow-inventory audit.
 | Step | What it runs | Fails |
 |------|--------------|-------|
 | Fail-closed credential gate | missing `NORTHFLANK_API_TOKEN` secret or project/service IDs -> `::error::` + exit 1 (website.yml convention) | hard |
-| Trigger build | `POST /v1/projects/{id}/services/{id}/build` with `{"sha": <full commit sha>}` | hard (no build id -> token scope error) |
+| Trigger build | `POST /v1/projects/{id}/services/{id}/build` with `{"sha": <full commit sha>}`. A 409 (native git trigger already building this commit) is **adopted**, not failed: the active build for the same sha is polled instead | hard (non-409 rejection, or 409 with no matching active build) |
 | Poll to conclusion | `GET …/build/{buildId}` until `concluded`; `success:false` (FAILURE/CRASHED/ABORTED) fails the job — the deployment was NOT shipped | hard |
 | Smoke test | `$NORTHFLANK_SERVICE_URL/health` + `/api/health` must return 200 within 10 min (retries); prints the gate-status payload. Skipped when the URL var is unset. 503s = fail-fast env gates not yet applied (§8 env table), not a workflow bug | hard |
 
