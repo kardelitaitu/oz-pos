@@ -521,7 +521,10 @@ curl -sf -o /dev/null -w '%{http_code}\n' \
 ```
 
 GitHub's secret store exposes no expiry/rotation metadata, so rely on these three
-probes (fold probe #3 into the §5 poller or an uptime monitor).
+probes (fold probe #3 into the §5 poller or an uptime monitor). The deploy job
+itself now runs probe #2 as its first step (`website.yml` → "Validate Cloudflare
+deploy credentials (fail-fast)"), so a rejected token fails the deploy in ~1s before
+the ~5 min portal build — probe #3 stays the ground truth for what actually shipped.
 
 ### 9.4 Rotation (zero-downtime, ~5 min)
 
@@ -542,9 +545,11 @@ probes (fold probe #3 into the §5 poller or an uptime monitor).
 
 - **TTL policy from §9.2:** every token gets a TTL ≤ 1 year + a calendar entry. A token
   with no TTL is a standing silent-rot risk — treat it as an incident to fix.
-- **Automated token-verify smoke:** wire probe #2 into a scheduled workflow (or the
-  §5 poller) so an invalid token alerts *before* the next deploy, instead of after 20
-  red runs. The token is a repo secret; the verify endpoint needs no other permission.
+- **Automated token-verify smoke:** the deploy job now runs probe #2 pre-build (see
+  §9.3), so an invalid token fails fast at deploy time — but that only alerts when a
+  deploy actually happens. Wire probe #2 into a scheduled workflow (or the §5 poller)
+  so an invalid token alerts *before* the next deploy, instead of after 20 red runs.
+  The token is a repo secret; the verify endpoint needs no other permission.
 - **Live-portal poller:** probe #3 is the ground truth for "did the deploy actually
   land" — a 404 on `/docs-portal/intro.html` means stale assets regardless of what CI
   says. Add it to the §5 alert rules as a page-level check.
