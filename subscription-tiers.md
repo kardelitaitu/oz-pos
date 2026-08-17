@@ -303,7 +303,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 | `docs/decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md` (ADR #23) | Trial lifecycle | 90-day trial — **re-scope note added 2026-08-17; segmented trials implemented 2026-08-18** (C2.1: `trial_vertical` in `activate.go`, 14-day Plus general / 14-day Pro restaurant-cafe / 30-day Pro enterprise-referral) |
 | `website/src/content/docs/{en,id}/{licensing,welcome,installation,activation}.md` | User-facing docs | 90-day / four-tier copy — **updated to the 5-tier free-forever model 2026-08-17** |
 | `crates/oz-core/src/subscription.rs` | Enforcement (client-side quotas) | enum Free/OneTime/Standard/Pro/Premium/Enterprise |
-| `apps/license-server/paddle_webhook.go` → `tierQuotas()` | Enforcement (license mint) | pro/premium/enterprise → 0/0/all types; free → 1/1/3 types |
+| `apps/license-server/paddle_webhook.go` → `tierQuotas(tier, bundle)` | Enforcement (license mint) | pro/premium/enterprise → 0/0/all types; free → 1/1/3 types; plus → 1/2, kds unlocked by `bundle_id == "restaurant_starter"` (**C3.2, implemented 2026-08-18** — activation honors it for trial keys; webhooks pass "" until bundle checkout ships) |
 | `apps/license-server/pb_schema.json` | Schema select values | free, pro, premium, enterprise — **needs plus** |
 | `apps/license-server/renew.go` | Offline renewal expiry | free +100y, pro/premium +1y, enterprise +3y |
 | `website/src/content/pricing/{en,id}.ts` | Live pricing pages | **DONE (2026-08-17)** — free/plus/pro/premium/enterprise, new USD & IDR prices, annual default + "2 months free", ⭐ Pro badge, full §3 matrix |

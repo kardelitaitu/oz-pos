@@ -486,10 +486,24 @@ For each trigger:
 
 **Why:** §9 Medium-Term item 14.
 
-- [ ] Add `bundle_id` optional field to license activation
-- [ ] In `tierQuotas()`: if `bundle_id == "restaurant_starter"`, unlock `kds` workspace type at Plus tier
-- [ ] In the website: add bundle purchase option on vertical landing pages
-- [ ] **Test:** `go test ./... -run TestBundleQuotas`
+- [x] Add `bundle_id` optional field to license activation
+- [x] In `tierQuotas()`: if `bundle_id == "restaurant_starter"`, unlock `kds` workspace type at Plus tier
+- [ ] In the website: add bundle purchase option on vertical landing pages *(deferred — needs bundle prices in `MIDTRANS_PRICE_TIERS`/`PADDLE_PRICE_TIERS` + a checkout custom field; activation already honors `?bundle=restaurant_starter`)*
+- [x] **Test:** `go test ./... -run TestBundleQuotas`
+
+> **Shipped** (2026-08-18): `bundle_id` on the activation request (Go
+> `ActivateRequest` + Rust `ActivateLicenseRequest` + desktop
+> `activate_license` + `activateLicense(..., bundleId?)` + new
+> `?bundle=` URL detector `ui/src/utils/bundle.ts`). `tierQuotas(tier,
+> bundle)` unlocks the `kds` workspace type at Plus for
+> `restaurant_starter` (bundles are Plus+ per §3 — Free stays locked,
+> Pro+ already has kds). Trust boundary mirrors `trial_vertical`: only
+> honored for trial keys, so a forged `bundle_id` can never widen a paid
+> license (paid bundles will be issued by the webhook at checkout once
+> the website leg lands). Tests: Go `TestBundleQuotas` (7 tier×bundle
+> cases) + 3 activation E2Es (trial unlock, trial without bundle,
+> paid-key-forged-bundle ignored), Rust bundle_id serialization ×2, UI
+> detector + 4 activation-screen tests.
 
 ---
 
