@@ -26,9 +26,9 @@ country price overrides for Indonesia (the customer's charge ≈ the Rp figure).
 | Tier | USD/mo | USD/yr (≈off) | IDR/mo | IDR/yr (≈off) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Free** | $0 | — | Rp 0 | — |
-| **Plus** | $5 | $49.99 (16.7%) | Rp 49.000 | Rp 500.000 (15.0%) |
-| **Pro** | $10 | $99.99 (16.7%) | Rp 99.000 | Rp 1.000.000 (15.8%) |
-| **Premium** | $25 | $249.99 (16.7%) | Rp 199.000 | Rp 2.000.000 (16.2%) |
+| **Plus** | $4.99 | $49.99 (16.5%) | Rp 49.000 | Rp 500.000 (15.0%) |
+| **Pro** | $9.99 | $99.99 (16.6%) | Rp 99.000 | Rp 1.000.000 (15.8%) |
+| **Premium** | $19.99 | $249.99 ⚠ | Rp 199.000 | Rp 2.000.000 (16.2%) |
 | **Enterprise** | Bespoke | Bespoke | Kustom | Kustom |
 
 Yearly = pay 10 months (10 × monthly, ≈15–17% off) in both currencies.
