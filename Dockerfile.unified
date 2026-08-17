@@ -19,9 +19,9 @@
 # to the managed Postgres addon (see unify-auth-and-sync.md).
 
 # ── Stage 1: Go license server (static build) ────────────────────────
-# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-16 to
+# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-17 to
 # Go 1.25.13 — clears the stdlib CVE set fixed in 1.25.13).
-FROM golang:1.25-alpine@sha256:3eb6c2b3db8d55e38537302edb510b4417f8a115efbd5906d131ceba9468e29a AS gobuilder
+FROM golang:1.25-alpine@sha256:1e0126852075c9c60731c8ba49088448b91f63e2aed97ca9d1a9791622a05946 AS gobuilder
 
 WORKDIR /src
 
@@ -149,8 +149,8 @@ RUN cargo build --package oz-cloud-server --release
 FROM caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648 AS caddy
 
 # ── Stage 4: Runtime (both functions + caddy + supervisor) ───────────
-# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-03).
-FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS runtime
+# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-17).
+FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241 AS runtime
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
