@@ -150,10 +150,10 @@ State of the codebase:
 
 ## Implementation Status
 
-- [ ] D1 checkout routing
-- [ ] D2 `midtrans_webhook.go` + route
-- [ ] D3 `payment_provider` + `midtrans_sub_id` (schema + migration + backfill)
-- [ ] D4 renewal handling (covered by D2's refresh path)
-- [ ] Tests + full gate pass
+- [x] D1 checkout routing — id-locale `CheckoutButton`/`AccountView` open Snap via `POST /api/v1/midtrans/snap`; Paddle for other locales
+- [x] D2 `midtrans_webhook.go` + route (`POST /api/v1/midtrans/webhook`)
+- [x] D3 `payment_provider` + `midtrans_sub_id`/`midtrans_order_id` (schema + migrations + Paddle backfill)
+- [x] D4 renewal handling — recurring charges refresh the same key (keyed by `subscription_id`)
+- [x] Tests — `go test ./... -run TestMidtrans` (mint, signature 401, replay dedup, renewal, failed-charge grace, amount cross-check, snap token) + website routing tests; full Go/website/build gates green
 
-Tracked in `TODO.md` C3.1.
+Tracked in `TODO.md` C3.1 (shipped 2026-08-18).

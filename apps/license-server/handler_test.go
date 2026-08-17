@@ -160,6 +160,15 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		if err := ensureIsTrialField(app); err != nil {
 			return err
 		}
+		// Mirror production boot: add the midtrans_sub_id / midtrans_order_id
+		// fields and the payment_provider discriminator (C3.1) via the same
+		// idempotent migration paths the deployed server uses.
+		if err := ensureMidtransFields(app); err != nil {
+			return err
+		}
+		if err := ensurePaymentProviderField(app); err != nil {
+			return err
+		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
@@ -175,6 +184,9 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
+		// Midtrans webhook + Snap checkout (C3.1) — mirror production boot.
+		se.Router.POST(midtransWebhookPath, handleMidtransWebhook(app))
+		se.Router.POST(midtransSnapPath, handleMidtransSnap(app))
 		return se.Next()
 	})
 }

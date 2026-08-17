@@ -448,17 +448,37 @@ For each trigger:
 
 > **Scope note:** This is the largest item. Requires its own ADR before implementation begins.
 
-- [ ] **Write ADR:** `docs/decisions/YYYY-MM-DD-midtrans-subscription-phase2.md`
+- [x] **Write ADR:** `docs/decisions/2026-08-18-adr39-midtrans-subscription-payments.md` (ADR #39)
   - Decision: route ID customers to Midtrans checkout for fixed-IDR QRIS subscription billing
   - Consequences: OZ-POS becomes merchant of record for Indonesian PPN; second webhook path
-- [ ] **License server:** Add Midtrans webhook handler in `apps/license-server/` (new file: `midtrans_webhook.go`)
-  - Parse Midtrans subscription notification
-  - Validate signature (Midtrans HMAC-SHA512)
-  - On successful payment: mint/renew license (same `tierQuotas()` logic as Paddle)
-  - On failed payment: set grace period
-- [ ] **Provisioning path:** Add `payment_provider` field to the license record (`"paddle"` | `"midtrans"`)
-- [ ] **Checkout routing:** In the website checkout flow, detect Indonesian IP/locale → redirect to Midtrans checkout instead of Paddle
-- [ ] **Test:** `go test ./... -run TestMidtransWebhook`
+- [x] **License server:** Add Midtrans webhook handler in `apps/license-server/` (`midtrans_webhook.go`)
+  - Parse Midtrans payment notification (non-strict; subscription_id when present)
+  - Validate signature (Midtrans `SHA512(order_id + status_code + gross_amount + serverkey)`)
+  - On successful payment: mint/renew license (same `tierQuotas()` + `signSubscription()` logic as Paddle; tier cross-checked against the fixed IDR amount)
+  - On failed payment: set grace period (grace_until = paid period end)
+- [x] **Provisioning path:** Add `payment_provider` field to the license record (`"paddle"` | `"midtrans"`, backfilled to `paddle`) + `midtrans_sub_id`/`midtrans_order_id` lookup fields
+- [x] **Checkout routing:** id-locale pricing button + account dashboard open Midtrans Snap (`POST /api/v1/midtrans/snap` → snap token) instead of Paddle; other locales keep Paddle
+- [x] **Test:** `go test ./... -run TestMidtrans` — mint/renew/grace/dedup/signature/amount-cross-check + snap token endpoint
+
+> **Shipped** (2026-08-18): 5 commits — ADR #39 (`7a6ef1f1`),
+> webhook + schema fields (`cce9de0e`), payment_provider + backfill
+> (`abea699f`), Snap checkout routing (`6a5a665e`), tests (final commit).
+> `POST /api/v1/midtrans/webhook` verifies the Midtrans signature_key
+> (SHA512 over order_id+status_code+gross_amount+serverkey), dedups by
+> transaction_id, and on a settled charge upserts the tenant by email,
+> mints/refreshes the license key, and writes the RSA-signed subscription
+> via the shared provisioning core — the POS sees byte-identical payloads
+> regardless of provider. Tier resolution cross-checks the
+> checkout-embedded tier_key against the fixed IDR gross_amount mapped in
+> the new `MIDTRANS_PRICE_TIERS` env (`"amount:tier[:period]"`), so a
+> tampered amount can't mint a higher tier. Recurring charges refresh the
+> same key (keyed by `subscription_id`); failed charges move the
+> subscription to `grace_period`. `payment_provider` + `midtrans_sub_id` /
+> `midtrans_order_id` added to `license_keys`/`subscriptions` (schema +
+> idempotent migrations + Paddle backfill). Checkout: id-locale buttons
+> request a snap token from `POST /api/v1/midtrans/snap` (session-authed;
+> buyer email from the tenant record, never the body) and open Snap.js;
+> Paddle stays for other locales.
 
 ---
 

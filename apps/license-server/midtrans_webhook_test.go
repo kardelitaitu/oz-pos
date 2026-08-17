@@ -1,0 +1,412 @@
+package main
+
+import (
+	"crypto/sha512"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/pocketbase/pocketbase/core"
+)
+
+// ── Signature + payload helpers ─────────────────────────────────────
+
+// signMidtrans recomputes Midtrans's documented notification signature:
+// SHA512(order_id + status_code + gross_amount + serverkey).
+func signMidtrans(serverKey, orderID, statusCode, grossAmount string) string {
+	sum := sha512.Sum512([]byte(orderID + statusCode + grossAmount + serverKey))
+	return hex.EncodeToString(sum[:])
+}
+
+// setMidtransEnv configures the webhook env vars shared by most tests.
+// The plus entry mirrors the production six-price MIDTRANS_PRICE_TIERS
+// shape (tier:period pairs keyed by the fixed IDR gross_amount).
+func setMidtransEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("MIDTRANS_SERVER_KEY", "test-midtrans-server-key")
+	t.Setenv("MIDTRANS_PRICE_TIERS", "149000:plus:month,1490000:plus:year,249000:pro:month,499000:pro:year")
+}
+
+// midtransPaymentBody renders a Midtrans payment notification.
+// subscriptionID "" omits subscription_id (a first charge that predates
+// the subscription record); tierField/email "" omit the custom fields.
+func midtransPaymentBody(transactionID, orderID, subscriptionID, status, statusCode, grossAmount, tierField, email string) string {
+	sub, cf1, cf2 := "", "", ""
+	if subscriptionID != "" {
+		sub = fmt.Sprintf(`,"subscription_id": %q`, subscriptionID)
+	}
+	if tierField != "" {
+		cf1 = fmt.Sprintf(`,"custom_field1": %q`, tierField)
+	}
+	if email != "" {
+		cf2 = fmt.Sprintf(`,"custom_field2": %q`, email)
+	}
+	return fmt.Sprintf(`{
+  "transaction_id": %q,
+  "order_id": %q,
+  "transaction_status": %q,
+  "status_code": %q,
+  "gross_amount": %q,
+  "fraud_status": "accept",
+  "payment_type": "qris",
+  "signature_key": "SIGNATURE",
+  "settlement_time": "2026-08-18 10:00:00"%s%s%s
+}`, transactionID, orderID, status, statusCode, grossAmount, sub, cf1, cf2)
+}
+
+// midtransSignedBody renders a fully signed payment notification.
+func midtransSignedBody(serverKey, transactionID, orderID, subscriptionID, status, statusCode, grossAmount, tierField, email string) string {
+	body := midtransPaymentBody(transactionID, orderID, subscriptionID, status, statusCode, grossAmount, tierField, email)
+	sig := signMidtrans(serverKey, orderID, statusCode, grossAmount)
+	return strings.Replace(body, `"signature_key": "SIGNATURE"`, fmt.Sprintf(`"signature_key": %q`, sig), 1)
+}
+
+// serveMidtrans posts a signed (or unsigned) notification body to the
+// webhook endpoint.
+func serveMidtrans(t *testing.T, se *core.ServeEvent, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	return servePost(t, se, midtransWebhookPath, "", nil, body)
+}
+
+// ── Webhook: mint / signature / dedup / renew / grace ───────────────
+
+// TestMidtransWebhook_MintSettledCharge drives the plus-tier mint over HTTP:
+// a settled QRIS charge provisions a 1-store/2-register license keyed by
+// subscription_id with payment_provider=midtrans, and the signed subscription
+// carries the plus quota block with a ~+1y expiry (yearly plan period).
+func TestMidtransWebhook_MintSettledCharge(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	var emailedKey string
+	restore := stubReceiptEmail(t, &emailedKey)
+	defer restore()
+
+	body := midtransSignedBody("test-midtrans-server-key", "txn_mt_001", "OZ-PLUS-1755-001",
+		"sub_mt_001", "settlement", "200", "1490000", "plus", "midbuyer@example.com")
+	rec := serveMidtrans(t, se, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from midtrans webhook, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Minted license keyed by subscription_id: OZ-PLUS- prefix + plus quota
+	// block (no kds), payment_provider=midtrans.
+	keyRec, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_001")
+	if err != nil {
+		t.Fatalf("midtrans license key not minted: %v", err)
+	}
+	key := keyRec.GetString("key")
+	if !strings.HasPrefix(key, "OZ-PLUS-") {
+		t.Errorf("expected OZ-PLUS- key prefix, got %q", key)
+	}
+	if keyRec.GetString("payment_provider") != "midtrans" {
+		t.Errorf("expected payment_provider=midtrans, got %q", keyRec.GetString("payment_provider"))
+	}
+	if keyRec.GetString("midtrans_order_id") != "OZ-PLUS-1755-001" {
+		t.Errorf("expected midtrans_order_id on key, got %q", keyRec.GetString("midtrans_order_id"))
+	}
+	if emailedKey != key {
+		t.Errorf("expected receipt email with key %q, got %q", key, emailedKey)
+	}
+	assertPlusQuotaBlock(t, keyRec.GetString("tier_key"), keyRec.GetInt("max_stores"), keyRec.GetInt("max_pos_instances"), mustParseAllowedTypes(t, keyRec.GetString("allowed_types")))
+
+	// Signed subscription persisted with the plus quota block, the provider
+	// discriminator, and a ~+1y expiry (yearly period from the price map).
+	subRec, err := app.FindFirstRecordByData("subscriptions", "midtrans_sub_id", "sub_mt_001")
+	if err != nil {
+		t.Fatalf("midtrans subscription not persisted: %v", err)
+	}
+	if subRec.GetString("status") != "active" {
+		t.Errorf("expected sub status active, got %q", subRec.GetString("status"))
+	}
+	if subRec.GetString("payment_provider") != "midtrans" {
+		t.Errorf("expected sub payment_provider=midtrans, got %q", subRec.GetString("payment_provider"))
+	}
+	if !strings.Contains(subRec.GetString("signed_payload"), `"tier_key":"plus"`) {
+		t.Errorf("expected signed payload tier_key plus, got: %s", subRec.GetString("signed_payload"))
+	}
+	expiry := subRec.GetDateTime("expires_at").Time()
+	if diff := expiry.Sub(time.Now().UTC().AddDate(1, 0, 0)); diff > 5*time.Minute || diff < -5*time.Minute {
+		t.Errorf("minted plus subscription should expire ~+1y, got %v (diff %v)", expiry, diff)
+	}
+
+	// The tenant was created by the webhook from custom_field2.
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "midbuyer@example.com")
+	if err != nil {
+		t.Fatalf("webhook-created tenant not found: %v", err)
+	}
+	if tenant.GetString("status") != "active" {
+		t.Errorf("expected tenant active, got %q", tenant.GetString("status"))
+	}
+}
+
+// TestMidtransWebhook_TierAmountCrossCheck rejects a charge whose
+// checkout-embedded tier disagrees with the fixed IDR amount — a tampered
+// custom_field1 must not mint a higher tier.
+func TestMidtransWebhook_TierAmountCrossCheck(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// custom_field1 says premium, but 1490000 maps to plus:year.
+	body := midtransSignedBody("test-midtrans-server-key", "txn_mt_xc01", "OZ-PLUS-1755-XC1",
+		"sub_mt_xc01", "settlement", "200", "1490000", "premium", "tamper@example.com")
+	rec := serveMidtrans(t, se, body)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 from tier mismatch, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_xc01"); err == nil {
+		t.Fatal("expected NO license key minted for a rejected charge")
+	}
+}
+
+// TestMidtransWebhook_InvalidSignature401 rejects a notification whose
+// signature_key doesn't match the canonical SHA512 over the fields.
+func TestMidtransWebhook_InvalidSignature401(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	body := midtransPaymentBody("txn_mt_bad01", "OZ-PLUS-1755-BAD", "sub_mt_bad01",
+		"settlement", "200", "1490000", "plus", "bad@example.com")
+	// Sign with the wrong key — the server key is "test-midtrans-server-key".
+	body = strings.Replace(body, `"signature_key": "SIGNATURE"`,
+		fmt.Sprintf(`"signature_key": %q`, signMidtrans("wrong-key", "OZ-PLUS-1755-BAD", "200", "1490000")), 1)
+	rec := serveMidtrans(t, se, body)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 from invalid signature, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_bad01"); err == nil {
+		t.Fatal("expected NO license key minted for an unsigned charge")
+	}
+}
+
+// TestMidtransWebhook_DuplicateReplay dedups a re-delivered notification
+// (Midtrans retries) — the second POST is a no-op and only one key exists.
+func TestMidtransWebhook_DuplicateReplay(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	body := midtransSignedBody("test-midtrans-server-key", "txn_mt_dup01", "OZ-PLUS-1755-DUP",
+		"sub_mt_dup01", "settlement", "200", "1490000", "plus", "dup@example.com")
+
+	rec1 := serveMidtrans(t, se, body)
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("expected 200 on first delivery, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+	rec2 := serveMidtrans(t, se, body)
+	if rec2.Code != http.StatusOK || !strings.Contains(rec2.Body.String(), "duplicate") {
+		t.Fatalf("expected 200 duplicate on replay, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	keys, err := app.FindRecordsByFilter("license_keys", "midtrans_sub_id = 'sub_mt_dup01'", "", 10, 0, nil)
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("expected exactly one license key after replay, got %d (err %v)", len(keys), err)
+	}
+}
+
+// TestMidtransWebhook_RenewalRefreshesSameKey covers the recurring-charge
+// path: a later charge on the same subscription (new order_id, same
+// subscription_id) refreshes the SAME license key instead of minting a
+// second one, and extends the expiry.
+func TestMidtransWebhook_RenewalRefreshesSameKey(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	restore := stubReceiptEmail(t, new(string))
+	defer restore()
+
+	// ── First charge ──
+	rec1 := serveMidtrans(t, se, midtransSignedBody("test-midtrans-server-key", "txn_mt_rn01",
+		"OZ-PLUS-1755-RN1", "sub_mt_rn01", "settlement", "200", "1490000", "plus", "renew@example.com"))
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("expected 200 on first charge, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+	keyRec1, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_rn01")
+	if err != nil {
+		t.Fatalf("first charge key not minted: %v", err)
+	}
+	keyA := keyRec1.GetString("key")
+	expiry1 := keyRec1.GetDateTime("expires_at").Time()
+
+	// ── Recurring charge: new order_id, same subscription_id ──
+	// The expiry extends from the charge time by the plan period; space the
+	// charges >1s apart so the +1y windows are provably different (in
+	// production the recurring charge lands ~a period later anyway).
+	time.Sleep(1100 * time.Millisecond)
+	rec2 := serveMidtrans(t, se, midtransSignedBody("test-midtrans-server-key", "txn_mt_rn02",
+		"OZ-PLUS-1756-RN2", "sub_mt_rn01", "settlement", "200", "1490000", "plus", "renew@example.com"))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on recurring charge, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	keys, err := app.FindRecordsByFilter("license_keys", "midtrans_sub_id = 'sub_mt_rn01'", "", 10, 0, nil)
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("expected exactly one key after renewal, got %d (err %v)", len(keys), err)
+	}
+	keyRec2 := keys[0]
+	if keyRec2.GetString("key") != keyA {
+		t.Errorf("expected renewal to refresh the same key %q, got %q", keyA, keyRec2.GetString("key"))
+	}
+	expiry2 := keyRec2.GetDateTime("expires_at").Time()
+	if !expiry2.After(expiry1) {
+		t.Errorf("expected renewal to extend expiry (%v -> %v)", expiry1, expiry2)
+	}
+	if keyRec2.GetString("midtrans_order_id") != "OZ-PLUS-1756-RN2" {
+		t.Errorf("expected order_id refreshed on key, got %q", keyRec2.GetString("midtrans_order_id"))
+	}
+
+	// The subscription record was refreshed too (same record, new expiry).
+	subs, err := app.FindRecordsByFilter("subscriptions", "midtrans_sub_id = 'sub_mt_rn01'", "", 10, 0, nil)
+	if err != nil || len(subs) != 1 {
+		t.Fatalf("expected exactly one subscription record after renewal, got %d (err %v)", len(subs), err)
+	}
+	if subs[0].GetString("status") != "active" {
+		t.Errorf("expected sub active after renewal, got %q", subs[0].GetString("status"))
+	}
+}
+
+// TestMidtransWebhook_FailedChargeGrace moves a provisioned subscription to
+// grace_period when a later charge expires/cancels — the customer keeps
+// access through the paid period (grace_until = expires_at).
+func TestMidtransWebhook_FailedChargeGrace(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Provision first, then a cancel notification on the same subscription.
+	rec1 := serveMidtrans(t, se, midtransSignedBody("test-midtrans-server-key", "txn_mt_gr01",
+		"OZ-PLUS-1755-GR1", "sub_mt_gr01", "settlement", "200", "1490000", "plus", "grace@example.com"))
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("expected 200 on settled charge, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+
+	rec2 := serveMidtrans(t, se, midtransSignedBody("test-midtrans-server-key", "txn_mt_gr02",
+		"OZ-PLUS-1755-GR2", "sub_mt_gr01", "cancel", "410", "1490000", "plus", "grace@example.com"))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on cancel notification, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	subRec, err := app.FindFirstRecordByData("subscriptions", "midtrans_sub_id", "sub_mt_gr01")
+	if err != nil {
+		t.Fatalf("subscription not found: %v", err)
+	}
+	if subRec.GetString("status") != "grace_period" {
+		t.Errorf("expected grace_period after cancel, got %q", subRec.GetString("status"))
+	}
+	if subRec.GetString("grace_until") != subRec.GetString("expires_at") {
+		t.Errorf("expected grace_until = expires_at, got grace=%q expires=%q",
+			subRec.GetString("grace_until"), subRec.GetString("expires_at"))
+	}
+	if !strings.Contains(subRec.GetString("signed_payload"), `"status":"grace_period"`) {
+		t.Errorf("expected re-signed payload status grace_period, got: %s", subRec.GetString("signed_payload"))
+	}
+
+	// A failed charge for an unknown order is acknowledged, not an error.
+	rec3 := serveMidtrans(t, se, midtransSignedBody("test-midtrans-server-key", "txn_mt_gr03",
+		"OZ-PLUS-1755-GR3", "", "expire", "407", "1490000", "plus", "nobody@example.com"))
+	if rec3.Code != http.StatusOK {
+		t.Fatalf("expected 200 acknowledging unknown-order failure, got %d: %s", rec3.Code, rec3.Body.String())
+	}
+}
+
+// ── Snap checkout endpoint ──────────────────────────────────────────
+
+// TestMidtransSnap_CheckoutToken exercises POST /api/v1/midtrans/snap:
+// session auth, tier/period → fixed IDR amount from the price map, and the
+// charge handed to the Snap API carries the tenant email (never a client
+// body value).
+func TestMidtransSnap_CheckoutToken(t *testing.T) {
+	resetRateLimiters()
+	setMidtransEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// seedTenant uses its first arg as the record id (≥15 chars) AND email
+	// prefix.
+	seedTenant(t, app, "snapbuyer000001", "snap-api-key-001", "active")
+	token := "snap-session-0001"
+	webOtpStore.createSession(hashWebToken(token), "snapbuyer000001")
+
+	var got midtransSnapCharge
+	orig := createMidtransSnap
+	createMidtransSnap = func(charge midtransSnapCharge) (midtransSnapResult, error) {
+		got = charge
+		return midtransSnapResult{Token: "snap-token-001", RedirectURL: "https://app.midtrans.com/snap/v1/transactions/snap-token-001"}, nil
+	}
+	defer func() { createMidtransSnap = orig }()
+
+	// Yearly plus → 1490000 (the fixed IDR price from MIDTRANS_PRICE_TIERS).
+	rec := servePost(t, se, midtransSnapPath, "Bearer "+token, nil, `{"tier_key":"plus","period":"yearly"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from snap endpoint, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Token   string `json:"token"`
+		OrderID string `json:"order_id"`
+		Amount  string `json:"amount"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse snap response: %v", err)
+	}
+	if resp.Token != "snap-token-001" || resp.Amount != "1490000" || resp.OrderID == "" {
+		t.Errorf("unexpected snap response: token=%q amount=%q order=%q", resp.Token, resp.Amount, resp.OrderID)
+	}
+	if got.GrossAmount != "1490000" || got.Period != "yearly" || got.TierKey != "plus" {
+		t.Errorf("unexpected snap charge: %+v", got)
+	}
+	if got.Email != "snapbuyer000001@example.com" {
+		t.Errorf("expected tenant email in snap charge, got %q", got.Email)
+	}
+	if !strings.HasPrefix(got.OrderID, "OZ-PLUS-") {
+		t.Errorf("expected OZ-PLUS- order id, got %q", got.OrderID)
+	}
+
+	// Monthly plus → 149000 (the monthly price); period omitted defaults to
+	// yearly (the pricing page's default billing period).
+	rec2 := servePost(t, se, midtransSnapPath, "Bearer "+token, nil, `{"tier_key":"plus","period":"monthly"}`)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for monthly period, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+	var resp2 struct {
+		Amount string `json:"amount"`
+	}
+	if err := json.Unmarshal(rec2.Body.Bytes(), &resp2); err != nil {
+		t.Fatalf("failed to parse second snap response: %v", err)
+	}
+	if resp2.Amount != "149000" {
+		t.Errorf("expected monthly amount 149000, got %q", resp2.Amount)
+	}
+
+	// Unknown tier → 400 (a misconfigured map must not mint an unbilled tier).
+	rec3 := servePost(t, se, midtransSnapPath, "Bearer "+token, nil, `{"tier_key":"premium","period":"yearly"}`)
+	if rec3.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unmapped tier, got %d: %s", rec3.Code, rec3.Body.String())
+	}
+
+	// No session → 401.
+	rec4 := servePost(t, se, midtransSnapPath, "Bearer bogus", nil, `{"tier_key":"plus"}`)
+	if rec4.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without session, got %d: %s", rec4.Code, rec4.Body.String())
+	}
+}

@@ -66,7 +66,12 @@ func midtransSnapURL() string {
 // mapped — the checkout then answers 400: a misconfigured map must not
 // mint an unbilled tier.
 func midtransAmountForTier(tier, period string) (string, bool) {
-	if period == "" {
+	// Normalize the website's BillingPeriod vocabulary (monthly/yearly) to
+	// the price map's plan-period vocabulary (month/year).
+	switch period {
+	case "monthly":
+		period = "month"
+	case "yearly", "":
 		period = "year"
 	}
 	m, err := midtransPriceTiers()
