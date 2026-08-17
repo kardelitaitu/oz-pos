@@ -22,6 +22,7 @@ cd "$(dirname "$0")/.."
 # Files that carry `image:tag@sha256:...` pins (DOCKER-02).
 FILES=(
     "Dockerfile.server"
+    "Dockerfile.unified"
     "apps/license-server/Dockerfile"
     "docker-compose.yml"
     "docker-compose.pg.yml"

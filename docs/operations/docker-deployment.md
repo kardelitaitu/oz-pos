@@ -489,21 +489,16 @@ path-looking argument.
    `ports: ["6379:6379"]` only for local development. In production,
    remove the port mapping or bind to `127.0.0.1`.
 
-3. **Use secrets for sensitive env vars** — In production, prefer
-   Docker secrets or your orchestrator's secret store instead of
-   plain env vars:
+3. **Use secrets for sensitive env vars** — Prefer your orchestrator's
+   secret store (Northflank secret group — runbook §8) over plain env vars.
+   The app reads its secrets as **env strings only** — it does not read
+   Docker secret files, so the `secrets:` + `/run/secrets/...` file-mount
+   pattern does not apply. Compose's required-variable syntax (already used
+   in `docker-compose.yml`) fails fast when a secret is missing:
 
    ```yaml
-   secrets:
-     oz_api_secret:
-       file: ./secrets/oz_api_secret.txt
-
-   services:
-     pos-cloud-server:
-       secrets:
-         - oz_api_secret
-       environment:
-         OZ_API_SECRET_FILE: /run/secrets/oz_api_secret
+   environment:
+     OZ_API_SECRET: "${OZ_API_SECRET:?OZ_API_SECRET is required}"
    ```
 
 4. **TLS termination** — These services speak HTTP. Use a reverse proxy

@@ -29,6 +29,8 @@
  * result (callers use it to refresh the dashboard, see AccountView).
  */
 
+import { licenseApiUrl } from '../lib/runtime-config';
+
 /** Event payload handed to Paddle.Initialize's eventCallback (v2). */
 export interface PaddleEvent {
   name: string;
@@ -77,7 +79,7 @@ function paddleEventCallback(event: PaddleEvent): void {
 const TOKEN = import.meta.env.PUBLIC_PADDLE_CLIENT_TOKEN as string | undefined;
 const ENVIRONMENT =
   (import.meta.env.PUBLIC_PADDLE_ENVIRONMENT as string | undefined) === 'sandbox' ? 'sandbox' : 'production';
-const API = import.meta.env.PUBLIC_LICENSE_API_URL as string | undefined;
+const API = licenseApiUrl();
 
 /** sessionStorage keys shared with AuthForm / AccountView. */
 export const SESSION_KEY = 'oz_session';

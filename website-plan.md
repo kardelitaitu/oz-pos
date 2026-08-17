@@ -515,7 +515,7 @@ Live at `https://oz-pos.adikaradwiatmaja.workers.dev` until the custom domain is
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `PUBLIC_LICENSE_API_URL` | `https://license.oz-pos.com` | Web auth + license API (replaces any direct PocketBase URL). Astro only exposes `PUBLIC_*` vars — this is set at **build time**, not in wrangler.toml |
+| `PUBLIC_LICENSE_API_URL` | `https://license.oz-pos.com` | Web auth + license API (replaces any direct PocketBase URL). Build-time fallback only: the Worker serves the runtime override from the `LICENSE_API_URL` [vars] binding in wrangler.toml, so a backend move needs no rebuild |
 | `PUBLIC_PADDLE_CLIENT_TOKEN` | `xxxxx` | Paddle.js v2 client token (`Paddle.Checkout`, `custom_data.email`). Empty = checkout buttons degrade to the mailto fallback |
 | `PUBLIC_PADDLE_ENVIRONMENT` | `sandbox` | Paddle SDK env: `sandbox` or `production` (defaults to `production` when unset — set `sandbox` until real price ids ship) |
 | `PUBLIC_CONTACT_ENDPOINT` | `https://license.oz-pos.com/api/v1/web/contact` | Support contact-form target; empty = mailto fallback |

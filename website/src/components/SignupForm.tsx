@@ -3,6 +3,7 @@ import { t } from '../i18n';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
+import { licenseApiUrl } from '../lib/runtime-config';
 
 /**
  * Signup form (website-plan.md §5) — the password-first registration path
@@ -20,7 +21,7 @@ import PasswordStrength from './PasswordStrength';
  * user is sent to ?next= or the account dashboard. Degrades to a "not
  * configured" notice when PUBLIC_LICENSE_API_URL is unset.
  */
-const API = import.meta.env.PUBLIC_LICENSE_API_URL as string | undefined;
+const API = licenseApiUrl();
 
 interface Props {
   locale: string;
