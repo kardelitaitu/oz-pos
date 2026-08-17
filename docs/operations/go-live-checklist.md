@@ -52,14 +52,13 @@ webhook delivery work the moment the new image is up.
    Default payment link** → pick a product (e.g. **Pro — $19 USD**) → Save. Without it the
    checkout overlay dies with **"Something went wrong"** before Paddle even opens.
    `localhost` is allowed for sandbox testing, so the local site works too.
-2. **Repoint the webhook destination** — the notification destination
-   `ntfset_01m05htpgfq0qmcvb0er6byrsx` currently posts to
-   `https://license.oz-pos.com/api/v1/paddle/webhook`, a domain we do **not** own yet — so
-   sandbox webhooks are being dropped. Paddle (sandbox) → **Developer tools →
+2. **Webhook destination — DONE (verified 2026-08-17 via the Paddle API):**
+   `ntfset_01m05htpgfq0qmcvb0er6byrsx` now posts to
+   `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook` (was the unowned
+   `license.oz-pos.com`). If it ever regresses: Paddle (sandbox) → **Developer tools →
    Notifications** → edit destination `ntfset_01m05htpgfq0qmcvb0er6byrsx` → **Endpoint
-   URL** → `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook` → Save.
-   While in that same edit screen, copy the **Endpoint secret** into §1 #3 — it is shown
-   once and never returned by any API.
+   URL** → the `code.run` URL → Save. While in that same edit screen, copy the
+   **Endpoint secret** into §1 #3 — it is shown once and never returned by any API.
 
 ---
 
@@ -165,8 +164,16 @@ a broken relay or rotated secret pages someone.
 
 - **Website secrets** (GitHub Actions → Settings → Secrets, consumed by `website.yml`
   and baked at build time): `PUBLIC_LICENSE_API_URL` (the `code.run` URL),
-  `PUBLIC_PADDLE_CLIENT_TOKEN`, `PUBLIC_PADDLE_ENVIRONMENT=sandbox`. The runtime override lives in `website/wrangler.toml` → `[vars] LICENSE_API_URL` — update it there (or the Worker dashboard) when the host changes; no rebuild needed.
+  `PUBLIC_PADDLE_CLIENT_TOKEN` — **DONE (2026-08-17): minted via `POST /client-tokens`
+  with the sandbox API key and set as a GH secret** (id `ctkn_01m07k8eyefpfbp3e3bf35qzvv`;
+  dashboard path if ever regenerated: Paddle (sandbox) → **Developer tools →
+  Authentication → Client-side tokens** → New — sandbox tokens start `test_`),
+  `PUBLIC_PADDLE_ENVIRONMENT=sandbox`. The runtime override lives in `website/wrangler.toml` → `[vars] LICENSE_API_URL` — update it there (or the Worker dashboard) when the host changes; no rebuild needed.
 - **Paddle sandbox checkout** is unblocked by the **default payment link** — now a
   checklist step in §1b #1 (do it before the §3 deploy).
 - **Domain + SPF/DKIM/DMARC** is the real inbox-not-spam fix once `oz-pos.com` is owned
   (see `DEPLOY.md` §7).
+- **Auto-deploy wiring** — backend deploys are manual (Redeploy button) until
+  `deploy.yml` is wired: set GitHub secret `NORTHFLANK_API_TOKEN` + vars
+  `NORTHFLANK_PROJECT_ID` / `NORTHFLANK_SERVICE_ID` / `NORTHFLANK_SERVICE_URL`
+  (see runbook §8.5). Until then, run the §3 apply order and click Redeploy.

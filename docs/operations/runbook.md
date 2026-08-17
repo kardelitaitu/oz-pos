@@ -399,7 +399,7 @@ docker volume prune
 | Dockerfile | `Dockerfile.unified` (repo root) |
 | Port | `80` (caddy; routes to :8080 PocketBase / :3099 Rust) |
 | Volume | single volume at `/data` (Northflank free tier = 1 volume) |
-| Build trigger | push/merge to `main` (CI builds from the branch) |
+| Build trigger | push to `main` — `deploy.yml` triggers the Northflank API build at the exact commit (§8.5); `workflow_dispatch` for manual redeploys |
 
 **Single-volume layout (DOCKER-11):**
 
@@ -475,6 +475,53 @@ All point at the unified host; each also has an env-var override:
 The **sync server URL** is per-install user config: Settings → Cloud Sync
 → enter `https://oz--cloud--76cyv4d6bn54.code.run`. Unlike auth, it is
 stored in the local DB (never compiled in).
+
+### 8.5 Automated deploys (deploy.yml)
+
+Merges to `main` now auto-deploy: `.github/workflows/deploy.yml` triggers a
+Northflank API build of the exact pushed commit (`POST
+/v1/projects/{projectId}/services/{serviceId}/build` with `{"sha": ...}`),
+polls until the build concludes (a combined service auto-deploys after a
+successful build), then smoke-tests `$NORTHFLANK_SERVICE_URL/health` and
+`/api/health`. The whole lifecycle is one auditable check on the merge
+commit — no dashboard clicks, and a stale deploy can no longer hide.
+
+**One-time setup:**
+
+1. **Create a team API token** — Northflank → Team settings → **API
+   tokens** → create one with permission **Project > Services > General >
+   Update** (trigger the build) + **Read** (poll it). Least privilege only.
+2. **Find the IDs** — resource header (top of the service page) → ⋮ →
+   **View specification**; or with the token:
+   `curl -s -H "Authorization: Bearer $TOKEN" https://api.northflank.com/v1/projects`
+   then `…/v1/projects/{projectId}/services`.
+3. **Set GitHub Actions secrets/vars:**
+   - secret `NORTHFLANK_API_TOKEN`
+   - vars `NORTHFLANK_PROJECT_ID`, `NORTHFLANK_SERVICE_ID`,
+     `NORTHFLANK_SERVICE_URL` (the public `https://oz--cloud--…code.run` URL;
+     unset skips the smoke step)
+
+**Behavior:** runs on push to `main` filtered to the unified-image inputs
+(`Dockerfile.unified`, `Cargo.toml`/`Cargo.lock`, `rust-toolchain.toml`,
+`crates/**`, `foundation/**`, `platform/**`, `modules/**`, `apps/**`) plus
+`workflow_dispatch` for manual redeploys. Fail-closed: missing token/IDs
+fails the job loudly. Until the §8 env table is fully applied, the smoke
+probes may 503 — that is the fail-fast gate working, not a workflow bug.
+
+**Manual redeploy from a shell** (same API call, no GitHub needed):
+
+```bash
+TOKEN="<team API token>"; PROJECT="<projectId>"; SERVICE="<serviceId>"
+curl -sS -X POST "https://api.northflank.com/v1/projects/$PROJECT/services/$SERVICE/build" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{}'
+```
+
+(empty body = build the latest commit of the service's linked branch.)
+
+**Alternative (zero repo code):** enable native git triggers on the service
+— Build configuration → branch restrictions → `main` — Northflank then
+auto-builds + auto-deploys on every push itself. Same outcome, but
+invisible in GitHub Actions; `deploy.yml` is the preferred, auditable path.
 ---
 ---
 

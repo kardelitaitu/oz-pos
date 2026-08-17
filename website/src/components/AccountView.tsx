@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
-import { getSessionEmail, openPaddleCheckout } from './paddle';
+import { getSessionEmail, isPaddleConfigured, openPaddleCheckout } from './paddle';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -347,27 +347,33 @@ export default function AccountView({ locale }: Props) {
         <section className="rounded-xl border border-accent/40 bg-surface/40 p-6" aria-label={t(locale, 'account.subscribe')}>
           <h2 className="text-lg font-semibold">{t(locale, 'account.subscribe')}</h2>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.noSubscription')}</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {subscribable.map((plan) => (
-              <div key={plan.tierKey} className="rounded-lg border border-ink/10 p-4">
-                <div className="flex items-baseline justify-between">
-                  <span className="font-semibold">{plan.name}</span>
-                  <span className="text-sm text-muted">
-                    {plan.price}
-                    {plan.period && <span> {plan.period}</span>}
-                  </span>
+          {isPaddleConfigured() ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {subscribable.map((plan) => (
+                <div key={plan.tierKey} className="rounded-lg border border-ink/10 p-4">
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-semibold">{plan.name}</span>
+                    <span className="text-sm text-muted">
+                      {plan.price}
+                      {plan.period && <span> {plan.period}</span>}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void subscribe(plan.priceId, plan.tierKey)}
+                    disabled={subscribing !== null}
+                    className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+                  >
+                    {subscribing === plan.tierKey ? '…' : t(locale, 'account.subscribe')}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void subscribe(plan.priceId, plan.tierKey)}
-                  disabled={subscribing !== null}
-                  className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
-                >
-                  {subscribing === plan.tierKey ? '…' : t(locale, 'account.subscribe')}
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-muted" role="status">
+              {t(locale, 'account.checkoutUnavailable')}
+            </p>
+          )}
           {subscribeError && (
             <p className="mt-3 text-sm text-link" role="alert">
               {t(locale, 'checkout.error')}

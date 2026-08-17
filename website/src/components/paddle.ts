@@ -95,7 +95,20 @@ export function isPlaceholderPriceId(priceId: string | undefined): boolean {
   return Boolean(priceId && priceId.startsWith('pri_placeholder_'));
 }
 
-/** Load the v2 SDK script once, resolving when window.Paddle is ready. */
+/** True when a client token is configured at build time (checkout can open). */
+export function isPaddleConfigured(): boolean {
+  return Boolean(TOKEN);
+}
+
+/**
+ * Load the v2 SDK script once, resolving when window.Paddle is ready.
+ *
+ * A failed script element never fires another event, so on error the element
+ * is removed and the promise rejects — the next call then creates a fresh
+ * script and retries, instead of hanging forever on a dead element (a
+ * transient CDN/network failure would otherwise leave the checkout button
+ * spinning on '…' until reload).
+ */
 export function loadPaddle(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (window.Paddle) {
@@ -105,7 +118,10 @@ export function loadPaddle(): Promise<void> {
     const existing = document.getElementById('paddle-js') as HTMLScriptElement | null;
     if (existing) {
       existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('paddle failed to load')));
+      existing.addEventListener('error', () => {
+        existing.remove();
+        reject(new Error('paddle failed to load'));
+      });
       return;
     }
     const script = document.createElement('script');
@@ -113,7 +129,10 @@ export function loadPaddle(): Promise<void> {
     script.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('paddle failed to load'));
+    script.onerror = () => {
+      script.remove();
+      reject(new Error('paddle failed to load'));
+    };
     document.head.appendChild(script);
   });
 }
