@@ -3,6 +3,7 @@
 use rusqlite::params;
 
 use crate::error::CoreError;
+use crate::subscription::{QuotaError, SubscriptionTier};
 use crate::{Role, User};
 use platform_core::rbac::ROLE_PRESETS;
 
@@ -182,6 +183,41 @@ impl Store<'_> {
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Count active staff users (non-owner) for C1.1 quota enforcement.
+    ///
+    /// The owner license-holder is not "staff" — the limit applies to team
+    /// members (subscription-tiers.md §3). Inactive users don't consume quota.
+    pub fn count_staff_users(&self) -> Result<i64, CoreError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM users WHERE is_active = 1 AND role_id != ?1",
+            params![crate::builtin_roles::OWNER],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    /// Enforce the subscription tier's staff-user limit before creating a
+    /// new staff member (C1.1 — §9 pre-launch item 1: prevents revenue
+    /// leakage from unlimited Free/Plus team accounts).
+    ///
+    /// When the tier's `max_staff_users()` cap is reached, returns
+    /// [`QuotaError::StaffLimit`] (surfaced as `SubscriptionLimitExceeded`,
+    /// which the UI maps to an upgrade CTA). Unlimited tiers (`None`) pass.
+    pub fn enforce_staff_quota(&self, tier: &SubscriptionTier) -> Result<(), CoreError> {
+        if let Some(limit) = tier.max_staff_users() {
+            let current = self.count_staff_users()?;
+            if current >= limit {
+                return Err(QuotaError::StaffLimit {
+                    tier: tier.name().into(),
+                    limit,
+                    current,
+                }
+                .into());
+            }
+        }
+        Ok(())
     }
 
     /// Look up a single user by id.
@@ -1205,6 +1241,75 @@ mod tests {
         let conn = fresh();
         let u = store(&conn).get_user("nope").unwrap();
         assert!(u.is_none());
+    }
+
+    // ── Staff quota enforcement (C1.1) ───────────────────────────────
+
+    #[test]
+    fn count_staff_users_excludes_owner_and_inactive() {
+        let conn = fresh();
+        seed_users(&conn);
+        // alice (active, role-lite) counts; bob (role-owner) and
+        // carol (inactive) do not.
+        assert_eq!(store(&conn).count_staff_users().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_staff_quota_enforcement() {
+        let conn = fresh();
+        seed_users(&conn); // 1 active staff (alice)
+        let s = store(&conn);
+
+        // Free allows 1 staff — alice already fills it, so another is blocked.
+        let err = s.enforce_staff_quota(&SubscriptionTier::Free).unwrap_err();
+        assert!(err.to_string().contains("allows maximum 1 staff users"));
+        assert!(err.to_string().contains("Free"));
+
+        // Plus (5) / Pro (20) have headroom at current=1.
+        assert!(s.enforce_staff_quota(&SubscriptionTier::Plus).is_ok());
+        assert!(s.enforce_staff_quota(&SubscriptionTier::Pro).is_ok());
+
+        // Unlimited tiers always pass.
+        assert!(s.enforce_staff_quota(&SubscriptionTier::Premium).is_ok());
+        assert!(s.enforce_staff_quota(&SubscriptionTier::Enterprise).is_ok());
+    }
+
+    #[test]
+    fn test_staff_quota_enforcement_blocks_at_limit() {
+        let conn = fresh();
+        seed_users(&conn); // 1 active staff (alice)
+        let s = store(&conn);
+
+        // Fill Plus to its cap (5): add 4 more active non-owner users.
+        for i in 0..4 {
+            s.create_user(
+                &format!("extra{i}"),
+                "hash",
+                &format!("Extra {i}"),
+                "role-staff",
+            )
+            .unwrap();
+        }
+        assert_eq!(s.count_staff_users().unwrap(), 5);
+
+        // At the cap, the next creation is blocked.
+        let err = s.enforce_staff_quota(&SubscriptionTier::Plus).unwrap_err();
+        assert!(err.to_string().contains("allows maximum 5 staff users"));
+
+        // Pro (20) still has headroom.
+        assert!(s.enforce_staff_quota(&SubscriptionTier::Pro).is_ok());
+    }
+
+    #[test]
+    fn test_staff_quota_owner_does_not_consume_slot() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_roles(&conn);
+        // A store with only the owner (role-owner) has 0 staff — Free passes.
+        s.create_user("owner", "hash", "Owner", "role-owner")
+            .unwrap();
+        assert_eq!(s.count_staff_users().unwrap(), 0);
+        assert!(s.enforce_staff_quota(&SubscriptionTier::Free).is_ok());
     }
 
     #[test]

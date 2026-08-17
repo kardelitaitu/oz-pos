@@ -402,6 +402,48 @@ describe('StaffManagementScreen', () => {
     }, FAST_WAIT);
   });
 
+  it('shows the upgrade CTA when staff creation hits the tier staff limit (C1.1)', async () => {
+    // The backend rejects past the tier cap with subKind subscriptionLimitExceeded.
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'create_staff_scoped') {
+        return Promise.reject(
+          new Error(
+            "Error invoking remote method 'create_staff_scoped': Error: " +
+              JSON.stringify({
+                kind: 'core',
+                subKind: 'subscriptionLimitExceeded',
+                message: 'Your Free tier allows maximum 1 staff users. You currently have 1. Upgrade to add more.',
+              }),
+          ),
+        );
+      }
+      if (cmd === 'list_staff_scoped') return Promise.resolve(SAMPLE_STAFF);
+      if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
+      if (cmd === 'list_all_workspaces_scoped') return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
+
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    const dialog = screen.getByRole('dialog');
+
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /username/i }), { target: { value: 'newuser' } });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'New User' } });
+    fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /role/i }), { target: { value: 'role-staff' } });
+    await fillRequiredProfile(dialog);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
+
+    // The quota banner replaces the generic error: message + upgrade CTA.
+    await waitFor(() => {
+      expect(screen.getByText(/your plan allows a limited number of staff/i)).toBeInTheDocument();
+    }, FAST_WAIT);
+    expect(within(dialog).getByRole('button', { name: /upgrade plan/i })).toBeInTheDocument();
+  });
+
   it('renders the workspace column from the DTO assignment (spec 0048)', async () => {
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();

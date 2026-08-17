@@ -12,6 +12,7 @@ use oz_core::db::Store;
 use oz_core::db::assignments::{Assignment, AssignmentSpec, ScopeMode};
 use oz_core::db::profile::{UserProfile, mask_last4};
 use oz_core::permissions;
+use oz_core::subscription::TenantSubscription;
 use oz_core::{Role, User};
 
 use foundation::{validate_min_length, validate_not_empty};
@@ -620,6 +621,13 @@ pub async fn create_staff_scoped(
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_CREATE)?;
     enforce_role_assignment_policy(&store, &session.user_id, None, &args.role_id, true)?;
+    // C1.1: enforce the subscription tier's staff-user limit (Free 1 / Plus 5 /
+    // Pro 20) before creating — the count runs against the global identity DB
+    // that also holds the tenant_subscription row.
+    let sub = TenantSubscription::load(&db, "default")?
+        .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+    sub.verify_signature()?;
+    store.enforce_staff_quota(&sub.effective_tier())?;
     let profile = args.profile.into_profile();
     let assignment = args.assignment.as_ref().map(assignment_spec).transpose()?;
     let user = store.create_user_with_profile(

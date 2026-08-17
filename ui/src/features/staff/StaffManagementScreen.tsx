@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useContext } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listStaffScoped,
@@ -10,10 +10,12 @@ import {
   type RoleDto,
   type ProfileArgs,
   type AssignmentArgs,
+  isStaffQuotaLimitError,
 } from '@/api/staff';
 import { listAllWorkspacesScoped, type WorkspaceTypeDto } from '@/api/workspaces';
 import { listStores, type StoreProfile } from '@/api/stores';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { LocaleContext } from '@/i18n/LocaleContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
@@ -235,6 +237,9 @@ function validateProfileForm(form: FormData, l10n: ReturnType<typeof useLocaliza
 /** Staff management screen — manage user accounts, roles, PIN codes, and workspace assignments. */
 export default function StaffManagementScreen() {
   const { l10n } = useLocalization();
+  // C1.1 upgrade link needs the active locale for the pricing URL; tests
+  // render without LocaleContext, so default to English there.
+  const locale = useContext(LocaleContext)?.locale ?? 'en';
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
@@ -262,6 +267,8 @@ export default function StaffManagementScreen() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** C1.1: the last save was rejected by the tier's staff-user limit. */
+  const [quotaUpgrade, setQuotaUpgrade] = useState(false);
 
   // ── Load data
 
@@ -320,6 +327,7 @@ export default function StaffManagementScreen() {
     setEditingIncomplete(false);
     setFieldErrors({});
     setError(null);
+    setQuotaUpgrade(false);
     setShowModal(true);
   }, []);
 
@@ -364,6 +372,7 @@ export default function StaffManagementScreen() {
     setEditingIncomplete(!member.is_profile_complete);
     setFieldErrors({});
     setError(null);
+    setQuotaUpgrade(false);
     setShowModal(true);
 
     // Load the full profile (masked/withheld per the caller's grants) and
@@ -411,6 +420,7 @@ export default function StaffManagementScreen() {
     setShowModal(false);
     setFieldErrors({});
     setError(null);
+    setQuotaUpgrade(false);
   }, []);
 
   // ── Assignment editor toggles (ADR #35 D5 / spec 0048) ────────────
@@ -478,6 +488,7 @@ export default function StaffManagementScreen() {
     setFieldErrors({});
     setSaving(true);
     setError(null);
+    setQuotaUpgrade(false);
     try {
       if (!sessionToken) {
         setError(l10n.getString('staff-error-save-failed'));
@@ -525,11 +536,28 @@ export default function StaffManagementScreen() {
       });
       await load();
     } catch (err) {
-      setError(l10nErrorMessage(err, l10n, 'staff-error-save-failed'));
+      if (isStaffQuotaLimitError(err)) {
+        // C1.1: tier staff limit reached — the banner (message + upgrade CTA)
+        // replaces the generic error line.
+        setQuotaUpgrade(true);
+        setError(null);
+      } else {
+        setQuotaUpgrade(false);
+        setError(l10nErrorMessage(err, l10n, 'staff-error-save-failed'));
+      }
     } finally {
       setSaving(false);
     }
   };
+
+  /** C1.1: open the website pricing page so the owner can upgrade the plan. */
+  const openUpgradePricing = useCallback(() => {
+    window.open(
+      `https://oz-pos.adikaradwiatmaja.workers.dev/${locale}/pricing/#plus`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+  }, [locale]);
 
   // ── Deactivate / Reactivate ────────────────────────────────────
 
@@ -804,6 +832,15 @@ export default function StaffManagementScreen() {
         }
         cancelLabel={l10n.getString('staff-btn-cancel')}
       >
+        {/* C1.1 staff-limit upgrade banner */}
+        {quotaUpgrade && (
+          <div className="staff-mgmt-quota-banner" role="alert">
+            <span>{l10n.getString('staff-error-quota-limit')}</span>
+            <Button variant="primary" size="sm" onClick={openUpgradePricing}>
+              {l10n.getString('staff-upgrade-cta')}
+            </Button>
+          </div>
+        )}
         {/* Username */}
         <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-username" aria-label={l10n.getString('staff-field-username-aria')}>
           <Localized id="staff-field-username-label">

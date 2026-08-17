@@ -494,6 +494,15 @@ pub enum QuotaError {
         /// The workspace type key that was rejected.
         type_key: String,
     },
+    /// The tenant has reached their staff-user limit (C1.1, §9 pre-launch item 1).
+    StaffLimit {
+        /// The subscription tier name.
+        tier: String,
+        /// The maximum number of staff users allowed.
+        limit: i64,
+        /// The current active staff count.
+        current: i64,
+    },
 }
 
 impl std::fmt::Display for QuotaError {
@@ -526,6 +535,17 @@ impl std::fmt::Display for QuotaError {
                     f,
                     "The '{type_key}' workspace type requires a higher tier. \
                      Your current tier is {tier}."
+                )
+            }
+            Self::StaffLimit {
+                tier,
+                limit,
+                current,
+            } => {
+                write!(
+                    f,
+                    "Your {tier} tier allows maximum {limit} staff users. \
+                     You currently have {current}. Upgrade to add more."
                 )
             }
         }

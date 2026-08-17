@@ -10,6 +10,7 @@ use oz_core::db::Store;
 use oz_core::db::assignments::{Assignment, AssignmentSpec, ScopeMode};
 use oz_core::db::profile::{UserProfile, mask_last4};
 use oz_core::permissions;
+use oz_core::subscription::TenantSubscription;
 use oz_core::{Role, User};
 
 use foundation::{validate_min_length, validate_not_empty};
@@ -567,6 +568,13 @@ pub async fn create_staff_scoped(
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_CREATE)?;
     enforce_role_assignment_policy(&store, &session.user_id, None, &args.role_id, true)?;
+    // C1.1: enforce the subscription tier's staff-user limit (Free 1 / Plus 5 /
+    // Pro 20) before creating — the count runs against the global identity DB
+    // that also holds the tenant_subscription row.
+    let sub = TenantSubscription::load(&db, "default")?
+        .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+    sub.verify_signature()?;
+    store.enforce_staff_quota(&sub.effective_tier())?;
     let profile = args.profile.into_profile();
     let assignment = args.assignment.as_ref().map(assignment_spec).transpose()?;
     let user = store.create_user_with_profile(
@@ -1061,6 +1069,16 @@ mod tests {
         .unwrap();
     }
 
+    /// Raise the default tenant's subscription tier so C1.1 staff-quota
+    /// enforcement has headroom (fresh_db seeds Free, which allows 1 staff).
+    fn seed_subscription_tier(conn: &rusqlite::Connection, tier_key: &str) {
+        conn.execute(
+            "UPDATE tenant_subscription SET tier_key = ?1 WHERE tenant_id = 'default'",
+            [tier_key],
+        )
+        .unwrap();
+    }
+
     fn scoped_state_with_token(
         conn: rusqlite::Connection,
         token: &str,
@@ -1208,6 +1226,8 @@ mod tests {
     async fn scoped_create_staff_allows_owner_session() {
         let conn = oz_core::migrations::fresh_db();
         seed_global_users(&conn);
+        // Pro (20 staff) — plenty of headroom past the seeded cashier.
+        seed_subscription_tier(&conn, "pro");
         let state =
             scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
         let app = tauri::test::mock_builder()
@@ -1231,6 +1251,77 @@ mod tests {
         .unwrap();
         assert_eq!(result.username, "mallory");
         assert_eq!(result.role_name, "Staff");
+    }
+
+    #[tokio::test]
+    async fn scoped_create_staff_blocked_at_free_tier_staff_limit() {
+        // C1.1: fresh_db seeds Free (max 1 staff) and seed_global_users
+        // already created the cashier — the next creation must be rejected
+        // with the subscription-limit error, not silently inserted.
+        let conn = oz_core::migrations::fresh_db();
+        seed_global_users(&conn);
+        let state =
+            scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = create_staff_scoped(
+            "owner-token".into(),
+            CreateStaffScopedArgs {
+                username: "mallory".into(),
+                pin: "1234".into(),
+                display_name: "Mallory".into(),
+                role_id: "role-staff".into(),
+                profile: complete_profile_args(),
+                assignment: None,
+            },
+            app.state(),
+        )
+        .await;
+
+        match result {
+            Err(AppError::Core { sub_kind, message }) => {
+                assert!(matches!(
+                    sub_kind,
+                    oz_core::CoreErrorKind::SubscriptionLimitExceeded
+                ));
+                assert!(message.contains("allows maximum 1 staff users"));
+            }
+            other => panic!("expected subscription-limit error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn scoped_create_staff_allowed_with_headroom_tier() {
+        // C1.1: with a Plus tier (5 staff) and a single seeded cashier,
+        // the owner can add a new staff member.
+        let conn = oz_core::migrations::fresh_db();
+        seed_global_users(&conn);
+        seed_subscription_tier(&conn, "plus");
+        let state =
+            scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = create_staff_scoped(
+            "owner-token".into(),
+            CreateStaffScopedArgs {
+                username: "mallory".into(),
+                pin: "1234".into(),
+                display_name: "Mallory".into(),
+                role_id: "role-staff".into(),
+                profile: complete_profile_args(),
+                assignment: None,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.username, "mallory");
     }
 
     #[tokio::test]
@@ -1876,6 +1967,8 @@ mod tests {
         // DB), and must not observe store A's business data.
         let conn = oz_core::migrations::fresh_db();
         seed_global_users(&conn);
+        // Pro tier so the staff-creation quota (C1.1) has headroom.
+        seed_subscription_tier(&conn, "pro");
         let temp_dir = tempfile::tempdir().unwrap();
         let mut state = AppState::for_test_with_conn(conn);
         state.db_manager =
