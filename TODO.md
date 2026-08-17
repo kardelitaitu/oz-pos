@@ -388,8 +388,10 @@ For each trigger:
 > days, and current usage (`store_count`/`staff_count`/`terminal_count`) — fed to
 > the UI through the new `SubscriptionProvider`/`useSubscription()` context
 > (mounted in `AppProviders`). Gates:
-> - **QRIS** (`PaymentModal`): selecting QRIS on a tier without `supports_qris`
->   shows the upgrade prompt instead of the QR generation UI → `#plus`.
+> - **QRIS** (`PaymentModal` + `SetupWizard`): selecting QRIS in checkout on a
+>   tier without `supports_qris` shows the upgrade prompt instead of the QR
+>   generation UI, and the onboarding Payments step renders a locked row with
+>   an Upgrade-to-Plus CTA → `#plus`.
 > - **Analytics** (`AnalyticsScreen`): locked screen with a blurred sample
 >   bar-chart preview (shared `TierLockedFeature` component) → `#pro`.
 > - **Loyalty** (`LoyaltyManagementScreen`): locked screen with a
@@ -403,9 +405,10 @@ For each trigger:
 >   shows the 20-staff nudge (`StaffManagementScreen`) → `#premium`.
 > Upgrade CTAs share `ui/src/utils/upgrade.ts` (`upgradePricingUrl`/
 > `openUpgradePricing`, locale-aware) — the C1.1/C1.2 CTAs now use it too.
-> Deviation from the literal spec: the QRIS gate lives in `PaymentModal` (there
-> is no dedicated QRIS settings screen), and the second-staff-login gate is
-> satisfied by C1.1's creation-time enforcement (login itself isn't tier-gated).
+> Deviation from the literal spec: the QRIS gates live in `PaymentModal`
+> (checkout) and the `SetupWizard` Payments step (onboarding — there is no
+> dedicated QRIS settings screen), and the second-staff-login gate is satisfied
+> by C1.1's creation-time enforcement (login itself isn't tier-gated).
 
 ---
 

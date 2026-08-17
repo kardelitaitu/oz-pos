@@ -259,6 +259,33 @@
   line-height: var(--leading-normal);
 }
 
+.setup-qris-row {
+  cursor: default;
+}
+
+.setup-qris-row--locked {
+  border-color: var(--color-border-strong);
+  background: var(--color-bg-surface);
+}
+
+.setup-qris-row--locked .setup-feature-name {
+  color: var(--color-fg-primary);
+}
+
+.setup-qris-row--locked .setup-feature-desc {
+  color: var(--color-fg-secondary);
+}
+
+.setup-qris-badge {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-success);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-success-bg);
+}
+
 /* ── Toggle switch ──────────────────────────────────── */
 .toggle-switch {
   position: relative;

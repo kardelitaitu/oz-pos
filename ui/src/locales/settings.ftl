@@ -40,6 +40,14 @@ setup-features-toggle-aria =
     .aria-label = Toggle { $label }
 
 setup-features-section-payments = Payment Methods
+
+# QRIS setup gate (C1 Free→Plus trigger — onboarding)
+setup-qris-label = QRIS (Midtrans)
+setup-qris-available = Accept QRIS payments — included with your plan.
+setup-qris-included = Included
+setup-qris-upgrade-required = QRIS payments are a Plus feature. Upgrade to Plus to accept QRIS.
+setup-qris-upgrade-cta = Upgrade to Plus
+
 setup-features-section-products = Products & Inventory
 setup-features-section-staff = Staff Management
 setup-features-section-hardware = Hardware & Peripherals

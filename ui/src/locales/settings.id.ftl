@@ -90,6 +90,14 @@ setup-features-group-aria = { $title }
 setup-features-toggle-aria =
     .aria-label = Aktifkan/nonaktifkan { $label }
 setup-features-section-payments = Metode Pembayaran
+
+# Gerbang setup QRIS (pemicu Free→Plus C1 — onboarding)
+setup-qris-label = QRIS (Midtrans)
+setup-qris-available = Terima pembayaran QRIS — sudah termasuk paket Anda.
+setup-qris-included = Termasuk
+setup-qris-upgrade-required = Pembayaran QRIS adalah fitur Plus. Tingkatkan ke Plus untuk menerima QRIS.
+setup-qris-upgrade-cta = Tingkatkan ke Plus
+
 setup-features-section-products = Produk & Stok
 setup-features-section-staff = Manajemen Staf
 setup-features-section-hardware = Perangkat Keras & Peripheral

@@ -6,8 +6,8 @@
 // singleton to avoid re-creating Fluent resources per render.
 // 21 tests (3 sync render tests moved to SetupWizardRender.test.tsx).
 
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
@@ -15,6 +15,8 @@ import type { ReactNode } from 'react';
 import SetupWizard, { type WizardState } from '@/features/setup/SetupWizard';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import salesFtl from '@/locales/sales.ftl?raw';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { makeSubscriptionCaps } from './test-utils/mocks/subscriptionCaps';
 
 // ── Module-level FluentBundle singleton ──────────────────────────
 // Avoids re-creating bundle + resources for every test render.
@@ -378,5 +380,63 @@ describe('SetupWizard — interactions', () => {
     expect(state.features['cash-payment']).toBe(true);
     expect(state.features['inventory-tracking']).toBe(true);
     expect(state.features['card-payment']).toBeUndefined();
+  });
+});
+
+describe('SetupWizard — QRIS gate (Free → Plus)', () => {
+  // Global beforeEach clears mock state; restore the safe `caps: null`
+  // default (every gate renders open) before each test here.
+  beforeEach(() => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
+  });
+
+  it('shows QRIS as included while capabilities are loading/unavailable', () => {
+    render(<SetupWizard />, { wrapper: FluentWrapper });
+    selectPreset(0);
+
+    const row = screen.getByTestId('setup-qris-row');
+    expect(row).not.toHaveClass('setup-qris-row--locked');
+    expect(within(row).getByText('Included')).toBeInTheDocument();
+  });
+
+  it('locks QRIS setup with an upgrade CTA on the Free tier', () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'free', supportsQris: false }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    render(<SetupWizard />, { wrapper: FluentWrapper });
+    selectPreset(0);
+
+    const row = screen.getByTestId('setup-qris-row');
+    expect(row).toHaveClass('setup-qris-row--locked');
+    expect(within(row).getByText(/QRIS payments are a Plus feature/)).toBeInTheDocument();
+
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    fireEvent.click(within(row).getByRole('button', { name: 'Upgrade to Plus' }));
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('/pricing/#plus'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+    open.mockRestore();
+  });
+
+  it('shows the included badge on Plus+ tiers', () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'plus', supportsQris: true }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    render(<SetupWizard />, { wrapper: FluentWrapper });
+    selectPreset(0);
+
+    const row = screen.getByTestId('setup-qris-row');
+    expect(within(row).getByText('Included')).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Upgrade to Plus' })).not.toBeInTheDocument();
   });
 });
