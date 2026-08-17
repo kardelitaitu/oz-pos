@@ -42,6 +42,7 @@ type midtransSnapCharge struct {
 	GrossAmount string
 	TierKey     string
 	Period      string
+	Bundle      string
 	Email       string
 }
 
@@ -61,11 +62,11 @@ func midtransSnapURL() string {
 }
 
 // midtransAmountForTier resolves the fixed IDR gross_amount for a
-// tier + period from MIDTRANS_PRICE_TIERS (the reverse of the webhook's
-// amount→tier lookup). Returns ("", false) when the tier/period isn't
-// mapped — the checkout then answers 400: a misconfigured map must not
-// mint an unbilled tier.
-func midtransAmountForTier(tier, period string) (string, bool) {
+// tier + period (+ optional bundle) from MIDTRANS_PRICE_TIERS (the reverse
+// of the webhook's amount→tier lookup). Returns ("", false) when the
+// tier/period/bundle combination isn't mapped — the checkout then answers
+// 400: a misconfigured map must not mint an unbilled tier.
+func midtransAmountForTier(tier, period, bundle string) (string, bool) {
 	// Normalize the website's BillingPeriod vocabulary (monthly/yearly) to
 	// the price map's plan-period vocabulary (month/year).
 	switch period {
@@ -74,17 +75,31 @@ func midtransAmountForTier(tier, period string) (string, bool) {
 	case "yearly", "":
 		period = "year"
 	}
+	bundle = normalizeBundleID(bundle)
 	m, err := midtransPriceTiers()
 	if err != nil {
 		return "", false
 	}
 	for amount, entry := range m {
-		t, p, _ := strings.Cut(entry, ":")
-		if t == tier && p == period {
+		t, rest, _ := strings.Cut(entry, ":")
+		p, b, _ := strings.Cut(rest, ":")
+		if t == tier && p == period && b == bundle {
 			return amount, true
 		}
 	}
 	return "", false
+}
+
+// midtransBundleItemSuffix returns the Snap item-name suffix for a bundle
+// (" + Restaurant Starter", or "" for no bundle) so the buyer sees what
+// they're paying for in the Snap UI.
+func midtransBundleItemSuffix(bundle string) string {
+	switch normalizeBundleID(bundle) {
+	case "restaurant_starter":
+		return " + Restaurant Starter"
+	default:
+		return ""
+	}
 }
 
 // midtransOrderID builds a unique order id for a charge:
@@ -117,7 +132,7 @@ func createMidtransSnapHTTP(charge midtransSnapCharge) (midtransSnapResult, erro
 			"id":       charge.TierKey + "-" + charge.Period,
 			"price":    charge.GrossAmount,
 			"quantity": 1,
-			"name":     "OZ-POS " + strings.ToUpper(charge.TierKey) + " (" + charge.Period + ")",
+			"name":     "OZ-POS " + strings.ToUpper(charge.TierKey) + " (" + charge.Period + ")" + midtransBundleItemSuffix(charge.Bundle),
 		}},
 		"customer_details": map[string]any{
 			"email": charge.Email,
@@ -125,6 +140,9 @@ func createMidtransSnapHTTP(charge midtransSnapCharge) (midtransSnapResult, erro
 		"custom_field1": charge.TierKey,
 		"custom_field2": charge.Email,
 		"custom_field3": charge.Period,
+		// custom_field4 = bundle_id (C3.2): the webhook cross-checks it
+		// against the price map, so it only labels what the amount paid for.
+		"custom_field4": charge.Bundle,
 		// Local methods first: QRIS is the Phase 2 headline, then VAs,
 		// e-wallets, and cards as a fallback.
 		"enabled_payments": []string{
@@ -200,20 +218,22 @@ func handleMidtransSnap(app core.App) func(e *core.RequestEvent) error {
 		var req struct {
 			TierKey string `json:"tier_key"`
 			Period  string `json:"period"`
+			Bundle  string `json:"bundle"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(e.Response, e.Request.Body, 16*1024)).Decode(&req); err != nil {
 			return e.JSON(http.StatusBadRequest, map[string]any{"error": "malformed JSON"})
 		}
 		tier := strings.ToLower(strings.TrimSpace(req.TierKey))
 		period := strings.ToLower(strings.TrimSpace(req.Period))
+		bundle := normalizeBundleID(req.Bundle)
 		if period == "" {
 			period = "year"
 		}
 
-		amount, ok := midtransAmountForTier(tier, period)
+		amount, ok := midtransAmountForTier(tier, period, bundle)
 		if !ok {
 			return e.JSON(http.StatusBadRequest, map[string]any{
-				"error": fmt.Sprintf("tier %q (%s) is not mapped in MIDTRANS_PRICE_TIERS", tier, period),
+				"error": fmt.Sprintf("tier %q (%s, bundle=%s) is not mapped in MIDTRANS_PRICE_TIERS", tier, period, bundle),
 			})
 		}
 
@@ -223,6 +243,7 @@ func handleMidtransSnap(app core.App) func(e *core.RequestEvent) error {
 			GrossAmount: amount,
 			TierKey:     tier,
 			Period:      period,
+			Bundle:      bundle,
 			Email:       tenant.GetString("email"),
 		})
 		if err != nil {

@@ -144,14 +144,17 @@ export function loadPaddle(): Promise<void> {
 /**
  * Open the sandbox/live checkout overlay for a price id, prefilled with
  * the customer's account email (customData.email is what the webhook
- * reads to attach the subscription to the tenant). When the overlay
- * closes, `onClosed` is called with whether the purchase completed
- * (checkout.completed fired before checkout.closed).
+ * reads to attach the subscription to the tenant). An optional vertical
+ * bundle (C3.2) rides custom_data.bundle — the webhook cross-checks it
+ * against the price's bundle segment and mints the widened quota block.
+ * When the overlay closes, `onClosed` is called with whether the purchase
+ * completed (checkout.completed fired before checkout.closed).
  */
 export async function openPaddleCheckout(
   priceId: string,
   email: string,
   onClosed?: OnCheckoutClosed,
+  bundle?: string,
 ): Promise<void> {
   if (!TOKEN) throw new Error('paddle not configured');
   await loadPaddle();
@@ -169,7 +172,7 @@ export async function openPaddleCheckout(
   window.Paddle.Checkout.open({
     items: [{ priceId, quantity: 1 }],
     customer: { email },
-    customData: { email },
+    customData: bundle ? { email, bundle } : { email },
   });
 }
 

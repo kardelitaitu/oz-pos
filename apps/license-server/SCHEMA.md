@@ -27,6 +27,7 @@ Stores the license keys generated for customers. You create these manually in th
 | `midtrans_order_id` | Text | *Optional* | Midtrans `order_id` of the most recent charge that minted/refreshed this key. Lookup key for charges that arrive before a `subscription_id` exists. |
 | `payment_provider` | Select | `paddle` | Billing provider that issued the key: `paddle` (global, USD cards) or `midtrans` (Indonesian QRIS/VA/e-wallet, fixed IDR). Set by the issuing webhook; backfilled to `paddle` for pre-Midtrans keys. |
 | `is_trial` | Bool | *Optional* | True for segmented-trial keys (C2.1). Activation mints a short Plus/Pro license from the request's `trial_vertical` (14-day Plus general, 14-day Pro restaurant/cafe, 30-day Pro enterprise referral) instead of the key's own tier/expiry/quota. Paid keys leave it unset. |
+| `bundle_id` | Text | *Optional* | Vertical-bundle id (C3.2) this license was purchased with — `restaurant_starter` widens the Plus quota block with the `kds` workspace type. Set at webhook mint; renewals fall back to it when the charge notification carries no bundle. |
 
 ---
 

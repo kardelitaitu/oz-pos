@@ -488,7 +488,7 @@ For each trigger:
 
 - [x] Add `bundle_id` optional field to license activation
 - [x] In `tierQuotas()`: if `bundle_id == "restaurant_starter"`, unlock `kds` workspace type at Plus tier
-- [ ] In the website: add bundle purchase option on vertical landing pages *(deferred — needs bundle prices in `MIDTRANS_PRICE_TIERS`/`PADDLE_PRICE_TIERS` + a checkout custom field; activation already honors `?bundle=restaurant_starter`)*
+- [x] In the website: add bundle purchase option on vertical landing pages — `?bundle=restaurant_starter` deep-link CTA on `/untuk-warung` + `/untuk-restoran`, Plus-card bundle toggle on pricing (pre-enabled by the param), and the checkout carries the bundle (Midtrans `custom_field4` / Paddle `custom_data.bundle`) so the webhook mints the bundle-widened quota block
 - [x] **Test:** `go test ./... -run TestBundleQuotas`
 
 > **Shipped** (2026-08-18): `bundle_id` on the activation request (Go
@@ -499,8 +499,19 @@ For each trigger:
 > `restaurant_starter` (bundles are Plus+ per §3 — Free stays locked,
 > Pro+ already has kds). Trust boundary mirrors `trial_vertical`: only
 > honored for trial keys, so a forged `bundle_id` can never widen a paid
-> license (paid bundles will be issued by the webhook at checkout once
-> the website leg lands). Tests: Go `TestBundleQuotas` (7 tier×bundle
+> license. **Website leg (this commit):** both price maps now take an
+> optional `:bundle_id` segment (`MIDTRANS_PRICE_TIERS`
+> `gross_amount:tier_key[:period][:bundle_id]`, `PADDLE_PRICE_TIERS`
+> `price_id:tier_key[:bundle_id]`) and the webhooks issue paid bundles —
+> the amount/price is authoritative, the checkout's custom field
+> (`custom_field4` / `custom_data.bundle`) is cross-checked, the widened
+> quota block is minted, and `bundle_id` persists on the license + sub so
+> renewals keep kds. `POST /api/v1/midtrans/snap` accepts an optional
+> `bundle`. The pricing Plus card renders a Restaurant Starter toggle
+> (pre-enabled by `?bundle=restaurant_starter`; placeholder bundle prices
+> degrade to the mailto fallback until the real catalog lands), and
+> `/untuk-warung` + `/untuk-restoran` carry the bundle CTA. Tests: Go
+> `TestBundleQuotas` (7 tier×bundle
 > cases) + 3 activation E2Es (trial unlock, trial without bundle,
 > paid-key-forged-bundle ignored), Rust bundle_id serialization ×2, UI
 > detector + 4 activation-screen tests.

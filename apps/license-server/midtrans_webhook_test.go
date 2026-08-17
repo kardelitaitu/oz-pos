@@ -410,3 +410,132 @@ func TestMidtransSnap_CheckoutToken(t *testing.T) {
 		t.Fatalf("expected 401 without session, got %d: %s", rec4.Code, rec4.Body.String())
 	}
 }
+
+// ── Vertical-bundle minting (C3.2) ───────────────────────────────────
+
+// midtransSignedBodyBundle is midtransSignedBody plus a custom_field4
+// (bundle_id). Custom fields are NOT part of the signature canonical string
+// (order_id + status_code + gross_amount + serverkey), so the field is
+// injected after signing.
+func midtransSignedBodyBundle(serverKey, transactionID, orderID, subscriptionID, status, statusCode, grossAmount, tierField, email, bundle string) string {
+	body := midtransSignedBody(serverKey, transactionID, orderID, subscriptionID, status, statusCode, grossAmount, tierField, email)
+	if bundle == "" {
+		return body
+	}
+	return strings.Replace(body, "\n}", fmt.Sprintf(",\n  \"custom_field4\": %q\n}", bundle), 1)
+}
+
+func TestMidtransPriceTiers_BundleSegment(t *testing.T) {
+	t.Setenv("MIDTRANS_PRICE_TIERS", "149000:plus:month,1740000:plus:year:restaurant_starter")
+	m, err := midtransPriceTiers()
+	if err != nil {
+		t.Fatalf("bundle entry should parse: %v", err)
+	}
+	if entry, ok := m["1740000"]; !ok || entry != "plus:year:restaurant_starter" {
+		t.Errorf("1740000 → %q, want plus:year:restaurant_starter", entry)
+	}
+	if entry, ok := m["149000"]; !ok || entry != "plus:month:" {
+		t.Errorf("149000 → %q, want plus:month: (no bundle)", entry)
+	}
+	t.Setenv("MIDTRANS_PRICE_TIERS", "1740000:plus:year:fancy_bundle")
+	if _, err := midtransPriceTiers(); err == nil {
+		t.Error("unknown bundle_id must fail parsing loudly")
+	}
+	t.Setenv("MIDTRANS_PRICE_TIERS", "1740000:plus:year:restaurant_starter:extra")
+	if _, err := midtransPriceTiers(); err == nil {
+		t.Error("5-segment entry must fail parsing")
+	}
+}
+
+// TestMidtransWebhook_BundleMintAndRenew drives the bundle purchase over
+// HTTP: a settled charge at the bundle price (custom_field4 labels it)
+// mints a plus key whose quota block includes kds and persists bundle_id on
+// the key + subscription. A later renewal at the PLAIN price (no
+// custom_field4) refreshes the SAME key and keeps kds via the stored
+// bundle_id — a bundle the customer is still paying for survives renewals.
+func TestMidtransWebhook_BundleMintAndRenew(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	t.Setenv("MIDTRANS_PRICE_TIERS", "149000:plus:month,1490000:plus:year,1740000:plus:year:restaurant_starter")
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	restore := stubReceiptEmail(t, new(string))
+	defer restore()
+
+	// ── First charge at the bundle price, custom_field4 labels it ──
+	rec1 := serveMidtrans(t, se, midtransSignedBodyBundle("test-midtrans-server-key", "txn_mt_bnd01",
+		"OZ-PLUS-1755-BND1", "sub_mt_bnd01", "settlement", "200", "1740000", "plus", "bundlebuyer@example.com", "restaurant_starter"))
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("expected 200 on bundle charge, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+	keyRec, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_bnd01")
+	if err != nil {
+		t.Fatalf("bundle license key not minted: %v", err)
+	}
+	key := keyRec.GetString("key")
+	if keyRec.GetString("bundle_id") != "restaurant_starter" {
+		t.Errorf("expected bundle_id=restaurant_starter on key, got %q", keyRec.GetString("bundle_id"))
+	}
+	if !hasKDS(mustParseAllowedTypes(t, keyRec.GetString("allowed_types"))) {
+		t.Errorf("bundle mint must include kds in allowed_types, got %q", keyRec.GetString("allowed_types"))
+	}
+	subRec, err := app.FindFirstRecordByData("subscriptions", "midtrans_sub_id", "sub_mt_bnd01")
+	if err != nil {
+		t.Fatalf("bundle subscription not persisted: %v", err)
+	}
+	if subRec.GetString("bundle_id") != "restaurant_starter" {
+		t.Errorf("expected sub bundle_id=restaurant_starter, got %q", subRec.GetString("bundle_id"))
+	}
+	if !strings.Contains(subRec.GetString("signed_payload"), "kds") {
+		t.Errorf("signed payload must carry kds in allowed_types, got: %s", subRec.GetString("signed_payload"))
+	}
+
+	// ── Renewal at the plain price, no custom_field4: the stored
+	//    bundle_id keeps kds on the SAME key, expiry extends ──
+	time.Sleep(1100 * time.Millisecond) // prove expiry extension
+	rec2 := serveMidtrans(t, se, midtransSignedBody("test-midtrans-server-key", "txn_mt_bnd02",
+		"OZ-PLUS-1755-BND2", "sub_mt_bnd01", "settlement", "200", "1490000", "plus", "bundlebuyer@example.com"))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on renewal, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+	keyRec2, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_bnd01")
+	if err != nil {
+		t.Fatalf("renewed key not found: %v", err)
+	}
+	if keyRec2.GetString("key") != key {
+		t.Errorf("renewal must refresh the SAME key, got %q (first %q)", keyRec2.GetString("key"), key)
+	}
+	if keyRec2.GetString("bundle_id") != "restaurant_starter" {
+		t.Errorf("renewal must keep the stored bundle_id, got %q", keyRec2.GetString("bundle_id"))
+	}
+	if !hasKDS(mustParseAllowedTypes(t, keyRec2.GetString("allowed_types"))) {
+		t.Errorf("renewal must keep kds in allowed_types, got %q", keyRec2.GetString("allowed_types"))
+	}
+	if !keyRec2.GetDateTime("expires_at").Time().After(keyRec.GetDateTime("expires_at").Time()) {
+		t.Errorf("renewal must extend expiry (was %v, now %v)", keyRec.GetDateTime("expires_at").Time(), keyRec2.GetDateTime("expires_at").Time())
+	}
+}
+
+// TestMidtransWebhook_BundleTamperRejected pays the PLAIN plus amount but
+// claims a bundle in custom_field4 — the fixed price is authoritative, so
+// the charge is rejected and no key is minted.
+func TestMidtransWebhook_BundleTamperRejected(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	t.Setenv("MIDTRANS_PRICE_TIERS", "149000:plus:month,1490000:plus:year,1740000:plus:year:restaurant_starter")
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	body := midtransSignedBodyBundle("test-midtrans-server-key", "txn_mt_tmp01",
+		"OZ-PLUS-1755-TMP", "sub_mt_tmp01", "settlement", "200", "1490000", "plus", "tamper@example.com", "restaurant_starter")
+	rec := serveMidtrans(t, se, body)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 from bundle mismatch, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_tmp01"); err == nil {
+		t.Fatal("expected NO license key minted for a bundle-claim tamper")
+	}
+}

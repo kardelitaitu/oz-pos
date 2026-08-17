@@ -172,6 +172,15 @@ func main() {
 		if err := ensurePaymentProviderField(app); err != nil {
 			return err
 		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// vertical-bundle checkout (C3.2 website leg): fresh boots get the
+		// license_keys.bundle_id field from the embedded pb_schema.json;
+		// existing pb_data volumes get it added without reimporting the
+		// schema. Existing records keep empty values — nothing before the
+		// bundle checkout shipped had a bundle.
+		if err := ensureBundleIDField(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -462,6 +471,34 @@ func ensurePaymentProviderField(app core.App) error {
 		if len(records) > 0 {
 			log.Printf("migrated %s collection: backfilled payment_provider=paddle on %d record(s)", name, len(records))
 		}
+	}
+	return nil
+}
+
+// ensureBundleIDField adds the license_keys / subscriptions bundle_id text
+// field for existing deployments that predate the vertical-bundle checkout
+// (fresh boots get it from the embedded pb_schema.json). Idempotent: no-op
+// once the field exists. Existing records keep empty values — the webhook
+// sets it at mint for bundle purchases and refresh falls back to it on
+// renewals.
+func ensureBundleIDField(app core.App) error {
+	for _, name := range []string{"license_keys", "subscriptions"} {
+		collection, err := app.FindCollectionByNameOrId(name)
+		if err != nil {
+			return fmt.Errorf("%s collection not found: %w", name, err)
+		}
+		if collection.Fields.GetByName("bundle_id") != nil {
+			continue
+		}
+		collection.Fields.Add(&core.TextField{
+			Name: "bundle_id",
+			Max:  64,
+			Help: "Vertical-bundle id (subscription-tiers.md §3, C3.2) this license was purchased with — \"restaurant_starter\" widens the Plus quota block with the kds workspace type. Set at webhook mint; renewals fall back to it when the charge notification carries no bundle.",
+		})
+		if err := app.Save(collection); err != nil {
+			return fmt.Errorf("failed to add bundle_id to %s: %w", name, err)
+		}
+		log.Printf("migrated %s collection: added bundle_id field", name)
 	}
 	return nil
 }

@@ -169,6 +169,12 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		if err := ensurePaymentProviderField(app); err != nil {
 			return err
 		}
+		// Mirror production boot: add the bundle_id field (vertical-bundle
+		// checkout, C3.2) via the same idempotent migration path the
+		// deployed server uses.
+		if err := ensureBundleIDField(app); err != nil {
+			return err
+		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))

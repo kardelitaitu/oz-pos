@@ -56,6 +56,18 @@ func TestBundleQuotas(t *testing.T) {
 
 // ── Activation E2E: the trial-only trust boundary ───────────────────
 
+// hasKDS reports whether the kds workspace type is in an allowed-types
+// list. Shared by the bundle webhook tests (midtrans/paddle) and the
+// activation E2Es below.
+func hasKDS(allowed []string) bool {
+	for _, w := range allowed {
+		if w == "kds" {
+			return true
+		}
+	}
+	return false
+}
+
 // activateWithBundle posts an activation for key with the given bundle_id
 // and returns the signed subscription payload.
 func activateWithBundle(t *testing.T, se *core.ServeEvent, key, bundle string) SubscriptionPayload {

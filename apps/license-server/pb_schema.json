@@ -245,6 +245,20 @@
         "type": "bool"
       },
       {
+        "help": "Vertical-bundle id (subscription-tiers.md §3, C3.2) this license was purchased with — \"restaurant_starter\" widens the Plus quota block with the kds workspace type. Set at webhook mint; renewals fall back to it when the charge notification carries no bundle.",
+        "hidden": false,
+        "id": "text2339013917",
+        "max": 64,
+        "min": 0,
+        "name": "bundle_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
         "hidden": false,
         "id": "autodate3454440663",
         "name": "created",
@@ -631,6 +645,20 @@
           "paddle",
           "midtrans"
         ]
+      },
+      {
+        "help": "Vertical-bundle id (subscription-tiers.md §3, C3.2) this subscription was purchased with — \"restaurant_starter\" widens the Plus quota block with the kds workspace type. Set at webhook mint; plan-change events keep it.",
+        "hidden": false,
+        "id": "text2632455521",
+        "max": 64,
+        "min": 0,
+        "name": "bundle_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
       },
       {
         "help": "Max stores for this subscription's tier (0 = unlimited). Populated by the Paddle webhook; matches the license key's quota block.",

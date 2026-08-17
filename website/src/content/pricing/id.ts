@@ -48,6 +48,19 @@ export const pricing: PricingTier[] = [
       monthly: { price: 'Rp 49.000', period: '/bulan', priceId: 'pri_placeholder_plus_monthly_usd' },
       yearly: { price: 'Rp 500.000', period: '/tahun', priceId: 'pri_placeholder_plus_yearly_usd' },
     },
+    // Paket Restaurant Starter (C3.2, subscription-tiers.md §5): Plus +
+    // KDS dengan diskon 10% dari harga à la carte. HARGA SEMENTARA (Plus
+    // dasar + add-on KDS, diskon 10%) — ganti dengan angka katalog saat
+    // harga riil tersedia; id placeholder menurun ke fallback mailto.
+    bundle: {
+      id: 'restaurant_starter',
+      label: 'Paket Restaurant Starter',
+      note: 'Plus + Layar Dapur (KDS) — diskon 10% dari à la carte',
+      prices: {
+        monthly: { price: 'Rp 74.000', period: '/bulan', priceId: 'pri_placeholder_plus_bundle_monthly' },
+        yearly: { price: 'Rp 750.000', period: '/tahun', priceId: 'pri_placeholder_plus_bundle_yearly' },
+      },
+    },
     features: [
       { label: '1 toko', included: true },
       { label: '2 register', included: true },

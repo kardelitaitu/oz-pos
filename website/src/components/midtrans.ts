@@ -74,15 +74,20 @@ export function loadSnap(): Promise<void> {
 }
 
 /**
- * Open the Snap overlay for a tier + billing period. Requests the snap
- * token from the license server with the register-first session token,
- * then hands it to snap.pay. When the overlay closes, `onClosed` is called
- * with whether the payment succeeded.
+ * Open the Snap overlay for a tier + billing period (+ optional vertical
+ * bundle, C3.2). Requests the snap token from the license server with the
+ * register-first session token, then hands it to snap.pay. The bundle rides
+ * in the request and is echoed back as custom_field4 so the webhook mints
+ * the bundle-widened quota block. When the overlay closes, `onClosed` is
+ * called with whether the payment succeeded. Signature mirrors
+ * openPaddleCheckout: the callback stays the 3rd argument so existing
+ * callers that pass it positionally are unaffected.
  */
 export async function openMidtransCheckout(
   tierKey: string,
   period: 'monthly' | 'yearly',
   onClosed?: OnSnapClosed,
+  bundle?: string,
 ): Promise<void> {
   const token = window.sessionStorage.getItem('oz_session');
   if (!token || !API) throw new Error('midtrans not configured');
@@ -92,7 +97,7 @@ export async function openMidtransCheckout(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ tier_key: tierKey, period }),
+    body: JSON.stringify({ tier_key: tierKey, period, bundle }),
   });
   if (!res.ok) throw new Error('snap token request failed');
   const data = (await res.json()) as { token: string; redirect_url?: string };

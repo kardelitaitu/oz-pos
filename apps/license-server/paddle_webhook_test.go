@@ -1117,14 +1117,33 @@ func TestVerifyPaddleConfig_ValidPasses(t *testing.T) {
 
 func TestPaddleTierForPrice_StillWorksViaParser(t *testing.T) {
 	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro,pri_test_premium:premium")
-	if tier, ok := paddleTierForPrice("pri_test_premium"); !ok || tier != "premium" {
-		t.Errorf("pri_test_premium → (%q, %v), want (premium, true)", tier, ok)
+	if tier, bundle, ok := paddleTierForPrice("pri_test_premium"); !ok || tier != "premium" || bundle != "" {
+		t.Errorf("pri_test_premium → (%q, %q, %v), want (premium, %q, true)", tier, bundle, ok, "")
 	}
-	if _, ok := paddleTierForPrice("pri_unknown"); ok {
+	if _, _, ok := paddleTierForPrice("pri_unknown"); ok {
 		t.Error("unmapped price must return ok=false")
 	}
-	if _, ok := paddleTierForPrice(""); ok {
+	if _, _, ok := paddleTierForPrice(""); ok {
 		t.Error("empty price must return ok=false")
+	}
+}
+
+func TestPaddlePriceTiers_BundleSegment(t *testing.T) {
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus,pri_test_bundle:plus:restaurant_starter")
+	m, err := paddlePriceTiers()
+	if err != nil {
+		t.Fatalf("bundle entry should parse: %v", err)
+	}
+	if entry, ok := m["pri_test_bundle"]; !ok || entry != "plus:restaurant_starter" {
+		t.Errorf("pri_test_bundle → %q, want plus:restaurant_starter", entry)
+	}
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_bad:plus:fancy_bundle")
+	if _, err := paddlePriceTiers(); err == nil {
+		t.Error("unknown bundle_id must fail parsing loudly")
+	}
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_malformed")
+	if _, err := paddlePriceTiers(); err == nil {
+		t.Error("malformed entry (single segment) must fail parsing")
 	}
 }
 
@@ -1340,4 +1359,89 @@ func mustParseAllowedTypes(t *testing.T, raw string) []string {
 		t.Fatalf("parse allowed_types %q: %v", raw, err)
 	}
 	return out
+}
+
+// ── Vertical-bundle minting (C3.2) ───────────────────────────────────
+
+// paddleCreatedBodyBundle is paddleCreatedBody plus a bundle entry inside
+// custom_data (what the checkout's openPaddleCheckout embeds).
+func paddleCreatedBodyBundle(eventID, subID, customerID, email, priceID, bundle string) string {
+	body := paddleCreatedBody(eventID, subID, customerID, email, priceID)
+	if bundle == "" {
+		return body
+	}
+	needle := fmt.Sprintf(`"custom_data": {"email": %q}`, email)
+	replacement := fmt.Sprintf(`"custom_data": {"email": %q, "bundle": %q}`, email, bundle)
+	return strings.Replace(body, needle, replacement, 1)
+}
+
+// TestPaddleWebhook_BundleMint drives a bundle purchase over HTTP: a
+// subscription.created at the bundle price (custom_data.bundle labels it)
+// mints a plus key whose quota block includes kds and persists bundle_id on
+// the key + subscription.
+func TestPaddleWebhook_BundleMint(t *testing.T) {
+	resetPaddleDedup()
+	resetRateLimiters()
+	setPaddleEnv(t)
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus,pri_test_pro:pro,pri_test_premium:premium,pri_test_bundle:plus:restaurant_starter")
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	restore := stubReceiptEmail(t, new(string))
+	defer restore()
+
+	body := paddleCreatedBodyBundle("evt_bundle_001", "sub_bundle_001", "cus_bundle_001",
+		"bundlebuyer@example.com", "pri_test_bundle", "restaurant_starter")
+	rec := servePost(t, se, paddleWebhookPath, "", map[string]string{
+		paddleSignatureHeader: signPaddle("test-webhook-secret", body, time.Now().Unix()),
+	}, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from bundle webhook, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	keyRec, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_bundle_001")
+	if err != nil {
+		t.Fatalf("bundle license key not minted: %v", err)
+	}
+	if keyRec.GetString("bundle_id") != "restaurant_starter" {
+		t.Errorf("expected bundle_id=restaurant_starter on key, got %q", keyRec.GetString("bundle_id"))
+	}
+	if !hasKDS(mustParseAllowedTypes(t, keyRec.GetString("allowed_types"))) {
+		t.Errorf("bundle mint must include kds in allowed_types, got %q", keyRec.GetString("allowed_types"))
+	}
+
+	subRec, err := app.FindFirstRecordByData("subscriptions", "paddle_sub_id", "sub_bundle_001")
+	if err != nil {
+		t.Fatalf("bundle subscription not persisted: %v", err)
+	}
+	if subRec.GetString("bundle_id") != "restaurant_starter" {
+		t.Errorf("expected sub bundle_id=restaurant_starter, got %q", subRec.GetString("bundle_id"))
+	}
+	if !strings.Contains(subRec.GetString("signed_payload"), "kds") {
+		t.Errorf("signed payload must carry kds in allowed_types, got: %s", subRec.GetString("signed_payload"))
+	}
+}
+
+// TestPaddleWebhook_BundleTamperRejected buys the PLAIN plus price but
+// claims a bundle in custom_data — the price's bundle segment is
+// authoritative, so the event is rejected and no key is minted.
+func TestPaddleWebhook_BundleTamperRejected(t *testing.T) {
+	resetPaddleDedup()
+	resetRateLimiters()
+	setPaddleEnv(t)
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus,pri_test_pro:pro,pri_test_premium:premium,pri_test_bundle:plus:restaurant_starter")
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	body := paddleCreatedBodyBundle("evt_bundle_tamper", "sub_bundle_tamper", "cus_bundle_tamper",
+		"tamper@example.com", "pri_test_plus", "restaurant_starter")
+	rec := servePost(t, se, paddleWebhookPath, "", map[string]string{
+		paddleSignatureHeader: signPaddle("test-webhook-secret", body, time.Now().Unix()),
+	}, body)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 from bundle mismatch, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_bundle_tamper"); err == nil {
+		t.Fatal("expected NO license key minted for a bundle-claim tamper")
+	}
 }

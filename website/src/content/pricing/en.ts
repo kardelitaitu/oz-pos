@@ -48,6 +48,20 @@ export const pricing: PricingTier[] = [
       monthly: { price: '$4.99', period: '/month', priceId: 'pri_placeholder_plus_monthly_usd' },
       yearly: { price: '$49.99', period: '/year', priceId: 'pri_placeholder_plus_yearly_usd' },
     },
+    // Restaurant Starter bundle (C3.2, subscription-tiers.md §5): Plus +
+    // KDS at 10% off à la carte. PLACEHOLDER prices (base Plus + KDS
+    // add-on, 10% off) — swap for the catalog figures when the six real
+    // prices land; the ids are placeholders that degrade to the mailto
+    // fallback until then.
+    bundle: {
+      id: 'restaurant_starter',
+      label: 'Restaurant Starter bundle',
+      note: 'Plus + Kitchen Display (KDS) — 10% off à la carte',
+      prices: {
+        monthly: { price: '$7.49', period: '/month', priceId: 'pri_placeholder_plus_bundle_monthly' },
+        yearly: { price: '$74.99', period: '/year', priceId: 'pri_placeholder_plus_bundle_yearly' },
+      },
+    },
     features: [
       { label: '1 store', included: true },
       { label: '2 registers', included: true },

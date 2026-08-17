@@ -31,7 +31,10 @@ beforeEach(() => {
   );
 });
 
-async function renderButton(locale: string, tier: { tierKey: string; name: string; cta: string; period: 'monthly' | 'yearly'; priceId?: string }) {
+async function renderButton(
+  locale: string,
+  tier: { tierKey: string; name: string; cta: string; period: 'monthly' | 'yearly'; priceId?: string; bundle?: string },
+) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -115,7 +118,26 @@ describe('CheckoutButton market routing', () => {
     });
     await clickButton(container);
 
-    expect(openMidtransCheckout).toHaveBeenCalledWith('plus', 'yearly');
+    // The bundle arg (C3.2) rides positionally after the onClosed callback.
+    expect(openMidtransCheckout).toHaveBeenCalledWith('plus', 'yearly', undefined, undefined);
+    await act(async () => root.unmount());
+  });
+
+  it('carries the selected bundle into the Midtrans snap request', async () => {
+    vi.doMock('../midtrans', () => ({ openMidtransCheckout: vi.fn().mockResolvedValue(undefined) }));
+    const { openMidtransCheckout } = await import('../midtrans');
+    sessionStorage.setItem('oz_session', 'sess-1');
+
+    const { container, root } = await renderButton('id', {
+      tierKey: 'plus',
+      name: 'Plus',
+      cta: 'Mulai',
+      period: 'yearly',
+      bundle: 'restaurant_starter',
+    });
+    await clickButton(container);
+
+    expect(openMidtransCheckout).toHaveBeenCalledWith('plus', 'yearly', undefined, 'restaurant_starter');
     await act(async () => root.unmount());
   });
 
@@ -140,7 +162,33 @@ describe('CheckoutButton market routing', () => {
     });
     await clickButton(container);
 
-    expect(openPaddleCheckout).toHaveBeenCalledWith('pri_01real', 'a@b.com');
+    expect(openPaddleCheckout).toHaveBeenCalledWith('pri_01real', 'a@b.com', undefined, undefined);
+    await act(async () => root.unmount());
+  });
+
+  it('carries the selected bundle into the Paddle checkout custom data', async () => {
+    vi.doMock('../midtrans', () => ({ openMidtransCheckout: vi.fn() }));
+    vi.doMock('../paddle', () => ({
+      hasSession: () => true,
+      isPaddleConfigured: () => true,
+      isPlaceholderPriceId: () => false,
+      openPaddleCheckout: vi.fn().mockResolvedValue(undefined),
+      getSessionEmail: () => Promise.resolve('a@b.com'),
+    }));
+    const { openPaddleCheckout } = await import('../paddle');
+    sessionStorage.setItem('oz_session', 'sess-1');
+
+    const { container, root } = await renderButton('en', {
+      tierKey: 'plus',
+      name: 'Plus',
+      cta: 'Get Plus',
+      period: 'yearly',
+      priceId: 'pri_01real',
+      bundle: 'restaurant_starter',
+    });
+    await clickButton(container);
+
+    expect(openPaddleCheckout).toHaveBeenCalledWith('pri_01real', 'a@b.com', undefined, 'restaurant_starter');
     await act(async () => root.unmount());
   });
 });

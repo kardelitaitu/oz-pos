@@ -67,8 +67,9 @@ export default function CheckoutButton({ tier, locale }: Props) {
     try {
       if (useMidtrans) {
         // The snap token request is session-authed; the license server
-        // reads the buyer email from the tenant record itself.
-        await openMidtransCheckout(tier.tierKey, tier.period);
+        // reads the buyer email from the tenant record itself. The bundle
+        // (C3.2) rides custom_field4 so the webhook mints the widened block.
+        await openMidtransCheckout(tier.tierKey, tier.period, undefined, tier.bundle);
         return;
       }
       const email = await getSessionEmail();
@@ -77,7 +78,7 @@ export default function CheckoutButton({ tier, locale }: Props) {
         window.location.href = loginHref;
         return;
       }
-      await openPaddleCheckout(priceId, email);
+      await openPaddleCheckout(priceId, email, undefined, tier.bundle);
     } catch {
       setError(true);
     } finally {

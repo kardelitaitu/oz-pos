@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { BillingPeriod, CheckoutTier, PricingTier } from '../content/pricing/types';
 import { t } from '../i18n';
 import CheckoutButton from './CheckoutButton';
@@ -26,6 +26,14 @@ interface Props {
 
 export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
+  // Vertical landing pages deep-link `pricing?bundle=restaurant_starter#plus`
+  // (C3.2): pre-enable the Plus card's bundle toggle from the URL. SSR-safe:
+  // window only exists after hydration (the grid mounts with client:load).
+  const [bundleOn, setBundleOn] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('bundle') === 'restaurant_starter') setBundleOn(true);
+  }, []);
 
   const buttonClass = (active: boolean) =>
     [
@@ -70,15 +78,21 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
 
       <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {tiers.map((tier) => {
-          const price = tier.prices[billing];
           const isFree = tier.tierKey === 'free';
           const isEnterprise = tier.tierKey === 'enterprise';
+          // The bundle toggle (C3.2) swaps the Plus card's price + checkout
+          // to the Restaurant Starter bundle: the checkout then carries
+          // bundle='restaurant_starter' and the webhook mints the
+          // bundle-widened quota block (kds at Plus).
+          const bundleActive = Boolean(tier.bundle && bundleOn);
+          const price = bundleActive && tier.bundle ? tier.bundle.prices[billing] : tier.prices[billing];
           const checkoutTier: CheckoutTier = {
             tierKey: tier.tierKey,
             name: tier.name,
             cta: tier.cta,
             period: billing,
             priceId: price.priceId,
+            bundle: bundleActive && tier.bundle ? tier.bundle.id : undefined,
           };
           return (
             <article
@@ -103,6 +117,21 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
                 <p className="mt-1 text-xs text-muted">{t(locale, 'pricingPage.billing.billedYearly')}</p>
               )}
               <p className="mt-2 text-sm text-muted">{tier.description}</p>
+
+              {tier.bundle && (
+                <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-md border border-ink/10 bg-surface/40 p-3 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={bundleOn}
+                    onChange={(e) => setBundleOn(e.target.checked)}
+                    className="mt-0.5 accent-accent"
+                  />
+                  <span>
+                    <span className="font-semibold text-ink">{tier.bundle.label}</span>
+                    <span className="mt-0.5 block text-muted">{tier.bundle.note}</span>
+                  </span>
+                </label>
+              )}
 
               <div className="mt-6">
                 {isFree ? (

@@ -53,6 +53,20 @@ export interface PricingTier {
   highlight?: boolean;
   /** Per-period price + checkout id. Yearly is the default selection. */
   prices: Record<BillingPeriod, TierPrice>;
+  /**
+   * Optional vertical-bundle option on this card (C3.2, subscription-tiers.md
+   * §5 — Restaurant Starter). When present the card renders a toggle that
+   * swaps the price + checkout to the bundle, which bills the tier PLUS the
+   * bundle (the checkout carries `bundle: 'restaurant_starter'`, and the
+   * price maps key the bundle amount). Placeholder price ids degrade to the
+   * mailto fallback until the real catalog lands.
+   */
+  bundle?: {
+    id: string;
+    label: string;
+    note: string;
+    prices: Record<BillingPeriod, TierPrice>;
+  };
   features: { label: string; included: boolean }[];
 }
 
@@ -64,6 +78,12 @@ export interface CheckoutTier {
   /** Selected billing period — the ID checkout bills Midtrans by period. */
   period: BillingPeriod;
   priceId?: string;
+  /**
+   * Vertical-bundle id (C3.2) the buyer selected — "restaurant_starter".
+   * The checkout carries it (Midtrans custom_field4 / Paddle
+   * custom_data.bundle) so the webhook mints the bundle-widened quota block.
+   */
+  bundle?: string;
 }
 
 export interface FeatureRow {

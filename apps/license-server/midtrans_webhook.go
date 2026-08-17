@@ -100,12 +100,14 @@ func resetMidtransDedup() {
 // midtransNotification is the subset of a Midtrans payment notification the
 // provisioning logic needs. Unknown fields are ignored (encoding/json) —
 // Midtrans recommends a non-strict parse because it adds fields over time.
-// custom_field1/2/3 are echoed back from the checkout's custom fields:
+// custom_field1/2/3/4 are echoed back from the checkout's custom fields:
 //
 //	custom_field1 = tier_key
 //	custom_field2 = buyer email (register-first, same as Paddle's
 //	               custom_data.email)
 //	custom_field3 = signup vertical (trial segmentation, unused here)
+//	custom_field4 = bundle_id (C3.2 vertical bundles — cross-checked
+//	               against the price map, never trusted alone)
 type midtransNotification struct {
 	TransactionID     string `json:"transaction_id"`
 	OrderID           string `json:"order_id"`
@@ -120,6 +122,7 @@ type midtransNotification struct {
 	CustomField1      string `json:"custom_field1"`
 	CustomField2      string `json:"custom_field2"`
 	CustomField3      string `json:"custom_field3"`
+	CustomField4      string `json:"custom_field4"`
 }
 
 // ── Signature verification ───────────────────────────────────────────
@@ -148,29 +151,45 @@ func verifyMidtransSignature(n midtransNotification, secret string) bool {
 // ── Tier & amount resolution ─────────────────────────────────────────
 
 // midtransPriceTiers parses MIDTRANS_PRICE_TIERS: comma-separated
-// "gross_amount:tier_key[:period]" pairs. The period (default "year") is the
-// plan's billing cycle — the recurring charge cadence that expiry extends by.
+// "gross_amount:tier_key[:period][:bundle_id]" pairs. The period (default
+// "year") is the plan's billing cycle — the recurring charge cadence that
+// expiry extends by. The optional bundle_id (C3.2) marks a vertical-bundle
+// price: the fixed amount pays for the tier PLUS the bundle, so the webhook
+// mints with tierQuotas(tier, bundle) and the checkout charges the same
+// amount (e.g. "1740000:plus:year:restaurant_starter").
+//
+// An unknown bundle id is rejected at parse time rather than no-op'd: a
+// typo'd bundle in the map must fail provisioning loudly (webhook 500 +
+// Midtrans retry), never silently mint a plain license for a bundle-priced
+// amount.
 func midtransPriceTiers() (map[string]string, error) {
 	v := strings.TrimSpace(os.Getenv("MIDTRANS_PRICE_TIERS"))
 	if v == "" {
-		return nil, fmt.Errorf("MIDTRANS_PRICE_TIERS is required — without it every Midtrans webhook fails provisioning with 500; set it to comma-separated gross_amount:tier_key[:period] pairs, e.g. 149000:plus:month,1490000:plus:year")
+		return nil, fmt.Errorf("MIDTRANS_PRICE_TIERS is required — without it every Midtrans webhook fails provisioning with 500; set it to comma-separated gross_amount:tier_key[:period][:bundle_id] pairs, e.g. 149000:plus:month,1740000:plus:year:restaurant_starter")
 	}
 	m := make(map[string]string)
 	for _, pair := range strings.Split(v, ",") {
 		parts := strings.Split(strings.TrimSpace(pair), ":")
-		if len(parts) < 2 || len(parts) > 3 {
-			return nil, fmt.Errorf("MIDTRANS_PRICE_TIERS has a malformed entry %q — expected gross_amount:tier_key[:period] pairs, e.g. 149000:plus:month", strings.TrimSpace(pair))
+		if len(parts) < 2 || len(parts) > 4 {
+			return nil, fmt.Errorf("MIDTRANS_PRICE_TIERS has a malformed entry %q — expected gross_amount:tier_key[:period][:bundle_id] pairs, e.g. 149000:plus:month or 1740000:plus:year:restaurant_starter", strings.TrimSpace(pair))
 		}
 		amount := normalizeMidtransAmount(parts[0])
 		tier := strings.TrimSpace(parts[1])
 		if amount == "" || tier == "" {
-			return nil, fmt.Errorf("MIDTRANS_PRICE_TIERS has a malformed entry %q — expected gross_amount:tier_key[:period] pairs", strings.TrimSpace(pair))
+			return nil, fmt.Errorf("MIDTRANS_PRICE_TIERS has a malformed entry %q — expected gross_amount:tier_key[:period][:bundle_id] pairs", strings.TrimSpace(pair))
 		}
 		period := "year"
-		if len(parts) == 3 && strings.TrimSpace(parts[2]) != "" {
+		if len(parts) >= 3 && strings.TrimSpace(parts[2]) != "" {
 			period = strings.TrimSpace(parts[2])
 		}
-		m[amount] = tier + ":" + period
+		bundle := ""
+		if len(parts) == 4 {
+			bundle = normalizeBundleID(parts[3])
+			if bundle == "" {
+				return nil, fmt.Errorf("MIDTRANS_PRICE_TIERS entry %q has an unknown bundle_id %q — recognized bundles: restaurant_starter", strings.TrimSpace(pair), strings.TrimSpace(parts[3]))
+			}
+		}
+		m[amount] = tier + ":" + period + ":" + bundle
 	}
 	return m, nil
 }
@@ -198,21 +217,29 @@ func midtransPriceForAmount(amount string) (string, bool) {
 	return entry, ok
 }
 
-// midtransTierForNotification resolves the tier for a notification:
-// custom_field1 (set by our checkout) cross-checked against the fixed IDR
-// price — the amount is authoritative, so a tampered custom_field1 cannot
-// mint a higher tier. Falls back to the amount map alone when the checkout
-// didn't embed a tier.
-func midtransTierForNotification(n midtransNotification) (tier, period string, err error) {
+// midtransTierForNotification resolves the tier, period, and bundle for a
+// notification. The fixed IDR amount is authoritative: custom_field1 (tier)
+// and custom_field4 (bundle, C3.2) set by our checkout are cross-checked
+// against the price-map entry, so a tampered custom field can never mint a
+// higher tier or a bundle the buyer didn't pay for. Falls back to the amount
+// map alone when the checkout didn't embed a field.
+func midtransTierForNotification(n midtransNotification) (tier, period, bundle string, err error) {
 	priceEntry, ok := midtransPriceForAmount(n.GrossAmount)
 	if !ok {
-		return "", "", fmt.Errorf("gross_amount %q is not mapped in MIDTRANS_PRICE_TIERS", n.GrossAmount)
+		return "", "", "", fmt.Errorf("gross_amount %q is not mapped in MIDTRANS_PRICE_TIERS", n.GrossAmount)
 	}
-	tier, period, _ = strings.Cut(priceEntry, ":")
+	tier, rest, _ := strings.Cut(priceEntry, ":")
+	period, bundle, _ = strings.Cut(rest, ":")
 	if cf := strings.TrimSpace(n.CustomField1); cf != "" && cf != tier {
-		return "", "", fmt.Errorf("custom_field1 tier %q disagrees with price-mapped tier %q for amount %q — rejecting", cf, tier, n.GrossAmount)
+		return "", "", "", fmt.Errorf("custom_field1 tier %q disagrees with price-mapped tier %q for amount %q — rejecting", cf, tier, n.GrossAmount)
 	}
-	return tier, period, nil
+	// A bundle claim must match the price the buyer actually paid — paying
+	// the plain amount and claiming a bundle in custom_field4 is rejected
+	// (the 500 makes Midtrans retry and the operator sees the mismatch).
+	if cf := strings.TrimSpace(n.CustomField4); cf != "" && cf != bundle {
+		return "", "", "", fmt.Errorf("custom_field4 bundle %q disagrees with price-mapped bundle %q for amount %q — rejecting", cf, bundle, n.GrossAmount)
+	}
+	return tier, period, bundle, nil
 }
 
 // ── Charge status mapping ────────────────────────────────────────────
@@ -323,7 +350,7 @@ func midtransProvision(app core.App, n midtransNotification) error {
 		return fmt.Errorf("cannot resolve buyer email for transaction %s (custom_field2 empty — checkout must embed it)", n.OrderID)
 	}
 
-	tier, period, err := midtransTierForNotification(n)
+	tier, period, bundle, err := midtransTierForNotification(n)
 	if err != nil {
 		return err
 	}
@@ -355,25 +382,33 @@ func midtransProvision(app core.App, n midtransNotification) error {
 		keyRecord.Set("tier_key", tier)
 		keyRecord.Set("status", "unused")
 		keyRecord.Set("expires_at", expiresAt)
-		maxStores, maxPOS, allowedTypes := tierQuotas(tier, "")
+		maxStores, maxPOS, allowedTypes := tierQuotas(tier, bundle)
 		keyRecord.Set("max_stores", maxStores)
 		keyRecord.Set("max_pos_instances", maxPOS)
 		if b, err := json.Marshal(allowedTypes); err == nil {
 			keyRecord.Set("allowed_types", string(b))
 		}
+		keyRecord.Set("bundle_id", bundle)
 		keyRecord.Set("midtrans_sub_id", n.SubscriptionID)
 		keyRecord.Set("midtrans_order_id", n.OrderID)
 		keyRecord.Set("payment_provider", "midtrans")
 		if saveErr := app.Save(keyRecord); saveErr != nil {
 			return fmt.Errorf("failed to save license key for transaction %s: %w", n.OrderID, saveErr)
 		}
-		log.Printf("midtrans webhook: minted key %q (tier=%s) for order %s", key, tier, n.OrderID)
+		log.Printf("midtrans webhook: minted key %q (tier=%s, bundle=%s) for order %s", key, tier, bundle, n.OrderID)
 		// Non-fatal: a failed receipt must not fail provisioning.
 		if mailErr := sendReceiptEmail(email, key, tier, expiresAt); mailErr != nil {
 			log.Printf("midtrans webhook: receipt email to %q failed (non-fatal): %v", email, mailErr)
 		}
 	} else {
 		// Refresh tier/expiry on the existing key (renewal / re-delivery).
+		// A recurring-charge notification may not echo custom_field4, so the
+		// bundle falls back to what was persisted at mint — a bundle the
+		// customer is still paying for must survive renewals. When the price
+		// map resolves a bundle for the charged amount it wins (plan change).
+		if bundle == "" {
+			bundle = keyRecord.GetString("bundle_id")
+		}
 		keyRecord.Set("tier_key", tier)
 		keyRecord.Set("expires_at", expiresAt)
 		keyRecord.Set("midtrans_order_id", n.OrderID)
@@ -383,7 +418,10 @@ func midtransProvision(app core.App, n midtransNotification) error {
 	}
 
 	// ── Upsert the RSA-signed subscription ────────────────────
-	maxStores, maxPOS, allowedTypes := tierQuotas(tier, "")
+	// The signed payload carries the bundle-widened allowed types, so the
+	// POS trusts the same payload shape regardless of how the bundle got
+	// there (checkout webhook or trial activation).
+	maxStores, maxPOS, allowedTypes := tierQuotas(tier, bundle)
 	graceUntil := calculateGraceUntil(mustParseTime(expiresAt)).Format(time.RFC3339)
 	payload := SubscriptionPayload{
 		TenantID:        tenant.Id,
@@ -413,6 +451,7 @@ func midtransProvision(app core.App, n midtransNotification) error {
 		subRecord.Set("midtrans_order_id", n.OrderID)
 	}
 	subRecord.Set("payment_provider", "midtrans")
+	subRecord.Set("bundle_id", bundle)
 	subRecord.Set("tenant_id", []string{tenant.Id})
 	subRecord.Set("tier_key", tier)
 	subRecord.Set("status", "active")

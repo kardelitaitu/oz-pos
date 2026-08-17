@@ -44,15 +44,21 @@ interface VerticalSection {
 
 interface Props {
   vertical: VerticalKey;
+  /** Show the Restaurant Starter bundle CTA (C3.2) — warung + restoran. */
+  showBundle?: boolean;
 }
 
-const { vertical } = Astro.props;
+const { vertical, showBundle } = Astro.props;
 const locale = Astro.currentLocale ?? 'en';
 const section = dict(locale).vertical as VerticalSection;
 const v = section[vertical];
 const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
 const downloadHref = getRelativeLocaleUrl(locale, 'download');
 const tierHref = `${pricingHref}#${v.tierAnchor}`;
+// Bundle purchase path (C3.2): deep-links to the Plus card with the
+// Restaurant Starter bundle pre-enabled — the pricing grid reads
+// `?bundle=restaurant_starter` and the checkout carries it into the
+// webhook (custom_field4 / custom_data.bundle).
 // Segmented-trial passthrough (C2.1, subscription-tiers.md §4): carry the
 // vertical onto the download page (?v=kafe etc.) so the download page can
 // show the matching trial offer and the desktop app's onboarding can detect
@@ -77,6 +83,16 @@ const tierHref = `${pricingHref}#${v.tierAnchor}`;
       >
         {section.ctaSecondary}
       </a>
+      {
+        showBundle && (
+          <a
+            href={`${pricingHref}?bundle=restaurant_starter#plus`}
+            class="rounded-md border border-accent/40 bg-accent/10 px-6 py-3 text-base font-semibold text-link transition hover:bg-accent/20"
+          >
+            {section.bundleCta}
+          </a>
+        )
+      }
     </div>
   </div>
 
