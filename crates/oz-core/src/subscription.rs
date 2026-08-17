@@ -20,10 +20,6 @@ use crate::error::CoreError;
 /// without producing false positives on slow or paused devices.
 const CLOCK_SKEW_TOLERANCE_SECONDS: i64 = 30;
 
-/// Offline grace period for paid tiers (14 days). After this period
-/// without a successful cloud sync, the tier reverts to Free quotas.
-const OFFLINE_GRACE_DAYS: i64 = 14;
-
 // ── Instance Status ─────────────────────────────────────────────────
 
 /// Three-state status for workspace instances, replacing the old
@@ -68,27 +64,34 @@ impl InstanceStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionTier {
-    /// 90-day Free Trial — 1 store, 1 register, 1 warehouse, offline-only.
+    /// Free forever — 30-day sales history, 1 store, 1 register, 1 warehouse, offline-only.
     Free,
     /// 1-Time Perpetual License — 1 store, 1 register, 1 warehouse, offline-first.
+    ///
+    /// Deprecated: kept only for database back-compat (`from_db("one_time")`).
+    /// Do not use for new code — the canonical lineup is Free / Plus / Pro / Premium / Enterprise.
+    #[deprecated(
+        note = "legacy perpetual license — kept only for database back-compat; do not use for new code"
+    )]
     OneTime,
-    /// Standard SaaS — 1 store, 2 registers, 1 warehouse, QRIS, basic cloud sync.
-    Standard,
-    /// Pro SaaS — Unlimited stores, unlimited registers, unlimited warehouses, Lua engine, Stripe + QRIS.
+    /// Plus SaaS — 1 store, 2 registers, 2 warehouses, QRIS, cloud sync, Daily Sales Dashboard.
+    Plus,
+    /// Pro SaaS — 2 stores, 5 registers/store, 3 warehouses, analytics + KDS, Stripe + QRIS.
     Pro,
-    /// Legacy alias for Pro tier.
+    /// Premium — unlimited stores/registers/warehouses, loyalty program, Lua engine, priority support.
     Premium,
-    /// Enterprise — Unlimited stores/registers/warehouses, regional zones, custom ERP adaptors.
+    /// Enterprise — unlimited stores/registers/warehouses, regional zones, custom ERP adaptors.
     Enterprise,
 }
 
+#[allow(deprecated)] // OneTime is intentionally referenced for DB back-compat
 impl SubscriptionTier {
     /// Parse from the database TEXT column.
     pub fn from_db(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "free" | "trial" => Self::Free,
             "one_time" | "perpetual" | "one-time" | "onetime" => Self::OneTime,
-            "standard" => Self::Standard,
+            "plus" | "standard" => Self::Plus, // "standard" is a legacy alias for Plus
             "pro" => Self::Pro,
             "premium" => Self::Premium,
             "enterprise" => Self::Enterprise,
@@ -99,40 +102,66 @@ impl SubscriptionTier {
     /// Human-readable tier name.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Free => "Free Trial",
+            Self::Free => "Free",
             Self::OneTime => "1-Time Perpetual",
-            Self::Standard => "Standard",
+            Self::Plus => "Plus",
             Self::Pro => "Pro",
-            Self::Premium => "Premium (Pro)",
+            Self::Premium => "Premium",
             Self::Enterprise => "Enterprise",
         }
     }
 
     /// Maximum number of stores allowed for this tier.
-    /// Returns `None` for unlimited (Pro / Enterprise).
+    /// Returns `None` for unlimited (Premium / Enterprise).
     pub fn max_stores(&self) -> Option<i64> {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => Some(1),
-            Self::Pro | Self::Premium | Self::Enterprise => None,
+            Self::Free | Self::OneTime | Self::Plus => Some(1),
+            Self::Pro => Some(2),
+            Self::Premium | Self::Enterprise => None,
         }
     }
 
     /// Maximum POS register instances per store for this tier.
-    /// Returns `None` for unlimited (Pro / Enterprise).
+    /// Returns `None` for unlimited (Premium / Enterprise).
     pub fn max_pos_instances(&self) -> Option<i64> {
         match self {
             Self::Free | Self::OneTime => Some(1),
-            Self::Standard => Some(2),
-            Self::Pro | Self::Premium | Self::Enterprise => None,
+            Self::Plus => Some(2),
+            Self::Pro => Some(5),
+            Self::Premium | Self::Enterprise => None,
         }
     }
 
     /// Maximum inventory warehouse storage locations allowed for this tier.
-    /// Returns `None` for unlimited (Pro / Enterprise).
+    /// Returns `None` for unlimited (Premium / Enterprise).
     pub fn max_warehouses(&self) -> Option<i64> {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => Some(1),
-            Self::Pro | Self::Premium | Self::Enterprise => None,
+            Self::Free | Self::OneTime => Some(1),
+            Self::Plus => Some(2),
+            Self::Pro => Some(3),
+            Self::Premium | Self::Enterprise => None,
+        }
+    }
+
+    /// Maximum staff users allowed for this tier.
+    /// Returns `None` for unlimited (Premium / Enterprise).
+    /// Enforced pre-launch per subscription-tiers.md §9 item 1.
+    pub fn max_staff_users(&self) -> Option<i64> {
+        match self {
+            Self::Free | Self::OneTime => Some(1),
+            Self::Plus => Some(5),
+            Self::Pro => Some(20),
+            Self::Premium | Self::Enterprise => None,
+        }
+    }
+
+    /// How far back (in days) sales history can be viewed/exported.
+    /// Returns `None` for unlimited (Plus and above). Free is capped at
+    /// 30 days — the primary Free → Plus upgrade trigger (§3, §9 item 2).
+    pub fn sales_history_days(&self) -> Option<i64> {
+        match self {
+            Self::Free | Self::OneTime => Some(30),
+            Self::Plus | Self::Pro | Self::Premium | Self::Enterprise => None,
         }
     }
 
@@ -140,7 +169,7 @@ impl SubscriptionTier {
     pub fn supports_cloud_sync(&self) -> bool {
         match self {
             Self::Free | Self::OneTime => false,
-            Self::Standard | Self::Pro | Self::Premium | Self::Enterprise => true,
+            Self::Plus | Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
 
@@ -148,14 +177,14 @@ impl SubscriptionTier {
     pub fn supports_qris(&self) -> bool {
         match self {
             Self::Free | Self::OneTime => false,
-            Self::Standard | Self::Pro | Self::Premium | Self::Enterprise => true,
+            Self::Plus | Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
 
     /// Whether this tier supports Stripe credit/debit card processing.
     pub fn supports_stripe(&self) -> bool {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => false,
+            Self::Free | Self::OneTime | Self::Plus => false,
             Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
@@ -163,15 +192,15 @@ impl SubscriptionTier {
     /// Whether this tier supports embedded Lua VM rule engine for custom promos.
     pub fn supports_lua_engine(&self) -> bool {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => false,
-            Self::Pro | Self::Premium | Self::Enterprise => true,
+            Self::Free | Self::OneTime | Self::Plus | Self::Pro => false,
+            Self::Premium | Self::Enterprise => true,
         }
     }
 
     /// Whether this tier supports multi-warehouse stock deduction fallback wires in Node Topology.
     pub fn supports_multi_warehouse_fallback(&self) -> bool {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => false,
+            Self::Free | Self::OneTime | Self::Plus => false,
             Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
@@ -181,17 +210,52 @@ impl SubscriptionTier {
         matches!(self, Self::Enterprise)
     }
 
+    /// Whether this tier supports the loyalty program (points & tiers).
+    /// Premium/Enterprise only — Pro sees a locked teaser (§3, §6).
+    pub fn supports_loyalty(&self) -> bool {
+        matches!(self, Self::Premium | Self::Enterprise)
+    }
+
+    /// Whether this tier supports reports & analytics (`analytics:view`).
+    pub fn supports_analytics(&self) -> bool {
+        matches!(self, Self::Pro | Self::Premium | Self::Enterprise)
+    }
+
+    /// Whether this tier supports the Daily Sales Dashboard (Laporan Harian) —
+    /// the Plus hero feature; Free shows a blurred teaser instead.
+    pub fn supports_daily_dashboard(&self) -> bool {
+        matches!(
+            self,
+            Self::Plus | Self::Pro | Self::Premium | Self::Enterprise
+        )
+    }
+
+    /// Offline grace period in days before quotas revert to Free
+    /// (subscription-tiers.md §3 Support table). Enterprise grace is
+    /// negotiated per contract — the fallback below is a generous client-side
+    /// default so a custom contract never locks a customer out client-side.
+    pub fn offline_grace_days(&self) -> i64 {
+        match self {
+            Self::Free | Self::OneTime => 7,
+            Self::Plus | Self::Pro => 14,
+            Self::Premium => 30,
+            Self::Enterprise => 3650, // custom per contract; ~10-year fallback
+        }
+    }
+
     /// Check whether this tier allows the given workspace type.
     pub fn allows_workspace_type(&self, type_key: &str) -> bool {
         match self {
             Self::Free | Self::OneTime => {
                 matches!(type_key, "store-pos" | "restaurant-pos" | "admin")
             }
-            Self::Standard => matches!(
+            // Plus unlocks inventory/warehouse but NOT kds (§3 Workspace Types).
+            Self::Plus => matches!(
                 type_key,
-                "restaurant-pos" | "store-pos" | "warehouse" | "admin" | "kds"
+                "store-pos" | "restaurant-pos" | "admin" | "warehouse" | "inventory"
             ),
-            Self::Pro | Self::Premium | Self::Enterprise => true, // All workspace types + custom plugins
+            // Pro and above unlock every workspace type, including KDS.
+            Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
 }
@@ -203,7 +267,7 @@ impl SubscriptionTier {
 pub struct TenantSubscription {
     /// The unique identifier of the tenant.
     pub tenant_id: String,
-    /// The subscription tier (Free, Pro, Premium, Enterprise).
+    /// The subscription tier (Free, Plus, Pro, Premium, Enterprise).
     pub tier: SubscriptionTier,
     /// The subscription status (e.g. "active", "canceled").
     pub status: String,
@@ -343,8 +407,8 @@ impl TenantSubscription {
     /// Check if the subscription is within the offline grace period.
     ///
     /// Free tier has no grace period (always "within grace" since it's free).
-    /// Paid tiers (Pro, Premium, Enterprise) get 14 days offline before
-    /// quotas revert to Free.
+    /// Paid tiers get a per-tier offline grace (`offline_grace_days()`, see
+    /// subscription-tiers.md §3 Support table) before quotas revert to Free.
     ///
     /// A canceled subscription is never within grace.
     ///
@@ -373,7 +437,7 @@ impl TenantSubscription {
         };
 
         let now = chrono::Utc::now();
-        let grace_deadline = expiry + chrono::Duration::days(OFFLINE_GRACE_DAYS);
+        let grace_deadline = expiry + chrono::Duration::days(self.tier.offline_grace_days());
 
         now <= grace_deadline
     }
@@ -475,6 +539,7 @@ impl From<QuotaError> for CoreError {
 }
 
 #[cfg(test)]
+#[allow(deprecated)] // OneTime assertions keep DB back-compat coverage
 mod tests {
     use super::*;
 
@@ -515,6 +580,11 @@ mod tests {
     #[test]
     fn tier_from_db() {
         assert_eq!(SubscriptionTier::from_db("free"), SubscriptionTier::Free);
+        assert_eq!(SubscriptionTier::from_db("plus"), SubscriptionTier::Plus);
+        assert_eq!(
+            SubscriptionTier::from_db("standard"), // legacy alias → Plus
+            SubscriptionTier::Plus
+        );
         assert_eq!(SubscriptionTier::from_db("pro"), SubscriptionTier::Pro);
         assert_eq!(
             SubscriptionTier::from_db("premium"),
@@ -531,8 +601,8 @@ mod tests {
     fn tier_max_stores() {
         assert_eq!(SubscriptionTier::Free.max_stores(), Some(1));
         assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::Pro.max_stores(), None);
+        assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
+        assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
         assert_eq!(SubscriptionTier::Premium.max_stores(), None);
         assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
     }
@@ -541,8 +611,8 @@ mod tests {
     fn tier_max_pos_instances() {
         assert_eq!(SubscriptionTier::Free.max_pos_instances(), Some(1));
         assert_eq!(SubscriptionTier::OneTime.max_pos_instances(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_pos_instances(), Some(2));
-        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), None);
+        assert_eq!(SubscriptionTier::Plus.max_pos_instances(), Some(2));
+        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), Some(5));
         assert_eq!(SubscriptionTier::Premium.max_pos_instances(), None);
         assert_eq!(SubscriptionTier::Enterprise.max_pos_instances(), None);
     }
@@ -555,9 +625,10 @@ mod tests {
         assert!(!SubscriptionTier::Free.allows_workspace_type("kds"));
         assert!(!SubscriptionTier::Free.allows_workspace_type("warehouse"));
 
-        // Standard tier
-        assert!(SubscriptionTier::Standard.allows_workspace_type("warehouse"));
-        assert!(SubscriptionTier::Standard.allows_workspace_type("kds"));
+        // Plus tier: warehouse/inventory allowed, kds NOT allowed
+        assert!(SubscriptionTier::Plus.allows_workspace_type("warehouse"));
+        assert!(SubscriptionTier::Plus.allows_workspace_type("inventory"));
+        assert!(!SubscriptionTier::Plus.allows_workspace_type("kds"));
 
         // Pro & Enterprise tier allow all
         assert!(SubscriptionTier::Pro.allows_workspace_type("kds"));
@@ -568,10 +639,11 @@ mod tests {
 
     #[test]
     fn tier_name() {
-        assert_eq!(SubscriptionTier::Free.name(), "Free Trial");
+        assert_eq!(SubscriptionTier::Free.name(), "Free");
         assert_eq!(SubscriptionTier::OneTime.name(), "1-Time Perpetual");
-        assert_eq!(SubscriptionTier::Standard.name(), "Standard");
+        assert_eq!(SubscriptionTier::Plus.name(), "Plus");
         assert_eq!(SubscriptionTier::Pro.name(), "Pro");
+        assert_eq!(SubscriptionTier::Premium.name(), "Premium");
         assert_eq!(SubscriptionTier::Enterprise.name(), "Enterprise");
     }
 
@@ -579,6 +651,10 @@ mod tests {
     fn tier_serialize() {
         let json = serde_json::to_value(SubscriptionTier::Free).unwrap();
         assert_eq!(json, "free");
+        let json = serde_json::to_value(SubscriptionTier::Plus).unwrap();
+        assert_eq!(json, "plus");
+        let json = serde_json::to_value(SubscriptionTier::Premium).unwrap();
+        assert_eq!(json, "premium");
     }
 
     // ── Signature Verification ────────────────────────────
@@ -852,19 +928,18 @@ mod tests {
     #[test]
     fn clock_skew_constants_are_reasonable() {
         assert_eq!(CLOCK_SKEW_TOLERANCE_SECONDS, 30);
-        assert_eq!(OFFLINE_GRACE_DAYS, 14);
     }
 
     // ── SubscriptionTier feature-flag coverage ─────────────────────────
 
     #[test]
     fn max_warehouses_per_tier() {
-        // Free/OneTime/Standard: 1 warehouse
+        // Free/OneTime: 1 warehouse; Plus: 2; Pro: 3
         assert_eq!(SubscriptionTier::Free.max_warehouses(), Some(1));
         assert_eq!(SubscriptionTier::OneTime.max_warehouses(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_warehouses(), Some(1));
-        // Pro/Premium/Enterprise: unlimited
-        assert_eq!(SubscriptionTier::Pro.max_warehouses(), None);
+        assert_eq!(SubscriptionTier::Plus.max_warehouses(), Some(2));
+        assert_eq!(SubscriptionTier::Pro.max_warehouses(), Some(3));
+        // Premium/Enterprise: unlimited
         assert_eq!(SubscriptionTier::Premium.max_warehouses(), None);
         assert_eq!(SubscriptionTier::Enterprise.max_warehouses(), None);
     }
@@ -873,7 +948,7 @@ mod tests {
     fn supports_cloud_sync_per_tier() {
         assert!(!SubscriptionTier::Free.supports_cloud_sync());
         assert!(!SubscriptionTier::OneTime.supports_cloud_sync());
-        assert!(SubscriptionTier::Standard.supports_cloud_sync());
+        assert!(SubscriptionTier::Plus.supports_cloud_sync());
         assert!(SubscriptionTier::Pro.supports_cloud_sync());
         assert!(SubscriptionTier::Premium.supports_cloud_sync());
         assert!(SubscriptionTier::Enterprise.supports_cloud_sync());
@@ -883,7 +958,7 @@ mod tests {
     fn supports_qris_per_tier() {
         assert!(!SubscriptionTier::Free.supports_qris());
         assert!(!SubscriptionTier::OneTime.supports_qris());
-        assert!(SubscriptionTier::Standard.supports_qris());
+        assert!(SubscriptionTier::Plus.supports_qris());
         assert!(SubscriptionTier::Pro.supports_qris());
         assert!(SubscriptionTier::Premium.supports_qris());
         assert!(SubscriptionTier::Enterprise.supports_qris());
@@ -893,7 +968,7 @@ mod tests {
     fn supports_stripe_per_tier() {
         assert!(!SubscriptionTier::Free.supports_stripe());
         assert!(!SubscriptionTier::OneTime.supports_stripe());
-        assert!(!SubscriptionTier::Standard.supports_stripe());
+        assert!(!SubscriptionTier::Plus.supports_stripe());
         assert!(SubscriptionTier::Pro.supports_stripe());
         assert!(SubscriptionTier::Premium.supports_stripe());
         assert!(SubscriptionTier::Enterprise.supports_stripe());
@@ -903,8 +978,9 @@ mod tests {
     fn supports_lua_engine_per_tier() {
         assert!(!SubscriptionTier::Free.supports_lua_engine());
         assert!(!SubscriptionTier::OneTime.supports_lua_engine());
-        assert!(!SubscriptionTier::Standard.supports_lua_engine());
-        assert!(SubscriptionTier::Pro.supports_lua_engine());
+        assert!(!SubscriptionTier::Plus.supports_lua_engine());
+        // Pro does NOT get Lua — Premium/Enterprise only (§3 Business Logic).
+        assert!(!SubscriptionTier::Pro.supports_lua_engine());
         assert!(SubscriptionTier::Premium.supports_lua_engine());
         assert!(SubscriptionTier::Enterprise.supports_lua_engine());
     }
@@ -913,7 +989,7 @@ mod tests {
     fn supports_multi_warehouse_fallback_per_tier() {
         assert!(!SubscriptionTier::Free.supports_multi_warehouse_fallback());
         assert!(!SubscriptionTier::OneTime.supports_multi_warehouse_fallback());
-        assert!(!SubscriptionTier::Standard.supports_multi_warehouse_fallback());
+        assert!(!SubscriptionTier::Plus.supports_multi_warehouse_fallback());
         assert!(SubscriptionTier::Pro.supports_multi_warehouse_fallback());
         assert!(SubscriptionTier::Premium.supports_multi_warehouse_fallback());
         assert!(SubscriptionTier::Enterprise.supports_multi_warehouse_fallback());
@@ -923,7 +999,7 @@ mod tests {
     fn supports_regional_zones_only_enterprise() {
         assert!(!SubscriptionTier::Free.supports_regional_zones());
         assert!(!SubscriptionTier::OneTime.supports_regional_zones());
-        assert!(!SubscriptionTier::Standard.supports_regional_zones());
+        assert!(!SubscriptionTier::Plus.supports_regional_zones());
         assert!(!SubscriptionTier::Pro.supports_regional_zones());
         assert!(!SubscriptionTier::Premium.supports_regional_zones());
         assert!(SubscriptionTier::Enterprise.supports_regional_zones());
@@ -933,8 +1009,8 @@ mod tests {
     fn max_stores_per_tier() {
         assert_eq!(SubscriptionTier::Free.max_stores(), Some(1));
         assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::Pro.max_stores(), None);
+        assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
+        assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
         assert_eq!(SubscriptionTier::Premium.max_stores(), None);
         assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
     }
@@ -943,8 +1019,8 @@ mod tests {
     fn max_pos_instances_per_tier() {
         assert_eq!(SubscriptionTier::Free.max_pos_instances(), Some(1));
         assert_eq!(SubscriptionTier::OneTime.max_pos_instances(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_pos_instances(), Some(2));
-        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), None);
+        assert_eq!(SubscriptionTier::Plus.max_pos_instances(), Some(2));
+        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), Some(5));
         assert_eq!(SubscriptionTier::Premium.max_pos_instances(), None);
         assert_eq!(SubscriptionTier::Enterprise.max_pos_instances(), None);
     }
@@ -961,13 +1037,15 @@ mod tests {
     }
 
     #[test]
-    fn allows_workspace_type_standard_tier() {
-        let tier = SubscriptionTier::Standard;
+    fn allows_workspace_type_plus_tier() {
+        let tier = SubscriptionTier::Plus;
         assert!(tier.allows_workspace_type("store-pos"));
         assert!(tier.allows_workspace_type("restaurant-pos"));
         assert!(tier.allows_workspace_type("admin"));
         assert!(tier.allows_workspace_type("warehouse"));
-        assert!(tier.allows_workspace_type("kds"));
+        assert!(tier.allows_workspace_type("inventory"));
+        // Plus does NOT unlock kds — that is Pro (§3 Workspace Types).
+        assert!(!tier.allows_workspace_type("kds"));
         assert!(!tier.allows_workspace_type("custom-plugin"));
     }
 
@@ -1010,9 +1088,10 @@ mod tests {
             SubscriptionTier::OneTime
         );
         assert_eq!(
-            SubscriptionTier::from_db("standard"),
-            SubscriptionTier::Standard
+            SubscriptionTier::from_db("standard"), // legacy alias → Plus
+            SubscriptionTier::Plus
         );
+        assert_eq!(SubscriptionTier::from_db("plus"), SubscriptionTier::Plus);
         assert_eq!(SubscriptionTier::from_db("pro"), SubscriptionTier::Pro);
         assert_eq!(
             SubscriptionTier::from_db("premium"),
@@ -1036,11 +1115,110 @@ mod tests {
 
     #[test]
     fn tier_names() {
-        assert_eq!(SubscriptionTier::Free.name(), "Free Trial");
+        assert_eq!(SubscriptionTier::Free.name(), "Free");
         assert_eq!(SubscriptionTier::OneTime.name(), "1-Time Perpetual");
-        assert_eq!(SubscriptionTier::Standard.name(), "Standard");
+        assert_eq!(SubscriptionTier::Plus.name(), "Plus");
         assert_eq!(SubscriptionTier::Pro.name(), "Pro");
-        assert_eq!(SubscriptionTier::Premium.name(), "Premium (Pro)");
+        assert_eq!(SubscriptionTier::Premium.name(), "Premium");
         assert_eq!(SubscriptionTier::Enterprise.name(), "Enterprise");
+    }
+
+    // ── New tier model (subscription-tiers.md §3) ──────────────────────
+
+    #[test]
+    fn test_plus_quota_limits() {
+        assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
+        assert_eq!(SubscriptionTier::Plus.max_pos_instances(), Some(2));
+        assert_eq!(SubscriptionTier::Plus.max_warehouses(), Some(2));
+        assert_eq!(SubscriptionTier::Plus.max_staff_users(), Some(5));
+        assert_eq!(SubscriptionTier::Plus.sales_history_days(), None);
+    }
+
+    #[test]
+    fn test_pro_quota_limits() {
+        assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
+        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), Some(5));
+        assert_eq!(SubscriptionTier::Pro.max_warehouses(), Some(3));
+        assert_eq!(SubscriptionTier::Pro.max_staff_users(), Some(20));
+        assert_eq!(SubscriptionTier::Pro.sales_history_days(), None);
+    }
+
+    #[test]
+    fn test_free_history_limit() {
+        assert_eq!(SubscriptionTier::Free.sales_history_days(), Some(30));
+        // All paid tiers are unlimited.
+        assert_eq!(SubscriptionTier::Plus.sales_history_days(), None);
+        assert_eq!(SubscriptionTier::Pro.sales_history_days(), None);
+        assert_eq!(SubscriptionTier::Premium.sales_history_days(), None);
+        assert_eq!(SubscriptionTier::Enterprise.sales_history_days(), None);
+    }
+
+    #[test]
+    fn test_workspace_type_matrix() {
+        // Plus gets inventory/warehouse but NOT kds.
+        assert!(SubscriptionTier::Plus.allows_workspace_type("store-pos"));
+        assert!(SubscriptionTier::Plus.allows_workspace_type("restaurant-pos"));
+        assert!(SubscriptionTier::Plus.allows_workspace_type("admin"));
+        assert!(SubscriptionTier::Plus.allows_workspace_type("inventory"));
+        assert!(SubscriptionTier::Plus.allows_workspace_type("warehouse"));
+        assert!(!SubscriptionTier::Plus.allows_workspace_type("kds"));
+        // Pro gets kds.
+        assert!(SubscriptionTier::Pro.allows_workspace_type("kds"));
+        assert!(SubscriptionTier::Pro.allows_workspace_type("warehouse"));
+    }
+
+    #[test]
+    fn test_staff_limits_per_tier() {
+        assert_eq!(SubscriptionTier::Free.max_staff_users(), Some(1));
+        assert_eq!(SubscriptionTier::Plus.max_staff_users(), Some(5));
+        assert_eq!(SubscriptionTier::Pro.max_staff_users(), Some(20));
+        assert_eq!(SubscriptionTier::Premium.max_staff_users(), None);
+        assert_eq!(SubscriptionTier::Enterprise.max_staff_users(), None);
+    }
+
+    #[test]
+    fn test_feature_flag_matrix() {
+        // Loyalty: Premium/Enterprise only.
+        assert!(!SubscriptionTier::Free.supports_loyalty());
+        assert!(!SubscriptionTier::Plus.supports_loyalty());
+        assert!(!SubscriptionTier::Pro.supports_loyalty());
+        assert!(SubscriptionTier::Premium.supports_loyalty());
+        assert!(SubscriptionTier::Enterprise.supports_loyalty());
+        // Analytics: Pro and above.
+        assert!(!SubscriptionTier::Free.supports_analytics());
+        assert!(!SubscriptionTier::Plus.supports_analytics());
+        assert!(SubscriptionTier::Pro.supports_analytics());
+        assert!(SubscriptionTier::Premium.supports_analytics());
+        assert!(SubscriptionTier::Enterprise.supports_analytics());
+        // Daily Sales Dashboard: Plus and above (blurred teaser on Free).
+        assert!(!SubscriptionTier::Free.supports_daily_dashboard());
+        assert!(SubscriptionTier::Plus.supports_daily_dashboard());
+        assert!(SubscriptionTier::Pro.supports_daily_dashboard());
+        assert!(SubscriptionTier::Premium.supports_daily_dashboard());
+        assert!(SubscriptionTier::Enterprise.supports_daily_dashboard());
+    }
+
+    #[test]
+    fn test_offline_grace_days_per_tier() {
+        assert_eq!(SubscriptionTier::Free.offline_grace_days(), 7);
+        assert_eq!(SubscriptionTier::Plus.offline_grace_days(), 14);
+        assert_eq!(SubscriptionTier::Pro.offline_grace_days(), 14);
+        assert_eq!(SubscriptionTier::Premium.offline_grace_days(), 30);
+        // Enterprise grace is custom per contract — fallback must be generous.
+        assert!(SubscriptionTier::Enterprise.offline_grace_days() >= 3650);
+    }
+
+    #[test]
+    fn test_from_db_plus_and_standard_alias() {
+        assert_eq!(SubscriptionTier::from_db("plus"), SubscriptionTier::Plus);
+        // Legacy "standard" rows map to Plus.
+        assert_eq!(
+            SubscriptionTier::from_db("standard"),
+            SubscriptionTier::Plus
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("STANDARD"),
+            SubscriptionTier::Plus
+        );
     }
 }

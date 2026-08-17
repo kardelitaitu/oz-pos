@@ -664,6 +664,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)] // OneTime kept for DB back-compat
     fn store_subscription_handles_all_tier_keys() {
         use crate::migrations;
         use crate::subscription::SubscriptionTier;
@@ -673,7 +674,8 @@ mod tests {
         let tiers = vec![
             ("free", SubscriptionTier::Free, 1, 1),
             ("one_time", SubscriptionTier::OneTime, 1, 1),
-            ("standard", SubscriptionTier::Standard, 1, 2),
+            ("plus", SubscriptionTier::Plus, 1, 2),
+            ("standard", SubscriptionTier::Plus, 1, 2), // legacy alias → Plus
             ("pro", SubscriptionTier::Pro, 0, 0),
             ("enterprise", SubscriptionTier::Enterprise, 0, 0),
         ];

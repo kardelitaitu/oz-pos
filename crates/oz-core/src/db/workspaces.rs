@@ -1773,9 +1773,9 @@ mod tests {
             )
             .unwrap();
 
-        // Recover with Standard (2 limit)
-        let std = SubscriptionTier::Standard;
-        let restored = store.auto_recover_instances("default", &std).unwrap();
+        // Recover with Plus (2 limit)
+        let plus = SubscriptionTier::Plus;
+        let restored = store.auto_recover_instances("default", &plus).unwrap();
         assert_eq!(restored, 2);
         assert_eq!(store.count_active_instances("default").unwrap(), 2);
 

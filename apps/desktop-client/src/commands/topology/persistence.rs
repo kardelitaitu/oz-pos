@@ -1031,7 +1031,9 @@ mod tests {
     fn validate_warehouse_quota_no_limit_for_tier_without_cap() {
         use oz_core::subscription::SubscriptionTier;
         let nodes: Vec<Value> = (0..100).map(|i| wh_node(&format!("w{i}"))).collect();
-        assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Pro).is_ok());
+        // Premium/Enterprise have no warehouse cap (§3).
+        assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Premium).is_ok());
+        assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Enterprise).is_ok());
     }
 
     // ── validate_diagram_payloads ───────────────────────────────
