@@ -1,0 +1,208 @@
+# cargo-deny configuration — mirrors the reviewed baseline in .cargo/audit.toml.
+#
+# Policy (see audit/27-ci-pipeline.md + docs/ci-pipeline.md security section):
+#   • License check: fail-closed. Only the permissive licenses below are
+#     allowed; anything new must be added deliberately.
+#   • Advisories: all vulnerability advisories fail (cargo-deny 0.19 has no
+#     severity threshold). Unmaintained/unsound/yanked are gated at the
+#     `workspace` level so a transitive-only finding stays visible but does
+#     not block CI — matching the "informational warnings stay visible but
+#     non-blocking" stance documented in .cargo/audit.toml.
+#   • The workspace's own crates are proprietary (LICENSE, `SEE LICENSE IN
+#     LICENSE` is not SPDX-parseable) — clarified per crate below.
+#
+# Refresh procedure (DOCKER-02-style, deliberate):
+#   After adding a dependency, run `cargo deny check licenses` and add any
+#   new license to `allow` ONLY after reviewing it. Run `cargo deny check
+#   advisories` and move an advisory to `ignore` only with a justification
+#   mirroring .cargo/audit.toml (owner + review date + rationale).
+
+[licenses]
+allow = [
+    # The workspace's own proprietary license (root LICENSE file), applied
+    # via the [[licenses.clarify]] entries below.
+    "LicenseRef-OZ-POS-Proprietary",
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+# The workspace's own crates are proprietary (root LICENSE file, declared as
+# `license = "SEE LICENSE IN LICENSE"` which is not SPDX-parseable). Clarify
+# each against the root LICENSE so they are treated as the project's own
+# code. If a LICENSE hash ever changes, cargo-deny prints the expected value
+# — update deliberately.
+[[licenses.clarify]]
+name = "foundation"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-api"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-cli"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-cloud-server"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-core"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-hal"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-logging"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-lua"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-notification"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-payment"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-plugin"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-pos-app"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-pos-tablet"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-reporting"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "oz-security"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "platform-core"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "platform-kernel"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "platform-startup"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "platform-sync"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-crm"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-currency"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-inventory"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-loyalty"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-reporting"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-sales"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-settings"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-staff"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-tax"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+[[licenses.clarify]]
+name = "modules-terminal"
+version = "*"
+expression = "LicenseRef-OZ-POS-Proprietary"
+license-files = [{ path = "../../LICENSE", hash = 0x6435f60b }]
+
+[advisories]
+# Keep yanked crates visible but non-blocking (default is already warn).
+yanked = "warn"
+# Only fail on unmaintained/unsound crates that a workspace crate depends on
+# DIRECTLY; transitive-only findings stay visible as warnings. This mirrors
+# the .cargo/audit.toml stance that these are informational, reviewed in the
+# weekly security.yml run.
+unmaintained = "workspace"
+unsound = "workspace"
+# RUSTSEC-2023-0071 — Marvin Attack (rsa 0.9.x, medium 5.9). Mirrors the
+# ignore in .cargo/audit.toml (Owner: architecture team · Reviewed:
+# 2026-08-03): no fixed 0.9.x release; the private key is used only by the
+# operator-side signing path, never for network-originated oracle queries.
+ignore = [
+    "RUSTSEC-2023-0071",
+]

@@ -10,6 +10,14 @@ jobs:
   audit:
     name: cargo audit
     runs-on: ubuntu-latest
+    # The ubuntu runner image globally sets RUSTC_WRAPPER=sccache, but sccache
+    # is only installed on PATH by mozilla/sccache-action (used by the other
+    # Rust jobs). cargo-audit invokes `cargo metadata`, whose rustc version
+    # probe execs `sccache .../bin/rustc -vV` and dies with "No such file or
+    # directory" when sccache is not installed. Override the wrapper to empty
+    # so rustc resolves normally — same pattern as the fuzz job in ci.yml.
+    env:
+      RUSTC_WRAPPER: ''
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -19,6 +27,13 @@ jobs:
   deny:
     name: cargo deny
     runs-on: ubuntu-latest
+    # Same runner-image sccache wrapper issue as the audit job: cargo-deny's
+    # internal `cargo metadata` probe dies with "could not execute process
+    # sccache .../bin/rustc -vV (No such file or directory)". Disable the
+    # wrapper (fuzz-job pattern, see ci.yml) — sccache provides no benefit for
+    # a metadata-only gate.
+    env:
+      RUSTC_WRAPPER: ''
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
