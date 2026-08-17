@@ -463,3 +463,90 @@ All point at the unified host; each also has an env-var override:
 The **sync server URL** is per-install user config: Settings → Cloud Sync
 → enter `https://oz--cloud--76cyv4d6bn54.code.run`. Unlike auth, it is
 stored in the local DB (never compiled in).
+---
+---
+
+## 9. Website Deploy Token (Cloudflare) — lifecycle & rotation
+
+The marketing site (Astro, `website/`) deploys to Cloudflare Workers static assets
+(`oz-pos` worker → `https://oz-pos.adikaradwiatmaja.workers.dev`) via
+`.github/workflows/website.yml` → `npx wrangler deploy`. The deploy authenticates
+with the **`CLOUDFLARE_API_TOKEN`** GitHub Actions repo secret; `CLOUDFLARE_ACCOUNT_ID`
+(the sibling secret) is not a credential — it is the account id shown in the Cloudflare
+dashboard and simply names which account the token acts on.
+
+### 9.1 Required scopes (least privilege)
+
+- **Account → Workers Scripts → Edit** — the only permission an assets-only Worker
+  needs (`wrangler deploy` of `name = "oz-pos"`): full CRUDL on the worker; no
+  Zone/DNS/Pages/KV permissions required.
+- Create it at **My Profile → API Tokens → Create Token** (a user token; an Account
+  token under Manage Account → API Tokens also works). The secret is **shown only
+  once** — copy it straight into the GitHub secret store.
+- Optional hardening: restrict to the single account; skip Client IP filtering unless
+  you accept the tradeoff — GitHub-hosted runner egress IPs change, so IP filters are
+  a frequent false-failure source.
+
+### 9.2 Expiry — how a token rots silently
+
+- TTL is **optional** at creation. A token **without a TTL never expires on its own** —
+  it stays valid until revoked, its scopes change, or the account relationship changes.
+  That is exactly how this bit us (2026-08-17): no TTL, no calendar event, and nothing
+  alerted when the token stopped working.
+- **Observed failure mode:** the deploy job errors with `Authentication error [code:
+  10000]` / `Invalid access token [code: 9109]` on `/accounts/<id>/workers/services/oz-pos`.
+  The job "fails loudly" in its own log, but **nobody is paged**: the PR `check` job
+  stays green (it does not deploy), so the Actions list looks healthy until you open
+  the `deploy` job. The live site keeps serving the last good build — here, the
+  pre-portal 1-card docs hub — for ~20 failed runs before the outage was noticed.
+- **Policy:** give every token a **TTL ≤ 1 year** (Cloudflare's maximum is 10 years)
+  and put the expiry date in the ops calendar. A TTL forces a deliberate review cadence
+  instead of silent rot.
+
+### 9.3 Detection (run these on any deploy suspicion)
+
+```bash
+# 1. Are recent deploys actually succeeding? All-failed = credential problem, not code.
+gh run list --workflow "Website Deploy" --branch main --limit 5
+
+# 2. Is the token itself valid? (authoritative — Cloudflare's verify endpoint)
+curl "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+# expect: {"result":{"status":"active"},...} with message code 10000 "valid and active"
+
+# 3. Is the LIVE site carrying the latest portal? The 4-card docs hub ships only via a
+#    successful deploy — a 404 here while CI is green means the deploy is silently stale.
+curl -sf -o /dev/null -w '%{http_code}\n' \
+  https://oz-pos.adikaradwiatmaja.workers.dev/docs-portal/intro.html   # want 200
+```
+
+GitHub's secret store exposes no expiry/rotation metadata, so rely on these three
+probes (fold probe #3 into the §5 poller or an uptime monitor).
+
+### 9.4 Rotation (zero-downtime, ~5 min)
+
+1. **Create the new token first** (My Profile → API Tokens → Create Token): Account →
+   Workers Scripts → Edit, **set a TTL**, note the expiry in the calendar. Copy it
+   immediately — shown only once.
+2. **Verify before touching GitHub:** run the §9.3 probe #2 with the new token →
+   `"status": "active"`.
+3. **Update the GitHub secret:** Settings → Secrets and variables → Actions →
+   `CLOUDFLARE_API_TOKEN` → paste → save. (`CLOUDFLARE_ACCOUNT_ID` stays the same.)
+4. **Confirm with a real deploy:** re-run the last failed Website Deploy run
+   (`gh run rerun <id>`) or push a trivial `website/**` change; confirm the `deploy`
+   job succeeds and probe #3 returns 200.
+5. **Revoke the old token** (API Tokens → Roll / Delete). Two overlapping tokens
+   during rotation is fine — the old one must die only after the new one is proven.
+
+### 9.5 Prevention (so this cannot recur silently)
+
+- **TTL policy from §9.2:** every token gets a TTL ≤ 1 year + a calendar entry. A token
+  with no TTL is a standing silent-rot risk — treat it as an incident to fix.
+- **Automated token-verify smoke:** wire probe #2 into a scheduled workflow (or the
+  §5 poller) so an invalid token alerts *before* the next deploy, instead of after 20
+  red runs. The token is a repo secret; the verify endpoint needs no other permission.
+- **Live-portal poller:** probe #3 is the ground truth for "did the deploy actually
+  land" — a 404 on `/docs-portal/intro.html` means stale assets regardless of what CI
+  says. Add it to the §5 alert rules as a page-level check.
+- **Treat a red `deploy` job as an incident:** add "Website Deploy `deploy` job failed"
+  to §3 — the check job being green is not a signal that anything shipped.
