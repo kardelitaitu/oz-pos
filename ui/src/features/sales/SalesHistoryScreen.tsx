@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, useContext } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { LocaleContext } from '@/i18n/LocaleContext';
 import {
   listSales,
   getSale,
@@ -122,9 +123,33 @@ function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: Swi
 }
 
 /** Sales history screen — filters by status, staff, and date range with swipable rows for manager void actions and detail drill-down. */
+/**
+ * C1.2: the Free tier's 30-day history window was applied — a blurred
+ * teaser row at the bottom of the list with an upgrade CTA.
+ */
+function SalesHistoryCapTeaser({ onUpgrade }: { onUpgrade: () => void }) {
+  const { l10n } = useLocalization();
+  return (
+    <div className="sales-history-cap-teaser" role="note">
+      <div className="sales-history-cap-teaser-backdrop" aria-hidden="true" />
+      <div className="sales-history-cap-teaser-content">
+        <span>{l10n.getString('sales-history-cap-teaser')}</span>
+        <Button variant="primary" size="sm" onClick={onUpgrade}>
+          {l10n.getString('sales-history-cap-upgrade-cta')}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function SalesHistoryScreen() {
   const { l10n } = useLocalization();
+  // C1.2 upgrade link needs the active locale for the pricing URL; tests
+  // render without LocaleContext, so default to English there.
+  const locale = useContext(LocaleContext)?.locale ?? 'en';
   const [sales, setSales] = useState<SaleListItem[]>([]);
+  /** C1.2: the backend capped this list to the tier's history window. */
+  const [salesHistoryCapped, setSalesHistoryCapped] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
@@ -182,13 +207,14 @@ export default function SalesHistoryScreen() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [items, staffList] = await Promise.all([
+      const [response, staffList] = await Promise.all([
         listSales(),
         sessionToken
           ? listStaffScoped(sessionToken).catch(() => [] as StaffMemberDto[])
           : Promise.resolve([] as StaffMemberDto[]),
       ]);
-      setSales(items);
+      setSales(response.sales);
+      setSalesHistoryCapped(response.salesHistoryCapped);
       setStaff(staffList);
     } catch {
       // LOAD-02: an initial load failure must not look like an empty
@@ -205,6 +231,15 @@ export default function SalesHistoryScreen() {
   });
 
   useEffect(() => { load(); }, [load]);
+
+  /** C1.2: open the website pricing page so the owner can upgrade the plan. */
+  const openUpgradePricing = useCallback(() => {
+    window.open(
+      `https://oz-pos.adikaradwiatmaja.workers.dev/${locale}/pricing/#plus`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+  }, [locale]);
 
   // ── Void state ──────────────────────────────────────────────────────
   const [voidTarget, setVoidTarget] = useState<SaleListItem | null>(null);
@@ -762,27 +797,34 @@ export default function SalesHistoryScreen() {
           </div>
         </Card>
       ) : filteredSales.length === 0 ? (
-        <Card shadow="sm">
-          <div className="sales-history-empty">
-            {sales.length === 0 ? (
-              <EmptyState
-                icon={<NoSalesIcon />}
-                headingLevel={2}
-                title={requiredLocalized(l10n, 'sales-history-empty')}
-              />
-            ) : (
-              <EmptyState
-                icon={<NotFoundIcon />}
-                headingLevel={2}
-                title={requiredLocalized(l10n, 'sales-history-empty-filtered')}
-                action={{
-                  label: requiredLocalized(l10n, 'sales-history-clear-filters'),
-                  onClick: () => { setSearchQuery(''); setStatusFilter('All'); setDateFrom(''); setDateTo(''); setCashierFilter(''); },
-                }}
-              />
-            )}
-          </div>
-        </Card>
+        <>
+          <Card shadow="sm">
+            <div className="sales-history-empty">
+              {sales.length === 0 ? (
+                <EmptyState
+                  icon={<NoSalesIcon />}
+                  headingLevel={2}
+                  title={requiredLocalized(l10n, 'sales-history-empty')}
+                />
+              ) : (
+                <EmptyState
+                  icon={<NotFoundIcon />}
+                  headingLevel={2}
+                  title={requiredLocalized(l10n, 'sales-history-empty-filtered')}
+                  action={{
+                    label: requiredLocalized(l10n, 'sales-history-clear-filters'),
+                    onClick: () => { setSearchQuery(''); setStatusFilter('All'); setDateFrom(''); setDateTo(''); setCashierFilter(''); },
+                  }}
+                />
+              )}
+            </div>
+          </Card>
+          {/* C1.2: history exists but everything fell outside the tier's
+              window (Free = 30 days) — surface the upgrade teaser. */}
+          {salesHistoryCapped && sales.length > 0 && (
+            <SalesHistoryCapTeaser onUpgrade={openUpgradePricing} />
+          )}
+        </>
       ) : (
         <div className="sales-history-table-wrap">
           <Localized id="sales-history-table-aria" attrs={{ 'aria-label': true }}>
@@ -858,6 +900,11 @@ export default function SalesHistoryScreen() {
 </tbody>
             </table>
           </Localized>
+          {/* C1.2: the tier's history window truncated this list — blurred
+              teaser row below the table with an upgrade CTA. */}
+          {salesHistoryCapped && (
+            <SalesHistoryCapTeaser onUpgrade={openUpgradePricing} />
+          )}
         </div>
       )}
 

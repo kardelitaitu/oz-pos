@@ -710,3 +710,41 @@
 .sales-history-cell-negative {
   color: var(--color-danger);
 }
+
+/* ── C1.2 history-cap teaser (Free tier 30-day window) ───────── */
+
+.sales-history-cap-teaser {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  color: var(--color-fg-primary);
+  font-size: var(--text-sm);
+}
+
+.sales-history-cap-teaser-backdrop {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-bg-primary) 86%, transparent),
+    color-mix(in srgb, var(--color-primary) 12%, transparent)
+  );
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.sales-history-cap-teaser-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+}

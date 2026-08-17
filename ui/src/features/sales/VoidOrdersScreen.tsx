@@ -103,7 +103,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
     setLoading(true);
     setError(null);
     try {
-      const items = await listSales();
+      const { sales: items } = await listSales();
       setSales(items);
     } catch (err) {
       setError(l10nErrorMessage(err, l10n, 'void-orders-error-load'));

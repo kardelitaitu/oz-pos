@@ -307,13 +307,24 @@ export interface SaleDetail {
   lines: SaleLineDto[];
 }
 
+/**
+ * C1.2: response for the sale-list commands — the sales (already capped to
+ * the tier's history window) plus the cap flag so the UI can show the
+ * upgrade teaser.
+ */
+export interface SaleListResponse {
+  sales: SaleListItem[];
+  /** True when the tier's history window (Free = 30 days) was applied. */
+  salesHistoryCapped: boolean;
+}
+
 /** List all completed sales. */
-export const listSales = (): Promise<SaleListItem[]> =>
-  loggedInvoke<SaleListItem[]>('list_sales');
+export const listSales = (): Promise<SaleListResponse> =>
+  loggedInvoke<SaleListResponse>('list_sales');
 
 /** ADR #7: List sales scoped to the store resolved from a session token. */
-export const listSalesScoped = (sessionToken: string): Promise<SaleListItem[]> =>
-  loggedInvoke<SaleListItem[]>('list_sales_scoped', { sessionToken });
+export const listSalesScoped = (sessionToken: string): Promise<SaleListResponse> =>
+  loggedInvoke<SaleListResponse>('list_sales_scoped', { sessionToken });
 
 /** Fetch a single sale by its identifier. */
 export const getSale = (id: string): Promise<SaleDetail | null> =>

@@ -229,6 +229,9 @@ sales-history-loading = Memuat penjualan…
 sales-history-error-load = Gagal memuat riwayat penjualan
 sales-history-empty = Belum ada penjualan tercatat
 sales-history-empty-filtered = Tidak ada penjualan yang cocok dengan filter Anda
+# C1.2: jendela riwayat 30 hari paket Free diterapkan — ajakan tingkatkan paket.
+sales-history-cap-teaser = Lihat riwayat penjualan lebih dari 30 hari — tingkatkan ke Plus
+sales-history-cap-upgrade-cta = Tingkatkan
 sales-history-count = { $count } penjualan
 sales-history-page-info = Halaman { $current } dari { $total }
 sales-history-col-id = ID Penjualan

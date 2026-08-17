@@ -186,12 +186,12 @@ describe('dev-mock cart + sales persistence (restart parity)', () => {
     const second = await import('@/dev-mock/tauri-api');
     const sales = (await second.invoke('list_sales_scoped', {
       sessionToken: 'session-1',
-    })) as unknown as Array<{ id: string }>;
+    })) as unknown as { sales: Array<{ id: string }> };
     const detail = (await second.invoke('get_sale_scoped', {
       id: sale.saleId,
     })) as unknown as { id: string; lines: unknown[] } | null;
 
-    expect(sales.some(s => s.id === sale.saleId)).toBe(true);
+    expect(sales.sales.some(s => s.id === sale.saleId)).toBe(true);
     expect(detail?.id).toBe(sale.saleId);
     expect(detail?.lines.length).toBe(1);
   });

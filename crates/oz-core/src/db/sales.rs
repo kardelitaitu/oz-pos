@@ -1287,13 +1287,40 @@ impl Store<'_> {
 
     /// List all sales ordered by creation date (most recent first), without line items.
     pub fn list_sales(&self) -> Result<Vec<Sale>, CoreError> {
-        let mut stmt = self.conn.prepare(
+        self.list_sales_sql("FROM sales ORDER BY created_at DESC")
+    }
+
+    /// List sales, optionally restricted to the last `days` days (C1.2 Free-tier
+    /// sales-history cap).
+    ///
+    /// Returns the sales plus whether the cap was applied (`days.is_some()`), so
+    /// the caller can surface an upgrade teaser when history was truncated.
+    /// `created_at` is stored as RFC-3339 text, so the lexicographic comparison
+    /// `created_at >= date('now', '-N days')` keeps every sale on/after that
+    /// day's midnight.
+    pub fn list_sales_with_history_cap(
+        &self,
+        days: Option<i64>,
+    ) -> Result<(Vec<Sale>, bool), CoreError> {
+        let mut clause = String::from("FROM sales");
+        if let Some(d) = days {
+            clause.push_str(&format!(" WHERE created_at >= date('now', '-{d} days')"));
+        }
+        clause.push_str(" ORDER BY created_at DESC");
+        Ok((self.list_sales_sql(&clause)?, days.is_some()))
+    }
+
+    /// Shared sale-list query: the given `FROM …` clause is appended to the
+    /// standard sale column projection.
+    fn list_sales_sql(&self, from_clause: &str) -> Result<Vec<Sale>, CoreError> {
+        let sql = format!(
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
                     subtotal_minor, tax_total_minor, customer_id, version
-             FROM sales ORDER BY created_at DESC",
-        )?;
+             {from_clause}"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map([], |row| {
             let cur_str: String = row.get("currency")?;
             let status_str: String = row.get("status")?;
@@ -2235,6 +2262,36 @@ mod tests {
             )
             .unwrap();
         assert_eq!(tenant, "default");
+    }
+
+    #[test]
+    fn test_sales_history_cap_free_tier() {
+        // C1.2: the Free tier caps history to the last 30 days; the list
+        // command drops older rows and flags `capped` so the UI can show the
+        // upgrade teaser. Unlimited tiers return everything, uncapped.
+        let conn = fresh();
+        let store = store(&conn);
+
+        let mut recent = Sale::from_cart(&make_cart()).unwrap();
+        recent.created_at = chrono::Utc::now().to_rfc3339();
+        let mut old = Sale::from_cart(&make_cart()).unwrap();
+        old.created_at = (chrono::Utc::now() - chrono::Duration::days(40)).to_rfc3339();
+        store.create_sale(&recent).unwrap();
+        store.create_sale(&old).unwrap();
+
+        // Free tier (30-day window): only the recent sale survives, capped=true.
+        let (capped_sales, capped) = store.list_sales_with_history_cap(Some(30)).unwrap();
+        assert!(capped, "Free tier must flag the history window as capped");
+        assert_eq!(capped_sales.len(), 1, "40-day-old sale must be excluded");
+        assert_eq!(capped_sales[0].id, recent.id);
+
+        // Plus/Pro/Premium (no window): everything, capped=false.
+        let (all_sales, capped) = store.list_sales_with_history_cap(None).unwrap();
+        assert!(!capped);
+        assert_eq!(all_sales.len(), 2);
+
+        // The plain list_sales() path stays uncapped.
+        assert_eq!(store.list_sales().unwrap().len(), 2);
     }
 
     #[test]

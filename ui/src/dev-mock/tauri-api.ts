@@ -2014,8 +2014,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     return null;
   },
 
-  'list_sales': () => [...completedSales],
-  'list_sales_scoped': () => [...completedSales],
+  'list_sales': () => ({ sales: [...completedSales], salesHistoryCapped: false }),
+  'list_sales_scoped': () => ({ sales: [...completedSales], salesHistoryCapped: false }),
   'void_sale': () => ({ id: 'voided-sale', status: 'voided', total: { minor_units: 0, currency: 'IDR' }, line_count: 0, created_at: new Date().toISOString() }),
   'void_sale_scoped': () => ({ id: 'voided-sale', status: 'voided', total: { minor_units: 0, currency: 'IDR' }, line_count: 0, created_at: new Date().toISOString() }),
 

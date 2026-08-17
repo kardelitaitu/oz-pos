@@ -9,6 +9,7 @@ use tauri::{State, command};
 
 use oz_core::Money;
 use oz_core::db::{DailySummaryRow, SalesByHourRow, Store};
+use oz_core::subscription::TenantSubscription;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -34,25 +35,47 @@ pub struct SaleListItem {
     pub created_at: String,
 }
 
+/// Response for the sale-list commands (C1.2).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// The sales plus whether the tier's history window was applied.
+pub struct SaleListResponse {
+    /// The sales — already capped to the tier's history window.
+    pub sales: Vec<SaleListItem>,
+    /// C1.2: true when the tier's history window (Free = 30 days) was
+    /// applied, so the UI can show the upgrade teaser.
+    pub sales_history_capped: bool,
+}
+
 #[command]
 /// List sales.
-pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>, AppError> {
+///
+/// C1.2: the list is capped to the tier's sales-history window
+/// (`sales_history_days()` — Free = 30 days, paid tiers = unlimited).
+pub async fn list_sales(state: State<'_, AppState>) -> Result<SaleListResponse, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let sales = store.list_sales()?;
+    let sub = TenantSubscription::load(&db, "default")?
+        .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+    sub.verify_signature()?;
+    let days = sub.effective_tier().sales_history_days();
+    let (sales, capped) = store.list_sales_with_history_cap(days)?;
     drop(db);
-    Ok(sales
-        .into_iter()
-        .map(|s| SaleListItem {
-            id: s.id,
-            total: s.total,
-            line_count: s.line_count,
-            status: format!("{:?}", s.status),
-            payment_method: s.payment_method,
-            user_id: s.user_id,
-            created_at: s.created_at,
-        })
-        .collect())
+    Ok(SaleListResponse {
+        sales: sales
+            .into_iter()
+            .map(|s| SaleListItem {
+                id: s.id,
+                total: s.total,
+                line_count: s.line_count,
+                status: format!("{:?}", s.status),
+                payment_method: s.payment_method,
+                user_id: s.user_id,
+                created_at: s.created_at,
+            })
+            .collect(),
+        sales_history_capped: capped,
+    })
 }
 
 #[derive(Debug, Serialize)]

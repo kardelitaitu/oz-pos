@@ -20,7 +20,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/api/sales', () => ({
-  listSales: vi.fn(() => Promise.resolve([])),
+  listSales: vi.fn(() => Promise.resolve({ sales: [], salesHistoryCapped: false })),
   voidSale: vi.fn(),
 }));
 

@@ -9,6 +9,7 @@ use tauri::State;
 
 use oz_core::Money;
 use oz_core::db::{DailySummaryRow, SalesByHourRow, Store};
+use oz_core::subscription::TenantSubscription;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -34,17 +35,46 @@ pub struct SaleListItem {
     pub created_at: String,
 }
 
+/// Response for the sale-list commands (C1.2).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// The sales plus whether the tier's history window was applied.
+pub struct SaleListResponse {
+    /// The sales — already capped to the tier's history window.
+    pub sales: Vec<SaleListItem>,
+    /// C1.2: true when the tier's history window (Free = 30 days) was
+    /// applied, so the UI can show the upgrade teaser.
+    pub sales_history_capped: bool,
+}
+
+/// C1.2: load the tenant subscription and list sales capped to its history
+/// window (`sales_history_days()` — Free = 30 days, paid tiers = unlimited).
+/// The subscription lives in the global identity DB that also holds sales for
+/// the legacy global variant; the store-scoped variant reads sales from the
+/// store DB but the subscription from the same global DB.
+fn load_capped_sales(db: &rusqlite::Connection) -> Result<SaleListResponse, AppError> {
+    let sub = TenantSubscription::load(db, "default")?
+        .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+    sub.verify_signature()?;
+    let days = sub.effective_tier().sales_history_days();
+    let store = Store::new(db);
+    let (sales, capped) = store.list_sales_with_history_cap(days)?;
+    Ok(SaleListResponse {
+        sales: sales.into_iter().map(map_sale_to_item).collect(),
+        sales_history_capped: capped,
+    })
+}
+
 /// List all sales from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_sales_scoped`
 /// with a `session_token` to list sales from the store-scoped database.
 #[tauri::command]
-pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>, AppError> {
+pub async fn list_sales(state: State<'_, AppState>) -> Result<SaleListResponse, AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let sales = store.list_sales()?;
+    let response = load_capped_sales(&db);
     drop(db);
-    Ok(sales.into_iter().map(map_sale_to_item).collect())
+    response
 }
 
 /// List all sales for the store resolved from a session token.
@@ -56,15 +86,27 @@ pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>,
 pub async fn list_sales_scoped(
     session_token: String,
     state: State<'_, AppState>,
-) -> Result<Vec<SaleListItem>, AppError> {
+) -> Result<SaleListResponse, AppError> {
+    // C1.2: the tier's history window lives on the tenant subscription in the
+    // global identity DB; the sales themselves come from the store DB.
+    let days = {
+        let db = state.db.lock().await;
+        let sub = TenantSubscription::load(&db, "default")?
+            .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+        sub.verify_signature()?;
+        sub.effective_tier().sales_history_days()
+    };
     let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let sales = store.list_sales()?;
+    let (sales, capped) = store.list_sales_with_history_cap(days)?;
     drop(db);
-    Ok(sales.into_iter().map(map_sale_to_item).collect())
+    Ok(SaleListResponse {
+        sales: sales.into_iter().map(map_sale_to_item).collect(),
+        sales_history_capped: capped,
+    })
 }
 
 /// Shared mapping from `oz_core::Sale` to `SaleListItem`.
