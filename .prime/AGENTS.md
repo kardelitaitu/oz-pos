@@ -6,6 +6,7 @@
 
 - Maintain documentation integrity. Preserve all existing comments and docstrings unless explicitly modified.
 - Never switch local branches unless explicitly asked by the user.
+- Never create new branches unless explicitly asked by the user.
 - **Use codebase-memory-mcp for code exploration.** Before reading files or grepping for symbols, query the knowledge graph via `codebase_memory_mcp` (search_graph, trace_path, get_code_snippet). This saves tokens by avoiding full-file reads and provides structural context that grep cannot.
 
 
