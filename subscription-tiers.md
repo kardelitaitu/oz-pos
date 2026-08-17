@@ -63,7 +63,7 @@ Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
 | **Numeric limits** | | | | | |
 | Max stores | 1 | 1 | 2 | Unlimited | Unlimited |
 | Max terminals (registers) / store | 1 | 2 | 5 | Unlimited | Unlimited |
-| Max warehouses | 1 | 1 | 3 | Unlimited | Unlimited |
+| Max warehouses | 1 | 2 | 3 | Unlimited | Unlimited |
 | Max KDS screens | 0 | 0 | 1 / store | Unlimited | Unlimited |
 | Max staff users * | 1 | 5 | 20 | Unlimited | Unlimited |
 | **Workspace types** | | | | | |
@@ -83,6 +83,7 @@ Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
 | **Business logic** | | | | | |
 | Custom tax (PPN / PB1 / service) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Reports & analytics (`analytics:view`) | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Scheduled report emails | ✗ | ✗ | ✗ | ✓ | ✓ |
 | Product bundles | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Lua scripting | ✗ | ✗ | ✗ | ✓ | ✓ |
 | Loyalty tiers & points | ✗ | ✗ | ✗ | ✓ | ✓ |
@@ -98,9 +99,10 @@ Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
 | Community forum | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Email / chat support | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Priority support | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Support response SLA | — | 24h | 8h | 1h (24/7) | account manager |
 | Software updates | minor + major | minor + major | minor + major | minor + major | minor + major |
 | White-label branding | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Offline grace period | — (never expires) | 14 days | 14 days | 14 days | custom |
+| Offline grace period | — (never expires) | 14 days | 14 days | 30 days | custom |
 | Enterprise services (dedicated hosting, ERP adaptors, account manager) | ✗ | ✗ | ✗ | ✗ | ✓ |
 
 \* Max staff users — not enforced anywhere yet; implement (or drop) before shipping.
