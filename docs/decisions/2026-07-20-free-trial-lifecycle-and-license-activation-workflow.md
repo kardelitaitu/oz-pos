@@ -1,12 +1,23 @@
 # ADR #23: Free Trial Lifecycle & License Activation Workflow
 
-- **Status**: Approved
+- **Status**: Approved — ⚠️ **RE-SCOPED by `subscription-tiers.md` §4 (FINAL, approved 2026-08-17)**
 - **Date**: 2026-07-20
 - **Author**: Technical Architecture & Security Team
 - **Related Documents**:
   - `docs/decisions/2026-07-10-license-server.md` (ADR #9: License Server Architecture)
-  - `docs/decisions/2026-07-10-subscription-tier-entitlement.md` (ADR #18: Tier Entitlements)
+  - `docs/decisions/2026-07-10-subscription-tier-entitlement.md` (ADR #5: Tier Entitlements)
   - `docs/specs/hardware-fingerprint-trial-lock.md` (`SPEC-2026-TRIAL-LOCK`: Anti-Abuse Trial Lock)
+  - `subscription-tiers.md` §4 (trial & conversion strategy — the replacement)
+
+> **Re-scope note:** the flat **90-day full-product trial** described below is
+> superseded by [`subscription-tiers.md`](../../subscription-tiers.md) §4: the
+> Free tier is **free forever** (1 store / 1 register / 1 warehouse / 30-day
+> sales history), and paid trials are **segmented by signup vertical** —
+> 14-day Plus trial for general signups, 14-day Pro trial for
+> restaurant/cafe signups, 30-day Pro trial for enterprise referrals. The
+> hardware-fingerprint anti-abuse mechanism (§3.1, `SPEC-2026-TRIAL-LOCK`)
+> still applies to prevent trial resets. `TODO.md` C2.1 tracks the
+> implementation (license-server `trial_vertical` field + segmented minting).
 
 ---
 
@@ -89,7 +100,7 @@ When a merchant enters a purchased license key:
 1. **Request**: POS sends `POST /api/v1/license/activate` with `{ key, email, phone, machine_id, api_key }`.
 2. **Server Validation**:
    - PocketBase validates key validity, status (`unused`), and tenant ownership.
-   - Upgrades tenant tier from `Free` to `OneTime`, `Standard`, `Pro`, or `Enterprise`.
+   - Upgrades tenant tier from `Free` to `Plus`, `Pro`, `Premium`, or `Enterprise` (the `OneTime` / `Standard` legacy names are superseded — see the re-scope note above).
    - Issues a new signed RSA payload with updated quotas (`max_stores`, `max_pos_instances`).
 3. **Instant In-Memory & Local Database Update**:
    - `oz-core` validates the RSA public key signature.

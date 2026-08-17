@@ -1,16 +1,28 @@
 ---
 import { getRelativeLocaleUrl } from 'astro:i18n';
-import { t } from '../i18n';
+import { t, dict } from '../i18n';
 
 const locale = Astro.currentLocale ?? 'en';
 const year = new Date().getFullYear();
+// Vertical entry points (subscription-tiers.md §5).
+const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
+const verticals = dict(locale).vertical as Record<(typeof verticalKeys)[number], { label: string }>;
 ---
 
 <footer class="border-t border-ink/5 bg-surface/40">
-  <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row">
+  <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-8 sm:flex-row">
     <p class="text-xs text-muted">
       © {year} OZ-POS. {t(locale, 'footer.rights')}
     </p>
+    <nav class="flex flex-wrap justify-center gap-4 text-xs text-muted" aria-label={t(locale, 'footer.business')}>
+      {
+        verticalKeys.map((key) => (
+          <a href={getRelativeLocaleUrl(locale, `untuk-${key}`)} class="transition hover:text-ink">
+            {verticals[key].label}
+          </a>
+        ))
+      }
+    </nav>
     <nav class="flex gap-4 text-xs text-muted" aria-label={t(locale, 'footer.legal')}>
       <a href={getRelativeLocaleUrl(locale, 'legal/privacy')} class="transition hover:text-ink">
         {t(locale, 'footer.privacy')}

@@ -67,6 +67,12 @@ webhook delivery work the moment the new image is up.
 ```ini
 # ── Paddle (sandbox) — REQUIRED at boot (fail-fast gates) ────────────
 PADDLE_WEBHOOK_SECRET=<copy from §1 #3>
+# NOTE (2026-08-17): the two ids below are the LEGACY $19/$49 sandbox
+# prices, superseded by the 5-tier lineup (subscription-tiers.md §2). The
+# new catalog needs SIX prices (Plus/Pro/Premium × monthly/yearly) once it
+# lands; until then the website shows the new prices with placeholder ids
+# and checkout degrades to the mailto fallback. PADDLE_PRICE_TIERS must
+# list every price id → tier_key pair (plus_monthly/plus_yearly → plus, etc.).
 PADDLE_PRICE_TIERS=pri_01m05gdnqp30xze6db73qcracp:pro,pri_01m05gdpk4hmnm0k8e6vxm8cec:premium
 PADDLE_API_URL=https://sandbox-api.paddle.com
 PADDLE_API_KEY=<copy from Paddle (sandbox) → Developer tools → Authentication>
@@ -150,7 +156,7 @@ curl -sS -X POST "$B/api/v1/paddle/webhook" \
 
 | Check | Pass condition |
 |---|---|
-| `/api/health` | `"smtp":{"configured":true,"verified":true}`, `"paddle":{"secret_configured":true,"price_tiers_configured":true,"price_tiers_mappings":2}`, `"rsa":{"configured":true}` |
+| `/api/health` | `"smtp":{"configured":true,"verified":true}`, `"paddle":{"secret_configured":true,"price_tiers_configured":true,"price_tiers_mappings":N}` (N = mapped prices; 2 today with the legacy ids, **6** once the new catalog ships), `"rsa":{"configured":true}` |
 | `request-otp` | `200` and a real 6-digit code email arrives (not spam) |
 | `paddle/webhook` | `401` (not `503`) — secret loaded, signature verified |
 | test notification | Paddle's "Send test notification" reaches the container log (proves the repointed destination + secret) |

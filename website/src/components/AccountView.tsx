@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
-import { clearSession, getSessionEmail, isPaddleConfigured, openPaddleCheckout } from './paddle';
+import { clearSession, getSessionEmail, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout } from './paddle';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -219,11 +219,18 @@ export default function AccountView({ locale }: Props) {
   }
 
   const { tenant, license, subscription } = me ?? {};
-  // Subscribe options from the locale's pricing content (pro + premium
-  // have real Paddle price ids; trial/enterprise do not).
+  // Subscribe options from the locale's pricing content: the three paid tiers
+  // (plus/pro/premium), billed at the yearly (default) rate. Tiers whose
+  // Paddle price id is still a placeholder (subscription-tiers.md — six real
+  // prices not yet catalogued) are excluded so the button never opens a
+  // dead checkout; free/enterprise have no price id at all.
   const subscribable = (pricingFor(locale) ?? [])
-    .filter((tier) => tier.priceId && (tier.tierKey === 'pro' || tier.tierKey === 'premium'))
-    .map((tier) => ({ tierKey: tier.tierKey, name: tier.name, price: tier.price, period: tier.period, priceId: tier.priceId! }));
+    .filter((tier) => tier.tierKey === 'plus' || tier.tierKey === 'pro' || tier.tierKey === 'premium')
+    .map((tier) => {
+      const yearly = tier.prices.yearly;
+      return { tierKey: tier.tierKey, name: tier.name, price: yearly.price, period: yearly.period, priceId: yearly.priceId ?? '' };
+    })
+    .filter((plan) => plan.priceId && !isPlaceholderPriceId(plan.priceId));
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -349,7 +356,7 @@ export default function AccountView({ locale }: Props) {
         <section className="rounded-xl border border-accent/40 bg-surface/40 p-6" aria-label={t(locale, 'account.subscribe')}>
           <h2 className="text-lg font-semibold">{t(locale, 'account.subscribe')}</h2>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.noSubscription')}</p>
-          {isPaddleConfigured() ? (
+          {isPaddleConfigured() && subscribable.length > 0 ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {subscribable.map((plan) => (
                 <div key={plan.tierKey} className="rounded-lg border border-ink/10 p-4">

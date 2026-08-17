@@ -15,7 +15,7 @@
 | **Checkout** | Paddle.js overlay (handles payments, tax, VAT, invoicing) |
 | **Auth** | Tenant auth on the **license server** — email OTP **or** password, no new auth collection |
 | **Database** | PocketBase (existing license-server datastore on Northflank) — **internal only**, the website never calls it directly |
-| **Pricing** | Real tier enum `free` / `trial` / `pro` / `premium` / `enterprise`; placeholder prices per locale |
+| **Pricing** | Real tier enum `free` / `plus` / `pro` / `premium` / `enterprise` (subscription-tiers.md); annual default toggle; six Paddle prices pending |
 | **Repo location** | `website/` directory in the monorepo |
 
 > **Grounding:** everything in this plan maps to code that already exists
@@ -92,7 +92,8 @@ website/
 │   ├── components/
 │   │   ├── Header.astro
 │   │   ├── Footer.astro
-│   │   ├── PricingCard.astro
+│   │   ├── PricingGrid.tsx     # cards + monthly/yearly toggle (annual default)
+│   │   ├── PricingPreviewCard.astro
 │   │   ├── FeatureTable.astro
 │   │   ├── Hero.astro
 │   │   ├── CheckoutButton.tsx    # Interactive: Paddle.js overlay
@@ -112,6 +113,10 @@ website/
 │       ├── [locale]/
 │       │   ├── index.astro
 │       │   ├── pricing.astro
+│       │   ├── untuk-kafe.astro
+│       │   ├── untuk-minimarket.astro
+│       │   ├── untuk-warung.astro
+│       │   ├── untuk-restoran.astro
 │       │   ├── features.astro
 │       │   ├── download.astro
 │       │   ├── login.astro
@@ -265,47 +270,59 @@ on the owned domain is the real inbox-not-spam fix — see
 > | OZ-POS Pro — `pro_01m05gdcbasdrc6wczkdc1bn3v` | `pri_01m05gdnqp30xze6db73qcracp` — $19/mo |
 > | OZ-POS Premium — `pro_01m05gdctj4qcph8a957xwm9nw` | `pri_01m05gdpk4hmnm0k8e6vxm8cec` — $49/mo |
 >
+> ⚠️ **Superseded by the 5-tier lineup** (subscription-tiers.md §2): the
+> prices above are the OLD $19/$49 sandbox prices. The six real Paddle
+> prices (Plus/Pro/Premium × monthly/yearly) do not exist yet — the site
+> displays the new lineup with placeholder price ids, so checkout degrades
+> to the mailto fallback until the catalog lands (`PADDLE_PRICE_TIERS`
+> needs the six price ids once D2 ships).
+>
 > **IDR limitation:** Paddle does not support IDR as a billing currency
 > (its price-currency allowlist has no IDR). The `id` locale displays Rp
-> but the checkout charges the USD price id above (Rp 299.000 ≈ $19,
-> Rp 749.000 ≈ $49). True IDR billing would need a local provider
-> (e.g. Midtrans/Xendit).
+> but the checkout charges the USD price id above. True IDR billing would
+> need a local provider (e.g. Midtrans/Xendit — see subscription-tiers.md
+> §2 Payment routing).
 
-### Global (USD)
-
-| Tier | tier_key | Price | Type |
-|------|----------|-------|------|
-| Free | `trial` | $0 | 90-day trial |
-| Pro | `pro` | $19/mo | Monthly |
-| Premium | `premium` | $49/mo | Monthly |
-| Enterprise | `enterprise` | Custom | Contact sales |
-
-### Indonesia (IDR)
+### Global (USD) — subscription-tiers.md §2 (FINAL 2026-08-17)
 
 | Tier | tier_key | Price | Type |
 |------|----------|-------|------|
-| Free | `trial` | Rp 0 | 90-day trial |
-| Pro | `pro` | Rp 299.000/mo | Monthly |
-| Premium | `premium` | Rp 749.000/mo | Monthly |
+| Free | `free` | $0 | Free forever |
+| Plus | `plus` | $4.99/mo · $49.99/yr | Monthly / yearly |
+| Pro ⭐ | `pro` | $9.99/mo · $99.99/yr | Monthly / yearly |
+| Premium | `premium` | $19.99/mo · $199.99/yr | Monthly / yearly |
 | Enterprise | `enterprise` | Custom | Contact sales |
+
+### Indonesia (IDR) — subscription-tiers.md §2 (FINAL 2026-08-17)
+
+| Tier | tier_key | Price | Type |
+|------|----------|-------|------|
+| Free | `free` | Rp 0 | Gratis selamanya |
+| Plus | `plus` | Rp 49.000/mo · Rp 500.000/yr | Bulanan / tahunan |
+| Pro ⭐ | `pro` | Rp 99.000/mo · Rp 1.000.000/yr | Bulanan / tahunan |
+| Premium | `premium` | Rp 199.000/mo · Rp 2.000.000/yr | Bulanan / tahunan |
+| Enterprise | `enterprise` | Kustom | Hubungi sales |
 
 > **"1-Time / perpetual" is NOT in the tier enum today.** Adding it means a
 > new `tier_key` value (e.g. `lifetime`) in the schema **and** client-side
 > quota/licensing changes (`crates/oz-core/src/subscription.rs`). Excluded
 > from v1 — decide separately.
 
-### Feature Comparison (placeholders)
+### Feature Comparison (subscription-tiers.md §3)
 
-| Feature | Free (`trial`) | Pro | Premium | Enterprise |
-|---------|----------------|-----|---------|------------|
-| Duration | 90 days | Monthly | Monthly | Custom |
-| Stores | 1 | 1 | Unlimited | Unlimited |
-| Registers | 1 | 2 | Unlimited | Unlimited |
-| Warehouses | 1 | 1 | Unlimited | Unlimited |
-| QRIS Payment | ✗ | ✓ | ✓ | ✓ |
-| Cloud Sync | ✗ | ✓ | ✓ | ✓ |
-| Lua Scripting | ✗ | ✗ | ✓ | ✓ |
-| Priority Support | ✗ | ✗ | ✓ | ✓ |
+| Feature | Free | Plus | Pro | Premium | Enterprise |
+|---------|------|------|-----|---------|------------|
+| Stores | 1 | 1 | 2 | Unlimited | Unlimited |
+| Registers / store | 1 | 2 | 5 | Unlimited | Unlimited |
+| Warehouses | 1 | 2 | 3 | Unlimited | Unlimited |
+| Staff users | 1 | 5 | 20 | Unlimited | Unlimited |
+| Sales history | 30 days | Unlimited | Unlimited | Unlimited | Unlimited |
+| QRIS | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Daily Sales Dashboard | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Analytics / KDS | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Loyalty / Lua | ✗ | ✗ | ✗ | ✓ | ✓ |
+
+(The full matrix lives in `website/src/content/pricing/{en,id}.ts`.)
 
 ---
 
@@ -417,7 +434,7 @@ https://license.oz-pos.com/api/v1/paddle/webhook        (new server work)
 
 | Element | Detail |
 |---------|--------|
-| Tier Cards | Trial / Pro / Premium / Enterprise (real tier enum) |
+| Tier Cards | Free / Plus / Pro ⭐ / Premium / Enterprise — annual default toggle ("2 months free") |
 | Feature Comparison | Full matrix below cards |
 | Buy Buttons | Paddle overlay checkout (product id per locale) |
 | Trust Signals | "30-day money back" · "Cancel anytime" |
@@ -455,6 +472,19 @@ Data comes from `/api/v1/web/me` — the account page is read-only.
 | Platform Cards | Windows / macOS / Linux |
 | Version Info | Current version (0.0.25), release date |
 | System Requirements | OS version, RAM, disk |
+
+### Vertical Landing Pages (`/[locale]/untuk-{kafe,minimarket,warung,restoran}`)
+
+Lead with vertical language + the OZ-POS positioning statement, never tier
+names (subscription-tiers.md §5). Each page deep-links to its natural tier
+on the pricing page via the `#plus` / `#pro` / `#premium` card anchors:
+
+| Page | Entry hook | Tier CTA |
+|------|-----------|----------|
+| `untuk-kafe` | KDS + analytics + multi-terminal | Pro |
+| `untuk-minimarket` | Inventory + multi-terminal + warehouses | Pro |
+| `untuk-warung` | QRIS + Daily Sales Dashboard | Plus |
+| `untuk-restoran` | KDS + loyalty + scheduled reports | Premium |
 
 ---
 
@@ -666,7 +696,7 @@ Until a `lifetime` tier ships, only time-based tiers exist:
 
 | License Type | tier_key | Updates Included |
 |-------------|----------|------------------|
-| Free Trial | `trial` | All updates during the 90-day trial |
+| Free | `free` | All updates — free forever (license server renews free at +100y) |
 | Pro | `pro` | All updates while subscribed |
 | Premium | `premium` | All updates while subscribed |
 | Enterprise | `enterprise` | Contract terms |
@@ -702,12 +732,13 @@ License server side (new work) needs locally:
 
 | Enhancement | Priority |
 |-------------|----------|
+| Paddle price catalog — six real prices (Plus/Pro/Premium × monthly/yearly) | P0 — required before paid checkout |
 | `lifetime` (1-Time) tier — schema + client change | P1 |
 | httpOnly cookie sessions + CSRF | P1 |
+| Midtrans checkout for IDR (Phase 2 — subscription-tiers.md §2) | P1 |
 | Paddle customer portal (change plan / invoices self-serve) | P2 |
 | OAuth login (Google, GitHub) | P2 |
 | Blog (markdown-based, SEO) | P2 |
-| Annual pricing toggle | P2 |
 | Customer testimonials | P3 |
 | Newsletter signup | P3 |
 | Dark/Light mode toggle | P3 |

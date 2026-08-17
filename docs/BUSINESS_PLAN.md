@@ -14,7 +14,15 @@ To democratize enterprise-grade, zero-downtime point-of-sale infrastructure for 
 
 ## 2. Product Tiering & Hybrid Pricing Model
 
-To capture the diverse landscape of Indonesian commerce—ranging from neighborhood stores (*warung kelontong*) to nationwide retail chains—OZ-POS employs a **hybrid pricing strategy** spanning four distinct tiers:
+> ⚠️ **Superseded for pricing (2026-08-17):** the tier lineup and prices in
+> this section are **outdated** — the approved lineup is **Free · Plus · Pro
+> ⭐ · Premium · Enterprise** with USD/IDR prices, annual "2 months free"
+> billing, and the full quota/feature matrix, per
+> [`subscription-tiers.md`](../subscription-tiers.md) (FINAL, single source
+> of truth). The 1-Time/Standard/Pro/Enterprise model and the IDR figures
+> below are retained as historical market analysis only.
+
+To capture the diverse landscape of Indonesian commerce—ranging from neighborhood stores (*warung kelontong*) to nationwide retail chains—OZ-POS originally employed a **hybrid pricing strategy** spanning four distinct tiers:
 
 ```mermaid
 graph TD

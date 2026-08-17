@@ -3,8 +3,9 @@ export function getStaticPaths() {
   return [{ params: { locale: 'en' } }, { params: { locale: 'id' } }];
 }
 import Base from '../../layouts/Base.astro';
-import PricingCard from '../../components/PricingCard.astro';
 import FeatureTable from '../../components/FeatureTable.astro';
+import PricingGrid from '../../components/PricingGrid.tsx';
+import { getRelativeLocaleUrl } from 'astro:i18n';
 import { t } from '../../i18n';
 import { pricingFor, featureRowsFor } from '../../content/pricing';
 
@@ -12,6 +13,8 @@ const locale = Astro.currentLocale ?? 'en';
 const pageTitle = `OZ-POS — ${t(locale, 'pricingPage.title')}`;
 const pricing = pricingFor(locale);
 const rows = featureRowsFor(locale);
+const downloadHref = getRelativeLocaleUrl(locale, 'download');
+const contactHref = 'mailto:sales@oz-pos.com';
 ---
 
 <Base title={pageTitle} description={t(locale, 'pageDesc.pricing')}>
@@ -21,9 +24,7 @@ const rows = featureRowsFor(locale);
       <p class="mx-auto mt-3 max-w-2xl text-muted">{t(locale, 'pricingPage.subtitle')}</p>
     </div>
 
-    <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-      {pricing.map((tier) => <PricingCard tier={tier} />)}
-    </div>
+    <PricingGrid client:load tiers={pricing} locale={locale} downloadHref={downloadHref} contactHref={contactHref} />
 
     <div class="mt-6 flex justify-center gap-6 text-sm text-muted">
       <span>✓ {t(locale, 'pricingPage.trust1')}</span>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { t } from '../i18n';
-import type { PricingTier } from '../content/pricing/types';
+import type { CheckoutTier } from '../content/pricing/types';
 import { hasSession, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout, getSessionEmail } from './paddle';
 
 /**
@@ -15,7 +15,8 @@ import { hasSession, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckou
  * the button degrades to a mailto fallback (see website-plan.md §7).
  */
 interface Props {
-  tier: PricingTier;
+  /** Billing-resolved tier (price id for the selected period — see PricingGrid). */
+  tier: CheckoutTier;
   locale: string;
 }
 

@@ -4,7 +4,8 @@ import { t } from '../i18n';
 
 interface Props {
   rows: FeatureRow[];
-  columns: PricingTier[];
+  /** Only tierKey + name are rendered (prices live in the card grid). */
+  columns: Pick<PricingTier, 'tierKey' | 'name'>[];
 }
 
 const { rows, columns } = Astro.props;

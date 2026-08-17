@@ -2,10 +2,21 @@
 
 # ADR #5: Subscription Tier & Entitlement Architecture
 
-**Status:** Implemented (2026-07-10)
+**Status:** Implemented (2026-07-10) — ⚠️ **SUPERSEDED for tier lineup & quotas by `subscription-tiers.md` (FINAL, approved 2026-08-17)**
 **Date:** 2026-07-10
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** subscriptions, entitlements, billing, multi-store, quotas, offline-grace
+
+> **Supersession note:** [`subscription-tiers.md`](../../subscription-tiers.md) is now the single source
+> of truth for tier pricing, quotas, and feature gates. The lineup is
+> **Free · Plus · Pro ⭐ · Premium · Enterprise** (this ADR's `Free / Pro /
+> Premium / Enterprise` matrix and the old numeric quotas — e.g. Pro = 2
+> stores / 3 registers, Premium = 5 stores — are outdated; the new matrix
+> is Pro = 2 stores / 5 registers, Premium = unlimited). The architectural
+> mechanism this ADR defines — signed `tenant_subscription`, per-store quota
+> checks, `InstanceStatus` downgrade/recovery, offline grace — remains valid
+> and unchanged. `TODO.md` Phase C0/C1 tracks the quota-value migration in
+> `crates/oz-core/src/subscription.rs`.
 
 ---
 
@@ -33,7 +44,7 @@ Because OZ-POS stores data locally in SQLite (`rusqlite`), subscription limits m
 -- Lives in the GLOBAL database (alongside store_profiles, terminals, users, roles)
 CREATE TABLE tenant_subscription (
     tenant_id          TEXT PRIMARY KEY,
-    tier_key           TEXT NOT NULL,        -- 'free', 'pro', 'premium', 'enterprise'
+    tier_key           TEXT NOT NULL,        -- 'free', 'plus', 'pro', 'premium', 'enterprise'
     status             TEXT NOT NULL,        -- 'active', 'past_due', 'canceled'
     expires_at         TEXT NULL,            -- ISO timestamp (NULL = lifetime/free)
     max_stores         INTEGER NOT NULL,

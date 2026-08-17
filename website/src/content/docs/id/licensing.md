@@ -1,37 +1,45 @@
 ---
 title: Lisensi & Paket
-description: Paket, uji coba, kedaluwarsa, dan masa tenggang.
+description: Paket, paket gratis selamanya, kedaluwarsa, dan masa tenggang.
 category: reference
 order: 1
-updated: "2026-08-16"
+updated: "2026-08-17"
 ---
 
 ## Paket
 
-OZ-POS memiliki empat paket: `trial`, `pro`, `premium`, dan `enterprise`.
-Apa yang dibuka setiap paket — toko, register, gudang, pembayaran QRIS,
-sinkron cloud, dan skrip — ditampilkan di [halaman harga](../../pricing/).
+OZ-POS memiliki lima paket: `free`, `plus`, `pro`, `premium`, dan
+`enterprise`. Apa yang dibuka setiap paket — toko, register, gudang,
+pembayaran QRIS, sinkron cloud, dan skrip — ditampilkan di
+[halaman harga](../../pricing/).
 
-| Kapabilitas    | Gratis            | Pro               | Premium           | Enterprise        |
-| -------------- | ----------------- | ----------------- | ----------------- | ----------------- |
-| Toko           | 1                 | 1                 | Tanpa batas       | Tanpa batas       |
-| Register       | 1                 | 2                 | Tanpa batas       | Tanpa batas       |
-| Gudang         | 1                 | 1                 | Tanpa batas       | Tanpa batas       |
-| Pembayaran QRIS| Tidak             | ✓                 | ✓                 | ✓                 |
-| Sinkron cloud  | Tidak             | ✓                 | ✓                 | ✓                 |
-| Skrip          | Tidak             | Tidak             | ✓                 | ✓                 |
+| Kapabilitas         | Gratis | Plus | Pro | Premium | Enterprise |
+| ------------------- | ------ | ---- | --- | ------- | ---------- |
+| Toko                | 1      | 1    | 2   | Tanpa batas | Tanpa batas |
+| Register / toko     | 1      | 2    | 5   | Tanpa batas | Tanpa batas |
+| Gudang              | 1      | 2    | 3   | Tanpa batas | Tanpa batas |
+| Riwayat penjualan   | 30 hari | Tanpa batas | Tanpa batas | Tanpa batas | Tanpa batas |
+| Pembayaran QRIS     | Tidak  | ✓    | ✓   | ✓       | ✓         |
+| Sinkron cloud       | Tidak  | ✓    | ✓   | ✓       | ✓         |
+| Skrip (Lua)         | Tidak  | Tidak | Tidak | ✓     | ✓         |
 
-## Uji coba 90 hari
+Paket tahunan = 2 bulan gratis (bayar 10 bulan, dapat 12).
 
-Uji coba membuka **seluruh produk** selama 90 hari — setiap ruang kerja,
-fitur, dan batas berada di paket tertinggi. Tidak perlu kunci lisensi untuk
-memulai: uji coba dimulai pada peluncuran pertama, dan Anda dapat membeli
-serta naik paket kapan saja tanpa menginstal ulang.
+## Paket Gratis
+
+Paket Gratis bersifat **gratis selamanya** — satu toko, satu register, satu
+gudang, dan riwayat penjualan 30 hari. Tidak perlu kunci lisensi untuk
+memulai: paket Gratis dimulai pada peluncuran pertama, dan Anda dapat naik
+paket kapan saja tanpa menginstal ulang. Setelah 30 hari, transaksi yang
+lebih lama disembunyikan di balik ajakan naik paket — tidak ada yang
+dihapus.
 
 ## Membeli dan mengaktifkan
 
-Paket berbayar dibeli di checkout situs web cukup dengan email Anda — tanpa
-akun. Kunci lisensi dan struk tiba melalui email, lalu Anda tempel kunci ke
+Paket berbayar dibeli di checkout situs web. Pembayaran bersifat
+register-first: checkout meminta Anda masuk dengan email (kode sekali pakai
+atau kata sandi) sehingga langganan terhubung ke akun Anda. Kunci lisensi dan
+tanda terima tiba melalui email, lalu Anda tempel kunci ke
 **Pengaturan → Lisensi** untuk mengaktifkan. Lihat
 [Aktivasi Lisensi](../activation/) untuk perjalanan lengkap, dan
 [halaman harga](../../pricing/) untuk harga terkini.

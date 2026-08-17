@@ -1,9 +1,19 @@
 # Technical Specification: Hardware Fingerprint Anti-Abuse Trial Lock
 
 **Specification ID:** SPEC-2026-TRIAL-LOCK  
-**Status:** Active Draft  
+**Status:** Active Draft — ⚠️ trial definition re-scoped (see note)  
 **Target Module:** `crates/oz-security`, `apps/desktop-client/src/commands/license.rs`, License Auth Server (PocketBase)  
 **Date:** 2026-07-20  
+
+> **Re-scope note (2026-08-17):** the flat **90-day free trial** referenced
+> throughout this spec is superseded by `subscription-tiers.md` §4 — the Free
+> tier is now **free forever**, and paid trials are segmented by signup
+> vertical (14-day Plus trial general, 14-day Pro trial restaurant/cafe,
+> 30-day Pro trial enterprise-referral). This spec's hardware-fingerprint
+> anti-abuse mechanism (one trial per physical device) still applies to the
+> segmented trials to prevent reset abuse; the expiry/lock wording should be
+> read against the trial types in `subscription-tiers.md` §4 rather than a
+> single 90-day window. Tracked by `TODO.md` C2.1.
 
 ---
 
