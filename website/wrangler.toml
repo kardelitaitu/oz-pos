@@ -14,16 +14,23 @@
 
 name = "oz-pos"
 
-# Workers static assets: serve the built site with zero server code.
-# NOTE: an assets-only Worker must NOT declare a binding — wrangler rejects
-# `binding` in that mode ("Cannot use assets with a binding in an assets-only
-# Worker"). Plain directory form is correct.
-assets = { directory = "./dist" }
+# Worker + static assets: worker.ts serves the site from the ASSETS binding
+# and exposes /__oz/runtime-config.js backed by the LICENSE_API_URL [vars]
+# binding, so the backend URL can change at runtime without rebuilding the
+# bundle (the build-time PUBLIC_LICENSE_API_URL stays as the fallback).
+main = "worker.ts"
+assets = { directory = "./dist", binding = "ASSETS" }
 
 # The runtime compatibility date. Bump deliberately (never forward-date):
 # `npx wrangler deploy` warns if this is more than a few days old.
 compatibility_date = "2026-08-16"
 
+[vars]
+# Runtime backend URL — overrides the build-time PUBLIC_LICENSE_API_URL.
+# Update this (dashboard → Worker → Settings → Variables, or wrangler.toml)
+# when the Northflank host changes; no site rebuild required.
+LICENSE_API_URL = "https://oz--cloud--76cyv4d6bn54.code.run"
+
 # PUBLIC_* env vars are baked into the JS at BUILD time (import.meta.env),
-# so nothing goes here — set them when running `npm run build`:
+# so they are NOT bindings — set them when running `npm run build`:
 #   PUBLIC_LICENSE_API_URL=… PUBLIC_PADDLE_CLIENT_TOKEN=… npm run build

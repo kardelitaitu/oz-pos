@@ -26,6 +26,10 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Runtime backend URL: served by the Worker from [vars] so a backend
+         move needs no rebuild (see worker.ts); absent locally → falls back
+         to the build-time PUBLIC_LICENSE_API_URL. -->
+    <script is:inline src="/__oz/runtime-config.js"></script>
     <!-- Apply the stored theme before first paint (dark is the default). -->
     <script is:inline>
       (() => {

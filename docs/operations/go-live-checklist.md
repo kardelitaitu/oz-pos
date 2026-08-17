@@ -165,7 +165,7 @@ a broken relay or rotated secret pages someone.
 
 - **Website secrets** (GitHub Actions → Settings → Secrets, consumed by `website.yml`
   and baked at build time): `PUBLIC_LICENSE_API_URL` (the `code.run` URL),
-  `PUBLIC_PADDLE_CLIENT_TOKEN`, `PUBLIC_PADDLE_ENVIRONMENT=sandbox`.
+  `PUBLIC_PADDLE_CLIENT_TOKEN`, `PUBLIC_PADDLE_ENVIRONMENT=sandbox`. The runtime override lives in `website/wrangler.toml` → `[vars] LICENSE_API_URL` — update it there (or the Worker dashboard) when the host changes; no rebuild needed.
 - **Paddle sandbox checkout** is unblocked by the **default payment link** — now a
   checklist step in §1b #1 (do it before the §3 deploy).
 - **Domain + SPF/DKIM/DMARC** is the real inbox-not-spam fix once `oz-pos.com` is owned

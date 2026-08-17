@@ -21,7 +21,7 @@ npm run build      # i18n audit gate + build to dist/
   contact link (the whole checkout path is dead-code-eliminated at build).
 - `PUBLIC_CONTACT_ENDPOINT` unset → contact form falls back to mailto.
 
-## Environment variables (build-time, Astro `PUBLIC_*` only)
+## Environment variables
 
 See `.env.example` for the full list with comments.
 
@@ -31,6 +31,13 @@ See `.env.example` for the full list with comments.
 | `PUBLIC_PADDLE_CLIENT_TOKEN` | Paddle.js v2 client token (empty = mailto fallback) |
 | `PUBLIC_PADDLE_ENVIRONMENT` | Paddle SDK env: `sandbox` or `production` (default `production`) |
 | `PUBLIC_CONTACT_ENDPOINT` | Contact-form target on the license server (empty = mailto) |
+
+`PUBLIC_LICENSE_API_URL` is resolved at **runtime** when served by the Worker:
+`website/worker.ts` exposes `/__oz/runtime-config.js` from the `LICENSE_API_URL`
+`[vars]` binding (wrangler.toml), loaded by the layout head before the bundle.
+Change that var — dashboard or wrangler.toml — to repoint the site; **no rebuild
+needed**. The build-time value above is only the fallback (local preview /
+static hosts, or an unset var).
 
 ## Deploy (Cloudflare Workers static assets)
 

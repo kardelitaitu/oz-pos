@@ -3,6 +3,7 @@ import { t } from '../i18n';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
+import { licenseApiUrl } from '../lib/runtime-config';
 
 /**
  * Sign-in form (website-plan.md §5/§11). Payment is register-first: the
@@ -19,7 +20,7 @@ import PasswordStrength from './PasswordStrength';
  * account dashboard by default. Degrades to a "not configured" notice when
  * PUBLIC_LICENSE_API_URL is unset.
  */
-const API = import.meta.env.PUBLIC_LICENSE_API_URL as string | undefined;
+const API = licenseApiUrl();
 
 interface Props {
   locale: string;

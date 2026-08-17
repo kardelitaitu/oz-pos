@@ -5,6 +5,7 @@ import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import { getSessionEmail, openPaddleCheckout } from './paddle';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
+import { licenseApiUrl } from '../lib/runtime-config';
 
 /**
  * Account dashboard (website-plan.md §8/§11). Reads the session token from
@@ -15,7 +16,7 @@ import PasswordStrength from './PasswordStrength';
  * the account must exist before payment). Graceful in every failure mode:
  * no token, API unset, server error.
  */
-const API = import.meta.env.PUBLIC_LICENSE_API_URL as string | undefined;
+const API = licenseApiUrl();
 
 interface MeResponse {
   tenant?: {
