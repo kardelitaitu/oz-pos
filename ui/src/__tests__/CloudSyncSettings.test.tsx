@@ -221,6 +221,12 @@ async function waitForSyncSection() {
     expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
   });
   navigateToSync();
+  // The section body (server URL field) renders after the async settings
+  // snapshot resolves — waiting on the sidebar treeitem alone let the first
+  // label query race ahead of the section render (flaky in CI).
+  await waitFor(() => {
+    expect(screen.getByLabelText(/server url/i)).toBeInTheDocument();
+  });
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
