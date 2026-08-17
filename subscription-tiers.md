@@ -58,48 +58,29 @@ Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
 
 ## 3. Quota & feature matrix
 
-### Numeric limits
-
-| Dimension | Free | Plus | Pro | Premium | Enterprise |
+| Feature | Free | Plus | Pro | Premium | Enterprise |
 | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Numeric limits** | | | | | |
 | Max stores | 1 | 1 | 3 | Unlimited | Unlimited |
 | Max terminals (registers) / store | 1 | 2 | 5 | Unlimited | Unlimited |
 | Max warehouses | 1 | 1 | 3 | Unlimited | Unlimited |
 | Max KDS screens | 0 | 0 | 1 / store | Unlimited | Unlimited |
 | Max staff users * | 1 | 5 | 20 | Unlimited | Unlimited |
-
-\* Max staff users — not enforced anywhere yet; implement (or drop) before shipping.
-
-### Workspace types
-
-| Type | Free | Plus | Pro | Premium | Enterprise |
-| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Workspace types** | | | | | |
 | `restaurant-pos` / `store-pos` / `admin` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `inventory` / `warehouse` | ✗ | ✓ | ✓ | ✓ | ✓ |
 | `kds` | ✗ | ✗ | ✓ | ✓ | ✓ |
-
-### Payments
-
-| Feature | Free | Plus | Pro | Premium | Enterprise |
-| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Payments** | | | | | |
 | Cash & manual split | ✓ | ✓ | ✓ | ✓ | ✓ |
 | QRIS (Midtrans) | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Stripe cards | ✗ | ✗ | ✓ | ✓ | ✓ |
 | Multi-currency | ✗ | ✗ | ✓ | ✓ | ✓ |
-
-### Sync & cloud
-
-| Feature | Free | Plus | Pro | Premium | Enterprise |
-| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Sync & cloud** | | | | | |
 | Offline-first SQLite engine | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Cloud sync (PostgreSQL outbox) | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Multi-store dashboard | ✗ | ✗ | ✓ | ✓ | ✓ |
 | CSV / data export | ✓ | ✓ | ✓ | ✓ | ✓ |
-
-### Business logic
-
-| Feature | Free | Plus | Pro | Premium | Enterprise |
-| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Business logic** | | | | | |
 | Custom tax (PPN / PB1 / service) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Product bundles | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Lua scripting | ✗ | ✗ | ✗ | ✓ | ✓ |
@@ -107,20 +88,12 @@ Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
 | Multi-warehouse routing | ✗ | ✗ | ✓ | ✓ | ✓ |
 | Live order simulation debugger | ✗ | ✗ | ✓ | ✓ | ✓ |
 | AI demand forecasting (roadmap) | ✗ | ✗ | ✗ | ✗ | ✓ |
-
-### Hardware (HAL)
-
-| Feature | Free | Plus | Pro | Premium | Enterprise |
-| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Hardware (HAL)** | | | | | |
 | Scanner / printer / cash drawer | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Customer display | ✗ | ✗ | ✓ | ✓ | ✓ |
 | KDS hardware | ✗ | ✗ | ✓ | ✓ | ✓ |
 | Custom HAL drivers | ✗ | ✗ | ✗ | ✗ | ✓ |
-
-### Support & platform
-
-| Feature | Free | Plus | Pro | Premium | Enterprise |
-| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Support & platform** | | | | | |
 | Community forum | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Email / chat support | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Priority support | ✗ | ✗ | ✗ | ✓ | ✓ |
@@ -128,6 +101,8 @@ Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
 | White-label branding | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Offline grace period | — (never expires) | 14 days | 14 days | 14 days | custom |
 | Enterprise services (dedicated hosting, ERP adaptors, account manager) | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+\* Max staff users — not enforced anywhere yet; implement (or drop) before shipping.
 
 ---
 
