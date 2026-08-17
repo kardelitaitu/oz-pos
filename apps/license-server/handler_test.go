@@ -1584,7 +1584,7 @@ func TestTrialVerticalSegmentation(t *testing.T) {
 
 			// Quota block must come from the segmented tier, not the key's
 			// default (plus = 1 store / 2 registers, pro = unlimited + kds).
-			expectedStores, expectedPOS, expectedTypes := tierQuotas(tc.tier)
+			expectedStores, expectedPOS, expectedTypes := tierQuotas(tc.tier, "")
 			if sp.MaxStores != expectedStores {
 				t.Errorf("vertical %q: expected max_stores=%d, got %d", tc.vertical, expectedStores, sp.MaxStores)
 			}

@@ -177,7 +177,7 @@ func TestMaxMachinesForTier_Plus(t *testing.T) {
 }
 
 func TestTierQuotas_Plus(t *testing.T) {
-	maxStores, maxPOS, allowedTypes := tierQuotas("plus")
+	maxStores, maxPOS, allowedTypes := tierQuotas("plus", "")
 	if maxStores != 1 {
 		t.Errorf("plus max_stores should be 1, got %d", maxStores)
 	}

@@ -355,7 +355,7 @@ func midtransProvision(app core.App, n midtransNotification) error {
 		keyRecord.Set("tier_key", tier)
 		keyRecord.Set("status", "unused")
 		keyRecord.Set("expires_at", expiresAt)
-		maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+		maxStores, maxPOS, allowedTypes := tierQuotas(tier, "")
 		keyRecord.Set("max_stores", maxStores)
 		keyRecord.Set("max_pos_instances", maxPOS)
 		if b, err := json.Marshal(allowedTypes); err == nil {
@@ -383,7 +383,7 @@ func midtransProvision(app core.App, n midtransNotification) error {
 	}
 
 	// ── Upsert the RSA-signed subscription ────────────────────
-	maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+	maxStores, maxPOS, allowedTypes := tierQuotas(tier, "")
 	graceUntil := calculateGraceUntil(mustParseTime(expiresAt)).Format(time.RFC3339)
 	payload := SubscriptionPayload{
 		TenantID:        tenant.Id,

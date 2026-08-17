@@ -362,7 +362,13 @@ func verifyPaddleConfig() error {
 
 // tierQuotas returns the subscription quota block for a tier, mirroring
 // the plan's product table and maxMachinesForTier semantics. 0 = unlimited.
-func tierQuotas(tier string) (maxStores, maxPOSInstances int, allowedTypes []string) {
+// bundle is an optional vertical-bundle id (subscription-tiers.md §3,
+// C3.2): "restaurant_starter" unlocks the kds workspace type at the Plus
+// tier (bundles are Plus+ per §3 — Pro+ already includes kds, so a bundle
+// only ever widens Plus). Webhook minting passes the bundle from the
+// checkout when the website leg ships; activation passes the request's
+// normalized bundle_id.
+func tierQuotas(tier, bundle string) (maxStores, maxPOSInstances int, allowedTypes []string) {
 	all := []string{"restaurant-pos", "store-pos", "inventory", "warehouse", "admin", "kds"}
 	switch tier {
 	case "pro", "premium", "enterprise":
@@ -370,7 +376,11 @@ func tierQuotas(tier string) (maxStores, maxPOSInstances int, allowedTypes []str
 	case "plus":
 		// 1 store, 2 registers/store, no kds (§3 Workspace Types — kds is Pro+).
 		// maxWarehouses is enforced client-side via SubscriptionTier::max_warehouses().
-		return 1, 2, []string{"restaurant-pos", "store-pos", "admin", "inventory", "warehouse"}
+		types := []string{"restaurant-pos", "store-pos", "admin", "inventory", "warehouse"}
+		if bundle == "restaurant_starter" {
+			types = append(types, "kds")
+		}
+		return 1, 2, types
 	case "free":
 		return 1, 1, []string{"restaurant-pos", "store-pos", "admin"}
 	default:
@@ -691,7 +701,7 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		keyRecord.Set("tier_key", tier)
 		keyRecord.Set("status", "unused")
 		keyRecord.Set("expires_at", expiresAt)
-		maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+		maxStores, maxPOS, allowedTypes := tierQuotas(tier, "")
 		keyRecord.Set("max_stores", maxStores)
 		keyRecord.Set("max_pos_instances", maxPOS)
 		if b, err := json.Marshal(allowedTypes); err == nil {
@@ -719,7 +729,7 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 	}
 
 	// ── Upsert the RSA-signed subscription ────────────────────
-	maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+	maxStores, maxPOS, allowedTypes := tierQuotas(tier, "")
 	status := "active"
 	graceUntil := calculateGraceUntil(mustParseTime(expiresAt)).Format(time.RFC3339)
 	payload := SubscriptionPayload{
@@ -862,7 +872,7 @@ func paddleUpdate(app core.App, ev paddleEvent) error {
 			subRecord.Set("tier_key", tier)
 			// Refresh the tier's quota block so the re-sign below reads the new
 			// tier's limits, not the ones captured at provisioning time.
-			maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+			maxStores, maxPOS, allowedTypes := tierQuotas(tier, "")
 			subRecord.Set("max_stores", maxStores)
 			subRecord.Set("max_pos_instances", maxPOS)
 			if b, err := json.Marshal(allowedTypes); err == nil {

@@ -603,17 +603,14 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// Trial keys: override the tier, expiry, and quota block with the
-		// vertical segmentation (§4). The key record's own values serve as
-		// the default for blank/unknown verticals (trialSegmentation).
-		// A recognized bundle (TODO C3.2) additionally unlocks the kds
-		// workspace at the Plus trial tier.
+		// vertical segmentation (§4) plus the request's bundle (C3.2). The
+		// key record's own values serve as the default for blank/unknown
+		// verticals (trialSegmentation). tierQuotas applies the bundle: a
+		// recognized bundle unlocks kds at the Plus tier.
 		if isTrialKey {
 			tierKey = trialTier
 			expiresAt = time.Now().UTC().AddDate(0, 0, trialDays)
-			maxStores, maxPOSInstances, allowedTypes = tierQuotas(trialTier)
-			if trialTier == "plus" && normalizeBundleID(req.BundleID) == "restaurant_starter" {
-				allowedTypes = append(allowedTypes, "kds")
-			}
+			maxStores, maxPOSInstances, allowedTypes = tierQuotas(trialTier, normalizeBundleID(req.BundleID))
 		}
 
 		sub := SubscriptionPayload{
