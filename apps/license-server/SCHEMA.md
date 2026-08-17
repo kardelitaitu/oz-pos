@@ -23,6 +23,8 @@ Stores the license keys generated for customers. You create these manually in th
 | `max_pos_instances` | Number | *Optional* | Tier quota (0 = unlimited). Populated by the Paddle webhook. |
 | `allowed_types` | JSON | *Optional* | JSON array of allowed workspace types for the tier. |
 | `paddle_sub_id` | Text | *Optional* | Paddle Billing `sub_...` id that issued the key. Set ⇒ webhook-issued (enables email+key activation and expiry sync on `subscription.updated`). Uniquely indexed (partial). |
+| `midtrans_sub_id` | Text | *Optional* | Midtrans Subscription API subscription id this key belongs to (recurring charges share it). Set ⇒ Midtrans webhook-issued; enables expiry refresh on later charges. Uniquely indexed (partial). |
+| `midtrans_order_id` | Text | *Optional* | Midtrans `order_id` of the most recent charge that minted/refreshed this key. Lookup key for charges that arrive before a `subscription_id` exists. |
 | `is_trial` | Bool | *Optional* | True for segmented-trial keys (C2.1). Activation mints a short Plus/Pro license from the request's `trial_vertical` (14-day Plus general, 14-day Pro restaurant/cafe, 30-day Pro enterprise referral) instead of the key's own tier/expiry/quota. Paid keys leave it unset. |
 
 ---
@@ -63,6 +65,8 @@ Stores the cryptographically signed subscription payload. This record is automat
 | `signature` | Text | **Mandatory** | The base64 cryptographic signature verified by the POS client. |
 | `grace_until` | Date | *Optional* | Secondary date allowing limited offline usage buffering if the POS cannot connect. |
 | `paddle_sub_id` | Text | *Optional* | Paddle Billing `sub_...` id this record mirrors — the lookup key for `subscription.updated` / `canceled` events. Uniquely indexed (partial). |
+| `midtrans_sub_id` | Text | *Optional* | Midtrans Subscription API subscription id this record mirrors — the lookup key for recurring-charge refreshes. Uniquely indexed (partial). |
+| `midtrans_order_id` | Text | *Optional* | Midtrans `order_id` of the most recent charge that provisioned/refreshed this record. |
 | `max_stores` | Number | *Optional* | Tier quota (0 = unlimited). Persisted whenever a subscription record is created (Paddle provisioning, manual activation, renew) and refreshed on Paddle tier change; read back for `/status` and webhook re-signs. |
 | `max_pos_instances` | Number | *Optional* | Tier quota (0 = unlimited). Persisted with the subscription record (Paddle provisioning, manual activation, renew) and refreshed on Paddle tier change. |
 | `allowed_types` | JSON | *Optional* | JSON array of allowed workspace types for the tier. Persisted with the subscription record (Paddle provisioning, manual activation, renew) and refreshed on Paddle tier change. |

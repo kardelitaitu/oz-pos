@@ -192,6 +192,34 @@
         "type": "text"
       },
       {
+        "help": "Midtrans Subscription API subscription id this key belongs to (recurring charges share it). Set => Midtrans webhook-issued; enables expiry refresh on later charges.",
+        "hidden": false,
+        "id": "text3141592653",
+        "max": 100,
+        "min": 0,
+        "name": "midtrans_sub_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Midtrans order_id of the most recent charge that minted/refreshed this key. Lookup key for charges that arrive before a subscription_id exists.",
+        "hidden": false,
+        "id": "text1618033989",
+        "max": 100,
+        "min": 0,
+        "name": "midtrans_order_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
         "help": "True for segmented-trial keys (C2.1): activation mints a short Plus/Pro license from the request's trial_vertical instead of the key's own tier/expiry/quota. Paid keys leave this unset.",
         "hidden": false,
         "id": "bool2837461521",
@@ -224,7 +252,8 @@
     ],
     "indexes": [
       "CREATE UNIQUE INDEX idx_license_keys_key ON license_keys (key)",
-      "CREATE UNIQUE INDEX idx_license_keys_paddle_sub ON license_keys (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''"
+      "CREATE UNIQUE INDEX idx_license_keys_paddle_sub ON license_keys (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''",
+      "CREATE UNIQUE INDEX idx_license_keys_midtrans_sub ON license_keys (midtrans_sub_id) WHERE midtrans_sub_id IS NOT NULL AND midtrans_sub_id != ''"
     ]
   },
   {
@@ -546,6 +575,34 @@
         "type": "text"
       },
       {
+        "help": "Midtrans Subscription API subscription id this record mirrors — the lookup key for recurring-charge refreshes.",
+        "hidden": false,
+        "id": "text2718281829",
+        "max": 100,
+        "min": 0,
+        "name": "midtrans_sub_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Midtrans order_id of the most recent charge that provisioned/refreshed this record.",
+        "hidden": false,
+        "id": "text3141592654",
+        "max": 100,
+        "min": 0,
+        "name": "midtrans_order_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
         "help": "Max stores for this subscription's tier (0 = unlimited). Populated by the Paddle webhook; matches the license key's quota block.",
         "hidden": false,
         "id": "number1618033988",
@@ -604,7 +661,8 @@
       }
     ],
     "indexes": [
-      "CREATE UNIQUE INDEX idx_subscriptions_paddle_sub ON subscriptions (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''"
+      "CREATE UNIQUE INDEX idx_subscriptions_paddle_sub ON subscriptions (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''",
+      "CREATE UNIQUE INDEX idx_subscriptions_midtrans_sub ON subscriptions (midtrans_sub_id) WHERE midtrans_sub_id IS NOT NULL AND midtrans_sub_id != ''"
     ]
   },
   {

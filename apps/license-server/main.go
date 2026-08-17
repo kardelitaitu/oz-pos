@@ -95,11 +95,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// ── Bootstrap: Paddle webhook config ─────────────────────────
-	// Fail fast when the webhook would answer 503/500 on every event
+	// ── Bootstrap: webhook config ────────────────────────────────
+	// Fail fast when a webhook would answer 503/500 on every event
 	// (missing secret or price→tier map): purchases would provision
-	// nothing and Paddle would retry forever (see verifyPaddleConfig).
+	// nothing and the provider would retry forever (see verifyPaddleConfig
+	// / verifyMidtransConfig).
 	if err := verifyPaddleConfig(); err != nil {
+		log.Fatal(err)
+	}
+	if err := verifyMidtransConfig(); err != nil {
 		log.Fatal(err)
 	}
 
@@ -152,6 +156,14 @@ func main() {
 		if err := ensureIsTrialField(app); err != nil {
 			return err
 		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// Midtrans webhook (C3.1): fresh boots get the midtrans_sub_id /
+		// midtrans_order_id fields from the embedded pb_schema.json; existing
+		// pb_data volumes get them added without reimporting the schema.
+		// Existing records keep empty values — they were Paddle-minted.
+		if err := ensureMidtransFields(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -195,6 +207,11 @@ func main() {
 		// paddle_webhook.go). NOT behind the web CORS allowlist: Paddle sends
 		// no Origin, and the Paddle-Signature header is the gate.
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
+		// Midtrans payment-notification webhook — signature-verified,
+		// server-to-server (see midtrans_webhook.go). NOT behind the web CORS
+		// allowlist: Midtrans sends no Origin, and the signature_key is the
+		// gate.
+		se.Router.POST(midtransWebhookPath, handleMidtransWebhook(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
 		// /api/health: PocketBase's built-in endpoint registers before this
@@ -352,6 +369,42 @@ func ensureIsTrialField(app core.App) error {
 		return fmt.Errorf("failed to add is_trial field: %w", err)
 	}
 	log.Println("migrated license_keys collection: added is_trial field")
+	return nil
+}
+
+// ensureMidtransFields adds the midtrans_sub_id / midtrans_order_id text
+// fields to license_keys and subscriptions for existing deployments that
+// predate the Midtrans webhook (fresh boots get them from the embedded
+// pb_schema.json). Idempotent: no-op once both fields exist. Existing
+// records keep empty values — they were minted by the Paddle webhook.
+func ensureMidtransFields(app core.App) error {
+	for _, name := range []string{"license_keys", "subscriptions"} {
+		collection, err := app.FindCollectionByNameOrId(name)
+		if err != nil {
+			return fmt.Errorf("%s collection not found: %w", name, err)
+		}
+		if collection.Fields.GetByName("midtrans_sub_id") != nil && collection.Fields.GetByName("midtrans_order_id") != nil {
+			continue
+		}
+		if collection.Fields.GetByName("midtrans_sub_id") == nil {
+			collection.Fields.Add(&core.TextField{
+				Name: "midtrans_sub_id",
+				Max:  100,
+				Help: "Midtrans Subscription API subscription id this record mirrors — the lookup key for recurring-charge refreshes.",
+			})
+		}
+		if collection.Fields.GetByName("midtrans_order_id") == nil {
+			collection.Fields.Add(&core.TextField{
+				Name: "midtrans_order_id",
+				Max:  100,
+				Help: "Midtrans order_id of the most recent charge that provisioned/refreshed this record.",
+			})
+		}
+		if err := app.Save(collection); err != nil {
+			return fmt.Errorf("failed to add midtrans fields to %s: %w", name, err)
+		}
+		log.Printf("migrated %s collection: added midtrans_sub_id / midtrans_order_id fields", name)
+	}
 	return nil
 }
 

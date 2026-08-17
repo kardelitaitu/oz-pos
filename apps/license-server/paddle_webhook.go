@@ -665,50 +665,10 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		return fmt.Errorf("cannot resolve customer email for subscription %s (set custom_data.email or PADDLE_API_KEY)", sub.ID)
 	}
 
-	// ── Upsert tenant by email ────────────────────────────────
-	tenant, err := app.FindFirstRecordByData("tenants", "email", email)
+	// ── Upsert tenant by email (shared with the Midtrans webhook) ──
+	tenant, err := upsertTenantByEmail(app, email, strings.TrimSpace(sub.CustomData["phone"]), "paddle")
 	if err != nil {
-		tenantColl, collErr := app.FindCollectionByNameOrId("tenants")
-		if collErr != nil {
-			return fmt.Errorf("tenants collection not found: %w", collErr)
-		}
-		tenant = core.NewRecord(tenantColl)
-		tenant.Set("email", email)
-		// Paddle customers may not provide a phone (custom_data.phone if
-		// they did) — the field is optional now.
-		if p := strings.TrimSpace(sub.CustomData["phone"]); p != "" {
-			tenant.Set("phone", p)
-		} else {
-			tenant.Set("phone", "-")
-		}
-		// Placeholder api_key (never revealed): the customer's real api_key
-		// is minted at first activation (see activate.go), which is when the
-		// POS learns it. The bcrypt hash keeps the unique index satisfied.
-		placeholder := generateAPIKey()
-		hash, lookup, hashErr := hashAPIKey(placeholder)
-		if hashErr != nil {
-			return fmt.Errorf("failed to hash placeholder api_key: %w", hashErr)
-		}
-		tenant.Set("api_key", hash)
-		tenant.Set("api_key_lookup", lookup)
-		tenant.Set("status", "active")
-		// Purchase-created tenants have not completed OTP verification
-		// (register-first means buyers usually have, but the flag's meaning
-		// is "proved inbox ownership via verify-otp" — they can do that
-		// anytime via request-otp).
-		tenant.Set("email_verified", false)
-		if saveErr := app.Save(tenant); saveErr != nil {
-			return fmt.Errorf("failed to save tenant %q: %w", email, saveErr)
-		}
-		log.Printf("paddle webhook: created tenant %q (id=%s) for subscription %s", email, tenant.Id, sub.ID)
-	} else if tenant.GetString("phone") == "" || tenant.GetString("phone") == "-" {
-		// Backfill a phone provided later at checkout, if any.
-		if p := strings.TrimSpace(sub.CustomData["phone"]); p != "" {
-			tenant.Set("phone", p)
-			if saveErr := app.Save(tenant); saveErr != nil {
-				log.Printf("paddle webhook: failed to backfill phone for tenant %q: %v", email, saveErr)
-			}
-		}
+		return err
 	}
 
 	startsAt, expiresAt := subscriptionTimes(sub, tier)
@@ -818,6 +778,61 @@ func mustParseTime(s string) time.Time {
 		return time.Now().UTC()
 	}
 	return t
+}
+
+// upsertTenantByEmail finds or creates the tenants record for a webhook
+// purchase, shared by the Paddle and Midtrans webhooks so both billing
+// paths mint identical tenant records. The phone is backfilled when
+// non-empty (Paddle checkout may collect it; Midtrans notifications do not
+// carry one). New tenants get a placeholder api_key — the real key is
+// minted at first activation (see activate.go), which is when the POS
+// learns it — and have not completed OTP verification (register-first means
+// buyers usually have, but the flag's meaning is "proved inbox ownership via
+// verify-otp").
+func upsertTenantByEmail(app core.App, email, phone, provider string) (*core.Record, error) {
+	tenant, err := app.FindFirstRecordByData("tenants", "email", email)
+	if err == nil {
+		if phone != "" && (tenant.GetString("phone") == "" || tenant.GetString("phone") == "-") {
+			tenant.Set("phone", phone)
+			if saveErr := app.Save(tenant); saveErr != nil {
+				log.Printf("%s webhook: failed to backfill phone for tenant %q: %v", provider, email, saveErr)
+			}
+		}
+		return tenant, nil
+	}
+
+	tenantColl, collErr := app.FindCollectionByNameOrId("tenants")
+	if collErr != nil {
+		return nil, fmt.Errorf("tenants collection not found: %w", collErr)
+	}
+	tenant = core.NewRecord(tenantColl)
+	tenant.Set("email", email)
+	if phone != "" {
+		tenant.Set("phone", phone)
+	} else {
+		tenant.Set("phone", "-")
+	}
+	// Placeholder api_key (never revealed): the customer's real api_key is
+	// minted at first activation (see activate.go), which is when the POS
+	// learns it. The bcrypt hash keeps the unique index satisfied.
+	placeholder := generateAPIKey()
+	hash, lookup, hashErr := hashAPIKey(placeholder)
+	if hashErr != nil {
+		return nil, fmt.Errorf("failed to hash placeholder api_key: %w", hashErr)
+	}
+	tenant.Set("api_key", hash)
+	tenant.Set("api_key_lookup", lookup)
+	tenant.Set("status", "active")
+	// Purchase-created tenants have not completed OTP verification
+	// (register-first means buyers usually have, but the flag's meaning is
+	// "proved inbox ownership via verify-otp" — they can do that anytime
+	// via request-otp).
+	tenant.Set("email_verified", false)
+	if saveErr := app.Save(tenant); saveErr != nil {
+		return nil, fmt.Errorf("failed to save tenant %q: %w", email, saveErr)
+	}
+	log.Printf("%s webhook: created tenant %q (id=%s)", provider, email, tenant.Id)
+	return tenant, nil
 }
 
 // paddleUpdate handles subscription.updated: refresh tier/status/expiry on
