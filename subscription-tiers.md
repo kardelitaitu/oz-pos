@@ -40,16 +40,17 @@ figure, e.g. Premium yearly ≈ $125, which drifts with FX).
 
 ## 3. Quota & feature matrix
 
-TBD = not yet decided (Pro store/terminal/warehouse counts).
-
 ### Numeric limits
 
 | Dimension | Free | Plus | Pro | Premium | Enterprise |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| Max stores | 1 | 1 | TBD | Unlimited | Unlimited |
-| Max terminals (registers) / store | 1 | 2 | TBD | Unlimited | Unlimited |
-| Max warehouses | 1 | 1 | TBD | Unlimited | Unlimited |
-| Max KDS screens | 0 | 0 | 1 | Unlimited | Unlimited |
+| Max stores | 1 | 1 | 3 | Unlimited | Unlimited |
+| Max terminals (registers) / store | 1 | 2 | 5 | Unlimited | Unlimited |
+| Max warehouses | 1 | 1 | 3 | Unlimited | Unlimited |
+| Max KDS screens | 0 | 0 | 1 / store | Unlimited | Unlimited |
+| Max staff users * | 1 | 5 | 20 | Unlimited | Unlimited |
+
+\* Max staff users — not enforced anywhere yet; implement (or drop) before shipping.
 
 ### Workspace types
 
@@ -105,8 +106,8 @@ TBD = not yet decided (Pro store/terminal/warehouse counts).
 | Community forum | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Email / chat support | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Priority support | ✗ | ✗ | ✗ | ✓ | ✓ |
-| Software updates | minor only | minor + major | minor + major | minor + major | minor + major |
-| White-label branding | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Software updates | minor + major | minor + major | minor + major | minor + major | minor + major |
+| White-label branding | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Offline grace period | — (never expires) | 14 days | 14 days | 14 days | custom |
 | Enterprise services (dedicated hosting, ERP adaptors, account manager) | ✗ | ✗ | ✗ | ✗ | ✓ |
 
