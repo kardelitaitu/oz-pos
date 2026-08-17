@@ -18,18 +18,22 @@
 
 ## 2. Pricing
 
-USD is billed via Paddle (Paddle cannot bill IDR — Rp figures are display only).
+USD and IDR are **independent market prices**: global customers pay the USD
+rate; Indonesian customers pay the IDR rate (lower, set for the local
+market). Paddle bills in USD only — the IDR rates are honored via Paddle
+country price overrides for Indonesia (the customer's charge ≈ the Rp figure).
 
 | Tier | USD/mo | USD/yr (≈off) | IDR/mo | IDR/yr (≈off) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Free** | $0 | — | Rp 0 | — |
-| **Plus** | $5 | $50 (16.7%) | Rp 79.000 | Rp 799.000 (15.7%) |
-| **Pro** | $10 | $100 (16.7%) | Rp 159.000 | Rp 1.499.000 (21.4%) |
-| **Premium** | $25 | $250 (16.7%) | Rp 399.000 | Rp 3.599.000 (24.8%) |
+| **Plus** | $5 | $50 (16.7%) | Rp 49.000 | Rp 500.000 (15.0%) |
+| **Pro** | $10 | $100 (16.7%) | Rp 99.000 | Rp 1.000.000 (15.8%) |
+| **Premium** | $25 | $250 (16.7%) | Rp 199.000 | Rp 2.000.000 (16.2%) |
 | **Enterprise** | Bespoke | Bespoke | Kustom | Kustom |
 
-USD yearly = pay 10 months (10 × monthly, ≈17% off). IDR yearly = increasing
-15–25% ladder. Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
+Yearly = pay 10 months (10 × monthly, ≈15–17% off) in both currencies.
+Six Paddle prices total (Plus/Pro/Premium × monthly/yearly); the IDR rates
+map to country-specific overrides for Indonesia.
 
 ## 3. Quota & feature matrix
 
