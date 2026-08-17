@@ -179,7 +179,7 @@ pub enum InstanceStatus {
 
 ## Open Questions
 
-1. **✅ Resolved:** The public key is embedded in the binary via `include_str!("oz-license.key.pub")` in `crates/oz-core/src/license_verification.rs`. Overridable via `OZ_LICENSE_PUBLIC_KEY` env var for testing. See ADR #9.
+1. **✅ Resolved:** The public key is embedded in the binary via `include_str!("oz-license.key.pub")` in `crates/oz-core/src/license_verification.rs` (`LICENSE_PUBLIC_KEY_PEM`) — build-time only; an earlier note claimed an `OZ_LICENSE_PUBLIC_KEY` env override, but the code never reads it, so swapping the key requires recompiling. See ADR #9.
 2. **✅ Resolved:** After 14 days offline, `effective_tier()` falls back to Free tier quotas. The register must reconnect to the license server to restore paid tier features. See `is_within_grace_period()` in `crates/oz-core/src/subscription.rs`.
 3. **Deferred:** Device-bound terminals always count as one instance toward the quota. A future ADR may distinguish device-bound instances (fixed hardware) from user-picked instances (floating licenses) for quota purposes.
 
