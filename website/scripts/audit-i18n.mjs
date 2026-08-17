@@ -27,6 +27,7 @@ const idKeys = new Set(flatKeys(id));
 function collect(dir) {
   return readdirSync(dir).flatMap((name) => {
     const p = join(dir, name);
+    if (name === '__tests__') return [];
     if (statSync(p).isDirectory()) return collect(p);
     return ['.astro', '.ts', '.tsx'].includes(extname(p)) ? [p] : [];
   });

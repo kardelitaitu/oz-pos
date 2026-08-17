@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import type { PricingTier } from '../content/pricing/types';
 import { hasSession, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout, getSessionEmail } from './paddle';
@@ -22,6 +22,13 @@ interface Props {
 export default function CheckoutButton({ tier, locale }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  // SSR-safe label: hasSession() reads sessionStorage, which does not
+  // exist during the Astro server render. Rendering it unconditionally
+  // made the SSR HTML say "Sign in to subscribe" while hydration showed
+  // the real CTA for signed-in users (React hydration mismatch #418).
+  // The label resolves only after mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const priceId = tier.priceId;
 
   // No checkout path: placeholder price (not yet catalogued) OR the client
@@ -57,7 +64,8 @@ export default function CheckoutButton({ tier, locale }: Props) {
         return;
       }
       await openPaddleCheckout(priceId, email);
-    } catch {
+    } catch (err) {
+      console.error('checkout open failed', err);
       setError(true);
     } finally {
       setLoading(false);
@@ -72,7 +80,7 @@ export default function CheckoutButton({ tier, locale }: Props) {
         disabled={loading}
         className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
       >
-        {loading ? '…' : hasSession() ? tier.cta : t(locale, 'checkout.signInToSubscribe')}
+        {loading ? '…' : mounted && hasSession() ? tier.cta : t(locale, 'checkout.signInToSubscribe')}
       </button>
       {error && (
         <p className="text-xs text-link" role="alert">

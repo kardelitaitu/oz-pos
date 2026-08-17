@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
-import { getSessionEmail, isPaddleConfigured, openPaddleCheckout } from './paddle';
+import { clearSession, getSessionEmail, isPaddleConfigured, openPaddleCheckout } from './paddle';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -89,8 +89,9 @@ export default function AccountView({ locale }: Props) {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {
-      // Expired/revoked session — clear the stored token; caller shows anon.
-      sessionStorage.removeItem('oz_session');
+      // Expired/revoked session — clear the stored token AND the cached
+      // email; caller shows anon.
+      clearSession();
       return null;
     }
     if (!res.ok) throw new Error('me failed');
@@ -185,7 +186,8 @@ export default function AccountView({ locale }: Props) {
           if (mountedRef.current) setRefreshState(found ? 'idle' : 'pending');
         })();
       });
-    } catch {
+    } catch (err) {
+      console.error('checkout open failed', err);
       setSubscribeError(true);
     } finally {
       setSubscribing(null);
@@ -409,7 +411,7 @@ export default function AccountView({ locale }: Props) {
               // Ignore network errors — logout is idempotent server-side.
             }
           }
-          sessionStorage.removeItem('oz_session');
+          clearSession();
           window.location.href = `/${locale}`;
         }}
         className="text-sm text-muted transition hover:text-ink"

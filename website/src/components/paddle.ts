@@ -62,6 +62,12 @@ export type OnCheckoutClosed = (completed: boolean) => void;
 // fires when the overlay closes (success screen dismissed or cancelled).
 let checkoutCompleted = false;
 let checkoutClosedListener: OnCheckoutClosed | null = null;
+// Paddle.Initialize registers the one-shot eventCallback (v2) and must
+// run once per page — re-initializing on a second checkout open is not
+// supported (the SDK logs "Cannot call Paddle.Initialize() more than
+// once per page, the call was ignored."). Environment.set stays
+// idempotent and re-runs every open.
+let initialized = false;
 
 /** Registered with Paddle.Initialize on the first call; fans events out. */
 function paddleEventCallback(event: PaddleEvent): void {
@@ -158,12 +164,25 @@ export async function openPaddleCheckout(
   window.Paddle.Environment.set(ENVIRONMENT);
   checkoutCompleted = false;
   checkoutClosedListener = onClosed ?? null;
-  window.Paddle.Initialize({ token: TOKEN, eventCallback: paddleEventCallback });
+  if (!initialized) {
+    window.Paddle.Initialize({ token: TOKEN, eventCallback: paddleEventCallback });
+    initialized = true;
+  }
   window.Paddle.Checkout.open({
     items: [{ priceId, quantity: 1 }],
     customer: { email },
     customData: { email },
   });
+}
+
+/** Remove the session token AND the cached email (logout / 401 paths). */
+export function clearSession(): void {
+  try {
+    window.sessionStorage.removeItem(SESSION_KEY);
+    window.sessionStorage.removeItem(EMAIL_KEY);
+  } catch {
+    // Storage unavailable (private mode) — nothing to clear.
+  }
 }
 
 /** True when a session token is present (signed in). */
@@ -189,6 +208,12 @@ export async function getSessionEmail(): Promise<string | null> {
     const res = await fetch(`${API}/api/v1/web/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (res.status === 401) {
+      // Expired/revoked session — clear the token AND the cached email
+      // so the next account on this browser can't inherit the old email.
+      clearSession();
+      return null;
+    }
     if (!res.ok) return null;
     const data = (await res.json()) as { tenant?: { email?: string } };
     const email = data.tenant?.email ?? null;

@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-  "prebuild": "node scripts/audit-i18n.mjs && node scripts/check-password-policy.mjs && bash scripts/import-portal.sh --if-exists",  "check": "astro check",
-  "precheck": "node scripts/audit-i18n.mjs && node scripts/check-password-policy.mjs",
+  "prebuild": "node scripts/audit-i18n.mjs && node scripts/check-password-policy.mjs && bash scripts/import-portal.sh --if-exists && vitest run",  "check": "astro check",
+  "precheck": "node scripts/audit-i18n.mjs && node scripts/check-password-policy.mjs && vitest run",
   "check:i18n": "node scripts/audit-i18n.mjs",
   "check:links": "node scripts/check-links.mjs",
     "astro": "astro",
     "deploy": "npm run build && wrangler deploy",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.2.2",
@@ -32,6 +33,8 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.9.0",
-    "wrangler": "^4.60.0"
+    "wrangler": "^4.60.0",
+    "vitest": "4.1.10",
+    "jsdom": "^24.1.0"
   }
 }
