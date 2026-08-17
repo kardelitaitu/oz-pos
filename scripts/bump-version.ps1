@@ -74,8 +74,12 @@ function Update-File {
 # 2. Update version strings in all codebase files
 Write-Host "`nUpdating version strings..." -ForegroundColor Cyan
 
-Update-File "AGENTS.md" "- **Version is locked at the current release (`$currentVersion`).** Never change the version number" "- **Version is locked at the current release (`$TargetVersion`).** Never change the version number"
-Update-File ".agents/AGENTS.md" "- **Version is locked at `$currentVersion`.** Never change the version number" "- **Version is locked at `$TargetVersion`.** Never change the version number"
+# NOTE: the Markdown backticks around the version must be DOUBLED in the
+# PowerShell string — a single backtick escapes the `$` and renders a
+# literal "$currentVersion", so the pattern would never match and the file
+# would be silently skipped (it happened for 0.0.26).
+Update-File "AGENTS.md" "- **Version is locked at the current release (``$currentVersion``).** Never change the version number" "- **Version is locked at the current release (``$TargetVersion``).** Never change the version number"
+Update-File ".agents/AGENTS.md" "- **Version is locked at ``$currentVersion``.** Never change the version number" "- **Version is locked at ``$TargetVersion``.** Never change the version number"
 Update-File "Cargo.toml" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
 Update-File "Dockerfile.server" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
 Update-File "apps/desktop-client/tauri.conf.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
@@ -103,7 +107,10 @@ $changelogPath = "CHANGELOG.md"
 if (Test-Path $changelogPath) {
     $content = Get-Content -Path $changelogPath -Raw
     $date = Get-Date -Format "yyyy-MM-dd"
-    $heading = "## [$TargetVersion] — $date"
+    # Build the em-dash via [char] so the script stays pure-ASCII: the file
+    # is BOM-less UTF-8, and Windows PowerShell 5.1 reads it as cp1252 where
+    # the em-dash bytes contain 0x94 (a quote char) that breaks parsing.
+    $heading = "## [$TargetVersion] $([char]0x2014) $date"
     $headingRe = "(?m)^## \[${TargetVersion}\]"
     if ($content -match $headingRe) {
         Write-Host "Skipped (heading already present): $changelogPath" -ForegroundColor Yellow
