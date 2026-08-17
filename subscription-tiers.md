@@ -33,7 +33,10 @@ country price overrides for Indonesia (the customer's charge ≈ the Rp figure).
 
 Yearly = pay 10 months (10 × monthly, ≈15–17% off) in both currencies.
 Six Paddle prices total (Plus/Pro/Premium × monthly/yearly); the IDR rates
-map to country-specific overrides for Indonesia.
+map to country-specific overrides for Indonesia (Paddle geolocates the
+buyer's IP at checkout and applies the override for the country selected —
+IDR isn't a supported currency, so the ID override is a USD amount ≈ the Rp
+figure, e.g. Premium yearly ≈ $125, which drifts with FX).
 
 ## 3. Quota & feature matrix
 
