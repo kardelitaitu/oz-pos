@@ -363,6 +363,7 @@ func midtransProvision(app core.App, n midtransNotification) error {
 		}
 		keyRecord.Set("midtrans_sub_id", n.SubscriptionID)
 		keyRecord.Set("midtrans_order_id", n.OrderID)
+		keyRecord.Set("payment_provider", "midtrans")
 		if saveErr := app.Save(keyRecord); saveErr != nil {
 			return fmt.Errorf("failed to save license key for transaction %s: %w", n.OrderID, saveErr)
 		}
@@ -411,6 +412,7 @@ func midtransProvision(app core.App, n midtransNotification) error {
 		subRecord.Set("midtrans_sub_id", n.SubscriptionID)
 		subRecord.Set("midtrans_order_id", n.OrderID)
 	}
+	subRecord.Set("payment_provider", "midtrans")
 	subRecord.Set("tenant_id", []string{tenant.Id})
 	subRecord.Set("tier_key", tier)
 	subRecord.Set("status", "active")

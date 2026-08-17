@@ -164,6 +164,14 @@ func main() {
 		if err := ensureMidtransFields(app); err != nil {
 			return err
 		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// payment_provider discriminator (C3.1): fresh boots get it from the
+		// embedded pb_schema.json; existing pb_data volumes get it added and
+		// their records backfilled to "paddle" (everything pre-Midtrans was
+		// Paddle-minted). Webhooks set it explicitly going forward.
+		if err := ensurePaymentProviderField(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -404,6 +412,52 @@ func ensureMidtransFields(app core.App) error {
 			return fmt.Errorf("failed to add midtrans fields to %s: %w", name, err)
 		}
 		log.Printf("migrated %s collection: added midtrans_sub_id / midtrans_order_id fields", name)
+	}
+	return nil
+}
+
+// ensurePaymentProviderField adds the payment_provider select field
+// ("paddle" | "midtrans") to license_keys and subscriptions for existing
+// deployments that predate the Midtrans webhook (fresh boots get it from the
+// embedded pb_schema.json). Idempotent: no-op once the field exists. Existing
+// records backfill to "paddle" — everything before Midtrans was Paddle-minted;
+// the webhooks set the value explicitly going forward.
+func ensurePaymentProviderField(app core.App) error {
+	for _, name := range []string{"license_keys", "subscriptions"} {
+		collection, err := app.FindCollectionByNameOrId(name)
+		if err != nil {
+			return fmt.Errorf("%s collection not found: %w", name, err)
+		}
+		if collection.Fields.GetByName("payment_provider") == nil {
+			collection.Fields.Add(&core.SelectField{
+				Name:      "payment_provider",
+				Values:    []string{"paddle", "midtrans"},
+				MaxSelect: 1,
+				Help:      "Billing provider that issued this record: \"paddle\" (global, USD cards) or \"midtrans\" (Indonesian QRIS/VA/e-wallet, fixed IDR). Backfilled to paddle for pre-Midtrans records.",
+			})
+			if err := app.Save(collection); err != nil {
+				return fmt.Errorf("failed to add payment_provider to %s: %w", name, err)
+			}
+			log.Printf("migrated %s collection: added payment_provider field", name)
+		}
+
+		// Backfill existing records (a deployment that already had the field
+		// never needs this — webhooks always set it).
+		records, err := app.FindAllRecords(name)
+		if err != nil {
+			return fmt.Errorf("failed to list %s for payment_provider backfill: %w", name, err)
+		}
+		for _, rec := range records {
+			if rec.GetString("payment_provider") == "" {
+				rec.Set("payment_provider", "paddle")
+				if err := app.Save(rec); err != nil {
+					return fmt.Errorf("failed to backfill payment_provider for %s %q: %w", name, rec.Id, err)
+				}
+			}
+		}
+		if len(records) > 0 {
+			log.Printf("migrated %s collection: backfilled payment_provider=paddle on %d record(s)", name, len(records))
+		}
 	}
 	return nil
 }

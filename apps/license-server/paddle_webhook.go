@@ -698,6 +698,7 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 			keyRecord.Set("allowed_types", string(b))
 		}
 		keyRecord.Set("paddle_sub_id", sub.ID)
+		keyRecord.Set("payment_provider", "paddle")
 		if saveErr := app.Save(keyRecord); saveErr != nil {
 			return fmt.Errorf("failed to save license key for subscription %s: %w", sub.ID, saveErr)
 		}
@@ -747,6 +748,7 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		subRecord = core.NewRecord(subColl)
 		subRecord.Set("paddle_sub_id", sub.ID)
 	}
+	subRecord.Set("payment_provider", "paddle")
 	subRecord.Set("tenant_id", []string{tenant.Id})
 	subRecord.Set("tier_key", tier)
 	subRecord.Set("status", status)

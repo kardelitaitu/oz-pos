@@ -220,6 +220,21 @@
         "type": "text"
       },
       {
+        "help": "Billing provider that issued this key: \"paddle\" (global, USD cards) or \"midtrans\" (Indonesian QRIS/VA/e-wallet, fixed IDR). Backfilled to paddle for pre-Midtrans keys.",
+        "hidden": false,
+        "id": "select1414213562",
+        "maxSelect": 1,
+        "name": "payment_provider",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "select",
+        "values": [
+          "paddle",
+          "midtrans"
+        ]
+      },
+      {
         "help": "True for segmented-trial keys (C2.1): activation mints a short Plus/Pro license from the request's trial_vertical instead of the key's own tier/expiry/quota. Paid keys leave this unset.",
         "hidden": false,
         "id": "bool2837461521",
@@ -601,6 +616,21 @@
         "required": false,
         "system": false,
         "type": "text"
+      },
+      {
+        "help": "Billing provider that issued this record: \"paddle\" (global, USD cards) or \"midtrans\" (Indonesian QRIS/VA/e-wallet, fixed IDR). Backfilled to paddle for pre-Midtrans records.",
+        "hidden": false,
+        "id": "select2236067977",
+        "maxSelect": 1,
+        "name": "payment_provider",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "select",
+        "values": [
+          "paddle",
+          "midtrans"
+        ]
       },
       {
         "help": "Max stores for this subscription's tier (0 = unlimited). Populated by the Paddle webhook; matches the license key's quota block.",
