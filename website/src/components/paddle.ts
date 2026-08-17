@@ -62,6 +62,10 @@ export type OnCheckoutClosed = (completed: boolean) => void;
 // fires when the overlay closes (success screen dismissed or cancelled).
 let checkoutCompleted = false;
 let checkoutClosedListener: OnCheckoutClosed | null = null;
+// Paddle.Initialize registers the one-shot eventCallback (v2) and must
+// run once per page — re-initializing on a second checkout open is not
+// supported. Environment.set stays idempotent and re-runs every open.
+let initialized = false;
 
 /** Registered with Paddle.Initialize on the first call; fans events out. */
 function paddleEventCallback(event: PaddleEvent): void {
@@ -158,12 +162,31 @@ export async function openPaddleCheckout(
   window.Paddle.Environment.set(ENVIRONMENT);
   checkoutCompleted = false;
   checkoutClosedListener = onClosed ?? null;
-  window.Paddle.Initialize({ token: TOKEN, eventCallback: paddleEventCallback });
+  if (!initialized) {
+    window.Paddle.Initialize({ token: TOKEN, eventCallback: paddleEventCallback });
+    initialized = true;
+  }
   window.Paddle.Checkout.open({
     items: [{ priceId, quantity: 1 }],
     customer: { email },
     customData: { email },
   });
+}
+
+/**
+ * Clear the full local session: the token AND the cached email. The
+ * email cache must die with the token — otherwise the next account on
+ * the same browser would get the previous user's email prefilled in
+ * checkout, attaching the subscription to the wrong tenant (the
+ * webhook reads customData.email).
+ */
+export function clearSession(): void {
+  try {
+    window.sessionStorage.removeItem(SESSION_KEY);
+    window.sessionStorage.removeItem(EMAIL_KEY);
+  } catch {
+    // Storage unavailable (private mode) — nothing to clear.
+  }
 }
 
 /** True when a session token is present (signed in). */

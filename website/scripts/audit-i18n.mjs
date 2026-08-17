@@ -23,10 +23,13 @@ function flatKeys(obj, prefix = '') {
 const enKeys = new Set(flatKeys(en));
 const idKeys = new Set(flatKeys(id));
 
-// Collect files (excluding node_modules/dist/.astro)
+// Collect files (excluding node_modules/dist/.astro and test fixtures —
+// __tests__ only exercises keys with made-up strings that must not count as
+// app references).
 function collect(dir) {
   return readdirSync(dir).flatMap((name) => {
     const p = join(dir, name);
+    if (name === '__tests__') return [];
     if (statSync(p).isDirectory()) return collect(p);
     return ['.astro', '.ts', '.tsx'].includes(extname(p)) ? [p] : [];
   });
