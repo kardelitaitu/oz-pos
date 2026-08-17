@@ -132,7 +132,7 @@ removed) before shipping.
 | Max stores | 1 | 1 | 3 † | Unlimited | Unlimited |
 | Max terminals (registers) / store | 1 | 2 | 5 † | Unlimited | Unlimited |
 | Max warehouses | 1 | 1 | 3 † | Unlimited | Unlimited |
-| Max KDS screens | 0 | 0 | 0 † | Unlimited | Unlimited |
+| Max KDS screens | 0 | 0 | 1 | Unlimited | Unlimited |
 | Max staff users * | 1 | 3 | 10 | Unlimited | Unlimited |
 
 #### Workspace types (ADR #4)
@@ -144,7 +144,7 @@ removed) before shipping.
 | `admin` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `inventory` | ✗ | ✓ | ✓ | ✓ | ✓ |
 | `warehouse` | ✗ | ✓ | ✓ | ✓ | ✓ |
-| `kds` | ✗ | ✗ | ✗ † | ✓ | ✓ |
+| `kds` | ✗ | ✗ | ✓ | ✓ | ✓ |
 
 #### Payments
 
@@ -212,8 +212,9 @@ removed) before shipping.
      set, at a lower price). Confirm.
   2. **Stripe card payments** — Pro or Premium+? (recommend **Pro+**, giving
      Pro a capability edge over Plus beyond quantity).
-  3. **KDS** — Premium+ (ADR #5) vs all paid (current code)? (recommend
-     **Premium+**).
+  3. **KDS** — ✅ decided with D3: **Pro gets up to 1 KDS screen**, Premium+
+     unlimited. Enforcement (currently all paid tiers get `kds` with no cap)
+     must limit Pro to 1.
   4. **Lua scripting** — Pro (business plan) vs Premium+ (site)? (recommend
      **Premium+**, as shipped).
   5. **Loyalty/points** (business plan Pro+) — which tier? (recommend
@@ -320,13 +321,10 @@ fill in §3 first.
 Enterprise`; Free = free forever, 1 workspace only; Plus is a new entry tier;
 Pro/Premium keep their live Paddle prices; Enterprise stays bespoke.
 
-**2026-08-17 — D2 resolved:** pricing model = **USD + IDR display × monthly +
-yearly** for every paid tier. Monthly anchors **$0 / $5 / $10 / $25** (Free /
-Plus / Pro / Premium); **USD yearly = $50 / $100 / $250** (flat pay-10-months,
-≈17% off); IDR monthly Rp 79.000 / 159.000 / 399.000 and IDR yearly Rp
-799.000 / 1.499.000 / 3.599.000 (increasing 15–25% ladder). Worked table in
-§3 D2. Paddle still bills USD only → 6 Paddle prices to create (Plus/Pro /
-Premium × monthly/yearly); the old $19/$49 get archived.
+**2026-08-17 — D3 partial:** the numeric-limit and workspace-type matrix was
+expanded to a full ~35-row comparison table; Pro gets **max 1 KDS screen**
+(so the `kds` workspace type unlocks on Pro, unlimited on Premium+). Remaining
+numeric cells (stores/terminals/warehouses, staff users) still open.
 
 **2026-08-17 — sandbox purchase verified end-to-end:** Paddle checkout → test
 payment (`4242 4242 4242 4242`) → webhook events → transaction
