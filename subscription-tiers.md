@@ -116,23 +116,90 @@ live.
   yearly Rp 799.000 / 1.499.000 / 3.599.000 (or the flat 10×-monthly variant
   if USD/IDR should match).
 
-### D3 — Quota table (stores / registers / warehouses / workspace types)
+### D3 — Quota & feature matrix (full comparison table)
 
 The core reconciliation. Free is fixed by D1 (**1 workspace only** — one
-store, one register, one warehouse). Plus needs a definition; Pro/Premium
-currently disagree between marketing (1 store / 2 regs) and enforcement
-(unlimited). Proposed ladder (numbers are proposals — adjust freely):
+store, one register, one warehouse). Everything else below is the
+**proposal** — adjust any cell. Rows marked † are feature-gate decisions
+that **D4** finalizes (value shown = the D4 recommendation). Rows marked *
+are not enforced anywhere in the code yet — they must be implemented (or
+removed) before shipping.
 
-| | Free (forever) | Plus | Pro | Premium | Enterprise |
+#### Numeric limits
+
+| Dimension | Free (forever) | Plus | Pro | Premium | Enterprise |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Stores** | 1 | 1 | **3** (propose) | Unlimited | Unlimited |
-| **Registers / store** | 1 | 2 | **5** (propose) | Unlimited | Unlimited |
-| **Warehouses** | 1 | 1 | **3** (propose) | Unlimited | Unlimited |
-| **Workspace types** | `restaurant-pos`, `store-pos`, `admin` | + `inventory`, `warehouse` | same as Plus | + `kds` | all |
+| Max stores | 1 | 1 | 3 † | Unlimited | Unlimited |
+| Max terminals (registers) / store | 1 | 2 | 5 † | Unlimited | Unlimited |
+| Max warehouses | 1 | 1 | 3 † | Unlimited | Unlimited |
+| Max KDS screens | 0 | 0 | 0 † | Unlimited | Unlimited |
+| Max staff users * | 1 | 3 | 10 | Unlimited | Unlimited |
 
-- **Recommendation:** adopt the ladder above and update the enforcement to
-  match: `tierQuotas()` and `SubscriptionTier::max_*()` must encode the same
-  numbers as the pricing pages, or the drift resurfaces.
+#### Workspace types (ADR #4)
+
+| Type | Free (forever) | Plus | Pro | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| `restaurant-pos` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `store-pos` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `admin` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `inventory` | ✗ | ✓ | ✓ | ✓ | ✓ |
+| `warehouse` | ✗ | ✓ | ✓ | ✓ | ✓ |
+| `kds` | ✗ | ✗ | ✗ † | ✓ | ✓ |
+
+#### Payments
+
+| Feature | Free (forever) | Plus | Pro | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Cash & manual split | ✓ | ✓ | ✓ | ✓ | ✓ |
+| QRIS (Midtrans) | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Stripe cards | ✗ | ✗ | ✓ † | ✓ | ✓ |
+| Multi-currency | ✗ | ✗ | ✓ † | ✓ | ✓ |
+
+#### Sync & cloud
+
+| Feature | Free (forever) | Plus | Pro | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Offline-first SQLite engine | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Cloud sync (PostgreSQL outbox) | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Multi-store dashboard | ✗ | ✗ | ✓ | ✓ | ✓ |
+| CSV / data export | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+#### Business logic
+
+| Feature | Free (forever) | Plus | Pro | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Custom tax (PPN / PB1 / service) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Product bundles | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Lua scripting | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Loyalty tiers & points | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Multi-warehouse routing | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Live order simulation debugger | ✗ | ✗ | ✓ | ✓ | ✓ |
+| AI demand forecasting (roadmap) | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+#### Hardware (HAL)
+
+| Feature | Free (forever) | Plus | Pro | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Scanner / printer / cash drawer | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Customer display | ✗ | ✗ | ✓ | ✓ | ✓ |
+| KDS hardware | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Custom HAL drivers | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+#### Support & platform
+
+| Feature | Free (forever) | Plus | Pro | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Community forum | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Email / chat support | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Priority support | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Software updates | minor only | minor + major | minor + major | minor + major | minor + major |
+| White-label branding | ✗ | ✗ | ✗ | ✓ † | ✓ |
+| Offline grace period | — (never expires) | 14 days | 14 days | 14 days | custom |
+| Enterprise services (dedicated hosting, ERP adaptors, account manager) | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+- **Recommendation:** adopt the matrix above (adjust freely) and update the
+  enforcement to match: `tierQuotas()` and `SubscriptionTier::max_*()` must
+  encode the same numbers as the pricing pages, or the drift resurfaces.
 - **Decision:** __________
 
 ### D4 — Feature gates (what unlocks where)
@@ -220,19 +287,12 @@ fill in §3 first.
 | **Price (IDR/mo)** | Rp 0 | Rp 79.000 | Rp 159.000 | Rp 399.000 | Kustom |
 | **Price (IDR/yr)** | — | Rp 799.000 | Rp 1.499.000 | Rp 3.599.000 | — |
 | **Billing** | — | Paddle, monthly or yearly | Paddle, monthly or yearly | Paddle, monthly or yearly | Bespoke contract |
-| **Stores** | 1 | 1 | 3 | Unlimited | Unlimited |
-| **Registers / store** | 1 | 2 | 5 | Unlimited | Unlimited |
-| **Warehouses** | 1 | 1 | 3 | Unlimited | Unlimited |
-| **Workspace types** | `restaurant-pos`, `store-pos`, `admin` | + `inventory`, `warehouse` | + (as Plus) | + `kds` | all |
-| **QRIS (Midtrans)** | ✗ | ✓ | ✓ | ✓ | ✓ |
-| **Stripe cards** | ✗ | ✗ | ✓ | ✓ | ✓ |
-| **Cloud sync** | ✗ | ✓ | ✓ | ✓ | ✓ |
-| **Lua scripting** | ✗ | ✗ | ✗ | ✓ | ✓ |
-| **Priority support** | ✗ | ✗ | ✗ | ✓ | ✓ (+ AM) |
 | **License key** | — (free, hw-locked) | `OZ-PLUS-…` | `OZ-PRO-…` | `OZ-PREMIUM-…` | `OZ-ENTERPRISE-…` |
 
-> Prices are finalized in **D2 (§3)**; the quota/feature rows above remain
-> proposals pending D3/D4.
+> Prices are finalized in **D2 (§3)**. The full quota & feature comparison
+> matrix — numeric limits, workspace types, payments, sync, business logic,
+> hardware, support (≈35 rows) — lives in **§3 D3** and is the proposal
+> pending confirmation.
 
 ---
 
