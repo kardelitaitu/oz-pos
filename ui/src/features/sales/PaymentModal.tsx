@@ -1,5 +1,8 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, useContext } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
+import { LocaleContext } from '@/i18n/LocaleContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { openUpgradePricing } from '@/utils/upgrade';
 import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
@@ -78,6 +81,9 @@ export default function PaymentModal({
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // C2.2: QRIS is a Plus+ feature — caps arrive from the subscription context.
+  const { caps } = useSubscription();
+  const locale = useContext(LocaleContext)?.locale ?? 'en';
   const { addToast } = useToast();
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [otherLabel, setOtherLabel] = useState('');
@@ -1296,7 +1302,21 @@ export default function PaymentModal({
                   </div>
                 )}
 
-                {method === 'qris' && (
+                {method === 'qris' &&
+                  (caps && !caps.supportsQris ? (
+                    // C2.2: QRIS setup gate (Free→Plus trigger) — show the
+                    // upgrade prompt instead of the QR generation UI.
+                    <div className="payment-qris-upgrade" role="note">
+                      <p>{l10n.getString('payment-qris-upgrade-required')}</p>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => openUpgradePricing(locale, 'plus')}
+                      >
+                        {l10n.getString('payment-qris-upgrade-cta')}
+                      </Button>
+                    </div>
+                  ) : (
                   <div className="payment-qris-section">
                     <Localized id="payment-qris-description">
                       <p className="payment-qris-description">
@@ -1315,7 +1335,7 @@ export default function PaymentModal({
                       </Localized>
                     </button>
                   </div>
-                )}
+                  ))}
               </>
             )}
 

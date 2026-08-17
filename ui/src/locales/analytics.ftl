@@ -247,3 +247,8 @@ analytics-card-desc-tables = Table turnover and covers served.
 analytics-card-desc-occupancy = Table utilization over time.
 analytics-card-desc-waitstaff = Top-performing waitstaff by covers served.
 analytics-card-desc-voids = Items voided or removed from orders.
+
+# C2.2: Analytics is a Pro+ feature — locked screen for lower tiers.
+analytics-upgrade-required = Analytics is a Pro feature
+analytics-upgrade-message = Unlock revenue, category, and hourly reports across all your stores. Upgrade to Pro to see your full analytics dashboard.
+analytics-upgrade-cta = Upgrade to Pro

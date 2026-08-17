@@ -84,4 +84,8 @@ terminal-overrides-count = { $count ->
    *[other] { $count } penimpaan
 }
 
+# C2.2: banner batas terminal (pemicu Plus→Pro).
+terminal-limit-reached = Anda telah mencapai batas { $limit } register untuk paket Anda. Tingkatkan ke Pro hingga 5 register per toko.
+terminal-limit-upgrade-cta = Tingkatkan ke Pro
+
 # ── Promotions ──

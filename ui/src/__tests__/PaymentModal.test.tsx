@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
 import { withFluent, withFluentLocale } from '@/locales/test-utils';
@@ -7,6 +7,8 @@ import { ToastProvider } from '@/frontend/shared/Toast';
 import salesFtl from '@/locales/sales.ftl?raw';
 import salesIdFtl from '@/locales/sales.id.ftl?raw';
 import PaymentModal from '@/features/sales/PaymentModal';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
 import type { Money, CartLine, Sku, LineId } from '@/types/domain';
 
 async function renderWithFluent(ui: React.ReactElement) {
@@ -79,6 +81,48 @@ describe('PaymentModal — rendering & fast interaction', () => {
     expect(screen.getByText('$ 7,00')).toBeInTheDocument();
     expect(screen.getByLabelText(/Cash/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Card/)).toBeInTheDocument();
+  });
+
+  it('shows the QRIS upgrade prompt when the tier does not support QRIS (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'free', supportsQris: false }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(/QRIS/));
+    expect(screen.getByText(/QRIS payments are a Plus feature/)).toBeInTheDocument();
+    expect(screen.getByText('Upgrade to Plus')).toBeInTheDocument();
+  });
+
+  it('shows the QRIS generation UI when the tier supports QRIS (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'plus', supportsQris: true }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(/QRIS/));
+    expect(screen.queryByText(/QRIS payments are a Plus feature/)).not.toBeInTheDocument();
+    expect(screen.getByText('Pay with QR')).toBeInTheDocument();
   });
 
   it('does not render when closed', async () => {

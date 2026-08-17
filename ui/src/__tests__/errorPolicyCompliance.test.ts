@@ -32,10 +32,10 @@ const ALLOWED_EXT = ['.ts', '.tsx'];
 const WHITELISTED_RAW_PARSE: Array<{ file: string; line: number }> = [
   // classifyError: reads err.message for retryable/terminal classification;
   // the surfaced text goes through plainErrorMessage (ERR-05).
-  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 134 },
+  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 140 },
   // complete() catch: reads err.message to JSON-detect PartialStockResult;
   // never displayed. Non-stock errors are classified for display below.
-  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 850 },
+  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 856 },
 ];
 
 function collectFiles(): string[] {

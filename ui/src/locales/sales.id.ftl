@@ -905,6 +905,10 @@ gift-cards-txn-balance = Saldo
 gift-cards-txn-notes = Catatan
 gift-cards-txn-date = Tanggal
 
+# C2.2: QRIS adalah fitur Plus+ — ajakan tingkatkan paket di modal pembayaran.
+payment-qris-upgrade-required = Pembayaran QRIS adalah fitur Plus. Tingkatkan ke Plus untuk menerima QRIS.
+payment-qris-upgrade-cta = Tingkatkan ke Plus
+
 # ── Sales History ARIA (remaining) ──
 sales-history-search-placeholder =
     .placeholder = Cari ID penjualan, pembayaran, kasir…

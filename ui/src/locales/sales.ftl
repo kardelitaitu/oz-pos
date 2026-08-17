@@ -940,4 +940,8 @@ gift-cards-txn-balance = Balance
 gift-cards-txn-notes = Notes
 gift-cards-txn-date = Date
 
+# C2.2: QRIS is a Plus+ feature — upgrade prompt on the payment modal.
+payment-qris-upgrade-required = QRIS payments are a Plus feature. Upgrade to Plus to accept QRIS.
+payment-qris-upgrade-cta = Upgrade to Plus
+
 # Dashboard

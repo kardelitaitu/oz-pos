@@ -242,6 +242,8 @@ vi.mock('@/api/tables', () => ({
 }));
 
 import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale, cardGranularity, cardRange } from '@/features/analytics/AnalyticsScreen';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
 import { yearlyHeatmapColumns, rangeForGranularity } from '@/features/analytics/analytics-data';
 import { analyticsDataCache, clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
@@ -1941,5 +1943,42 @@ describe('hasGrantedPermission (backend has_permission mirror)', () => {
     expect(hasGrantedPermission(['sales:*'], 'analytics:view')).toBe(false);
     expect(hasGrantedPermission(['analytics:view'], 'sales:create')).toBe(false);
     expect(hasGrantedPermission(undefined, 'analytics:view')).toBe(false);
+  });
+});
+
+describe('C2.2 analytics tab lock (Plus → Pro)', () => {
+  afterEach(() => {
+    vi.mocked(useSubscription).mockImplementation(() => ({
+      caps: null,
+      loading: false,
+      refresh: vi.fn(),
+    }));
+  });
+
+  it('locks the screen with a blurred sample chart + upgrade CTA below Pro', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'plus', supportsAnalytics: false }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Analytics is a Pro feature')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Upgrade to Pro')).toBeInTheDocument();
+    // The live card grid must not render behind the lock.
+    expect(screen.queryByTestId('echarts-mock')).not.toBeInTheDocument();
+  });
+
+  it('renders the live dashboard when the tier supports analytics', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'pro', supportsAnalytics: true }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.queryByText('Analytics is a Pro feature')).not.toBeInTheDocument();
+    });
   });
 });

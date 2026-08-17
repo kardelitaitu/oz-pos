@@ -1,3 +1,18 @@
+/* C2.2 locked-screen sample chart (blurred behind TierLockedFeature). */
+.analytics-locked-sample {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  height: 160px;
+}
+
+.analytics-locked-sample span {
+  flex: 1;
+  min-width: 12px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: color-mix(in srgb, var(--color-primary) 55%, var(--color-bg-secondary));
+}
+
 /* ── Scoped light palette (AUT-1) ────────────────────────────────
    The analytics workspace is deliberately rendered as a fixed light
    surface regardless of the global theme (owner/admin reporting desk).

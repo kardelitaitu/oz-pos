@@ -2,6 +2,21 @@
   padding: var(--space-6) var(--space-8);
 }
 
+/* C2.2 terminal-limit banner (Plus→Pro trigger). */
+.terminal-limit-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  color: var(--color-fg-primary);
+  font-size: var(--text-sm);
+}
+
 .terminal-mgmt-empty {
   display: flex;
   flex-direction: column;

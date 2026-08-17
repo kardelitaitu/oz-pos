@@ -16,6 +16,8 @@ import { listAllWorkspacesScoped, type WorkspaceTypeDto } from '@/api/workspaces
 import { listStores, type StoreProfile } from '@/api/stores';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { LocaleContext } from '@/i18n/LocaleContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { openUpgradePricing as openUpgradePricingPage } from '@/utils/upgrade';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
@@ -240,6 +242,10 @@ export default function StaffManagementScreen() {
   // C1.1 upgrade link needs the active locale for the pricing URL; tests
   // render without LocaleContext, so default to English there.
   const locale = useContext(LocaleContext)?.locale ?? 'en';
+  // C2.2: Pro→Premium trigger — at 16+ staff (Pro caps at 20), nudge the
+  // owner toward Premium before they hit the hard limit.
+  const { caps } = useSubscription();
+  const atProStaffCap = caps?.tier === 'pro' && (caps.staffCount ?? 0) >= 16;
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
@@ -552,11 +558,7 @@ export default function StaffManagementScreen() {
 
   /** C1.1: open the website pricing page so the owner can upgrade the plan. */
   const openUpgradePricing = useCallback(() => {
-    window.open(
-      `https://oz-pos.adikaradwiatmaja.workers.dev/${locale}/pricing/#plus`,
-      '_blank',
-      'noopener,noreferrer',
-    );
+    openUpgradePricingPage(locale, 'plus');
   }, [locale]);
 
   // ── Deactivate / Reactivate ────────────────────────────────────
@@ -652,6 +654,16 @@ export default function StaffManagementScreen() {
           <Button onClick={openCreate}>Add Staff</Button>
         </Localized>
       </div>
+
+      {/* C2.2: Pro tier near its 20-staff cap — upgrade nudge. */}
+      {atProStaffCap && (
+        <div className="staff-mgmt-approaching-banner" role="note">
+          <span>{l10n.getString('staff-limit-approaching-premium')}</span>
+          <Button variant="primary" size="sm" onClick={() => openUpgradePricingPage(locale, 'premium')}>
+            {l10n.getString('staff-limit-approaching-premium-cta')}
+          </Button>
+        </div>
+      )}
 
       {loadError ? (
         <Card shadow="sm">

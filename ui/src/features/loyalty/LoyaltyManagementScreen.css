@@ -2,6 +2,51 @@
   padding: var(--space-4);
 }
 
+/* C2.2 locked-screen animated preview (behind TierLockedFeature). The
+   animation + keyframes are gated on no-preference so reduced-motion
+   users get the static preview (animationCompliance). */
+.loyalty-locked-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  max-width: 420px;
+}
+
+.loyalty-locked-badge {
+  font-size: var(--text-2xl);
+  color: color-mix(in srgb, var(--color-primary) 70%, var(--color-fg-secondary));
+}
+
+.loyalty-locked-bar {
+  height: 14px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-primary) 35%, var(--color-bg-secondary));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .loyalty-locked-badge {
+    animation: loyalty-locked-pulse 1.8s ease-in-out infinite;
+  }
+
+  .loyalty-locked-bar {
+    animation: loyalty-locked-slide 1.6s ease-in-out infinite alternate;
+  }
+
+  .loyalty-locked-bar:nth-child(3) { animation-delay: 0.2s; }
+  .loyalty-locked-bar:nth-child(4) { animation-delay: 0.4s; }
+
+  @keyframes loyalty-locked-pulse {
+    from { transform: scale(1); opacity: 0.7; }
+    to   { transform: scale(1.12); opacity: 1; }
+  }
+
+  @keyframes loyalty-locked-slide {
+    from { transform: translateX(-6px); }
+    to   { transform: translateX(6px); }
+  }
+}
+
 .loyalty-mgmt-header {
   display: flex;
   align-items: center;

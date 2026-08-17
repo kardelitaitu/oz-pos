@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import staffFtl from '@/locales/staff.ftl?raw';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
 
 // FAST_WAIT: 5ms polling for async assertions (10x faster than default 50ms).
 const FAST_WAIT = { interval: 5, timeout: 500 } as const;
@@ -567,5 +569,30 @@ describe('StaffManagementScreen', () => {
     fireEvent.click(within(dialog).getByLabelText(/Restaurant/));
 
     expect(within(dialog).getByRole('button', { name: /update/i })).toBeDisabled();
+  });
+
+  // ── C2.2: Pro→Premium approaching-limit banner (16+ staff) ──
+
+  it('shows the approaching-limit banner at 16+ staff on Pro (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'pro', maxStaffUsers: 20, staffCount: 16 }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+    expect(screen.getByText(/nearing the Pro plan's 20-staff limit/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /upgrade to premium/i })).toBeInTheDocument();
+  });
+
+  it('hides the approaching-limit banner on Premium (unlimited staff) (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'premium', maxStaffUsers: null, staffCount: 16 }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+    expect(screen.queryByText(/nearing the Pro plan's 20-staff limit/i)).not.toBeInTheDocument();
   });
 });

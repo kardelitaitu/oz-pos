@@ -111,6 +111,20 @@ impl SubscriptionTier {
         }
     }
 
+    /// Machine-readable tier key used in the DB and the UI
+    /// (`free`, `plus`, `pro`, `premium`, `enterprise`). The deprecated
+    /// `OneTime` variant is reported as `free` — its DB rows were always
+    /// treated as the free quota tier.
+    pub fn tier_key(&self) -> &'static str {
+        match self {
+            Self::Free | Self::OneTime => "free",
+            Self::Plus => "plus",
+            Self::Pro => "pro",
+            Self::Premium => "premium",
+            Self::Enterprise => "enterprise",
+        }
+    }
+
     /// Maximum number of stores allowed for this tier.
     /// Returns `None` for unlimited (Premium / Enterprise).
     pub fn max_stores(&self) -> Option<i64> {

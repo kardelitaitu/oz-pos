@@ -735,6 +735,7 @@ pub fn run() {
             commands::license::get_license_status,
             commands::license::check_license_status,
             commands::license::test_auth_connection,
+            commands::subscription::get_subscription_capabilities,
             // The legacy unscoped save_topology command is intentionally not
             // registered. All production writes use the authenticated,
             // revision-aware apply_topology_diff command.

@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { beforeEach, afterEach, vi } from 'vitest';
 import type * as WorkspaceContextModule from '@/contexts/WorkspaceContext';
+import type * as SubscriptionContextModule from '@/contexts/SubscriptionContext';
 
 // ── Global mock: echarts-for-react ────────────────────────────────
 // jsdom lacks Canvas 2D context support, which causes zrender (ECharts'
@@ -130,6 +131,20 @@ vi.mock('@/contexts/WorkspaceContext', async (importOriginal) => {
     ...actual,
     useWorkspace: vi.fn().mockImplementation(() => safeWorkspaceDefault),
     useWorkspaceScope: vi.fn().mockImplementation(() => safeScopeDefault),
+  };
+});
+
+// ── Global mock: @/contexts/SubscriptionContext ─────────────────────
+// C2.2 tier gates read `useSubscription()`. The safe default is `caps:
+// null` — every gate renders open (no lock, no banner) — so existing
+// tests are unaffected. Tests exercising a gate override per-test with
+// `vi.mocked(useSubscription).mockReturnValue({ caps: {…} })`.
+vi.mock('@/contexts/SubscriptionContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof SubscriptionContextModule>();
+  const safeSubscriptionDefault = { caps: null, loading: false, refresh: vi.fn() };
+  return {
+    ...actual,
+    useSubscription: vi.fn().mockImplementation(() => safeSubscriptionDefault),
   };
 });
 

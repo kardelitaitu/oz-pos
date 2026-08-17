@@ -5,6 +5,8 @@ import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
 import terminalsFtl from '@/locales/terminals.ftl?raw';
 import type { TerminalDto } from '@/api/terminals';
 
@@ -211,5 +213,35 @@ describe('TerminalManagementScreen', () => {
 
     await userEvent.click(screen.getAllByText('Register Terminal')[0]!.closest('button')!);
     await waitFor(() => expect(screen.getByText('Register New Terminal')).toBeDefined());
+  });
+
+  // ── C2.2: terminal-limit banner (Plus→Pro trigger) ────────────
+
+  it('shows the non-blocking limit banner at the tier\'s register cap (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ maxPosInstances: 2, terminalCount: 2 }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    mockListTerminals.mockResolvedValue([makeTerminal(), makeTerminal({ id: 't-2', deviceId: 'dev-002' })]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText(/register limit for your plan/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText('Upgrade to Pro')).toBeInTheDocument();
+  });
+
+  it('hides the terminal-limit banner under the cap (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ maxPosInstances: 5, terminalCount: 2 }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    mockListTerminals.mockResolvedValue([makeTerminal(), makeTerminal({ id: 't-2', deviceId: 'dev-002' })]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getAllByText('Front Counter').length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef, useContext } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { LocaleContext } from '@/i18n/LocaleContext';
+import { openUpgradePricing as openUpgradePricingPage } from '@/utils/upgrade';
 import {
   listSales,
   getSale,
@@ -234,11 +235,7 @@ export default function SalesHistoryScreen() {
 
   /** C1.2: open the website pricing page so the owner can upgrade the plan. */
   const openUpgradePricing = useCallback(() => {
-    window.open(
-      `https://oz-pos.adikaradwiatmaja.workers.dev/${locale}/pricing/#plus`,
-      '_blank',
-      'noopener,noreferrer',
-    );
+    openUpgradePricingPage(locale, 'plus');
   }, [locale]);
 
   // ── Void state ──────────────────────────────────────────────────────

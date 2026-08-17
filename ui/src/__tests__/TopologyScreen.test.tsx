@@ -8,6 +8,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, waitFor, act, screen, fireEvent, within } from '@testing-library/react';
 import TopologyScreen from '@/features/stores/TopologyScreen';
+import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
+import type { SubscriptionCapabilities } from '@/api/subscription';
 
 // ── Mocks ──────────────────────────────────────────────────────────
 
@@ -45,6 +47,16 @@ vi.mock('@/api/topology', () => ({
 
 vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspace: () => ({ sessionToken: 'test-session-token' }),
+}));
+
+// C2.2: per-file SubscriptionContext stub — plain object so the file's
+// `vi.resetAllMocks()` in beforeEach cannot wipe it; the caps value is a
+// hoisted fn the gate tests set per-test.
+const { mockUseSubscriptionCaps } = vi.hoisted(() => ({
+  mockUseSubscriptionCaps: vi.fn<(v: SubscriptionCapabilities | null) => SubscriptionCapabilities | null>(() => null),
+}));
+vi.mock('@/contexts/SubscriptionContext', () => ({
+  useSubscription: () => ({ caps: mockUseSubscriptionCaps(null), loading: false, refresh: vi.fn() }),
 }));
 
 // The editor's Apply gate mirrors the backend `staff:update` permission via
@@ -1357,5 +1369,27 @@ describe('TopologyScreen', () => {
     expect(mockAddToast).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'error', message: 'topology-rename-permission-error' }),
     );
+  });
+
+  // ── C2.2: second-store gate (Plus→Pro trigger) ───────────────
+
+  it('shows the store-limit upgrade banner at the tier cap and blocks creation (C2.2)', async () => {
+    mockUseSubscriptionCaps.mockReturnValue(makeSubscriptionCaps({ maxStores: 1, storeCount: 1 }));
+    render(<TopologyScreen />);
+    await waitFor(() => expect(capturedEditorProps.onSave).toBeDefined());
+
+    // Opening the branch-add form surfaces the inline upgrade banner.
+    fireEvent.click(screen.getByRole('button', { name: 'topology-branch-add' }));
+    expect(screen.getByText('store-limit-upgrade-pro')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'store-limit-upgrade-cta' })).toBeInTheDocument();
+  });
+
+  it('hides the store-limit banner when under the cap (C2.2)', async () => {
+    mockUseSubscriptionCaps.mockReturnValue(makeSubscriptionCaps({ maxStores: 2, storeCount: 1 }));
+    render(<TopologyScreen />);
+    await waitFor(() => expect(capturedEditorProps.onSave).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: 'topology-branch-add' }));
+    expect(screen.queryByText('store-limit-upgrade-pro')).not.toBeInTheDocument();
   });
 });

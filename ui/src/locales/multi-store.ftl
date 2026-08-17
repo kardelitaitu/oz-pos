@@ -332,3 +332,9 @@ topology-hud-wires = { $count } { $count ->
 topology-wire-label-connected = Connected
 topology-wire-label-stock-deduct = Stock Deduct (P{ $priority })
 topology-wire-label-fallback = Fallback (P{ $priority })
+
+# C2.2: second-store gate (Plus→Pro) + Pro 2-store cap nudge (Pro→Premium).
+store-limit-upgrade-pro = Your plan allows { $max } store(s). Upgrade to Pro to add more stores.
+store-limit-upgrade-cta = Upgrade to Pro
+store-limit-upgrade-premium = Opening a 3rd store? Upgrade to Premium for unlimited stores.
+store-limit-upgrade-premium-cta = Upgrade to Premium

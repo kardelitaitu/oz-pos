@@ -11,6 +11,8 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import TierLockedFeature from '@/components/TierLockedFeature';
 import { minorUnitExponent } from '@/types/domain';
 import { animDuration } from '@/utils/animation';
 import { l10nErrorMessage } from '@/utils/app-error';
@@ -296,6 +298,9 @@ const ANALYTICS_CARDS: AnalyticsCard[] = [
 export default function AnalyticsScreen() {
   const { l10n } = useLocalization();
   const { currency } = useCurrency();
+  // C2.2: Analytics is a Pro+ feature — caps arrive from the subscription
+  // context and gate the screen below.
+  const { caps } = useSubscription();
   const exp = minorUnitExponent(currency);
   // Number formatting follows the active Fluent locale, matching the other
   // analytics cards' money formatter (never a hardcoded English locale).
@@ -1018,6 +1023,31 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       </div>
     );
   };
+
+  // C2.2: Analytics tab lock (Plus→Pro trigger) — render a locked screen
+  // with a blurred sample chart + upgrade CTA instead of the live cards.
+  if (caps && !caps.supportsAnalytics) {
+    return (
+      <div className="analytics">
+        <TierLockedFeature
+          titleKey="analytics-upgrade-required"
+          messageKey="analytics-upgrade-message"
+          ctaKey="analytics-upgrade-cta"
+          target="pro"
+        >
+          <div className="analytics-locked-sample" aria-hidden="true">
+            <span style={{ height: '32%' }} />
+            <span style={{ height: '58%' }} />
+            <span style={{ height: '44%' }} />
+            <span style={{ height: '76%' }} />
+            <span style={{ height: '52%' }} />
+            <span style={{ height: '88%' }} />
+            <span style={{ height: '64%' }} />
+          </div>
+        </TierLockedFeature>
+      </div>
+    );
+  }
 
   return (
     <div className="analytics" role="region" aria-label={l10n.getString('analytics-region-aria')}>
