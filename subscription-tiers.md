@@ -28,7 +28,7 @@ country price overrides for Indonesia (the customer's charge ≈ the Rp figure).
 | **Free** | $0 | — | Rp 0 | — |
 | **Plus** | $4.99 | $49.99 (16.5%) | Rp 49.000 | Rp 500.000 (15.0%) |
 | **Pro** | $9.99 | $99.99 (16.6%) | Rp 99.000 | Rp 1.000.000 (15.8%) |
-| **Premium** | $19.99 | $249.99 ⚠ | Rp 199.000 | Rp 2.000.000 (16.2%) |
+| **Premium** | $19.99 | $199.99 (16.6%) | Rp 199.000 | Rp 2.000.000 (16.2%) |
 | **Enterprise** | Bespoke | Bespoke | Kustom | Kustom |
 
 Yearly = pay 10 months (10 × monthly, ≈15–17% off) in both currencies.
