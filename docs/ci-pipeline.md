@@ -1,6 +1,6 @@
 # CI Pipeline Dashboard — OZ-POS
 
-<!-- Audit stamp: 2026-08-03 · AUDIT-27 remediation · status: REWRITTEN — matrix and gate policy reconciled with current workflows (ci.yml, e2e-pr.yml, nightly.yml, release.yml, security.yml, docs.yml) and local runners (check.sh, check-ui.mjs). Updated 2026-08-16: website.yml added to workflow inventory. Updated 2026-08-17: website.yml check job catalog (docs portal build + internal-link audit). Updated 2026-08-17: docs.yml REMOVED - the GitHub Pages deploy is retired; the docs portal now ships exclusively via website.yml -> Cloudflare. -->
+<!-- Audit stamp: 2026-08-03 · AUDIT-27 remediation · status: REWRITTEN — matrix and gate policy reconciled with current workflows (ci.yml, e2e-pr.yml, nightly.yml, release.yml, security.yml, docs.yml) and local runners (check.sh, check-ui.mjs). Updated 2026-08-16: website.yml added to workflow inventory. Updated 2026-08-17: website.yml check job catalog (docs portal build + internal-link audit). Updated 2026-08-17: docs.yml REMOVED - the GitHub Pages deploy is retired; the docs portal now ships exclusively via website.yml -> Cloudflare. Updated 2026-08-17: deploy.yml added (Northflank auto-deploy of the unified image on main push). -->
 
 > Last updated: 2026-08-17
 
@@ -14,6 +14,7 @@
 | `release.yml` | Tag push `v*` | Build + blocking Trivy scan + publish all artifacts |
 | `security.yml` | Weekly Monday + manual | Full-tree cargo audit, cargo deny, Trivy scans |
 | `website.yml` | PR (website paths) + push to `main` (website paths) | Marketing site (Astro, `website/`): `check` job runs astro check + i18n audit, **builds the full docs portal** (mdBook hub + cargo doc + TypeDoc via `scripts/build-docs.sh`, hard-fail), `npm run build`, then the **internal-link audit** (`check:links`, failing gate) + a portal-staged smoke — on every PR/push. `deploy` job runs on main only and `wrangler deploy`s to Cloudflare Workers static assets (its portal build is soft-fail; the hub degrades to the Get Started card on failure). Fail-closed: a missing `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` secret fails the deploy job loudly instead of silently skipping. See [Job Matrix (website.yml)](#job-matrix-websiteyml) |
+| `deploy.yml` | Push to `main` (unified-image paths) + manual dispatch | Backend auto-deploy: triggers the Northflank `oz-cloud` service to build `Dockerfile.unified` at the exact pushed commit via the API, polls to build conclusion (success => the service rolls the image), then smoke-tests the public health endpoints. Fail-closed: a missing `NORTHFLANK_API_TOKEN` / project / service IDs fails the job loudly. See [Job Matrix (deploy.yml)](#job-matrix-deployyml) |
 | `android.yml` / `ios.yml` | Push to `main` | Mobile build pipelines |
 
 ## Job Matrix (ci.yml)
@@ -75,6 +76,25 @@ copy-pasted with only the fail mode differing.
 > all - `docs.yml`'s cargo-doc compile was removed along with the GitHub Pages
 > deploy. Cargo-doc compilation is still covered by nightly.yml's `docs` job, and
 > every PR compiles the whole workspace via `rust-test-apps`/`rust-test-fast`.
+
+## Job Matrix (deploy.yml)
+
+`deploy` is the backend ship path: on push to `main` (filtered to the
+unified-image inputs — `Dockerfile.unified`, `Cargo.toml`/`Cargo.lock`,
+`rust-toolchain.toml`, `crates/**`, `foundation/**`, `platform/**`,
+`modules/**`, `apps/**`) it asks Northflank to build `Dockerfile.unified` at
+the exact commit via the API, polls until the build concludes (a combined
+service auto-deploys after a successful build), then smoke-tests
+`$NORTHFLANK_SERVICE_URL/health` + `/api/health`. Not a merge gate — it runs
+only on `main`, so it is not in `gates.json`; its job appears here for the
+workflow-inventory audit.
+
+| Step | What it runs | Fails |
+|------|--------------|-------|
+| Fail-closed credential gate | missing `NORTHFLANK_API_TOKEN` secret or project/service IDs -> `::error::` + exit 1 (website.yml convention) | hard |
+| Trigger build | `POST /v1/projects/{id}/services/{id}/build` with `{"sha": <full commit sha>}` | hard (no build id -> token scope error) |
+| Poll to conclusion | `GET …/build/{buildId}` until `concluded`; `success:false` (FAILURE/CRASHED/ABORTED) fails the job — the deployment was NOT shipped | hard |
+| Smoke test | `$NORTHFLANK_SERVICE_URL/health` + `/api/health` must return 200 within 10 min (retries); prints the gate-status payload. Skipped when the URL var is unset. 503s = fail-fast env gates not yet applied (§8 env table), not a workflow bug | hard |
 
 ## Gate manifest — single source of truth (AUDIT-27 CI-08)
 

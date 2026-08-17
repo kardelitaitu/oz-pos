@@ -173,3 +173,7 @@ a broken relay or rotated secret pages someone.
   checklist step in §1b #1 (do it before the §3 deploy).
 - **Domain + SPF/DKIM/DMARC** is the real inbox-not-spam fix once `oz-pos.com` is owned
   (see `DEPLOY.md` §7).
+- **Auto-deploy wiring** — backend deploys are manual (Redeploy button) until
+  `deploy.yml` is wired: set GitHub secret `NORTHFLANK_API_TOKEN` + vars
+  `NORTHFLANK_PROJECT_ID` / `NORTHFLANK_SERVICE_ID` / `NORTHFLANK_SERVICE_URL`
+  (see runbook §8.5). Until then, run the §3 apply order and click Redeploy.

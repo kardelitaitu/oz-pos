@@ -1,0 +1,191 @@
+# ── Backend Deploy (Northflank) ─────────────────────────────────────────
+#
+# Makes merges to `main` auto-deploy the unified image (Dockerfile.unified)
+# to the `oz-cloud` service — no more manual "build → push → click Redeploy".
+#
+# How it works:
+#   The Northflank service is a git combined service: it builds
+#   `Dockerfile.unified` from the repo and auto-deploys after a successful
+#   build. This workflow triggers that build for the EXACT pushed commit via
+#   the Northflank API:
+#
+#     POST /v1/projects/{projectId}/services/{serviceId}/build
+#         { "sha": "<full commit sha>" }
+#
+#   then polls GET .../build/{buildId} until it concludes (SUCCESS → the
+#   service rolls the new image), then smoke-tests the public URL. The whole
+#   lifecycle (trigger → build → rollout → health) is one auditable check on
+#   the merge commit, instead of a dashboard click.
+#
+# Fail-closed: a missing NORTHFLANK_API_TOKEN secret or project/service IDs
+# fails the job loudly (same policy as website.yml's Cloudflare deploy) —
+# a deploy that silently doesn't happen is how the service went stale before.
+#
+# One-time setup (see docs/operations/runbook.md §8.5):
+#   * Northflank → Team settings → API tokens → create a token with
+#     Project > Services > General > Update (trigger build) + Read (poll).
+#   * GitHub secrets/vars:
+#       secret: NORTHFLANK_API_TOKEN
+#       vars:   NORTHFLANK_PROJECT_ID, NORTHFLANK_SERVICE_ID,
+#               NORTHFLANK_SERVICE_URL (the public https://…code.run URL;
+#               unset skips the post-deploy smoke test)
+#   * How to find the IDs: Northflank resource header → ⋮ → View
+#     specification, or GET /v1/projects and GET /v1/projects/{id}/services
+#     with the same token.
+#
+# Alternative (zero repo code): enable native git triggers on the service
+# (Build configuration → branch restrictions → main) — same outcome, but not
+# auditable in GitHub Actions. This workflow is the preferred, visible path.
+
+name: Deploy Backend (Northflank)
+
+on:
+  push:
+    branches: [main]
+    # Only paths that feed the unified image (Dockerfile.unified build
+    # context). Website/docs/UI-only changes must not redeploy the backend.
+    paths:
+      - Dockerfile.unified
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - crates/**
+      - foundation/**
+      - platform/**
+      - modules/**
+      - apps/**
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-northflank-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NF_API: https://api.northflank.com/v1
+  NF_PROJECT_ID: ${{ vars.NORTHFLANK_PROJECT_ID }}
+  NF_SERVICE_ID: ${{ vars.NORTHFLANK_SERVICE_ID }}
+  NF_SERVICE_URL: ${{ vars.NORTHFLANK_SERVICE_URL }}
+
+jobs:
+  deploy:
+    name: Build + deploy to Northflank
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      # Fail-closed credential gate (website.yml convention): a deploy that
+      # silently no-ops is the failure mode this workflow exists to kill.
+      - name: Fail closed if Northflank credentials missing
+        env:
+          NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+        run: |
+          if [ -z "$NF_TOKEN" ]; then
+            echo "::error::NORTHFLANK_API_TOKEN secret is not set — cannot trigger a Northflank deploy"
+            echo "::error::create a team API token (runbook §8.5) and set it as a GitHub Actions secret"
+            exit 1
+          fi
+          if [ -z "$NF_PROJECT_ID" ] || [ -z "$NF_SERVICE_ID" ]; then
+            echo "::error::NORTHFLANK_PROJECT_ID / NORTHFLANK_SERVICE_ID vars are not set — see runbook §8.5"
+            exit 1
+          fi
+          echo "Deploying commit $GITHUB_SHA to service $NF_SERVICE_ID (project $NF_PROJECT_ID)"
+
+      - name: Trigger Northflank build for the exact commit
+        id: trigger
+        env:
+          NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          # -w appends the HTTP code on a fresh line; --fail would swallow the
+          # error body, so capture it and print it for diagnosis.
+          resp=$(curl -sS -w '\n%{http_code}' \
+            -X POST "$NF_API/projects/$NF_PROJECT_ID/services/$NF_SERVICE_ID/build" \
+            -H "Authorization: Bearer $NF_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"sha\":\"$GITHUB_SHA\"}")
+          code=$(echo "$resp" | tail -1)
+          body=$(echo "$resp" | sed '$d')
+          echo "Trigger response (HTTP $code): $body"
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            echo "::error::Northflank rejected the build trigger (HTTP $code)"
+            echo "::error::check token scope (Project > Services > General > Update) and the project/service IDs"
+            exit 1
+          fi
+          build_id=$(echo "$body" | jq -r '.data.id // empty')
+          if [ -z "$build_id" ]; then
+            echo "::error::Northflank returned no build id in the response"
+            exit 1
+          fi
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+
+      # Combined services auto-deploy after a successful build, so the build
+      # outcome IS the deploy outcome. Poll until concluded; fail on any
+      # terminal non-success state (FAILURE / CRASHED / ABORTED / …).
+      # Transient API blips retry 3× per poll instead of killing the job.
+      - name: Wait for build to conclude
+        env:
+          NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+          BUILD_ID: ${{ steps.trigger.outputs.build_id }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 100); do
+            code=""
+            body=""
+            for attempt in 1 2 3; do
+              resp=$(curl -sS -w '\n%{http_code}' \
+                "$NF_API/projects/$NF_PROJECT_ID/services/$NF_SERVICE_ID/build/$BUILD_ID" \
+                -H "Authorization: Bearer $NF_TOKEN" || true)
+              code=$(echo "$resp" | tail -1)
+              body=$(echo "$resp" | sed '$d')
+              if [ "$code" = "200" ] && [ -n "$body" ]; then break; fi
+              echo "poll $i attempt $attempt: HTTP ${code:-timeout} — retrying"
+              sleep 10
+            done
+            if [ "$code" != "200" ]; then
+              echo "::error::Northflank API unreachable while polling build $BUILD_ID (HTTP ${code:-timeout})"
+              exit 1
+            fi
+            data=$(echo "$body" | jq '.data')
+            status=$(echo "$data" | jq -r '.status')
+            concluded=$(echo "$data" | jq -r '.concluded')
+            echo "build $BUILD_ID: status=$status (poll $i)"
+            if [ "$concluded" = "true" ]; then
+              if [ "$(echo "$data" | jq -r '.success')" = "true" ]; then
+                echo "Build $BUILD_ID succeeded — service is rolling the new image"
+                exit 0
+              fi
+              msg=$(echo "$data" | jq -r '.message // "no message"')
+              echo "::error::Northflank build $BUILD_ID failed: $msg"
+              echo "::error::inspect: https://app.northflank.com — the deployment was NOT shipped"
+              exit 1
+            fi
+            sleep 30
+          done
+          echo "::error::timed out waiting for build $BUILD_ID to conclude (50 min)"
+          exit 1
+
+      # Post-deploy smoke: the runbook §8 verification checklist, automated.
+      # The health endpoints 503 by design until the go-live env vars (§8 env
+      # table) are applied — a red here is the fail-fast gate working, not a
+      # workflow bug. Skipped when NORTHFLANK_SERVICE_URL is unset.
+      - name: Smoke-test the deployed service
+        run: |
+          if [ -z "$NF_SERVICE_URL" ]; then
+            echo "::notice::NORTHFLANK_SERVICE_URL unset — skipping post-deploy smoke test (deploy itself succeeded)"
+            exit 0
+          fi
+          ok=0
+          for i in $(seq 1 30); do
+            health=$(curl -sS -m 10 -o /dev/null -w '%{http_code}' "$NF_SERVICE_URL/health" || true)
+            api=$(curl -sS -m 10 -o /dev/null -w '%{http_code}' "$NF_SERVICE_URL/api/health" || true)
+            echo "smoke poll $i: /health=$health /api/health=$api"
+            if [ "$health" = "200" ] && [ "$api" = "200" ]; then ok=1; break; fi
+            sleep 20
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::deployed service did not become healthy within 10 min ($NF_SERVICE_URL)"
+            echo "::error::check the go-live env vars (§8 env table) — the fail-fast gates 503 until they are applied"
+            exit 1
+          fi
+          echo "--- /api/health payload (gate statuses) ---"
+          curl -sS -m 10 "$NF_SERVICE_URL/api/health" | jq .
+          echo "--- done ---"
