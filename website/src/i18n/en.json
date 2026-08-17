@@ -297,6 +297,8 @@
     "errorRegister": "Couldn't create the account. Please try again.",
     "errorExists": "An account with this email already exists. Sign in instead.",
     "haveAccount": "Already have an account?",
-    "signInLink": "Sign in"
+    "signInLink": "Sign in",
+    "agreeBefore": "By signing up, you agree to the",
+    "agreeSeparator": "and"
   }
 }

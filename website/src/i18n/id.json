@@ -297,6 +297,8 @@
     "errorRegister": "Tidak dapat membuat akun. Silakan coba lagi.",
     "errorExists": "Akun dengan email ini sudah ada. Masuk saja.",
     "haveAccount": "Sudah punya akun?",
-    "signInLink": "Masuk"
+    "signInLink": "Masuk",
+    "agreeBefore": "Dengan mendaftar, Anda menyetujui",
+    "agreeSeparator": "dan"
   }
 }
