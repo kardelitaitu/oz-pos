@@ -154,17 +154,28 @@ const mockGetInventoryTurnover = vi.fn(() => Promise.resolve({ units_sold: 500, 
 // off-range fixed date would be dropped (rendering an all-zero chart).
 const daysAfter = (iso: string, n: number) =>
   new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+/** ISO Monday of the current local week — matches `weekStartKey` in the loader. */
+const isoLocalMonday = () => {
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow);
+  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+};
 const mockGetInventoryTrend = vi.fn((startDate?: string, _endDate?: string, _token?: string) => Promise.resolve([
   { date: startDate ?? '2026-07-21', units_sold: 15 },
   { date: daysAfter(startDate ?? '2026-07-21', 1), units_sold: 18 },
 ]));
 // Restaurant table turnover: 3 days of completed table orders.
 // Turns of 20/30/25 → average turn minutes of 72/48/58 (1440 ÷ turns).
-const mockGetTableTurnover = vi.fn(() => Promise.resolve([
-  { date: '2026-08-10', table_orders: 20 },
-  { date: '2026-08-11', table_orders: 30 },
-  { date: '2026-08-12', table_orders: 25 },
-]));
+// Range-anchored to the queried week (like mockGetInventoryTrend) so the
+// rows always land inside the zero-filled axis — a fixed date here would
+// drift out of the weekly window and render an all-zero chart.
+const mockGetTableTurnover = vi.fn((startDate?: string, _endDate?: string, _token?: string) =>
+  Promise.resolve([
+    { date: startDate ?? '2026-08-10', table_orders: 20 },
+    { date: daysAfter(startDate ?? '2026-08-10', 1), table_orders: 30 },
+    { date: daysAfter(startDate ?? '2026-08-10', 2), table_orders: 25 },
+  ]));
 // Real hourly table activity for the occupancy curve — twin-peak shape
 // (lunch ≈ 12:00, dinner ≈ 19:00), so the derived peak hour is 19.
 const mockGetHourlyOccupancy = vi.fn(() => Promise.resolve([
@@ -200,7 +211,7 @@ vi.mock('@/api/reports', () => ({
   getVoidedItems: () => mockGetVoidedItems(),
   getInventoryTurnover: () => mockGetInventoryTurnover(),
   getInventoryTrend: (startDate: string, endDate: string, token: string) => mockGetInventoryTrend(startDate, endDate, token),
-  getTableTurnover: () => mockGetTableTurnover(),
+  getTableTurnover: (startDate: string, endDate: string, token: string) => mockGetTableTurnover(startDate, endDate, token),
   getHourlyOccupancy: () => mockGetHourlyOccupancy(),
 }));
 
@@ -1593,9 +1604,12 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('134 min')).toBeTruthy();
 
     // With a single weekly bucket the zero-filled no-orders day can no
-    // longer surface as a spurious "lowest turn time" reading.
-    expect(screen.queryByText('Low: 08-13 · 0 min')).toBeNull();
-    expect(screen.getByText('Low: 08-10 · 134 min')).toBeTruthy();
+    // longer surface as a spurious "lowest turn time" reading. The labels
+    // are derived from the current week (the mock is range-anchored), so
+    // compute the Monday and the no-orders day the same way the loader does.
+    const monday = isoLocalMonday();
+    expect(screen.queryByText(`Low: ${daysAfter(monday, 3).slice(5)} · 0 min`)).toBeNull();
+    expect(screen.getByText(`Low: ${monday.slice(5)} · 134 min`)).toBeTruthy();
 
     // Occupancy card renders its real hourly curve (peak derived from the
     // hourly-activity mock → 19:00) and the live rate from the tables
