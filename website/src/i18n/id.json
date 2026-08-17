@@ -178,7 +178,9 @@
     ],
     "note": "Unduhan rilis dipublikasikan di GitHub Releases.",
     "releaseLink": "Lihat GitHub Releases",
-    "comingSoon": "Segera hadir"
+    "comingSoon": "Segera hadir",
+    "trialCallout": "Anda datang dari halaman kafe/restoran — kunci trial Anda membuka trial Pro 14 hari.",
+    "trialCalloutEnterprise": "Referensi — kunci trial Anda membuka trial Pro 30 hari."
   },
   "login": {
     "title": "Masuk ke akun Anda",

@@ -43,18 +43,28 @@ export async function getMachineId(): Promise<string> {
   return loggedInvoke('get_machine_id');
 }
 
-/** Activate the license with a key, email, phone, and machine identifier. Returns true if activation succeeded. */
+/**
+ * Activate the license with a key, email, phone, and machine identifier.
+ * Returns true if activation succeeded.
+ *
+ * `trialVertical` is the optional segmented-trial vertical (C2.1): the
+ * server only reads it for trial keys and mints a 14-day Plus / 14-day Pro
+ * / 30-day Pro trial per subscription-tiers.md §4 (e.g. detected from a
+ * `?v=restaurant` landing-page URL param). Paid keys ignore it.
+ */
 export async function activateLicense(
   key: string,
   email: string,
   machineId: string,
-  phone: string
+  phone: string,
+  trialVertical?: string
 ): Promise<boolean> {
   return loggedInvoke('activate_license', {
     key,
     email,
     machineId,
     phone,
+    ...(trialVertical ? { trialVertical } : {}),
   });
 }
 

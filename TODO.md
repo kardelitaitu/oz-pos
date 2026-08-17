@@ -314,19 +314,40 @@ Staff limit currently has no enforcement in the codebase (`max_staff_users` does
 
 **Why:** §9 Short-Term item 8. Replace universal 30-day Pro trial with vertical-segmented trial.
 
-- [ ] In the license server activation flow (`apps/license-server/activate.go`):
-  - [ ] Add a `trial_vertical` field to the activation request (optional, e.g. `"restaurant"`, `"retail"`, `""`)
-  - [ ] Based on `trial_vertical`:
+- [x] In the license server activation flow (`apps/license-server/activate.go`):
+  - [x] Add a `trial_vertical` field to the activation request (optional, e.g. `"restaurant"`, `"retail"`, `""`)
+  - [x] Based on `trial_vertical`:
     - `""` or unset → mint a **14-day Plus trial** license
     - `"restaurant"` / `"cafe"` → mint a **14-day Pro trial** license
     - `"enterprise_referral"` → mint a **30-day Pro trial** license
-  - [ ] Update `ADR #23` reference in source map — trial is now segmented, not 90-day flat
-- [ ] In the Rust activation command: pass `trial_vertical` from the UI activation form
-- [ ] In `ui/src/api/license.ts`: add `trialVertical?: string` param to `activateLicense()`
-- [ ] In the onboarding/setup flow: detect vertical from the landing page URL param (`?v=restaurant`) and pass it through
+  - [x] Update `ADR #23` reference in source map — trial is now segmented, not 90-day flat
+- [x] In the Rust activation command: pass `trial_vertical` from the UI activation form
+- [x] In `ui/src/api/license.ts`: add `trialVertical?: string` param to `activateLicense()`
+- [x] In the onboarding/setup flow: detect vertical from the landing page URL param (`?v=restaurant`) and pass it through
 
-- [ ] **Test (Go):** `go test ./... -run TestTrialVerticalSegmentation`
-- [ ] **Test (Rust):** `cargo test -p oz-core test_trial_activation_vertical`
+- [x] **Test (Go):** `go test ./... -run TestTrialVerticalSegmentation`
+- [x] **Test (Rust):** `cargo test -p oz-core test_trial_activation_vertical`
+
+> **Shipped** (2026-08-18): license-server activation mints segmented trials.
+> `ActivateRequest.trial_vertical` + `trialSegmentation()` (blank → 14-day
+> Plus, restaurant/cafe → 14-day Pro, enterprise_referral → 30-day Pro);
+> gated on the new `license_keys.is_trial` bool (schema + idempotent
+> `ensureIsTrialField` migration) so **paid keys are never segmented** — a
+> forged `trial_vertical` cannot shorten or downgrade a paying license.
+> Trial licenses mint with the segmented tier's quota block
+> (`tierQuotas(tier)`), a 14-day offline grace, and the key's `expires_at`
+> still gates activation. Rust: `ActivateLicenseRequest.trial_vertical`
+> (omitted when unset) threaded through the desktop `activate_license`
+> command. UI: `activateLicense(..., trialVertical?)`; new
+> `utils/trial-vertical.ts` detects the `?v=`/`?vertical=` landing-page
+> param (kafe/restoran/cafe → restaurant) and `LicenseActivationScreen`
+> passes it + shows a localized trial hint (en + id). Website: vertical
+> landing pages carry `?v=<vertical>` onto `/download`, whose client-side
+> script reveals a localized segmented-trial callout. Tests: Go
+> `TestTrialVerticalSegmentation` (4 verticals × tier/expiry/quota) +
+> `TestTrialVerticalSegmentation_PaidKeyIgnored`, Rust
+> `test_trial_activation_vertical_*` (3 serialization contracts), UI
+> detector + activation-screen tests (5).
 
 ---
 
@@ -408,8 +429,8 @@ For each trigger:
 
 > **Shipped** (2026-08-18): all 4 pages × 2 locales built on the shared
 > `VerticalLanding.astro` component; CTAs deep-link to the natural tier anchor on the
-> pricing page (`#plus`/`#pro`/`#premium`) instead of `?v=` signup params — the `?v=`
-> vertical-detection in the onboarding flow is still pending (see C2.1).
+> pricing page (`#plus`/`#pro`/`#premium`); the download CTA also carries the
+> `?v=<vertical>` signup param that C2.1's onboarding flow reads (implemented 2026-08-18).
 > Homepage "For your business" strip + footer "Jenis bisnis" column link to the pages.
 
 - [x] **Verify:** `cd website && npm run build` — all 8 routes build; rendered HTML verified

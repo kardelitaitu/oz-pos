@@ -300,7 +300,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 | :--- | :--- | :--- |
 | `docs/BUSINESS_PLAN.md` §2 | Market/pricing plan (IDR, annual) | 1-Time / Standard / Pro / Enterprise — **superseded banner added 2026-08-17**; content kept as historical analysis |
 | `docs/decisions/2026-07-10-subscription-tier-entitlement.md` (ADR #5) | Design intent | Free / Pro / Premium / Enterprise with numeric quotas — **supersession note added 2026-08-17** (mechanism still valid; quotas from §3) |
-| `docs/decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md` (ADR #23) | Trial lifecycle | 90-day trial — **re-scope note added 2026-08-17** (free-forever tier + segmented trials per §4; impl tracked in TODO C2.1) |
+| `docs/decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md` (ADR #23) | Trial lifecycle | 90-day trial — **re-scope note added 2026-08-17; segmented trials implemented 2026-08-18** (C2.1: `trial_vertical` in `activate.go`, 14-day Plus general / 14-day Pro restaurant-cafe / 30-day Pro enterprise-referral) |
 | `website/src/content/docs/{en,id}/{licensing,welcome,installation,activation}.md` | User-facing docs | 90-day / four-tier copy — **updated to the 5-tier free-forever model 2026-08-17** |
 | `crates/oz-core/src/subscription.rs` | Enforcement (client-side quotas) | enum Free/OneTime/Standard/Pro/Premium/Enterprise |
 | `apps/license-server/paddle_webhook.go` → `tierQuotas()` | Enforcement (license mint) | pro/premium/enterprise → 0/0/all types; free → 1/1/3 types |

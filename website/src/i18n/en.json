@@ -178,7 +178,9 @@
     ],
     "note": "Release downloads are published on GitHub Releases.",
     "releaseLink": "View GitHub Releases",
-    "comingSoon": "Coming soon"
+    "comingSoon": "Coming soon",
+    "trialCallout": "You came from a restaurant/cafe page — your trial key unlocks a 14-day Pro trial.",
+    "trialCalloutEnterprise": "Referral — your trial key unlocks a 30-day Pro trial."
   },
   "login": {
     "title": "Sign in to your account",

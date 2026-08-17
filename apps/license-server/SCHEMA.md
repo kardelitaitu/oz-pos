@@ -23,6 +23,7 @@ Stores the license keys generated for customers. You create these manually in th
 | `max_pos_instances` | Number | *Optional* | Tier quota (0 = unlimited). Populated by the Paddle webhook. |
 | `allowed_types` | JSON | *Optional* | JSON array of allowed workspace types for the tier. |
 | `paddle_sub_id` | Text | *Optional* | Paddle Billing `sub_...` id that issued the key. Set ⇒ webhook-issued (enables email+key activation and expiry sync on `subscription.updated`). Uniquely indexed (partial). |
+| `is_trial` | Bool | *Optional* | True for segmented-trial keys (C2.1). Activation mints a short Plus/Pro license from the request's `trial_vertical` (14-day Plus general, 14-day Pro restaurant/cafe, 30-day Pro enterprise referral) instead of the key's own tier/expiry/quota. Paid keys leave it unset. |
 
 ---
 

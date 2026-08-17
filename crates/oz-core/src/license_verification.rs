@@ -126,6 +126,14 @@ pub struct ActivateLicenseRequest {
     pub email: String,
     /// The contact phone number for the licensee.
     pub phone: String,
+    /// The segmented-trial vertical (C2.1, subscription-tiers.md §4). Only
+    /// read by the server for trial keys: `None`/blank → 14-day Plus trial,
+    /// `"restaurant"`/`"cafe"` → 14-day Pro trial, `"enterprise_referral"`
+    /// → 30-day Pro trial. Paid keys ignore it — a client-supplied value
+    /// never shortens or downgrades a paid license. Omitted from the body
+    /// when unset so generic activations stay byte-identical.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub trial_vertical: Option<String>,
     /// The api_key of an existing tenant, required when re-activating
     /// an installation whose tenant was previously activated (H1 audit
     /// fix). New tenants omit this on the first activation; the server
@@ -719,6 +727,76 @@ mod tests {
 
     // We need to import TenantSubscription for the test above.
     use crate::subscription::TenantSubscription;
+
+    // ── trial_vertical serialization (C2.1) ────────────────────────
+
+    #[test]
+    fn test_trial_activation_vertical_serializes_when_set() {
+        // A restaurant vertical must travel in the request body so the
+        // license server can mint the segmented 14-day Pro trial.
+        let req = ActivateLicenseRequest {
+            key: "OZ-TRIAL-0000".into(),
+            machine_id: "m1".into(),
+            email: "cafe@example.com".into(),
+            phone: "08123".into(),
+            trial_vertical: Some("restaurant".into()),
+            api_key: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            json.contains("\"trial_vertical\":\"restaurant\""),
+            "got: {json}"
+        );
+        // The api_key must stay out of the body (Bearer header only).
+        assert!(!json.contains("api_key"), "got: {json}");
+    }
+
+    #[test]
+    fn test_trial_activation_vertical_omitted_when_none() {
+        // Generic (non-trial) activations omit trial_vertical entirely so
+        // the body stays byte-identical to pre-C2.1 clients and paid keys
+        // are never segmented by accident.
+        let req = ActivateLicenseRequest {
+            key: "OZ-PRO-KEY-0001".into(),
+            machine_id: "m1".into(),
+            email: "paid@example.com".into(),
+            phone: "08123".into(),
+            trial_vertical: None,
+            api_key: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            !json.contains("trial_vertical"),
+            "trial_vertical must be omitted when None, got: {json}"
+        );
+    }
+
+    #[test]
+    fn test_trial_activation_vertical_all_segments() {
+        // Every accepted vertical value round-trips through the wire format
+        // (the Go server maps: blank/unknown → plus 14d, restaurant/cafe →
+        // pro 14d, enterprise_referral → pro 30d).
+        for (vertical, expected) in [
+            ("", "\"trial_vertical\":\"\""),
+            ("restaurant", "\"trial_vertical\":\"restaurant\""),
+            ("cafe", "\"trial_vertical\":\"cafe\""),
+            (
+                "enterprise_referral",
+                "\"trial_vertical\":\"enterprise_referral\"",
+            ),
+        ] {
+            let req = ActivateLicenseRequest {
+                key: "OZ-TRIAL-KEY".into(),
+                machine_id: "m1".into(),
+                email: "trial@example.com".into(),
+                phone: "08123".into(),
+                trial_vertical: Some(vertical.into()),
+                api_key: None,
+            };
+            let json = serde_json::to_string(&req).unwrap();
+            assert!(json.contains(expected), "vertical {vertical:?}: got {json}");
+        }
+    }
 
     // ── extract_server_error tests ────────────────────────────────
 

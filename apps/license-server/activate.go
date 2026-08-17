@@ -20,12 +20,36 @@ type ActivateRequest struct {
 	// Phone is the contact phone number for the licensee.
 	// Stored as-is on the tenant record; falls back to "-" if empty.
 	Phone string `json:"phone"`
+	// TrialVertical is the segmented-trial vertical (subscription-tiers.md §4).
+	// Only read for trial keys (license_keys.is_trial = true): "" / unset →
+	// 14-day Plus trial, "restaurant" / "cafe" → 14-day Pro trial,
+	// "enterprise_referral" → 30-day Pro trial. Paid keys ignore it entirely
+	// — a client-supplied parameter must never shorten a paying customer's
+	// license.
+	TrialVertical string `json:"trial_vertical"`
 	// APIKey is the tenant API key for authenticating re-activations.
 	// On first activation the server issues a new api_key in the response,
 	// which the POS persists and re-sends on subsequent calls.
 	// When a license key is already activated by the same email's tenant,
 	// the api_key is NOT required — the email + key pair is sufficient proof.
 	APIKey string `json:"api_key,omitempty"`
+}
+
+// trialSegmentation maps an activation request's trial_vertical to the
+// (tier, duration-in-days) a trial key should mint (subscription-tiers.md
+// §4). Blank/unset and unknown verticals fall back to the general 14-day
+// Plus trial; restaurant/cafe signups get the 14-day Pro trial; enterprise
+// referrals get the 30-day Pro trial. Matching is case-insensitive and
+// whitespace-tolerant.
+func trialSegmentation(vertical string) (tier string, days int) {
+	switch strings.ToLower(strings.TrimSpace(vertical)) {
+	case "restaurant", "cafe":
+		return "pro", 14
+	case "enterprise_referral":
+		return "pro", 30
+	default:
+		return "plus", 14
+	}
 }
 
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
@@ -432,6 +456,21 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Segmented trial resolution (C2.1) ─────────────────
+		// Trial keys (license_keys.is_trial) mint a short-duration license
+		// whose tier and length come from the request's trial_vertical (§4):
+		// general signups get 14 days of Plus, restaurant/cafe signups get
+		// 14 days of Pro, and enterprise referrals get 30 days of Pro.
+		// Paid keys (is_trial = false) never enter this branch — their tier,
+		// expiry, and quota block come solely from the key record, so a
+		// forged trial_vertical can never downgrade or shorten a paid key.
+		isTrialKey := keyRecord.GetBool("is_trial")
+		var trialTier string
+		var trialDays int
+		if isTrialKey {
+			trialTier, trialDays = trialSegmentation(req.TrialVertical)
+		}
+
 		// ── Machine count enforcement (H1 audit gap fix) ─────
 		// Before registering, check that the tenant hasn't exceeded
 		// their tier-based machine limit. Machine record IDs are
@@ -442,6 +481,11 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		//   Premium:    10 machines
 		//   Enterprise: unlimited
 		tierForLimit := keyRecord.GetString("tier_key")
+		// Trial keys are limited by the SEGMENTED tier (e.g. a restaurant
+		// trial minted as Pro gets Pro's 3 machines), not the key's default.
+		if isTrialKey {
+			tierForLimit = trialTier
+		}
 		maxMachines := maxMachinesForTier(tierForLimit)
 		if maxMachines > 0 {
 			machines, _ := app.FindRecordsByFilter(
@@ -531,18 +575,29 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		// ── Build and sign subscription ───────────────────────────
 		tierKey := keyRecord.GetString("tier_key")
 		expiresAt := calculateExpiry(tierKey)
+		maxStores := keyRecord.GetInt("max_stores")
+		maxPOSInstances := keyRecord.GetInt("max_pos_instances")
 
 		var allowedTypes []string
 		if err := json.Unmarshal([]byte(keyRecord.GetString("allowed_types")), &allowedTypes); err != nil {
 			allowedTypes = []string{}
 		}
 
+		// Trial keys: override the tier, expiry, and quota block with the
+		// vertical segmentation (§4). The key record's own values serve as
+		// the default for blank/unknown verticals (trialSegmentation).
+		if isTrialKey {
+			tierKey = trialTier
+			expiresAt = time.Now().UTC().AddDate(0, 0, trialDays)
+			maxStores, maxPOSInstances, allowedTypes = tierQuotas(trialTier)
+		}
+
 		sub := SubscriptionPayload{
 			TenantID:        tenantID,
 			TierKey:         tierKey,
 			Status:          "active",
-			MaxStores:       keyRecord.GetInt("max_stores"),
-			MaxPOSInstances: keyRecord.GetInt("max_pos_instances"),
+			MaxStores:       maxStores,
+			MaxPOSInstances: maxPOSInstances,
 			AllowedTypes:    allowedTypes,
 			StartsAt:        time.Now().UTC().Format(time.RFC3339),
 			ExpiresAt:       expiresAt.Format(time.RFC3339),

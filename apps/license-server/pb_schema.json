@@ -192,6 +192,16 @@
         "type": "text"
       },
       {
+        "help": "True for segmented-trial keys (C2.1): activation mints a short Plus/Pro license from the request's trial_vertical instead of the key's own tier/expiry/quota. Paid keys leave this unset.",
+        "hidden": false,
+        "id": "bool2837461521",
+        "name": "is_trial",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool"
+      },
+      {
         "hidden": false,
         "id": "autodate3454440663",
         "name": "created",

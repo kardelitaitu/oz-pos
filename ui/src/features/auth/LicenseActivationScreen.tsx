@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { activateLicense, getMachineId } from '@/api/license';
+import { detectTrialVertical } from '@/utils/trial-vertical';
 import { getVersion, getLocalIp } from '@/api/system';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import ConnectionStatus from '@/components/ConnectionStatus';
@@ -38,6 +39,11 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   const [appVersion, setAppVersion] = useState<string>('0.0.28');
   const [ipAddress, setIpAddress] = useState<string>(requiredLocalized(l10n, 'auth-ip-detecting'));
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: 'email' | 'phone' | 'licenseKey' } | null>(null);
+  // Segmented-trial vertical (C2.1): detected once from the landing-page
+  // URL param (?v=restaurant etc.) and passed to the server on activation.
+  // The server only reads it for trial keys, so a stale/spoofed value can
+  // never affect paid activations.
+  const [trialVertical] = useState<string>(() => detectTrialVertical());
   const { addToast } = useToast();
   // Stable ref so the mount effect runs exactly once without depending on
   // l10n (which can cause the effect to re-fetch version/IP unnecessarily).
@@ -93,12 +99,12 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
     try {
       const machineId = await getMachineId();
 
-      const success = await activateLicense(
-        key.trim(),
-        email.trim(),
-        machineId,
-        phone.trim()
-      );
+      // Pass the segmented-trial vertical only when detected, so generic
+      // activations stay 4-arg (and the server ignores it for paid keys
+      // regardless).
+      const success = trialVertical
+        ? await activateLicense(key.trim(), email.trim(), machineId, phone.trim(), trialVertical)
+        : await activateLicense(key.trim(), email.trim(), machineId, phone.trim());
 
       if (success) {
         addToast({ type: 'success', message: l10n.getString('auth-activation-success') });
@@ -172,6 +178,20 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
             <Localized id="auth-activate-subtitle">
               <p>Enter your information below</p>
             </Localized>
+            {/* Segmented-trial hint (C2.1): shown only when the user arrived
+                from a vertical landing page. General signups ('' ) get the
+                default 14-day Plus trial with no special hint. */}
+            {trialVertical && (
+              <p
+                className="license-trial-hint"
+                role="status"
+                data-testid="trial-vertical-hint"
+              >
+                {trialVertical === 'restaurant'
+                  ? l10n.getString('auth-trial-hint-pro')
+                  : l10n.getString('auth-trial-hint-enterprise')}
+              </p>
+            )}
           </div>
 
           {errorMsg && (

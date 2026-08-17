@@ -56,6 +56,11 @@ pub struct LicenseStatusDto {
 }
 
 /// Activates a license key for the given email, phone, and machine ID.
+///
+/// `trial_vertical` is the optional segmented-trial vertical (C2.1): the
+/// server only reads it for trial keys and mints a 14-day Plus / 14-day
+/// Pro / 30-day Pro license per subscription-tiers.md §4. Paid keys ignore
+/// it entirely, so omitting it is always safe.
 #[tauri::command]
 pub async fn activate_license(
     state: State<'_, AppState>,
@@ -63,6 +68,7 @@ pub async fn activate_license(
     email: String,
     machine_id: String,
     phone: String,
+    trial_vertical: Option<String>,
 ) -> Result<bool, AppError> {
     // H1 audit fix: read the previously-stored (now encrypted) api_key
     // so the server can authenticate the caller as the legitimate tenant
@@ -97,6 +103,7 @@ pub async fn activate_license(
         email,
         machine_id,
         phone,
+        trial_vertical,
         api_key: stored_api_key,
     };
 

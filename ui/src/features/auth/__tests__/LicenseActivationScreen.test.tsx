@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, createEvent } from '@testing-library/react';
 import LicenseActivationScreen from '../LicenseActivationScreen';
 import { activateLicense, getMachineId } from '@/api/license';
@@ -36,6 +36,8 @@ vi.mock('@fluent/react', () => ({
         'auth-activation-success': 'License activated successfully!',
         'auth-activation-failed': 'Failed to activate license.',
         'auth-activation-error': 'An error occurred during activation.',
+        'auth-trial-hint-pro': 'You came from a restaurant/cafe page — your trial key unlocks a 14-day Pro trial.',
+        'auth-trial-hint-enterprise': 'Your referral trial key unlocks a 30-day Pro trial.',
         'auth-clipboard-error': 'Clipboard error: ' + (args && args['message'] ? args['message'] : ''),
         'auth-error-title': 'Error',
         'auth-version': 'Version ' + (args ? args['version'] : ''),
@@ -555,6 +557,70 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       
       unmount();
       expect(() => resolveReadText('late@email.com')).not.toThrow();
+    });
+  });
+
+  describe('8. Segmented trial vertical (C2.1)', () => {
+    afterEach(() => {
+      // Restore the default URL so later tests see no ?v= param.
+      window.history.replaceState({}, '', '/');
+    });
+
+    it('51. No ?v= param: no trial hint, 4-arg activateLicense call', async () => {
+      window.history.replaceState({}, '', '/');
+      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
+
+      expect(screen.queryByTestId('trial-vertical-hint')).not.toBeInTheDocument();
+      fillForm();
+      clickSubmit();
+
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
+    });
+
+    it('52. ?v=restaurant: Pro hint shown and vertical passed to activateLicense', async () => {
+      window.history.replaceState({}, '', '/?v=restaurant');
+      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
+
+      await waitFor(() => expect(screen.getByTestId('trial-vertical-hint')).toHaveTextContent(/14-day Pro trial/), FAST_WAIT);
+      fillForm();
+      clickSubmit();
+
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant'), FAST_WAIT);
+    });
+
+    it('53. ?v=kafe normalizes to restaurant (website vertical key)', async () => {
+      window.history.replaceState({}, '', '/?v=kafe');
+      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
+
+      await waitFor(() => expect(screen.getByTestId('trial-vertical-hint')).toHaveTextContent(/14-day Pro trial/), FAST_WAIT);
+      fillForm();
+      clickSubmit();
+
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant'), FAST_WAIT);
+    });
+
+    it('54. ?v=enterprise_referral: 30-day Pro hint, vertical passed', async () => {
+      window.history.replaceState({}, '', '/?v=enterprise_referral');
+      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
+
+      await waitFor(() => expect(screen.getByTestId('trial-vertical-hint')).toHaveTextContent(/30-day Pro trial/), FAST_WAIT);
+      fillForm();
+      clickSubmit();
+
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'enterprise_referral'), FAST_WAIT);
+    });
+
+    it('55. ?v=warung (general vertical): no hint, no vertical passed', async () => {
+      window.history.replaceState({}, '', '/?v=warung');
+      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
+
+      // warung maps to the general 14-day Plus trial — the default — so
+      // there is nothing vertical-specific to show or send.
+      expect(screen.queryByTestId('trial-vertical-hint')).not.toBeInTheDocument();
+      fillForm();
+      clickSubmit();
+
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
     });
   });
 

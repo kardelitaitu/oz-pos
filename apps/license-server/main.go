@@ -144,6 +144,14 @@ func main() {
 		if err := ensurePasswordResetAtField(app); err != nil {
 			return err
 		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// segmented-trial flag (C2.1): fresh boots get it from the embedded
+		// pb_schema.json; existing pb_data volumes get it added without
+		// reimporting the schema. Existing keys keep is_trial=false — the
+		// correct semantics (only trial keys minted going forward flip it).
+		if err := ensureIsTrialField(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -320,6 +328,30 @@ func ensurePasswordResetAtField(app core.App) error {
 		return fmt.Errorf("failed to add password_reset_at field: %w", err)
 	}
 	log.Println("migrated tenants collection: added password_reset_at field")
+	return nil
+}
+
+// ensureIsTrialField adds the license_keys.is_trial bool to existing
+// deployments that predate segmented trials (fresh boots get it from the
+// embedded pb_schema.json). Idempotent: no-op once the field exists.
+// Existing records default to false — the correct semantics, since only
+// trial keys minted going forward are marked (paid keys never are).
+func ensureIsTrialField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("license_keys")
+	if err != nil {
+		return fmt.Errorf("license_keys collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("is_trial") != nil {
+		return nil
+	}
+	collection.Fields.Add(&core.BoolField{
+		Name: "is_trial",
+		Help: "True for segmented-trial keys (C2.1): activation mints a short Plus/Pro license from the request's trial_vertical instead of the key's own tier/expiry/quota. Paid keys leave this unset.",
+	})
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add is_trial field: %w", err)
+	}
+	log.Println("migrated license_keys collection: added is_trial field")
 	return nil
 }
 

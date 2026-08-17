@@ -10,6 +10,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -151,6 +152,12 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 			return err
 		}
 		if err := ensurePasswordResetAtField(app); err != nil {
+			return err
+		}
+		// Mirror production boot: add the license_keys.is_trial bool
+		// (segmented trials, C2.1) via the same idempotent migration path
+		// the deployed server uses.
+		if err := ensureIsTrialField(app); err != nil {
 			return err
 		}
 
@@ -507,6 +514,22 @@ func seedLicenseKeyWithLimits(t *testing.T, app *tests.TestApp, key, tierKey, st
 	rec.Set("expires_at", expiresAt)
 	if err := app.Save(rec); err != nil {
 		t.Fatalf("failed to seed license key %q: %v", key, err)
+	}
+}
+
+// seedTrialKey seeds a segmented-trial license key (license_keys.is_trial =
+// true). Trial activation mints a short Plus/Pro license from the request's
+// trial_vertical, ignoring the key's own tier/quota defaults (C2.1).
+func seedTrialKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expiresAt string) {
+	t.Helper()
+	seedLicenseKey(t, app, key, tierKey, status, expiresAt)
+	rec, err := app.FindFirstRecordByData("license_keys", "key", key)
+	if err != nil {
+		t.Fatalf("seeded trial key %q not found: %v", key, err)
+	}
+	rec.Set("is_trial", true)
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to mark trial key %q: %v", key, err)
 	}
 }
 
@@ -1479,6 +1502,186 @@ func TestActivateHandler_Success(t *testing.T) {
 	)
 	if err != nil || len(machines) == 0 {
 		t.Fatal("machine should have been registered")
+	}
+}
+
+// TestTrialVerticalSegmentation verifies C2.1: trial keys
+// (license_keys.is_trial) mint segmented short-duration licenses from the
+// request's trial_vertical — blank/unset → 14-day Plus, restaurant/cafe →
+// 14-day Pro, enterprise_referral → 30-day Pro — with the tier's quota
+// block and a 14-day offline grace (subscription-tiers.md §4).
+func TestTrialVerticalSegmentation(t *testing.T) {
+	cases := []struct {
+		name     string
+		vertical string
+		tier     string
+		days     int
+	}{
+		{"blank_vertical_mints_plus_14d", "", "plus", 14},
+		{"restaurant_vertical_mints_pro_14d", "restaurant", "pro", 14},
+		{"cafe_vertical_mints_pro_14d", "cafe", "pro", 14},
+		{"enterprise_referral_mints_pro_30d", "enterprise_referral", "pro", 30},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resetRateLimiters()
+			app, se := setupDirectApp(t)
+			defer app.Cleanup()
+
+			key := fmt.Sprintf("OZ-TRIAL-%04d", i)
+			// The key record's own tier is the DEFAULT for blank verticals;
+			// a vertical re-segments the minted license regardless of it.
+			seedTrialKey(t, app, key, "plus", "unused", "2099-12-31 23:59:59.000Z")
+
+			body := strings.NewReader(fmt.Sprintf(`{
+				"key": %q,
+				"email": "trialseg%04d@example.com",
+				"machine_id": "trialmachin0001",
+				"trial_vertical": %q
+			}`, key, i, tc.vertical))
+			req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			mux, err := se.Router.BuildMux()
+			if err != nil {
+				t.Fatalf("BuildMux failed: %v", err)
+			}
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+
+			var resp map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("failed to parse response: %v", err)
+			}
+			payloadStr, ok := resp["signed_payload"].(string)
+			if !ok {
+				t.Fatal("expected signed_payload in response")
+			}
+
+			var sp SubscriptionPayload
+			if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+				t.Fatalf("failed to parse signed_payload: %v", err)
+			}
+			if sp.TierKey != tc.tier {
+				t.Errorf("vertical %q: expected tier_key=%s, got %q", tc.vertical, tc.tier, sp.TierKey)
+			}
+
+			// Quota block must come from the segmented tier, not the key's
+			// default (plus = 1 store / 2 registers, pro = unlimited + kds).
+			expectedStores, expectedPOS, expectedTypes := tierQuotas(tc.tier)
+			if sp.MaxStores != expectedStores {
+				t.Errorf("vertical %q: expected max_stores=%d, got %d", tc.vertical, expectedStores, sp.MaxStores)
+			}
+			if sp.MaxPOSInstances != expectedPOS {
+				t.Errorf("vertical %q: expected max_pos_instances=%d, got %d", tc.vertical, expectedPOS, sp.MaxPOSInstances)
+			}
+			if !slices.Equal(sp.AllowedTypes, expectedTypes) {
+				t.Errorf("vertical %q: expected allowed_types=%v, got %v", tc.vertical, expectedTypes, sp.AllowedTypes)
+			}
+
+			// Expiry is now + days; grace is expiry + 14 days.
+			expiresAt, err := time.Parse(time.RFC3339, sp.ExpiresAt)
+			if err != nil {
+				t.Fatalf("failed to parse expires_at: %v", err)
+			}
+			expDiff := expiresAt.Sub(time.Now().UTC().AddDate(0, 0, tc.days))
+			if expDiff > time.Hour || expDiff < -time.Hour {
+				t.Errorf("vertical %q: expected expiry ~%d days from now, got %v (diff %v)", tc.vertical, tc.days, expiresAt, expDiff)
+			}
+			graceUntil, err := time.Parse(time.RFC3339, sp.GraceUntil)
+			if err != nil {
+				t.Fatalf("failed to parse grace_until: %v", err)
+			}
+			graceDiff := graceUntil.Sub(expiresAt.AddDate(0, 0, 14))
+			if graceDiff > time.Minute || graceDiff < -time.Minute {
+				t.Errorf("vertical %q: expected grace_until = expiry + 14d, got diff %v", tc.vertical, graceDiff)
+			}
+
+			// The key is consumed and the subscription persisted with the
+			// segmented tier.
+			keyRec, err := app.FindFirstRecordByData("license_keys", "key", key)
+			if err != nil {
+				t.Fatalf("trial key not found: %v", err)
+			}
+			if keyRec.GetString("status") != "activated" {
+				t.Errorf("expected key status activated, got %q", keyRec.GetString("status"))
+			}
+			subs, err := app.FindRecordsByFilter(
+				"subscriptions",
+				"tier_key = {:tier}",
+				"", 1, 0,
+				map[string]any{"tier": tc.tier},
+			)
+			if err != nil || len(subs) == 0 {
+				t.Fatalf("expected a persisted %s subscription, err=%v", tc.tier, err)
+			}
+		})
+	}
+}
+
+// TestTrialVerticalSegmentation_PaidKeyIgnored verifies the C2.1 security
+// gate: trial_vertical is read ONLY for trial keys. A paid key activated
+// with trial_vertical="restaurant" must keep its own tier, quota block,
+// and +1y expiry — a client-supplied parameter must never shorten or
+// downgrade a paying customer's license.
+func TestTrialVerticalSegmentation_PaidKeyIgnored(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedLicenseKeyWithLimits(t, app, "OZ-PAID-TRIAL-001", "pro", "unused",
+		"2099-12-31 23:59:59.000Z", 5, 3, `["restaurant-pos","store-pos"]`)
+
+	body := strings.NewReader(`{
+		"key": "OZ-PAID-TRIAL-001",
+		"email": "paidtrial0001@example.com",
+		"machine_id": "trialmachin0001",
+		"trial_vertical": "restaurant"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	payloadStr, _ := resp["signed_payload"].(string)
+	var sp SubscriptionPayload
+	if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+		t.Fatalf("failed to parse signed_payload: %v", err)
+	}
+
+	// The key's own tier/quota/expiry win — the forged vertical is ignored.
+	if sp.TierKey != "pro" {
+		t.Errorf("paid key must keep tier pro, got %q", sp.TierKey)
+	}
+	if sp.MaxStores != 5 {
+		t.Errorf("paid key must keep max_stores=5, got %d", sp.MaxStores)
+	}
+	if sp.MaxPOSInstances != 3 {
+		t.Errorf("paid key must keep max_pos_instances=3, got %d", sp.MaxPOSInstances)
+	}
+	expiresAt, err := time.Parse(time.RFC3339, sp.ExpiresAt)
+	if err != nil {
+		t.Fatalf("failed to parse expires_at: %v", err)
+	}
+	expDiff := expiresAt.Sub(time.Now().UTC().AddDate(1, 0, 0))
+	if expDiff > time.Hour || expDiff < -time.Hour {
+		t.Errorf("paid key must keep +1y expiry (calculateExpiry(pro)), got diff %v", expDiff)
 	}
 }
 
