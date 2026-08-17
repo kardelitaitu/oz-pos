@@ -808,6 +808,48 @@ mod tests {
         }
     }
 
+    // ── bundle_id serialization (C3.2) ─────────────────────────────
+
+    #[test]
+    fn test_bundle_id_serializes_when_set() {
+        // A recognized bundle must travel in the request body so the license
+        // server can unlock the kds workspace at the Plus trial tier.
+        let req = ActivateLicenseRequest {
+            key: "OZ-TRIAL-BUNDLE".into(),
+            machine_id: "m1".into(),
+            email: "bundle@example.com".into(),
+            phone: "08123".into(),
+            trial_vertical: None,
+            bundle_id: Some("restaurant_starter".into()),
+            api_key: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            json.contains("\"bundle_id\":\"restaurant_starter\""),
+            "got: {json}"
+        );
+    }
+
+    #[test]
+    fn test_bundle_id_omitted_when_none() {
+        // Activations without a bundle omit bundle_id entirely so the body
+        // stays byte-identical to pre-C3.2 clients.
+        let req = ActivateLicenseRequest {
+            key: "OZ-PRO-KEY-0001".into(),
+            machine_id: "m1".into(),
+            email: "paid@example.com".into(),
+            phone: "08123".into(),
+            trial_vertical: None,
+            bundle_id: None,
+            api_key: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            !json.contains("bundle_id"),
+            "bundle_id must be omitted when None, got: {json}"
+        );
+    }
+
     // ── extract_server_error tests ────────────────────────────────
 
     #[test]

@@ -585,7 +585,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant', undefined), FAST_WAIT);
     });
 
     it('53. ?v=kafe normalizes to restaurant (website vertical key)', async () => {
@@ -596,7 +596,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant', undefined), FAST_WAIT);
     });
 
     it('54. ?v=enterprise_referral: 30-day Pro hint, vertical passed', async () => {
@@ -607,7 +607,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'enterprise_referral'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'enterprise_referral', undefined), FAST_WAIT);
     });
 
     it('55. ?v=warung (general vertical): no hint, no vertical passed', async () => {
@@ -653,6 +653,57 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       render(<LicenseActivationScreen onActivated={mockOnActivated} />);
       const year = new Date().getFullYear().toString();
       expect(screen.getByText(new RegExp(`OZ-POS © ${year} All rights reserved.`))).toBeInTheDocument();
+    });
+  });
+
+  describe('9. Vertical bundles (C3.2)', () => {
+    afterEach(() => {
+      // Restore the default URL so later tests see no ?bundle= param.
+      window.history.replaceState({}, '', '/');
+    });
+
+    it('56. No ?bundle= param: no bundle passed to activateLicense', async () => {
+      window.history.replaceState({}, '', '/');
+      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
+
+      fillForm();
+      clickSubmit();
+
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
+    });
+
+    it('57. ?bundle=restaurant_starter: bundle passed to activateLicense', async () => {
+      window.history.replaceState({}, '', '/?bundle=restaurant_starter');
+      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
+
+      fillForm();
+      clickSubmit();
+
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith(
+        'KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, 'restaurant_starter'
+      ), FAST_WAIT);
+    });
+
+    it('58. ?v=kafe&bundle=restaurant_starter: vertical AND bundle passed together', async () => {
+      window.history.replaceState({}, '', '/?v=kafe&bundle=restaurant_starter');
+      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
+
+      fillForm();
+      clickSubmit();
+
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith(
+        'KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant', 'restaurant_starter'
+      ), FAST_WAIT);
+    });
+
+    it('59. Unknown ?bundle= value is normalized away (no-op)', async () => {
+      window.history.replaceState({}, '', '/?bundle=fancy_bundle');
+      render(<LicenseActivationScreen onActivated={mockOnActivated} />);
+
+      fillForm();
+      clickSubmit();
+
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
     });
   });
 });
