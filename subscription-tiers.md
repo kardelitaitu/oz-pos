@@ -61,7 +61,7 @@ Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
 | Feature | Free | Plus | Pro | Premium | Enterprise |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Numeric limits** | | | | | |
-| Max stores | 1 | 1 | 3 | Unlimited | Unlimited |
+| Max stores | 1 | 1 | 2 | Unlimited | Unlimited |
 | Max terminals (registers) / store | 1 | 2 | 5 | Unlimited | Unlimited |
 | Max warehouses | 1 | 1 | 3 | Unlimited | Unlimited |
 | Max KDS screens | 0 | 0 | 1 / store | Unlimited | Unlimited |
