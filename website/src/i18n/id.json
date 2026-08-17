@@ -156,9 +156,9 @@
   },
   "download": {
     "title": "Unduh OZ-POS",
-    "subtitle": "Versi 0.0.27 — uji coba gratis 90 hari, tanpa pendaftaran.",
+    "subtitle": "Versi 0.0.28 — uji coba gratis 90 hari, tanpa pendaftaran.",
     "version": "Versi saat ini",
-    "versionValue": "0.0.27",
+    "versionValue": "0.0.28",
     "platformsTitle": "Pilih platform Anda",
     "requirementsTitle": "Persyaratan sistem",
     "requirements": [
