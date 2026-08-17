@@ -35,7 +35,7 @@ Created a cross-platform Node.js E2E runner at `scripts/run-e2e.mjs`:
 
 ## 🔷 Phase B — Next Recommendations (in priority order)
 
-### B1 — KDS Critical-Path E2E Test (Phase Active)
+### [x] B1 — KDS Critical-Path E2E Test (Phase Active)
 
 **Goal:** Full ticket lifecycle E2E — pending → preparing → ready → served, plus layout switching, per-item status, and settings interaction.
 
@@ -48,17 +48,19 @@ Current `kds.spec.ts` covers basic render + single advance. Missing:
 
 **File:** `ui/e2e/e2e-kds-critical-path.spec.ts`
 
-### B2 — KDS E2E: End-to-End POS → KDS Flow
+### [x] B2 — KDS E2E: End-to-End POS → KDS Flow
 
 **Goal:** Complete a sale with kitchen items in Restaurant POS, then verify the ticket appears on the KDS screen.
 
-Requires the dev-mock to support cross-workspace order propagation. Currently the sale mock and KDS mock are independent — completing a sale doesn't populate KDS orders.
+**Status:** ✅ Complete (2026-08-18)
 
-**Steps:**
-1. Add a `pendingKdsOrders` buffer to `dev-mock/tauri-api.ts`
-2. Wire `completeSale` to push a new KDS order into the buffer
-3. Wire `getKdsQueueScoped` to include buffered orders
-4. Write E2E test: Restaurant POS → add product → complete sale → KDS → verify ticket
+**Implementation:**
+- ✅ `pushKdsOrderFromCart()` in `dev-mock/tauri-api.ts` (lines 829-876) creates KDS orders from cart lines
+- ✅ `complete_sale` / `complete_sale_scoped` handlers wire the POS sale to push KDS orders (lines 1900, 1929)
+- ✅ `get_kds_queue_scoped` returns the updated `mockKdsOrders` array (line 2262)
+- ✅ E2E test at `ui/e2e/e2e-pos-to-kds.spec.ts` covers: Restaurant POS → add product → complete sale → KDS → verify ticket appears in pending column
+
+**Test Results:** Passes on both `desktop` and `tablet` projects
 
 ### B3 — E2E CI Workflow for PRs
 
@@ -81,7 +83,6 @@ Requires the dev-mock to support cross-workspace order propagation. Currently th
 
 ## ✅ Previously Completed
 
-See `git log --oneline` for the full commit chain. Key items:
 - ShiftManagementScreen audit + fix (1171 lines)
 - SalesHistoryScreen audit + fix (1131 lines)
 - DataManagementScreen audit + fix (968 lines)
@@ -89,3 +90,400 @@ See `git log --oneline` for the full commit chain. Key items:
 - AppearanceSection + ReceiptSection test coverage (32 tests)
 - Doc drift audit (ARCHITECTURE.md, RESTRUCTURING.md, api-reference.md)
 - `npm run check:all` unified validation runner
+
+---
+
+## ⏳ Phase C — Subscription Tier Implementation (`subscription-tiers.md`)
+
+> Source of truth: [`subscription-tiers.md`](./subscription-tiers.md)
+>
+> **Legend:** `[ ]` todo · `[/]` in progress · `[x]` done
+>
+> **Verification commands used throughout:**
+> - Rust: `cargo check -p oz-core` · `cargo test -p oz-core <test_name>`
+> - Go: `go test ./... -run <TestName>` (from `apps/license-server/`)
+> - UI: `cd ui && npm run typecheck` · `npm run lint` · `npm run test -- --testPathPattern=<file>`
+> - E2E: `cd ui && npm run e2e:ui`
+
+---
+
+### C0 — Prerequisites (must ship before C1–C4)
+
+#### C0.1 — `crates/oz-core` — Rename / restructure `SubscriptionTier` enum
+
+**Why:** The live enum (`Free, OneTime, Standard, Pro, Premium, Enterprise`) does not
+match the plan (`Free, Plus, Pro, Premium, Enterprise`). `Standard` maps to the new
+`Plus`; `OneTime` is deprecated. Rename before any new quota code builds on the old names.
+
+- [x] In [`crates/oz-core/src/subscription.rs`](./crates/oz-core/src/subscription.rs):
+  - [x] Add `Plus` variant (maps to what `Standard` did — 1 store, 2 terminals, 2 warehouses, QRIS, cloud sync)
+  - [x] Update `from_db()` to accept `"plus"` and keep `"standard"` as a legacy alias → `Plus`
+  - [x] Rename docstring of `Free` from "90-day Free Trial" to "Free forever — 30-day sales history"
+  - [x] Update `max_stores()`: `Plus → Some(1)`, `Pro → Some(2)`, `Premium → None`
+  - [x] Update `max_pos_instances()`: `Plus → Some(2)`, `Pro → Some(5)`, `Premium → None`
+  - [x] Update `max_warehouses()`: `Plus → Some(2)`, `Pro → Some(3)`, `Premium → None`
+  - [x] Add `max_staff_users() -> Option<i64>`: `Free → Some(1)`, `Plus → Some(5)`, `Pro → Some(20)`, `Premium/Enterprise → None`
+  - [x] Add `sales_history_days() -> Option<i64>`: `Free → Some(30)`, all others → `None` (unlimited)
+  - [x] Update `supports_qris()`: `Free → false`, `Plus/Pro/Premium/Enterprise → true`
+  - [x] Update `supports_stripe()`: `Free/Plus → false`, `Pro/Premium/Enterprise → true`
+  - [x] Update `supports_lua_engine()`: `Free/Plus/Pro → false`, `Premium/Enterprise → true`
+  - [x] Update `allows_workspace_type()`: `Plus` gets `inventory/warehouse` but NOT `kds`; `Pro` gets `kds`
+  - [x] Add `supports_loyalty() -> bool`: `Premium/Enterprise → true`, others `false`
+  - [x] Add `supports_analytics() -> bool`: `Pro/Premium/Enterprise → true`, others `false`
+  - [x] Add `supports_daily_dashboard() -> bool`: `Plus/Pro/Premium/Enterprise → true`, `Free → false`
+  - [x] Add `offline_grace_days() -> i64` per subscription-tiers.md §3 (Support table): `Free → 7`, `Plus/Pro → 14`, `Premium → 30`, `Enterprise → custom` — the flat `OFFLINE_GRACE_DAYS` constant is gone; `is_within_grace_period` now uses `tier.offline_grace_days()`
+  - [x] Update `name()` to return `"Plus"` for the Plus variant (also `Free` → `"Free"`, `Premium` → `"Premium"` — no more "Free Trial" / "Premium (Pro)")
+  - [x] Deprecate `OneTime` variant with `#[deprecated]` doc comment (keep for DB back-compat, do not remove)
+
+- [x] **Verify:** `cargo check -p oz-core` — green
+- [x] **Test:** `cargo test -p oz-core` — all existing quota tests still pass (1870 lib + integration suites, 0 failures)
+- [x] **New tests** (added to `#[cfg(test)]` block in `subscription.rs`):
+  - `test_plus_quota_limits` — assert `max_stores`, `max_pos_instances`, `max_staff_users`, `sales_history_days`
+  - `test_pro_quota_limits` — assert `max_stores(2)`, `max_pos_instances(5)`, `max_staff_users(20)`
+  - `test_free_history_limit` — assert `sales_history_days() == Some(30)`
+  - `test_workspace_type_matrix` — assert `Plus` allows `inventory` but not `kds`; `Pro` allows `kds`
+  - Also added: `test_staff_limits_per_tier`, `test_feature_flag_matrix`, `test_offline_grace_days_per_tier`, `test_from_db_plus_and_standard_alias`
+
+> **Shipped** (2026-08-18): clippy `-D warnings` clean on `oz-core` + `oz-pos-app` (all targets);
+> `oz-pos-tablet` compiles; dependent tests updated (`license_verification.rs` "standard" → Plus
+> + `plus` row, `db/workspaces.rs` roundtrip uses Plus, topology `warehouse_quota` tests now
+> use Plus/Free/Premium per the new caps). `Standard` variant removed; `from_db("standard")` → `Plus`.
+
+---
+
+#### C0.2 — License Server (Go) — Add `plus` tier to `tierQuotas()`
+
+Files: [`apps/license-server/paddle_webhook.go`](./apps/license-server/paddle_webhook.go),
+[`apps/license-server/pb_schema.json`](./apps/license-server/pb_schema.json),
+[`apps/license-server/renew.go`](./apps/license-server/renew.go),
+[`apps/license-server/expiry.go`](./apps/license-server/expiry.go)
+
+- [x] In `paddle_webhook.go` → `tierQuotas()`: add `"plus"` case with
+  `maxStores=1, maxPosInstances=2, allowedTypes=["restaurant-pos","store-pos","admin","inventory","warehouse"]` (no `kds`)
+  (note: `tierQuotas` returns only stores/instances/types — `maxWarehouses` for Plus is enforced client-side via C0.1 `max_warehouses()`)
+- [x] In `pb_schema.json`: add `"plus"` to the tier select field values list (both `license_keys.tier_key` and `subscriptions.tier_key`)
+- [x] In `renew.go`: add offline renewal expiry for `"plus"` tier → `+1y` (same as `"pro"`)
+- [x] In `expiry.go`: add `"plus"` to `calculateExpiry` → `+1y` and to `maxMachinesForTier` → `2`
+- [ ] Add the six Paddle price ids (Plus/Pro/Premium × monthly/yearly) as `price_id:tier_key` pairs in `PADDLE_PRICE_TIERS` once the new catalog ships — today only the two legacy $19/$49 sandbox ids are mapped (see website-plan.md §7) — **blocked on the Paddle catalog, not code**
+
+- [x] **Verify:** `cd apps/license-server && go build ./...` + `go vet ./...` — green
+- [x] **Test:** `go test ./... -run TestTierQuotas` (Plus case: 1 store / 2 registers / no kds), `TestCalculateExpiry_Plus`, `TestMaxMachinesForTier_Plus`, and `TestRenewHandler_PlusTier` (full renew flow: plus key mints a +1y renewal with the 1/2 quota block); full `go test ./... -count=1` suite passes
+
+> **Shipped** (2026-08-18): test schema now mirrors production (`createTestCollections` /
+> `createMinimalCollections` select values include `plus`); `gofmt`-clean aside from the repo-wide
+> CRLF working-tree drift (git normalizes on commit).
+
+---
+
+### C1 — Pre-Launch Gate (ship before any paid marketing)
+
+#### C1.1 — Enforce staff user limit
+
+**Why:** Flagged as critical revenue leakage risk in §9 Pre-Launch item 1.
+Staff limit currently has no enforcement in the codebase (`max_staff_users` doesn't exist yet — add in C0.1 first).
+
+- [x] In the Rust command that creates a staff user (find via `grep -r "create_staff\|add_staff\|insert.*staff" crates/ apps/`):
+  - [x] Before insert, query `COUNT(*)` of active staff for the tenant
+  - [x] Compare against `subscription.tier.max_staff_users()`
+  - [x] Return `CoreError::QuotaExceeded` if at limit
+- [x] In `ui/src/api/staff.ts`: handle the `QuotaExceeded` error code and surface an upgrade CTA
+
+- [x] **Test (Rust):** `cargo test -p oz-core test_staff_quota_enforcement`
+- [x] **Test (UI):** `cd ui && npm run test -- --testPathPattern=staff`
+
+> **Shipped** (2026-08-18): `SubscriptionTier::max_staff_users()` (Free 1 / Plus 5 / Pro 20 /
+> Premium+ unlimited) enforced via `Db::enforce_staff_quota(&tier)` in **both** clients'
+> `create_staff_scoped` (desktop + tablet) before insert. Error surfaces as
+> `QuotaError::StaffLimit { tier, limit, current }` → wire `SubscriptionLimitExceeded`
+> subKind; the UI (`ui/src/api/staff.ts` `isStaffQuotaLimitError` + `StaffManagementScreen`)
+> shows a localized quota banner with an "Upgrade plan" CTA deep-linking to
+> `/{locale}/pricing/#plus`. Tests: oz-core `test_staff_quota_enforcement` /
+> `count_staff_users_excludes_owner_and_inactive`, desktop command-level
+> `rejects_staff_past_free_limit` / `allows_staff_with_plus`, UI
+> `shows the upgrade CTA when staff creation hits the tier staff limit (C1.1)`.
+
+---
+
+#### C1.2 — Enforce 30-day sales history cap on Free tier
+
+**Why:** Primary upgrade forcing function for Free → Plus (§9 Pre-Launch item 2).
+
+- [x] In the Rust sales history query command:
+  - [x] After loading the subscription, call `tier.sales_history_days()`
+  - [x] If `Some(days)`, append `AND created_at >= date('now', '-N days')` to the SQL
+  - [x] Return a new `sales_history_capped: bool` field in the response DTO so the UI knows to show the teaser
+- [x] In `ui/src/api/sales.ts`: add `salesHistoryCapped?: boolean` to the response type
+- [x] In the Sales History screen (`ui/src/features/sales/`):
+  - [x] When `salesHistoryCapped === true`, render a blurred/overlay row at the bottom of the list
+  - [x] Overlay text (Fluent key `sales-history-cap-teaser`): *"Lihat riwayat lebih dari 30 hari — upgrade ke Plus"*
+  - [x] Overlay has an "Upgrade" CTA button linking to the subscription/upgrade flow
+
+- [x] **i18n:** Add `sales-history-cap-teaser` key to `ui/src/locales/sales.ftl` and `sales.id.ftl`
+- [x] **Test (Rust):** `cargo test -p oz-core test_sales_history_cap_free_tier`
+- [x] **Test (UI):** `cd ui && npm run test -- --testPathPattern=SalesHistory`
+- [x] **Pre-commit hook:** `git config core.hooksPath .githooks` — bundle-parity gate will catch missing FTL keys
+
+> **Shipped** (2026-08-18): the sale-list commands now cap to the tier's
+> history window. Core: `Store::list_sales_with_history_cap(Option<i64>)`
+> appends `WHERE created_at >= date('now', '-N days')` (RFC-3339 `created_at`
+> compares lexicographically) and returns `(Vec<Sale>, bool)`; `list_sales()`
+> delegates to the same SQL builder. Commands: desktop `list_sales` /
+> `list_sales_scoped` + tablet `list_sales` load the tenant subscription
+> (`sales_history_days()` — Free 30, paid tiers unlimited) and return a new
+> `SaleListResponse { sales, salesHistoryCapped }` DTO (`serde rename_all
+> camelCase`). UI: `api/sales.ts` `SaleListResponse`; Sales History screen
+> renders the blurred `SalesHistoryCapTeaser` row (FTL `sales-history-cap-teaser`
+> / `sales-history-cap-upgrade-cta`, en + id) with an "Upgrade" CTA to
+> `/{locale}/pricing/#plus`, shown after the table or after the filtered-empty
+> state when history exists but fell outside the window; `VoidOrdersScreen`
+> consumes the same wrapper. Tests: oz-core `test_sales_history_cap_free_tier`,
+> UI `shows the 30-day history cap teaser … (C1.2)` / `hides the history cap
+> teaser … (C1.2)`, dev-mock + auth-contract updated to the wrapper shape.
+> Note: `SaleListItem` still serializes snake_case on the wire while the TS
+> type is camelCase (pre-existing mismatch, out of scope).
+
+---
+
+#### C1.3 — Annual plan as default on pricing page + "2 bulan gratis" framing
+
+**Why:** §9 Pre-Launch items 3 & 5. Increases annual commit rate.
+
+- [x] In `website/src/content/pricing/en.ts`:
+  - [x] Change `period` on Pro/Plus/Premium from `'/month'` to include yearly option
+  - [x] Add yearly prices (`prices.yearly`) with `yearlyDiscount: '2 months free'` to each paid tier
+  - [x] Annual is the default billing selection
+- [x] In `website/src/content/pricing/id.ts`:
+  - [x] Same changes with IDR prices and `yearlyDiscount: '2 bulan gratis'`
+- [x] In the pricing page component (`website/src/components/PricingGrid.tsx`):
+  - [x] Add monthly/annual toggle — default to annual
+  - [x] Show "2 months free" / "2 bulan gratis" framing on the annual option
+  - [x] Update displayed price based on toggle state
+
+> **Shipped** (2026-08-18): annual is the default selection in `PricingGrid.tsx`;
+> the toggle note reads "Billed yearly — 2 months free" / "Ditagih tahunan — 2 bulan gratis"
+> (always "2 months free", never a percentage, per §2). Implementation detail: instead of
+> flat `yearlyPrice`/`yearlyPriceId`/`defaultBilling` fields, `PricingTier` uses
+> `prices: Record<'monthly' | 'yearly', TierPrice>` (each with `price`/`period`/`priceId`)
+> and `useState('yearly')` drives the default — same behavior, less duplication.
+
+- [x] **Test:** `cd website && npm run check` + `npm run build` — green; rendered HTML verified (annual prices `$49.99/$99.99/$199.99` visible server-side)
+
+---
+
+#### C1.4 — Add ⭐ Most Popular badge to Pro on pricing page
+
+**Why:** §9 Pre-Launch item 4. Anchors user attention to the ARPU target tier.
+
+- [x] In `website/src/content/pricing/en.ts` and `id.ts`:
+  - [x] Add `highlight: true` to the `pro` tier (drives the localized ⭐ badge)
+- [x] In the pricing page component: render a highlighted badge/ribbon on the tier card that has `highlight` set
+- [x] Verify Pro card has `highlight: true` — visual treatment is prominent
+
+> **Shipped** (2026-08-18): `highlight: true` on `pro` renders the ⭐
+> "Most Popular" / "Paling Populer" ribbon in `PricingGrid.tsx`.
+
+- [x] **Test:** `cd website && npm run check` (astro check) — green
+
+---
+
+#### C1.5 — Website pricing page: add Plus tier + Free-forever card
+
+**Why:** Website currently shows `trial / pro / premium / enterprise` — needs `free / plus / pro / premium / enterprise`.
+
+- [x] In `website/src/content/pricing/en.ts`:
+  - [x] Change `trial` tier: renamed to `free`, description "Free forever", period `'free forever'`, no 90-day mention
+  - [x] Add `plus` tier between `free` and `pro`: `$4.99/mo`, `$49.99/yr`, features: QRIS, cloud sync, Daily Sales Dashboard, 2 registers, 2 warehouses (5-staff quota lives in the matrix row)
+  - [x] Update `pro` tier: corrected to `$9.99/mo` (was $19/mo — wrong vs the plan)
+  - [x] Update `premium` tier: corrected to `$19.99/mo` (was $49/mo — wrong)
+  - [x] Update `featureRows` table to include all 5 tier columns (16 rows mirroring §3)
+- [x] In `website/src/content/pricing/id.ts`: mirrored with IDR prices (Rp 49.000/99.000/199.000 monthly; Rp 500.000/1.000.000/2.000.000 yearly)
+- [x] In `website/src/content/pricing/types.ts`: `TierKey = free/plus/pro/premium/enterprise`; each tier carries `prices: Record<'monthly' | 'yearly', TierPrice>` and `highlight?: boolean`
+
+> **Shipped** (2026-08-18): fully implemented and verified (check + build + rendered HTML:
+> 5 cards, annual default, ⭐ badge, 5-column table). Deviation from the literal spec:
+> `badge`/`yearlyPrice`/`yearlyPriceId`/`defaultBilling` became `prices`/`highlight` — see C1.3 note.
+> Paid tiers still carry `pri_placeholder_…` ids until the real Paddle catalog lands (C0.2 last bullet).
+
+- [x] **Verify:** `cd website && npm run check` + `npm run build` — green
+
+---
+
+### C2 — Short-Term (Month 1–3)
+
+#### C2.1 — Segmented trial strategy
+
+**Why:** §9 Short-Term item 8. Replace universal 30-day Pro trial with vertical-segmented trial.
+
+- [ ] In the license server activation flow (`apps/license-server/activate.go`):
+  - [ ] Add a `trial_vertical` field to the activation request (optional, e.g. `"restaurant"`, `"retail"`, `""`)
+  - [ ] Based on `trial_vertical`:
+    - `""` or unset → mint a **14-day Plus trial** license
+    - `"restaurant"` / `"cafe"` → mint a **14-day Pro trial** license
+    - `"enterprise_referral"` → mint a **30-day Pro trial** license
+  - [ ] Update `ADR #23` reference in source map — trial is now segmented, not 90-day flat
+- [ ] In the Rust activation command: pass `trial_vertical` from the UI activation form
+- [ ] In `ui/src/api/license.ts`: add `trialVertical?: string` param to `activateLicense()`
+- [ ] In the onboarding/setup flow: detect vertical from the landing page URL param (`?v=restaurant`) and pass it through
+
+- [ ] **Test (Go):** `go test ./... -run TestTrialVerticalSegmentation`
+- [ ] **Test (Rust):** `cargo test -p oz-core test_trial_activation_vertical`
+
+---
+
+#### C2.2 — In-app upgrade triggers
+
+**Why:** §9 Short-Term item 10 and §6 of the plan.
+
+**Free → Plus triggers:**
+
+- [ ] **Sales history cap trigger** *(already covered in C1.2)*
+- [ ] **QRIS setup gate:** In the QRIS settings/setup screen, check `tier.supports_qris()` before showing setup UI. If `false`, render an upgrade prompt (Fluent key `qris-upgrade-required`).
+- [ ] **Second staff login gate:** In the staff login handler, call `max_staff_users()` enforcement (covered in C1.1) — the error surfaces as an in-app prompt.
+
+**Plus → Pro triggers:**
+
+- [ ] **Analytics tab lock:** In `ui/src/features/analytics/`, check `supports_analytics()`. If `false`, render a locked screen with a blurred sample chart (Fluent key `analytics-upgrade-required`).
+- [ ] **Second store gate:** In the store creation flow, check `max_stores()` quota. On limit: show an upgrade prompt (Fluent key `store-limit-upgrade-pro`).
+- [ ] **Terminal limit warning:** When terminal count reaches `max_pos_instances() - 0` (at limit), show a non-blocking banner (Fluent key `terminal-limit-reached`).
+
+**Pro → Premium triggers:**
+
+- [ ] **Store count approaching Pro limit (2):** When `store_count == 2`, show an in-app banner: *"Buka toko ke-3? Upgrade ke Premium"* (Fluent key `store-limit-upgrade-premium`).
+- [ ] **Staff count approaching Pro limit (20):** At 16+ staff, show a banner (Fluent key `staff-limit-approaching-premium`).
+- [ ] **Loyalty module teaser:** In `ui/src/features/loyalty/`, check `supports_loyalty()`. If `false`, render a locked screen with an animated preview (Fluent key `loyalty-upgrade-required`).
+
+For each trigger:
+- [ ] Add the Fluent key to the **module's** FTL pair in `ui/src/locales/` (files are per-module, e.g. `settings.ftl` / `settings.id.ftl`, `analytics.ftl` / `analytics.id.ftl` — there is no single `en.ftl`/`id.ftl`)
+- [ ] Add a component test asserting the locked state renders for the correct tier
+- [ ] Pre-commit bundle-parity hook validates FTL keys
+
+- [ ] **Test:** `cd ui && npm run test -- --testPathPattern=UpgradeTrigger`
+
+---
+
+#### C2.3 — Vertical landing pages (website)
+
+**Why:** §9 Short-Term item 9. Higher conversion than generic pricing page.
+
+- [x] Create `website/src/pages/[locale]/untuk-kafe.astro`:
+  - Hero: KDS + analytics
+  - CTA: "Coba Pro gratis 14 hari" → deep-links to `#pro` on the pricing page
+- [x] Create `website/src/pages/[locale]/untuk-minimarket.astro`:
+  - Hero: inventory + multi-terminal
+  - CTA: "Coba Pro gratis 14 hari" → `#pro`
+- [x] Create `website/src/pages/[locale]/untuk-warung.astro`:
+  - Hero: QRIS + Laporan Harian
+  - CTA: "Mulai gratis" → `#plus`
+- [x] Create `website/src/pages/[locale]/untuk-restoran.astro`:
+  - Hero: loyalty + automation
+  - CTA: "Coba Pro gratis 14 hari" → `#premium`
+- [x] Add canonical meta tags and Indonesian-language SEO to each page
+
+> **Shipped** (2026-08-18): all 4 pages × 2 locales built on the shared
+> `VerticalLanding.astro` component; CTAs deep-link to the natural tier anchor on the
+> pricing page (`#plus`/`#pro`/`#premium`) instead of `?v=` signup params — the `?v=`
+> vertical-detection in the onboarding flow is still pending (see C2.1).
+> Homepage "For your business" strip + footer "Jenis bisnis" column link to the pages.
+
+- [x] **Verify:** `cd website && npm run build` — all 8 routes build; rendered HTML verified
+
+---
+
+### C3 — Medium-Term (Month 3–6)
+
+#### C3.1 — Phase 2: Midtrans QRIS subscription payments
+
+**Why:** §9 Medium-Term item 12. Critical revenue unlock for the Indonesian MSME market.
+
+> **Scope note:** This is the largest item. Requires its own ADR before implementation begins.
+
+- [ ] **Write ADR:** `docs/decisions/YYYY-MM-DD-midtrans-subscription-phase2.md`
+  - Decision: route ID customers to Midtrans checkout for fixed-IDR QRIS subscription billing
+  - Consequences: OZ-POS becomes merchant of record for Indonesian PPN; second webhook path
+- [ ] **License server:** Add Midtrans webhook handler in `apps/license-server/` (new file: `midtrans_webhook.go`)
+  - Parse Midtrans subscription notification
+  - Validate signature (Midtrans HMAC-SHA512)
+  - On successful payment: mint/renew license (same `tierQuotas()` logic as Paddle)
+  - On failed payment: set grace period
+- [ ] **Provisioning path:** Add `payment_provider` field to the license record (`"paddle"` | `"midtrans"`)
+- [ ] **Checkout routing:** In the website checkout flow, detect Indonesian IP/locale → redirect to Midtrans checkout instead of Paddle
+- [ ] **Test:** `go test ./... -run TestMidtransWebhook`
+
+---
+
+#### C3.2 — Vertical-specific bundles
+
+**Why:** §9 Medium-Term item 14.
+
+- [ ] Add `bundle_id` optional field to license activation
+- [ ] In `tierQuotas()`: if `bundle_id == "restaurant_starter"`, unlock `kds` workspace type at Plus tier
+- [ ] In the website: add bundle purchase option on vertical landing pages
+- [ ] **Test:** `go test ./... -run TestBundleQuotas`
+
+---
+
+#### C3.3 — Pause subscription feature
+
+**Why:** §9 Medium-Term item 15. Expected -20% churn.
+
+- [ ] In the license server: add a `PATCH /api/subscriptions/:id/pause` endpoint
+  - Accept `pause_months: 1 | 2 | 3`
+  - Set `status = "paused"`, `paused_until = now + N months`
+  - On resume: restore tier and reset billing cycle
+- [ ] In the app: add "Pause subscription" option in the account/billing settings
+- [ ] **Test:** `go test ./... -run TestPauseSubscription`
+
+---
+
+### C4 — Long-Term (Month 6–12)
+
+#### C4.1 — A/B test Pro pricing ($7.99 vs $9.99)
+
+- [ ] Add `PADDLE_PRO_MONTHLY_PRICE_ID_VARIANT` env var for the $7.99 variant Paddle price
+- [ ] In the website pricing page: support a `?ab=pro_price` query param to switch price IDs
+- [ ] Instrument conversion events to Mixpanel/Posthog per variant
+- [ ] **Decision gate:** Run for minimum 30 days with 500+ sessions per variant before acting
+
+#### C4.2 — Enterprise self-serve trial / Premium store-limit bridge
+
+- [ ] In `tierQuotas()`: allow Premium to define up to 10 stores self-serve; >10 requires Enterprise contract
+- [ ] In the store creation flow: at store 10 on Premium, show *"Contact us for Enterprise to unlock more stores"*
+- [ ] Add `GET /api/enterprise-trial` endpoint for self-serve Enterprise trial activation (30-day, gated by sales team approval flag)
+
+#### C4.3 — Add-on marketplace scaffold
+
+- [ ] Design add-on entitlement model (separate from tier quotas)
+- [ ] Add `addons: Vec<String>` to the license payload
+- [ ] Expose `get_addons()` Tauri command
+- [ ] Build marketplace UI shell in `ui/src/features/` (initially read-only listing)
+
+---
+
+### Verification Runbook (run before marking any Phase complete)
+
+```powershell
+# 1. Rust — fast check + targeted tests
+cargo check -p oz-core
+cargo test -p oz-core
+
+# 2. License server — full Go test suite
+cd apps/license-server
+go test ./... -count=1
+
+# 3. UI — type safety + lint + unit tests
+cd ui
+npm run typecheck
+npm run lint
+npm run test
+
+# 4. i18n gates — bundle parity + FTL dedupe
+python scripts/verify-bundle-parity.py --all
+python scripts/dedupe-ftl.py --dry-run
+
+# 5. Full E2E (requires Docker)
+npm run e2e
+```
+
+> After C0 and C1 are complete, add a Playwright E2E spec:
+> `ui/e2e/e2e-upgrade-trigger-flow.spec.ts`
+> covering: Free user hits 30-day history cap → sees blurred overlay → clicks upgrade → upgrade modal opens.
