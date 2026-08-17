@@ -539,3 +539,150 @@ func TestMidtransWebhook_BundleTamperRejected(t *testing.T) {
 		t.Fatal("expected NO license key minted for a bundle-claim tamper")
 	}
 }
+
+// ── Plus-tier E2E (snap → mint → activate → recurring renewal) ───────
+
+// TestMidtransPlus_SnapToRenew_EndToEnd is the Midtrans twin of
+// TestPaddlePlus_WebhookToRenew_EndToEnd: the full plus-tier lifecycle over
+// the app mux — snap token → settled-charge mint → POS activation (tenant
+// api_key issued) → recurring-charge renewal. The Midtrans renewal model
+// differs from Paddle's: instead of a second purchase + renew-endpoint call,
+// a later settled charge on the same subscription refreshes the SAME key and
+// extends expiry (midtransProvision's findMidtransKey idempotency).
+func TestMidtransPlus_SnapToRenew_EndToEnd(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	var emailedKey string
+	restore := stubReceiptEmail(t, &emailedKey)
+	defer restore()
+
+	// ── 1. Snap token for the plus tier (yearly = the pricing default) ──
+	seedTenant(t, app, "snapbuyer000001", "snap-api-key-001", "active")
+	snapToken := "snap-session-0001"
+	webOtpStore.createSession(hashWebToken(snapToken), "snapbuyer000001")
+
+	orig := createMidtransSnap
+	createMidtransSnap = func(charge midtransSnapCharge) (midtransSnapResult, error) {
+		return midtransSnapResult{Token: "snap-token-e2e-001", RedirectURL: "https://app.midtrans.com/snap/v1/transactions/snap-token-e2e-001"}, nil
+	}
+	defer func() { createMidtransSnap = orig }()
+
+	rec := servePost(t, se, midtransSnapPath, "Bearer "+snapToken, nil, `{"tier_key":"plus","period":"yearly"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from snap endpoint, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var snapResp struct {
+		Token   string `json:"token"`
+		OrderID string `json:"order_id"`
+		Amount  string `json:"amount"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &snapResp); err != nil {
+		t.Fatalf("failed to parse snap response: %v", err)
+	}
+	if snapResp.Token != "snap-token-e2e-001" || snapResp.Amount != "1490000" || snapResp.OrderID == "" {
+		t.Fatalf("unexpected snap response: %+v", snapResp)
+	}
+
+	// ── 2. Settled charge for the snap order mints the license ──
+	// The checkout's custom fields echo back: tier (custom_field1) and the
+	// register-first buyer email (custom_field2) that keys the tenant.
+	body := midtransSignedBody("test-midtrans-server-key", "txn_mt_e2e_001", snapResp.OrderID,
+		"sub_mt_e2e_001", "settlement", "200", "1490000", "plus", "snapbuyer000001@example.com")
+	rec2 := serveMidtrans(t, se, body)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 from mint webhook, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	keyRec, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_e2e_001")
+	if err != nil {
+		t.Fatalf("plus license key not minted: %v", err)
+	}
+	key := keyRec.GetString("key")
+	if !strings.HasPrefix(key, "OZ-PLUS-") {
+		t.Errorf("expected OZ-PLUS- key prefix, got %q", key)
+	}
+	if keyRec.GetString("midtrans_order_id") != snapResp.OrderID {
+		t.Errorf("key must record the snap order id, got %q want %q", keyRec.GetString("midtrans_order_id"), snapResp.OrderID)
+	}
+	if keyRec.GetString("payment_provider") != "midtrans" {
+		t.Errorf("expected payment_provider=midtrans, got %q", keyRec.GetString("payment_provider"))
+	}
+	if emailedKey != key {
+		t.Errorf("expected receipt email with key %q, got %q", key, emailedKey)
+	}
+	assertPlusQuotaBlock(t, keyRec.GetString("tier_key"), keyRec.GetInt("max_stores"), keyRec.GetInt("max_pos_instances"), mustParseAllowedTypes(t, keyRec.GetString("allowed_types")))
+
+	subRec, err := app.FindFirstRecordByData("subscriptions", "midtrans_sub_id", "sub_mt_e2e_001")
+	if err != nil {
+		t.Fatalf("plus subscription not persisted: %v", err)
+	}
+	if subRec.GetString("status") != "active" {
+		t.Errorf("expected sub status active, got %q", subRec.GetString("status"))
+	}
+	if !strings.Contains(subRec.GetString("signed_payload"), `"tier_key":"plus"`) {
+		t.Errorf("expected signed payload tier_key plus, got: %s", subRec.GetString("signed_payload"))
+	}
+	mintExpiry := subRec.GetDateTime("expires_at").Time()
+	if diff := mintExpiry.Sub(time.Now().UTC().AddDate(1, 0, 0)); diff > 5*time.Minute || diff < -5*time.Minute {
+		t.Errorf("minted plus subscription should expire ~+1y, got %v (diff %v)", mintExpiry, diff)
+	}
+
+	// ── 3. Activate the minted key → tenant api_key issued ───────
+	actBody := fmt.Sprintf(`{"key":%q,"email":"snapbuyer000001@example.com","machine_id":"e2emachine00001"}`, key)
+	actRec := servePost(t, se, "/api/v1/license/activate", "", nil, actBody)
+	if actRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from activate, got %d: %s", actRec.Code, actRec.Body.String())
+	}
+	var actResp map[string]any
+	if err := json.Unmarshal(actRec.Body.Bytes(), &actResp); err != nil {
+		t.Fatalf("failed to parse activate response: %v", err)
+	}
+	apiKey, _ := actResp["api_key"].(string)
+	if apiKey == "" {
+		t.Fatal("expected api_key in activate response")
+	}
+	actPayload := signedPayloadFrom(t, actRec.Body.Bytes())
+	assertPlusQuotaBlock(t, actPayload.TierKey, actPayload.MaxStores, actPayload.MaxPOSInstances, actPayload.AllowedTypes)
+
+	keyAfterActivate, err := app.FindFirstRecordByData("license_keys", "key", key)
+	if err != nil || keyAfterActivate.GetString("status") != "activated" {
+		t.Fatalf("expected key %q activated, got status %q (err %v)", key, keyAfterActivate.GetString("status"), err)
+	}
+
+	// ── 4. Recurring charge on the same subscription refreshes the
+	//       SAME key and extends expiry (Midtrans's renewal model) ──
+	time.Sleep(1100 * time.Millisecond) // prove the expiry extension
+	rec3 := serveMidtrans(t, se, midtransSignedBody("test-midtrans-server-key", "txn_mt_e2e_002",
+		"OZ-PLUS-1755-E2E2", "sub_mt_e2e_001", "settlement", "200", "1490000", "plus", "snapbuyer000001@example.com"))
+	if rec3.Code != http.StatusOK {
+		t.Fatalf("expected 200 from renewal webhook, got %d: %s", rec3.Code, rec3.Body.String())
+	}
+
+	keyRec2, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_e2e_001")
+	if err != nil {
+		t.Fatalf("renewed key not found: %v", err)
+	}
+	if keyRec2.GetString("key") != key {
+		t.Errorf("recurring renewal must refresh the SAME key, got %q (first %q)", keyRec2.GetString("key"), key)
+	}
+	if keyRec2.GetString("midtrans_order_id") == snapResp.OrderID {
+		t.Errorf("renewal must record the new order id, still %q", keyRec2.GetString("midtrans_order_id"))
+	}
+	if !keyRec2.GetDateTime("expires_at").Time().After(mintExpiry) {
+		t.Errorf("renewal must extend expiry beyond the mint expiry (mint %v, now %v)", mintExpiry, keyRec2.GetDateTime("expires_at").Time())
+	}
+
+	// Renewed subscription keeps the plus quota block and a new expiry.
+	subRec2, err := app.FindFirstRecordByData("subscriptions", "midtrans_sub_id", "sub_mt_e2e_001")
+	if err != nil {
+		t.Fatalf("renewed subscription not found: %v", err)
+	}
+	assertPlusQuotaBlock(t, subRec2.GetString("tier_key"), subRec2.GetInt("max_stores"), subRec2.GetInt("max_pos_instances"), mustParseAllowedTypes(t, subRec2.GetString("allowed_types")))
+	if !subRec2.GetDateTime("expires_at").Time().After(mintExpiry) {
+		t.Errorf("renewed subscription expiry must extend beyond mint expiry")
+	}
+}

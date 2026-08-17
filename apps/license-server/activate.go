@@ -424,18 +424,19 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// ── New activation for existing tenant: api_key required ──
 			// The caller must prove they are the registered tenant admin
 			// by presenting the api_key that was issued on first activation.
-			// EXCEPTION: webhook-issued keys (paddle_sub_id set) are bound
-			// to this tenant's email at purchase, so email + key is sufficient
-			// proof (the same model as re-activation). The tenant's api_key is
-			// minted NOW and returned in the response so /status and /renew
-			// work for the POS — the webhook only stored a placeholder hash.
+			// EXCEPTION: webhook-issued keys (paddle_sub_id / midtrans_sub_id
+			// set) are bound to this tenant's email at purchase, so email +
+			// key is sufficient proof (the same model as re-activation). The
+			// tenant's api_key is minted NOW and returned in the response so
+			// /status and /renew work for the POS — the webhook only stored a
+			// placeholder hash (both providers upsert the tenant the same way).
 			if keyStatus == "unused" || keyStatus == "" {
-				paddleIssued := keyRecord.GetString("paddle_sub_id") != ""
-				if paddleIssued {
+				providerIssued := keyRecord.GetString("paddle_sub_id") != "" || keyRecord.GetString("midtrans_sub_id") != ""
+				if providerIssued {
 					newAPIKey := generateAPIKey()
 					apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
 					if hashErr != nil {
-						log.Printf("Paddle-key activation api_key mint failed for tenant %q: %v", tenant.Id, hashErr)
+						log.Printf("webhook-key activation api_key mint failed for tenant %q: %v", tenant.Id, hashErr)
 						return e.JSON(http.StatusInternalServerError, map[string]any{
 							"error": "failed to create api_key",
 						})
@@ -443,7 +444,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 					tenant.Set("api_key", apiKeyHash)
 					tenant.Set("api_key_lookup", apiKeyLookup)
 					if saveErr := app.Save(tenant); saveErr != nil {
-						log.Printf("Paddle-key activation api_key save failed for tenant %q: %v", tenant.Id, saveErr)
+						log.Printf("webhook-key activation api_key save failed for tenant %q: %v", tenant.Id, saveErr)
 						return e.JSON(http.StatusInternalServerError, map[string]any{
 							"error": "failed to create api_key",
 						})
