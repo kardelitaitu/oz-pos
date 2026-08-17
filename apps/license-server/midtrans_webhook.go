@@ -105,7 +105,10 @@ func resetMidtransDedup() {
 //	custom_field1 = tier_key
 //	custom_field2 = buyer email (register-first, same as Paddle's
 //	               custom_data.email)
-//	custom_field3 = signup vertical (trial segmentation, unused here)
+//	custom_field3 = billing period (the website's monthly/yearly
+//	               vocabulary; the amount→price-map lookup is
+//	               authoritative for the cadence, so it is not
+//	               cross-checked)
 //	custom_field4 = bundle_id (C3.2 vertical bundles — cross-checked
 //	               against the price map, never trusted alone)
 type midtransNotification struct {

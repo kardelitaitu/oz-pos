@@ -157,3 +157,55 @@ State of the codebase:
 - [x] Tests — `go test ./... -run TestMidtrans` (mint, signature 401, replay dedup, renewal, failed-charge grace, amount cross-check, snap token) + website routing tests; full Go/website/build gates green
 
 Tracked in `TODO.md` C3.1 (shipped 2026-08-18).
+
+## Implementation Deviations (shipped 2026-08-18, verified against the code)
+
+The decisions above were written before implementation; the shipped code deviates in
+several places. Recorded here so the decision record stays honest — the deviations are
+intentional refinements, not bugs (except where noted):
+
+1. **Signature scheme is SHA-512, not HMAC-SHA512** (D2). `verifyMidtransSignature`
+   computes `sha512(order_id + status_code + gross_amount + serverkey)` with
+   `sha512.Sum512` + constant-time compare — Midtrans's documented payment-notification
+   scheme, which is a plain hash, not HMAC. Also, **only the payment canonical string is
+   implemented**: subscription-status notifications carry no dedicated canonical string
+   and fall through the handler's default branch as acknowledged no-ops (provisioning is
+   keyed on settled *transaction* charges).
+2. **Custom-field contract (D1) differs.** The ADR said the checkout embeds
+   `tier_key` + `email` + `vertical`; what shipped is `custom_field1 = tier_key`,
+   `custom_field2 = buyer email`, `custom_field3 = billing period` (the website's
+   `monthly`/`yearly` vocabulary), and — added by C3.2 — `custom_field4 = bundle_id`.
+   The signup vertical is **not** carried on Midtrans charges (trial segmentation is a
+   desktop-activation concern); the stale `custom_field3 = signup vertical` comment in
+   `midtrans_webhook.go` was corrected to match.
+3. **Period vocabulary: website `monthly`/`yearly` vs. price-map `month`/`year`** (D2
+   tier resolution). `midtransAmountForTier` normalizes the website's `BillingPeriod` to
+   the map's plan-period vocabulary before the reverse lookup, and `midtransChargeExpiry`
+   derives the expiry from the map's period. The webhook **cross-checks `custom_field1`
+   (tier) and `custom_field4` (bundle) against the map but not `custom_field3` (period)**
+   — the amount→map lookup is authoritative for the period, so a tampered `custom_field3`
+   cannot change the billed cadence.
+4. **Price-map format gained segments (D2).** `MIDTRANS_PRICE_TIERS` shipped as
+   `gross_amount:tier_key[:period][:bundle_id]` — not the ADR's "`gross_amount → tier`,
+   same shape as `PADDLE_PRICE_TIERS`" — with `[:period]` (default `year`) and the C3.2
+   `[:bundle_id]` extension. Unknown bundle ids are rejected at parse time (loud boot
+   failure, never a silent no-op).
+5. **The snap endpoint creates a Snap transaction token, not a Midtrans subscription**
+   (D1). `createMidtransSnapHTTP` calls `POST {base}/snap/v1/transactions` (server key via
+   Basic auth) and returns `{token, redirect_url, order_id, amount}` — the ADR's
+   `snap_token` plus the order id and the fixed amount (the buyer-facing charge).
+   `subscription_id` linkage only appears when Midtrans later sends recurring charges;
+   provisioning falls back to `midtrans_order_id` for charges that predate a subscription
+   id.
+6. **Dedup key is `transaction_id` only** (D2) — not "`transaction_id`/`order_id`". A
+   re-delivery with the same `order_id` but a new `transaction_id` is not deduped, which
+   is safe: provisioning upserts idempotently on `midtrans_sub_id`/`midtrans_order_id`.
+7. **Extra schema fields (D3).** Beyond `midtrans_sub_id`, both collections carry
+   `midtrans_order_id` (lookup key for pre-subscription charges) and, from C3.2,
+   `bundle_id` — the latter persisting a purchased bundle across renewals.
+8. **Webhook-minted keys activate like Paddle keys.** The activation handler's
+   api_key-mint-on-first-activation fast-path was originally Paddle-only
+   (`paddle_sub_id`); the Midtrans plus-tier E2E exposed that a Midtrans-minted key
+   401'd on activation, and it now covers any webhook-issued key (`paddle_sub_id` **or**
+   `midtrans_sub_id`). This is the D1 register-first model made symmetric across
+   providers.
