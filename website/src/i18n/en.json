@@ -254,8 +254,7 @@
   },
   "legal": {
     "privacyTitle": "Privacy Policy",
-    "termsTitle": "Terms of Service",
-    "placeholder": "This page is a placeholder. Legal text will be added before launch."
+    "termsTitle": "Terms of Service"
   },
   "notFound": {
     "title": "Page not found",
