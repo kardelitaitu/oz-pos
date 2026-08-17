@@ -3,6 +3,7 @@ import { t } from '../i18n';
 import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import { clearSession, getSessionEmail, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout } from './paddle';
+import { openMidtransCheckout } from './midtrans';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -157,41 +158,51 @@ export default function AccountView({ locale }: Props) {
   const subscribe = async (priceId: string, tierKey: string) => {
     setSubscribing(tierKey);
     setSubscribeError(false);
+    // Indonesian market bills through Midtrans Snap (ADR #39 D1); every
+    // other locale through Paddle.
+    const useMidtrans = locale === 'id';
     try {
+      if (useMidtrans) {
+        await openMidtransCheckout(tierKey, 'yearly', (completed) => pollAfterCheckout(completed));
+        return;
+      }
       const email = await getSessionEmail();
       if (!email) throw new Error('no session email');
       // After the overlay closes, refresh /me so a completed purchase shows
       // the subscription without a manual reload. The webhook provisions
       // asynchronously, so poll for it (up to ~20s) instead of a single fetch.
-      await openPaddleCheckout(priceId, email, (completed) => {
-        if (!completed) return;
-        if (!mountedRef.current) return;
-        setRefreshState('checking');
-        void (async () => {
-          let found = false;
-          for (let i = 0; i < 8 && !found; i++) {
-            await new Promise((r) => setTimeout(r, 2500));
-            if (!mountedRef.current) return;
-            try {
-              const data = await fetchMe();
-              if (data) {
-                setMe(data);
-                setState('ready');
-                found = Boolean(data.subscription);
-              }
-            } catch {
-              // Transient network error — keep polling.
-            }
-          }
-          if (mountedRef.current) setRefreshState(found ? 'idle' : 'pending');
-        })();
-      });
+      await openPaddleCheckout(priceId, email, (completed) => pollAfterCheckout(completed));
     } catch (err) {
       console.error('checkout open failed', err);
       setSubscribeError(true);
     } finally {
       setSubscribing(null);
     }
+  };
+
+  /** Poll /me after a completed checkout until the webhook provisions. */
+  const pollAfterCheckout = (completed: boolean) => {
+    if (!completed) return;
+    if (!mountedRef.current) return;
+    setRefreshState('checking');
+    void (async () => {
+      let found = false;
+      for (let i = 0; i < 8 && !found; i++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        if (!mountedRef.current) return;
+        try {
+          const data = await fetchMe();
+          if (data) {
+            setMe(data);
+            setState('ready');
+            found = Boolean(data.subscription);
+          }
+        } catch {
+          // Transient network error — keep polling.
+        }
+      }
+      if (mountedRef.current) setRefreshState(found ? 'idle' : 'pending');
+    })();
   };
 
   if (state === 'loading') return <p className="text-muted">{t(locale, 'account.loading')}</p>;
@@ -224,13 +235,17 @@ export default function AccountView({ locale }: Props) {
   // Paddle price id is still a placeholder (subscription-tiers.md — six real
   // prices not yet catalogued) are excluded so the button never opens a
   // dead checkout; free/enterprise have no price id at all.
+  // The id market bills through Midtrans (fixed Rp from the server's
+  // MIDTRANS_PRICE_TIERS map), so Paddle price ids don't gate it; other
+  // locales need a real, non-placeholder Paddle price.
+  const useMidtrans = locale === 'id';
   const subscribable = (pricingFor(locale) ?? [])
     .filter((tier) => tier.tierKey === 'plus' || tier.tierKey === 'pro' || tier.tierKey === 'premium')
     .map((tier) => {
       const yearly = tier.prices.yearly;
       return { tierKey: tier.tierKey, name: tier.name, price: yearly.price, period: yearly.period, priceId: yearly.priceId ?? '' };
     })
-    .filter((plan) => plan.priceId && !isPlaceholderPriceId(plan.priceId));
+    .filter((plan) => (useMidtrans ? true : plan.priceId && !isPlaceholderPriceId(plan.priceId)));
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -356,7 +371,7 @@ export default function AccountView({ locale }: Props) {
         <section className="rounded-xl border border-accent/40 bg-surface/40 p-6" aria-label={t(locale, 'account.subscribe')}>
           <h2 className="text-lg font-semibold">{t(locale, 'account.subscribe')}</h2>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.noSubscription')}</p>
-          {isPaddleConfigured() && subscribable.length > 0 ? (
+          {(useMidtrans ? Boolean(licenseApiUrl()) : isPaddleConfigured()) && subscribable.length > 0 ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {subscribable.map((plan) => (
                 <div key={plan.tierKey} className="rounded-lg border border-ink/10 p-4">

@@ -61,6 +61,8 @@ export interface CheckoutTier {
   tierKey: TierKey;
   name: string;
   cta: string;
+  /** Selected billing period — the ID checkout bills Midtrans by period. */
+  period: BillingPeriod;
   priceId?: string;
 }
 

@@ -2,17 +2,21 @@ import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import type { CheckoutTier } from '../content/pricing/types';
 import { hasSession, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout, getSessionEmail } from './paddle';
+import { openMidtransCheckout } from './midtrans';
+import { licenseApiUrl } from '../lib/runtime-config';
 
 /**
  * Pricing-page checkout button (website-plan.md §7). Payment is
  * register-first: without a session the button redirects to the login
  * page (which self-signs a new account on first OTP verify) instead of
- * opening checkout, so the webhook always finds a tenant for
- * customData.email. With a session it opens the Paddle checkout overlay
- * prefilled with the account email.
+ * opening checkout, so the webhook always finds a tenant. With a session
+ * it opens the checkout overlay for the buyer's market (ADR #39 D1):
+ * id-locale pages open the Midtrans Snap overlay (fixed Rp, QRIS/VA/
+ * e-wallet); every other locale opens Paddle (USD cards).
  *
- * When PADDLE_CLIENT_TOKEN is unset (or the price id is a placeholder)
- * the button degrades to a mailto fallback (see website-plan.md §7).
+ * When the locale's checkout provider is unconfigured (PADDLE_CLIENT_TOKEN
+ * unset / placeholder price id for Paddle markets, license API unset for
+ * id) the button degrades to a mailto fallback (see website-plan.md §7).
  */
 interface Props {
   /** Billing-resolved tier (price id for the selected period — see PricingGrid). */
@@ -31,11 +35,14 @@ export default function CheckoutButton({ tier, locale }: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const priceId = tier.priceId;
+  // Indonesian market: the id-locale pages bill through Midtrans Snap
+  // (fixed IDR, QRIS/VA/e-wallet — ADR #39 D1). Paddle stays for every
+  // other locale.
+  const useMidtrans = locale === 'id';
 
-  // No checkout path: placeholder price (not yet catalogued) OR the client
-  // token is unset (checkout can't open) — degrade to the mailto fallback
+  // No checkout path for this locale — degrade to the mailto fallback
   // instead of sending the user through login into a dead checkout.
-  if (!priceId || isPlaceholderPriceId(priceId) || !isPaddleConfigured()) {
+  if (useMidtrans ? !licenseApiUrl() : !priceId || isPlaceholderPriceId(priceId) || !isPaddleConfigured()) {
     return (
       <a
         href={`mailto:sales@oz-pos.com?subject=${encodeURIComponent('OZ-POS plan: ' + tier.name)}`}
@@ -58,6 +65,12 @@ export default function CheckoutButton({ tier, locale }: Props) {
     setLoading(true);
     setError(false);
     try {
+      if (useMidtrans) {
+        // The snap token request is session-authed; the license server
+        // reads the buyer email from the tenant record itself.
+        await openMidtransCheckout(tier.tierKey, tier.period);
+        return;
+      }
       const email = await getSessionEmail();
       if (!email) {
         // Session token present but no email resolvable — back to login.

@@ -77,6 +77,7 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
             tierKey: tier.tierKey,
             name: tier.name,
             cta: tier.cta,
+            period: billing,
             priceId: price.priceId,
           };
           return (

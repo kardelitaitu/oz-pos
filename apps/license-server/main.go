@@ -211,6 +211,10 @@ func main() {
 		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		// Midtrans Snap checkout (see midtrans_checkout.go) — session-authed
+		// web endpoint like /api/v1/web/*: the id-locale pricing button
+		// requests a snap token for a tier + period, which Snap.js opens.
+		se.Router.POST(midtransSnapPath, handleMidtransSnap(app))
 		// Paddle Billing webhook — signature-verified, server-to-server (see
 		// paddle_webhook.go). NOT behind the web CORS allowlist: Paddle sends
 		// no Origin, and the Paddle-Signature header is the gate.
