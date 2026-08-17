@@ -48,6 +48,13 @@ jobs:
   container-scan:
     name: Trivy container scan
     runs-on: ubuntu-latest
+    # SARIF upload needs the token to write code-scanning results; the repo
+    # default GITHUB_TOKEN is read-only (no permissions block = no
+    # security-events: write), which made upload-sarif fail with "Resource
+    # not accessible by integration" on every scheduled run.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
       - name: Build cloud image
@@ -84,13 +91,13 @@ jobs:
           output: trivy-license.sarif
       - name: Upload Trivy SARIF (cloud)
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-cloud.sarif
           category: trivy-cloud
       - name: Upload Trivy SARIF (license)
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-license.sarif
           category: trivy-license
