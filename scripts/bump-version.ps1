@@ -15,15 +15,27 @@
 
 .PARAMETER TargetVersion
     The new version number to bump the codebase to (e.g., "0.0.6").
+    Must be MAJOR.MINOR.PATCH and newer than the current version - the script
+    refuses to bump backwards.
+
+.PARAMETER DryRun
+    Preview mode: probes every pattern and reports what would change without
+    writing anything, refreshing lockfiles, or running the release gate.
+    Exits non-zero if any pattern would fail to match.
 
 .EXAMPLE
     powershell -File scripts\bump-version.ps1 "0.0.6"
     (Run this command from the project root workspace directory)
+
+.EXAMPLE
+    powershell -File scripts\bump-version.ps1 "0.0.6" -DryRun
 #>
 
 param(
     [Parameter(Mandatory=$true)]
-    [string]$TargetVersion
+    [ValidatePattern('^\d+\.\d+\.\d+$')]  # PS 5.1 has no ErrorMessage on ValidatePattern; the default message shows the expected MAJOR.MINOR.PATCH shape
+    [string]$TargetVersion,
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,7 +49,7 @@ $cargoTomlPath = "Cargo.toml"
 if (-not (Test-Path $cargoTomlPath)) {
     Write-Error "Could not find Cargo.toml in workspace root."
 }
-$cargoToml = Get-Content -Path $cargoTomlPath -Raw
+$cargoToml = [System.IO.File]::ReadAllText($cargoTomlPath, (New-Object System.Text.UTF8Encoding($false)))
 $currentVersion = [regex]::Match($cargoToml, '(?m)^version\s*=\s*"([^"]+)"').Groups[1].Value
 
 if (-not $currentVersion) {
@@ -52,6 +64,30 @@ if ($currentVersion -eq $TargetVersion) {
     exit 0
 }
 
+# Refuse to bump backwards: a release version must never go down.
+function Test-NewerVersion {
+    param([string]$Current, [string]$Target)
+    $c = $Current -split '\.' | ForEach-Object { [int]$_ }
+    $t = $Target -split '\.' | ForEach-Object { [int]$_ }
+    for ($i = 0; $i -lt 3; $i++) {
+        if ($t[$i] -gt $c[$i]) { return $true }
+        if ($t[$i] -lt $c[$i]) { return $false }
+    }
+    return $false
+}
+if (-not (Test-NewerVersion $currentVersion $TargetVersion)) {
+    Write-Error "Target version $TargetVersion is not newer than current $currentVersion - refusing to bump backwards."
+}
+
+# Failure accounting: any pattern that does not match (or a missing target file)
+# is recorded here and FAILS the bump at the end. A silent skip is how AGENTS.md
+# drifted in 0.0.26 and how the StatusBar label rotted at 0.0.25 for two
+# releases - so a skip is now a hard error, never a warning.
+$script:BumpFailures = New-Object System.Collections.Generic.List[string]
+# Every file the bump owns, collected so the post-bump sweep can prove the old
+# version is gone from all of them.
+$script:BumpTargets = New-Object System.Collections.Generic.List[string]
+
 # Helper function to do safe string replacement in a file
 function Update-File {
     param(
@@ -59,21 +95,28 @@ function Update-File {
         [string]$OldString,
         [string]$NewString
     )
-    if (Test-Path $Path) {
-        # UTF-8 read/write: the files are BOM-less UTF-8, but Windows PowerShell 5.1
-        # defaults to ANSI (cp1252), which mangles non-ASCII (em-dashes in i18n
-        # strings and CHANGELOG headings) on read and writes mojibake on write.
-        $utf8 = New-Object System.Text.UTF8Encoding($false)
-        $content = [System.IO.File]::ReadAllText($Path, $utf8)
-        if ($content.Contains($OldString)) {
-            $updated = $content.Replace($OldString, $NewString)
-            [System.IO.File]::WriteAllText($Path, $updated, $utf8)
-            Write-Host "Updated: $Path"
-        } else {
-            Write-Host "Skipped (target string not found): $Path" -ForegroundColor Yellow
-        }
+    # UTF-8 read/write: the files are BOM-less UTF-8, but Windows PowerShell 5.1
+    # defaults to ANSI (cp1252), which mangles non-ASCII (em-dashes in i18n
+    # strings and CHANGELOG headings) on read and writes mojibake on write.
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    if (-not (Test-Path $Path)) {
+        $script:BumpFailures.Add("MISSING FILE: $Path")
+        Write-Host "MISSING FILE: $Path" -ForegroundColor Red
+        return
+    }
+    $script:BumpTargets.Add((Resolve-Path $Path).Path)
+    $content = [System.IO.File]::ReadAllText($Path, $utf8)
+    if (-not $content.Contains($OldString)) {
+        $script:BumpFailures.Add("NO MATCH in $Path (expected pattern: $OldString)")
+        Write-Host "NO MATCH in $Path" -ForegroundColor Red
+        return
+    }
+    if ($DryRun) {
+        Write-Host "WOULD UPDATE: $Path"
     } else {
-        Write-Host "Warning: File not found: $Path" -ForegroundColor Red
+        $updated = $content.Replace($OldString, $NewString)
+        [System.IO.File]::WriteAllText($Path, $updated, $utf8)
+        Write-Host "Updated: $Path"
     }
 }
 
@@ -132,7 +175,10 @@ Update-File "README.md" "Latest release: **v$currentVersion** (on branch ``$curr
 # 2b. Sync canonical CHANGELOG.md heading (RELEASE-07)
 Write-Host "`nSyncing CHANGELOG.md heading..." -ForegroundColor Cyan
 $changelogPath = "CHANGELOG.md"
-if (Test-Path $changelogPath) {
+if (-not (Test-Path $changelogPath)) {
+    $script:BumpFailures.Add("MISSING FILE: $changelogPath")
+    Write-Host "MISSING FILE: $changelogPath" -ForegroundColor Red
+} else {
     $content = [System.IO.File]::ReadAllText($changelogPath, (New-Object System.Text.UTF8Encoding($false)))
     $date = Get-Date -Format "yyyy-MM-dd"
     # Build the em-dash via [char] so the script source stays pure-ASCII; the
@@ -145,43 +191,95 @@ if (Test-Path $changelogPath) {
     } else {
         # Insert the new heading right after the intro block (before the first "## [").
         $insertAfter = [regex]::Match($content, "(?m)^## \[")
-        if ($insertAfter.Success) {
+        if (-not $insertAfter.Success) {
+            $script:BumpFailures.Add("CHANGELOG.md has no '## [' heading to anchor the new entry - the format changed?")
+            Write-Host "CHANGELOG.md has no '## [' heading to anchor the new entry" -ForegroundColor Red
+        } elseif ($DryRun) {
+            Write-Host "WOULD INSERT: $changelogPath ($heading)"
+        } else {
             $block = "$heading`r`n`r`nRelease notes: see docs/releases/CHANGELOG-$TargetVersion.md (reviewed before tagging).`r`n`r`n---`r`n`r`n"
             $updated = $content.Substring(0, $insertAfter.Index) + $block + $content.Substring($insertAfter.Index)
             [System.IO.File]::WriteAllText($changelogPath, $updated, (New-Object System.Text.UTF8Encoding($false)))
             Write-Host "Updated: $changelogPath (inserted $heading)"
-        } else {
-            Write-Host "Skipped (no existing '## [' headings to anchor): $changelogPath" -ForegroundColor Yellow
         }
     }
-} else {
-    Write-Host "Warning: File not found: $changelogPath" -ForegroundColor Red
 }
 
-# 3. Refresh Lockfiles
+# 2c. Fail fast: a bump with any unresolved pattern is a broken bump, and the
+# lockfile refresh / release gate must not run on one. This check is mode-
+# agnostic, so a dry run with problems also exits non-zero.
+if ($script:BumpFailures.Count -gt 0) {
+    Write-Host "`nBUMP FAILED - $($script:BumpFailures.Count) problem(s):" -ForegroundColor Red
+    foreach ($f in $script:BumpFailures) { Write-Host "  - $f" -ForegroundColor Red }
+    exit 1
+}
+Write-Host "All $($script:BumpTargets.Count) version-string patterns resolved."
+
+# 3. Refresh Lockfiles (skipped in dry-run)
 Write-Host "`nUpdating lockfiles..." -ForegroundColor Cyan
+if ($DryRun) {
+    Write-Host "Dry run - skipping lockfile refresh."
+} else {
+    # Cargo.lock
+    Write-Host "Running cargo check to update Cargo.lock..."
+    & cargo check
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "cargo check failed while updating Cargo.lock."
+    }
 
-# Cargo.lock
-Write-Host "Running cargo check to update Cargo.lock..."
-& cargo check
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "cargo check failed while updating Cargo.lock."
+    # ui/package-lock.json
+    if (Test-Path "ui") {
+        Push-Location ui
+        Write-Host "Running npm install --package-lock-only to sync package-lock.json..."
+        & npm install --package-lock-only --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "npm install failed while syncing ui/package-lock.json."
+        }
+        Pop-Location
+    }
+
+    # website/package-lock.json
+    if (Test-Path "website") {
+        Push-Location website
+        Write-Host "Running npm install --package-lock-only to sync website/package-lock.json..."
+        & npm install --package-lock-only --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "npm install failed while syncing website/package-lock.json."
+        }
+        Pop-Location
+    }
 }
 
-# ui/package-lock.json
-if (Test-Path "ui") {
-    Push-Location ui
-    Write-Host "Running npm install --package-lock-only to sync package-lock.json..."
-    & npm install --package-lock-only
-    Pop-Location
+# 4. Post-bump verification (real mode only): prove the old version is gone from
+# every owned file, then run the canonical release version gate (AUDIT-28) as the
+# final word - the script has always claimed to satisfy that gate, now it proves it.
+if (-not $DryRun) {
+    Write-Host "`nVerifying the bump..." -ForegroundColor Cyan
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $stale = 0
+    foreach ($target in $script:BumpTargets) {
+        if ([System.IO.File]::ReadAllText($target, $utf8).Contains($currentVersion)) {
+            Write-Host "STALE: $target still contains $currentVersion" -ForegroundColor Red
+            $stale++
+        }
+    }
+    if ($stale -gt 0) {
+        Write-Error "$stale file(s) still contain the old version $currentVersion - the bump is incomplete."
+    }
+    Write-Host "No stale $currentVersion references in $($script:BumpTargets.Count) owned file(s)."
+
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        Write-Error "node is not on PATH - cannot run the release version gate (scripts/check-release-version.mjs)."
+    }
+    Write-Host "Running release version gate: node scripts/check-release-version.mjs $TargetVersion"
+    & node scripts/check-release-version.mjs $TargetVersion
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Release version gate FAILED - the bump is inconsistent."
+    }
 }
 
-# website/package-lock.json
-if (Test-Path "website") {
-    Push-Location website
-    Write-Host "Running npm install --package-lock-only to sync website/package-lock.json..."
-    & npm install --package-lock-only
-    Pop-Location
+if ($DryRun) {
+    Write-Host "`nDRY RUN COMPLETE - no files were modified." -ForegroundColor Green
+} else {
+    Write-Host "`nVersion successfully bumped from $currentVersion to $TargetVersion!" -ForegroundColor Green
 }
-
-Write-Host "`nVersion successfully bumped from $currentVersion to $TargetVersion!" -ForegroundColor Green
