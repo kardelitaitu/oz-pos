@@ -336,28 +336,55 @@ Staff limit currently has no enforcement in the codebase (`max_staff_users` does
 
 **Free → Plus triggers:**
 
-- [ ] **Sales history cap trigger** *(already covered in C1.2)*
-- [ ] **QRIS setup gate:** In the QRIS settings/setup screen, check `tier.supports_qris()` before showing setup UI. If `false`, render an upgrade prompt (Fluent key `qris-upgrade-required`).
-- [ ] **Second staff login gate:** In the staff login handler, call `max_staff_users()` enforcement (covered in C1.1) — the error surfaces as an in-app prompt.
+- [x] **Sales history cap trigger** *(already covered in C1.2)*
+- [x] **QRIS setup gate:** In the QRIS settings/setup screen, check `tier.supports_qris()` before showing setup UI. If `false`, render an upgrade prompt (Fluent key `qris-upgrade-required`).
+- [x] **Second staff login gate:** In the staff login handler, call `max_staff_users()` enforcement (covered in C1.1) — the error surfaces as an in-app prompt.
 
 **Plus → Pro triggers:**
 
-- [ ] **Analytics tab lock:** In `ui/src/features/analytics/`, check `supports_analytics()`. If `false`, render a locked screen with a blurred sample chart (Fluent key `analytics-upgrade-required`).
-- [ ] **Second store gate:** In the store creation flow, check `max_stores()` quota. On limit: show an upgrade prompt (Fluent key `store-limit-upgrade-pro`).
-- [ ] **Terminal limit warning:** When terminal count reaches `max_pos_instances() - 0` (at limit), show a non-blocking banner (Fluent key `terminal-limit-reached`).
+- [x] **Analytics tab lock:** In `ui/src/features/analytics/`, check `supports_analytics()`. If `false`, render a locked screen with a blurred sample chart (Fluent key `analytics-upgrade-required`).
+- [x] **Second store gate:** In the store creation flow, check `max_stores()` quota. On limit: show an upgrade prompt (Fluent key `store-limit-upgrade-pro`).
+- [x] **Terminal limit warning:** When terminal count reaches `max_pos_instances() - 0` (at limit), show a non-blocking banner (Fluent key `terminal-limit-reached`).
 
 **Pro → Premium triggers:**
 
-- [ ] **Store count approaching Pro limit (2):** When `store_count == 2`, show an in-app banner: *"Buka toko ke-3? Upgrade ke Premium"* (Fluent key `store-limit-upgrade-premium`).
-- [ ] **Staff count approaching Pro limit (20):** At 16+ staff, show a banner (Fluent key `staff-limit-approaching-premium`).
-- [ ] **Loyalty module teaser:** In `ui/src/features/loyalty/`, check `supports_loyalty()`. If `false`, render a locked screen with an animated preview (Fluent key `loyalty-upgrade-required`).
+- [x] **Store count approaching Pro limit (2):** When `store_count == 2`, show an in-app banner: *"Buka toko ke-3? Upgrade ke Premium"* (Fluent key `store-limit-upgrade-premium`).
+- [x] **Staff count approaching Pro limit (20):** At 16+ staff, show a banner (Fluent key `staff-limit-approaching-premium`).
+- [x] **Loyalty module teaser:** In `ui/src/features/loyalty/`, check `supports_loyalty()`. If `false`, render a locked screen with an animated preview (Fluent key `loyalty-upgrade-required`).
 
 For each trigger:
-- [ ] Add the Fluent key to the **module's** FTL pair in `ui/src/locales/` (files are per-module, e.g. `settings.ftl` / `settings.id.ftl`, `analytics.ftl` / `analytics.id.ftl` — there is no single `en.ftl`/`id.ftl`)
-- [ ] Add a component test asserting the locked state renders for the correct tier
-- [ ] Pre-commit bundle-parity hook validates FTL keys
+- [x] Add the Fluent key to the **module's** FTL pair in `ui/src/locales/` (files are per-module, e.g. `settings.ftl` / `settings.id.ftl`, `analytics.ftl` / `analytics.id.ftl` — there is no single `en.ftl`/`id.ftl`)
+- [x] Add a component test asserting the locked state renders for the correct tier
+- [x] Pre-commit bundle-parity hook validates FTL keys
 
-- [ ] **Test:** `cd ui && npm run test -- --testPathPattern=UpgradeTrigger`
+- [x] **Test:** `cd ui && npm run test -- --testPathPattern=UpgradeTrigger`
+
+> **Shipped** (2026-08-18): every gate reads a single local IPC read — the new
+> `get_subscription_capabilities` command (desktop + tablet) returns the tier's
+> quotas (`max_stores`/`max_pos_instances`/`max_warehouses`/`max_staff_users`/
+> `sales_history_days`), feature flags (`supports_qris`/`supports_analytics`/
+> `supports_loyalty`/`supports_daily_dashboard`/`supports_cloud_sync`), grace
+> days, and current usage (`store_count`/`staff_count`/`terminal_count`) — fed to
+> the UI through the new `SubscriptionProvider`/`useSubscription()` context
+> (mounted in `AppProviders`). Gates:
+> - **QRIS** (`PaymentModal`): selecting QRIS on a tier without `supports_qris`
+>   shows the upgrade prompt instead of the QR generation UI → `#plus`.
+> - **Analytics** (`AnalyticsScreen`): locked screen with a blurred sample
+>   bar-chart preview (shared `TierLockedFeature` component) → `#pro`.
+> - **Loyalty** (`LoyaltyManagementScreen`): locked screen with a
+>   reduced-motion-gated animated preview → `#premium`.
+> - **Second store** (`TopologyScreen` `handleAddBranch`): at `max_stores()`,
+>   the add-branch form shows an inline banner and creation is blocked → `#pro`.
+> - **Terminal limit** (`TerminalManagementScreen`): non-blocking banner at
+>   `max_pos_instances()` → `#pro`.
+> - **Approaching limits**: Pro at its 2-store cap shows the "Buka toko ke-3?
+>   Upgrade ke Premium" banner (`MultiStoreDashboardScreen`); Pro at 16+ staff
+>   shows the 20-staff nudge (`StaffManagementScreen`) → `#premium`.
+> Upgrade CTAs share `ui/src/utils/upgrade.ts` (`upgradePricingUrl`/
+> `openUpgradePricing`, locale-aware) — the C1.1/C1.2 CTAs now use it too.
+> Deviation from the literal spec: the QRIS gate lives in `PaymentModal` (there
+> is no dedicated QRIS settings screen), and the second-staff-login gate is
+> satisfied by C1.1's creation-time enforcement (login itself isn't tier-gated).
 
 ---
 
