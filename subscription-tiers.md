@@ -82,6 +82,7 @@ Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
 | CSV / data export | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Business logic** | | | | | |
 | Custom tax (PPN / PB1 / service) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Reports & analytics (`analytics:view`) | ✗ | ✗ | ✓ | ✓ | ✓ |
 | Product bundles | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Lua scripting | ✗ | ✗ | ✗ | ✓ | ✓ |
 | Loyalty tiers & points | ✗ | ✗ | ✗ | ✓ | ✓ |
