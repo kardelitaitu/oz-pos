@@ -83,19 +83,21 @@ yearly.** Yearly prices are rounded to a clean figure and carry a **15–25%
 discount**, with cheaper tiers getting less (Plus ≈15–16%, Pro ≈20–22%,
 Premium ≈25%).
 
-Worked price points (anchors are the existing/live figures; Plus monthly is
-the working proposal):
+Worked price points — monthly anchors decided 2026-08-17: **$0 / $5 / $10 /
+$25** (Free / Plus / Pro / Premium):
 
 | Tier | USD monthly | USD yearly (≈off) | IDR monthly | IDR yearly (≈off) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Free** | $0 | — (free forever) | Rp 0 | — |
-| **Plus** | **$9** (propose) | **$90** (16.7%) | **Rp 149.000** | **Rp 1.499.000** (16.2%) |
-| **Pro** | $19 | **$180** (21.1%) | Rp 299.000 | **Rp 2.799.000** (22.0%) |
-| **Premium** | $49 | **$440** (25.2%) | Rp 749.000 | **Rp 6.499.000** (27.7%)¹ |
+| **Plus** | **$5** | **$50** (16.7%) | **Rp 79.000** | **Rp 799.000** (15.7%) |
+| **Pro** | **$10** | **$95** (20.8%) | **Rp 159.000** | **Rp 1.499.000** (21.4%) |
+| **Premium** | **$25** | **$225** (25.0%) | **Rp 399.000** | **Rp 3.599.000** (24.8%) |
 | **Enterprise** | Bespoke | Bespoke | Kustom | Kustom |
 
-¹ Premium IDR yearly rounds to a classic price point that lands at ≈27.7%
-off; if a strict ≤25% is preferred, use **Rp 6.749.000** (24.9%) instead.
+All yearly figures land inside the 15–25% band and the discount rises with
+the tier (USD 16.7% → 20.8% → 25.0%; IDR 15.7% → 21.4% → 24.8%). These
+replace the current live Paddle prices ($19/$49) — the old prices get
+archived when the new ones go live.
 
 - **Facts that still hold:** Paddle cannot bill IDR — the checkout always
   charges the USD price (monthly or yearly); the Rp figures are display only.
@@ -103,10 +105,11 @@ off; if a strict ≤25% is preferred, use **Rp 6.749.000** (24.9%) instead.
 - **Implementation:** each (tier × frequency) is its own Paddle price —
   **6 prices total** (Plus/Pro/Premium × monthly/yearly), each mapped in
   `PADDLE_PRICE_TIERS` back to its `tier_key`. Rounding convention used here:
-  nearest $10 (USD) and classic `Rp …9.000` price points (IDR) — adjust
+  nearest $5 (USD) and classic `Rp …9.000` price points (IDR) — adjust
   freely, but the ladder must hold: **cheaper tier ⇒ smaller discount.**
-- **Decision:** ✅ USD + IDR display × monthly + yearly as tabled; yearly
-  discount targets before rounding: Plus **15%**, Pro **20%**, Premium **25%**.
+- **Decision:** ✅ USD + IDR display × monthly + yearly as tabled; monthly
+  anchors **$0 / $5 / $10 / $25**; yearly discount targets before rounding:
+  Plus **15%**, Pro **20%**, Premium **25%**.
 
 ### D3 — Quota table (stores / registers / warehouses / workspace types)
 
@@ -207,10 +210,10 @@ fill in §3 first.
 
 | | Free (forever) | Plus | Pro | Premium | Enterprise |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Price (USD/mo)** | $0 | $9 | $19 | $49 | Custom |
-| **Price (USD/yr)** | — | $90 | $180 | $440 | — |
-| **Price (IDR/mo)** | Rp 0 | Rp 149.000 | Rp 299.000 | Rp 749.000 | Kustom |
-| **Price (IDR/yr)** | — | Rp 1.499.000 | Rp 2.799.000 | Rp 6.499.000 | — |
+| **Price (USD/mo)** | $0 | $5 | $10 | $25 | Custom |
+| **Price (USD/yr)** | — | $50 | $95 | $225 | — |
+| **Price (IDR/mo)** | Rp 0 | Rp 79.000 | Rp 159.000 | Rp 399.000 | Kustom |
+| **Price (IDR/yr)** | — | Rp 799.000 | Rp 1.499.000 | Rp 3.599.000 | — |
 | **Billing** | — | Paddle, monthly or yearly | Paddle, monthly or yearly | Paddle, monthly or yearly | Bespoke contract |
 | **Stores** | 1 | 1 | 3 | Unlimited | Unlimited |
 | **Registers / store** | 1 | 2 | 5 | Unlimited | Unlimited |
@@ -236,7 +239,7 @@ fill in §3 first.
 | 2 | Add `plus` case to `tierQuotas()` | `apps/license-server/paddle_webhook.go` |
 | 3 | Add `plus` to schema select values | `apps/license-server/pb_schema.json` (license_keys, subscriptions, tenants?) |
 | 4 | Rework pricing pages: Free card = "free forever / 1 workspace", new Plus card | `website/src/content/pricing/{en,id}.ts` + `types.ts` (TierKey union) |
-| 5 | Create the **6 Paddle prices** (Plus/Pro/Premium × monthly/yearly) + wire them | Paddle dashboard → `PADDLE_PRICE_TIERS` env (6 mappings) → `docs/operations/go-live-checklist.md` |
+| 5 | Create the **6 Paddle prices** (Plus/Pro/Premium × monthly/yearly) at the D2 points + wire them; archive the old $19/$49 | Paddle dashboard → `PADDLE_PRICE_TIERS` env (6 mappings) → `docs/operations/go-live-checklist.md` |
 | 11 | Pricing pages: monthly/yearly toggle, per-frequency priceIds, "billed in USD" note (ID) | `website/src/content/pricing/{en,id}.ts` + `CheckoutButton.tsx` (pass the chosen frequency's priceId) |
 | 6 | Align enforcement with the decided quotas (fix Pro over-entitlement) | `tierQuotas()` + `SubscriptionTier::max_*()` |
 | 7 | Free-tier lifecycle (hw lock, no trial clock) | ADR #23 re-scope; client trial timer code |
@@ -254,9 +257,12 @@ Pro/Premium keep their live Paddle prices; Enterprise stays bespoke.
 
 **2026-08-17 — D2 resolved:** pricing model = **USD + IDR display × monthly +
 yearly** for every paid tier; yearly is a rounded price at **15–25% off** with
-cheaper tiers getting less (Plus ≈15–16%, Pro ≈20–22%, Premium ≈25%). Worked
-price points live in §3 D2. Paddle still bills USD only → 6 Paddle prices to
-create (Plus/Pro/Premium × monthly/yearly).
+cheaper tiers getting less. Monthly anchors **$0 / $5 / $10 / $25** (Free /
+Plus / Pro / Premium) set the same day → USD yearly $50 / $95 / $225; IDR
+monthly Rp 79.000 / 159.000 / 399.000; IDR yearly Rp 799.000 / 1.499.000 /
+3.599.000 (worked table in §3 D2). Paddle still bills USD only → 6 Paddle
+prices to create (Plus/Pro/Premium × monthly/yearly); the old $19/$49 get
+archived.
 
 **2026-08-17 — sandbox purchase verified end-to-end:** Paddle checkout → test
 payment (`4242 4242 4242 4242`) → webhook events → transaction
