@@ -1,9 +1,8 @@
 ---
 title: Syarat dan Ketentuan Layanan
-updated: "2026-08-17"
+version: "1.0"
+effective: "17 Agustus 2026"
 ---
-
-**Terakhir diperbarui: 17 Agustus 2026**
 
 Syarat dan Ketentuan Layanan ini ("Ketentuan") merupakan perjanjian yang mengikat secara hukum antara Anda ("Anda" atau "Pelanggan") dan pengoperasi layanan OZ-POS ("Perusahaan", "kami", atau "kita") yang mengatur akses dan penggunaan Anda atas situs web, aplikasi desktop, layanan cloud, server lisensi, dan layanan terkait OZ-POS (secara bersama-sama, "Layanan").
 
@@ -124,3 +123,10 @@ Tidak ada pihak yang bertanggung jawab atas kegagalan atau keterlambatan dalam m
 ## 17. Kontak
 
 Pertanyaan tentang Ketentuan ini: **support@oz-pos.com**. Untuk membeli atau meningkatkan paket: halaman harga atau **sales@oz-pos.com**.
+
+
+## Riwayat versi
+
+| Versi | Tanggal berlaku | Ringkasan perubahan |
+| --- | --- | --- |
+| 1.0 | 17 Agustus 2026 | Publikasi awal. |

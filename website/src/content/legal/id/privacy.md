@@ -1,9 +1,8 @@
 ---
 title: Kebijakan Privasi
-updated: "2026-08-17"
+version: "1.0"
+effective: "17 Agustus 2026"
 ---
-
-**Terakhir diperbarui: 17 Agustus 2026**
 
 Kebijakan Privasi ini menjelaskan data apa saja yang dikumpulkan oleh OZ-POS ("Perusahaan", "kami", atau "kita") melalui situs web, aplikasi desktop, layanan cloud, dan layanan terkait OZ-POS (secara bersama-sama, "Layanan"), alasan pengumpulannya, cara kami menggunakan dan melindunginya, serta hak-hak Anda atas data tersebut.
 
@@ -134,3 +133,10 @@ Pertanyaan, permintaan, atau pengaduan mengenai kebijakan ini atau data Anda:
 - **Subjek surel:** "Permintaan privasi"
 
 Kami berupaya menanggapi setiap permintaan privasi dalam 30 hari.
+
+
+## Riwayat versi
+
+| Versi | Tanggal berlaku | Ringkasan perubahan |
+| --- | --- | --- |
+| 1.0 | 17 Agustus 2026 | Publikasi awal. |

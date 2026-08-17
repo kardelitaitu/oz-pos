@@ -27,7 +27,8 @@ const legal = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/legal' }),
   schema: z.object({
     title: z.string(),
-    updated: z.string().optional(),
+    version: z.string().optional(),
+    effective: z.string().optional(),
   }),
 });
 

@@ -1,9 +1,8 @@
 ---
 title: Privacy Policy
-updated: "2026-08-17"
+version: "1.0"
+effective: "August 17, 2026"
 ---
-
-**Last updated: August 17, 2026**
 
 This Privacy Policy explains what data OZ-POS (the "Company", "we", "us", or "our") collects through the OZ-POS website, desktop application, cloud services, and related services (together, the "Service"), why we collect it, how we use and protect it, and the rights you have over it.
 
@@ -134,3 +133,10 @@ Questions, requests, or complaints about this policy or your data:
 - **Subject line:** "Privacy request"
 
 We aim to respond to every privacy request within 30 days.
+
+
+## Version history
+
+| Version | Effective date | Summary of changes |
+| --- | --- | --- |
+| 1.0 | August 17, 2026 | Initial publication. |

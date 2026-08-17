@@ -1,9 +1,8 @@
 ---
 title: Terms of Service
-updated: "2026-08-17"
+version: "1.0"
+effective: "August 17, 2026"
 ---
-
-**Last updated: August 17, 2026**
 
 These Terms of Service (the "Terms") are a legally binding agreement between you ("you", "your", or the "Customer") and the operator of the OZ-POS service (the "Company", "we", "us", or "our") governing your access to and use of the OZ-POS website, desktop application, cloud services, license server, and related services (together, the "Service").
 
@@ -124,3 +123,10 @@ Neither party is liable for failure or delay in performing obligations under the
 ## 17. Contact
 
 Questions about these Terms: **support@oz-pos.com**. To purchase or upgrade a plan: the pricing page or **sales@oz-pos.com**.
+
+
+## Version history
+
+| Version | Effective date | Summary of changes |
+| --- | --- | --- |
+| 1.0 | August 17, 2026 | Initial publication. |

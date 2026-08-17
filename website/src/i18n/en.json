@@ -254,7 +254,9 @@
   },
   "legal": {
     "privacyTitle": "Privacy Policy",
-    "termsTitle": "Terms of Service"
+    "termsTitle": "Terms of Service",
+    "effective": "Effective",
+    "version": "Version"
   },
   "notFound": {
     "title": "Page not found",

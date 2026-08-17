@@ -21,9 +21,9 @@ const { Content } = await render(doc);
 <Base title={pageTitle} description={t(locale, 'pageDesc.terms')}>
   <section class="mx-auto max-w-3xl px-4 py-16">
     <h1 class="text-3xl font-bold">{t(locale, 'legal.termsTitle')}</h1>
-    {doc.data.updated && (
+    {doc.data.effective && doc.data.version && (
       <p class="mt-3 text-xs text-muted">
-        {t(locale, 'docs.updated')} {doc.data.updated}
+        {t(locale, 'legal.effective')} {doc.data.effective} · {t(locale, 'legal.version')} {doc.data.version}
       </p>
     )}
     <div class="docs-content mt-8">
