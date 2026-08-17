@@ -1,8 +1,9 @@
 # Subscription Tiers — Final Decisions
 
-> Approved 2026-08-17. Single source of truth for tier pricing, quotas, and
-> feature gates. Supersedes the tier/pricing sections of `docs/BUSINESS_PLAN.md`
-> §2, ADR #5, and the older pricing content until those are updated to match.
+> **Status: FINAL** — Approved 2026-08-17. Single source of truth for tier
+> pricing, quotas, and feature gates. Supersedes the tier/pricing sections of
+> `docs/BUSINESS_PLAN.md` §2, ADR #5, and the older pricing content until
+> those are updated to match.
 
 ## 1. Lineup
 
@@ -20,8 +21,7 @@
 
 USD and IDR are **independent market prices**: global customers pay the USD
 rate; Indonesian customers pay the IDR rate (lower, set for the local
-market). Paddle bills in USD only — the IDR rates are honored via Paddle
-country price overrides for Indonesia (the customer's charge ≈ the Rp figure).
+market). See **Payment routing** below for how each is charged.
 
 | Tier | USD/mo | USD/yr (≈off) | IDR/mo | IDR/yr (≈off) |
 | :--- | :---: | :---: | :---: | :---: |
@@ -32,11 +32,29 @@ country price overrides for Indonesia (the customer's charge ≈ the Rp figure).
 | **Enterprise** | Bespoke | Bespoke | Kustom | Kustom |
 
 Yearly = pay 10 months (10 × monthly, ≈15–17% off) in both currencies.
-Six Paddle prices total (Plus/Pro/Premium × monthly/yearly); the IDR rates
-map to country-specific overrides for Indonesia (Paddle geolocates the
-buyer's IP at checkout and applies the override for the country selected —
-IDR isn't a supported currency, so the ID override is a USD amount ≈ the Rp
-figure, e.g. Premium yearly ≈ $125, which drifts with FX).
+Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
+
+### Payment routing
+
+| Market | Provider | Currency | Payment methods |
+| :--- | :--- | :--- | :--- |
+| **Global** | Paddle (MoR) | USD | cards |
+| **Indonesia** | **Midtrans** (Phase 2) | IDR, fixed Rp | QRIS, virtual accounts, e-wallets, cards |
+
+- **Phase 1 (now):** Paddle for everyone. The IDR rates are honored via
+  Paddle country price overrides for Indonesia — Paddle geolocates the
+  buyer's IP at checkout and applies the override for the country selected.
+  IDR isn't a supported currency, so the override is a USD amount ≈ the Rp
+  figure (e.g. Premium yearly ≈ $125), which drifts with FX.
+- **Phase 2 (next):** route Indonesian customers to a **Midtrans** checkout
+  — fixed Rp prices and local payment methods (QRIS, virtual accounts,
+  e-wallets) that cards alone can't reach; Paddle stays for global.
+  Midtrans over Xendit because `oz-payment` already integrates Midtrans QRIS
+  for in-store payments.
+- **Costs of Phase 2:** OZ-POS becomes merchant of record for ID payments
+  (Indonesian PPN, refunds, disputes); a second webhook + provisioning path
+  in the license server; local-method subscriptions are less mature than
+  card auto-renew.
 
 ## 3. Quota & feature matrix
 
