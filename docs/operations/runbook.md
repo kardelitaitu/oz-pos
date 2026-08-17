@@ -507,6 +507,10 @@ commit — no dashboard clicks, and a stale deploy can no longer hide.
 `workflow_dispatch` for manual redeploys. Fail-closed: missing token/IDs
 fails the job loudly. Until the §8 env table is fully applied, the smoke
 probes may 503 — that is the fail-fast gate working, not a workflow bug.
+If the service's native git trigger beats the workflow to the API (HTTP
+409 "only one build may be active"), the workflow **adopts the in-flight
+build for the same commit** and watches it to conclusion — a merge shows
+one green, auditable check either way.
 
 **Manual redeploy from a shell** (same API call, no GitHub needed):
 

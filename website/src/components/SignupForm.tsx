@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import PasswordField from './PasswordField';
@@ -37,8 +37,14 @@ export default function SignupForm({ locale }: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // SSR-safe: never render the not-configured notice in server HTML (the
+  // Worker's runtime config can supply the URL at hydration even when the
+  // build-time PUBLIC_LICENSE_API_URL is unset) — that caused a visible
+  // flash on /en/signup before the real form swapped in.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (!API) {
+  if (!API && mounted) {
     return <p className="rounded-md border border-ink/10 p-4 text-sm text-muted">{t(locale, 'login.notConfigured')}</p>;
   }
 

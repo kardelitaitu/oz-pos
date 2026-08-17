@@ -17,6 +17,12 @@
 #   lifecycle (trigger → build → rollout → health) is one auditable check on
 #   the merge commit, instead of a dashboard click.
 #
+#   The service also has its native git trigger enabled (auto-builds on push
+#   to main), which can beat this workflow to the API. A 409 ("only one build
+#   active") is therefore expected, not an error: the trigger step adopts the
+#   in-flight build when its SHA matches the pushed commit and lets the poll
+#   step watch it. The GitHub check stays green and auditable on every merge.
+#
 # Fail-closed: a missing NORTHFLANK_API_TOKEN secret or project/service IDs
 # fails the job loudly (same policy as website.yml's Cloudflare deploy) —
 # a deploy that silently doesn't happen is how the service went stale before.
@@ -106,6 +112,27 @@ jobs:
           body=$(echo "$resp" | sed '$d')
           echo "Trigger response (HTTP $code): $body"
           if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            # 409 = a build is already active (free tier: one concurrent
+            # build). Expected when the service's native git trigger fires
+            # on the same push before this workflow's API call. If the
+            # active build is for OUR commit, adopt it and let the poll
+            # step watch it to conclusion instead of erroring.
+            if [ "$code" = "409" ]; then
+              echo "Build already active (409) — checking for an in-flight build of this commit"
+              list=$(curl -sS --fail \
+                "$NF_API/projects/$NF_PROJECT_ID/services/$NF_SERVICE_ID/build" \
+                -H "Authorization: Bearer $NF_TOKEN")
+              build_id=$(echo "$list" | jq -r \
+                --arg sha "$GITHUB_SHA" \
+                '(.data.builds // .data.items // []) | map(select(.sha == $sha and .concluded == false)) | .[0].id // empty')
+              if [ -n "$build_id" ]; then
+                echo "Adopting in-flight build $build_id (sha $GITHUB_SHA)"
+                echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "::error::a build is already active but none is for $GITHUB_SHA — inspect https://app.northflank.com"
+              exit 1
+            fi
             echo "::error::Northflank rejected the build trigger (HTTP $code)"
             echo "::error::check token scope (Project > Services > General > Update) and the project/service IDs"
             exit 1

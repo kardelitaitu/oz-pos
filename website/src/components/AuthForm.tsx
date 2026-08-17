@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import PasswordField from './PasswordField';
@@ -48,8 +48,15 @@ export default function AuthForm({ locale }: Props) {
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirm, setResetConfirm] = useState('');
   const [resetCooldown, setResetCooldown] = useState('');
+  // The not-configured notice must never appear in SSR HTML: the
+  // build-time PUBLIC_LICENSE_API_URL can be unset while the Worker's
+  // runtime config (/__oz/runtime-config.js) provides the URL at
+  // hydration. Rendering the notice server-side caused a visible
+  // "auth API is not configured" flash before the real form swapped in.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (!API) {
+  if (!API && mounted) {
     return <p className="rounded-md border border-ink/10 p-4 text-sm text-muted">{t(locale, 'login.notConfigured')}</p>;
   }
 
