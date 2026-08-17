@@ -417,15 +417,27 @@ longer exists — migrating that data requires a PocketBase backup → restore
 
 | Variable | Value / source | Notes |
 |----------|----------------|-------|
-| `OZ_LICENSE_PRIVATE_KEY` | RSA PEM | required — Go license server exits without it |
+| `OZ_LICENSE_PRIVATE_KEY` | RSA PEM | required — Go license server exits without it (`OZ_LICENSE_KEY` is the legacy alias) |
 | `OZ_API_SECRET` | `openssl rand -hex 32` | required when `OZ_PRODUCTION=1` |
 | `OZ_ADMIN_KEY` | random string | required when `OZ_PRODUCTION=1`; gates token mint |
 | `OZ_PRODUCTION` | `1` | fail-closed boot: refuses to start if either secret is unset; implies `OZ_DB_REQUIRE_TLS=1` |
 | `OZ_ENFORCE_PLANS` | `1` | reject free-plan sync (403 plan_required) |
 | `OZ_CORS_ORIGINS` | optional | extra origins beyond the default allowlist |
-| `PADDLE_WEBHOOK_SECRET` | optional | Paddle Billing webhook provisioning |
-| `PADDLE_PRICE_TIERS` | optional | `price_id:tier_key` map |
-| `OZ_SMTP_*`, `OZ_DISCORD_WEBHOOK`, `OZ_WEB_ALLOWED_ORIGINS` | optional | if configured |
+| `OZ_DB_POOL_SIZE` | `20` | Postgres pool size (ignored for SQLite) |
+| `OZ_LOG_FORMAT` | `json` or unset | log output format (plain unless `json`) |
+| `OZ_APPLY_SCHEMA` | `0` post-cutover | default applies full DDL at startup; set `0` once the schema exists and the app runs as the restricted `oz_app` role (§6.3) |
+| `OZ_REDIRECT_ONLY` / `OZ_SYNC_REDIRECT_URL` | optional | sync-redirect mode — `OZ_REDIRECT_ONLY=true` requires `OZ_SYNC_REDIRECT_URL`; dev/testing only |
+| `PADDLE_WEBHOOK_SECRET` | sandbox endpoint secret | Paddle Billing webhook provisioning — **required at boot** (fail-fast gate) |
+| `PADDLE_PRICE_TIERS` | `price_id:tier_key` map | **required at boot** — unmapped prices fail provisioning with 500 → Paddle retries |
+| `PADDLE_API_URL` | `https://api.paddle.com` (default) / `https://sandbox-api.paddle.com` | Paddle API base for webhook customer lookups; use the sandbox URL until the live catalog exists |
+| `PADDLE_API_KEY` | optional | server-side API key — fallback `GET /customers/{id}` when `custom_data.email` is absent (checkout passes it, so rarely needed) |
+| `PADDLE_WEBHOOK_MAX_AGE` | `5m` | webhook timestamp replay window |
+| `OZ_SMTP_HOST` / `OZ_SMTP_PORT` / `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` / `OZ_SMTP_FROM` | Brevo relay creds | OTP + license-key receipt emails. Port 465 = implicit TLS, anything else = STARTTLS. `OZ_SMTP_FROM` required at boot once `OZ_SMTP_HOST` is set (sender must be verified with the relay) |
+| `OZ_WEB_ALLOWED_ORIGINS` | optional | unset = defaults already include the deployed site + localhost |
+| `OZ_WEB_SESSION_TTL` | `24h` | web session lifetime (Go duration) |
+| `OZ_DISCORD_WEBHOOK` | optional | support-contact target for `/api/v1/web/contact`; unset → 503 + mailto fallback |
+| `OZ_HEALTH_SMTP_MAX_FAILS` | `3` | container healthcheck (unified image): fail after N consecutive `smtp.verified:false` probes |
+| `OZ_HEALTH_PADDLE_MAX_FAILS` | `3` | container healthcheck (unified image): fail after N consecutive `paddle.secret_configured:false` probes |
 
 > ⚠️ **Do not set `OZ_PRODUCTION=1` unless both `OZ_API_SECRET` and
 > `OZ_ADMIN_KEY` are set** — startup fails fast by design (no dev-secret
