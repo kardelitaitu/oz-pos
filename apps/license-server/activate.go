@@ -27,6 +27,14 @@ type ActivateRequest struct {
 	// — a client-supplied parameter must never shorten a paying customer's
 	// license.
 	TrialVertical string `json:"trial_vertical"`
+	// BundleID is the optional vertical-bundle id (subscription-tiers.md §3,
+	// TODO C3.2). "restaurant_starter" unlocks the kds workspace type at the
+	// Plus tier. Mirrors trial_vertical's trust boundary: only honored for
+	// trial keys — a client-supplied bundle must never widen a PAYING license
+	// beyond what was purchased (paid bundles are issued by the webhook at
+	// checkout, which the website leg of C3.2 will wire). Unknown values are
+	// ignored.
+	BundleID string `json:"bundle_id"`
 	// APIKey is the tenant API key for authenticating re-activations.
 	// On first activation the server issues a new api_key in the response,
 	// which the POS persists and re-sends on subsequent calls.
@@ -50,6 +58,17 @@ func trialSegmentation(vertical string) (tier string, days int) {
 	default:
 		return "plus", 14
 	}
+}
+
+// normalizeBundleID canonicalizes an activation request's bundle_id.
+// Only "restaurant_starter" is recognized today (TODO C3.2); anything else
+// (blank, unknown, malformed) normalizes to "" — a no-op bundle.
+func normalizeBundleID(bundle string) string {
+	b := strings.ToLower(strings.TrimSpace(bundle))
+	if b == "restaurant_starter" {
+		return b
+	}
+	return ""
 }
 
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
@@ -586,10 +605,15 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		// Trial keys: override the tier, expiry, and quota block with the
 		// vertical segmentation (§4). The key record's own values serve as
 		// the default for blank/unknown verticals (trialSegmentation).
+		// A recognized bundle (TODO C3.2) additionally unlocks the kds
+		// workspace at the Plus trial tier.
 		if isTrialKey {
 			tierKey = trialTier
 			expiresAt = time.Now().UTC().AddDate(0, 0, trialDays)
 			maxStores, maxPOSInstances, allowedTypes = tierQuotas(trialTier)
+			if trialTier == "plus" && normalizeBundleID(req.BundleID) == "restaurant_starter" {
+				allowedTypes = append(allowedTypes, "kds")
+			}
 		}
 
 		sub := SubscriptionPayload{

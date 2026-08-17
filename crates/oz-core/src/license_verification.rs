@@ -134,6 +134,13 @@ pub struct ActivateLicenseRequest {
     /// when unset so generic activations stay byte-identical.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub trial_vertical: Option<String>,
+    /// The vertical-bundle id (C3.2, subscription-tiers.md §3).
+    /// "restaurant_starter" unlocks the kds workspace type at the Plus
+    /// tier. Mirrors `trial_vertical`'s trust boundary: the server only
+    /// honors it for trial keys — a client-supplied bundle never widens a
+    /// paid license. Omitted from the body when unset.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bundle_id: Option<String>,
     /// The api_key of an existing tenant, required when re-activating
     /// an installation whose tenant was previously activated (H1 audit
     /// fix). New tenants omit this on the first activation; the server
@@ -740,6 +747,7 @@ mod tests {
             email: "cafe@example.com".into(),
             phone: "08123".into(),
             trial_vertical: Some("restaurant".into()),
+            bundle_id: None,
             api_key: None,
         };
         let json = serde_json::to_string(&req).unwrap();
@@ -762,6 +770,7 @@ mod tests {
             email: "paid@example.com".into(),
             phone: "08123".into(),
             trial_vertical: None,
+            bundle_id: None,
             api_key: None,
         };
         let json = serde_json::to_string(&req).unwrap();
@@ -791,6 +800,7 @@ mod tests {
                 email: "trial@example.com".into(),
                 phone: "08123".into(),
                 trial_vertical: Some(vertical.into()),
+                bundle_id: None,
                 api_key: None,
             };
             let json = serde_json::to_string(&req).unwrap();

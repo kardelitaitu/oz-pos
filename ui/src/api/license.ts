@@ -51,13 +51,19 @@ export async function getMachineId(): Promise<string> {
  * server only reads it for trial keys and mints a 14-day Plus / 14-day Pro
  * / 30-day Pro trial per subscription-tiers.md §4 (e.g. detected from a
  * `?v=restaurant` landing-page URL param). Paid keys ignore it.
+ *
+ * `bundleId` is the optional vertical-bundle id (C3.2): "restaurant_starter"
+ * unlocks the kds workspace type at the Plus trial tier (e.g. detected from
+ * a `?bundle=restaurant_starter` landing-page URL param). The server honors
+ * it for trial keys only.
  */
 export async function activateLicense(
   key: string,
   email: string,
   machineId: string,
   phone: string,
-  trialVertical?: string
+  trialVertical?: string,
+  bundleId?: string
 ): Promise<boolean> {
   return loggedInvoke('activate_license', {
     key,
@@ -65,6 +71,7 @@ export async function activateLicense(
     machineId,
     phone,
     ...(trialVertical ? { trialVertical } : {}),
+    ...(bundleId ? { bundleId } : {}),
   });
 }
 

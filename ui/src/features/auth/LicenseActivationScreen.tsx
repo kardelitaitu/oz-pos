@@ -3,6 +3,7 @@ import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { activateLicense, getMachineId } from '@/api/license';
 import { detectTrialVertical } from '@/utils/trial-vertical';
+import { detectBundleId } from '@/utils/bundle';
 import { getVersion, getLocalIp } from '@/api/system';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import ConnectionStatus from '@/components/ConnectionStatus';
@@ -44,6 +45,10 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   // The server only reads it for trial keys, so a stale/spoofed value can
   // never affect paid activations.
   const [trialVertical] = useState<string>(() => detectTrialVertical());
+  // Vertical bundle (C3.2): detected once from ?bundle=restaurant_starter
+  // and passed to the server on activation. Honored for trial keys only,
+  // so a spoofed value can never widen a paid license.
+  const [bundleId] = useState<string>(() => detectBundleId());
   const { addToast } = useToast();
   // Stable ref so the mount effect runs exactly once without depending on
   // l10n (which can cause the effect to re-fetch version/IP unnecessarily).
@@ -102,8 +107,15 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       // Pass the segmented-trial vertical only when detected, so generic
       // activations stay 4-arg (and the server ignores it for paid keys
       // regardless).
-      const success = trialVertical
-        ? await activateLicense(key.trim(), email.trim(), machineId, phone.trim(), trialVertical)
+      const success = trialVertical || bundleId
+        ? await activateLicense(
+            key.trim(),
+            email.trim(),
+            machineId,
+            phone.trim(),
+            trialVertical || undefined,
+            bundleId || undefined
+          )
         : await activateLicense(key.trim(), email.trim(), machineId, phone.trim());
 
       if (success) {

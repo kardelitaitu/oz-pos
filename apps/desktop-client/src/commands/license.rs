@@ -61,6 +61,10 @@ pub struct LicenseStatusDto {
 /// server only reads it for trial keys and mints a 14-day Plus / 14-day
 /// Pro / 30-day Pro license per subscription-tiers.md §4. Paid keys ignore
 /// it entirely, so omitting it is always safe.
+///
+/// `bundle_id` is the optional vertical-bundle id (C3.2): "restaurant_starter"
+/// unlocks the kds workspace type at the Plus tier. The server honors it for
+/// trial keys only, so omitting it is always safe.
 #[tauri::command]
 pub async fn activate_license(
     state: State<'_, AppState>,
@@ -69,6 +73,7 @@ pub async fn activate_license(
     machine_id: String,
     phone: String,
     trial_vertical: Option<String>,
+    bundle_id: Option<String>,
 ) -> Result<bool, AppError> {
     // H1 audit fix: read the previously-stored (now encrypted) api_key
     // so the server can authenticate the caller as the legitimate tenant
@@ -104,6 +109,7 @@ pub async fn activate_license(
         machine_id,
         phone,
         trial_vertical,
+        bundle_id,
         api_key: stored_api_key,
     };
 
