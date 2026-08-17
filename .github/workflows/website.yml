@@ -176,7 +176,7 @@ jobs:
       # ── Docs portal build ────────────────────────────────────────────
       # The portal (docs/book/) is generated (mdBook hub + cargo doc + TypeDoc)
       # and staged into website/public/docs-portal by import-portal.sh during
-      # `npm run build`. docs.yml compiles cargo doc on its own schedule; here
+      # `npm run build`. nightly.yml's docs job compiles cargo doc on its own schedule; here
       # we run the full build-docs.sh so the mdBook hub and TypeDoc ship too.
       #
       # SOFT-FAIL (continue-on-error): a docs build hiccup must never block the

@@ -521,7 +521,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Developer docs: `docs/plugin-guide.md` + CONTRIBUTING.md + QUICKSTART.md + HAL example driver
 
 ### Developer Experience
-- [x] `cargo doc` generated and hosted on GitHub Pages (`.github/workflows/docs.yml`, sccache, preserves workspace index)
+- [x] `cargo doc` generated and shipped in the docs portal (hosted on Cloudflare via `website/` + `scripts/build-docs.sh`, sccache, preserves workspace index)
 - [x] `CONTRIBUTING.md` — contribution guide, PR template
 - [x] `docs/QUICKSTART.md` — local dev setup
 - [x] Example Lua scripts in `scripts/examples/` (discount_bulk, tax_overrides, validate_order)
