@@ -52,6 +52,7 @@
         "maxSelect": 1,
         "values": [
           "free",
+          "plus",
           "pro",
           "premium",
           "enterprise"
@@ -431,6 +432,7 @@
         "maxSelect": 1,
         "values": [
           "free",
+          "plus",
           "pro",
           "premium",
           "enterprise"

@@ -68,7 +68,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	licenseKeys := core.NewBaseCollection("license_keys")
 	licenseKeys.Fields.Add(
 		&core.TextField{Name: "key", Required: true},
-		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 		&core.NumberField{Name: "max_stores"},
 		&core.NumberField{Name: "max_pos_instances"},
 		&core.JSONField{Name: "allowed_types"},
@@ -96,7 +96,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	subscriptions := core.NewBaseCollection("subscriptions")
 	subscriptions.Fields.Add(
 		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
-		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 		&core.NumberField{Name: "max_stores"},
 		&core.NumberField{Name: "max_pos_instances"},
 		&core.JSONField{Name: "allowed_types"},
@@ -282,7 +282,7 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 	licenseKeys := core.NewBaseCollection("license_keys")
 	licenseKeys.Fields.Add(
 		&core.TextField{Name: "key", Required: true},
-		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 		&core.NumberField{Name: "max_stores"},
 		&core.NumberField{Name: "max_pos_instances"},
 		&core.JSONField{Name: "allowed_types"},
@@ -330,7 +330,7 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 		subscriptions := core.NewBaseCollection("subscriptions")
 		subscriptions.Fields.Add(
 			&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenantsID, MaxSelect: 1},
-			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 			&core.NumberField{Name: "max_stores"},
 			&core.NumberField{Name: "max_pos_instances"},
 			&core.JSONField{Name: "allowed_types"},
@@ -1023,6 +1023,67 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	}
 	if !foundExpired {
 		t.Error("expected one expired subscription after renewal")
+	}
+}
+
+func TestRenewHandler_PlusTier(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Seed tenant + active plus subscription, then a valid unused plus key
+	// carrying the plus quota block (1 store / 2 registers, no kds).
+	seedTenant(t, app, "rnwplus00000001", "rnwpluskey00001", "active")
+	seedSubscription(t, app, "rnwplus00000001", "plus", "active")
+	seedLicenseKeyWithLimits(t, app, "rnwpluskey00001-key", "plus", "unused",
+		"2099-12-31 23:59:59.000Z", 1, 2, `["restaurant-pos", "store-pos", "admin", "inventory", "warehouse"]`)
+
+	body := strings.NewReader(`{"tenant_id":"rnwplus00000001","key":"rnwpluskey00001-key"}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer rnwpluskey00001")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	payloadStr, ok := resp["signed_payload"].(string)
+	if !ok {
+		t.Fatal("expected signed_payload in response")
+	}
+
+	var sp SubscriptionPayload
+	if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+		t.Fatalf("failed to parse signed_payload: %v", err)
+	}
+	if sp.TierKey != "plus" {
+		t.Errorf("expected tier_key=plus in renewal payload, got %q", sp.TierKey)
+	}
+	if sp.MaxStores != 1 {
+		t.Errorf("expected max_stores=1 in renewal payload, got %d", sp.MaxStores)
+	}
+	if sp.MaxPOSInstances != 2 {
+		t.Errorf("expected max_pos_instances=2 in renewal payload, got %d", sp.MaxPOSInstances)
+	}
+	// Plus renews for +1 year (same as pro/premium). The seeded active
+	// subscription already expires +1y out, so renewal appends another year.
+	expiresAt, err := time.Parse(time.RFC3339, sp.ExpiresAt)
+	if err != nil {
+		t.Fatalf("failed to parse expires_at: %v", err)
+	}
+	diff := expiresAt.Sub(time.Now().UTC().AddDate(2, 0, 0))
+	if diff > time.Hour || diff < -time.Hour {
+		t.Errorf("plus renewal expiry should be ~2 years from now, got diff %v", diff)
 	}
 }
 

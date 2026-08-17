@@ -367,6 +367,10 @@ func tierQuotas(tier string) (maxStores, maxPOSInstances int, allowedTypes []str
 	switch tier {
 	case "pro", "premium", "enterprise":
 		return 0, 0, all // unlimited stores/instances, all workspace types
+	case "plus":
+		// 1 store, 2 registers/store, no kds (§3 Workspace Types — kds is Pro+).
+		// maxWarehouses is enforced client-side via SubscriptionTier::max_warehouses().
+		return 1, 2, []string{"restaurant-pos", "store-pos", "admin", "inventory", "warehouse"}
 	case "free":
 		return 1, 1, []string{"restaurant-pos", "store-pos", "admin"}
 	default:

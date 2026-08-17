@@ -150,7 +150,7 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		switch tierKey {
 		case "free":
 			newExpiresAt = baseTime.AddDate(100, 0, 0)
-		case "pro", "premium":
+		case "plus", "pro", "premium":
 			newExpiresAt = baseTime.AddDate(1, 0, 0)
 		case "enterprise":
 			newExpiresAt = baseTime.AddDate(3, 0, 0)
