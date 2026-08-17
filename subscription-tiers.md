@@ -1,30 +1,33 @@
 # Subscription Tier Finalization
 
-> **Status:** DRAFT — this document exists to force the remaining tier decisions.
+> **Status:** DRAFT — D1 (lineup) is resolved; D2–D9 still need decisions.
 > **Date:** 2026-08-17
-> **Why this exists:** the repo carries several overlapping (and mutually
+> **Why this exists:** the repo carried several overlapping (and mutually
 > contradictory) tier definitions — the business plan, ADR #5, the oz-core
-> entitlement enum, and the live website + Paddle implementation. Before we
-> harden anything else, the tier list itself must be one source of truth.
-> Work through **§3 (the decisions)** — every open question has the options
-> already discussed somewhere in the repo, with a recommendation.
+> entitlement enum, and the live website + Paddle implementation. The lineup
+> is now decided (see D1); the remaining work is filling in quotas, prices,
+> and feature gates per tier, then aligning every file with this document.
 
 ---
 
-## 1. The conflict in one table
+## 1. The decided lineup (D1 — RESOLVED 2026-08-17)
 
-The same tier name means different things in different files today:
+**Five tiers: `Free` · `Plus` · `Pro` · `Premium` · `Enterprise`**
 
-| Tier | BUSINESS_PLAN.md (market) | ADR #5 (design, 2026-07) | oz-core `SubscriptionTier` (enforcement) | Website + Paddle (live, shipping) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Free / Trial** | 3-month offline-only trial, 1 store / 1 terminal / 1 wh | 1 store, 1 register, `store-pos`+`admin` | 1 store, 1 instance, 1 wh, `[restaurant-pos, store-pos, admin]` | 90-day trial card, no checkout, no QRIS/cloud/Lua |
-| **1-Time** | IDR 3.5jt one-time / terminal, perpetual | — (legacy enum) | 1 store, 1 instance | not offered ("roadmap") |
-| **Standard** | IDR 2jt / yr, 1 store / 2 terminals / 1 wh | — (legacy enum) | 1 store, **2** instances | not offered |
-| **Pro** | IDR 5jt / yr, **unlimited** everything, QRIS + Stripe + Lua | **2 stores, 3 registers/store**, + `inventory` | **unlimited** stores/instances/wh, all types | **$19/mo**, 1 store, 2 registers, 1 wh, QRIS + cloud, **no Lua** |
-| **Premium** | — (not a business-plan tier) | **5 stores, 10 registers/store**, + `kds`, `analytics-pro` | unlimited, all types | **$49/mo**, unlimited everything + Lua |
-| **Enterprise** | Bespoke, dedicated infra, ERP adaptors | Unlimited, all + custom plugins | unlimited, all types | Custom (mailto), no Paddle price |
+- **Free** is a **free-forever plan with 1 workspace only** — it *replaces*
+  the old 90-day trial card. No checkout, no payment method.
+- **Plus** is a new entry-level paid tier, inserted between Free and Pro.
+- **Pro** ($19/mo) and **Premium** ($49/mo) keep their existing Paddle prices.
+- **Enterprise** stays bespoke (no Paddle price, contact-sales path).
 
-Four sources, four different answers for "what does Pro get".
+What each old model contributed (and where it lands now):
+
+| Old model | Old tiers | Fate under the 5-tier lineup |
+| :--- | :--- | :--- |
+| BUSINESS_PLAN.md | 1-Time / Standard / Pro / Enterprise | **1-Time, Standard: retired.** Their features fold into the Plus/Pro ladder as needed. |
+| ADR #5 | Free / Pro / Premium / Enterprise | **Free, Pro, Premium, Enterprise kept** — ADR #5's numeric quotas inform D3. |
+| Website + Paddle (live) | Trial / Pro / Premium / Enterprise | **Trial → Free (forever). Plus is new.** Pro/Premium prices unchanged. |
+| oz-core enum | Free / OneTime / Standard / Pro / Premium / Enterprise | Legacy `OneTime`/`Standard` drop out (D9). |
 
 ---
 
@@ -32,15 +35,15 @@ Four sources, four different answers for "what does Pro get".
 
 | File | Role | Tier source |
 | :--- | :--- | :--- |
-| `docs/BUSINESS_PLAN.md` §2 | Market/pricing plan (IDR, annual) | 1-Time / Standard / Pro / Enterprise |
+| `docs/BUSINESS_PLAN.md` §2 | Market/pricing plan (IDR, annual) | 1-Time / Standard / Pro / Enterprise — **superseded for pricing** |
 | `docs/decisions/2026-07-10-subscription-tier-entitlement.md` (ADR #5) | Design intent | Free / Pro / Premium / Enterprise with numeric quotas |
-| `docs/decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md` (ADR #23) | Trial lifecycle | 90-day trial, 14-day grace, hardware fingerprint lock |
+| `docs/decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md` (ADR #23) | Trial lifecycle | 90-day trial — **to be re-scoped to the free-forever tier** (D5) |
 | `crates/oz-core/src/subscription.rs` | **Enforcement** (client-side quotas) | enum Free/OneTime/Standard/Pro/Premium/Enterprise |
 | `apps/license-server/paddle_webhook.go` → `tierQuotas()` | **Enforcement** (license mint) | `pro/premium/enterprise` → 0/0/all types; `free` → 1/1/3 types |
-| `apps/license-server/pb_schema.json` | Schema select values | `free, pro, premium, enterprise` |
+| `apps/license-server/pb_schema.json` | Schema select values | `free, pro, premium, enterprise` — **needs `plus`** |
 | `apps/license-server/renew.go` | Offline renewal expiry | `free` +100y, `pro/premium` +1y, `enterprise` +3y |
-| `website/src/content/pricing/{en,id}.ts` | **Live pricing pages** | trial / pro / premium / enterprise (USD $19/$49, Rp display) |
-| `apps/license-server` `PADDLE_PRICE_TIERS` (env) | Live billing map | 2 prices: `pri_…racp:pro`, `pri_…8cec:premium` |
+| `website/src/content/pricing/{en,id}.ts` | **Live pricing pages** | trial / pro / premium / enterprise (USD $19/$49, Rp display) — **needs `plus` + free-forever card** |
+| `apps/license-server` `PADDLE_PRICE_TIERS` (env) | Live billing map | 2 prices: `pri_…racp:pro`, `pri_…8cec:premium` — **needs a Plus price** |
 
 Known drift (verified 2026-08-17):
 - **Pro quotas:** website says 1 store / 2 registers / 1 warehouse; oz-core
@@ -48,8 +51,7 @@ Known drift (verified 2026-08-17):
   over-entitled vs. what the checkout advertises.
 - **`kds` (and `warehouse`) workspace types:** `tierQuotas()` grants all paid
   tiers all 6 types; ADR #5 gates KDS to Premium+.
-- **Legacy tiers:** oz-core still carries `OneTime` / `Standard` (business-plan
-  era) that no longer exist in the schema select or the site.
+- **Legacy tiers:** oz-core still carries `OneTime` / `Standard`.
 - **Currency:** the business plan is 100% IDR/annual; the live system is USD/
   monthly via Paddle with Rp **display** figures (Paddle cannot bill IDR).
 
@@ -58,20 +60,15 @@ Known drift (verified 2026-08-17):
 ## 3. Decisions to finalize
 
 Mark each with ✅ (adopt recommendation), or write your choice in the
-**Decision** line. Until every row has a decision, this document stays DRAFT.
+**Decision** line. D1 is done; everything else stays open until written here.
 
-### D1 — Tier lineup
+### D1 — Tier lineup ✅ **RESOLVED 2026-08-17**
 
-- **Options:**
-  - **(a) Keep the live lineup:** Free trial / Pro / Premium / Enterprise.
-  - **(b) Business-plan lineup:** 1-Time / Standard / Pro / Enterprise.
-  - **(c) Hybrid:** live lineup **plus** an optional one-time perpetual tier.
-- **Shipped today:** (a) — Pro $19 and Premium $49 are the only Paddle prices;
-  1-Time/Standard were never wired to billing.
-- **Recommendation:** **(a)**. Standard/1-Time add pricing complexity and a
-  perpetual tier conflicts with the subscription-first roadmap. Keep the
-  one-time perpetual idea in the roadmap (see D7).
-- **Decision:** __________
+**Free / Plus / Pro / Premium / Enterprise** — five tiers. **Free = free
+forever, 1 workspace only.** Pro $19 and Premium $49 keep their Paddle
+prices; Plus is a new entry price; Enterprise is bespoke.
+
+- **Decision:** ✅ 5-tier lineup as stated above.
 
 ### D2 — Billing currency & frequency
 
@@ -82,10 +79,10 @@ Mark each with ✅ (adopt recommendation), or write your choice in the
   - **(a) USD monthly only** (live today) — Paddle handles tax/MoR, receipt
     emails, refunds. Rp stays display-only; add a "billed in USD" note on the
     ID page.
-  - **(b) USD monthly + annual** (annual = 2 months free, e.g. $190/yr) —
-    needs 2 more Paddle prices and 2 more `PADDLE_PRICE_TIERS` mappings.
+  - **(b) USD monthly + annual** (annual = 2 months free) — needs 1 extra
+    Paddle price per tier and extra `PADDLE_PRICE_TIERS` mappings.
   - **(c) True IDR billing** via a local provider (Midtrans/Xendit) alongside
-    Paddle — significant work; needed only if IDR card/QRIS billing is a hard
+    Paddle — significant work; needed only if IDR billing is a hard
     requirement.
 - **Recommendation:** **(a)** now, **(b)** as the first pricing expansion, **(c)**
   only when a paying IDR segment demands it.
@@ -93,25 +90,21 @@ Mark each with ✅ (adopt recommendation), or write your choice in the
 
 ### D3 — Quota table (stores / registers / warehouses / workspace types)
 
-The core reconciliation. Options are the three published matrices:
+The core reconciliation. Free is fixed by D1 (**1 workspace only** — one
+store, one register, one warehouse). Plus needs a definition; Pro/Premium
+currently disagree between marketing (1 store / 2 regs) and enforcement
+(unlimited). Proposed ladder (numbers are proposals — adjust freely):
 
-| | BUSINESS_PLAN (Pro) | ADR #5 (Pro / Premium) | Website live (Pro / Premium) |
-| :--- | :--- | :--- | :--- |
-| Stores | Unlimited | 2 / 5 | 1 / Unlimited |
-| Registers | Unlimited | 3 / 10 | 2 / Unlimited |
-| Warehouses | Unlimited | — / — | 1 / Unlimited |
-| Workspace types | — | +`inventory` / +`kds` | all paid = all 6 types (current code) |
+| | Free (forever) | Plus | Pro | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Stores** | 1 | 1 | **3** (propose) | Unlimited | Unlimited |
+| **Registers / store** | 1 | 2 | **5** (propose) | Unlimited | Unlimited |
+| **Warehouses** | 1 | 1 | **3** (propose) | Unlimited | Unlimited |
+| **Workspace types** | `restaurant-pos`, `store-pos`, `admin` | + `inventory`, `warehouse` | same as Plus | + `kds` | all |
 
-- **Recommendation:** adopt the **website matrix as written** (it is what the
-  buyer sees at checkout — marketing and enforcement must match) and update
-  the enforcement to match:
-  - **Free/trial:** 1 store, 1 register, 1 warehouse — `restaurant-pos`,
-    `store-pos`, `admin`.
-  - **Pro:** 1 store, 2 registers, 1 warehouse — + `inventory`, `warehouse`.
-  - **Premium:** unlimited stores/registers/warehouses — + `kds`.
-  - **Enterprise:** unlimited — all types.
-  - Concretely: `tierQuotas()` and `SubscriptionTier::max_*()` must encode the
-    same numbers, or the drift resurfaces.
+- **Recommendation:** adopt the ladder above and update the enforcement to
+  match: `tierQuotas()` and `SubscriptionTier::max_*()` must encode the same
+  numbers as the pricing pages, or the drift resurfaces.
 - **Decision:** __________
 
 ### D4 — Feature gates (what unlocks where)
@@ -119,26 +112,30 @@ The core reconciliation. Options are the three published matrices:
 - **Live site:** trial = nothing; **Pro** = QRIS + cloud sync; **Premium** =
   + Lua + priority support. Stripe cards are implemented in `oz-payment` but
   not listed on the site.
-- **Business plan:** QRIS on Standard+, Stripe on Pro+, Lua on Pro+.
 - **Open sub-questions:**
-  1. **Stripe card payments** — Pro or Premium+? (recommend **Premium+**, so
-     Pro ≠ Premium only by quantity; differentiate on capability).
-  2. **KDS** — Premium+ (ADR #5) vs all paid (current code)? (recommend
+  1. **Plus features** — proposed: QRIS + cloud sync (the old Pro feature
+     set, at a lower price). Confirm.
+  2. **Stripe card payments** — Pro or Premium+? (recommend **Pro+**, giving
+     Pro a capability edge over Plus beyond quantity).
+  3. **KDS** — Premium+ (ADR #5) vs all paid (current code)? (recommend
      **Premium+**).
-  3. **Lua scripting** — Pro (business plan) vs Premium+ (site)? (recommend
+  4. **Lua scripting** — Pro (business plan) vs Premium+ (site)? (recommend
      **Premium+**, as shipped).
-  4. **Loyalty/points** (business plan Pro+) — in scope for which tier?
-     (recommend **Premium+**, matches "automation" positioning).
+  5. **Loyalty/points** (business plan Pro+) — which tier? (recommend
+     **Premium+**, matches "automation" positioning).
 - **Decision:** __________
 
-### D5 — Trial terms
+### D5 — Free tier lifecycle (was: trial terms)
 
-- **Settled in ADR #23** (adopt as final): **90-day trial**, 1 store/1
-  register/1 warehouse, offline-only (no cloud sync, no payment gateways),
-  hardware-fingerprint anti-abuse lock, expiry warning at day 76, 14-day
-  offline grace, then soft lock with upgrade path.
-- **Confirm:** trial has **no Paddle price** and the site's Free card must
-  keep no `priceId` (checkout must stay disabled for it).
+- **Decided:** Free is **free forever**, not a 90-day trial — no trial clock,
+  no countdown banners.
+- **Still to confirm:**
+  1. Keep the **hardware-fingerprint anti-abuse lock** (ADR #23) on the free
+     tier so reinstalls can't spawn unlimited free workspaces? (recommend
+     **yes** — same mechanism, no expiry).
+  2. Retire the 90-day / 14-day-grace lifecycle from ADR #23, or keep it as a
+     future promotional offer? (recommend **retire** — Free is now the
+     permanent entry tier).
 - **Decision:** __________
 
 ### D6 — Renewal & grace semantics
@@ -156,12 +153,10 @@ The core reconciliation. Options are the three published matrices:
 
 ### D7 — One-time perpetual licensing
 
-- **Options:** ship it (business-plan 1-Time tier), or keep deferred.
-- **Shipped today:** deferred — site copy literally says "One-time (perpetual)
-  licensing is not available yet — see the roadmap."
-- **Recommendation:** keep **deferred**; re-open only after subscription
-  churn/retention data justifies it.
-- **Decision:** __________
+- **Status:** the business plan's 1-Time tier is retired by D1; a perpetual
+  option is no longer part of the lineup. **Closed** unless a paying segment
+  asks for it.
+- **Decision:** ✅ Closed — no perpetual tier.
 
 ### D8 — Enterprise definition
 
@@ -176,35 +171,35 @@ The core reconciliation. Options are the three published matrices:
 
 ### D9 — Tier-key cleanup (schema & enum)
 
-- **Current:** schema select = `free, pro, premium, enterprise`; oz-core enum
-  still maps legacy `standard`, `one_time`, `perpetual` strings.
-- **Recommendation:** after D1, drop the legacy aliases from
-  `SubscriptionTier::from_db` (keep accepting them defensively is fine, but
-  stop documenting them as tiers).
+- **Target values:** `free, plus, pro, premium, enterprise` in
+  `pb_schema.json` select fields, `SubscriptionTier::from_db()`, and the
+  pricing `TierKey` union. Drop legacy `trial`, `standard`, `one_time`,
+  `perpetual` aliases (keep accepting them defensively in `from_db` is fine,
+  but stop documenting them as tiers).
 - **Decision:** __________
 
 ---
 
-## 4. Proposed final matrix (once D1–D9 are decided)
+## 4. Proposed final matrix (once D2–D9 are decided)
 
 This is the target single source of truth. It is **proposed**, not final —
 fill in §3 first.
 
-| | Free (90-day trial) | Pro | Premium | Enterprise |
-| :--- | :---: | :---: | :---: | :---: |
-| **Price (USD/mo)** | $0 | $19 | $49 | Custom |
-| **Price (IDR display)** | Rp 0 | Rp 299.000 | Rp 749.000 | Kustom |
-| **Billing** | — | Paddle, monthly, auto-renew | Paddle, monthly, auto-renew | Bespoke contract |
-| **Stores** | 1 | 1 | Unlimited | Unlimited |
-| **Registers** | 1 | 2 | Unlimited | Unlimited |
-| **Warehouses** | 1 | 1 | Unlimited | Unlimited |
-| **Workspace types** | `restaurant-pos`, `store-pos`, `admin` | + `inventory`, `warehouse` | + `kds` | all |
-| **QRIS (Midtrans)** | ✗ | ✓ | ✓ | ✓ |
-| **Stripe cards** | ✗ | ? (D4.1) | ✓ | ✓ |
-| **Cloud sync** | ✗ | ✓ | ✓ | ✓ |
-| **Lua scripting** | ✗ | ✗ | ✓ | ✓ |
-| **Priority support** | ✗ | ✗ | ✓ | ✓ (+ AM) |
-| **License key** | — (trial, hw-locked) | `OZ-PRO-…` | `OZ-PREMIUM-…` | `OZ-ENTERPRISE-…` |
+| | Free (forever) | Plus | Pro | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Price (USD/mo)** | $0 | **$9** (propose) | $19 | $49 | Custom |
+| **Price (IDR display)** | Rp 0 | **Rp 149.000** (propose) | Rp 299.000 | Rp 749.000 | Kustom |
+| **Billing** | — | Paddle, monthly | Paddle, monthly | Paddle, monthly | Bespoke contract |
+| **Stores** | 1 | 1 | 3 | Unlimited | Unlimited |
+| **Registers / store** | 1 | 2 | 5 | Unlimited | Unlimited |
+| **Warehouses** | 1 | 1 | 3 | Unlimited | Unlimited |
+| **Workspace types** | `restaurant-pos`, `store-pos`, `admin` | + `inventory`, `warehouse` | + (as Plus) | + `kds` | all |
+| **QRIS (Midtrans)** | ✗ | ✓ | ✓ | ✓ | ✓ |
+| **Stripe cards** | ✗ | ✗ | ✓ | ✓ | ✓ |
+| **Cloud sync** | ✗ | ✓ | ✓ | ✓ | ✓ |
+| **Lua scripting** | ✗ | ✗ | ✗ | ✓ | ✓ |
+| **Priority support** | ✗ | ✗ | ✗ | ✓ | ✓ (+ AM) |
+| **License key** | — (free, hw-locked) | `OZ-PLUS-…` | `OZ-PRO-…` | `OZ-PREMIUM-…` | `OZ-ENTERPRISE-…` |
 
 ---
 
@@ -212,24 +207,32 @@ fill in §3 first.
 
 | # | Change | File(s) |
 | :--- | :--- | :--- |
-| 1 | Quota numbers per tier | `apps/license-server/paddle_webhook.go` → `tierQuotas()`; `crates/oz-core/src/subscription.rs` → `max_stores()/max_pos_instances()/max_warehouses()/allows_workspace_type()` |
-| 2 | Feature rows (Stripe, KDS, loyalty) | `website/src/content/pricing/{en,id}.ts` + `types.ts` |
-| 3 | New prices (annual, if D2=b) | Paddle dashboard → 2 new prices → `PADDLE_PRICE_TIERS` env → docs/operations/go-live-checklist.md |
-| 4 | IDR display note ("billed in USD") | `website/src/content/pricing/id.ts` |
-| 5 | Tier-key cleanup (D9) | `crates/oz-core/src/subscription.rs` `from_db()`; verify `pb_schema.json` select values |
-| 6 | Renewal expiry policy (D6) | `apps/license-server/renew.go` |
-| 7 | Supersede stale docs | `docs/BUSINESS_PLAN.md` §2 (mark superseded for pricing); ADR #5 quota table (amend); `website-plan.md` tier section |
-| 8 | Regression tests | `apps/license-server/paddle_webhook_test.go`, `handler_test.go` (quota assertions), oz-core subscription tests |
+| 1 | Add `plus` to the tier enum + quota methods | `crates/oz-core/src/subscription.rs` |
+| 2 | Add `plus` case to `tierQuotas()` | `apps/license-server/paddle_webhook.go` |
+| 3 | Add `plus` to schema select values | `apps/license-server/pb_schema.json` (license_keys, subscriptions, tenants?) |
+| 4 | Rework pricing pages: Free card = "free forever / 1 workspace", new Plus card | `website/src/content/pricing/{en,id}.ts` + `types.ts` (TierKey union) |
+| 5 | Create the **Plus Paddle price** (dashboard) + wire it | Paddle dashboard → `PADDLE_PRICE_TIERS` env → `docs/operations/go-live-checklist.md` |
+| 6 | Align enforcement with the decided quotas (fix Pro over-entitlement) | `tierQuotas()` + `SubscriptionTier::max_*()` |
+| 7 | Free-tier lifecycle (hw lock, no trial clock) | ADR #23 re-scope; client trial timer code |
+| 8 | Renewal expiry policy (D6) | `apps/license-server/renew.go` |
+| 9 | Supersede stale docs | `docs/BUSINESS_PLAN.md` §2, ADR #5 quota table, `website-plan.md` tier section |
+| 10 | Regression tests for the new quota table | `apps/license-server/paddle_webhook_test.go`, `handler_test.go`, oz-core subscription tests |
 
 ---
 
-## 6. Evidence recorded 2026-08-17
+## 6. Evidence & decision log
 
-- The full sandbox purchase loop is verified live: Paddle checkout → test
-  payment (`4242 4242 4242 4242`) → webhook events → transaction
-  `txn_01m07za3pygc0qdj464hdq66ev` **completed** → subscription
-  `sub_01m07zaeebjxff7cfawmpmeqxn` **active** on Pro `pri_01m05gdnqp30xze6db73qcracp`.
-- The only two Paddle prices in existence are Pro $19 and Premium $49 (sandbox).
-- `tierQuotas()` currently grants **unlimited** quotas to all paid tiers —
-  the marketing pages promise less. This is the single most urgent drift to
-  resolve once D3 is decided.
+**2026-08-17 — D1 resolved:** five-tier lineup `Free / Plus / Pro / Premium /
+Enterprise`; Free = free forever, 1 workspace only; Plus is a new entry tier;
+Pro/Premium keep their live Paddle prices; Enterprise stays bespoke.
+
+**2026-08-17 — sandbox purchase verified end-to-end:** Paddle checkout → test
+payment (`4242 4242 4242 4242`) → webhook events → transaction
+`txn_01m07za3pygc0qdj464hdq66ev` **completed** → subscription
+`sub_01m07zaeebjxff7cfawmpmeqxn` **active** on Pro `pri_01m05gdnqp30xze6db73qcracp`.
+The only two Paddle prices in existence are Pro $19 and Premium $49 (sandbox).
+
+**Urgent drift to resolve first (D3):** `tierQuotas()` currently grants
+**unlimited** quotas to all paid tiers — the marketing pages promise less, and
+the new Plus tier makes the gap bigger. Align enforcement with the decided
+table before the Plus price goes live.
