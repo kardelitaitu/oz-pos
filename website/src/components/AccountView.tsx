@@ -186,7 +186,8 @@ export default function AccountView({ locale }: Props) {
           if (mountedRef.current) setRefreshState(found ? 'idle' : 'pending');
         })();
       });
-    } catch {
+    } catch (err) {
+      console.error('checkout open failed', err);
       setSubscribeError(true);
     } finally {
       setSubscribing(null);

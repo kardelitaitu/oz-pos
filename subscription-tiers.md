@@ -1,0 +1,124 @@
+# Subscription Tiers — Final Decisions
+
+> **Status: FINAL** — Approved 2026-08-17. Single source of truth for tier
+> pricing, quotas, and feature gates. Supersedes the tier/pricing sections of
+> `docs/BUSINESS_PLAN.md` §2, ADR #5, and the older pricing content until
+> those are updated to match.
+
+## 1. Lineup
+
+**Five tiers: Free · Plus · Pro · Premium · Enterprise**
+
+| Tier | Position |
+| :--- | :--- |
+| **Free** | Free forever — 1 workspace only (1 store, 1 terminal, 1 warehouse) |
+| **Plus** | Entry paid tier |
+| **Pro** | Mid paid tier |
+| **Premium** | Top paid tier |
+| **Enterprise** | Bespoke — no list price, contact sales |
+
+## 2. Pricing
+
+USD and IDR are **independent market prices**: global customers pay the USD
+rate; Indonesian customers pay the IDR rate (lower, set for the local
+market). See **Payment routing** below for how each is charged.
+
+| Tier | USD/mo | USD/yr (≈off) | IDR/mo | IDR/yr (≈off) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Free** | $0 | — | Rp 0 | — |
+| **Plus** | $4.99 | $49.99 (16.5%) | Rp 49.000 | Rp 500.000 (15.0%) |
+| **Pro** | $9.99 | $99.99 (16.6%) | Rp 99.000 | Rp 1.000.000 (15.8%) |
+| **Premium** | $19.99 | $199.99 (16.6%) | Rp 199.000 | Rp 2.000.000 (16.2%) |
+| **Enterprise** | Bespoke | Bespoke | Kustom | Kustom |
+
+Yearly = pay 10 months (10 × monthly, ≈15–17% off) in both currencies.
+Six Paddle prices total (Plus/Pro/Premium × monthly/yearly).
+
+### Payment routing
+
+| Market | Provider | Currency | Payment methods |
+| :--- | :--- | :--- | :--- |
+| **Global** | Paddle (MoR) | USD | cards |
+| **Indonesia** | **Midtrans** (Phase 2) | IDR, fixed Rp | QRIS, virtual accounts, e-wallets, cards |
+
+- **Phase 1 (now):** Paddle for everyone. The IDR rates are honored via
+  Paddle country price overrides for Indonesia — Paddle geolocates the
+  buyer's IP at checkout and applies the override for the country selected.
+  IDR isn't a supported currency, so the override is a USD amount ≈ the Rp
+  figure (e.g. Premium yearly ≈ $125), which drifts with FX.
+- **Phase 2 (next):** route Indonesian customers to a **Midtrans** checkout
+  — fixed Rp prices and local payment methods (QRIS, virtual accounts,
+  e-wallets) that cards alone can't reach; Paddle stays for global.
+  Midtrans over Xendit because `oz-payment` already integrates Midtrans QRIS
+  for in-store payments.
+- **Costs of Phase 2:** OZ-POS becomes merchant of record for ID payments
+  (Indonesian PPN, refunds, disputes); a second webhook + provisioning path
+  in the license server; local-method subscriptions are less mature than
+  card auto-renew.
+
+## 3. Quota & feature matrix
+
+| Feature | Free | Plus | Pro | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Numeric limits** | | | | | |
+| Max stores | 1 | 1 | 2 | Unlimited | Unlimited |
+| Max terminals (registers) / store | 1 | 2 | 5 | Unlimited | Unlimited |
+| Max warehouses | 1 | 2 | 3 | Unlimited | Unlimited |
+| Max KDS screens | 0 | 0 | 1 / store | Unlimited | Unlimited |
+| Max staff users * | 1 | 5 | 20 | Unlimited | Unlimited |
+| **Workspace types** | | | | | |
+| `restaurant-pos` / `store-pos` / `admin` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `inventory` / `warehouse` | ✗ | ✓ | ✓ | ✓ | ✓ |
+| `kds` | ✗ | ✗ | ✓ | ✓ | ✓ |
+| **Payments** | | | | | |
+| Cash & manual split | ✓ | ✓ | ✓ | ✓ | ✓ |
+| QRIS (Midtrans) | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Stripe cards | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Multi-currency | ✗ | ✗ | ✓ | ✓ | ✓ |
+| **Sync & cloud** | | | | | |
+| Offline-first SQLite engine | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Cloud sync (PostgreSQL outbox) | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Multi-store dashboard | ✗ | ✗ | ✓ | ✓ | ✓ |
+| CSV / data export | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Business logic** | | | | | |
+| Custom tax (PPN / PB1 / service) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Reports & analytics (`analytics:view`) | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Scheduled report emails | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Product bundles | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Lua scripting | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Loyalty tiers & points | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Multi-warehouse routing | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Live order simulation debugger | ✗ | ✗ | ✓ | ✓ | ✓ |
+| AI demand forecasting (roadmap) | ✗ | ✗ | ✗ | ✗ | ✓ |
+| **Hardware (HAL)** | | | | | |
+| Scanner / printer / cash drawer | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Customer display | ✗ | ✗ | ✓ | ✓ | ✓ |
+| KDS hardware | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Custom HAL drivers | ✗ | ✗ | ✗ | ✗ | ✓ |
+| **Support & platform** | | | | | |
+| Community forum | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Email / chat support | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Priority support | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Support response SLA | — | 24h | 8h | 1h (24/7) | account manager |
+| Software updates | minor + major | minor + major | minor + major | minor + major | minor + major |
+| White-label branding | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Offline grace period | — (never expires) | 14 days | 14 days | 30 days | custom |
+| Enterprise services (dedicated hosting, ERP adaptors, account manager) | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+\* Max staff users — not enforced anywhere yet; implement (or drop) before shipping.
+
+---
+
+## 4. Where each definition lives (source map)
+
+| File | Role | Tier source |
+| :--- | :--- | :--- |
+| `docs/BUSINESS_PLAN.md` §2 | Market/pricing plan (IDR, annual) | 1-Time / Standard / Pro / Enterprise — superseded for pricing |
+| `docs/decisions/2026-07-10-subscription-tier-entitlement.md` (ADR #5) | Design intent | Free / Pro / Premium / Enterprise with numeric quotas |
+| `docs/decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md` (ADR #23) | Trial lifecycle | 90-day trial — to be re-scoped to the free-forever tier |
+| `crates/oz-core/src/subscription.rs` | Enforcement (client-side quotas) | enum Free/OneTime/Standard/Pro/Premium/Enterprise |
+| `apps/license-server/paddle_webhook.go` → `tierQuotas()` | Enforcement (license mint) | pro/premium/enterprise → 0/0/all types; free → 1/1/3 types |
+| `apps/license-server/pb_schema.json` | Schema select values | free, pro, premium, enterprise — needs plus |
+| `apps/license-server/renew.go` | Offline renewal expiry | free +100y, pro/premium +1y, enterprise +3y |
+| `website/src/content/pricing/{en,id}.ts` | Live pricing pages | trial / pro / premium / enterprise (USD $19/$49, Rp display) — needs plus + free-forever card |
+| `apps/license-server` `PADDLE_PRICE_TIERS` (env) | Live billing map | 2 prices today: `pri_…racp:pro`, `pri_…8cec:premium` — needs 6 once D2 lands (monthly + yearly × Plus/Pro/Premium) |

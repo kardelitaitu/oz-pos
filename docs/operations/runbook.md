@@ -576,6 +576,13 @@ gh run list --workflow "Website Deploy" --branch main --limit 5
 curl "https://api.cloudflare.com/client/v4/user/tokens/verify" \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
 # expect: {"result":{"status":"active"},...} with message code 10000 "valid and active"
+# Note: SHORT-LIVED tokens (cfat_ prefix, e.g. dashboard quick-creates) are
+# account-scoped only: /user/tokens/verify answers 401 while the token is fine.
+# Probe them against their own account instead (same call the deploy gate makes):
+curl "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+# A cfat_ token also EXPIRES by design — prefer a regular token with a TTL ≤ 1y
+# for the CI secret so the deploy never silently rots mid-cycle.
 
 # 3. Is the LIVE site carrying the latest portal? The 4-card docs hub ships only via a
 #    successful deploy — a 404 here while CI is green means the deploy is silently stale.

@@ -4,13 +4,14 @@
  * apps/license-server/pb_schema.json and crates/oz-core/src/subscription.rs).
  * The trial card is not a Paddle product (it is the offline 90-day trial).
  *
- * Each paid tier has TWO Paddle prices: a USD price for the global audience
- * (`en` locale) and an IDR price for Indonesia (`id` locale). The content
- * files are per-locale, so `priceId` always holds the price id for THAT
- * locale's currency — the checkout button never needs to convert. On the
- * server, both ids map to the same tier_key via PADDLE_PRICE_TIERS (see
- * apps/license-server/paddle_webhook.go). `currency` documents which is
- * which and can drive display/toggle logic later.
+ * Paddle does not support IDR as a billing currency, so both locales
+ * charge the SAME USD price ids: `en` shows USD, `id` shows an Rp display
+ * figure that is an approximation of the USD amount (the checkout always
+ * bills in USD — see src/content/pricing/id.ts). On the server the price
+ * ids map to the tier_key via PADDLE_PRICE_TIERS (see
+ * apps/license-server/paddle_webhook.go). `currency` documents the display
+ * currency and can drive a future local-provider (e.g. Midtrans/Xendit)
+ * billing path.
  */
 export type TierKey = 'trial' | 'pro' | 'premium' | 'enterprise';
 

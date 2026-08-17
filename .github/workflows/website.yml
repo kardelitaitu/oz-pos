@@ -148,9 +148,19 @@ jobs:
           # Authoritative validity probe (runbook §9.3): Cloudflare's own
           # /user/tokens/verify endpoint. HTTP 400 + code 9109 = the secret
           # is invalid/expired; HTTP 000 = runner cannot reach api.cloudflare.com.
+          # Short-lived tokens (cfat_ prefix) are account-scoped only — they
+          # get 401 on user-level endpoints while still being perfectly valid
+          # for the deploy. Fall back to the account-scoped verify (the probe
+          # Cloudflare's dashboard suggests for them) before declaring failure.
           HTTP=$(curl -sS -m 15 -o /tmp/cf-verify.json -w '%{http_code}' \
             "https://api.cloudflare.com/client/v4/user/tokens/verify" \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" || true)
+          if [ "$HTTP" = "401" ]; then
+            echo "User-level verify rejected the token — retrying against account ${CLOUDFLARE_ACCOUNT_ID} (short-lived tokens are account-scoped)."
+            HTTP=$(curl -sS -m 15 -o /tmp/cf-verify.json -w '%{http_code}' \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/tokens/verify" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" || true)
+          fi
           if [ "$HTTP" != "200" ]; then
             echo "::error::Cloudflare token verification failed (HTTP ${HTTP}) — deploy blocked."
             echo "  Response: $(head -c 300 /tmp/cf-verify.json 2>/dev/null || echo 'no response body')"
