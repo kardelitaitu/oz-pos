@@ -222,6 +222,7 @@
     "logout": "Keluar",
     "notConfigured": "API lisensi belum dikonfigurasi pada deployment ini.",
     "noSubscription": "Anda belum memiliki langganan aktif. Pilih paket untuk memulai.",
+    "checkoutUnavailable": "Pembayaran online belum tersedia — hubungi sales@oz-pos.com untuk berlangganan.",
     "subscribe": "Berlangganan",
     "subscription": "Langganan",
     "starts": "Mulai",

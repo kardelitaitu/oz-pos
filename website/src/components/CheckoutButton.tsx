@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { t } from '../i18n';
 import type { PricingTier } from '../content/pricing/types';
-import { hasSession, isPlaceholderPriceId, openPaddleCheckout, getSessionEmail } from './paddle';
+import { hasSession, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout, getSessionEmail } from './paddle';
 
 /**
  * Pricing-page checkout button (website-plan.md §7). Payment is
@@ -24,7 +24,10 @@ export default function CheckoutButton({ tier, locale }: Props) {
   const [error, setError] = useState(false);
   const priceId = tier.priceId;
 
-  if (!priceId || isPlaceholderPriceId(priceId)) {
+  // No checkout path: placeholder price (not yet catalogued) OR the client
+  // token is unset (checkout can't open) — degrade to the mailto fallback
+  // instead of sending the user through login into a dead checkout.
+  if (!priceId || isPlaceholderPriceId(priceId) || !isPaddleConfigured()) {
     return (
       <a
         href={`mailto:sales@oz-pos.com?subject=${encodeURIComponent('OZ-POS plan: ' + tier.name)}`}

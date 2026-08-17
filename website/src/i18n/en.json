@@ -222,6 +222,7 @@
     "logout": "Sign out",
     "notConfigured": "The license API is not configured on this deployment.",
     "noSubscription": "You don't have an active subscription yet. Choose a plan to get started.",
+    "checkoutUnavailable": "Online checkout isn't available yet — contact sales@oz-pos.com to subscribe.",
     "subscribe": "Subscribe",
     "subscription": "Subscription",
     "starts": "Starts",

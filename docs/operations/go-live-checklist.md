@@ -52,14 +52,13 @@ webhook delivery work the moment the new image is up.
    Default payment link** → pick a product (e.g. **Pro — $19 USD**) → Save. Without it the
    checkout overlay dies with **"Something went wrong"** before Paddle even opens.
    `localhost` is allowed for sandbox testing, so the local site works too.
-2. **Repoint the webhook destination** — the notification destination
-   `ntfset_01m05htpgfq0qmcvb0er6byrsx` currently posts to
-   `https://license.oz-pos.com/api/v1/paddle/webhook`, a domain we do **not** own yet — so
-   sandbox webhooks are being dropped. Paddle (sandbox) → **Developer tools →
+2. **Webhook destination — DONE (verified 2026-08-17 via the Paddle API):**
+   `ntfset_01m05htpgfq0qmcvb0er6byrsx` now posts to
+   `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook` (was the unowned
+   `license.oz-pos.com`). If it ever regresses: Paddle (sandbox) → **Developer tools →
    Notifications** → edit destination `ntfset_01m05htpgfq0qmcvb0er6byrsx` → **Endpoint
-   URL** → `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook` → Save.
-   While in that same edit screen, copy the **Endpoint secret** into §1 #3 — it is shown
-   once and never returned by any API.
+   URL** → the `code.run` URL → Save. While in that same edit screen, copy the
+   **Endpoint secret** into §1 #3 — it is shown once and never returned by any API.
 
 ---
 
@@ -165,7 +164,9 @@ a broken relay or rotated secret pages someone.
 
 - **Website secrets** (GitHub Actions → Settings → Secrets, consumed by `website.yml`
   and baked at build time): `PUBLIC_LICENSE_API_URL` (the `code.run` URL),
-  `PUBLIC_PADDLE_CLIENT_TOKEN`, `PUBLIC_PADDLE_ENVIRONMENT=sandbox`. The runtime override lives in `website/wrangler.toml` → `[vars] LICENSE_API_URL` — update it there (or the Worker dashboard) when the host changes; no rebuild needed.
+  `PUBLIC_PADDLE_CLIENT_TOKEN` — copy from Paddle (sandbox) → **Settings → Public keys
+  & tokens → Client-side token** (NOT the API key; without it the checkout overlay
+  can't open and every button falls back to mailto), `PUBLIC_PADDLE_ENVIRONMENT=sandbox`. The runtime override lives in `website/wrangler.toml` → `[vars] LICENSE_API_URL` — update it there (or the Worker dashboard) when the host changes; no rebuild needed.
 - **Paddle sandbox checkout** is unblocked by the **default payment link** — now a
   checklist step in §1b #1 (do it before the §3 deploy).
 - **Domain + SPF/DKIM/DMARC** is the real inbox-not-spam fix once `oz-pos.com` is owned
