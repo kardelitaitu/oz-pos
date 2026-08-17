@@ -1,12 +1,14 @@
 # Subscription Tier Finalization
 
-> **Status:** DRAFT — D1 (lineup) is resolved; D2–D9 still need decisions.
+> **Status:** DRAFT — D1 (lineup) and D2 (pricing model) are resolved;
+> D3–D9 still need decisions.
 > **Date:** 2026-08-17
 > **Why this exists:** the repo carried several overlapping (and mutually
 > contradictory) tier definitions — the business plan, ADR #5, the oz-core
 > entitlement enum, and the live website + Paddle implementation. The lineup
-> is now decided (see D1); the remaining work is filling in quotas, prices,
-> and feature gates per tier, then aligning every file with this document.
+> and pricing model are now decided (see D1 + D2); the remaining work is
+> filling in quotas and feature gates per tier, confirming the exact price
+> points, then aligning every file with this document.
 
 ---
 
@@ -19,6 +21,10 @@
 - **Plus** is a new entry-level paid tier, inserted between Free and Pro.
 - **Pro** ($19/mo) and **Premium** ($49/mo) keep their existing Paddle prices.
 - **Enterprise** stays bespoke (no Paddle price, contact-sales path).
+- **Pricing model (D2):** every paid tier is sold in **USD and IDR display** ×
+  **monthly and yearly**; yearly is a rounded price carrying a **15–25%
+  discount**, with cheaper tiers getting less (Plus ≈15–16%, Pro ≈20–22%,
+  Premium ≈25%).
 
 What each old model contributed (and where it lands now):
 
@@ -43,7 +49,7 @@ What each old model contributed (and where it lands now):
 | `apps/license-server/pb_schema.json` | Schema select values | `free, pro, premium, enterprise` — **needs `plus`** |
 | `apps/license-server/renew.go` | Offline renewal expiry | `free` +100y, `pro/premium` +1y, `enterprise` +3y |
 | `website/src/content/pricing/{en,id}.ts` | **Live pricing pages** | trial / pro / premium / enterprise (USD $19/$49, Rp display) — **needs `plus` + free-forever card** |
-| `apps/license-server` `PADDLE_PRICE_TIERS` (env) | Live billing map | 2 prices: `pri_…racp:pro`, `pri_…8cec:premium` — **needs a Plus price** |
+| `apps/license-server` `PADDLE_PRICE_TIERS` (env) | Live billing map | 2 prices today: `pri_…racp:pro`, `pri_…8cec:premium` — **needs 6 once D2 lands** (monthly + yearly × Plus/Pro/Premium) |
 
 Known drift (verified 2026-08-17):
 - **Pro quotas:** website says 1 store / 2 registers / 1 warehouse; oz-core
@@ -70,23 +76,37 @@ prices; Plus is a new entry price; Enterprise is bespoke.
 
 - **Decision:** ✅ 5-tier lineup as stated above.
 
-### D2 — Billing currency & frequency
+### D2 — Billing currency & frequency ✅ **RESOLVED 2026-08-17**
 
-- **Facts:** Paddle supports no IDR; the site currently charges the USD price
-  and shows an Rp figure (Rp 299.000 ≈ $19, Rp 749.000 ≈ $49). Business plan
-  priced everything in IDR **annual**.
-- **Options:**
-  - **(a) USD monthly only** (live today) — Paddle handles tax/MoR, receipt
-    emails, refunds. Rp stays display-only; add a "billed in USD" note on the
-    ID page.
-  - **(b) USD monthly + annual** (annual = 2 months free) — needs 1 extra
-    Paddle price per tier and extra `PADDLE_PRICE_TIERS` mappings.
-  - **(c) True IDR billing** via a local provider (Midtrans/Xendit) alongside
-    Paddle — significant work; needed only if IDR billing is a hard
-    requirement.
-- **Recommendation:** **(a)** now, **(b)** as the first pricing expansion, **(c)**
-  only when a paying IDR segment demands it.
-- **Decision:** __________
+**Every paid tier is priced in both USD and IDR (display), sold monthly and
+yearly.** Yearly prices are rounded to a clean figure and carry a **15–25%
+discount**, with cheaper tiers getting less (Plus ≈15–16%, Pro ≈20–22%,
+Premium ≈25%).
+
+Worked price points (anchors are the existing/live figures; Plus monthly is
+the working proposal):
+
+| Tier | USD monthly | USD yearly (≈off) | IDR monthly | IDR yearly (≈off) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Free** | $0 | — (free forever) | Rp 0 | — |
+| **Plus** | **$9** (propose) | **$90** (16.7%) | **Rp 149.000** | **Rp 1.499.000** (16.2%) |
+| **Pro** | $19 | **$180** (21.1%) | Rp 299.000 | **Rp 2.799.000** (22.0%) |
+| **Premium** | $49 | **$440** (25.2%) | Rp 749.000 | **Rp 6.499.000** (27.7%)¹ |
+| **Enterprise** | Bespoke | Bespoke | Kustom | Kustom |
+
+¹ Premium IDR yearly rounds to a classic price point that lands at ≈27.7%
+off; if a strict ≤25% is preferred, use **Rp 6.749.000** (24.9%) instead.
+
+- **Facts that still hold:** Paddle cannot bill IDR — the checkout always
+  charges the USD price (monthly or yearly); the Rp figures are display only.
+  A "billed in USD" note goes on the ID pricing page.
+- **Implementation:** each (tier × frequency) is its own Paddle price —
+  **6 prices total** (Plus/Pro/Premium × monthly/yearly), each mapped in
+  `PADDLE_PRICE_TIERS` back to its `tier_key`. Rounding convention used here:
+  nearest $10 (USD) and classic `Rp …9.000` price points (IDR) — adjust
+  freely, but the ladder must hold: **cheaper tier ⇒ smaller discount.**
+- **Decision:** ✅ USD + IDR display × monthly + yearly as tabled; yearly
+  discount targets before rounding: Plus **15%**, Pro **20%**, Premium **25%**.
 
 ### D3 — Quota table (stores / registers / warehouses / workspace types)
 
@@ -187,9 +207,11 @@ fill in §3 first.
 
 | | Free (forever) | Plus | Pro | Premium | Enterprise |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Price (USD/mo)** | $0 | **$9** (propose) | $19 | $49 | Custom |
-| **Price (IDR display)** | Rp 0 | **Rp 149.000** (propose) | Rp 299.000 | Rp 749.000 | Kustom |
-| **Billing** | — | Paddle, monthly | Paddle, monthly | Paddle, monthly | Bespoke contract |
+| **Price (USD/mo)** | $0 | $9 | $19 | $49 | Custom |
+| **Price (USD/yr)** | — | $90 | $180 | $440 | — |
+| **Price (IDR/mo)** | Rp 0 | Rp 149.000 | Rp 299.000 | Rp 749.000 | Kustom |
+| **Price (IDR/yr)** | — | Rp 1.499.000 | Rp 2.799.000 | Rp 6.499.000 | — |
+| **Billing** | — | Paddle, monthly or yearly | Paddle, monthly or yearly | Paddle, monthly or yearly | Bespoke contract |
 | **Stores** | 1 | 1 | 3 | Unlimited | Unlimited |
 | **Registers / store** | 1 | 2 | 5 | Unlimited | Unlimited |
 | **Warehouses** | 1 | 1 | 3 | Unlimited | Unlimited |
@@ -201,6 +223,9 @@ fill in §3 first.
 | **Priority support** | ✗ | ✗ | ✗ | ✓ | ✓ (+ AM) |
 | **License key** | — (free, hw-locked) | `OZ-PLUS-…` | `OZ-PRO-…` | `OZ-PREMIUM-…` | `OZ-ENTERPRISE-…` |
 
+> Prices are finalized in **D2 (§3)**; the quota/feature rows above remain
+> proposals pending D3/D4.
+
 ---
 
 ## 5. Implementation ripple (what changes once decided)
@@ -211,7 +236,8 @@ fill in §3 first.
 | 2 | Add `plus` case to `tierQuotas()` | `apps/license-server/paddle_webhook.go` |
 | 3 | Add `plus` to schema select values | `apps/license-server/pb_schema.json` (license_keys, subscriptions, tenants?) |
 | 4 | Rework pricing pages: Free card = "free forever / 1 workspace", new Plus card | `website/src/content/pricing/{en,id}.ts` + `types.ts` (TierKey union) |
-| 5 | Create the **Plus Paddle price** (dashboard) + wire it | Paddle dashboard → `PADDLE_PRICE_TIERS` env → `docs/operations/go-live-checklist.md` |
+| 5 | Create the **6 Paddle prices** (Plus/Pro/Premium × monthly/yearly) + wire them | Paddle dashboard → `PADDLE_PRICE_TIERS` env (6 mappings) → `docs/operations/go-live-checklist.md` |
+| 11 | Pricing pages: monthly/yearly toggle, per-frequency priceIds, "billed in USD" note (ID) | `website/src/content/pricing/{en,id}.ts` + `CheckoutButton.tsx` (pass the chosen frequency's priceId) |
 | 6 | Align enforcement with the decided quotas (fix Pro over-entitlement) | `tierQuotas()` + `SubscriptionTier::max_*()` |
 | 7 | Free-tier lifecycle (hw lock, no trial clock) | ADR #23 re-scope; client trial timer code |
 | 8 | Renewal expiry policy (D6) | `apps/license-server/renew.go` |
@@ -225,6 +251,12 @@ fill in §3 first.
 **2026-08-17 — D1 resolved:** five-tier lineup `Free / Plus / Pro / Premium /
 Enterprise`; Free = free forever, 1 workspace only; Plus is a new entry tier;
 Pro/Premium keep their live Paddle prices; Enterprise stays bespoke.
+
+**2026-08-17 — D2 resolved:** pricing model = **USD + IDR display × monthly +
+yearly** for every paid tier; yearly is a rounded price at **15–25% off** with
+cheaper tiers getting less (Plus ≈15–16%, Pro ≈20–22%, Premium ≈25%). Worked
+price points live in §3 D2. Paddle still bills USD only → 6 Paddle prices to
+create (Plus/Pro/Premium × monthly/yearly).
 
 **2026-08-17 — sandbox purchase verified end-to-end:** Paddle checkout → test
 payment (`4242 4242 4242 4242`) → webhook events → transaction
