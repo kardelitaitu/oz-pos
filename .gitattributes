@@ -15,10 +15,17 @@
 /ui/dist/ linguist-vendored
 /ui/node_modules/ linguist-vendored
 
-# Shell entrypoints must stay LF so the `#!/bin/sh` shebang survives
-# Docker builds on Windows checkouts (core.autocrlf would otherwise
-# convert them to CRLF and break container startup with
-# "exec ...: no such file or directory").
-*.sh text eol=lf
-docker-entrypoint.sh text eol=lf
-scripts/*.sh text eol=lf
+# ── Line endings: LF everywhere ───────────────────────────────────────
+# The index already stores every text file as LF. This pins the WORKING
+# TREE to LF on every platform, overriding the system-level
+# core.autocrlf=true that makes Windows checkouts CRLF. Without it, any
+# LF-writing tool (editors, Codebuff, gofmt/cargo fmt) leaves files that
+# git flags as "modified" with a zero content diff — the recurring
+# CRLF/LF noise in `git status` (and the "LF will be replaced by CRLF"
+# warning on every add/commit).
+* text=auto eol=lf
+
+# Windows batch files: cmd.exe mis-parses labels/goto in LF-only batch
+# files, so check them out CRLF (the index still stores LF).
+*.bat text eol=crlf
+*.cmd text eol=crlf
