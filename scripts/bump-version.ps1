@@ -4,10 +4,12 @@
 
 .DESCRIPTION
     This script finds all occurrences of the current codebase version (read dynamically from Cargo.toml)
-    across Rust Cargo config files, Tauri app config files, UI packages, health route tests, and React
-    status/footer views, and updates them to the target version.
-    It then automatically refreshes the package lockfiles (Cargo.lock and package-lock.json).
-    It also inserts the "## [X.Y.Z] — date" heading into the canonical CHANGELOG.md so the
+    across Rust Cargo config files, Tauri app config files, UI packages, Fluent statusbar labels,
+    the website package + i18n strings, health route tests, React status/footer views, the Docker
+    cache-priming manifests, and the version-lock lines in the AGENTS.md mirrors, and updates them
+    to the target version.
+    It then automatically refreshes the package lockfiles (Cargo.lock and the ui/ + website/ package-lock.json files).
+    It also inserts the "## [X.Y.Z] - date" heading into the canonical CHANGELOG.md so the
     AUDIT-28 release version gate (scripts/check-release-version.mjs) passes when the tag is
     created.
 
@@ -58,10 +60,14 @@ function Update-File {
         [string]$NewString
     )
     if (Test-Path $Path) {
-        $content = Get-Content -Path $Path -Raw
+        # UTF-8 read/write: the files are BOM-less UTF-8, but Windows PowerShell 5.1
+        # defaults to ANSI (cp1252), which mangles non-ASCII (em-dashes in i18n
+        # strings and CHANGELOG headings) on read and writes mojibake on write.
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        $content = [System.IO.File]::ReadAllText($Path, $utf8)
         if ($content.Contains($OldString)) {
             $updated = $content.Replace($OldString, $NewString)
-            Set-Content -Path $Path -Value $updated -NoNewline
+            [System.IO.File]::WriteAllText($Path, $updated, $utf8)
             Write-Host "Updated: $Path"
         } else {
             Write-Host "Skipped (target string not found): $Path" -ForegroundColor Yellow
@@ -75,7 +81,7 @@ function Update-File {
 Write-Host "`nUpdating version strings..." -ForegroundColor Cyan
 
 # NOTE: the Markdown backticks around the version must be DOUBLED in the
-# PowerShell string — a single backtick escapes the `$` and renders a
+# PowerShell string - a single backtick escapes the `$` and renders a
 # literal "$currentVersion", so the pattern would never match and the file
 # would be silently skipped (it happened for 0.0.26).
 Update-File "AGENTS.md" "- **Version is locked at the current release (``$currentVersion``).** Never change the version number" "- **Version is locked at the current release (``$TargetVersion``).** Never change the version number"
@@ -99,17 +105,39 @@ Update-File "ui/src/features/auth/LicenseActivationScreen.tsx" ("useState<string
 Update-File "ui/src/features/auth/StaffLoginScreen.tsx" "OZ-POS Enterprise v$currentVersion" "OZ-POS Enterprise v$TargetVersion"
 Update-File "ui/src/features/auth/__tests__/LicenseActivationScreen.test.tsx" "Version $currentVersion" "Version $TargetVersion"
 Update-File "ui/src/features/design/TooltipPreview.tsx" "OZ-POS v$currentVersion" "OZ-POS v$TargetVersion"
-Update-File "ui/src/frontend/shell/StatusBar.tsx" "OZ-POS Enterprise v$currentVersion" "OZ-POS Enterprise v$TargetVersion"
+
+# The status-bar version label lives in Fluent, not TSX (StatusBar.tsx renders the
+# `statusbar-version` key), so the FTL files are the real bump targets.
+Update-File "ui/src/locales/shared.ftl" "statusbar-version = OZ-POS Enterprise v$currentVersion" "statusbar-version = OZ-POS Enterprise v$TargetVersion"
+Update-File "ui/src/locales/shared.id.ftl" "statusbar-version = OZ-POS Enterprise v$currentVersion" "statusbar-version = OZ-POS Enterprise v$TargetVersion"
+
+# Website (marketing site): package version + i18n version strings. Single-quoted
+# format strings keep the em-dash out of the source; it is injected via [char]0x2014.
+Update-File "website/package.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
+Update-File "website/package-lock.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
+Update-File "website/src/i18n/en.json" ('"versionValue": "{0}"' -f $currentVersion) ('"versionValue": "{0}"' -f $TargetVersion)
+Update-File "website/src/i18n/en.json" ('"subtitle": "Version {0} {1} free 90-day trial, no signup required."' -f $currentVersion, [char]0x2014) ('"subtitle": "Version {0} {1} free 90-day trial, no signup required."' -f $TargetVersion, [char]0x2014)
+Update-File "website/src/i18n/id.json" ('"versionValue": "{0}"' -f $currentVersion) ('"versionValue": "{0}"' -f $TargetVersion)
+Update-File "website/src/i18n/id.json" ('"subtitle": "Versi {0} {1} uji coba gratis 90 hari, tanpa pendaftaran."' -f $currentVersion, [char]0x2014) ('"subtitle": "Versi {0} {1} uji coba gratis 90 hari, tanpa pendaftaran."' -f $TargetVersion, [char]0x2014)
+
+# Dockerfile.unified carries the same cache-priming manifests as Dockerfile.server.
+Update-File "Dockerfile.unified" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
+
+# .prime/AGENTS.md mirrors the root version-lock line (same wording as AGENTS.md).
+Update-File ".prime/AGENTS.md" "- **Version is locked at the current release (``$currentVersion``).** Never change the version number" "- **Version is locked at the current release (``$TargetVersion``).** Never change the version number"
+
+# README's "Latest release" claim (prose, updated per release).
+Update-File "README.md" "Latest release: **v$currentVersion** (on branch ``$currentVersion``)." "Latest release: **v$TargetVersion** (on branch ``$TargetVersion``)."
 
 # 2b. Sync canonical CHANGELOG.md heading (RELEASE-07)
 Write-Host "`nSyncing CHANGELOG.md heading..." -ForegroundColor Cyan
 $changelogPath = "CHANGELOG.md"
 if (Test-Path $changelogPath) {
-    $content = Get-Content -Path $changelogPath -Raw
+    $content = [System.IO.File]::ReadAllText($changelogPath, (New-Object System.Text.UTF8Encoding($false)))
     $date = Get-Date -Format "yyyy-MM-dd"
-    # Build the em-dash via [char] so the script stays pure-ASCII: the file
-    # is BOM-less UTF-8, and Windows PowerShell 5.1 reads it as cp1252 where
-    # the em-dash bytes contain 0x94 (a quote char) that breaks parsing.
+    # Build the em-dash via [char] so the script source stays pure-ASCII; the
+    # heading is written as proper UTF-8 by the UTF-8 writer below (previously
+    # PowerShell 5.1's ANSI Set-Content emitted a cp1252 0x97 byte instead).
     $heading = "## [$TargetVersion] $([char]0x2014) $date"
     $headingRe = "(?m)^## \[${TargetVersion}\]"
     if ($content -match $headingRe) {
@@ -120,7 +148,7 @@ if (Test-Path $changelogPath) {
         if ($insertAfter.Success) {
             $block = "$heading`r`n`r`nRelease notes: see docs/releases/CHANGELOG-$TargetVersion.md (reviewed before tagging).`r`n`r`n---`r`n`r`n"
             $updated = $content.Substring(0, $insertAfter.Index) + $block + $content.Substring($insertAfter.Index)
-            Set-Content -Path $changelogPath -Value $updated -NoNewline
+            [System.IO.File]::WriteAllText($changelogPath, $updated, (New-Object System.Text.UTF8Encoding($false)))
             Write-Host "Updated: $changelogPath (inserted $heading)"
         } else {
             Write-Host "Skipped (no existing '## [' headings to anchor): $changelogPath" -ForegroundColor Yellow
@@ -144,6 +172,14 @@ if ($LASTEXITCODE -ne 0) {
 if (Test-Path "ui") {
     Push-Location ui
     Write-Host "Running npm install --package-lock-only to sync package-lock.json..."
+    & npm install --package-lock-only
+    Pop-Location
+}
+
+# website/package-lock.json
+if (Test-Path "website") {
+    Push-Location website
+    Write-Host "Running npm install --package-lock-only to sync website/package-lock.json..."
     & npm install --package-lock-only
     Pop-Location
 }

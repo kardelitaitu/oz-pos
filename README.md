@@ -212,7 +212,7 @@ Every PR must pass `cargo fmt`, Clippy, `tsc --noEmit`, and all tests before mer
 | 4 | In Progress | CRM, Restaurant, Accounting |
 | 5 | In Progress | Multi-store topology, Cloud Sync, Plugin system |
 
-Latest release: **v0.0.25** (on branch `0.0.25`).
+Latest release: **v0.0.27** (on branch `0.0.27`).
 
 See [ROADMAP.md](./docs/ROADMAP.md) for the full phased delivery plan, and [MODULAR_APP_PLAN.md](./docs/MODULAR_APP_PLAN.md) for detailed granular checklists covering feature presets, restaurant workflows, LAN KDS discovery, and Docker cloud server containerization (`apps/cloud-server`).
 
