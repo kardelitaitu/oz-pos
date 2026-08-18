@@ -39,4 +39,6 @@ pub struct StoreProfile {
     /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
-#[cfg(test)] #[path = "store_profile_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "store_profile_tests.rs"]
+mod tests;
