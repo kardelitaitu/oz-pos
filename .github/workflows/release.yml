@@ -427,6 +427,9 @@ jobs:
           # they are included in SHA256SUMS.txt so install.ps1 can verify its
           # OWN checksum when run from disk (see install/win/install.ps1).
           cp install/win/install.ps1 install/win/uninstall.ps1 release-assets/
+          # Unix counterparts ship the same way (see install/install.sh) —
+          # `curl -fsSL .../releases/latest/download/install.sh | bash`.
+          cp install/install.sh install/uninstall.sh release-assets/
           (cd release-assets && sha256sum * > SHA256SUMS.txt)
           echo "Release asset inventory:"
           ls -la release-assets/
@@ -436,7 +439,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for required in latest.json beta.json SHA256SUMS.txt install.ps1 uninstall.ps1; do
+          for required in latest.json beta.json SHA256SUMS.txt install.ps1 uninstall.ps1 install.sh uninstall.sh; do
             [ -f "release-assets/$required" ] || { echo "::error::required asset missing: $required"; exit 1; }
           done
           for ext in AppImage exe dmg tar; do
@@ -475,6 +478,8 @@ jobs:
             release-assets/beta.json
             release-assets/install.ps1
             release-assets/uninstall.ps1
+            release-assets/install.sh
+            release-assets/uninstall.sh
 
       # RELEASE-08/09: verify the release contains the required assets, then
       # flip draft → published. Runs after attestation so the asset list is final.
@@ -486,7 +491,7 @@ jobs:
           set -euo pipefail
           TAG="${{ github.ref_name }}"
           gh release view "$TAG" --json assets --jq '.assets[].name' > /tmp/attached.txt
-          for required in latest.json beta.json SHA256SUMS.txt install.ps1 uninstall.ps1; do
+          for required in latest.json beta.json SHA256SUMS.txt install.ps1 uninstall.ps1 install.sh uninstall.sh; do
             grep -qx "$required" /tmp/attached.txt || { echo "::error::release asset missing after upload: $required"; exit 1; }
           done
           echo "Release asset count: $(wc -l < /tmp/attached.txt)"

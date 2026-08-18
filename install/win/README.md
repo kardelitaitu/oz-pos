@@ -84,6 +84,7 @@ it up with no changes.
 
 ## Roadmap
 
-Linux and macOS counterparts (`install.sh`) will follow the same pattern:
-resolve the platform manifest key, verify against `SHA256SUMS.txt`, and
-delegate to the native installer.
+Linux and macOS counterparts are shipped in [`../install.sh`](../install.sh)
+and [`../uninstall.sh`](../uninstall.sh) — same pattern: resolve the
+platform manifest key, verify against `SHA256SUMS.txt`, and delegate to the
+native installer (AppImage/deb on Linux, DMG on macOS).
