@@ -17,4 +17,19 @@ const docs = defineCollection({
   }),
 });
 
-export const collections = { docs };
+/**
+ * Legal collection (Privacy Policy / Terms of Service).
+ * Files: src/content/legal/<locale>/{privacy,terms}.md.
+ * The page <h1> comes from i18n (legal.privacyTitle / legal.termsTitle);
+ * frontmatter carries the last-updated date shown under it.
+ */
+const legal = defineCollection({
+  loader: glob({ pattern: '**/*.md', base: './src/content/legal' }),
+  schema: z.object({
+    title: z.string(),
+    version: z.string().optional(),
+    effective: z.string().optional(),
+  }),
+});
+
+export const collections = { docs, legal };

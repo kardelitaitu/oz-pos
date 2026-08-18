@@ -255,7 +255,8 @@
   "legal": {
     "privacyTitle": "Kebijakan Privasi",
     "termsTitle": "Ketentuan Layanan",
-    "placeholder": "Halaman ini masih placeholder. Teks hukum akan ditambahkan sebelum peluncuran."
+    "effective": "Mulai berlaku",
+    "version": "Versi"
   },
   "notFound": {
     "title": "Halaman tidak ditemukan",
