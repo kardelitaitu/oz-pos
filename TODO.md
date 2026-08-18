@@ -549,12 +549,25 @@ For each trigger:
 
 **Why:** §9 Medium-Term item 15. Expected -20% churn.
 
-- [ ] In the license server: add a `PATCH /api/subscriptions/:id/pause` endpoint
+**Status:** ✅ Complete (2026-08-18)
+
+- [x] In the license server: add `POST /api/v1/license/pause` and `POST /api/v1/license/resume` endpoints
   - Accept `pause_months: 1 | 2 | 3`
-  - Set `status = "paused"`, `paused_until = now + N months`
-  - On resume: restore tier and reset billing cycle
-- [ ] In the app: add "Pause subscription" option in the account/billing settings
-- [ ] **Test:** `go test ./... -run TestPauseSubscription`
+  - Set `status = "paused"`, `paused_at = now`, `paused_until = now + N months`
+  - On resume: restore tier to `active` and clear pause fields
+- [x] In the app: add "Pause subscription" / "Resume subscription" buttons in LicenseSettings
+  - Pause button shown when subscription is active
+  - Resume button + "Paused until" label shown when paused
+  - Uses Tauri commands `pause_subscription` / `resume_subscription`
+- [x] Schema: `paused` added to subscriptions.status select, `paused_at` and `paused_until` date fields
+- [x] **Test:** `go test ./... -run TestPause|TestResume` — 8 tests passing
+- [x] **i18n:** Pause/resume FTL keys in en + id (`settings.ftl` / `settings.id.ftl`)
+
+> **Shipped** (2026-08-18): `1b27c703` (server), UI pending commit.
+> Server: `handlePause` / `handleResume` in `pause.go` / `resume.go`, migration in
+> `ensurePauseFields`, 8 tests. Client: `core_pause_subscription` / `core_resume_subscription`
+> in oz-core, Tauri commands `pause_subscription` / `resume_subscription`,
+> `pauseSubscription()` / `resumeSubscription()` API wrappers, buttons in LicenseSettings.
 
 ---
 

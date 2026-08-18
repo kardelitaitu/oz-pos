@@ -10,6 +10,7 @@ use oz_core::crypto::{decrypt_api_key, encrypt_api_key};
 use oz_core::license_verification::{
     ActivateLicenseRequest, RenewLicenseRequest, SignedSubscriptionPayload,
     activate_license as core_activate_license, check_license_status as core_check_license_status,
+    pause_subscription as core_pause_subscription, resume_subscription as core_resume_subscription,
     renew_license as core_renew_license, store_subscription, verify_license_signature,
 };
 use oz_core::subscription::TenantSubscription;
@@ -641,6 +642,90 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
             });
         }
     }
+}
+
+/// Pause the current subscription for 1–3 months.
+///
+/// Reads the stored API key, calls the license server's pause endpoint,
+/// and returns the new paused status.
+#[tauri::command]
+pub async fn pause_subscription(
+    state: State<'_, AppState>,
+    pause_months: u8,
+) -> Result<PauseResumeDto, AppError> {
+    let api_key = {
+        let conn = state.db.lock().await;
+        let api_key_enc = Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty());
+        let mid = Settings::get(&conn, "machine_id")?.unwrap_or_default();
+        match api_key_enc {
+            Some(ref v) => decrypt_api_key(v, &mid).unwrap_or_else(|e| {
+                tracing::warn!("license.api_key decryption failed, treating as legacy plaintext: {e}");
+                v.clone()
+            }),
+            None => {
+                return Err(AppError::Invalid(
+                    "No license activated. Activate first.".into(),
+                ));
+            }
+        }
+    };
+
+    let resp = core_pause_subscription(&api_key, pause_months)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(PauseResumeDto {
+        status: resp.status,
+        tier_key: resp.tier_key,
+        paused_at: resp.paused_at,
+        paused_until: resp.paused_until,
+    })
+}
+
+/// Resume a paused subscription.
+///
+/// Reads the stored API key and calls the license server's resume endpoint.
+#[tauri::command]
+pub async fn resume_subscription(
+    state: State<'_, AppState>,
+) -> Result<PauseResumeDto, AppError> {
+    let api_key = {
+        let conn = state.db.lock().await;
+        let api_key_enc = Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty());
+        let mid = Settings::get(&conn, "machine_id")?.unwrap_or_default();
+        match api_key_enc {
+            Some(ref v) => decrypt_api_key(v, &mid).unwrap_or_else(|e| {
+                tracing::warn!("license.api_key decryption failed, treating as legacy plaintext: {e}");
+                v.clone()
+            }),
+            None => {
+                return Err(AppError::Invalid(
+                    "No license activated. Activate first.".into(),
+                ));
+            }
+        }
+    };
+
+    let resp = core_resume_subscription(&api_key)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(PauseResumeDto {
+        status: resp.status,
+        tier_key: resp.tier_key,
+        paused_at: resp.paused_at,
+        paused_until: resp.paused_until,
+    })
+}
+
+/// DTO for pause/resume subscription response.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PauseResumeDto {
+    pub status: String,
+    pub tier_key: String,
+    pub paused_at: Option<String>,
+    pub paused_until: Option<String>,
 }
 
 #[cfg(test)]

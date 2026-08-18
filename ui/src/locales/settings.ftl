@@ -414,6 +414,17 @@ settings-license-refresh = Refresh
 settings-license-refresh-aria = Refresh license status
 settings-license-poll-offline = Server unreachable
 settings-license-load-failed = Failed to load license info
+# C3.3: Pause/resume subscription
+settings-license-subscription-actions = Subscription
+settings-license-pause-subscription = Pause subscription
+settings-license-pause-aria = Pause subscription for 1 month
+settings-license-pause-success = Subscription paused. Resume anytime.
+settings-license-pause-failed = Failed to pause subscription
+settings-license-paused-until = Paused until
+settings-license-resume-subscription = Resume subscription
+settings-license-resume-aria = Resume paused subscription
+settings-license-resume-success = Subscription resumed!
+settings-license-resume-failed = Failed to resume subscription
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. All rights reserved.
 
 # Appearance / Brand settings

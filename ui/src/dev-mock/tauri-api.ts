@@ -1454,6 +1454,16 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_device_id': () => 'mock-device-id-001',
   'activate_license': () => true,
   'renew_license': () => true,
+  'pause_subscription': () => ({
+    status: 'paused',
+    tierKey: 'plus',
+    pausedAt: new Date().toISOString(),
+    pausedUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  }),
+  'resume_subscription': () => ({
+    status: 'active',
+    tierKey: 'plus',
+  }),
 
   // ═══════════════════════════════════════════════════════════════
   // STORES

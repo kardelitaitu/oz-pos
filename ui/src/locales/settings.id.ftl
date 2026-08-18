@@ -642,6 +642,17 @@ settings-license-refresh = Muat Ulang
 settings-license-refresh-aria = Muat ulang status lisensi
 settings-license-poll-offline = Server tidak dapat dijangkau
 settings-license-load-failed = Gagal memuat info lisensi
+# C3.3: Pause/resume subscription
+settings-license-subscription-actions = Langganan
+settings-license-pause-subscription = Jeda langganan
+settings-license-pause-aria = Jeda langganan selama 1 bulan
+settings-license-pause-success = Langganan dijeda. Resume kapan saja.
+settings-license-pause-failed = Gagal menjeda langganan
+settings-license-paused-until = Dijeda hingga
+settings-license-resume-subscription = Lanjutkan langganan
+settings-license-resume-aria = Lanjutkan langganan yang dijeda
+settings-license-resume-success = Langganan dilanjutkan!
+settings-license-resume-failed = Gagal melanjutkan langganan
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. Seluruh hak cipta dilindungi.
 
 # ── Toast messages ──

@@ -733,6 +733,8 @@ pub fn run() {
             commands::license::get_machine_id,
             commands::license::get_hardware_fingerprint,
             commands::license::renew_license,
+            commands::license::pause_subscription,
+            commands::license::resume_subscription,
             commands::license::get_license_status,
             commands::license::check_license_status,
             commands::license::test_auth_connection,

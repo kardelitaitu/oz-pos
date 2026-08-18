@@ -504,6 +504,94 @@ pub fn store_subscription(
     Ok(())
 }
 
+/// Response from the pause/resume subscription endpoint.
+pub struct PauseResumeResponse {
+    pub status: String,
+    pub tier_key: String,
+    pub paused_at: Option<String>,
+    pub paused_until: Option<String>,
+}
+
+/// Pause a subscription for 1–3 months.
+///
+/// Calls `POST /api/v1/license/pause` with `pause_months` in the body.
+/// The subscription transitions to `paused` status with `paused_at` and
+/// `paused_until` timestamps.
+pub async fn pause_subscription(
+    api_key: &str,
+    pause_months: u8,
+) -> Result<PauseResumeResponse, CoreError> {
+    let url = format!("{}/api/v1/license/pause", license_server_url());
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({ "pause_months": pause_months });
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(api_key)
+        .timeout(std::time::Duration::from_secs(15))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("pause: {msg}");
+            CoreError::Internal(msg)
+        })?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let msg = extract_server_error(&body);
+        let err = format!("pause failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
+    }
+
+    resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse pause response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })
+}
+
+/// Resume a paused subscription.
+///
+/// Calls `POST /api/v1/license/resume`. The subscription transitions
+/// back to `active` and the pause fields are cleared.
+pub async fn resume_subscription(
+    api_key: &str,
+) -> Result<PauseResumeResponse, CoreError> {
+    let url = format!("{}/api/v1/license/resume", license_server_url());
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(api_key)
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("resume: {msg}");
+            CoreError::Internal(msg)
+        })?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let msg = extract_server_error(&body);
+        let err = format!("resume failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
+    }
+
+    resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse resume response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

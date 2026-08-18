@@ -95,6 +95,24 @@ export async function renewLicense(newKey: string): Promise<boolean> {
   return loggedInvoke('renew_license', { newKey });
 }
 
+/** Pause/resume subscription response from the license server. */
+export interface PauseResumeResponse {
+  status: string;
+  tierKey: string;
+  pausedAt?: string;
+  pausedUntil?: string;
+}
+
+/** Pause the current subscription for 1–3 months. */
+export async function pauseSubscription(pauseMonths: number): Promise<PauseResumeResponse> {
+  return loggedInvoke('pause_subscription', { pauseMonths });
+}
+
+/** Resume a paused subscription. */
+export async function resumeSubscription(): Promise<PauseResumeResponse> {
+  return loggedInvoke('resume_subscription');
+}
+
 /** Auth-server reachability probe result (mirrors PingResult). */
 export interface AuthPingResult {
   ok: boolean;
