@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, createEvent } from '@testing-library/react';
 import LicenseActivationScreen from '../LicenseActivationScreen';
-import { activateLicense, getMachineId } from '@/api/license';
+import { activateLicense, getHardwareFingerprint, getMachineId } from '@/api/license';
 import { getVersion, getLocalIp, type VersionInfo } from '@/api/system';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 
@@ -17,7 +17,8 @@ vi.mock('@/frontend/shared/Toast', () => ({
 
 vi.mock('@/api/license', () => ({
   activateLicense: vi.fn(),
-  getMachineId: vi.fn()
+  getMachineId: vi.fn(),
+  getHardwareFingerprint: vi.fn()
 }));
 
 vi.mock('@/api/system', () => ({
@@ -99,6 +100,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
     vi.mocked(getVersion).mockResolvedValue({ version: '1.0.0', name: 'oz-pos', rustVersion: '1.70', target: 'windows' });
     vi.mocked(getLocalIp).mockResolvedValue('192.168.1.100');
     vi.mocked(getMachineId).mockResolvedValue('test-machine-id');
+    vi.mocked(getHardwareFingerprint).mockResolvedValue('hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
     vi.mocked(activateLicense).mockResolvedValue(true);
     vi.mocked(readText).mockResolvedValue('clipboard-text');
   });
@@ -329,7 +331,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm('  test@test.com  ', '  08123456789  ', 'KEY123');
       clickSubmit();
       
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
 
     it('26. Submitting trims whitespace from the License Key payload', async () => {
@@ -337,7 +339,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm('test@test.com', '08123456789', '  KEY123  ');
       clickSubmit();
       
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
 
     it('27. Submitting trims whitespace from the Phone payload', async () => {
@@ -345,7 +347,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm('test@test.com', '  08123456789  ', 'KEY123');
       clickSubmit();
       
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
 
     it('28. Happy path: Successful activation calls getMachineId, activateLicense, fires success toast', async () => {
@@ -574,7 +576,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
 
     it('52. ?v=restaurant: Pro hint shown and vertical passed to activateLicense', async () => {
@@ -585,7 +587,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant', undefined), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant', undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
 
     it('53. ?v=kafe normalizes to restaurant (website vertical key)', async () => {
@@ -596,7 +598,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant', undefined), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant', undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
 
     it('54. ?v=enterprise_referral: 30-day Pro hint, vertical passed', async () => {
@@ -607,7 +609,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'enterprise_referral', undefined), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'enterprise_referral', undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
 
     it('55. ?v=warung (general vertical): no hint, no vertical passed', async () => {
@@ -620,7 +622,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
   });
 
@@ -669,7 +671,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
 
     it('57. ?bundle=restaurant_starter: bundle passed to activateLicense', async () => {
@@ -680,7 +682,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       clickSubmit();
 
       await waitFor(() => expect(activateLicense).toHaveBeenCalledWith(
-        'KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, 'restaurant_starter'
+        'KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, 'restaurant_starter', 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
       ), FAST_WAIT);
     });
 
@@ -692,7 +694,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       clickSubmit();
 
       await waitFor(() => expect(activateLicense).toHaveBeenCalledWith(
-        'KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant', 'restaurant_starter'
+        'KEY123', 'test@test.com', 'test-machine-id', '08123456789', 'restaurant', 'restaurant_starter', 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
       ), FAST_WAIT);
     });
 
@@ -703,7 +705,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
 
-      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789'), FAST_WAIT);
+      await waitFor(() => expect(activateLicense).toHaveBeenCalledWith('KEY123', 'test@test.com', 'test-machine-id', '08123456789', undefined, undefined, 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'), FAST_WAIT);
     });
   });
 });

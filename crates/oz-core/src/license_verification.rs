@@ -141,6 +141,17 @@ pub struct ActivateLicenseRequest {
     /// paid license. Omitted from the body when unset.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bundle_id: Option<String>,
+    /// The device-level hardware fingerprint (SPEC-2026-TRIAL-LOCK): the
+    /// "hw_" + SHA-256 hex of the same hardware anchor `machine_id`
+    /// derives from, stable across reinstalls. Unlike `machine_id` (the
+    /// same digest truncated to 15 chars and persisted per-installation),
+    /// the fingerprint is the full digest in the spec's canonical form, so
+    /// the server's one-trial-per-device lock can key on it even after a
+    /// wiped Settings table. The server falls back to `machine_id` when
+    /// omitted and never gates PAID keys with the trial lock — sending it
+    /// is always safe. Omitted from the body when unset.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub hardware_fingerprint: Option<String>,
     /// The api_key of an existing tenant, required when re-activating
     /// an installation whose tenant was previously activated (H1 audit
     /// fix). New tenants omit this on the first activation; the server
@@ -748,6 +759,7 @@ mod tests {
             phone: "08123".into(),
             trial_vertical: Some("restaurant".into()),
             bundle_id: None,
+            hardware_fingerprint: None,
             api_key: None,
         };
         let json = serde_json::to_string(&req).unwrap();
@@ -771,6 +783,7 @@ mod tests {
             phone: "08123".into(),
             trial_vertical: None,
             bundle_id: None,
+            hardware_fingerprint: None,
             api_key: None,
         };
         let json = serde_json::to_string(&req).unwrap();
@@ -801,6 +814,7 @@ mod tests {
                 phone: "08123".into(),
                 trial_vertical: Some(vertical.into()),
                 bundle_id: None,
+                hardware_fingerprint: None,
                 api_key: None,
             };
             let json = serde_json::to_string(&req).unwrap();
@@ -821,6 +835,7 @@ mod tests {
             phone: "08123".into(),
             trial_vertical: None,
             bundle_id: Some("restaurant_starter".into()),
+            hardware_fingerprint: None,
             api_key: None,
         };
         let json = serde_json::to_string(&req).unwrap();
@@ -841,6 +856,7 @@ mod tests {
             phone: "08123".into(),
             trial_vertical: None,
             bundle_id: None,
+            hardware_fingerprint: None,
             api_key: None,
         };
         let json = serde_json::to_string(&req).unwrap();

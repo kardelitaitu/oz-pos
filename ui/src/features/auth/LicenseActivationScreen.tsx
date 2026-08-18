@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
-import { activateLicense, getMachineId } from '@/api/license';
+import { activateLicense, getHardwareFingerprint, getMachineId } from '@/api/license';
 import { detectTrialVertical } from '@/utils/trial-vertical';
 import { detectBundleId } from '@/utils/bundle';
 import { getVersion, getLocalIp } from '@/api/system';
@@ -103,6 +103,10 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
     setLoading(true);
     try {
       const machineId = await getMachineId();
+      // Device-level fingerprint (SPEC-2026-TRIAL-LOCK): the server's
+      // one-trial-per-device lock keys on it, falling back to machine_id
+      // when omitted. Always sent — it never gates paid keys.
+      const hardwareFingerprint = await getHardwareFingerprint();
 
       // Pass the segmented-trial vertical only when detected, so generic
       // activations stay 4-arg (and the server ignores it for paid keys
@@ -114,9 +118,10 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
             machineId,
             phone.trim(),
             trialVertical || undefined,
-            bundleId || undefined
+            bundleId || undefined,
+            hardwareFingerprint
           )
-        : await activateLicense(key.trim(), email.trim(), machineId, phone.trim());
+        : await activateLicense(key.trim(), email.trim(), machineId, phone.trim(), undefined, undefined, hardwareFingerprint);
 
       if (success) {
         addToast({ type: 'success', message: l10n.getString('auth-activation-success') });

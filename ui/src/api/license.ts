@@ -44,6 +44,15 @@ export async function getMachineId(): Promise<string> {
 }
 
 /**
+ * Get the device-level hardware fingerprint (SPEC-2026-TRIAL-LOCK):
+ * "hw_" + SHA-256 hex of the hardware anchor, stable across reinstalls.
+ * The license server's one-trial-per-device lock keys on it.
+ */
+export async function getHardwareFingerprint(): Promise<string> {
+  return loggedInvoke('get_hardware_fingerprint');
+}
+
+/**
  * Activate the license with a key, email, phone, and machine identifier.
  * Returns true if activation succeeded.
  *
@@ -56,6 +65,10 @@ export async function getMachineId(): Promise<string> {
  * unlocks the kds workspace type at the Plus trial tier (e.g. detected from
  * a `?bundle=restaurant_starter` landing-page URL param). The server honors
  * it for trial keys only.
+ *
+ * `hardwareFingerprint` is the device-level fingerprint (SPEC-2026-TRIAL-LOCK):
+ * the server's one-trial-per-device lock keys on it, falling back to
+ * machineId when omitted, and never gates paid keys.
  */
 export async function activateLicense(
   key: string,
@@ -63,7 +76,8 @@ export async function activateLicense(
   machineId: string,
   phone: string,
   trialVertical?: string,
-  bundleId?: string
+  bundleId?: string,
+  hardwareFingerprint?: string
 ): Promise<boolean> {
   return loggedInvoke('activate_license', {
     key,
@@ -72,6 +86,7 @@ export async function activateLicense(
     phone,
     ...(trialVertical ? { trialVertical } : {}),
     ...(bundleId ? { bundleId } : {}),
+    ...(hardwareFingerprint ? { hardwareFingerprint } : {}),
   });
 }
 

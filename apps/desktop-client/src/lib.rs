@@ -731,6 +731,7 @@ pub fn run() {
             commands::workspaces::list_workspace_screens,
             commands::license::activate_license,
             commands::license::get_machine_id,
+            commands::license::get_hardware_fingerprint,
             commands::license::renew_license,
             commands::license::get_license_status,
             commands::license::check_license_status,

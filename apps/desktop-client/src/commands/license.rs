@@ -65,6 +65,12 @@ pub struct LicenseStatusDto {
 /// `bundle_id` is the optional vertical-bundle id (C3.2): "restaurant_starter"
 /// unlocks the kds workspace type at the Plus tier. The server honors it for
 /// trial keys only, so omitting it is always safe.
+///
+/// `hardware_fingerprint` is the device-level fingerprint (SPEC-2026-TRIAL-
+/// LOCK) — the "hw_" + SHA-256 of the hardware anchor, stable across
+/// reinstalls. The server's one-trial-per-device lock keys on it; it falls
+/// back to machine_id when omitted and never gates paid keys, so sending it
+/// is always safe.
 #[tauri::command]
 pub async fn activate_license(
     state: State<'_, AppState>,
@@ -74,6 +80,7 @@ pub async fn activate_license(
     phone: String,
     trial_vertical: Option<String>,
     bundle_id: Option<String>,
+    hardware_fingerprint: Option<String>,
 ) -> Result<bool, AppError> {
     // H1 audit fix: read the previously-stored (now encrypted) api_key
     // so the server can authenticate the caller as the legitimate tenant
@@ -110,6 +117,7 @@ pub async fn activate_license(
         phone,
         trial_vertical,
         bundle_id,
+        hardware_fingerprint,
         api_key: stored_api_key,
     };
 
@@ -177,6 +185,32 @@ pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppErr
     let id = generate_machine_id();
     Settings::set_batch(&conn, &[("machine_id".to_string(), id.clone())])?;
     Ok(id)
+}
+
+/// Retrieves the device-level hardware fingerprint (SPEC-2026-TRIAL-LOCK).
+///
+/// The fingerprint is `hw_` + the full SHA-256 hex of the hardware anchor
+/// (`get_system_uuid`), stable across app reinstalls — unlike `machine_id`
+/// (the same digest truncated to 15 chars), the fingerprint is recomputed
+/// from the anchor rather than read from a persisted per-installation
+/// setting, so a wiped Settings table still yields the same value on the
+/// same physical device. The license server's one-trial-per-device lock
+/// keys on it: a reinstall under a fresh email cannot reset the trial clock.
+/// The value is cached in Settings so the underlying process spawns
+/// (wmic/reg) happen once per installation.
+#[tauri::command]
+pub async fn get_hardware_fingerprint(state: State<'_, AppState>) -> Result<String, AppError> {
+    let conn = state.db.lock().await;
+    // Return the persisted fingerprint if one already exists.
+    if let Some(existing) = Settings::get(&conn, "hardware_fingerprint")?
+        && !existing.is_empty()
+    {
+        return Ok(existing);
+    }
+    // Generate a new one and persist it.
+    let fp = generate_hardware_fingerprint();
+    Settings::set_batch(&conn, &[("hardware_fingerprint".to_string(), fp.clone())])?;
+    Ok(fp)
 }
 
 /// Renews an existing license subscription with a new license key.
@@ -354,6 +388,27 @@ fn generate_machine_id() -> String {
     let hash = hasher.finalize();
     let hex_str = hex::encode(&hash[..16]);
     hex_str[..MACHINE_ID_LEN].to_string()
+}
+
+/// Compute the canonical `hw_<64hex>` hardware fingerprint from the same
+/// hardware anchor `machine_id` derives from (SPEC-2026-TRIAL-LOCK). The
+/// FULL SHA-256 digest (64 hex chars) is used — the machine_id only takes
+/// the first 15 chars — so the fingerprint is both more collision-resistant
+/// and self-describing ("hw_" prefix) in the license server's
+/// trial_registrations collection. The random-UUID fallback is shared with
+/// `generate_machine_id` so a host with no queryable hardware anchor gets
+/// a stable-in-process value rather than a fresh one per call.
+fn generate_hardware_fingerprint() -> String {
+    let raw_id = get_system_uuid().unwrap_or_else(|| {
+        FALLBACK_MACHINE_ID
+            .get_or_init(|| uuid::Uuid::new_v4().to_string())
+            .clone()
+    });
+
+    let mut hasher = Sha256::new();
+    hasher.update(raw_id.as_bytes());
+    let hash = hasher.finalize();
+    format!("hw_{}", hex::encode(hash))
 }
 
 /// Data transfer object for server-authoritative license status.
@@ -671,6 +726,48 @@ mod tests {
         assert_eq!(
             id1, id2,
             "machine ID should survive round-trip through Settings"
+        );
+    }
+
+    #[test]
+    fn hardware_fingerprint_has_spec_shape_and_is_deterministic() {
+        // SPEC-2026-TRIAL-LOCK: the fingerprint is "hw_" + 64 lowercase
+        // hex chars (the full SHA-256 of the hardware anchor) — exactly
+        // what the license server's normalizeHardwareFingerprint accepts.
+        let fp1 = generate_hardware_fingerprint();
+        assert!(
+            fp1.starts_with("hw_") && fp1.len() == 67,
+            "fingerprint must be hw_ + 64 hex, got {fp1:?} (len {})",
+            fp1.len()
+        );
+        assert!(
+            fp1[3..]
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+            "fingerprint hex must be lowercase alphanumeric, got {fp1}"
+        );
+        for _ in 0..10 {
+            assert_eq!(
+                generate_hardware_fingerprint(),
+                fp1,
+                "hardware fingerprint changed between calls"
+            );
+        }
+    }
+
+    #[test]
+    fn hardware_fingerprint_is_persisted_in_settings() {
+        use oz_core::migrations;
+        let conn = migrations::fresh_db();
+        let fp1 = generate_hardware_fingerprint();
+        // Simulate what get_hardware_fingerprint does: persist to Settings.
+        Settings::set_batch(&conn, &[("hardware_fingerprint".to_string(), fp1.clone())]).unwrap();
+        let fp2 = Settings::get(&conn, "hardware_fingerprint")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            fp1, fp2,
+            "hardware fingerprint should survive round-trip through Settings"
         );
     }
 
