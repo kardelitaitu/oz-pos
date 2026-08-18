@@ -223,3 +223,88 @@ func TestGenerateApprovalCode_Prefix(t *testing.T) {
 		t.Errorf("expected code length 12, got %d: %q", len(code), code)
 	}
 }
+
+// ── Edge case tests for enterprise_trial.go ──────────────────
+
+func TestEnterpriseTrial_InvalidJSONBody(t *testing.T) {
+	runScenario(t, &tests.ApiScenario{
+		Method:          "POST",
+		URL:             "/api/v1/license/enterprise-trial",
+		Body:            strings.NewReader(`not json`),
+		ExpectedStatus:  400,
+		ExpectedContent: []string{"invalid JSON body"},
+	})
+}
+
+func TestEnterpriseTrial_TooShortApprovalCode(t *testing.T) {
+	runScenario(t, &tests.ApiScenario{
+		Method:          "POST",
+		URL:             "/api/v1/license/enterprise-trial",
+		Body:            strings.NewReader(`{"approval_code": "SHORT", "email": "test@example.com"}`),
+		ExpectedStatus:  400,
+		ExpectedContent: []string{"invalid approval_code format"},
+	})
+}
+
+func TestEnterpriseTrial_EmailNormalization(t *testing.T) {
+	// Email should be lowercased and trimmed
+	runScenario(t, &tests.ApiScenario{
+		Method:          "POST",
+		URL:             "/api/v1/license/enterprise-trial",
+		Body:            strings.NewReader(`{"approval_code": "ENT-VALIDCODE-02", "email": "  Enterprise@Test.COM  "}`),
+		ExpectedStatus:  200,
+		ExpectedContent: []string{"trial_key_minted", "enterprise@test.com"},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedApprovalCode(t.(*testing.T), app, "ENT-VALIDCODE-02", "enterprise@test.com", "unused")
+		},
+	})
+}
+
+func TestEnterpriseTrial_ResponseFieldsComplete(t *testing.T) {
+	runScenario(t, &tests.ApiScenario{
+		Method:         "POST",
+		URL:            "/api/v1/license/enterprise-trial",
+		Body:           strings.NewReader(`{"approval_code": "ENT-VALIDCODE-03", "email": "resp@test.com"}`),
+		ExpectedStatus: 200,
+		ExpectedContent: []string{
+			`"status"`, "trial_key_minted",
+			`"license_key"`,
+			`"email"`, "resp@test.com",
+			`"tier_key"`, "enterprise",
+			`"days"`,
+			`"expires_at"`,
+		},
+		BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			seedApprovalCode(t.(*testing.T), app, "ENT-VALIDCODE-03", "resp@test.com", "unused")
+		},
+	})
+}
+
+func TestGenerateEnterpriseTrialKey_Unique(t *testing.T) {
+	seen := make(map[string]bool)
+	for i := 0; i < 50; i++ {
+		key := generateEnterpriseTrialKey()
+		if seen[key] {
+			t.Fatalf("duplicate key generated: %q on iteration %d", key, i)
+		}
+		seen[key] = true
+	}
+}
+
+func TestGenerateEnterpriseTrialKey_Charset(t *testing.T) {
+	// Random part of key should only contain characters from the charset (no I/O/0/1)
+	// The prefix OZ-ENTR- contains O which is fine
+	const forbidden = "IO01"
+	for i := 0; i < 20; i++ {
+		key := generateEnterpriseTrialKey()
+		randPart := key[8:] // skip OZ-ENTR-
+		for _, ch := range randPart {
+			if ch == '-' {
+				continue // separator
+			}
+			if strings.ContainsRune(forbidden, ch) {
+				t.Errorf("key %q random part contains forbidden char %c", key, ch)
+			}
+		}
+	}
+}
