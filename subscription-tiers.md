@@ -343,15 +343,15 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 
 ### Short-Term (Month 1-3)
 10. ✅ **Implement segmented trial strategy** — 14-day Plus trial for general; 14-day Pro for restaurant/cafe; 30-day Pro for enterprise-referral
-11. **Build vertical landing pages** — `/untuk-kafe`, `/untuk-warung`, `/untuk-minimarket`, `/untuk-restoran`
+11. ✅ **Build vertical landing pages** — `/untuk-kafe`, `/untuk-warung`, `/untuk-minimarket`, `/untuk-restoran` — `VerticalLanding.astro` component with i18n, segmented trial CTAs, bundle paths
 12. ✅ **Implement in-app upgrade triggers** — `TierLockedFeature` component (analytics + loyalty + daily dashboard), 80% usage limit alerts via `SubscriptionCapabilities`
-13. **Implement upgrade/downgrade proration** — reduce upgrade friction
+13. ✅ **Implement upgrade/downgrade proration** — `paddleUpdate()` in paddle_webhook.go handles tier transitions; Paddle handles proration billing; grace period via `offline_grace_days`
 
 ### Medium-Term (Month 3-6)
-14. **Phase 2: Midtrans QRIS subscriptions** — critical revenue unlock for the full Indonesian MSME market
+14. ✅ **Phase 2: Midtrans QRIS subscriptions** — `midtrans_webhook.go` + Snap checkout implemented; ID payment routing with custom fields (ADR #39)
 15. **Build trial-to-paid email flows** — personalized per vertical (see §4)
-16. **Create vertical-specific bundles** — 10% discount vs à la carte (see §5)
-17. **Implement pause subscription feature** — reduce Plus churn
+16. ✅ **Create vertical-specific bundles** — `restaurant_starter` bundle implemented (C3.2); unlocks KDS workspace type for Plus
+17. ✅ **Implement pause subscription feature** — pause/resume endpoints + `paused_at`/`pause_until` fields (C3.3)
 
 ### Long-Term (Month 6-12)
 18. **A/B test Pro at $7.99 vs $9.99** — optimize conversion-to-revenue balance
