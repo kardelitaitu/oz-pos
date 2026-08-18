@@ -21,15 +21,4 @@ pub trait CashDrawer: Send + Sync {
     fn device_info(&self) -> DeviceInfo;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::drivers::mock::MockCashDrawer;
-
-    #[tokio::test]
-    async fn default_is_open_returns_disconnected() {
-        let d = MockCashDrawer::new();
-        let result = d.is_open().await;
-        assert!(matches!(result, Err(HalError::Disconnected)));
-    }
-}
+#[cfg(test)] #[path = "cash_drawer_tests.rs"] mod tests;

@@ -119,10 +119,7 @@ mod tests {
         let scenario = load_scenario("stripe", "success");
         assert_eq!(scenario.driver, "stripe");
         assert_eq!(scenario.name, "success");
-        assert!(
-            !scenario.exchanges.is_empty(),
-            "fixture must have exchanges"
-        );
+        assert!(!scenario.exchanges.is_empty(), "fixture must have exchanges");
     }
 
     #[test]
@@ -149,7 +146,6 @@ mod tests {
         let first = &scenario.exchanges[0];
         let url = format!("{}{}", mock_server.uri(), first.path);
 
-        // Use the correct HTTP method from the fixture
         let resp = match first.method.to_uppercase().as_str() {
             "GET" => client.get(&url).send().await.unwrap(),
             _ => client.post(&url).send().await.unwrap(),
@@ -159,11 +155,7 @@ mod tests {
 
         let body: serde_json::Value = resp.json().await.unwrap();
         for (key, value) in first.response_body.as_object().unwrap() {
-            assert_eq!(
-                body.get(key),
-                Some(value),
-                "key {key} mismatch in replayed response"
-            );
+            assert_eq!(body.get(key), Some(value), "key {key} mismatch in replayed response");
         }
     }
 }

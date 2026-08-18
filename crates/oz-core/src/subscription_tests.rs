@@ -1,0 +1,920 @@
+
+use super::*;
+
+// ── InstanceStatus ────────────────────────────────────
+
+#[test]
+fn instance_status_from_db() {
+    assert_eq!(InstanceStatus::from_db("active"), InstanceStatus::Active);
+    assert_eq!(
+        InstanceStatus::from_db("quota_suspended"),
+        InstanceStatus::QuotaSuspended
+    );
+    assert_eq!(
+        InstanceStatus::from_db("archived"),
+        InstanceStatus::Archived
+    );
+    assert_eq!(InstanceStatus::from_db("unknown"), InstanceStatus::Active);
+}
+
+#[test]
+fn instance_status_as_str() {
+    assert_eq!(InstanceStatus::Active.as_str(), "active");
+    assert_eq!(InstanceStatus::QuotaSuspended.as_str(), "quota_suspended");
+    assert_eq!(InstanceStatus::Archived.as_str(), "archived");
+}
+
+#[test]
+fn instance_status_serialize() {
+    let json = serde_json::to_value(InstanceStatus::Active).unwrap();
+    assert_eq!(json, "active");
+
+    let json = serde_json::to_value(InstanceStatus::QuotaSuspended).unwrap();
+    assert_eq!(json, "quota_suspended");
+}
+
+// ── SubscriptionTier ──────────────────────────────────
+
+#[test]
+fn tier_from_db() {
+    assert_eq!(SubscriptionTier::from_db("free"), SubscriptionTier::Free);
+    assert_eq!(SubscriptionTier::from_db("plus"), SubscriptionTier::Plus);
+    assert_eq!(
+        SubscriptionTier::from_db("standard"), // legacy alias → Plus
+        SubscriptionTier::Plus
+    );
+    assert_eq!(SubscriptionTier::from_db("pro"), SubscriptionTier::Pro);
+    assert_eq!(
+        SubscriptionTier::from_db("premium"),
+        SubscriptionTier::Premium
+    );
+    assert_eq!(
+        SubscriptionTier::from_db("enterprise"),
+        SubscriptionTier::Enterprise
+    );
+    assert_eq!(SubscriptionTier::from_db("invalid"), SubscriptionTier::Free);
+}
+
+#[test]
+fn tier_max_stores() {
+    assert_eq!(SubscriptionTier::Free.max_stores(), Some(1));
+    assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
+    assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
+    assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
+    assert_eq!(SubscriptionTier::Premium.max_stores(), Some(10));
+    assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
+}
+
+#[test]
+fn tier_max_pos_instances() {
+    assert_eq!(SubscriptionTier::Free.max_pos_instances(), Some(1));
+    assert_eq!(SubscriptionTier::OneTime.max_pos_instances(), Some(1));
+    assert_eq!(SubscriptionTier::Plus.max_pos_instances(), Some(2));
+    assert_eq!(SubscriptionTier::Pro.max_pos_instances(), Some(5));
+    assert_eq!(SubscriptionTier::Premium.max_pos_instances(), None);
+    assert_eq!(SubscriptionTier::Enterprise.max_pos_instances(), None);
+}
+
+#[test]
+fn tier_allows_workspace_type() {
+    // Free tier & OneTime
+    assert!(SubscriptionTier::Free.allows_workspace_type("store-pos"));
+    assert!(SubscriptionTier::Free.allows_workspace_type("admin"));
+    assert!(!SubscriptionTier::Free.allows_workspace_type("kds"));
+    assert!(!SubscriptionTier::Free.allows_workspace_type("warehouse"));
+
+    // Plus tier: warehouse/inventory allowed, kds NOT allowed
+    assert!(SubscriptionTier::Plus.allows_workspace_type("warehouse"));
+    assert!(SubscriptionTier::Plus.allows_workspace_type("inventory"));
+    assert!(!SubscriptionTier::Plus.allows_workspace_type("kds"));
+
+    // Pro & Enterprise tier allow all
+    assert!(SubscriptionTier::Pro.allows_workspace_type("kds"));
+    assert!(SubscriptionTier::Pro.allows_workspace_type("analytics-pro"));
+    assert!(SubscriptionTier::Pro.allows_workspace_type("warehouse"));
+    assert!(SubscriptionTier::Enterprise.allows_workspace_type("anything"));
+}
+
+#[test]
+fn tier_name() {
+    assert_eq!(SubscriptionTier::Free.name(), "Free");
+    assert_eq!(SubscriptionTier::OneTime.name(), "1-Time Perpetual");
+    assert_eq!(SubscriptionTier::Plus.name(), "Plus");
+    assert_eq!(SubscriptionTier::Pro.name(), "Pro");
+    assert_eq!(SubscriptionTier::Premium.name(), "Premium");
+    assert_eq!(SubscriptionTier::Enterprise.name(), "Enterprise");
+}
+
+#[test]
+fn tier_serialize() {
+    let json = serde_json::to_value(SubscriptionTier::Free).unwrap();
+    assert_eq!(json, "free");
+    let json = serde_json::to_value(SubscriptionTier::Plus).unwrap();
+    assert_eq!(json, "plus");
+    let json = serde_json::to_value(SubscriptionTier::Premium).unwrap();
+    assert_eq!(json, "premium");
+}
+
+// ── Signature Verification ────────────────────────────
+
+#[test]
+fn verify_bootstrap_signature_passes() {
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Free,
+        status: "active".into(),
+        expires_at: None,
+        max_stores: 1,
+        max_pos_instances: 1,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.verify_signature().is_ok());
+}
+
+#[test]
+fn verify_non_bootstrap_signature_rejected() {
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Free,
+        status: "active".into(),
+        expires_at: None,
+        max_stores: 1,
+        max_pos_instances: 1,
+        allowed_types_json: "[]".into(),
+        signature: "TAMPERED_SIGNATURE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.verify_signature().is_err());
+}
+
+// ── QuotaError Display ────────────────────────────────
+
+#[test]
+fn quota_error_register_limit() {
+    let err = QuotaError::RegisterLimit {
+        tier: "Free".into(),
+        limit: 1,
+        current: 1,
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("Free"));
+    assert!(msg.contains("1"));
+}
+
+#[test]
+fn quota_error_store_limit() {
+    let err = QuotaError::StoreLimit {
+        tier: "Pro".into(),
+        limit: 2,
+        current: 2,
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("Pro"));
+    assert!(msg.contains("2"));
+}
+
+#[test]
+fn quota_error_type_not_allowed() {
+    let err = QuotaError::TypeNotAllowed {
+        tier: "Free".into(),
+        type_key: "kds".into(),
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("kds"));
+    assert!(msg.contains("Free"));
+}
+
+// ── Clock Rollback Detection ──────────────────────────
+
+#[test]
+fn clock_rollback_detects_future_timestamps() {
+    use crate::migrations;
+    let conn = migrations::fresh_db();
+
+    // Insert a sale with a timestamp far in the future.
+    conn.execute(
+        "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
+         VALUES ('sale-1', 'completed', 1000, 'USD', 1, '2099-01-01T00:00:00.000Z', '2099-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+
+    let result = TenantSubscription::validate_clock_rollback(&conn);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("system clock tampered"));
+    assert!(err.contains("2099"));
+}
+
+#[test]
+fn clock_rollback_passes_with_recent_timestamps() {
+    use crate::migrations;
+    let conn = migrations::fresh_db();
+
+    // Insert a sale with a recent timestamp.
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
+         VALUES ('sale-1', 'completed', 1000, 'USD', 1, ?1, ?1)",
+        rusqlite::params![now],
+    )
+    .unwrap();
+
+    let result = TenantSubscription::validate_clock_rollback(&conn);
+    assert!(result.is_ok(), "expected OK, got: {result:?}");
+}
+
+#[test]
+fn clock_rollback_passes_with_empty_tables() {
+    use crate::migrations;
+    let conn = migrations::fresh_db();
+    // No sales or audit_logs — should default to Utc::now().
+    let result = TenantSubscription::validate_clock_rollback(&conn);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn compute_max_ledger_timestamp_prefers_recent_over_older() {
+    use crate::migrations;
+    let conn = migrations::fresh_db();
+
+    conn.execute(
+        "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
+         VALUES ('s1', 'completed', 1000, 'USD', 1, '2025-06-01T00:00:00.000Z', '2025-06-01T00:00:00.000Z')",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO audit_log (id, action, user_id, created_at)
+         VALUES ('a1', 'login', 'user-1', '2025-07-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+
+    let ts = TenantSubscription::compute_max_ledger_timestamp(&conn).unwrap();
+    // Should pick the audit_log timestamp (2025-07-01) over sales (2025-06-01).
+    assert!(ts.contains("2025-07-01"), "expected July, got: {ts}");
+}
+
+// ── Offline Grace Period ──────────────────────────────
+
+#[test]
+fn free_tier_always_within_grace() {
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Free,
+        status: "active".into(),
+        expires_at: Some("2020-01-01T00:00:00.000Z".into()),
+        max_stores: 1,
+        max_pos_instances: 1,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+}
+
+#[test]
+fn paid_tier_with_no_expiry_within_grace() {
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Pro,
+        status: "active".into(),
+        expires_at: None, // lifetime
+        max_stores: 2,
+        max_pos_instances: 3,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Pro);
+}
+
+#[test]
+fn paid_tier_within_14_day_grace() {
+    // Expiry is 7 days ago — still within 14-day grace.
+    let recent = chrono::Utc::now() - chrono::Duration::days(7);
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Premium,
+        status: "active".into(),
+        expires_at: Some(recent.to_rfc3339()),
+        max_stores: 5,
+        max_pos_instances: 10,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Premium);
+}
+
+#[test]
+fn paid_tier_outside_grace_downgrades_to_free() {
+    // Expiry is 30 days ago — outside 14-day grace.
+    let old = chrono::Utc::now() - chrono::Duration::days(30);
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Premium,
+        status: "active".into(),
+        expires_at: Some(old.to_rfc3339()),
+        max_stores: 5,
+        max_pos_instances: 10,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(!sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+}
+
+#[test]
+fn enterprise_lifetime_never_downgrades() {
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Enterprise,
+        status: "active".into(),
+        expires_at: None,
+        max_stores: 0,
+        max_pos_instances: 0,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Enterprise);
+}
+
+// ── constants ────────────────────────────────────────
+
+// ── allowed_types_json workspace-type entitlement (C3.2 bundle) ──────
+
+#[test]
+fn allows_workspace_type_bundle_payload_unlocks_kds_on_plus() {
+    // A Plus + restaurant_starter bundle mints a signed payload whose
+    // allowed_types lists kds even though the Plus TIER statically
+    // excludes it (subscription-tiers.md §5). The entitlement must honor
+    // the payload, not the tier defaults.
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Plus,
+        status: "active".into(),
+        expires_at: None,
+        max_stores: 1,
+        max_pos_instances: 2,
+        allowed_types_json:
+            r#"["store-pos","restaurant-pos","admin","warehouse","inventory","kds"]"#.into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(sub.allows_workspace_type("kds"));
+    assert!(sub.allows_workspace_type("store-pos"));
+    assert!(sub.allows_workspace_type("warehouse"));
+}
+
+#[test]
+fn allows_workspace_type_empty_payload_falls_back_to_tier_defaults() {
+    // Bootstrap / legacy rows carry `[]` — the tier defaults apply, so
+    // plain Plus still cannot create a kds workspace.
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Plus,
+        status: "active".into(),
+        expires_at: None,
+        max_stores: 1,
+        max_pos_instances: 2,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(!sub.allows_workspace_type("kds"));
+    assert!(sub.allows_workspace_type("warehouse"));
+    assert!(sub.allows_workspace_type("store-pos"));
+}
+
+#[test]
+fn allows_workspace_type_payload_is_authoritative_not_union() {
+    // A payload that does NOT list a type must not grant it, even when
+    // the tier would — the signed list is the entitlement boundary.
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Pro,
+        status: "active".into(),
+        expires_at: None,
+        max_stores: 2,
+        max_pos_instances: 5,
+        allowed_types_json: r#"["store-pos","restaurant-pos","admin"]"#.into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    // Pro's static defaults would allow kds/warehouse, but the payload
+    // does not list them.
+    assert!(!sub.allows_workspace_type("kds"));
+    assert!(!sub.allows_workspace_type("warehouse"));
+    assert!(sub.allows_workspace_type("store-pos"));
+}
+
+#[test]
+fn allows_workspace_type_grace_expired_ignores_stored_list() {
+    // A grace-expired subscription reverts to Free — the stored bundle
+    // entitlement no longer applies even though the JSON still lists kds.
+    let old = chrono::Utc::now() - chrono::Duration::days(30);
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Plus,
+        status: "active".into(),
+        expires_at: Some(old.to_rfc3339()),
+        max_stores: 1,
+        max_pos_instances: 2,
+        allowed_types_json:
+            r#"["store-pos","restaurant-pos","admin","warehouse","inventory","kds"]"#.into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(!sub.is_within_grace_period());
+    assert!(!sub.allows_workspace_type("kds"));
+    assert!(sub.allows_workspace_type("store-pos")); // Free default
+}
+
+#[test]
+fn bootstrap_free_uses_free_defaults() {
+    let sub = TenantSubscription::bootstrap_free();
+    assert_eq!(sub.tier, SubscriptionTier::Free);
+    assert!(sub.allows_workspace_type("store-pos"));
+    assert!(!sub.allows_workspace_type("kds"));
+    assert!(!sub.allows_workspace_type("warehouse"));
+}
+
+#[test]
+fn canceled_subscription_not_within_grace() {
+    let sub = TenantSubscription {
+        tenant_id: "default".into(),
+        tier: SubscriptionTier::Pro,
+        status: "canceled".into(),
+        expires_at: None, // lifetime but canceled
+        max_stores: 2,
+        max_pos_instances: 3,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: String::new(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    };
+    assert!(!sub.is_within_grace_period());
+    assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
+}
+
+#[test]
+fn clock_skew_constants_are_reasonable() {
+    assert_eq!(CLOCK_SKEW_TOLERANCE_SECONDS, 30);
+}
+
+// ── SubscriptionTier feature-flag coverage ─────────────────────────
+
+#[test]
+fn max_warehouses_per_tier() {
+    // Free/OneTime: 1 warehouse; Plus: 2; Pro: 3
+    assert_eq!(SubscriptionTier::Free.max_warehouses(), Some(1));
+    assert_eq!(SubscriptionTier::OneTime.max_warehouses(), Some(1));
+    assert_eq!(SubscriptionTier::Plus.max_warehouses(), Some(2));
+    assert_eq!(SubscriptionTier::Pro.max_warehouses(), Some(3));
+    // Premium/Enterprise: unlimited
+    assert_eq!(SubscriptionTier::Premium.max_warehouses(), None);
+    assert_eq!(SubscriptionTier::Enterprise.max_warehouses(), None);
+}
+
+#[test]
+fn supports_cloud_sync_per_tier() {
+    assert!(!SubscriptionTier::Free.supports_cloud_sync());
+    assert!(!SubscriptionTier::OneTime.supports_cloud_sync());
+    assert!(SubscriptionTier::Plus.supports_cloud_sync());
+    assert!(SubscriptionTier::Pro.supports_cloud_sync());
+    assert!(SubscriptionTier::Premium.supports_cloud_sync());
+    assert!(SubscriptionTier::Enterprise.supports_cloud_sync());
+}
+
+#[test]
+fn supports_qris_per_tier() {
+    assert!(!SubscriptionTier::Free.supports_qris());
+    assert!(!SubscriptionTier::OneTime.supports_qris());
+    assert!(SubscriptionTier::Plus.supports_qris());
+    assert!(SubscriptionTier::Pro.supports_qris());
+    assert!(SubscriptionTier::Premium.supports_qris());
+    assert!(SubscriptionTier::Enterprise.supports_qris());
+}
+
+#[test]
+fn supports_stripe_per_tier() {
+    assert!(!SubscriptionTier::Free.supports_stripe());
+    assert!(!SubscriptionTier::OneTime.supports_stripe());
+    assert!(!SubscriptionTier::Plus.supports_stripe());
+    assert!(SubscriptionTier::Pro.supports_stripe());
+    assert!(SubscriptionTier::Premium.supports_stripe());
+    assert!(SubscriptionTier::Enterprise.supports_stripe());
+}
+
+#[test]
+fn supports_lua_engine_per_tier() {
+    assert!(!SubscriptionTier::Free.supports_lua_engine());
+    assert!(!SubscriptionTier::OneTime.supports_lua_engine());
+    assert!(!SubscriptionTier::Plus.supports_lua_engine());
+    // Pro does NOT get Lua — Premium/Enterprise only (§3 Business Logic).
+    assert!(!SubscriptionTier::Pro.supports_lua_engine());
+    assert!(SubscriptionTier::Premium.supports_lua_engine());
+    assert!(SubscriptionTier::Enterprise.supports_lua_engine());
+}
+
+#[test]
+fn supports_multi_warehouse_fallback_per_tier() {
+    assert!(!SubscriptionTier::Free.supports_multi_warehouse_fallback());
+    assert!(!SubscriptionTier::OneTime.supports_multi_warehouse_fallback());
+    assert!(!SubscriptionTier::Plus.supports_multi_warehouse_fallback());
+    assert!(SubscriptionTier::Pro.supports_multi_warehouse_fallback());
+    assert!(SubscriptionTier::Premium.supports_multi_warehouse_fallback());
+    assert!(SubscriptionTier::Enterprise.supports_multi_warehouse_fallback());
+}
+
+#[test]
+fn supports_regional_zones_only_enterprise() {
+    assert!(!SubscriptionTier::Free.supports_regional_zones());
+    assert!(!SubscriptionTier::OneTime.supports_regional_zones());
+    assert!(!SubscriptionTier::Plus.supports_regional_zones());
+    assert!(!SubscriptionTier::Pro.supports_regional_zones());
+    assert!(!SubscriptionTier::Premium.supports_regional_zones());
+    assert!(SubscriptionTier::Enterprise.supports_regional_zones());
+}
+
+#[test]
+fn max_stores_per_tier() {
+    assert_eq!(SubscriptionTier::Free.max_stores(), Some(1));
+    assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
+    assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
+    assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
+    assert_eq!(SubscriptionTier::Premium.max_stores(), Some(10));
+    assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
+}
+
+#[test]
+fn max_pos_instances_per_tier() {
+    assert_eq!(SubscriptionTier::Free.max_pos_instances(), Some(1));
+    assert_eq!(SubscriptionTier::OneTime.max_pos_instances(), Some(1));
+    assert_eq!(SubscriptionTier::Plus.max_pos_instances(), Some(2));
+    assert_eq!(SubscriptionTier::Pro.max_pos_instances(), Some(5));
+    assert_eq!(SubscriptionTier::Premium.max_pos_instances(), None);
+    assert_eq!(SubscriptionTier::Enterprise.max_pos_instances(), None);
+}
+
+#[test]
+fn allows_workspace_type_free_tier() {
+    let tier = SubscriptionTier::Free;
+    assert!(tier.allows_workspace_type("store-pos"));
+    assert!(tier.allows_workspace_type("restaurant-pos"));
+    assert!(tier.allows_workspace_type("admin"));
+    assert!(!tier.allows_workspace_type("warehouse"));
+    assert!(!tier.allows_workspace_type("kds"));
+    assert!(!tier.allows_workspace_type("custom-plugin"));
+}
+
+#[test]
+fn allows_workspace_type_plus_tier() {
+    let tier = SubscriptionTier::Plus;
+    assert!(tier.allows_workspace_type("store-pos"));
+    assert!(tier.allows_workspace_type("restaurant-pos"));
+    assert!(tier.allows_workspace_type("admin"));
+    assert!(tier.allows_workspace_type("warehouse"));
+    assert!(tier.allows_workspace_type("inventory"));
+    // Plus does NOT unlock kds — that is Pro (§3 Workspace Types).
+    assert!(!tier.allows_workspace_type("kds"));
+    assert!(!tier.allows_workspace_type("custom-plugin"));
+}
+
+#[test]
+fn allows_workspace_type_pro_tier_allows_all() {
+    for tier in [
+        SubscriptionTier::Pro,
+        SubscriptionTier::Premium,
+        SubscriptionTier::Enterprise,
+    ] {
+        assert!(tier.allows_workspace_type("store-pos"));
+        assert!(tier.allows_workspace_type("restaurant-pos"));
+        assert!(tier.allows_workspace_type("warehouse"));
+        assert!(tier.allows_workspace_type("kds"));
+        assert!(tier.allows_workspace_type("admin"));
+        assert!(tier.allows_workspace_type("custom-plugin"));
+        assert!(tier.allows_workspace_type("anything"));
+    }
+}
+
+#[test]
+fn from_db_aliases() {
+    assert_eq!(SubscriptionTier::from_db("free"), SubscriptionTier::Free);
+    assert_eq!(SubscriptionTier::from_db("trial"), SubscriptionTier::Free);
+    assert_eq!(SubscriptionTier::from_db("FREE"), SubscriptionTier::Free);
+    assert_eq!(
+        SubscriptionTier::from_db("one_time"),
+        SubscriptionTier::OneTime
+    );
+    assert_eq!(
+        SubscriptionTier::from_db("perpetual"),
+        SubscriptionTier::OneTime
+    );
+    assert_eq!(
+        SubscriptionTier::from_db("one-time"),
+        SubscriptionTier::OneTime
+    );
+    assert_eq!(
+        SubscriptionTier::from_db("onetime"),
+        SubscriptionTier::OneTime
+    );
+    assert_eq!(
+        SubscriptionTier::from_db("standard"), // legacy alias → Plus
+        SubscriptionTier::Plus
+    );
+    assert_eq!(SubscriptionTier::from_db("plus"), SubscriptionTier::Plus);
+    assert_eq!(SubscriptionTier::from_db("pro"), SubscriptionTier::Pro);
+    assert_eq!(
+        SubscriptionTier::from_db("premium"),
+        SubscriptionTier::Premium
+    );
+    assert_eq!(
+        SubscriptionTier::from_db("enterprise"),
+        SubscriptionTier::Enterprise
+    );
+}
+
+#[test]
+fn from_db_unknown_defaults_to_free() {
+    assert_eq!(SubscriptionTier::from_db("unknown"), SubscriptionTier::Free);
+    assert_eq!(SubscriptionTier::from_db(""), SubscriptionTier::Free);
+    assert_eq!(
+        SubscriptionTier::from_db("ENTREPRISE"),
+        SubscriptionTier::Free
+    ); // case-sensitive after to_lowercase
+}
+
+#[test]
+fn tier_names() {
+    assert_eq!(SubscriptionTier::Free.name(), "Free");
+    assert_eq!(SubscriptionTier::OneTime.name(), "1-Time Perpetual");
+    assert_eq!(SubscriptionTier::Plus.name(), "Plus");
+    assert_eq!(SubscriptionTier::Pro.name(), "Pro");
+    assert_eq!(SubscriptionTier::Premium.name(), "Premium");
+    assert_eq!(SubscriptionTier::Enterprise.name(), "Enterprise");
+}
+
+// ── New tier model (subscription-tiers.md §3) ──────────────────────
+
+#[test]
+fn test_plus_quota_limits() {
+    assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
+    assert_eq!(SubscriptionTier::Plus.max_pos_instances(), Some(2));
+    assert_eq!(SubscriptionTier::Plus.max_warehouses(), Some(2));
+    assert_eq!(SubscriptionTier::Plus.max_staff_users(), Some(5));
+    assert_eq!(SubscriptionTier::Plus.sales_history_days(), None);
+}
+
+#[test]
+fn test_pro_quota_limits() {
+    assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
+    assert_eq!(SubscriptionTier::Pro.max_pos_instances(), Some(5));
+    assert_eq!(SubscriptionTier::Pro.max_warehouses(), Some(3));
+    assert_eq!(SubscriptionTier::Pro.max_staff_users(), Some(20));
+    assert_eq!(SubscriptionTier::Pro.sales_history_days(), None);
+}
+
+#[test]
+fn test_free_history_limit() {
+    assert_eq!(SubscriptionTier::Free.sales_history_days(), Some(30));
+    // All paid tiers are unlimited.
+    assert_eq!(SubscriptionTier::Plus.sales_history_days(), None);
+    assert_eq!(SubscriptionTier::Pro.sales_history_days(), None);
+    assert_eq!(SubscriptionTier::Premium.sales_history_days(), None);
+    assert_eq!(SubscriptionTier::Enterprise.sales_history_days(), None);
+}
+
+#[test]
+fn test_workspace_type_matrix() {
+    // Plus gets inventory/warehouse but NOT kds.
+    assert!(SubscriptionTier::Plus.allows_workspace_type("store-pos"));
+    assert!(SubscriptionTier::Plus.allows_workspace_type("restaurant-pos"));
+    assert!(SubscriptionTier::Plus.allows_workspace_type("admin"));
+    assert!(SubscriptionTier::Plus.allows_workspace_type("inventory"));
+    assert!(SubscriptionTier::Plus.allows_workspace_type("warehouse"));
+    assert!(!SubscriptionTier::Plus.allows_workspace_type("kds"));
+    // Pro gets kds.
+    assert!(SubscriptionTier::Pro.allows_workspace_type("kds"));
+    assert!(SubscriptionTier::Pro.allows_workspace_type("warehouse"));
+}
+
+#[test]
+fn test_staff_limits_per_tier() {
+    assert_eq!(SubscriptionTier::Free.max_staff_users(), Some(1));
+    assert_eq!(SubscriptionTier::Plus.max_staff_users(), Some(5));
+    assert_eq!(SubscriptionTier::Pro.max_staff_users(), Some(20));
+    assert_eq!(SubscriptionTier::Premium.max_staff_users(), None);
+    assert_eq!(SubscriptionTier::Enterprise.max_staff_users(), None);
+}
+
+#[test]
+fn test_feature_flag_matrix() {
+    // Loyalty: Premium/Enterprise only.
+    assert!(!SubscriptionTier::Free.supports_loyalty());
+    assert!(!SubscriptionTier::Plus.supports_loyalty());
+    assert!(!SubscriptionTier::Pro.supports_loyalty());
+    assert!(SubscriptionTier::Premium.supports_loyalty());
+    assert!(SubscriptionTier::Enterprise.supports_loyalty());
+    // Analytics: Pro and above.
+    assert!(!SubscriptionTier::Free.supports_analytics());
+    assert!(!SubscriptionTier::Plus.supports_analytics());
+    assert!(SubscriptionTier::Pro.supports_analytics());
+    assert!(SubscriptionTier::Premium.supports_analytics());
+    assert!(SubscriptionTier::Enterprise.supports_analytics());
+    // Daily Sales Dashboard: Plus and above (blurred teaser on Free).
+    assert!(!SubscriptionTier::Free.supports_daily_dashboard());
+    assert!(SubscriptionTier::Plus.supports_daily_dashboard());
+    assert!(SubscriptionTier::Pro.supports_daily_dashboard());
+    assert!(SubscriptionTier::Premium.supports_daily_dashboard());
+    assert!(SubscriptionTier::Enterprise.supports_daily_dashboard());
+}
+
+#[test]
+fn test_offline_grace_days_per_tier() {
+    assert_eq!(SubscriptionTier::Free.offline_grace_days(), 7);
+    assert_eq!(SubscriptionTier::Plus.offline_grace_days(), 14);
+    assert_eq!(SubscriptionTier::Pro.offline_grace_days(), 14);
+    assert_eq!(SubscriptionTier::Premium.offline_grace_days(), 30);
+    // Enterprise grace is custom per contract — fallback must be generous.
+    assert!(SubscriptionTier::Enterprise.offline_grace_days() >= 3650);
+}
+
+#[test]
+fn test_from_db_plus_and_standard_alias() {
+    assert_eq!(SubscriptionTier::from_db("plus"), SubscriptionTier::Plus);
+    // Legacy "standard" rows map to Plus.
+    assert_eq!(
+        SubscriptionTier::from_db("standard"),
+        SubscriptionTier::Plus
+    );
+    assert_eq!(
+        SubscriptionTier::from_db("STANDARD"),
+        SubscriptionTier::Plus
+    );
+}
+
+// ── C4.3: Add-on Marketplace ──────────────────────────────
+
+/// Helper: build a TenantSubscription with a given signed payload.
+fn sub_with_payload(payload: &str) -> TenantSubscription {
+    TenantSubscription {
+        tenant_id: "test".into(),
+        tier: SubscriptionTier::Plus,
+        status: "active".into(),
+        expires_at: None,
+        max_stores: 1,
+        max_pos_instances: 2,
+        allowed_types_json: "[]".into(),
+        signature: "BOOTSTRAP_FREE".into(),
+        signed_payload: payload.into(),
+        api_key: String::new(),
+        updated_at: String::new(),
+    }
+}
+
+#[test]
+fn addons_parses_json_array() {
+    let payload = r#"{"tier":"plus","addons":["advanced_analytics","priority_support"]}"#;
+    let sub = sub_with_payload(payload);
+    let addons = sub.addons();
+    assert_eq!(addons.len(), 2);
+    assert!(addons.contains(&"advanced_analytics".to_string()));
+    assert!(addons.contains(&"priority_support".to_string()));
+}
+
+#[test]
+fn addons_empty_payload_returns_empty_vec() {
+    let sub = sub_with_payload("");
+    assert!(sub.addons().is_empty());
+}
+
+#[test]
+fn addons_no_addons_key_returns_empty_vec() {
+    let payload = r#"{"tier":"plus"}"#;
+    let sub = sub_with_payload(payload);
+    assert!(sub.addons().is_empty());
+}
+
+#[test]
+fn addons_invalid_json_returns_empty_vec() {
+    let sub = sub_with_payload("not json at all");
+    assert!(sub.addons().is_empty());
+}
+
+#[test]
+fn addons_addons_not_array_returns_empty_vec() {
+    let payload = r#"{"addons":"not_an_array"}"#;
+    let sub = sub_with_payload(payload);
+    assert!(sub.addons().is_empty());
+}
+
+#[test]
+fn has_addon_case_insensitive() {
+    let payload = r#"{"addons":["Advanced_Analytics"]}"#;
+    let sub = sub_with_payload(payload);
+    assert!(sub.has_addon("advanced_analytics"));
+    assert!(sub.has_addon("ADVANCED_ANALYTICS"));
+    assert!(sub.has_addon("Advanced_Analytics"));
+}
+
+#[test]
+fn has_addon_returns_false_when_not_present() {
+    let payload = r#"{"addons":["priority_support"]}"#;
+    let sub = sub_with_payload(payload);
+    assert!(!sub.has_addon("advanced_analytics"));
+}
+
+#[test]
+fn has_addon_empty_payload() {
+    let sub = sub_with_payload("");
+    assert!(!sub.has_addon("anything"));
+}
+
+#[test]
+fn supports_analytics_with_addons_plus_tier() {
+    // Plus without addon → no analytics
+    let payload = r#"{"tier":"plus","addons":[]}"#;
+    let sub = sub_with_payload(payload);
+    assert!(!sub.supports_analytics_with_addons());
+
+    // Plus with advanced_analytics addon → analytics enabled
+    let payload = r#"{"tier":"plus","addons":["advanced_analytics"]}"#;
+    let sub = sub_with_payload(payload);
+    assert!(sub.supports_analytics_with_addons());
+}
+
+#[test]
+fn supports_analytics_with_addons_pro_tier() {
+    // Pro always supports analytics regardless of addons
+    let mut sub = sub_with_payload("");
+    sub.tier = SubscriptionTier::Pro;
+    assert!(sub.supports_analytics_with_addons());
+}
+
+#[test]
+fn supports_analytics_with_addons_free_tier() {
+    // Free never supports analytics, even with addon
+    let mut sub = sub_with_payload(r#"{"addons":["advanced_analytics"]}"#);
+    sub.tier = SubscriptionTier::Free;
+    assert!(!sub.supports_analytics_with_addons());
+}
+
+#[test]
+fn supports_analytics_with_addons_premium_tier() {
+    let mut sub = sub_with_payload("");
+    sub.tier = SubscriptionTier::Premium;
+    assert!(sub.supports_analytics_with_addons());
+}
+
+#[test]
+fn addons_empty_array() {
+    let payload = r#"{"addons":[]}"#;
+    let sub = sub_with_payload(payload);
+    assert!(sub.addons().is_empty());
+    assert!(!sub.has_addon("anything"));
+}
+
+#[test]
+fn addons_multiple_addons() {
+    let payload =
+        r#"{"addons":["advanced_analytics","priority_support","extra_storage","custom_hal"]}"#;
+    let sub = sub_with_payload(payload);
+    assert_eq!(sub.addons().len(), 4);
+    assert!(sub.has_addon("advanced_analytics"));
+    assert!(sub.has_addon("priority_support"));
+    assert!(sub.has_addon("extra_storage"));
+    assert!(sub.has_addon("custom_hal"));
+}
