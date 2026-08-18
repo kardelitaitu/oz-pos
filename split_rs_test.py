@@ -38,15 +38,21 @@ def find_test_module_start(lines):
     for idx, line in enumerate(lines):
         stripped = line.strip()
         if stripped == '#[cfg(test)]':
-            # Look ahead for the mod tests { line, skipping empty lines
+            # Look ahead for the mod tests { line, skipping empty lines and other attributes
             j = idx + 1
-            while j < len(lines) and lines[j].strip() == '':
-                j += 1
-            if j < len(lines):
+            while j < len(lines):
                 stripped_j = lines[j].strip()
+                if stripped_j == '':
+                    j += 1
+                    continue
+                if stripped_j.startswith('#['):
+                    # Skip other attributes like #[allow(deprecated)]
+                    j += 1
+                    continue
                 if stripped_j.startswith('mod tests {'):
                     # Found: the #[cfg(test)] line is at idx, and the brace line is at j
                     return idx, j
+                break  # Neither attribute, empty, nor mod tests — stop looking
     return None, None
 
 def main():
