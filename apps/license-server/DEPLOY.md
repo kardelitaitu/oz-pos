@@ -499,6 +499,7 @@ Run this in **sandbox first** (ADR #39 verification). Tick every box before cons
 
 - [ ] **Tampered amount** — a settled notification whose `gross_amount` is not in the map → **500** and no key minted (Midtrans retries until the map is fixed).
 - [ ] **Bundle claim on a plain amount** — `custom_field4=restaurant_starter` with a plain Plus `gross_amount` → **500**, no key (the price map is authoritative).
+- [ ] **Tampered custom_field3** — `1490000` (plus:year) with `custom_field3="month"` → **500**, no key (the period must match the price-map period).
 - [ ] **Invalid signature** — wrong `signature_key` → **401**, nothing created.
 - [ ] **Replay** — resend the same `transaction_id` → **200** with `{"status":"duplicate"}`, still exactly one license key.
 - [ ] **Renewal** — a second settled charge with the same `subscription_id` but a new `order_id` → the **same** key is refreshed (no second key) and `expires_at` extends +1 year.
@@ -596,6 +597,18 @@ curl -X POST https://app.sandbox.midtrans.com/snap/v1/transactions \
 ```
 
 **Expected 201:** `{"token":"…","redirect_url":"…"}` (use `https://app.midtrans.com` for production; the base must match the `MIDTRANS_SERVER_KEY` environment — sandbox key + sandbox URL, production key + production URL). A 401 here means the server key is wrong or belongs to a different environment.
+
+**Webhook failure modes (curl the webhook endpoint with a signed body):**
+
+| Call | Expected |
+|---|---|
+| Invalid signature | `401 {"error":"invalid signature"}` |
+| Tampered amount (not in map) | `500`; log: `gross_amount "…" is not mapped in MIDTRANS_PRICE_TIERS` |
+| Bundle claim on plain amount | `500`; log: `custom_field4 bundle "…" disagrees with price-mapped bundle ""` |
+| **Tampered custom_field3** | `500`; log: `custom_field3 period "…" disagrees with price-mapped period "…"` |
+| Replay (same `transaction_id`) | `200 {"status":"duplicate"}` |
+| Renewal (same `subscription_id`) | `200`; same key refreshed, `expires_at` extended |
+| Failed charge (`cancel`/`expire`) | `200`; subscription → `grace_period` |
 
 ---
 
