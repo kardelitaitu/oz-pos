@@ -119,6 +119,21 @@ type paddleEvent struct {
 
 // paddleSubscription is the subset of the Paddle Billing subscription
 // entity the provisioning logic needs. All times are RFC 3339 strings.
+//
+// custom_data echoes back what the website's checkout (paddle.ts
+// Paddle.Checkout.open) embedded at purchase — the register-first account
+// email plus the optional C3.2 vertical bundle:
+//
+//	custom_data.email  = buyer email (register-first, the webhook upserts
+//	                     the tenant by it — same as Midtrans's
+//	                     custom_field2)
+//	custom_data.bundle = bundle_id (C3.2 vertical bundles — cross-checked
+//	                     against the price map, never trusted alone)
+//
+// The signup vertical is NOT carried here (trial segmentation is a
+// desktop-activation concern — see trial_vertical in activate.go), and
+// custom_data.phone may be present when the Paddle checkout collects it
+// (backfilled onto the tenant when non-empty).
 type paddleSubscription struct {
 	ID         string            `json:"id"`
 	Status     string            `json:"status"`

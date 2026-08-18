@@ -37,6 +37,17 @@
 > trial-reset the spec's trial lock existed to prevent. The re-scope note's
 > earlier claim that the mechanism "still applies" was inaccurate; the trial
 > lock remains unimplemented (`SPEC-2026-TRIAL-LOCK` is spec-only today).
+>
+> **Deviation 2 (shipped, verified against the code):** the Paddle webhook's
+> `custom_data` contract mirrors the Midtrans custom-field contract (ADR #39
+> note 2) — the register-first checkout embeds **`email`** (the account email
+> the webhook upserts the tenant by, `paddle_webhook.go`
+> `resolvePaddleEmail`) and, from C3.2, **`bundle`** (cross-checked against
+> the price map's bundle segment, never trusted alone); `phone` may ride
+> along when the Paddle checkout collects it. The signup **vertical is not
+> carried** on Paddle purchases — trial segmentation is a desktop-activation
+> concern (`trial_vertical`, see the segmented-minting note above), the same
+> decision ADR #39 made for Midtrans.
 
 ---
 
