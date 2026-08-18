@@ -180,6 +180,16 @@ export default function SignupForm({ locale }: Props) {
           {loading ? '…' : t(locale, 'signup.createAccount')}
         </button>
         <p className="text-center text-xs text-muted">
+          {t(locale, 'signup.agreeBefore')}{' '}
+          <a href={`/${locale}/legal/terms`} className="text-link transition hover:underline">
+            {t(locale, 'legal.termsTitle')}
+          </a>{' '}
+          {t(locale, 'signup.agreeSeparator')}{' '}
+          <a href={`/${locale}/legal/privacy`} className="text-link transition hover:underline">
+            {t(locale, 'legal.privacyTitle')}
+          </a>.
+        </p>
+        <p className="text-center text-xs text-muted">
           {t(locale, 'signup.haveAccount')}{' '}
           <a href={`/${locale}/login`} className="text-link transition hover:underline">
             {t(locale, 'signup.signInLink')}
