@@ -253,22 +253,11 @@ func midtransTierForNotification(n midtransNotification) (tier, period, bundle s
 	return tier, period, bundle, nil
 }
 
-// normalizeMidtransPeriod canonicalizes the period vocabulary to the price
-// map's plan-period (month/year): the website's checkout sends month/year
-// (midtransAmountForTier normalizes the reverse direction), and
-// monthly/yearly is accepted for legacy charges that embedded the website's
-// BillingPeriod vocabulary. Anything else passes through unchanged so the
-// caller's comparison decides (and a garbage value mismatches the map).
-func normalizeMidtransPeriod(p string) string {
-	switch strings.ToLower(strings.TrimSpace(p)) {
-	case "monthly":
-		return "month"
-	case "yearly":
-		return "year"
-	default:
-		return strings.ToLower(strings.TrimSpace(p))
-	}
-}
+// normalizeMidtransPeriod is an alias for the shared normalizeBillingPeriod
+// helper, used by the webhook's custom_field3 cross-check. Both the checkout
+// (midtransAmountForTier) and the webhook use the same vocabulary normalization
+// so they agree on what "monthly" means.
+var normalizeMidtransPeriod = normalizeBillingPeriod
 
 // ── Charge status mapping ────────────────────────────────────────────
 

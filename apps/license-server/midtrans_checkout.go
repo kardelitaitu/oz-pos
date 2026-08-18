@@ -69,12 +69,7 @@ func midtransSnapURL() string {
 func midtransAmountForTier(tier, period, bundle string) (string, bool) {
 	// Normalize the website's BillingPeriod vocabulary (monthly/yearly) to
 	// the price map's plan-period vocabulary (month/year).
-	switch period {
-	case "monthly":
-		period = "month"
-	case "yearly", "":
-		period = "year"
-	}
+	period = normalizeBillingPeriod(period)
 	bundle = normalizeBundleID(bundle)
 	m, err := midtransPriceTiers()
 	if err != nil {

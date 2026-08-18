@@ -68,6 +68,28 @@ func extractAPIKey(authHeader string) (apiKey string, err error) {
 	return key, nil
 }
 
+// normalizeBillingPeriod canonicalizes the period vocabulary to the
+// canonical plan-period format (month/year): the website's checkout sends
+// monthly/yearly (from BillingPeriod), while the price map uses month/year.
+// This function is shared by midtransAmountForTier (checkout → price map)
+// and the webhook's custom_field3 cross-check (notification → price map)
+// so both code paths agree on the vocabulary mapping.
+//
+// The normalization is case-insensitive and trims whitespace. Values that
+// don't match any known vocabulary ("month", "year", "monthly", "yearly")
+// pass through unchanged so the caller's comparison decides (and a garbage
+// value mismatches the map).
+func normalizeBillingPeriod(p string) string {
+	switch strings.ToLower(strings.TrimSpace(p)) {
+	case "monthly":
+		return "month"
+	case "yearly":
+		return "year"
+	default:
+		return strings.ToLower(strings.TrimSpace(p))
+	}
+}
+
 // redactRequestBody returns a JSON-string copy of body with the "api_key"
 // field masked as "[REDACTED]". Used by handlers that want to log the
 // request payload for debugging without leaking the credential into log
