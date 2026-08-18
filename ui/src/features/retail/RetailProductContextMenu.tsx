@@ -63,8 +63,8 @@ export default function RetailProductContextMenu({
   const style: React.CSSProperties = menu
     ? {
         position: 'fixed',
-        left: Math.min(menu.x, Math.max(0, window.innerWidth - 220)),
-        top: Math.min(menu.y, Math.max(0, window.innerHeight - 120)),
+        left: Math.max(0, Math.min(menu.x, window.innerWidth - 220)),
+        top: Math.max(0, Math.min(menu.y, window.innerHeight - 120)),
         zIndex: 1000,
       }
     : {};

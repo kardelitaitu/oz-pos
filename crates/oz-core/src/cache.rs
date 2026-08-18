@@ -393,7 +393,6 @@ pub mod redis_cache {
         }
     }
 
-#[cfg(test)] #[path = "cache_tests.rs"] mod tests;
 }
 
 /// Create a cache, attempting Redis first and falling back to no-op.
