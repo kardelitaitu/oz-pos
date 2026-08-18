@@ -59,7 +59,7 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
 
 describe('KdsHistoryPanel', () => {
   beforeEach(() => {
-    mockListKdsOrdersScoped.mockResolvedValue([]);
+    mockListKdsOrdersScoped.mockReset();
   });
 
   afterEach(() => {
@@ -96,7 +96,9 @@ describe('KdsHistoryPanel', () => {
 
   describe('Filter tabs', () => {
     it('defaults to Served tab selected', async () => {
-      mockListKdsOrdersScoped.mockResolvedValue([makeOrder({ status: 'served' })]);
+      mockListKdsOrdersScoped.mockImplementation((_token: string, _status?: string) => {
+        return Promise.resolve([makeOrder({ status: 'served' })]);
+      });
 
       renderWithFluentSync(<KdsHistoryPanel />, kdsFtl);
 
@@ -113,9 +115,16 @@ describe('KdsHistoryPanel', () => {
       const servedOrders = [makeOrder({ id: 'served-1', status: 'served' })];
       const cancelledOrders = [makeOrder({ id: 'cancelled-1', status: 'cancelled' })];
 
-      mockListKdsOrdersScoped
-        .mockResolvedValueOnce(servedOrders)
-        .mockResolvedValueOnce(cancelledOrders);
+      let callCount = 0;
+      mockListKdsOrdersScoped.mockImplementation((_token: string, _status?: string) => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(servedOrders);
+        } else if (callCount === 2) {
+          return Promise.resolve(cancelledOrders);
+        }
+        return Promise.resolve([]);
+      });
 
       renderWithFluentSync(<KdsHistoryPanel />, kdsFtl);
 
@@ -157,7 +166,9 @@ describe('KdsHistoryPanel', () => {
         }),
       ];
 
-      mockListKdsOrdersScoped.mockResolvedValue(orders);
+      mockListKdsOrdersScoped.mockImplementation((_token: string, _status?: string) => {
+        return Promise.resolve(orders);
+      });
 
       renderWithFluentSync(<KdsHistoryPanel />, kdsFtl);
 
@@ -177,7 +188,9 @@ describe('KdsHistoryPanel', () => {
     });
 
     it('shows empty state when no orders', async () => {
-      mockListKdsOrdersScoped.mockResolvedValue([]);
+      mockListKdsOrdersScoped.mockImplementation((_token: string, _status?: string) => {
+        return Promise.resolve([]);
+      });
 
       renderWithFluentSync(<KdsHistoryPanel />, kdsFtl);
 
@@ -189,7 +202,9 @@ describe('KdsHistoryPanel', () => {
 
   describe('Error handling', () => {
     it('shows error message with retry button on fetch failure', async () => {
-      mockListKdsOrdersScoped.mockRejectedValue(new Error('Network error'));
+      mockListKdsOrdersScoped.mockImplementation((_token: string, _status?: string) => {
+        return Promise.reject(new Error('Network error'));
+      });
 
       renderWithFluentSync(<KdsHistoryPanel />, kdsFtl);
 
@@ -201,9 +216,16 @@ describe('KdsHistoryPanel', () => {
     });
 
     it('retries fetch when retry button is clicked', async () => {
-      mockListKdsOrdersScoped
-        .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce([makeOrder()]);
+      let callCount = 0;
+      mockListKdsOrdersScoped.mockImplementation((_token: string, _status?: string) => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.reject(new Error('Network error'));
+        } else if (callCount === 2) {
+          return Promise.resolve([makeOrder()]);
+        }
+        return Promise.resolve([]);
+      });
 
       renderWithFluentSync(<KdsHistoryPanel />, kdsFtl);
 
@@ -229,11 +251,18 @@ describe('KdsHistoryPanel', () => {
       const servedOrders = [makeOrder({ id: 'served-1', status: 'served' })];
       const cancelledOrders = [makeOrder({ id: 'cancelled-1', status: 'cancelled' })];
 
-      mockListKdsOrdersScoped
-        .mockResolvedValueOnce(servedOrders)
-        .mockImplementationOnce(() => new Promise((resolve) => {
-          setTimeout(() => resolve(cancelledOrders), 100);
-        }));
+      let callCount = 0;
+      mockListKdsOrdersScoped.mockImplementation((_token: string, _status?: string) => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(servedOrders);
+        } else if (callCount === 2) {
+          return new Promise((resolve) => {
+            setTimeout(() => resolve(cancelledOrders), 100);
+          });
+        }
+        return Promise.resolve([]);
+      });
 
       renderWithFluentSync(<KdsHistoryPanel />, kdsFtl);
 
@@ -250,6 +279,60 @@ describe('KdsHistoryPanel', () => {
 
       // The in-flight fetch resolves after ~100ms of real time.
       await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    });
+  });
+
+  describe('Filter behavior', () => {
+    it('filters orders by status — Served tab shows only served orders', async () => {
+      const allOrders = [
+        makeOrder({ id: 'served-1', status: 'served', display_number: 101 }),
+        makeOrder({ id: 'served-2', status: 'served', display_number: 102 }),
+        makeOrder({ id: 'cancelled-1', status: 'cancelled', display_number: 103 }),
+      ];
+
+      mockListKdsOrdersScoped.mockImplementation((_token: string, _status?: string) => {
+        // Filter orders by status - this is what the real API would do
+        const filtered = allOrders.filter(order => !_status || order.status === _status);
+        return Promise.resolve(filtered);
+      });
+
+      renderWithFluentSync(<KdsHistoryPanel />, kdsFtl);
+
+      await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+
+      // Should only show served orders (the mock filters by status)
+      expect(screen.queryByText('#103')).not.toBeInTheDocument(); // cancelled order should NOT appear
+      expect(screen.getByText('#101')).toBeInTheDocument();
+      expect(screen.getByText('#102')).toBeInTheDocument();
+    });
+
+    it('filters orders by status — Cancelled tab shows only cancelled orders', async () => {
+      const allOrders = [
+        makeOrder({ id: 'served-1', status: 'served', display_number: 101 }),
+        makeOrder({ id: 'served-2', status: 'served', display_number: 102 }),
+        makeOrder({ id: 'cancelled-1', status: 'cancelled', display_number: 103 }),
+      ];
+
+      mockListKdsOrdersScoped.mockImplementation((_token: string, _status?: string) => {
+        // Filter orders by status - this is what the real API would do
+        const filtered = allOrders.filter(order => !_status || order.status === _status);
+        return Promise.resolve(filtered);
+      });
+
+      renderWithFluentSync(<KdsHistoryPanel />, kdsFtl);
+
+      await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+
+      const user = userEvent.setup();
+      const cancelledTab = screen.getByRole('tab', { name: /cancelled/i });
+      await user.click(cancelledTab);
+
+      await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+
+      // Should only show cancelled orders (the mock filters by status)
+      expect(screen.queryByText('#101')).not.toBeInTheDocument(); // served order should NOT appear
+      expect(screen.queryByText('#102')).not.toBeInTheDocument(); // served order should NOT appear
+      expect(screen.getByText('#103')).toBeInTheDocument(); // cancelled order SHOULD appear
     });
   });
 });

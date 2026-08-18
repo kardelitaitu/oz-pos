@@ -2258,7 +2258,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_kds_orders': () => mockKdsOrders,
-  'list_kds_orders_scoped': () => mockKdsOrders,
+  'list_kds_orders_scoped': (args: unknown) => { const [_token, status] = args as [string, string | undefined]; return mockKdsOrders.filter(order => !status || order['status'] === status); },
   'get_kds_queue': () => mockKdsOrders,
   'get_kds_queue_scoped': () => mockKdsOrders,
   'update_kds_status': (args) => {
