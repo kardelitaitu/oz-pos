@@ -355,7 +355,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 
 ### Long-Term (Month 6-12)
 18. ✅ **A/B test Pro at $7.99 vs $9.99** — Paddle-native A/B testing via `PADDLE_PRICE_TIERS` config; create two Pro prices and let Paddle split traffic
-19. **Enterprise self-serve trial / Premium store-limit bridge** — reduce sales cycle length
+19. ✅ **Enterprise self-serve trial / Premium store-limit bridge** — `POST /api/v1/license/enterprise-trial` validates approval codes from PocketBase collection, mints 30-day Enterprise trial license key; admin endpoints (`/api/v1/admin/enterprise-codes`) for code generation/listing; `/enterprise-trial` Astro page with EN/ID i18n; `enterprise_self_serve` vertical in `trialSegmentation`
 20. **Launch add-on marketplace** — diversify revenue
 21. ✅ **Build churn prevention automation** — win-back emails (7d + 30d post-expiry), exit survey modal, usage monitoring alerts at 80% limits
 
