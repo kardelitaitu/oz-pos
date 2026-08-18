@@ -2268,14 +2268,37 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_kds_orders': () => mockKdsOrders,
-  'list_kds_orders_scoped': (args: unknown) => { const [_token, status] = args as [string, string | undefined]; return mockKdsOrders.filter(order => !status || order['status'] === status); },
-  'get_kds_queue': (args: unknown) => { 
-    const [userId, kdsZone] = args as [string, string | undefined]; 
-    return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone); 
+  'list_kds_orders_scoped': (args: unknown) => {
+    let status: string | undefined;
+    if (Array.isArray(args)) {
+      [, status] = args as [string, string | undefined];
+    } else {
+      const obj = (args ?? {}) as Record<string, unknown>;
+      status = obj.status as string | undefined;
+    }
+    return mockKdsOrders.filter(order => !status || order['status'] === status);
   },
-  'get_kds_queue_scoped': (args: unknown) => { 
-    const [sessionToken, kdsZone] = args as [string, string | undefined]; 
-    return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone); 
+  'get_kds_queue': (args: unknown) => {
+    let kdsZone: string | undefined;
+    if (Array.isArray(args)) {
+      [, kdsZone] = args as [string, string | undefined];
+    } else {
+      const obj = (args ?? {}) as Record<string, unknown>;
+      kdsZone = obj.kdsZone as string | undefined;
+    }
+    return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone);
+  },
+  'get_kds_queue_scoped': (args: unknown) => {
+    let sessionToken: string | undefined;
+    let kdsZone: string | undefined;
+    if (Array.isArray(args)) {
+      [sessionToken, kdsZone] = args as [string, string | undefined];
+    } else {
+      const obj = (args ?? {}) as Record<string, unknown>;
+      sessionToken = obj.sessionToken as string | undefined;
+      kdsZone = obj.kdsZone as string | undefined;
+    }
+    return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone);
   },
   'update_kds_status': (args) => {
     const { id, status } = (args as { id?: string; status?: string }) ?? {};
