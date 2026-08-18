@@ -52,6 +52,7 @@ var requiredCollections = []string{
 	"tenant_machines",
 	"trial_registrations",
 	"trial_claims",
+	"trial_email_log",
 }
 
 // privateKey is the RSA-2048 private key loaded from the
@@ -269,6 +270,16 @@ func main() {
 		// hook, so it can't be replaced by re-registering the route; a root
 		// middleware short-circuits it with our extended payload (health.go).
 		bindHealthOverride(app, se)
+
+		// ── Trial-to-paid email scheduler (C2.2, §4) ───────────────
+		// Runs daily at 08:00 UTC to scan active trial subscriptions and
+		// send milestone emails (day 7 weekly summary, day 14 last-day
+		// warning). Idempotent: trial_email_log prevents double-sends.
+		if err := ensureTrialEmailLogCollection(app); err != nil {
+			log.Printf("warning: failed to create trial_email_log collection: %v", err)
+		}
+		go startTrialEmailScheduler(app)
+
 		return se.Next()
 	})
 
