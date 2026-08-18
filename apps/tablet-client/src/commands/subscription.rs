@@ -33,6 +33,8 @@ pub struct SubscriptionCapabilitiesDto {
     pub supports_qris: bool,
     /// Whether the tier can view analytics (Pro+).
     pub supports_analytics: bool,
+    /// C4.3: Add-on identifiers purchased with this license.
+    pub addons: Vec<String>,
     /// Whether the tier can run the loyalty program (Premium+).
     pub supports_loyalty: bool,
     /// Whether the tier has the Daily Sales Dashboard (Plus+).
@@ -78,7 +80,7 @@ pub async fn get_subscription_capabilities(
         max_staff_users: tier.max_staff_users(),
         sales_history_days: tier.sales_history_days(),
         supports_qris: tier.supports_qris(),
-        supports_analytics: tier.supports_analytics(),
+        supports_analytics: sub.supports_analytics_with_addons(),
         supports_loyalty: tier.supports_loyalty(),
         supports_daily_dashboard: tier.supports_daily_dashboard(),
         supports_cloud_sync: tier.supports_cloud_sync(),
@@ -86,5 +88,6 @@ pub async fn get_subscription_capabilities(
         store_count,
         staff_count,
         terminal_count,
+        addons: sub.addons(),
     })
 }

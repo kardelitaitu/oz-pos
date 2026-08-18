@@ -1,0 +1,106 @@
+/* ── Add-on Marketplace (C4.3) ─────────────────────────────────── */
+
+.addons-marketplace {
+  padding: var(--space-6) var(--space-8);
+}
+
+.addons-marketplace--empty {
+  text-align: center;
+  padding: var(--space-12) var(--space-8);
+}
+
+.addons-marketplace-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.addons-marketplace-header {
+  margin-bottom: var(--space-6);
+}
+
+.addons-marketplace-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-1);
+}
+
+.addons-marketplace-subtitle {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.addons-marketplace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+/* ── Addon Card ────────────────────────────────────────────────── */
+
+.addon-card {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.addon-card:hover {
+  border-color: var(--accent, #0066ff);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.addon-card--owned {
+  border-color: var(--success, #22c55e);
+  background: var(--success-bg, #f0fdf4);
+}
+
+.addon-card-icon {
+  font-size: 1.75rem;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 40px;
+  text-align: center;
+}
+
+.addon-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.addon-card-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-1);
+}
+
+.addon-card-desc {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 0 var(--space-3);
+  line-height: 1.4;
+}
+
+.addon-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.addon-card-price {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent, #0066ff);
+}
+
+.addon-card-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--success, #22c55e);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 6px;
+  background: var(--success-bg, #f0fdf4);
+}

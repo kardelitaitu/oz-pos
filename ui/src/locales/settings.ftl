@@ -846,3 +846,18 @@ exit-survey-reason-other = Other
 exit-survey-other-placeholder = Please tell us more...
 exit-survey-cancel = Go back
 exit-survey-submit = Pause subscription
+
+# ── Add-on Marketplace (C4.3) ─────────────────────────────────────
+addon-marketplace-title = Add-ons
+addon-marketplace-subtitle = Extend your plan with additional features
+addon-marketplace-empty = No add-ons available for your current plan.
+addon-purchase-button = Add
+addon-owned-badge = Active
+addon-analytics-name = Advanced Analytics
+addon-analytics-desc = Unlock detailed sales reports, trend analysis, and custom date ranges on the Plus plan.
+addon-support-name = Priority Support
+addon-support-desc = Get faster response times and dedicated support from the OZ-POS team.
+addon-storage-name = Extra Cloud Storage
+addon-storage-desc = Increase your cloud sync storage quota for larger product catalogs and longer history.
+addon-hal-name = Custom HAL Drivers
+addon-hal-desc = Load and use custom hardware abstraction layer drivers for specialized POS peripherals.

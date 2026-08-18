@@ -22,6 +22,7 @@ export function makeSubscriptionCaps(
     storeCount: 1,
     staffCount: 0,
     terminalCount: 0,
+    addons: [],
     ...overrides,
   };
 }

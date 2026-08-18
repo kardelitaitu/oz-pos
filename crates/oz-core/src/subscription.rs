@@ -495,6 +495,47 @@ impl TenantSubscription {
         }
     }
 
+    /// Parse the add-on identifiers from the signed subscription payload.
+    ///
+    /// Add-ons are stored as a JSON array of strings in the signed payload
+    /// (e.g. `["advanced_analytics", "priority_support"]`). They are additive
+    /// to the base tier quotas — a Plus subscriber with `advanced_analytics`
+    /// gains analytics without upgrading to Pro.
+    ///
+    /// Returns an empty vec if the payload is empty or unparseable.
+    pub fn addons(&self) -> Vec<String> {
+        if self.signed_payload.is_empty() {
+            return Vec::new();
+        }
+        // The signed payload is a JSON object; extract the "addons" array.
+        serde_json::from_str::<serde_json::Value>(&self.signed_payload)
+            .ok()
+            .and_then(|v| v.get("addons").cloned())
+            .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
+            .unwrap_or_default()
+    }
+
+    /// Check if the subscription has a specific add-on.
+    ///
+    /// Case-insensitive comparison against the `addons` list in the signed
+    /// payload. Returns `false` for empty/unparseable payloads.
+    pub fn has_addon(&self, addon: &str) -> bool {
+        let lower = addon.to_lowercase();
+        self.addons().iter().any(|a| a.to_lowercase() == lower)
+    }
+
+    /// Whether the subscription supports analytics, accounting for add-ons.
+    ///
+    /// Pro+ natively supports analytics. Plus gains analytics via the
+    /// `advanced_analytics` add-on. Other tiers do not support analytics
+    /// regardless of add-ons.
+    pub fn supports_analytics_with_addons(&self) -> bool {
+        if self.tier.supports_analytics() {
+            return true;
+        }
+        matches!(self.tier, SubscriptionTier::Plus) && self.has_addon("advanced_analytics")
+    }
+
     /// Determine the effective subscription tier after applying
     /// offline grace rules.
     ///

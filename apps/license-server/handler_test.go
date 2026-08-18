@@ -234,6 +234,10 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		if err := ensureEnterpriseApprovals(app); err != nil {
 			return err
 		}
+		// C4.3: add-on marketplace field on license_keys
+		if err := ensureAddonsField(app); err != nil {
+			return err
+		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
@@ -262,6 +266,10 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/license/enterprise-trial", handleEnterpriseTrial(app))
 		se.Router.POST("/api/v1/admin/enterprise-codes", handleGenerateEnterpriseCode(app))
 		se.Router.GET("/api/v1/admin/enterprise-codes", handleListEnterpriseCodes(app))
+		// C4.3: Add-on marketplace admin endpoints
+		se.Router.POST("/api/v1/admin/license-addons", handleAddLicenseAddon(app))
+		se.Router.DELETE("/api/v1/admin/license-addons", handleRemoveLicenseAddon(app))
+		se.Router.GET("/api/v1/admin/license-addons", handleListLicenseAddons(app))
 		return se.Next()
 	})
 }

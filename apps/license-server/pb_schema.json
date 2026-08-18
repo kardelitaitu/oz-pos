@@ -259,6 +259,21 @@
         "type": "text"
       },
       {
+        "help": "C4.3: JSON array of add-on identifiers purchased with this license (e.g. [\"advanced_analytics\", \"priority_support\"]). Add-ons are additive to base tier quotas.",
+        "hidden": false,
+        "id": "text_addons_field",
+        "name": "addons",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 1024,
+        "min": 0
+      },
+      {
         "hidden": false,
         "id": "autodate3454440663",
         "name": "created",

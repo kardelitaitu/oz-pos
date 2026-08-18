@@ -28,6 +28,8 @@ export interface SubscriptionCapabilities {
   storeCount: number;
   staffCount: number;
   terminalCount: number;
+  // ── C4.3: Add-on identifiers ───────────────────────────────
+  addons: string[];
 }
 
 /** Read the tenant's subscription capabilities (local, no network). */

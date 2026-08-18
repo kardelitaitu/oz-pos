@@ -832,3 +832,18 @@ exit-survey-reason-other = Lainnya
 exit-survey-other-placeholder = Ceritakan lebih lanjut...
 exit-survey-cancel = Kembali
 exit-survey-submit = Jeda langganan
+
+# ── Add-on Marketplace (C4.3) ─────────────────────────────────────
+addon-marketplace-title = Tambahan
+addon-marketplace-subtitle = Perluas paket Anda dengan fitur tambahan
+addon-marketplace-empty = Tidak ada tambahan yang tersedia untuk paket Anda saat ini.
+addon-purchase-button = Tambah
+addon-owned-badge = Aktif
+addon-analytics-name = Analitik Lanjutan
+addon-analytics-desc = Buka laporan penjualan detail, analisis tren, dan rentang tanggal kustom di paket Plus.
+addon-support-name = Dukungan Prioritas
+addon-support-desc = Dapatkan waktu respons lebih cepat dan dukungan khusus dari tim OZ-POS.
+addon-storage-name = Penyimpanan Cloud Tambahan
+addon-storage-desc = Tingkatkan kuota penyimpanan cloud sync untuk katalog produk yang lebih besar dan riwayat lebih panjang.
+addon-hal-name = Driver HAL Kustom
+addon-hal-desc = Muat dan gunakan driver abstraction layer hardware kustom untuk perangkat POS khusus.
