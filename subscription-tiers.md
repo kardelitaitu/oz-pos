@@ -349,7 +349,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 
 ### Medium-Term (Month 3-6)
 14. ✅ **Phase 2: Midtrans QRIS subscriptions** — `midtrans_webhook.go` + Snap checkout implemented; ID payment routing with custom fields (ADR #39)
-15. **Build trial-to-paid email flows** — personalized per vertical (see §4)
+15. ✅ **Build trial-to-paid email flows** — `trial_emails.go` scheduler with Brevo SMTP; day 7 + day 14 milestones for Plus and Pro trials; bilingual EN/ID templates; idempotent via `trial_email_log` collection
 16. ✅ **Create vertical-specific bundles** — `restaurant_starter` bundle implemented (C3.2); unlocks KDS workspace type for Plus
 17. ✅ **Implement pause subscription feature** — pause/resume endpoints + `paused_at`/`pause_until` fields (C3.3)
 
