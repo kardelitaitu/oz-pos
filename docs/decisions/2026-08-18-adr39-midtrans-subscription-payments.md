@@ -181,10 +181,13 @@ intentional refinements, not bugs (except where noted):
 3. **Period vocabulary: website `monthly`/`yearly` vs. price-map `month`/`year`** (D2
    tier resolution). `midtransAmountForTier` normalizes the website's `BillingPeriod` to
    the map's plan-period vocabulary before the reverse lookup, and `midtransChargeExpiry`
-   derives the expiry from the map's period. The webhook **cross-checks `custom_field1`
-   (tier) and `custom_field4` (bundle) against the map but not `custom_field3` (period)**
-   — the amount→map lookup is authoritative for the period, so a tampered `custom_field3`
-   cannot change the billed cadence.
+   derives the expiry from the map's period. The webhook cross-checks **all three**
+   checkout-embedded fields — `custom_field1` (tier), `custom_field3` (period, added
+   2026-08-18: `normalizeMidtransPeriod` accepts `month`/`year` and the website's
+   `monthly`/`yearly`), and `custom_field4` (bundle) — against the price-map entry.
+   The amount→map lookup remains authoritative for the cadence; a tampered
+   `custom_field3` on a renewal now rejects the notification (500) instead of being
+   silently ignored, so a forged period can't drift the expiry interval.
 4. **Price-map format gained segments (D2).** `MIDTRANS_PRICE_TIERS` shipped as
    `gross_amount:tier_key[:period][:bundle_id]` — not the ADR's "`gross_amount → tier`,
    same shape as `PADDLE_PRICE_TIERS`" — with `[:period]` (default `year`) and the C3.2

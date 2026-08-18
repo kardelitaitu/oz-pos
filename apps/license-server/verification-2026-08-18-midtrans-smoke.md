@@ -107,7 +107,7 @@ the fake, §11.8 step 3 shape):**
   "item_details": [{ "id": "plus-yearly", "price": "500000", "quantity": 1, "name": "OZ-POS PLUS (yearly)" }],
   "customer_details": { "email": "verify.buyer@example.com" },
   "custom_field1": "plus", "custom_field2": "verify.buyer@example.com",
-  "custom_field3": "yearly", "custom_field4": "",
+  "custom_field3": "year", "custom_field4": "",
   "enabled_payments": ["qris", "bank_transfer", "echannel", "gopay", "shopeepay", "credit_card"],
   "credit_card": { "secure": true }
 }

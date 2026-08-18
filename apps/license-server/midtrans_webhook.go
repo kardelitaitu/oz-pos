@@ -105,10 +105,9 @@ func resetMidtransDedup() {
 //	custom_field1 = tier_key
 //	custom_field2 = buyer email (register-first, same as Paddle's
 //	               custom_data.email)
-//	custom_field3 = billing period (the website's monthly/yearly
-//	               vocabulary; the amount→price-map lookup is
-//	               authoritative for the cadence, so it is not
-//	               cross-checked)
+//	custom_field3 = billing period (month/year — cross-checked against
+//	               the price-map period, so a tampered cadence can't
+//	               drift the expiry; monthly/yearly also accepted)
 //	custom_field4 = bundle_id (C3.2 vertical bundles — cross-checked
 //	               against the price map, never trusted alone)
 type midtransNotification struct {
@@ -221,10 +220,11 @@ func midtransPriceForAmount(amount string) (string, bool) {
 }
 
 // midtransTierForNotification resolves the tier, period, and bundle for a
-// notification. The fixed IDR amount is authoritative: custom_field1 (tier)
-// and custom_field4 (bundle, C3.2) set by our checkout are cross-checked
-// against the price-map entry, so a tampered custom field can never mint a
-// higher tier or a bundle the buyer didn't pay for. Falls back to the amount
+// notification. The fixed IDR amount is authoritative: custom_field1 (tier),
+// custom_field3 (period), and custom_field4 (bundle, C3.2) set by our
+// checkout are cross-checked against the price-map entry, so a tampered
+// custom field can never mint a higher tier, a bundle the buyer didn't pay
+// for, or a period that drifts the renewal cadence. Falls back to the amount
 // map alone when the checkout didn't embed a field.
 func midtransTierForNotification(n midtransNotification) (tier, period, bundle string, err error) {
 	priceEntry, ok := midtransPriceForAmount(n.GrossAmount)
@@ -236,6 +236,14 @@ func midtransTierForNotification(n midtransNotification) (tier, period, bundle s
 	if cf := strings.TrimSpace(n.CustomField1); cf != "" && cf != tier {
 		return "", "", "", fmt.Errorf("custom_field1 tier %q disagrees with price-mapped tier %q for amount %q — rejecting", cf, tier, n.GrossAmount)
 	}
+	// The period must match the price the buyer actually paid — a renewal
+	// charging the yearly amount but claiming a monthly cadence (or vice
+	// versa) would otherwise let midtransChargeExpiry extend the wrong
+	// interval. The website's monthly/yearly vocabulary is normalized so a
+	// legacy charge that embedded it still passes.
+	if cf := strings.TrimSpace(n.CustomField3); cf != "" && normalizeMidtransPeriod(cf) != period {
+		return "", "", "", fmt.Errorf("custom_field3 period %q disagrees with price-mapped period %q for amount %q — rejecting", cf, period, n.GrossAmount)
+	}
 	// A bundle claim must match the price the buyer actually paid — paying
 	// the plain amount and claiming a bundle in custom_field4 is rejected
 	// (the 500 makes Midtrans retry and the operator sees the mismatch).
@@ -243,6 +251,23 @@ func midtransTierForNotification(n midtransNotification) (tier, period, bundle s
 		return "", "", "", fmt.Errorf("custom_field4 bundle %q disagrees with price-mapped bundle %q for amount %q — rejecting", cf, bundle, n.GrossAmount)
 	}
 	return tier, period, bundle, nil
+}
+
+// normalizeMidtransPeriod canonicalizes the period vocabulary to the price
+// map's plan-period (month/year): the website's checkout sends month/year
+// (midtransAmountForTier normalizes the reverse direction), and
+// monthly/yearly is accepted for legacy charges that embedded the website's
+// BillingPeriod vocabulary. Anything else passes through unchanged so the
+// caller's comparison decides (and a garbage value mismatches the map).
+func normalizeMidtransPeriod(p string) string {
+	switch strings.ToLower(strings.TrimSpace(p)) {
+	case "monthly":
+		return "month"
+	case "yearly":
+		return "year"
+	default:
+		return strings.ToLower(strings.TrimSpace(p))
+	}
 }
 
 // ── Charge status mapping ────────────────────────────────────────────

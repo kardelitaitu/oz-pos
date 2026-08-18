@@ -425,6 +425,59 @@ func midtransSignedBodyBundle(serverKey, transactionID, orderID, subscriptionID,
 	return strings.Replace(body, "\n}", fmt.Sprintf(",\n  \"custom_field4\": %q\n}", bundle), 1)
 }
 
+// midtransSignedBodyPeriod is midtransSignedBody plus a custom_field3
+// (billing period). Custom fields are NOT part of the signature canonical
+// string (order_id + status_code + gross_amount + serverkey), so the field
+// is injected after signing.
+func midtransSignedBodyPeriod(serverKey, transactionID, orderID, subscriptionID, status, statusCode, grossAmount, tierField, email, period string) string {
+	body := midtransSignedBody(serverKey, transactionID, orderID, subscriptionID, status, statusCode, grossAmount, tierField, email)
+	if period == "" {
+		return body
+	}
+	return strings.Replace(body, "\n}", fmt.Sprintf(",\n  \"custom_field3\": %q\n}", period), 1)
+}
+
+// TestMidtransWebhook_PeriodCrossCheck rejects a renewal whose
+// checkout-embedded period disagrees with the price-map period — a tampered
+// custom_field3 must not drift the expiry cadence (monthly amount charged
+// as yearly, or vice versa). The fixed IDR amount stays authoritative.
+func TestMidtransWebhook_PeriodCrossCheck(t *testing.T) {
+	resetMidtransDedup()
+	resetRateLimiters()
+	setMidtransEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// 1490000 maps to plus:year, but custom_field3 claims a monthly
+	// cadence — a forged period must not let midtransChargeExpiry extend
+	// by a month instead of a year.
+	body := midtransSignedBodyPeriod("test-midtrans-server-key", "txn_mt_pd01", "OZ-PLUS-1755-PD1",
+		"sub_mt_pd01", "settlement", "200", "1490000", "plus", "period@example.com", "month")
+	rec := serveMidtrans(t, se, body)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 from period mismatch, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_pd01"); err == nil {
+		t.Fatal("expected NO license key minted for a period-tampered charge")
+	}
+
+	// The website's monthly/yearly vocabulary is accepted for the matching
+	// period — 149000 maps to plus:month, and "monthly" normalizes to it.
+	body2 := midtransSignedBodyPeriod("test-midtrans-server-key", "txn_mt_pd02", "OZ-PLUS-1755-PD2",
+		"sub_mt_pd02", "settlement", "200", "149000", "plus", "period@example.com", "monthly")
+	rec2 := serveMidtrans(t, se, body2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for matching period vocabulary, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+	keyRec, err := app.FindFirstRecordByData("license_keys", "midtrans_sub_id", "sub_mt_pd02")
+	if err != nil {
+		t.Fatalf("period-valid charge key not minted: %v", err)
+	}
+	if diff := keyRec.GetDateTime("expires_at").Time().Sub(time.Now().UTC().AddDate(0, 1, 0)); diff > 5*time.Minute || diff < -5*time.Minute {
+		t.Errorf("monthly charge should expire ~+1mo, got %v (diff %v)", keyRec.GetDateTime("expires_at").Time(), diff)
+	}
+}
+
 func TestMidtransPriceTiers_BundleSegment(t *testing.T) {
 	t.Setenv("MIDTRANS_PRICE_TIERS", "149000:plus:month,1740000:plus:year:restaurant_starter")
 	m, err := midtransPriceTiers()
