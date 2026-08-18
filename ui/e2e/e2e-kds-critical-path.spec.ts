@@ -176,8 +176,8 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     // Toggle sound off
     await soundControl.click();
     // Verify it's toggled (if it's a checkbox, check the checked attribute)
-    const isSoundChecked = await soundControl.isChecked();
     // We don't enforce a specific state, just that it's operable
+    await soundControl.isChecked();
     await expect(soundControl).toBeEnabled();
     // Toggle sound back on to leave state as we found it (optional, but good practice)
     await soundControl.click();
@@ -185,7 +185,8 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     // --- Interact with a threshold control ---
     const firstThreshold = thresholdControls.first();
     // Get current value (if it's a number or range input)
-    const currentValue = await firstThreshold.inputValue();
+    // Verify we can read the current value
+    await firstThreshold.inputValue();
     // Set a new value (if it's a number input, we can type; if range, we might need to drag or set via evaluate)
     // For simplicity, we'll just check that we can focus and it's enabled
     await expect(firstThreshold).toBeEnabled();

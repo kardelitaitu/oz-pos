@@ -2274,7 +2274,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       [, status] = args as [string, string | undefined];
     } else {
       const obj = (args ?? {}) as Record<string, unknown>;
-      status = obj.status as string | undefined;
+      status = obj['status'] as string | undefined;
     }
     return mockKdsOrders.filter(order => !status || order['status'] === status);
   },
@@ -2284,19 +2284,17 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       [, kdsZone] = args as [string, string | undefined];
     } else {
       const obj = (args ?? {}) as Record<string, unknown>;
-      kdsZone = obj.kdsZone as string | undefined;
+      kdsZone = obj['kdsZone'] as string | undefined;
     }
     return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone);
   },
   'get_kds_queue_scoped': (args: unknown) => {
-    let sessionToken: string | undefined;
     let kdsZone: string | undefined;
     if (Array.isArray(args)) {
-      [sessionToken, kdsZone] = args as [string, string | undefined];
+      [, kdsZone] = args as [string, string | undefined];
     } else {
       const obj = (args ?? {}) as Record<string, unknown>;
-      sessionToken = obj.sessionToken as string | undefined;
-      kdsZone = obj.kdsZone as string | undefined;
+      kdsZone = obj['kdsZone'] as string | undefined;
     }
     return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone);
   },

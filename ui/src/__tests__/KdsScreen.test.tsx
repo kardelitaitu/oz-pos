@@ -30,14 +30,14 @@ vi.mock('@/api/kds', () => ({
     if (!_kdsZone) {
       return orders;
     }
-    return orders.filter(order => order['kitchen_zone'] === _kdsZone);
+    return orders.filter((order: KdsOrder) => order['kitchen_zone'] === _kdsZone);
   },
   getKdsQueueScoped: async (_token: string, _kdsZone?: string) => {
     const orders = await mockGetKdsQueue();
     if (!_kdsZone) {
       return orders;
     }
-    return orders.filter(order => order['kitchen_zone'] === _kdsZone);
+    return orders.filter((order: KdsOrder) => order['kitchen_zone'] === _kdsZone);
   },
   listKdsOrdersScoped: (_token: string, _status: string) => mockListKdsOrdersScoped(),
   updateKdsStatus: (_userId: string, id: string, status: string) =>
