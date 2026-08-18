@@ -420,8 +420,14 @@ func verifyPaddleConfig() error {
 func tierQuotas(tier, bundle string) (maxStores, maxPOSInstances int, allowedTypes []string) {
 	all := []string{"restaurant-pos", "store-pos", "inventory", "warehouse", "admin", "kds"}
 	switch tier {
-	case "pro", "premium", "enterprise":
+	case "enterprise":
 		return 0, 0, all // unlimited stores/instances, all workspace types
+	case "pro":
+		return 2, 5, all
+	case "premium":
+		// C4.2: Premium allows up to 10 stores self-serve; >10 requires
+		// Enterprise contract. Unlimited instances and all workspace types.
+		return 10, 0, all
 	case "plus":
 		// 1 store, 2 registers/store, no kds (§3 Workspace Types — kds is Pro+).
 		// maxWarehouses is enforced client-side via SubscriptionTier::max_warehouses().

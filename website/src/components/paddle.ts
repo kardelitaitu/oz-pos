@@ -39,6 +39,8 @@ export interface PaddleEvent {
 
 declare global {
   interface Window {
+    /** C4.1: A/B test variant for analytics attribution (e.g. 'pro_price'). */
+    __ab_variant?: string;
     Paddle?: {
       Environment: { set: (env: 'sandbox' | 'production') => void };
       Initialize: (opts: { token: string; eventCallback?: (event: PaddleEvent) => void }) => void;

@@ -30,9 +30,13 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
   // (C3.2): pre-enable the Plus card's bundle toggle from the URL. SSR-safe:
   // window only exists after hydration (the grid mounts with client:load).
   const [bundleOn, setBundleOn] = useState(false);
+  // C4.1: A/B test — ?ab=pro_price activates the $7.99 variant for Pro monthly
+  const [abVariant, setAbVariant] = useState<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('bundle') === 'restaurant_starter') setBundleOn(true);
+    const ab = params.get('ab');
+    if (ab) setAbVariant(ab);
   }, []);
 
   const buttonClass = (active: boolean) =>
@@ -85,7 +89,14 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
           // bundle='restaurant_starter' and the webhook mints the
           // bundle-widened quota block (kds at Plus).
           const bundleActive = Boolean(tier.bundle && bundleOn);
-          const price = bundleActive && tier.bundle ? tier.bundle.prices[billing] : tier.prices[billing];
+          let price = bundleActive && tier.bundle ? tier.bundle.prices[billing] : tier.prices[billing];
+          // C4.1: A/B test override — when ?ab=pro_price is set and this tier
+          // has a variantPriceId, swap the price + priceId for the variant.
+          let abActive = false;
+          if (abVariant === 'pro_price' && price.variantPriceId && billing === 'monthly') {
+            price = { ...price, priceId: price.variantPriceId, price: price.variantPrice ?? price.price };
+            abActive = true;
+          }
           const checkoutTier: CheckoutTier = {
             tierKey: tier.tierKey,
             name: tier.name,
@@ -93,6 +104,7 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
             period: billing,
             priceId: price.priceId,
             bundle: bundleActive && tier.bundle ? tier.bundle.id : undefined,
+            abVariant: abActive ? abVariant : undefined,
           };
           return (
             <article

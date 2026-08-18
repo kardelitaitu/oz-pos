@@ -224,6 +224,8 @@ func main() {
 		// C3.3: Pause/resume subscription endpoints
 		se.Router.POST("/api/v1/license/pause", handlePause(app))
 		se.Router.POST("/api/v1/license/resume", handleResume(app))
+		// C4.2: Enterprise self-serve trial (gated by approval code)
+		se.Router.POST("/api/v1/license/enterprise-trial", handleEnterpriseTrial(app))
 		// Public website support form → Discord channel (see contact.go).
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		// Website tenant-email OTP auth + account dashboard (see web_otp.go).

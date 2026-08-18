@@ -80,7 +80,13 @@ export const pricing: PricingTier[] = [
     cta: 'Choose Pro',
     highlight: true,
     prices: {
-      monthly: { price: '$9.99', period: '/month', priceId: 'pri_placeholder_pro_monthly_usd' },
+      monthly: {
+        price: '$9.99', period: '/month',
+        priceId: 'pri_placeholder_pro_monthly_usd',
+        // C4.1: A/B variant — $7.99 vs $9.99 (controlled by ?ab=pro_price + env)
+        variantPriceId: 'pri_pro_monthly_usd_variant_799',
+        variantPrice: '$7.99',
+      },
       yearly: { price: '$99.99', period: '/year', priceId: 'pri_placeholder_pro_yearly_usd' },
     },
     features: [

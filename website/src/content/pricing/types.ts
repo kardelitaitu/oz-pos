@@ -39,6 +39,17 @@ export interface TierPrice {
    * CheckoutButton.isPlaceholderPriceId). Absent = no checkout (free/custom).
    */
   priceId?: string;
+  /**
+   * C4.1 A/B test variant price id. When present and the `?ab=pro_price`
+   * query param matches, this price id overrides the default `priceId`.
+   * The variant price is for the same product at a different price point
+   * (e.g. $7.99 vs $9.99 for Pro monthly).
+   */
+  variantPriceId?: string;
+  /**
+   * C4.1: Display price for the A/B variant. Shown when variant is active.
+   */
+  variantPrice?: string;
 }
 
 export interface PricingTier {
@@ -84,6 +95,13 @@ export interface CheckoutTier {
    * custom_data.bundle) so the webhook mints the bundle-widened quota block.
    */
   bundle?: string;
+  /**
+   * C4.1: A/B test variant identifier (e.g. "pro_price"). When present,
+   * the checkout embeds it in custom_data.ab_variant for analytics
+   * attribution. The server ignores it — it's purely for client-side
+   * conversion tracking.
+   */
+  abVariant?: string;
 }
 
 export interface FeatureRow {

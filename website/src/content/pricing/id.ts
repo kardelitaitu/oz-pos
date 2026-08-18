@@ -79,7 +79,13 @@ export const pricing: PricingTier[] = [
     cta: 'Pilih Pro',
     highlight: true,
     prices: {
-      monthly: { price: 'Rp 99.000', period: '/bulan', priceId: 'pri_placeholder_pro_monthly_usd' },
+      monthly: {
+        price: 'Rp 99.000', period: '/bulan',
+        priceId: 'pri_placeholder_pro_monthly_usd',
+        // C4.1: A/B variant — Rp 79.000 vs Rp 99.000 (controlled by ?ab=pro_price)
+        variantPriceId: 'pri_pro_monthly_usd_variant_799',
+        variantPrice: 'Rp 79.000',
+      },
       yearly: { price: 'Rp 1.000.000', period: '/tahun', priceId: 'pri_placeholder_pro_yearly_usd' },
     },
     features: [

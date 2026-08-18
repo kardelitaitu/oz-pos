@@ -126,12 +126,14 @@ impl SubscriptionTier {
     }
 
     /// Maximum number of stores allowed for this tier.
-    /// Returns `None` for unlimited (Premium / Enterprise).
+    /// C4.2: Premium allows up to 10 stores self-serve; >10 requires
+    /// Enterprise contract. Enterprise is unlimited.
     pub fn max_stores(&self) -> Option<i64> {
         match self {
             Self::Free | Self::OneTime | Self::Plus => Some(1),
             Self::Pro => Some(2),
-            Self::Premium | Self::Enterprise => None,
+            Self::Premium => Some(10),
+            Self::Enterprise => None,
         }
     }
 
@@ -674,7 +676,7 @@ mod tests {
         assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
         assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
         assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
-        assert_eq!(SubscriptionTier::Premium.max_stores(), None);
+        assert_eq!(SubscriptionTier::Premium.max_stores(), Some(10));
         assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
     }
 
@@ -1188,7 +1190,7 @@ mod tests {
         assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
         assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
         assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
-        assert_eq!(SubscriptionTier::Premium.max_stores(), None);
+        assert_eq!(SubscriptionTier::Premium.max_stores(), Some(10));
         assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
     }
 

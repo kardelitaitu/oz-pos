@@ -93,6 +93,10 @@ export default function CheckoutButton({ tier, locale }: Props) {
         // The snap token request is session-authed; the license server
         // reads the buyer email from the tenant record itself. The bundle
         // (C3.2) rides custom_field4 so the webhook mints the widened block.
+        // C4.1: A/B variant is not carried to Midtrans (id-locale only bills
+        // through IDR fixed prices, no Paddle variant). Analytics tracking
+        // happens client-side via window.__ab_variant.
+        if (tier.abVariant) window.__ab_variant = tier.abVariant;
         await openMidtransCheckout(tier.tierKey, tier.period, undefined, tier.bundle);
         return;
       }
@@ -105,6 +109,8 @@ export default function CheckoutButton({ tier, locale }: Props) {
       // The mailto guard above guarantees priceId here: the Paddle branch is
       // only reachable when !useMidtrans and the guard already ruled out a
       // missing/placeholder price id.
+      // C4.1: Track A/B variant for analytics attribution.
+      if (tier.abVariant) window.__ab_variant = tier.abVariant;
       await openPaddleCheckout(priceId!, email, undefined, tier.bundle);
     } catch {
       setError(true);

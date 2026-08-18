@@ -248,6 +248,11 @@ pub struct SignedSubscriptionPayload {
     /// List of workspace types allowed.
     #[serde(default)]
     pub allowed_types: Vec<String>,
+    /// C4.3: Add-on identifiers purchased with this license.
+    /// Add-ons extend tier capabilities (e.g. "advanced_analytics",
+    /// "priority_support"). The list is additive to the base tier quotas.
+    #[serde(default)]
+    pub addons: Vec<String>,
     /// When the subscription becomes active.
     pub starts_at: String,
     /// When the subscription expires.

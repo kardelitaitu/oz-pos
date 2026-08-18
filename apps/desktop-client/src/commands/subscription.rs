@@ -169,7 +169,8 @@ mod tests {
         seed_tier(&conn, "premium");
         let dto = caps(&conn);
         assert_eq!(dto.tier, "premium");
-        assert_eq!(dto.max_stores, None);
+        // C4.2: Premium allows up to 10 stores self-serve
+        assert_eq!(dto.max_stores, Some(10));
         assert_eq!(dto.max_pos_instances, None);
         assert_eq!(dto.max_staff_users, None);
         assert_eq!(dto.sales_history_days, None);
