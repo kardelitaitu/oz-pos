@@ -14,10 +14,29 @@
 > Free tier is **free forever** (1 store / 1 register / 1 warehouse / 30-day
 > sales history), and paid trials are **segmented by signup vertical** —
 > 14-day Plus trial for general signups, 14-day Pro trial for
-> restaurant/cafe signups, 30-day Pro trial for enterprise referrals. The
-> hardware-fingerprint anti-abuse mechanism (§3.1, `SPEC-2026-TRIAL-LOCK`)
-> still applies to prevent trial resets. `TODO.md` C2.1 tracks the
-> implementation (license-server `trial_vertical` field + segmented minting).
+> restaurant/cafe signups, 30-day Pro trial for enterprise referrals.
+> `TODO.md` C2.1 tracked the implementation (license-server `trial_vertical`
+> field + segmented minting, shipped 2026-08-18).
+>
+> **Deviation (shipped 2026-08-18, verified against the code):** the
+> hardware-fingerprint anti-abuse mechanism (§3.1, `SPEC-2026-TRIAL-LOCK`) —
+> the server-side `trial_registrations` collection keyed by
+> `hardware_fingerprint`, the `POST /api/v1/license/trial` endpoint, and the
+> 403 "Trial already claimed for this hardware ID" gate — was **not
+> implemented**. No `trial_registrations` collection exists in
+> `apps/license-server/pb_schema.json` (only `license_keys`, `tenants`,
+> `subscriptions`, `tenant_machines`), no trial endpoint is registered in
+> `main.go`, and the spec's client-side `compute_hardware_fingerprint()`
+> never shipped. What shipped instead: the SHA-256 machine fingerprint is
+> sent as `machine_id` on `/api/v1/license/activate` and enforced per-tier
+> (`tenant_machines` + `maxMachinesForTier` — Free 1 / Plus 2 / Pro 3 /
+> Premium 10 / Enterprise unlimited), so a single tenant cannot re-trial on
+> more machines than the tier allows; rate limiting and per-key brute-force
+> cooldowns apply. **Known gap:** nothing stops one hardware device from
+> claiming a fresh trial under a *different email/tenant* — the exact
+> trial-reset the spec's trial lock existed to prevent. The re-scope note's
+> earlier claim that the mechanism "still applies" was inaccurate; the trial
+> lock remains unimplemented (`SPEC-2026-TRIAL-LOCK` is spec-only today).
 
 ---
 
