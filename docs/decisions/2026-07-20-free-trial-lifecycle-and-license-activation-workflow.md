@@ -18,25 +18,10 @@
 > `TODO.md` C2.1 tracked the implementation (license-server `trial_vertical`
 > field + segmented minting, shipped 2026-08-18).
 >
-> **Deviation (shipped 2026-08-18, verified against the code):** the
-> hardware-fingerprint anti-abuse mechanism (§3.1, `SPEC-2026-TRIAL-LOCK`) —
-> the server-side `trial_registrations` collection keyed by
-> `hardware_fingerprint`, the `POST /api/v1/license/trial` endpoint, and the
-> 403 "Trial already claimed for this hardware ID" gate — was **not
-> implemented**. No `trial_registrations` collection exists in
-> `apps/license-server/pb_schema.json` (only `license_keys`, `tenants`,
-> `subscriptions`, `tenant_machines`), no trial endpoint is registered in
-> `main.go`, and the spec's client-side `compute_hardware_fingerprint()`
-> never shipped. What shipped instead: the SHA-256 machine fingerprint is
-> sent as `machine_id` on `/api/v1/license/activate` and enforced per-tier
-> (`tenant_machines` + `maxMachinesForTier` — Free 1 / Plus 2 / Pro 3 /
-> Premium 10 / Enterprise unlimited), so a single tenant cannot re-trial on
-> more machines than the tier allows; rate limiting and per-key brute-force
-> cooldowns apply. **Known gap:** nothing stops one hardware device from
-> claiming a fresh trial under a *different email/tenant* — the exact
-> trial-reset the spec's trial lock existed to prevent. The re-scope note's
-> earlier claim that the mechanism "still applies" was inaccurate; the trial
-> lock remains unimplemented (`SPEC-2026-TRIAL-LOCK` is spec-only today).
+> **Deviation 1 (shipped 2026-08-18, then SUPERSEDED):** an earlier version
+> of this note recorded the hardware-fingerprint trial lock (§3.1,
+> `SPEC-2026-TRIAL-LOCK`) as unimplemented. That deviation is now closed —
+> see Deviation 3 below, which documents what actually shipped.
 >
 > **Deviation 2 (shipped, verified against the code):** the Paddle webhook's
 > `custom_data` contract mirrors the Midtrans custom-field contract (ADR #39
@@ -48,6 +33,43 @@
 > carried** on Paddle purchases — trial segmentation is a desktop-activation
 > concern (`trial_vertical`, see the segmented-minting note above), the same
 > decision ADR #39 made for Midtrans.
+>
+> **Deviation 3 (shipped 2026-08-18, verified against the code):** the
+> hardware-fingerprint trial lock now ships end-to-end:
+>
+> - **Server** — the `trial_registrations` collection (pb_schema.json,
+>   keyed by `hardware_fingerprint` with a unique index, plus the
+>   idempotent `ensureTrialRegistrations` migration for existing
+>   deployments); `POST /api/v1/license/trial` (`trial.go`) registers a
+>   device's first claim and answers **403 `TRIAL_ALREADY_CLAIMED`** on
+>   every later attempt, permanently; and the activation-time gate
+>   `enforceTrialLock` (`activate.go`) fires **before** the machine-count
+>   checks at mint time for trial keys, so a client that skips the endpoint
+>   is still locked. Same-tenant re-activations (re-install) pass; a
+>   different tenant on the same hardware is the reset-abuse case and gets
+>   the 403.
+> - **Client** — the desktop app computes the device-level fingerprint
+>   `hw_` + SHA-256 of the same hardware anchor `machine_id` derives from
+>   (Windows MachineGuid / motherboard UUID via wmic, `/etc/machine-id` on
+>   Linux/macOS) via `get_hardware_fingerprint()` (`license.rs`) and sends
+>   it on `/api/v1/license/activate` (`hardware_fingerprint` field,
+>   `ActivateLicenseRequest`). Unlike `machine_id` (truncated to 15 chars,
+>   persisted per-installation), the fingerprint is the full digest in the
+>   spec's canonical form, so a wiped Settings table still yields the same
+>   value on the same device.
+> - **Trust boundary preserved** — the lock fires only for **trial keys**;
+>   paid keys are never gated (a paying customer is never locked out by the
+>   trial gate). The server also accepts the 15-char `machine_id` form when
+>   no `hw_` fingerprint is sent, so legacy clients degrade to the old
+>   per-installation identifier rather than bricking activation.
+> - **Remaining gaps (accepted):** a host with no queryable hardware anchor
+>   (e.g. a minimal container) falls back to a random UUID that is stable
+>   only within a process; and the claim is permanent by design — even an
+>   expired trial keeps the device claimed, which is the intended anti-reset
+>   property but means a device can never be re-trialled (the spec's
+>   `trial_registrations` collection matches this). The earlier "nothing
+>   stops one device from re-trialling under a fresh email" gap is closed
+>   for devices with a stable hardware anchor.
 
 ---
 
