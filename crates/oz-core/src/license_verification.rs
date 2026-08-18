@@ -568,9 +568,7 @@ pub async fn pause_subscription(
 ///
 /// Calls `POST /api/v1/license/resume`. The subscription transitions
 /// back to `active` and the pause fields are cleared.
-pub async fn resume_subscription(
-    api_key: &str,
-) -> Result<PauseResumeResponse, CoreError> {
+pub async fn resume_subscription(api_key: &str) -> Result<PauseResumeResponse, CoreError> {
     let url = format!("{}/api/v1/license/resume", license_server_url());
     let client = reqwest::Client::new();
 
