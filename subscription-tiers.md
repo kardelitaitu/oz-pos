@@ -331,31 +331,33 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 ## 9. Implementation Priorities
 
 ### Pre-Launch (Critical — before any paid marketing spend)
-1. **Enforce staff user limits** — prevent revenue leakage
-2. **Enforce 30-day sales history cap on Free** — primary upgrade forcing function
-3. **Set annual plan as default on pricing page** — increases annual commit rate
-4. **Add ⭐ Most Popular badge to Pro** on pricing page — anchors ARPU at the target tier
-5. **Reframe annual discount as "2 bulan gratis" / "2 months free"** everywhere — stronger psychology than a percentage
-6. **Build Daily Sales Dashboard as the hero feature of Plus** — lead all Plus marketing with this
-7. **Define Enterprise pricing guidance** — enable sales team
+1. ✅ **Enforce staff user limits** — `enforce_staff_quota()` in staff.rs, wired in desktop + tablet clients
+2. ✅ **Enforce 30-day sales history cap on Free** — `list_sales_with_history_cap()` in sales.rs
+3. ✅ **Set annual plan as default on pricing page** — PricingGrid.tsx defaults to annual
+4. ✅ **Add ⭐ Most Popular badge to Pro** on pricing page — `mostPopular` in i18n
+5. ✅ **Reframe annual discount as "2 bulan gratis" / "2 months free"** — all docs and pricing pages
+6. ✅ **Build Daily Sales Dashboard as the hero feature of Plus** — `DailyTotalWidget.tsx` with Free-tier lock (blurred teaser + upgrade CTA)
+7. ✅ **Define Enterprise pricing guidance** — ranges defined in §2
+8. ✅ **Enforce store-count quota on creation** — `enforce_store_quota()` blocks Free/Plus at 1, Pro at 2
+9. ✅ **Enforce warehouse-count quota on creation** — `enforce_warehouse_quota()` blocks Free at 1, Plus at 2, Pro at 3
 
 ### Short-Term (Month 1-3)
-8. **Implement segmented trial strategy** — 14-day Plus trial for general signup; 14-day Pro trial for restaurant/cafe vertical
-9. **Build vertical landing pages** — `/untuk-kafe`, `/untuk-warung`, `/untuk-minimarket`, `/untuk-restoran`
-10. **Implement in-app upgrade triggers** — 80% usage limit alerts + locked feature teasers (see §6)
-11. **Implement upgrade/downgrade proration** — reduce upgrade friction
+10. ✅ **Implement segmented trial strategy** — 14-day Plus trial for general; 14-day Pro for restaurant/cafe; 30-day Pro for enterprise-referral
+11. **Build vertical landing pages** — `/untuk-kafe`, `/untuk-warung`, `/untuk-minimarket`, `/untuk-restoran`
+12. ✅ **Implement in-app upgrade triggers** — `TierLockedFeature` component (analytics + loyalty + daily dashboard), 80% usage limit alerts via `SubscriptionCapabilities`
+13. **Implement upgrade/downgrade proration** — reduce upgrade friction
 
 ### Medium-Term (Month 3-6)
-12. **Phase 2: Midtrans QRIS subscriptions** — critical revenue unlock for the full Indonesian MSME market
-13. **Build trial-to-paid email flows** — personalized per vertical (see §4)
-14. **Create vertical-specific bundles** — 10% discount vs à la carte (see §5)
-15. **Implement pause subscription feature** — reduce Plus churn
+14. **Phase 2: Midtrans QRIS subscriptions** — critical revenue unlock for the full Indonesian MSME market
+15. **Build trial-to-paid email flows** — personalized per vertical (see §4)
+16. **Create vertical-specific bundles** — 10% discount vs à la carte (see §5)
+17. **Implement pause subscription feature** — reduce Plus churn
 
 ### Long-Term (Month 6-12)
-16. **A/B test Pro at $7.99 vs $9.99** — optimize conversion-to-revenue balance
-17. **Enterprise self-serve trial / Premium store-limit bridge** — reduce sales cycle length
-18. **Launch add-on marketplace** — diversify revenue
-19. **Build churn prevention automation** — improve retention
+18. **A/B test Pro at $7.99 vs $9.99** — optimize conversion-to-revenue balance
+19. **Enterprise self-serve trial / Premium store-limit bridge** — reduce sales cycle length
+20. **Launch add-on marketplace** — diversify revenue
+21. **Build churn prevention automation** — improve retention
 
 ---
 
