@@ -51,6 +51,19 @@ pub async fn create_inventory_location(
         oz_core::permissions::INVENTORY_LOCATIONS_MANAGE,
     )
     .await?;
+
+    // Warehouse quota enforcement: Free allows 1, Plus 2, Pro 3,
+    // Premium/Enterprise unlimited. Only fires for warehouse-type locations.
+    // Load subscription from the identity DB first (tenant_subscription lives
+    // there), then release the lock before opening the scoped store DB.
+    let effective_tier = {
+        let identity = state.db.lock().await;
+        let sub = oz_core::subscription::TenantSubscription::load(&identity, "default")?
+            .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+        sub.verify_signature()?;
+        sub.effective_tier()
+    };
+
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -59,6 +72,7 @@ pub async fn create_inventory_location(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+    store.enforce_warehouse_quota(&effective_tier, &location_type)?;
 
     let id = store.create_inventory_location(&name, &location_type, &description)?;
     Ok(id)

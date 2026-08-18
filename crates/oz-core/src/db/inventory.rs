@@ -1,6 +1,7 @@
 //! Inventory management DB methods — locations CRUD, shifts, transaction logs, thresholds.
 
 use crate::error::CoreError;
+use crate::subscription::{QuotaError, SubscriptionTier};
 use crate::{
     InventoryLocation, InventoryShift, InventoryTransaction, InventoryTransactionLine,
     StockThreshold, Store, WorkspaceInventoryLocation,
@@ -24,6 +25,43 @@ pub struct InventoryTransactionLineInput {
 
 impl Store<'_> {
     // ── Locations CRUD ──────────────────────────────────────────────────
+
+    /// Count active warehouse-type inventory locations.
+    pub fn count_warehouse_locations(&self) -> Result<i64, CoreError> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM inventory_locations WHERE type = 'warehouse' AND is_active = 1",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    /// Enforce the subscription tier's warehouse limit before creating
+    /// a new warehouse-type inventory location.
+    ///
+    /// Only fires for `type = "warehouse"` — store, transit, damaged,
+    /// and virtual locations are not warehouse-counted.
+    pub fn enforce_warehouse_quota(
+        &self,
+        tier: &SubscriptionTier,
+        location_type: &str,
+    ) -> Result<(), CoreError> {
+        if location_type != "warehouse" {
+            return Ok(());
+        }
+        if let Some(limit) = tier.max_warehouses() {
+            let current = self.count_warehouse_locations()?;
+            if current >= limit {
+                return Err(QuotaError::WarehouseLimit {
+                    tier: tier.name().into(),
+                    limit,
+                    current,
+                }
+                .into());
+            }
+        }
+        Ok(())
+    }
 
     /// Create a new inventory location.
     pub fn create_inventory_location(
@@ -718,6 +756,7 @@ impl Store<'_> {
 mod tests {
     use super::*;
     use crate::migrations;
+    use crate::subscription::SubscriptionTier;
     use rusqlite::Connection;
 
     fn fresh() -> Connection {
@@ -1857,5 +1896,88 @@ mod tests {
         let zebra_pos = names.iter().position(|n| *n == "Zebra").unwrap();
         assert!(alpha_pos < mike_pos, "Alpha should come before Mike");
         assert!(mike_pos < zebra_pos, "Mike should come before Zebra");
+    }
+
+    // ── Warehouse quota enforcement ─────────────────────────────────
+
+    #[test]
+    fn count_warehouse_locations_starts_at_zero() {
+        let conn = fresh();
+        let s = store(&conn);
+        assert_eq!(s.count_warehouse_locations().unwrap(), 0);
+    }
+
+    #[test]
+    fn count_warehouse_locations_counts_only_warehouses() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_inventory_location("Main Store", "store", "").unwrap();
+        s.create_inventory_location("WH A", "warehouse", "").unwrap();
+        s.create_inventory_location("WH B", "warehouse", "").unwrap();
+        s.create_inventory_location("Transit", "transit", "").unwrap();
+        assert_eq!(s.count_warehouse_locations().unwrap(), 2);
+    }
+
+    #[test]
+    fn enforce_warehouse_quota_allows_non_warehouse_types() {
+        let conn = fresh();
+        let s = store(&conn);
+        // Free allows 1 warehouse; store/transit types bypass the check.
+        assert!(s
+            .enforce_warehouse_quota(&SubscriptionTier::Free, "store")
+            .is_ok());
+        assert!(s
+            .enforce_warehouse_quota(&SubscriptionTier::Free, "transit")
+            .is_ok());
+        assert!(s
+            .enforce_warehouse_quota(&SubscriptionTier::Free, "damaged")
+            .is_ok());
+    }
+
+    #[test]
+    fn enforce_warehouse_quota_blocks_free_at_limit() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_inventory_location("WH A", "warehouse", "").unwrap();
+        // Free allows 1 warehouse; we have 1 → must be blocked.
+        let err = s
+            .enforce_warehouse_quota(&SubscriptionTier::Free, "warehouse")
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::SubscriptionLimitExceeded(_)),
+            "Free with 1 warehouse must be blocked: {err:?}"
+        );
+    }
+
+    #[test]
+    fn enforce_warehouse_quota_allows_plus_two() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_inventory_location("WH A", "warehouse", "").unwrap();
+        // Plus allows 2 warehouses; we have 1 → OK.
+        assert!(s
+            .enforce_warehouse_quota(&SubscriptionTier::Plus, "warehouse")
+            .is_ok());
+        s.create_inventory_location("WH B", "warehouse", "").unwrap();
+        // Now at 2 → Plus must be blocked.
+        let err = s
+            .enforce_warehouse_quota(&SubscriptionTier::Plus, "warehouse")
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::SubscriptionLimitExceeded(_)),
+            "Plus with 2 warehouses must be blocked: {err:?}"
+        );
+    }
+
+    #[test]
+    fn enforce_warehouse_quota_error_message_includes_tier() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_inventory_location("WH A", "warehouse", "").unwrap();
+        let err = s
+            .enforce_warehouse_quota(&SubscriptionTier::Free, "warehouse")
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Free"), "message should name the tier: {msg}");
     }
 }

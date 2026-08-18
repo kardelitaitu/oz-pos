@@ -556,6 +556,15 @@ pub enum QuotaError {
         /// The current active staff count.
         current: i64,
     },
+    /// The tenant has reached their warehouse-location limit.
+    WarehouseLimit {
+        /// The subscription tier name.
+        tier: String,
+        /// The maximum number of warehouse locations allowed.
+        limit: i64,
+        /// The current active warehouse count.
+        current: i64,
+    },
 }
 
 impl std::fmt::Display for QuotaError {
@@ -598,6 +607,17 @@ impl std::fmt::Display for QuotaError {
                 write!(
                     f,
                     "Your {tier} tier allows maximum {limit} staff users. \
+                     You currently have {current}. Upgrade to add more."
+                )
+            }
+            Self::WarehouseLimit {
+                tier,
+                limit,
+                current,
+            } => {
+                write!(
+                    f,
+                    "Your {tier} tier allows maximum {limit} warehouse locations. \
                      You currently have {current}. Upgrade to add more."
                 )
             }
