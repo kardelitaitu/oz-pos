@@ -29,8 +29,8 @@
 | Metric | Count |
 |---|---|
 | Total Feature Components | ~100 |
-| Components WITH Tests | ~84 |
-| **Components WITHOUT Tests** | **~16** |
+| Components WITH Tests | ~85 |
+| **Components WITHOUT Tests** | **~15** |
 | Hooks Without Tests | 5 |
 | API Contract Tests Missing | ~30 modules |
 
@@ -46,7 +46,6 @@
 | `RetailHeader` | `ui/src/features/retail/RetailHeader.tsx` | Workspace switcher, user menu, clock, notifications | ❌ No tests |
 | `RetailModals` | `ui/src/features/retail/RetailModals.tsx` | Modal stacking, focus trap, escape handling, portal cleanup | ❌ No tests |
 | `RetailProductContextMenu` | `ui/src/features/retail/RetailProductContextMenu.tsx` | Right-click positioning, touch long-press, action handlers | ❌ No tests |
-| `RetailProductGrid` | `ui/src/features/retail/RetailProductGrid.tsx` | Virtualization, search/filter, category tabs, infinite scroll | ❌ No tests |
 | `RetailSubViews` | `ui/src/features/retail/RetailSubViews.tsx` | Tab switching, state preservation, lazy loading | ❌ No tests |
 
 ### 🏢 **Store Topology Sub-components** (HIGH PRIORITY — Complex DnD)
@@ -134,6 +133,7 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 
 | Component | Commit | Tests Added |
 |---|---|---|
+| `RetailProductGrid` | `<commit-hash>` | 56 tests (EN + ID locales) |
 | `RetailFnBar` | `<commit-hash>` | 21 tests (EN + ID locales) |
 | `ReceiptPreview` | `366061d7` | 19 tests (EN + ID locales) |
 
@@ -236,7 +236,7 @@ Based on risk × impact:
 
 | Priority | Target | Reason |
 |---|---|---|
-| 1 | `RetailProductGrid` + `RetailFnBar` | Core POS revenue flow, high interaction complexity |
+| 1 | `RetailModals` + `RetailHeader` | Core POS revenue flow, modal stacking, workspace switching |
 | 2 | `topologyWireGroup` + `topologyRelationshipPicker` | Complex SVG math, connection validation |
 | 3 | `useKeyboardAvoidance` + `usePullToRefresh` | Mobile UX critical, subtle math bugs |
 | 4 | `EmailReportSettings` | Cron parsing, timezone edge cases |
@@ -249,6 +249,101 @@ Based on risk × impact:
 ---
 
 ## 📝 TDD Journal
+
+### 2026-08-19 — TDD Cycle: RetailFnBar Coverage
+
+**Objective:** Add test coverage for RetailFnBar (function key bar) — critical POS terminal component handling F1-F12 shortcuts, mode toggles, and quick actions.
+
+**Phase 1 - Analyze:** RetailFnBar is a pure presentational component (105 lines) rendering 13 buttons (F1-F12 + Tables). Key behaviors:
+- Dynamic Hold/Resume label based on `heldCartId`
+- Disabled states for Pay/Void/Discount when `linesLength === 0`
+- Feature-gated Quick Return and Tables buttons
+- Keyboard shortcuts from manifest via `fnKey()` → `aria-keyshortcuts`
+- SKU input focus via ref (F5)
+
+**Phase 2 - Find Weaknesses:**
+- No existing test coverage
+- Complex i18n: 16+ Fluent keys from sales, kds, tables bundles
+- Feature flags (QUICK_RETURN, TABLE_MANAGEMENT) require mocking
+- Text nodes split across `<span>` (F-key) + text node (label) — requires flexible matchers
+- Indonesian locale has different key names (e.g., `sale-pay-button` = "Bayar" vs EN "Pay")
+
+**Phase 3 - Red → Green → Refactor:**
+- Red: Created `RetailFnBar.test.tsx` with 21 tests covering all behaviors
+- Green: Tests passed after fixing i18n expectations and text matching
+- Refactor: Used `getByRole('button')` + `textContent` for reliable assertions
+
+**Phase 4 - Verify:**
+- All 21 tests pass (EN + ID locales)
+- Full retail test suite: 160 tests pass
+- Lint + typecheck clean
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved RetailFnBar from "Without Tests" → "Recently Covered"; updated summary counts.
+
+**Phase 7 - Commit:** `test(retail): add RetailFnBar coverage (21 tests) — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Consider testing keyboard navigation (Tab order, Enter activation)
+- Test feature flag disabled states (QUICK_RETURN, TABLE_MANAGEMENT)
+- RetailProductGrid is next highest priority target
+
+---
+
+### 2026-08-19 — TDD Cycle: RetailProductGrid Coverage
+
+**Objective:** Add test coverage for RetailProductGrid (665 lines) — complex product grid with categories, search, sorting, pagination, column toggles, SKU input, and scale integration.
+
+**Phase 1 - Analyze:** RetailProductGrid is a pure presentational component with `data`/`actions` prop split. Key behaviors:
+- Category tabs with horizontal scroll, active state, +Category button
+- Search bar with input, clear button, popularity sort
+- Column toggle menu (9 columns + hide inactive) with outside-click/Escape close
+- Product table with 7 sortable columns, stock badges, price volatility indicator
+- Pagination (prev/next, page info, disabled states)
+- SKU input bar (Enter submit, GO button, ref focus)
+- Scale indicator (conditional, polls every 2s)
+- Loading skeleton (8 rows matching visible columns)
+- 4 empty state variants (low stock, no match, no category, no products)
+- Product cards with long-press (400ms), click, right-click/Menu key, keyboard Enter/Space
+
+**Phase 2 - Find Weaknesses:**
+- No existing test coverage
+- Complex i18n: 40+ Fluent keys from sales, products, tables, kds bundles
+- Long-press timer cleanup with refs to avoid stale closures
+- Right-click + keyboard Menu key context menu (ADR #38 D1)
+- Column toggle menu uses document-level pointerdown/keydown listeners (capture phase)
+- Horizontal scroll maps both deltaX and deltaY to horizontal
+- Empty state priority: filterLowStock > searchQuery > activeCategory > default
+- Price volatility uses `Date.now()` — 24h window, test flakiness risk
+- Stock level thresholds with defaults (low/medium/high)
+- ProductCard memoization relies on referential stability of 15+ props
+- formatMoney uses `id-ID` locale → "Rp 10.000" (space, dots for thousands)
+
+**Phase 3 - Red → Green → Refactor:**
+- Red: Created `RetailProductGrid.test.tsx` with 56 tests across 8 describe blocks
+- Green: Tests passed after fixing i18n expectations and text matching
+- Refactor: Used flexible matchers for split text nodes, fireEvent for controlled inputs
+
+**Phase 4 - Verify:**
+- All 56 tests pass (EN + ID locales)
+- Full retail test suite: 216 tests pass
+- Lint + typecheck clean
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved RetailProductGrid from "Without Tests" → "Recently Covered"; updated summary counts and next targets.
+
+**Phase 7 - Commit:** `test(retail): add RetailProductGrid coverage (56 tests) — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Test long-press timer edge cases (rapid mount/unmount, product list changes)
+- Test column toggle persistence (localStorage + server sync via useRetailColumnPrefs)
+- Test price volatility with mocked time (24h boundary)
+- Test scale indicator polling cleanup and weigh-and-add flow
+- Test keyboard navigation (Tab order, Arrow keys in table, Escape handling)
+
+---
 
 ### 2026-08-19 — TDD Cycle: RetailFnBar Coverage
 
