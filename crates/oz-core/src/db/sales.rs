@@ -2147,6 +2147,7 @@ impl Store<'_> {
     /// Returns ALL rates at the first matching level (e.g. all product-
     /// level rates). Returns an empty vec when no rate is configured.
     pub fn resolve_best_tax_rates_for_sku(&self, sku: &str) -> Result<Vec<TaxRate>, CoreError> {
+	
         // 1. Product-level tax rates — return ALL assigned rates.
         let product_rate_ids = self.get_product_tax_rates(sku)?;
         if !product_rate_ids.is_empty() {
@@ -2191,10 +2192,6 @@ impl Store<'_> {
         }
 
         // 3. Default store-wide tax rate.
-        let all_rates = self.list_tax_rates()?;
-        if let Some(default) = all_rates.into_iter().find(|r| r.is_default) {
-            return Ok(vec![default]);
-        }
 
         Ok(Vec::new())
     }
@@ -2208,6 +2205,7 @@ mod tests {
     use crate::migrations;
     use crate::{Cart, CartLine, Sku};
     use rusqlite::Connection;
+    use std::collections::HashSet;
 
     fn fresh() -> Connection {
         migrations::fresh_db()
@@ -3008,7 +3006,7 @@ mod tests {
             .id
     }
 
-    fn seed_product_with_category(conn: &Connection, sku: &str, category_id: Option<&str>) {
+    fn seed_product(conn: &Connection, sku: &str, category_id: Option<&str>) -> String {
         let s = store(conn);
         let currency: crate::money::Currency = "USD".parse().unwrap();
         let money = crate::Money {
@@ -3017,6 +3015,11 @@ mod tests {
         };
         s.create_product(sku, sku, money, category_id, None, 100, None)
             .unwrap();
+        sku.to_string()
+    }
+
+    fn seed_product_with_category(conn: &Connection, sku: &str, category_id: Option<&str>) {
+        seed_product(conn, sku, category_id);
     }
 
     fn make_single_line_sale(sku: &str, qty: i64, unit_minor: i64) -> Sale {
@@ -5122,5 +5125,91 @@ mod tests {
             .unwrap();
         assert!(items.is_empty());
         assert_eq!(total, 0);
+    }
+
+    // ── Tax Rate Resolution Direct Tests ───────────────────────────────────
+
+    #[test]
+    fn resolve_best_tax_rates_returns_product_level_rates() {
+        let conn = fresh();
+        let s = store(&conn);
+        
+        // Arrange: Create two tax rates and assign both to product
+        let vat_rate_id = seed_tax_rate(&conn, "VAT 10%", 1000, false, false);
+        let sales_tax_id = seed_tax_rate(&conn, "Sales Tax 5%", 500, false, false);
+        let _product_id = seed_product(&conn, "TEST-SKU", None); 
+        
+        // Assign both tax rates to the product
+        s.set_product_tax_rates("TEST-SKU", &[vat_rate_id.clone(), sales_tax_id.clone()])
+            .unwrap();
+        
+        // Act: Resolve tax rates for the SKU
+        let rates = s.resolve_best_tax_rates_for_sku("TEST-SKU").unwrap();
+        
+        // Assert: Both product-level rates should be returned (order may vary)
+        assert_eq!(rates.len(), 2);
+        let rate_ids: HashSet<_> = rates.iter().map(|r| r.id.as_str()).collect();
+        assert!(rate_ids.contains(vat_rate_id.as_str()));
+        assert!(rate_ids.contains(sales_tax_id.as_str()));
+    }
+
+    #[test]
+    fn resolve_best_tax_rates_falls_back_to_category_level() {
+        let conn = fresh();
+        let s = store(&conn);
+        
+        // Arrange: Create category tax rate, product with no direct rates but category assigned
+        let cat_rate_id = seed_tax_rate(&conn, "Category Tax 8%", 800, false, false);
+        let category_id = "CAT-TEST";
+        s.create_category(category_id, "Test Category", "#ffffff", "").unwrap();
+        s.set_category_tax_rates(category_id, &[cat_rate_id.clone()]).unwrap();
+        
+        let product_id = seed_product_with_category(&conn, "TEST-SKU", Some(category_id));
+        // Note: No product-level tax rates assigned
+        
+        // Act: Resolve tax rates for the SKU
+        let rates = s.resolve_best_tax_rates_for_sku("TEST-SKU").unwrap();
+        
+        // Assert: Category-level rate should be returned
+        assert_eq!(rates.len(), 1);
+        assert_eq!(rates[0].id, cat_rate_id);
+        assert_eq!(rates[0].name, "Category Tax 8%");
+        assert_eq!(rates[0].rate_bps, 800);
+    }
+
+    #[test]
+    fn resolve_best_tax_rates_falls_back_to_default_store_rate() {
+        let conn = fresh();
+        let s = store(&conn);
+        
+        // Arrange: Create default store tax rate, product with no direct or category rates
+        let default_rate_id = seed_tax_rate(&conn, "Default Store Tax 5%", 500, true, false);
+        let _product_id = seed_product(&conn, "TEST-SKU", None);
+        // Note: No product-level tax rates, no category assigned
+        
+        // Act: Resolve tax rates for the SKU
+        let rates = s.resolve_best_tax_rates_for_sku("TEST-SKU").unwrap();
+        
+        // Assert: Default store rate should be returned
+        assert_eq!(rates.len(), 1);
+        assert_eq!(rates[0].id, default_rate_id);
+        assert_eq!(rates[0].name, "Default Store Tax 5%");
+        assert!(rates[0].is_default);
+    }
+
+    #[test]
+    fn resolve_best_tax_rates_returns_empty_when_no_rates_exist() {
+        let conn = fresh();
+        let s = store(&conn);
+        
+        // Arrange: Create product with no tax rates assigned anywhere
+        let _product_id = seed_product(&conn, "TEST-SKU", None);
+        // Note: No tax rates created at all, no product/category assignments
+        
+        // Act: Resolve tax rates for the SKU
+        let rates = s.resolve_best_tax_rates_for_sku("TEST-SKU").unwrap();
+        
+        // Assert: Empty vector should be returned
+        assert!(rates.is_empty());
     }
 }

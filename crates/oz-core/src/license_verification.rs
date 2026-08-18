@@ -510,10 +510,15 @@ pub fn store_subscription(
 }
 
 /// Response from the pause/resume subscription endpoint.
+#[derive(Debug, Deserialize)]
 pub struct PauseResumeResponse {
+    /// New subscription status ("paused" or "active").
     pub status: String,
+    /// Tier key that was paused/resumed.
     pub tier_key: String,
+    /// When the subscription was paused (only present on pause response).
     pub paused_at: Option<String>,
+    /// When the pause expires (only present on pause response).
     pub paused_until: Option<String>,
 }
 
