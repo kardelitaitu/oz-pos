@@ -66,6 +66,8 @@ func trialSegmentation(vertical string) (tier string, days int) {
 		return "pro", 14
 	case "enterprise_referral":
 		return "pro", 30
+	case "enterprise_self_serve":
+		return "enterprise", 30
 	default:
 		return "plus", 14
 	}
