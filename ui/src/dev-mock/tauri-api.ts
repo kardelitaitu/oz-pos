@@ -2259,8 +2259,14 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'list_kds_orders': () => mockKdsOrders,
   'list_kds_orders_scoped': (args: unknown) => { const [_token, status] = args as [string, string | undefined]; return mockKdsOrders.filter(order => !status || order['status'] === status); },
-  'get_kds_queue': () => mockKdsOrders,
-  'get_kds_queue_scoped': () => mockKdsOrders,
+  'get_kds_queue': (args: unknown) => { 
+    const [userId, kdsZone] = args as [string, string | undefined]; 
+    return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone); 
+  },
+  'get_kds_queue_scoped': (args: unknown) => { 
+    const [sessionToken, kdsZone] = args as [string, string | undefined]; 
+    return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone); 
+  },
   'update_kds_status': (args) => {
     const { id, status } = (args as { id?: string; status?: string }) ?? {};
     const order = mockKdsOrders.find((o) => o['id'] === id);

@@ -25,8 +25,20 @@ const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockGetKd
 }));
 
 vi.mock('@/api/kds', () => ({
-  getKdsQueue: (_userId: string) => mockGetKdsQueue(),
-  getKdsQueueScoped: (_token: string, _userId: string) => mockGetKdsQueue(),
+  getKdsQueue: async (_userId: string, _kdsZone?: string) => {
+    const orders = await mockGetKdsQueue();
+    if (!_kdsZone) {
+      return orders;
+    }
+    return orders.filter(order => order['kitchen_zone'] === _kdsZone);
+  },
+  getKdsQueueScoped: async (_token: string, _kdsZone?: string) => {
+    const orders = await mockGetKdsQueue();
+    if (!_kdsZone) {
+      return orders;
+    }
+    return orders.filter(order => order['kitchen_zone'] === _kdsZone);
+  },
   listKdsOrdersScoped: (_token: string, _status: string) => mockListKdsOrdersScoped(),
   updateKdsStatus: (_userId: string, id: string, status: string) =>
     mockUpdateKdsStatus(id, status),
@@ -562,6 +574,82 @@ describe('KdsScreen', () => {
       expect(screen.getByText('All').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
       expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(false);
     });
+  });
+
+  // ── 3a: Zone-switching filtering tests ──────────────────────
+  it('shows only Grill orders when Grill zone is selected', async () => {
+    const allOrders = [
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102, kitchen_zone: 'Fry' }),
+      makeOrder({ id: 'o-3', status: 'pending', display_number: 103, kitchen_zone: 'Grill' }),
+    ];
+    mockGetKdsQueue.mockResolvedValue(allOrders);
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // Click the Grill zone chip
+    await userEvent.click(screen.getByText('Grill'));
+    await waitFor(() => {
+      expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+    });
+
+    // Should only show Grill orders (o-1 and o-3)
+    expect(screen.getByText('#101')).toBeInTheDocument();
+    expect(screen.queryByText('#102')).not.toBeInTheDocument(); // Fry order should be hidden
+    expect(screen.getByText('#103')).toBeInTheDocument();
+  });
+
+  it('shows only Fry orders when Fry zone is selected', async () => {
+    const allOrders = [
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102, kitchen_zone: 'Fry' }),
+      makeOrder({ id: 'o-3', status: 'pending', display_number: 103, kitchen_zone: 'Grill' }),
+    ];
+    mockGetKdsQueue.mockResolvedValue(allOrders);
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // Click the Fry zone chip
+    await userEvent.click(screen.getByText('Fry'));
+    await waitFor(() => {
+      expect(screen.getByText('Fry').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+    });
+
+    // Should only show Fry orders (o-2)
+    expect(screen.queryByText('#101')).not.toBeInTheDocument(); // Grill order should be hidden
+    expect(screen.getByText('#102')).toBeInTheDocument();
+    expect(screen.queryByText('#103')).not.toBeInTheDocument(); // Grill order should be hidden
+  });
+
+  it('shows all orders when All zone is selected', async () => {
+    const allOrders = [
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102, kitchen_zone: 'Fry' }),
+      makeOrder({ id: 'o-3', status: 'pending', display_number: 103, kitchen_zone: 'Grill' }),
+    ];
+    mockGetKdsQueue.mockResolvedValue(allOrders);
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // Click the Grill zone chip first
+    await userEvent.click(screen.getByText('Grill'));
+    await waitFor(() => {
+      expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+    });
+
+    // Then click All to reset
+    await userEvent.click(screen.getByText('All'));
+    await waitFor(() => {
+      expect(screen.getByText('All').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+    });
+
+    // Should show all orders
+    expect(screen.getByText('#101')).toBeInTheDocument();
+    expect(screen.getByText('#102')).toBeInTheDocument();
+    expect(screen.getByText('#103')).toBeInTheDocument();
   });
 
   // ── 2b: History view tests ─────────────────────────────────────

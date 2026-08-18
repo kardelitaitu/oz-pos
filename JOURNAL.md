@@ -5003,3 +5003,31 @@ Two regression pins:
 **Tests:** AnalyticsScreen 91/91 (empty-state coverage for low-stock, generic, and heatmap).
 
 **Risks / follow-ups:** none outstanding.
+
+## 2026-08-12 — TDD: Fixed KDS zone filtering test failures
+
+**Problem:** Zone filtering tests for KdsScreen were failing because the test mock for `getKdsQueueScoped` had an incorrect parameter signature. The mock expected three parameters `(_token: string, _userId: string, _kdsZone?: string)` but the component calls it with only two parameters `(sessionToken, zone)`. This caused the zone parameter to be passed as `_userId`, leaving `_kdsZone` as `undefined`, which bypassed the filtering logic and returned all orders regardless of zone selection.
+
+**Symptoms:** 
+- "shows only Grill orders when Grill zone is selected" test failed: Expected Fry order (#102) to be hidden but it was showing
+- "shows only Fry orders when Fry zone is selected" test failed: Expected Grill order (#101) to be hidden but it was showing
+- Both failures indicated no filtering was occurring (all orders shown)
+
+**Root Cause:** Incorrect parameter signature in test mock caused zone filtering logic to never execute.
+
+**Solution:** Corrected the parameter signature in `ui/src/__tests__/KdsScreen.test.tsx`:
+- Changed `getKdsQueueScoped: async (_token: string, _userId: string, _kdsZone?: string) => {`
+- To `getKdsQueueScoped: async (_token: string, _kdsZone?: string) => {`
+
+**Verification:** 
+- When zone is selected (e.g., 'Grill'), `_kdsZone` now receives the correct value
+- Mock skips early return (`if (!_kdsZone)`) and executes filtering: `return orders.filter(order => order['kitchen_zone'] === _kdsZone);`
+- This correctly shows only orders matching the selected zone and hides others
+
+**Deliberately NOT done:** 
+- Did not modify component code or production API mocks (fix is test-only)
+- Did not change the filtering logic itself (was already correct)
+- Focused fix exclusively on the test mock parameter mismatch
+
+**Files Changed:**
+- `ui/src/__tests__/KdsScreen.test.tsx` (lines 35-41)
