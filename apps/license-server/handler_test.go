@@ -131,6 +131,27 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	if err := app.Save(tenantMachines); err != nil {
 		t.Fatalf("failed to create tenant_machines collection: %v", err)
 	}
+
+	// Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK): one trial
+	// per physical device. Mirrors the production pb_schema.json so
+	// /api/v1/license/trial and the activation-time gate find it.
+	trialRegs := core.NewBaseCollection("trial_registrations")
+	trialRegs.Fields.Add(&core.TextField{Name: "hardware_fingerprint", Required: true, Max: 128})
+	trialRegs.Fields.Add(&core.DateField{Name: "first_seen_at", Required: true})
+	trialRegs.Fields.Add(&core.DateField{Name: "trial_expires_at", Required: true})
+	trialRegs.Fields.Add(&core.SelectField{Name: "platform", Required: true, Values: []string{"windows", "android", "linux", "macos", "unknown"}, MaxSelect: 1})
+	trialRegs.Fields.Add(&core.TextField{Name: "app_version", Required: true, Max: 32})
+	trialRegs.Fields.Add(&core.RelationField{Name: "tenant_id", CollectionId: tenants.Id, MaxSelect: 1})
+	trialRegs.Fields.Add(&core.TextField{Name: "ip_address", Max: 64})
+	trialRegs.Indexes = append(trialRegs.Indexes,
+		"CREATE UNIQUE INDEX idx_trial_registrations_hw ON trial_registrations (hardware_fingerprint) WHERE hardware_fingerprint IS NOT NULL AND hardware_fingerprint != ''")
+	trialRegs.CreateRule = types.Pointer("")
+	trialRegs.ListRule = types.Pointer("")
+	trialRegs.ViewRule = types.Pointer("")
+	trialRegs.UpdateRule = types.Pointer("")
+	if err := app.Save(trialRegs); err != nil {
+		t.Fatalf("failed to create trial_registrations collection: %v", err)
+	}
 }
 
 func registerTestRoutes(t *testing.T, app *tests.TestApp) {
@@ -175,9 +196,17 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		if err := ensureBundleIDField(app); err != nil {
 			return err
 		}
+		// Mirror production boot: ensure the trial_registrations collection
+		// (hardware-fingerprint trial lock, SPEC-2026-TRIAL-LOCK) exists.
+		if err := ensureTrialRegistrations(app); err != nil {
+			return err
+		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
+		// Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK) — mirror
+		// production boot.
+		se.Router.POST(trialPath, handleTrial(app))
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))

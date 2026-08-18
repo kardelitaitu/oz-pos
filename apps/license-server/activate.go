@@ -35,6 +35,16 @@ type ActivateRequest struct {
 	// checkout, which the website leg of C3.2 will wire). Unknown values are
 	// ignored.
 	BundleID string `json:"bundle_id"`
+	// HardwareFingerprint is the device-level fingerprint (SPEC-2026-TRIAL-
+	// LOCK): the client's "hw_<hex>" hash of the same hardware anchor the
+	// machine_id derives from. Unlike machine_id (per-installation, bound
+	// to a tenant's tenant_machines row), the fingerprint is stable across
+	// reinstalls, so the trial lock keys on it — a device that claimed a
+	// trial under a DIFFERENT email answers 403 at mint time even before
+	// the machine-registration checks. Optional: clients that don't send
+	// it fall back to the machine_id, and legacy/non-fingerprint values
+	// skip the lock rather than bricking activation.
+	HardwareFingerprint string `json:"hardware_fingerprint"`
 	// APIKey is the tenant API key for authenticating re-activations.
 	// On first activation the server issues a new api_key in the response,
 	// which the POS persists and re-sends on subsequent calls.
@@ -58,6 +68,98 @@ func trialSegmentation(vertical string) (tier string, days int) {
 	default:
 		return "plus", 14
 	}
+}
+
+// trialLockDenied is the typed error enforceTrialLock returns for the
+// reset-abuse case (a different tenant claiming a trial on an already-
+// claimed device). handleActivate renders it as the same 403 JSON the
+// /trial claim endpoint emits, so both gates answer
+// {"code":"TRIAL_ALREADY_CLAIMED",...} — the code the client keys on.
+// (apis.NewForbiddenError's errData arg is field-level validation data,
+// not free-form details, so a flat details map would be mangled into
+// validation_invalid_value noise — hence the typed error.)
+type trialLockDenied struct {
+	code        string
+	message     string
+	expiredAt   string
+	fingerprint string
+}
+
+func (e *trialLockDenied) Error() string { return e.message }
+
+// enforceTrialLock is the activation-time half of the hardware-fingerprint
+// trial lock (SPEC-2026-TRIAL-LOCK; the claim endpoint is /api/v1/license
+// /trial). For a trial-key activation it ensures the machine has not
+// already claimed a trial:
+//
+//   - no registration yet → create one for this tenant (the device's
+//     first claim), allow the trial;
+//   - registration owned by the SAME tenant → re-install re-activation,
+//     allow;
+//   - registration owned by a DIFFERENT tenant → 403 TRIAL_ALREADY_CLAIMED
+//     — the reset-abuse case (same hardware, fresh email).
+//
+// The gate fires at mint time regardless of whether the client called the
+// /trial endpoint first, so skipping the endpoint cannot bypass the lock.
+// Returns a *trialLockDenied (rendered by the handler as the 403 JSON) or
+// nil when the trial may proceed.
+func enforceTrialLock(app core.App, hardwareFingerprint, machineID, tenantID string, trialDays int) error {
+	// Prefer the device-level fingerprint (stable across reinstalls); fall
+	// back to the machine_id for clients that only send that. Either way
+	// the value must be a real fingerprint form, else the lock is skipped
+	// rather than bricking activation.
+	fp := normalizeHardwareFingerprint(hardwareFingerprint)
+	if fp == "" {
+		fp = normalizeHardwareFingerprint(machineID)
+	}
+	if fp == "" {
+		// A non-fingerprint value (legacy client) skips the lock — the
+		// /trial endpoint and clients that send a real fingerprint are
+		// still protected.
+		return nil
+	}
+	existing, err := app.FindFirstRecordByData("trial_registrations", "hardware_fingerprint", fp)
+	if err != nil {
+		// No claim yet — this activation is the device's first trial.
+		coll, collErr := app.FindCollectionByNameOrId("trial_registrations")
+		if collErr != nil {
+			return fmt.Errorf("trial_registrations collection not found: %w", collErr)
+		}
+		rec := core.NewRecord(coll)
+		rec.Set("hardware_fingerprint", fp)
+		rec.Set("first_seen_at", time.Now().UTC())
+		rec.Set("trial_expires_at", time.Now().UTC().AddDate(0, 0, trialDays))
+		rec.Set("tenant_id", []string{tenantID})
+		rec.Set("platform", "unknown")
+		rec.Set("app_version", "unknown")
+		if saveErr := app.Save(rec); saveErr != nil {
+			log.Printf("trial lock: failed to register fingerprint %q for tenant %q: %v", fp, tenantID, saveErr)
+			return nil // non-fatal: the trial still mints, the lock just degrades
+		}
+		log.Printf("trial lock: registered fingerprint %q for tenant %q (first claim)", fp, tenantID)
+		return nil
+	}
+
+	// A claim exists. Resolve its owning tenant (relation stored as a JSON
+	// array in PB). Same tenant → re-activation, allow. Different tenant →
+	// the exact abuse the lock exists to prevent.
+	owner := existing.GetString("tenant_id")
+	if strings.HasPrefix(owner, "[") {
+		if sl := existing.GetStringSlice("tenant_id"); len(sl) > 0 {
+			owner = sl[0]
+		}
+	}
+	if owner != "" && owner != tenantID {
+		return &trialLockDenied{
+			code:        "TRIAL_ALREADY_CLAIMED",
+			message:     "A trial has already been claimed for this device. Purchase a license to continue.",
+			expiredAt:   existing.GetDateTime("trial_expires_at").Time().UTC().Format(time.RFC3339),
+			fingerprint: fp,
+		}
+	}
+	// Same tenant (or a legacy claim without an owner): allow — the
+	// tenant's own re-installations are legitimate.
+	return nil
 }
 
 // normalizeBundleID canonicalizes an activation request's bundle_id.
@@ -489,6 +591,28 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		var trialDays int
 		if isTrialKey {
 			trialTier, trialDays = trialSegmentation(req.TrialVertical)
+		}
+
+		// ── Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK) ──
+		// One trial per physical device. Fires BEFORE the machine-count and
+		// tenant_machines registration checks so a claimed device answers
+		// 403 TRIAL_ALREADY_CLAIMED (the reset-abuse case) instead of a
+		// misleading machine-conflict 409. The fingerprint is the client's
+		// hardware-derived "hw_<hex>" (stable across reinstalls), falling
+		// back to the machine_id for clients that don't send one; a claim
+		// by the SAME tenant is a re-install re-activation and passes.
+		if isTrialKey {
+			if err := enforceTrialLock(app, req.HardwareFingerprint, req.MachineID, tenantID, trialDays); err != nil {
+				if denied, ok := err.(*trialLockDenied); ok {
+					return e.JSON(http.StatusForbidden, map[string]any{
+						"code":                 denied.code,
+						"message":              denied.message,
+						"expired_at":           denied.expiredAt,
+						"hardware_fingerprint": denied.fingerprint,
+					})
+				}
+				return err
+			}
 		}
 
 		// ── Machine count enforcement (H1 audit gap fix) ─────

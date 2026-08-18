@@ -838,5 +838,157 @@
     "indexes": [
       "CREATE UNIQUE INDEX idx_tenant_machines_machine_id ON tenant_machines (machine_id) WHERE machine_id IS NOT NULL AND machine_id != ''"
     ]
+  },
+  {
+    "id": "trialreg0000001",
+    "name": "trial_registrations",
+    "type": "base",
+    "system": false,
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text1000000003",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "Hardware fingerprint (SPEC-2026-TRIAL-LOCK): the client's derived hardware identifier, 'hw_' + SHA-256 of the machine anchor. Unique — one trial per physical device.",
+        "hidden": false,
+        "id": "text1000000000",
+        "max": 128,
+        "min": 1,
+        "name": "hardware_fingerprint",
+        "presentable": true,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date1000000000",
+        "name": "first_seen_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "When the claimed trial expires (segmented trial length from subscription-tiers.md §4). Informational — the fingerprint stays claimed permanently to prevent reset abuse.",
+        "hidden": false,
+        "id": "date1000000001",
+        "name": "trial_expires_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "OS platform the trial was claimed from.",
+        "hidden": false,
+        "id": "select1000000000",
+        "maxSelect": 1,
+        "name": "platform",
+        "presentable": false,
+        "required": true,
+        "system": false,
+      "type": "select",
+      "values": [
+        "windows",
+        "android",
+        "linux",
+        "macos",
+        "unknown"
+      ]
+      },
+      {
+        "help": "Client app version that claimed the trial.",
+        "hidden": false,
+        "id": "text1000000001",
+        "max": 32,
+        "min": 0,
+        "name": "app_version",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Tenant that claimed this device's trial. Set at claim; a re-install by the SAME tenant is a re-activation (allowed), a claim by a DIFFERENT tenant is the reset abuse the lock exists to block.",
+        "hidden": false,
+        "id": "relation1000000000",
+        "name": "tenant_id",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "relation",
+        "cascadeDelete": false,
+        "collectionId": "64d11bd2cc57a18",
+        "maxSelect": 1,
+        "minSelect": 0
+      },
+      {
+        "help": "Client IP at claim time (informational, from the request).",
+        "hidden": false,
+        "id": "text1000000002",
+        "max": 64,
+        "min": 0,
+        "name": "ip_address",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "hidden": false,
+        "id": "autodate1000000000",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate1000000001",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_trial_registrations_hw ON trial_registrations (hardware_fingerprint) WHERE hardware_fingerprint IS NOT NULL AND hardware_fingerprint != ''"
+    ]
   }
 ]

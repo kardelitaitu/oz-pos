@@ -29,6 +29,7 @@ import (
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 // pbSchemaJSON is the PocketBase collections schema embedded at build time.
@@ -49,6 +50,7 @@ var requiredCollections = []string{
 	"tenants",
 	"subscriptions",
 	"tenant_machines",
+	"trial_registrations",
 }
 
 // privateKey is the RSA-2048 private key loaded from the
@@ -181,6 +183,14 @@ func main() {
 		if err := ensureBundleIDField(app); err != nil {
 			return err
 		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK): fresh
+		// boots get the trial_registrations collection from the embedded
+		// pb_schema.json; existing pb_data volumes get it created here
+		// without reimporting the whole schema.
+		if err := ensureTrialRegistrations(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -192,6 +202,9 @@ func main() {
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
+		// Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK): claims a
+		// device's one trial; answers 403 TRIAL_ALREADY_CLAIMED on reuse.
+		se.Router.POST(trialPath, handleTrial(app))
 		// /status uses POST + Authorization: Bearer <api_key> to keep the
 		// credential out of URLs (which would otherwise leak it to webserver
 		// access logs, CDN logs, browser history, and Referer headers).
@@ -500,6 +513,37 @@ func ensureBundleIDField(app core.App) error {
 		}
 		log.Printf("migrated %s collection: added bundle_id field", name)
 	}
+	return nil
+}
+
+// ensureTrialRegistrations creates the trial_registrations collection for
+// deployments that predate the hardware-fingerprint trial lock
+// (SPEC-2026-TRIAL-LOCK). Fresh boots get it from the embedded
+// pb_schema.json; this is the idempotent in-place upgrade for already-
+// provisioned pb_data volumes so POST /api/v1/license/trial and the
+// activation-time trial gate always find their collection.
+func ensureTrialRegistrations(app core.App) error {
+	if _, err := app.FindCollectionByNameOrId("trial_registrations"); err == nil {
+		return nil // already exists
+	}
+	coll := core.NewBaseCollection("trial_registrations")
+	coll.Fields.Add(&core.TextField{Name: "hardware_fingerprint", Required: true, Max: 128})
+	coll.Fields.Add(&core.DateField{Name: "first_seen_at", Required: true})
+	coll.Fields.Add(&core.DateField{Name: "trial_expires_at", Required: true})
+	coll.Fields.Add(&core.SelectField{Name: "platform", Required: true, Values: []string{"windows", "android", "linux", "macos", "unknown"}, MaxSelect: 1})
+	coll.Fields.Add(&core.TextField{Name: "app_version", Required: true, Max: 32})
+	coll.Fields.Add(&core.RelationField{Name: "tenant_id", CollectionId: "tenants", MaxSelect: 1})
+	coll.Fields.Add(&core.TextField{Name: "ip_address", Max: 64})
+	coll.Indexes = append(coll.Indexes,
+		"CREATE UNIQUE INDEX idx_trial_registrations_hw ON trial_registrations (hardware_fingerprint) WHERE hardware_fingerprint IS NOT NULL AND hardware_fingerprint != ''")
+	coll.CreateRule = types.Pointer("")
+	coll.ListRule = types.Pointer("")
+	coll.ViewRule = types.Pointer("")
+	coll.UpdateRule = types.Pointer("")
+	if err := app.Save(coll); err != nil {
+		return fmt.Errorf("failed to create trial_registrations collection: %w", err)
+	}
+	log.Println("migrated: created trial_registrations collection (hardware-fingerprint trial lock)")
 	return nil
 }
 
