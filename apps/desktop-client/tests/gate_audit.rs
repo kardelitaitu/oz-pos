@@ -99,7 +99,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
     // permission memberships live inside mod tests, which the strip keeps).
     (
         "products",
-        11,
+        8,
         &[
             "PRODUCTS_CREATE",
             "PRODUCTS_DELETE",
@@ -444,7 +444,8 @@ fn census_dir(dir: &Path) -> BTreeMap<String, (usize, Vec<String>)> {
         if path.extension().and_then(|e| e.to_str()) != Some("rs") {
             continue;
         }
-        if stem == "authz" || stem == "mod" {
+        // Skip split test files and excluded modules.
+        if stem == "authz" || stem == "mod" || stem.ends_with("_tests") {
             continue;
         }
         let (file_calls, file_keys) = census_file(&path);

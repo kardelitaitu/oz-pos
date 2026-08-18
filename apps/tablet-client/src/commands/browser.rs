@@ -71,13 +71,4 @@ async fn open_in_browser(url: &str) -> Result<(), AppError> {
         .map_err(|e| AppError::Internal(format!("opening browser: {e}")))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn urlencoding_encodes_query() {
-        assert_eq!(urlencoding("Coca Cola"), "Coca+Cola");
-        assert_eq!(urlencoding("Bakso 100%"), "Bakso+100%25");
-    }
-}
+#[cfg(test)] #[path = "browser_tests.rs"] mod tests;
