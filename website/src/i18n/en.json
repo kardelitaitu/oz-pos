@@ -392,6 +392,22 @@
         "Built-in loyalty that increases repeat visits.",
         "QRIS-native payments your customers already use."
       ]
+    },
+    "enterpriseTrial": {
+      "title": "Enterprise Self-Serve Trial",
+      "metaDesc": "Start a 30-day Enterprise trial of OZ-POS with your approval code.",
+      "subtitle": "Enter your approval code to start a 30-day Enterprise trial with unlimited stores, staff, and all workspace types.",
+      "codeLabel": "Approval Code",
+      "codePlaceholder": "ENT-XXXXXXXX",
+      "emailLabel": "Work Email",
+      "emailPlaceholder": "you@company.com",
+      "submitButton": "Request Enterprise Trial",
+      "successTitle": "Your Enterprise Trial Key is Ready!",
+      "successMessage": "Copy the key below and paste it into the OZ-POS app when prompted to activate. Your trial includes unlimited stores, staff, and all workspace types for 30 days.",
+      "yourKeyLabel": "Your License Key",
+      "copyButton": "Copy",
+      "nextSteps": "Next: Open OZ-POS, paste this key along with your email, and start using Enterprise features immediately.",
+      "downloadButton": "Download OZ-POS"
     }
   }
 }

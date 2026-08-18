@@ -392,6 +392,22 @@
         "Loyalitas bawaan yang meningkatkan kunjungan berulang.",
         "Pembayaran native QRIS yang sudah dipakai pelanggan Anda."
       ]
+    },
+    "enterpriseTrial": {
+      "title": "Trial Enterprise Mandiri",
+      "metaDesc": "Mulai trial Enterprise 30 hari OZ-POS dengan kode persetujuan Anda.",
+      "subtitle": "Masukkan kode persetujuan Anda untuk memulai trial Enterprise 30 hari dengan toko, staf, dan semua jenis workspace tanpa batas.",
+      "codeLabel": "Kode Persetujuan",
+      "codePlaceholder": "ENT-XXXXXXXX",
+      "emailLabel": "Email Kantor",
+      "emailPlaceholder": "anda@perusahaan.com",
+      "submitButton": "Minta Trial Enterprise",
+      "successTitle": "Kunci Trial Enterprise Anda Siap!",
+      "successMessage": "Salin kunci di bawah dan tempel ke aplikasi OZ-POS saat diminta untuk mengaktifkan. Trial Anda mencakup toko, staf, dan semua jenis workspace tanpa batas selama 30 hari.",
+      "yourKeyLabel": "Kunci Lisensi Anda",
+      "copyButton": "Salin",
+      "nextSteps": "Langkah berikutnya: Buka OZ-POS, tempel kunci ini bersama email Anda, dan mulai menggunakan fitur Enterprise segera.",
+      "downloadButton": "Unduh OZ-POS"
     }
   }
 }

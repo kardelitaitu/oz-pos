@@ -1246,5 +1246,114 @@
       "CREATE UNIQUE INDEX idx_trial_email_log_sub_day ON trial_email_log (subscription, day_offset)",
       "CREATE INDEX idx_trial_email_log_sent ON trial_email_log (sent_at)"
     ]
+  },
+  {
+    "id": "enterprise_approvals",
+    "name": "enterprise_approvals",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "help": "Unique approval code shared with the prospect.",
+        "hidden": false,
+        "id": "text_ent_code",
+        "name": "code",
+        "presentable": true,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 64,
+        "min": 8,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Prospect email this code was issued to.",
+        "hidden": false,
+        "id": "text_ent_email",
+        "name": "email",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 254,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Name of the prospect or company.",
+        "hidden": false,
+        "id": "text_ent_name",
+        "name": "prospect_name",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 256,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "unused = code not yet redeemed; redeemed = trial key minted; expired = past validity window.",
+        "hidden": false,
+        "id": "select_ent_status",
+        "name": "status",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "maxSelect": 1,
+        "values": ["unused", "redeemed", "expired"]
+      },
+      {
+        "help": "Sales rep or admin who generated this code.",
+        "hidden": false,
+        "id": "text_ent_creator",
+        "name": "created_by",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 256,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "hidden": false,
+        "id": "autodate_ent_created",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate_ent_updated",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_enterprise_approvals_code ON enterprise_approvals (code)",
+      "CREATE INDEX idx_enterprise_approvals_status ON enterprise_approvals (status)"
+    ]
   }
 ]

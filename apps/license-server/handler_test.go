@@ -230,6 +230,10 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		if err := ensureTrialClaims(app); err != nil {
 			return err
 		}
+		// C4.2: enterprise self-serve trial approval codes
+		if err := ensureEnterpriseApprovals(app); err != nil {
+			return err
+		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
@@ -254,6 +258,10 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		// C3.3: Pause/resume subscription endpoints.
 		se.Router.POST("/api/v1/license/pause", handlePause(app))
 		se.Router.POST("/api/v1/license/resume", handleResume(app))
+		// C4.2: Enterprise self-serve trial + admin endpoints.
+		se.Router.POST("/api/v1/license/enterprise-trial", handleEnterpriseTrial(app))
+		se.Router.POST("/api/v1/admin/enterprise-codes", handleGenerateEnterpriseCode(app))
+		se.Router.GET("/api/v1/admin/enterprise-codes", handleListEnterpriseCodes(app))
 		return se.Next()
 	})
 }
