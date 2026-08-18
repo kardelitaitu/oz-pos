@@ -972,3 +972,8 @@ sales-history-refund-lines-aria =
 payment-customer-name-aria =
     .aria-label = Nama pelanggan untuk tagihan terbuka
 
+# Daily Sales Dashboard — Free tier lock (C2.2, §6)
+daily-dashboard-locked-title = Dasbor Penjualan Harian
+daily-dashboard-locked-message = Lihat total pendapatan harian, jumlah penjualan, dan rincian item dalam sekilas. Fitur ini tersedia di Plus ke atas.
+daily-dashboard-locked-cta = Upgrade ke Plus
+

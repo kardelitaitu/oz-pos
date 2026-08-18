@@ -962,3 +962,7 @@ receipt-preview-skip = Skip
 receipt-preview-print = Print Receipt
 
 # Dashboard
+# Daily Sales Dashboard — Free tier lock (C2.2, §6)
+daily-dashboard-locked-title = Daily Sales Dashboard
+daily-dashboard-locked-message = See your daily revenue, sales count, and item breakdown at a glance. This feature is available on Plus and above.
+daily-dashboard-locked-cta = Upgrade to Plus

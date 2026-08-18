@@ -4,6 +4,8 @@ import { Localized, useLocalization } from '@fluent/react';
 import { exportDailySummaryScoped, type DailySummaryRow } from '@/api/sales';
 import { formatMoney, type Money } from '@/types/domain';
 import { Skeleton } from '@/components/Skeleton';
+import TierLockedFeature from '@/components/TierLockedFeature';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 /**
  * Daily Total Widget — shows revenue, sales count, and item count
@@ -15,6 +17,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
  */
 export default function DailyTotalWidget() {
   const { l10n } = useLocalization();
+  const { caps } = useSubscription();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const [summary, setSummary] = useState<DailySummaryRow[]>([]);
@@ -38,6 +41,35 @@ export default function DailyTotalWidget() {
   const totalSales = summary.length;
   const totalItems = summary.reduce((acc, r) => acc + r.line_count, 0);
   const currency = summary[0]?.currency ?? 'USD';
+
+  // C2.2: Free tier sees a blurred teaser with upgrade CTA (§3, §6).
+  if (caps && !caps.supportsDailyDashboard) {
+    return (
+      <TierLockedFeature
+        titleKey="daily-dashboard-locked-title"
+        messageKey="daily-dashboard-locked-message"
+        ctaKey="daily-dashboard-locked-cta"
+        target="plus"
+      >
+        <div className="reporting-widget reporting-widget--daily-total" aria-hidden="true">
+          <div className="reporting-widget-kpi-row">
+            <div className="reporting-widget-kpi">
+              <span className="reporting-widget-kpi-label">Daily Total</span>
+              <span className="reporting-widget-kpi-value">Rp 1.250.000</span>
+            </div>
+            <div className="reporting-widget-kpi">
+              <span className="reporting-widget-kpi-label">Sales</span>
+              <span className="reporting-widget-kpi-value">12</span>
+            </div>
+            <div className="reporting-widget-kpi">
+              <span className="reporting-widget-kpi-label">Items</span>
+              <span className="reporting-widget-kpi-value">34</span>
+            </div>
+          </div>
+        </div>
+      </TierLockedFeature>
+    );
+  }
 
   if (loading) {
     return (
