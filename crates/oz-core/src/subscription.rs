@@ -456,6 +456,43 @@ impl TenantSubscription {
         now <= grace_deadline
     }
 
+    /// A defensive default for tenants without a subscription row — Free
+    /// tier with an empty quota block (workspace types fall back to the
+    /// tier defaults). Mirrors the bootstrap row the migration seeds.
+    pub fn bootstrap_free() -> Self {
+        Self {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Free,
+            status: "active".into(),
+            expires_at: None,
+            max_stores: 1,
+            max_pos_instances: 1,
+            allowed_types_json: "[]".into(),
+            signature: String::new(),
+            signed_payload: String::new(),
+            api_key: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    /// Whether the subscription currently allows the given workspace type.
+    ///
+    /// Honors the signed payload's quota block (`allowed_types_json` — e.g.
+    /// a Plus + restaurant_starter bundle lists `kds`, C3.2), falling back
+    /// to the tier's static defaults when the list is empty or unparseable
+    /// (bootstrap `[]`, legacy rows). A grace-expired or canceled
+    /// subscription reverts to the Free defaults regardless of the stored
+    /// list — the entitlement the server granted no longer applies.
+    pub fn allows_workspace_type(&self, type_key: &str) -> bool {
+        if !self.is_within_grace_period() {
+            return SubscriptionTier::Free.allows_workspace_type(type_key);
+        }
+        match serde_json::from_str::<Vec<String>>(&self.allowed_types_json) {
+            Ok(types) if !types.is_empty() => types.iter().any(|t| t == type_key),
+            _ => self.tier.allows_workspace_type(type_key),
+        }
+    }
+
     /// Determine the effective subscription tier after applying
     /// offline grace rules.
     ///
@@ -939,6 +976,112 @@ mod tests {
     }
 
     // ── constants ────────────────────────────────────────
+
+    // ── allowed_types_json workspace-type entitlement (C3.2 bundle) ──────
+
+    #[test]
+    fn allows_workspace_type_bundle_payload_unlocks_kds_on_plus() {
+        // A Plus + restaurant_starter bundle mints a signed payload whose
+        // allowed_types lists kds even though the Plus TIER statically
+        // excludes it (subscription-tiers.md §5). The entitlement must honor
+        // the payload, not the tier defaults.
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Plus,
+            status: "active".into(),
+            expires_at: None,
+            max_stores: 1,
+            max_pos_instances: 2,
+            allowed_types_json:
+                r#"["store-pos","restaurant-pos","admin","warehouse","inventory","kds"]"#.into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
+            updated_at: String::new(),
+        };
+        assert!(sub.allows_workspace_type("kds"));
+        assert!(sub.allows_workspace_type("store-pos"));
+        assert!(sub.allows_workspace_type("warehouse"));
+    }
+
+    #[test]
+    fn allows_workspace_type_empty_payload_falls_back_to_tier_defaults() {
+        // Bootstrap / legacy rows carry `[]` — the tier defaults apply, so
+        // plain Plus still cannot create a kds workspace.
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Plus,
+            status: "active".into(),
+            expires_at: None,
+            max_stores: 1,
+            max_pos_instances: 2,
+            allowed_types_json: "[]".into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
+            updated_at: String::new(),
+        };
+        assert!(!sub.allows_workspace_type("kds"));
+        assert!(sub.allows_workspace_type("warehouse"));
+        assert!(sub.allows_workspace_type("store-pos"));
+    }
+
+    #[test]
+    fn allows_workspace_type_payload_is_authoritative_not_union() {
+        // A payload that does NOT list a type must not grant it, even when
+        // the tier would — the signed list is the entitlement boundary.
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Pro,
+            status: "active".into(),
+            expires_at: None,
+            max_stores: 2,
+            max_pos_instances: 5,
+            allowed_types_json: r#"["store-pos","restaurant-pos","admin"]"#.into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
+            updated_at: String::new(),
+        };
+        // Pro's static defaults would allow kds/warehouse, but the payload
+        // does not list them.
+        assert!(!sub.allows_workspace_type("kds"));
+        assert!(!sub.allows_workspace_type("warehouse"));
+        assert!(sub.allows_workspace_type("store-pos"));
+    }
+
+    #[test]
+    fn allows_workspace_type_grace_expired_ignores_stored_list() {
+        // A grace-expired subscription reverts to Free — the stored bundle
+        // entitlement no longer applies even though the JSON still lists kds.
+        let old = chrono::Utc::now() - chrono::Duration::days(30);
+        let sub = TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Plus,
+            status: "active".into(),
+            expires_at: Some(old.to_rfc3339()),
+            max_stores: 1,
+            max_pos_instances: 2,
+            allowed_types_json:
+                r#"["store-pos","restaurant-pos","admin","warehouse","inventory","kds"]"#.into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
+            updated_at: String::new(),
+        };
+        assert!(!sub.is_within_grace_period());
+        assert!(!sub.allows_workspace_type("kds"));
+        assert!(sub.allows_workspace_type("store-pos")); // Free default
+    }
+
+    #[test]
+    fn bootstrap_free_uses_free_defaults() {
+        let sub = TenantSubscription::bootstrap_free();
+        assert_eq!(sub.tier, SubscriptionTier::Free);
+        assert!(sub.allows_workspace_type("store-pos"));
+        assert!(!sub.allows_workspace_type("kds"));
+        assert!(!sub.allows_workspace_type("warehouse"));
+    }
 
     #[test]
     fn canceled_subscription_not_within_grace() {

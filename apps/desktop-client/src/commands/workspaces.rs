@@ -89,20 +89,20 @@ pub async fn list_workspaces_scoped(
     let session = state.resolve_session(&session_token)?; // ADR #5: Load subscription from global DB for entitlement filtering.
     // Also validates the system clock has not been rolled back. The user's
     // assignment (ADR #35 D5 / spec 0048) rides the same global-DB lock so
-    // the listing below can scope-filter post-login switches.
-    let (tier, assignment) = {
+    // the listing below can scope-filter post-login switches. The FULL
+    // subscription (not just its tier) is kept so entitlement filtering
+    // honors the signed payload's allowed_types_json — a Plus +
+    // restaurant_starter bundle lists kds even though the Plus tier
+    // statically excludes it (C3.2).
+    let (sub, assignment) = {
         let global_db = state.db.lock().await;
         TenantSubscription::validate_clock_rollback(&global_db)?;
-        let tier = TenantSubscription::load(&global_db, "default")?
-            .map(|sub| sub.effective_tier())
-            .unwrap_or_else(|| {
-                tracing::warn!(
-                    "no subscription found for tenant 'default', defaulting to Free tier"
-                );
-                oz_core::SubscriptionTier::Free
-            });
+        let sub = TenantSubscription::load(&global_db, "default")?.unwrap_or_else(|| {
+            tracing::warn!("no subscription found for tenant 'default', defaulting to Free tier");
+            TenantSubscription::bootstrap_free()
+        });
         let assignment = Store::new(&global_db).assignment_for_user(&session.user_id)?;
-        (tier, assignment)
+        (sub, assignment)
     };
     let conn = state
         .db_manager
@@ -116,7 +116,7 @@ pub async fn list_workspaces_scoped(
         &session.role_id,
         Some(&session.user_id),
         &session.store_id,
-        &tier,
+        &sub,
     )?;
     drop(db);
     // Scope-filter through the user's assignment (scoped-sessions follow-up):
@@ -190,8 +190,10 @@ pub async fn create_workspace_instance_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let effective = sub.effective_tier();
-    store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
+    // The signed payload's allowed_types_json is the workspace-type
+    // entitlement source (C3.2: Plus + restaurant_starter lists kds); the
+    // register-count limit still comes from the effective tier inside.
+    store.enforce_instance_quota(&sub, &req.type_key, &req.store_id)?;
     let _row = store.create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
         id: req.id.clone(),
         type_key: req.type_key.clone(),

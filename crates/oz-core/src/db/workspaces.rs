@@ -12,7 +12,7 @@ use rusqlite::params;
 use serde::Serialize;
 
 use crate::error::CoreError;
-use crate::subscription::{QuotaError, SubscriptionTier};
+use crate::subscription::{QuotaError, SubscriptionTier, TenantSubscription};
 
 use super::Store;
 
@@ -334,16 +334,19 @@ impl Store<'_> {
     /// filtering (ADR #5).
     ///
     /// Same resolution as `list_workspaces` but additionally filters
-    /// out instances whose `type_key` is not allowed by the given tier.
+    /// out instances whose `type_key` is not allowed by the subscription's
+    /// entitlement — the signed payload's `allowed_types_json`, falling
+    /// back to the tier's static defaults (C3.2: a Plus + restaurant_starter
+    /// bundle lists `kds`, so a bundle subscriber sees its KDS workspace).
     pub fn list_workspaces_with_entitlement(
         &self,
         role_id: &str,
         user_id: Option<&str>,
         store_id: &str,
-        tier: &SubscriptionTier,
+        sub: &TenantSubscription,
     ) -> Result<Vec<WorkspaceDto>, CoreError> {
         let mut results = self.list_workspaces_inner(role_id, user_id, store_id)?;
-        results.retain(|dto| tier.allows_workspace_type(&dto.type_key));
+        results.retain(|dto| sub.allows_workspace_type(&dto.type_key));
         Ok(results)
     }
 
@@ -584,31 +587,36 @@ impl Store<'_> {
     /// Enforce subscription quota before creating a workspace instance.
     ///
     /// Checks:
-    /// 1. Tier allows this workspace type
-    /// 2. Per-store register count is within tier limit
+    /// 1. Subscription entitlement allows this workspace type — the signed
+    ///    payload's `allowed_types_json` (C3.2: a Plus + restaurant_starter
+    ///    bundle lists `kds`), falling back to the tier's static defaults
+    /// 2. Per-store register count is within the effective tier's limit
     ///
     /// Called by Tauri commands before delegating to `create_workspace_instance`.
     pub fn enforce_instance_quota(
         &self,
-        tier: &SubscriptionTier,
+        sub: &TenantSubscription,
         type_key: &str,
         store_id: &str,
     ) -> Result<(), CoreError> {
-        // 1. Workspace type must be allowed by this tier.
-        if !tier.allows_workspace_type(type_key) {
+        let effective = sub.effective_tier();
+        // 1. Workspace type must be allowed by this subscription's
+        //    entitlement (the signed payload's quota block, not just the
+        //    static tier defaults).
+        if !sub.allows_workspace_type(type_key) {
             return Err(QuotaError::TypeNotAllowed {
-                tier: tier.name().into(),
+                tier: effective.name().into(),
                 type_key: type_key.into(),
             }
             .into());
         }
 
-        // 2. Per-store register limit.
-        if let Some(limit) = tier.max_pos_instances() {
+        // 2. Per-store register limit from the effective tier.
+        if let Some(limit) = effective.max_pos_instances() {
             let current = self.count_active_instances(store_id)?;
             if current >= limit {
                 return Err(QuotaError::RegisterLimit {
-                    tier: tier.name().into(),
+                    tier: effective.name().into(),
                     limit,
                     current,
                 }
@@ -1204,6 +1212,45 @@ mod tests {
         (store, "user-1".into())
     }
 
+    /// A subscription with the EMPTY quota block — workspace-type
+    /// entitlement falls back to the tier's static defaults, which is what
+    /// the pre-bundle entitlement tests exercised via a bare `SubscriptionTier`.
+    fn sub_for_tier(tier: SubscriptionTier) -> TenantSubscription {
+        TenantSubscription {
+            tenant_id: "default".into(),
+            tier,
+            status: "active".into(),
+            expires_at: None,
+            max_stores: 1,
+            max_pos_instances: 1,
+            allowed_types_json: "[]".into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    /// A Plus + restaurant_starter bundle subscription — the signed payload's
+    /// `allowed_types` lists `kds` even though the Plus TIER statically
+    /// excludes it (C3.2).
+    fn plus_bundle_sub() -> TenantSubscription {
+        TenantSubscription {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Plus,
+            status: "active".into(),
+            expires_at: None,
+            max_stores: 1,
+            max_pos_instances: 2,
+            allowed_types_json:
+                r#"["store-pos","restaurant-pos","admin","warehouse","inventory","kds"]"#.into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: String::new(),
+            api_key: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
     // ── Legacy tests (backward compatible) ────────────────────────────
 
     #[test]
@@ -1457,14 +1504,14 @@ mod tests {
     fn list_workspaces_with_entitlement_filters_by_tier() {
         let (store, _) = fresh();
         // Free tier only allows restaurant-pos, store-pos, admin
-        let free_tier = SubscriptionTier::Free;
+        let free = sub_for_tier(SubscriptionTier::Free);
         let dto = store
-            .list_workspaces_with_entitlement("role-owner", None, "default", &free_tier)
+            .list_workspaces_with_entitlement("role-owner", None, "default", &free)
             .unwrap();
         // KDS and inventory should be filtered out
         assert!(
             dto.iter()
-                .all(|w| free_tier.allows_workspace_type(&w.type_key))
+                .all(|w| SubscriptionTier::Free.allows_workspace_type(&w.type_key))
         );
         assert!(!dto.iter().any(|w| w.type_key == "kds"));
         assert!(!dto.iter().any(|w| w.type_key == "inventory"));
@@ -1482,7 +1529,7 @@ mod tests {
         // so the entitlement query checks 'warehouse' as the user-facing
         // stock-keeping workspace type (internal crate is still
         // `modules/inventory/` per §3 multi-crate carve-out rationale).
-        let premium = SubscriptionTier::Premium;
+        let premium = sub_for_tier(SubscriptionTier::Premium);
         let dto = store
             .list_workspaces_with_entitlement("role-owner", None, "default", &premium)
             .unwrap();
@@ -1495,10 +1542,27 @@ mod tests {
     #[test]
     fn list_workspaces_with_entitlement_enterprise_sees_all() {
         let (store, _) = fresh();
-        let enterprise = SubscriptionTier::Enterprise;
+        let enterprise = sub_for_tier(SubscriptionTier::Enterprise);
         let dto = store
             .list_workspaces_with_entitlement("role-owner", None, "default", &enterprise)
             .unwrap();
+        assert_eq!(dto.len(), 5);
+    }
+
+    #[test]
+    fn list_workspaces_with_entitlement_bundle_plus_sees_kds() {
+        let (store, _) = fresh();
+        // A Plus + restaurant_starter bundle subscriber's signed payload
+        // lists kds — the listing must show the KDS workspace even though
+        // the Plus TIER statically excludes it (C3.2).
+        let sub = plus_bundle_sub();
+        let dto = store
+            .list_workspaces_with_entitlement("role-owner", None, "default", &sub)
+            .unwrap();
+        assert!(
+            dto.iter().any(|w| w.type_key == "kds"),
+            "bundle subscriber must see the KDS workspace, got {dto:?}"
+        );
         assert_eq!(dto.len(), 5);
     }
 
@@ -1648,7 +1712,7 @@ mod tests {
     #[test]
     fn enforce_instance_quota_rejects_disallowed_type() {
         let (store, _) = fresh();
-        let free = SubscriptionTier::Free;
+        let free = sub_for_tier(SubscriptionTier::Free);
         let result = store.enforce_instance_quota(&free, "kds", "default");
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
@@ -1659,13 +1723,35 @@ mod tests {
     #[test]
     fn enforce_instance_quota_allows_type_but_fails_on_count() {
         let (store, _) = fresh();
-        let free = SubscriptionTier::Free;
+        let free = sub_for_tier(SubscriptionTier::Free);
         // Free tier allows restaurant-pos but we have 5 active instances.
         // Free tier allows 1 max, so this should fail on count, not type.
         let result = store.enforce_instance_quota(&free, "restaurant-pos", "default");
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("1 registers"));
+    }
+
+    #[test]
+    fn enforce_instance_quota_bundle_plus_allows_kds() {
+        let (store, _) = fresh();
+        // A fresh store id has zero active instances, so the type check is
+        // the only gate — kds must pass for the bundle even at Plus tier.
+        let sub = plus_bundle_sub();
+        assert!(
+            store
+                .enforce_instance_quota(&sub, "kds", "fresh-store")
+                .is_ok(),
+            "Plus + restaurant_starter must be able to create a kds workspace"
+        );
+        // The same type stays rejected for plain Plus (empty block → tier
+        // defaults), proving the payload is what widened the entitlement.
+        let plain = sub_for_tier(SubscriptionTier::Plus);
+        let result = store.enforce_instance_quota(&plain, "kds", "fresh-store");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("kds"));
+        assert!(err.contains("Plus"));
     }
 
     // ── Auto-Recovery & Suspension tests (ADR #5 Phase 3b/3c) ───────
