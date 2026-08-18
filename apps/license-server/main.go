@@ -199,6 +199,10 @@ func main() {
 		if err := ensureTrialClaims(app); err != nil {
 			return err
 		}
+		// C3.3: pause subscription fields
+		if err := ensurePauseFields(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -217,6 +221,9 @@ func main() {
 		// credential out of URLs (which would otherwise leak it to webserver
 		// access logs, CDN logs, browser history, and Referer headers).
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
+		// C3.3: Pause/resume subscription endpoints
+		se.Router.POST("/api/v1/license/pause", handlePause(app))
+		se.Router.POST("/api/v1/license/resume", handleResume(app))
 		// Public website support form → Discord channel (see contact.go).
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		// Website tenant-email OTP auth + account dashboard (see web_otp.go).
@@ -583,6 +590,64 @@ func ensureTrialClaims(app core.App) error {
 		return fmt.Errorf("failed to create trial_claims collection: %w", err)
 	}
 	log.Println("migrated: created trial_claims collection (lightweight repeat-email detector)")
+	return nil
+}
+
+// ensurePauseFields adds the paused status value and paused_at/paused_until
+// date fields to the subscriptions collection for existing deployments that
+// predate the pause-subscription feature (C3.3). Fresh boots get these from
+// the embedded pb_schema.json.
+func ensurePauseFields(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("subscriptions")
+	if err != nil {
+		return fmt.Errorf("subscriptions collection not found: %w", err)
+	}
+
+	// Add "paused" to the status select if not present
+	statusField, ok := collection.Fields.GetByName("status").(*core.SelectField)
+	if ok {
+		hasPaused := false
+		for _, v := range statusField.Values {
+			if v == "paused" {
+				hasPaused = true
+				break
+			}
+		}
+		if !hasPaused {
+			statusField.Values = append(statusField.Values, "paused")
+			if err := app.Save(collection); err != nil {
+				return fmt.Errorf("failed to add paused status to subscriptions: %w", err)
+			}
+			log.Println("migrated: added paused status to subscriptions.status select")
+		}
+	}
+
+	// Add paused_at field if not present
+	if collection.Fields.GetByName("paused_at") == nil {
+		collection.Fields.Add(&core.DateField{
+			Name:     "paused_at",
+			Required: false,
+			Help:     "When the subscription was paused (C3.3).",
+		})
+		if err := app.Save(collection); err != nil {
+			return fmt.Errorf("failed to add paused_at to subscriptions: %w", err)
+		}
+		log.Println("migrated: added paused_at field to subscriptions")
+	}
+
+	// Add paused_until field if not present
+	if collection.Fields.GetByName("paused_until") == nil {
+		collection.Fields.Add(&core.DateField{
+			Name:     "paused_until",
+			Required: false,
+			Help:     "When the pause expires and billing resumes (C3.3).",
+		})
+		if err := app.Save(collection); err != nil {
+			return fmt.Errorf("failed to add paused_until to subscriptions: %w", err)
+		}
+		log.Println("migrated: added paused_until field to subscriptions")
+	}
+
 	return nil
 }
 

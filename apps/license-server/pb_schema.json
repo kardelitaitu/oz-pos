@@ -520,7 +520,8 @@
           "active",
           "expired",
           "grace_period",
-          "revoked"
+          "revoked",
+          "paused"
         ]
       },
       {
@@ -552,6 +553,30 @@
         "hidden": false,
         "id": "date5077564346",
         "name": "grace_until",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "When the subscription was paused (C3.3).",
+        "hidden": false,
+        "id": "date_paused_at_01",
+        "name": "paused_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "When the pause expires and billing resumes (C3.3).",
+        "hidden": false,
+        "id": "date_paused_until_01",
+        "name": "paused_until",
         "presentable": false,
         "required": false,
         "system": false,

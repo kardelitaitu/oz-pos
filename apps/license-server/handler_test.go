@@ -101,10 +101,12 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.NumberField{Name: "max_stores"},
 		&core.NumberField{Name: "max_pos_instances"},
 		&core.JSONField{Name: "allowed_types"},
-		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
+		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked", "paused"}},
 		&core.DateField{Name: "starts_at", Required: true},
 		&core.DateField{Name: "expires_at", Required: true},
 		&core.DateField{Name: "grace_until"},
+		&core.DateField{Name: "paused_at"},
+		&core.DateField{Name: "paused_until"},
 		&core.TextField{Name: "signed_payload", Required: true},
 		&core.TextField{Name: "signature", Required: true},
 		&core.TextField{Name: "paddle_sub_id"},
@@ -249,6 +251,9 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		// Midtrans webhook + Snap checkout (C3.1) — mirror production boot.
 		se.Router.POST(midtransWebhookPath, handleMidtransWebhook(app))
 		se.Router.POST(midtransSnapPath, handleMidtransSnap(app))
+		// C3.3: Pause/resume subscription endpoints.
+		se.Router.POST("/api/v1/license/pause", handlePause(app))
+		se.Router.POST("/api/v1/license/resume", handleResume(app))
 		return se.Next()
 	})
 }
