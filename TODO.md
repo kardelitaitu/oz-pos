@@ -62,22 +62,42 @@ Current `kds.spec.ts` covers basic render + single advance. Missing:
 
 **Test Results:** Passes on both `desktop` and `tablet` projects
 
-### B3 — E2E CI Workflow for PRs
+### [x] B3 — E2E CI Workflow for PRs
 
 **Goal:** Add a GitHub Actions workflow that runs the e2e suite on PRs targeting `main`.
 
-**Steps:**
-1. Create `.github/workflows/e2e-pr.yml`
-2. Steps: Install Node → Install Playwright browsers → Build Docker image → Start Vite → Run Playwright → Upload traces on failure
-3. Make it non-blocking (informational) initially, then require after proving stable
+**Status:** ✅ Complete (2026-08-17)
 
-### B4 — Test the E2E Runner Itself
+**Implementation:**
+- ✅ `.github/workflows/e2e-pr.yml` — runs on PRs targeting `main` + manual dispatch
+- ✅ 2 project shards (desktop / tablet) for fast PR feedback
+- ✅ Uses `--changed-only` flag to skip unchanged specs
+- ✅ Fetches full git history for `git merge-base` comparison
+- ✅ Uploads Playwright traces on failure
+- ✅ Non-blocking initially (informational)
+
+### [x] B4 — Test the E2E Runner Itself
 
 **Goal:** Write a vitest unit test for `scripts/run-e2e.mjs` that mocks `execSync` and `spawn`, verifying Docker detection, Vite startup, and cleanup logic.
 
-### B5 — `--changed-only` Mode
+**Status:** ✅ Complete (2026-08-17)
+
+**Implementation:**
+- ✅ `scripts/__tests__/run-e2e.test.mjs` — 9.6KB test file
+- ✅ Mocks `execSync` and `spawn` for isolated testing
+- ✅ Verifies Docker detection, Vite startup, and cleanup logic
+
+### [x] B5 — `--changed-only` Mode
 
 **Goal:** Add a `--changed-only` flag to `run-e2e.mjs` that skips Docker startup when only UI spec files have changed (detected via `git diff --name-only`).
+
+**Status:** ✅ Complete (2026-08-17)
+
+**Implementation:**
+- ✅ `scripts/run-e2e.mjs` line 38: `const CHANGED_ONLY = args.includes('--changed-only')`
+- ✅ Uses `git merge-base` to detect changed spec files
+- ✅ Skips Docker startup when only UI specs changed
+- ✅ Integrated into `.github/workflows/e2e-pr.yml` (auto-enabled for PRs)
 
 ---
 
