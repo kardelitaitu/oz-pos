@@ -488,7 +488,7 @@ Run this in **sandbox first** (ADR #39 verification). Tick every box before cons
 
 1. [ ] Open `https://<site>/id/pricing`, keep the **yearly** default, click **Choose Plus**.
 2. [ ] No session → redirected to `/id/login` (register-first — the webhook needs a tenant email). Verify a throwaway email + OTP; then click **Choose Plus** again.
-3. [ ] In DevTools → Network, the button POSTs `…/api/v1/midtrans/snap` with `{tier_key:"plus", period:"yearly"}` and answers `{token, redirect_url, order_id, amount:"500000"}` — **the amount must equal the price map**. Any other amount (or a 400 `not mapped`) means the map is wrong — stop.
+3. [ ] In DevTools → Network, the button POSTs `…/api/v1/midtrans/snap` with `{tier_key:"plus", period:"yearly"}` and answers `{token, redirect_url, order_id, amount:"500000"}` — **the amount must equal the price map**. Any other amount (or a 400 `not mapped`) means the map is wrong — stop. (Prefer shell? The same calls, with the exact expected JSON, are in §11.8.)
 4. [ ] The Snap overlay opens (QRIS / VA / e-wallet / card). Pay with the sandbox QRIS — scan the QRIS image with the Midtrans sandbox mobile app, or use the sandbox dashboard's simulate-payment flow; the transaction settles within seconds.
 5. [ ] `snap.pay`'s `onSuccess` fires; the webhook answers **200**. In the admin UI (`/_/`): a **tenant** was upserted by the checkout email, and a **license_keys** record exists with `key` = `OZ-PLUS-…`, `payment_provider=midtrans`, `midtrans_sub_id` set, and the plus quota block (max_stores=1, max_pos_instances=2, allowed_types without `kds`).
 6. [ ] The **receipt email** with the license key lands at the buyer address (requires SMTP from §7.1 step 5; failure is non-fatal and logged).
@@ -508,6 +508,94 @@ Run this in **sandbox first** (ADR #39 verification). Tick every box before cons
 
 - [ ] Flip `MIDTRANS_SERVER_KEY` to the production `Mid-server-…` key and unset `MIDTRANS_SNAP_URL` (production default). Redeploy, confirm the boot log, then run steps 1–7 once against production with a real small charge.
 - [ ] Remove the sandbox test tenant/keys from the admin UI (or keep a sandbox service for future tests).
+
+### 11.8 Verify the checkout leg with curl (no browser)
+
+The browser walk in §11.7 step 3 is the happy path; this section reproduces the exact same calls with curl so ops can verify the snap leg from a shell. The flow is **register-first** — the webhook needs a tenant email — so the session token comes from the same OTP login the website uses. No `Origin` header is needed: the CORS allowlist only governs browsers (`webOriginAllowed` passes for header-less callers).
+
+**Step 1 — session token (register-or-login).** The 6-digit code arrives by email; the response is the same whether the account existed or not (no enumeration):
+
+```bash
+curl -X POST https://license.oz-pos.com/api/v1/web/request-otp \
+  -H "Content-Type: application/json" \
+  -d '{"email":"buyer@test.com"}'
+```
+
+**Expected 200:** `{"status":"ok"}`
+
+```bash
+# 1b. Exchange the emailed code for a session token
+curl -X POST https://license.oz-pos.com/api/v1/web/verify-otp \
+  -H "Content-Type: application/json" \
+  -d '{"email":"buyer@test.com","code":"123456"}'
+```
+
+**Expected 200:** `{"token":"<session token>","expires_at":"…","tenant":{…},"license":{…},"subscription":{…}}` — capture `token`; it is the Bearer credential for the snap call below.
+
+**Step 2 — create the Snap charge (the checkout leg):**
+
+```bash
+curl -X POST https://license.oz-pos.com/api/v1/midtrans/snap \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token from step 1b>" \
+  -d '{"tier_key":"plus","period":"yearly"}'
+```
+
+**Expected 200:**
+
+```json
+{
+  "token": "6f9d2c11-…-snap-token",
+  "redirect_url": "https://app.midtrans.com/snap/v2/vtweb/…",
+  "order_id": "OZ-PLUS-1755486000-1a2b3c",
+  "amount": "500000"
+}
+```
+
+**Cross-check every run:** `order_id` matches `OZ-<TIER>-<unix>-<hex>`; `amount` equals the §2/§7.1 price-map entry (Rp 500.000 for `plus:year`). Any other amount — or a `400 {"error":"tier … is not mapped in MIDTRANS_PRICE_TIERS"}` — means the map is wrong: **stop** (the endpoint refuses to mint an unbilled tier).
+
+**Bundle variant** (only if the bundle entry is in the map, C3.2):
+
+```bash
+curl -X POST https://license.oz-pos.com/api/v1/midtrans/snap \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"tier_key":"plus","period":"yearly","bundle":"restaurant_starter"}'
+```
+
+**Expected 200:** same shape with `"amount":"750000"` — the bundle amount, so the webhook mints `kds` in `allowed_types` (custom_field4 rides the charge).
+
+**Failure modes (curl the same endpoint):**
+
+| Call | Expected |
+|---|---|
+| No/malformed `Authorization` | `401 {"error":"missing or invalid session token"}`
+| Expired/unknown session | `401 {"error":"invalid or expired session"}`
+| Tier/period not in the map | `400 {"error":"tier "pro" (weekly, bundle=) is not mapped in MIDTRANS_PRICE_TIERS"}`
+| Disallowed `Origin` header (browser only) | `403 {"error":"origin not allowed"}`
+| Midtrans unreachable / wrong server key | `502 {"error":"checkout provider error"}` + server log `midtrans snap: token creation failed`
+
+**Step 3 (optional) — the raw Midtrans leg**, to prove the server key + Snap account independently of the app (this is byte-for-byte what `createMidtransSnapHTTP` sends):
+
+```bash
+curl -X POST https://app.sandbox.midtrans.com/snap/v1/transactions \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -u "SB-Mid-server-…:" \
+  -d '{
+    "transaction_details": {"order_id": "OZ-PLUS-1755486000-1a2b3c", "gross_amount": "500000"},
+    "item_details": [{"id": "plus-year", "price": "500000", "quantity": 1, "name": "OZ-POS PLUS (year)"}],
+    "customer_details": {"email": "buyer@test.com"},
+    "custom_field1": "plus",
+    "custom_field2": "buyer@test.com",
+    "custom_field3": "year",
+    "custom_field4": "",
+    "enabled_payments": ["qris", "bank_transfer", "echannel", "gopay", "shopeepay", "credit_card"],
+    "credit_card": {"secure": true}
+  }'
+```
+
+**Expected 201:** `{"token":"…","redirect_url":"…"}` (use `https://app.midtrans.com` for production; the base must match the `MIDTRANS_SERVER_KEY` environment — sandbox key + sandbox URL, production key + production URL). A 401 here means the server key is wrong or belongs to a different environment.
 
 ---
 
