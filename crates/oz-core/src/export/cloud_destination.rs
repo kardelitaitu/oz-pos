@@ -603,4 +603,6 @@ fn sign_rsa256(message: &str, private_key_pem: &str) -> Result<Vec<u8>, String> 
     Ok(signature.to_vec())
 }
 
-#[cfg(test)] #[path = "cloud_destination_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "cloud_destination_tests.rs"]
+mod tests;

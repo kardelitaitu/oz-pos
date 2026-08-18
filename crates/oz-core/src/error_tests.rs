@@ -1,4 +1,3 @@
-
 use super::*;
 
 #[test]
@@ -217,8 +216,7 @@ fn from_currency_error_not_found_to_core_not_found() {
 
 #[test]
 fn from_currency_error_db_to_core_db() {
-    let currency_err =
-        modules_currency::CurrencyError::Db(rusqlite::Error::QueryReturnedNoRows);
+    let currency_err = modules_currency::CurrencyError::Db(rusqlite::Error::QueryReturnedNoRows);
     let core_err: CoreError = currency_err.into();
     match core_err {
         CoreError::Db(ref e) => {

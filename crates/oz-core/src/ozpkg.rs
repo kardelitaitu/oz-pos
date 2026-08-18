@@ -258,4 +258,6 @@ pub fn import_ozpkg(data: &[u8], password: &str) -> Result<(OzpkgHeader, OzpkgPa
     Ok((header, payload))
 }
 
-#[cfg(test)] #[path = "ozpkg_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "ozpkg_tests.rs"]
+mod tests;

@@ -54,4 +54,6 @@ pub struct BundleWithItems {
     pub items: Vec<BundleItem>,
 }
 
-#[cfg(test)] #[path = "product_bundle_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "product_bundle_tests.rs"]
+mod tests;

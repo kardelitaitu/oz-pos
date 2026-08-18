@@ -522,4 +522,6 @@ fn format_amount(minor: i64, currency: &str) -> String {
     }
 }
 
-#[cfg(test)] #[path = "email_report_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "email_report_tests.rs"]
+mod tests;

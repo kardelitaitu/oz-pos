@@ -1332,4 +1332,6 @@ fn upsert_users(tx: &rusqlite::Transaction<'_>, rows: &[SnapshotUser]) -> Result
     Ok(count)
 }
 
-#[cfg(test)] #[path = "sync_client_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "sync_client_tests.rs"]
+mod tests;

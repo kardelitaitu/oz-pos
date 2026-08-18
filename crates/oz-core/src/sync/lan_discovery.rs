@@ -159,4 +159,6 @@ impl LanDiscoverer {
     }
 }
 
-#[cfg(test)] #[path = "lan_discovery_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "lan_discovery_tests.rs"]
+mod tests;

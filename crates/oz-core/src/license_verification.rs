@@ -600,4 +600,6 @@ pub async fn resume_subscription(api_key: &str) -> Result<PauseResumeResponse, C
     })
 }
 
-#[cfg(test)] #[path = "license_verification_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "license_verification_tests.rs"]
+mod tests;

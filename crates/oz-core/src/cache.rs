@@ -392,7 +392,6 @@ pub mod redis_cache {
             let _: Result<(), _> = redis::cmd("PUBLISH").arg(key).arg(&msg).query(&mut *conn);
         }
     }
-
 }
 
 /// Create a cache, attempting Redis first and falling back to no-op.
@@ -413,4 +412,6 @@ pub fn create_cache(redis_url: &str, ttl_seconds: u64) -> Arc<dyn Cache> {
     Arc::new(NoopCache)
 }
 
-#[cfg(test)] #[path = "cache_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "cache_tests.rs"]
+mod tests;

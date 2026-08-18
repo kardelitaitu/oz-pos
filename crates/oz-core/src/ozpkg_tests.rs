@@ -1,4 +1,3 @@
-
 use super::*;
 
 #[test]
@@ -142,8 +141,7 @@ fn empty_password_allowed() {
         settings: None,
     };
 
-    let exported =
-        export_ozpkg("", "Store", "0.0.1", vec![], HashMap::new(), &payload).unwrap();
+    let exported = export_ozpkg("", "Store", "0.0.1", vec![], HashMap::new(), &payload).unwrap();
 
     let result = import_ozpkg(&exported, "");
     assert!(

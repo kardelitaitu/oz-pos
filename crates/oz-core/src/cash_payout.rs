@@ -35,4 +35,6 @@ impl CashPayout {
     }
 }
 
-#[cfg(test)] #[path = "cash_payout_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "cash_payout_tests.rs"]
+mod tests;

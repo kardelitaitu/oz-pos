@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// Create a pre-migrated in-memory connection for unit tests.

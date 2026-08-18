@@ -205,4 +205,6 @@ fn base64_decode(encoded: &str) -> Result<Vec<u8>, CoreError> {
         .map_err(|e| CoreError::Internal(format!("failed to decode base64 ciphertext: {e}")))
 }
 
-#[cfg(test)] #[path = "crypto_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "crypto_tests.rs"]
+mod tests;

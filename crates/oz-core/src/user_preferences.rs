@@ -58,4 +58,6 @@ impl UserPreferences {
     }
 }
 
-#[cfg(test)] #[path = "user_preferences_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "user_preferences_tests.rs"]
+mod tests;

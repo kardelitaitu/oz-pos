@@ -30,4 +30,6 @@ impl TerminalProfile {
     pub const CUSTOMER_DISPLAY: &'static str = "customer_display";
 }
 
-#[cfg(test)] #[path = "terminal_profile_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "terminal_profile_tests.rs"]
+mod tests;

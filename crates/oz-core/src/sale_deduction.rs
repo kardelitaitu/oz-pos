@@ -184,4 +184,6 @@ pub fn allocate_stock_in_route_order(
     (remaining == 0).then_some(allocations)
 }
 
-#[cfg(test)] #[path = "sale_deduction_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "sale_deduction_tests.rs"]
+mod tests;

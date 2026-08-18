@@ -162,4 +162,6 @@ impl OfflineQueueItem {
     }
 }
 
-#[cfg(test)] #[path = "offline_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "offline_tests.rs"]
+mod tests;

@@ -127,4 +127,6 @@ impl PurchaseOrderLine {
     }
 }
 
-#[cfg(test)] #[path = "purchase_order_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "purchase_order_tests.rs"]
+mod tests;

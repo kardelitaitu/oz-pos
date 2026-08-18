@@ -62,4 +62,6 @@ pub struct StockTransferLine {
     pub received_qty: i64,
 }
 
-#[cfg(test)] #[path = "stock_transfer_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "stock_transfer_tests.rs"]
+mod tests;

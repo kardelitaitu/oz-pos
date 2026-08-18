@@ -535,4 +535,6 @@ pub fn resolve_location_chain_for_sku(
     Ok(results)
 }
 
-#[cfg(test)] #[path = "location_resolver_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "location_resolver_tests.rs"]
+mod tests;

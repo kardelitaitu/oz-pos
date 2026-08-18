@@ -73,4 +73,6 @@ impl Supplier {
     }
 }
 
-#[cfg(test)] #[path = "supplier_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "supplier_tests.rs"]
+mod tests;

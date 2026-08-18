@@ -115,4 +115,6 @@ impl std::fmt::Debug for LoginRateLimiter {
     }
 }
 
-#[cfg(test)] #[path = "rate_limiter_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "rate_limiter_tests.rs"]
+mod tests;

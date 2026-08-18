@@ -749,4 +749,6 @@ impl Store<'_> {
     }
 }
 
-#[cfg(test)] #[path = "mod_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;

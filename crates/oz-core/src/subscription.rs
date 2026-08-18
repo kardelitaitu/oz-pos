@@ -1585,7 +1585,8 @@ mod tests {
 
     #[test]
     fn addons_multiple_addons() {
-        let payload = r#"{"addons":["advanced_analytics","priority_support","extra_storage","custom_hal"]}"#;
+        let payload =
+            r#"{"addons":["advanced_analytics","priority_support","extra_storage","custom_hal"]}"#;
         let sub = sub_with_payload(payload);
         assert_eq!(sub.addons().len(), 4);
         assert!(sub.has_addon("advanced_analytics"));

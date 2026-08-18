@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn day(days_ago: i64, count: i64) -> DayCount {

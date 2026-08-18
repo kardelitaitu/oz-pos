@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::migrations;
 use crate::settings::Settings;
@@ -652,9 +651,8 @@ fn format_expiry_less_than_a_minute() {
 fn format_expiry_ninety_minutes() {
     // Small buffer (+5s) prevents sub-second drift from pushing the
     // duration below 60 minutes (which would display as "59 minutes").
-    let ts =
-        (chrono::Utc::now() + chrono::Duration::minutes(90) + chrono::Duration::seconds(5))
-            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let ts = (chrono::Utc::now() + chrono::Duration::minutes(90) + chrono::Duration::seconds(5))
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     assert_eq!(format_expiry(&ts), "expires in 1 hour");
 }
 

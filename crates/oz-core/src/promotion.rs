@@ -94,4 +94,6 @@ pub struct PromotionApplication {
     pub created_at: String,
 }
 
-#[cfg(test)] #[path = "promotion_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "promotion_tests.rs"]
+mod tests;

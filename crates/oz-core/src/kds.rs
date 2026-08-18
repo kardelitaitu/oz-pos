@@ -202,4 +202,6 @@ pub struct UpdateKdsOrderItemsInput {
     pub line_items: Option<Vec<CreateKdsLineItemInput>>,
 }
 
-#[cfg(test)] #[path = "kds_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "kds_tests.rs"]
+mod tests;

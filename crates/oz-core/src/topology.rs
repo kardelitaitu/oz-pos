@@ -681,4 +681,6 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
     Ok(())
 }
 
-#[cfg(test)] #[path = "topology_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "topology_tests.rs"]
+mod tests;

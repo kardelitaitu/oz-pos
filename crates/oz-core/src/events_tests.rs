@@ -1,4 +1,3 @@
-
 use super::*;
 
 #[test]
@@ -230,9 +229,7 @@ fn settings_updated_rejects_invalid_json() {
     assert!(serde_json::from_str::<SettingsUpdated>("{}").is_err());
     assert!(serde_json::from_str::<SettingsUpdated>("\"not an object\"").is_err());
     assert!(
-        serde_json::from_str::<SettingsUpdated>(
-            "{\"changed_keys\":[1,2,3],\"terminal_id\":\"t\"}"
-        )
-        .is_err()
+        serde_json::from_str::<SettingsUpdated>("{\"changed_keys\":[1,2,3],\"terminal_id\":\"t\"}")
+            .is_err()
     );
 }

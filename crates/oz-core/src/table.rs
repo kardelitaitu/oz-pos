@@ -79,4 +79,6 @@ pub struct Table {
     pub updated_at: String,
 }
 
-#[cfg(test)] #[path = "table_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "table_tests.rs"]
+mod tests;

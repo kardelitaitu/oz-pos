@@ -684,7 +684,9 @@ impl FeatureGuardRegistry {
     }
 }
 
-#[cfg(test)] #[path = "features_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "features_tests.rs"]
+mod tests;
 
 #[test]
 fn kds_guard_allows_other_features() {

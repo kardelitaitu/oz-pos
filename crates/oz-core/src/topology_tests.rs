@@ -1,4 +1,3 @@
-
 use super::*;
 use serde_json::json;
 
@@ -90,8 +89,7 @@ fn invalid_purpose_key_is_reported() {
         ws,
     ];
     let wires = vec![semantic_location_wire("wire-1", "ws-1")];
-    let err =
-        validate_semantic_json(&nodes, &wires).expect_err("dining-room needs restaurant-pos");
+    let err = validate_semantic_json(&nodes, &wires).expect_err("dining-room needs restaurant-pos");
     assert_eq!(validation_code(&err), "invalid-purpose");
 }
 

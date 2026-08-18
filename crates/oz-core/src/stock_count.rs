@@ -144,4 +144,6 @@ pub struct StockAdjustment {
     pub created_at: String,
 }
 
-#[cfg(test)] #[path = "stock_count_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "stock_count_tests.rs"]
+mod tests;

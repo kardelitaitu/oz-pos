@@ -75,4 +75,6 @@ impl AuditEntry {
     }
 }
 
-#[cfg(test)] #[path = "audit_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "audit_tests.rs"]
+mod tests;

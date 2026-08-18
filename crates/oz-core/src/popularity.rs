@@ -257,4 +257,6 @@ pub fn score_from_raw(
     WEIGHT_SALES * s + WEIGHT_SEARCH * q + WEIGHT_EDITS * e
 }
 
-#[cfg(test)] #[path = "popularity_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "popularity_tests.rs"]
+mod tests;

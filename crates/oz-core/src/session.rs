@@ -96,4 +96,6 @@ impl SessionContext {
     }
 }
 
-#[cfg(test)] #[path = "session_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "session_tests.rs"]
+mod tests;

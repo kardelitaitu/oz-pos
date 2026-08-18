@@ -24,4 +24,6 @@ pub struct TerminalFeatureOverride {
     pub updated_at: String,
 }
 
-#[cfg(test)] #[path = "terminal_override_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "terminal_override_tests.rs"]
+mod tests;

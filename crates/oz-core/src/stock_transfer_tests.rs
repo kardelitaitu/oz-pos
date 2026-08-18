@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn sample_transfer() -> StockTransfer {

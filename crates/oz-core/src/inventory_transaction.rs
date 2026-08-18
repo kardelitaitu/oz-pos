@@ -172,4 +172,6 @@ pub struct InventoryTransactionLine {
     pub sort_order: i64,
 }
 
-#[cfg(test)] #[path = "inventory_transaction_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "inventory_transaction_tests.rs"]
+mod tests;

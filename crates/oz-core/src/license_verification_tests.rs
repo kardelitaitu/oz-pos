@@ -1,4 +1,3 @@
-
 use super::*;
 use rsa::RsaPrivateKey;
 use rsa::pkcs8::{DecodePublicKey, EncodePublicKey};
@@ -7,8 +6,7 @@ use rsa::signature::SignatureEncoding;
 /// Generate a test RSA key pair and return (private, public_pem).
 fn generate_test_keypair() -> (RsaPrivateKey, String) {
     let mut rng = rand::thread_rng();
-    let private_key =
-        RsaPrivateKey::new(&mut rng, 2048).expect("failed to generate test RSA key");
+    let private_key = RsaPrivateKey::new(&mut rng, 2048).expect("failed to generate test RSA key");
     let public_pem = private_key
         .to_public_key()
         .to_public_key_pem(rsa::pkcs8::LineEnding::LF)

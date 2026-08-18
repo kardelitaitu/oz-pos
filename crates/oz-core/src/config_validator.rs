@@ -220,4 +220,6 @@ fn truncate_prefix(s: &str, max_len: usize) -> String {
     }
 }
 
-#[cfg(test)] #[path = "config_validator_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "config_validator_tests.rs"]
+mod tests;

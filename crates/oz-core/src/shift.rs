@@ -114,4 +114,6 @@ impl Shift {
     }
 }
 
-#[cfg(test)] #[path = "shift_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "shift_tests.rs"]
+mod tests;

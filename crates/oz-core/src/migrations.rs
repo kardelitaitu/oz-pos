@@ -157,4 +157,6 @@ pub fn fresh_db() -> rusqlite::Connection {
     fresh
 }
 
-#[cfg(test)] #[path = "migrations_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "migrations_tests.rs"]
+mod tests;

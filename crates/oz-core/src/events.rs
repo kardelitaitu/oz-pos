@@ -70,4 +70,6 @@ impl DomainEvent for SettingsUpdated {
     }
 }
 
-#[cfg(test)] #[path = "events_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "events_tests.rs"]
+mod tests;

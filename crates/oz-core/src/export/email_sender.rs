@@ -329,4 +329,6 @@ pub fn resolve_now_in_timezone(tz_name: &str) -> chrono::DateTime<chrono::FixedO
     }
 }
 
-#[cfg(test)] #[path = "email_sender_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "email_sender_tests.rs"]
+mod tests;

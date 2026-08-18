@@ -73,4 +73,6 @@ pub struct PaymentSplitArg {
     pub idempotency_key: Option<String>,
 }
 
-#[cfg(test)] #[path = "payment_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "payment_tests.rs"]
+mod tests;

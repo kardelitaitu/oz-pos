@@ -27,4 +27,6 @@ pub struct RecipeItem {
     pub unit: String,
 }
 
-#[cfg(test)] #[path = "recipe_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "recipe_tests.rs"]
+mod tests;
