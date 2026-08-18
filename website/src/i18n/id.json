@@ -325,6 +325,8 @@
       "tagline": "KDS, analitik, dan multi-terminal — bekerja penuh offline.",
       "tierAnchor": "pro",
       "ctaPrimary": "Lihat paket Pro",
+      "leadWithTrial": true,
+      "trialCta": "Mulai trial Pro 14 hari",
       "features": [
         { "title": "Layar dapur (KDS)", "description": "Pesanan langsung masuk ke layar dapur secara real-time — tidak perlu berteriak ke dapur." },
         { "title": "Analitik jam sibuk", "description": "Lihat jam berapa penjualan ramai, produk apa yang laris, dan di mana Anda bisa mengurangi pemborosan." },

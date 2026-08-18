@@ -28,6 +28,16 @@ interface VerticalContent {
   ctaPrimary: string;
   features: VerticalFeature[];
   benefits: string[];
+  /**
+   * Lead with the trial CTA instead of the plan-browsing link (§5). Kafe is
+   * the one vertical whose entry hook is the 14-day Pro trial — the
+   * restaurant/cafe segment gets Pro on trial activation (§4, server
+   * trialSegmentation) — so the primary button funnels into the download
+   * page with ?v=kafe and the pricing deep-link demotes to secondary.
+   */
+  leadWithTrial?: boolean;
+  /** Label for the trial CTA when leadWithTrial is set. */
+  trialCta?: string;
 }
 
 interface VerticalSection {
@@ -55,14 +65,29 @@ const v = section[vertical];
 const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
 const downloadHref = getRelativeLocaleUrl(locale, 'download');
 const tierHref = `${pricingHref}#${v.tierAnchor}`;
-// Bundle purchase path (C3.2): deep-links to the Plus card with the
-// Restaurant Starter bundle pre-enabled — the pricing grid reads
-// `?bundle=restaurant_starter` and the checkout carries it into the
-// webhook (custom_field4 / custom_data.bundle).
 // Segmented-trial passthrough (C2.1, subscription-tiers.md §4): carry the
 // vertical onto the download page (?v=kafe etc.) so the download page can
 // show the matching trial offer and the desktop app's onboarding can detect
 // it (the POS normalizes kafe/restoran → restaurant = 14-day Pro trial).
+const trialHref = `${downloadHref}?v=${vertical}`;
+// CTA leadership (§5): kafe leads with its Pro trial CTA — the restaurant/
+// cafe segment is the one that mints a 14-day Pro trial (§4), so the
+// primary button funnels into the trial download (?v=kafe) instead of a
+// plan-browsing link. All other verticals lead with the natural-tier
+// pricing deep-link and demote the download CTA to secondary.
+const leadsWithTrial = Boolean(v.leadWithTrial);
+const primaryCta = {
+  href: leadsWithTrial ? trialHref : tierHref,
+  label: leadsWithTrial ? (v.trialCta ?? section.ctaSecondary) : v.ctaPrimary,
+};
+const secondaryCta = {
+  href: leadsWithTrial ? tierHref : trialHref,
+  label: leadsWithTrial ? v.ctaPrimary : section.ctaSecondary,
+};
+// Bundle purchase path (C3.2): deep-links to the Plus card with the
+// Restaurant Starter bundle pre-enabled — the pricing grid reads
+// `?bundle=restaurant_starter` and the checkout carries it into the
+// webhook (custom_field4 / custom_data.bundle).
 ---
 
 <section class="mx-auto max-w-6xl px-4 py-16">
@@ -72,16 +97,16 @@ const tierHref = `${pricingHref}#${v.tierAnchor}`;
     <p class="mt-4 text-lg text-muted">{v.tagline}</p>
     <div class="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
       <a
-        href={tierHref}
+        href={primaryCta.href}
         class="rounded-md bg-accent px-6 py-3 text-base font-semibold text-black transition hover:opacity-90"
       >
-        {v.ctaPrimary}
+        {primaryCta.label}
       </a>
       <a
-        href={`${downloadHref}?v=${vertical}`}
+        href={secondaryCta.href}
         class="rounded-md border border-ink/15 px-6 py-3 text-base font-semibold text-ink transition hover:bg-ink/5"
       >
-        {section.ctaSecondary}
+        {secondaryCta.label}
       </a>
       {
         showBundle && (

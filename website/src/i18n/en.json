@@ -325,6 +325,8 @@
       "tagline": "KDS, analytics, and multi-terminal — working fully offline.",
       "tierAnchor": "pro",
       "ctaPrimary": "See the Pro plan",
+      "leadWithTrial": true,
+      "trialCta": "Start your 14-day Pro trial",
       "features": [
         { "title": "Kitchen display (KDS)", "description": "Orders land on the kitchen screen in real time — no more shouting over the grinder." },
         { "title": "Peak-hours analytics", "description": "See which hours sell, what moves, and where you can cut waste." },

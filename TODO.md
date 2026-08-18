@@ -435,6 +435,13 @@ For each trigger:
 > pricing page (`#plus`/`#pro`/`#premium`); the download CTA also carries the
 > `?v=<vertical>` signup param that C2.1's onboarding flow reads (implemented 2026-08-18).
 > Homepage "For your business" strip + footer "Jenis bisnis" column link to the pages.
+>
+> **§5 audit fix** (2026-08-18): `/untuk-kafe` now leads with its Pro trial CTA
+> ("Start your 14-day Pro trial" / "Mulai trial Pro 14 hari") → `/download?v=kafe`,
+> demoting "See the Pro plan" to secondary — restoring the original "Coba Pro gratis
+> 14 hari" intent. Minimarket keeps "See the Pro plan" as primary: §4 grants the
+> 14-day Pro trial only to restaurant/cafe signups, so a "Pro trial" CTA there would
+> promise a trial the server's `trialSegmentation` never mints (minimarket → Plus).
 
 - [x] **Verify:** `cd website && npm run build` — all 8 routes build; rendered HTML verified
 
