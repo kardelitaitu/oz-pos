@@ -29,8 +29,8 @@
 | Metric | Count |
 |---|---|
 | Total Feature Components | ~100 |
-| Components WITH Tests | ~83 |
-| **Components WITHOUT Tests** | **~17** |
+| Components WITH Tests | ~84 |
+| **Components WITHOUT Tests** | **~16** |
 | Hooks Without Tests | 5 |
 | API Contract Tests Missing | ~30 modules |
 
@@ -43,7 +43,6 @@
 
 | Component | File | Risk Areas | Status |
 |---|---|---|---|
-| `RetailFnBar` | `ui/src/features/retail/RetailFnBar.tsx` | Keyboard shortcuts (F1-F12), mode toggles, quick actions | ❌ No tests |
 | `RetailHeader` | `ui/src/features/retail/RetailHeader.tsx` | Workspace switcher, user menu, clock, notifications | ❌ No tests |
 | `RetailModals` | `ui/src/features/retail/RetailModals.tsx` | Modal stacking, focus trap, escape handling, portal cleanup | ❌ No tests |
 | `RetailProductContextMenu` | `ui/src/features/retail/RetailProductContextMenu.tsx` | Right-click positioning, touch long-press, action handlers | ❌ No tests |
@@ -135,6 +134,7 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 
 | Component | Commit | Tests Added |
 |---|---|---|
+| `RetailFnBar` | `<commit-hash>` | 21 tests (EN + ID locales) |
 | `ReceiptPreview` | `366061d7` | 19 tests (EN + ID locales) |
 
 ---
@@ -249,6 +249,47 @@ Based on risk × impact:
 ---
 
 ## 📝 TDD Journal
+
+### 2026-08-19 — TDD Cycle: RetailFnBar Coverage
+
+**Objective:** Add test coverage for RetailFnBar (function key bar) — critical POS terminal component handling F1-F12 shortcuts, mode toggles, and quick actions.
+
+**Phase 1 - Analyze:** RetailFnBar is a pure presentational component (105 lines) rendering 13 buttons (F1-F12 + Tables). Key behaviors:
+- Dynamic Hold/Resume label based on `heldCartId`
+- Disabled states for Pay/Void/Discount when `linesLength === 0`
+- Feature-gated Quick Return and Tables buttons
+- Keyboard shortcuts from manifest via `fnKey()` → `aria-keyshortcuts`
+- SKU input focus via ref (F5)
+
+**Phase 2 - Find Weaknesses:**
+- No existing test coverage
+- Complex i18n: 16+ Fluent keys from sales, kds, tables bundles
+- Feature flags (QUICK_RETURN, TABLE_MANAGEMENT) require mocking
+- Text nodes split across `<span>` (F-key) + text node (label) — requires flexible matchers
+- Indonesian locale has different key names (e.g., `sale-pay-button` = "Bayar" vs EN "Pay")
+
+**Phase 3 - Red → Green → Refactor:**
+- Red: Created `RetailFnBar.test.tsx` with 21 tests covering all behaviors
+- Green: Tests passed after fixing i18n expectations and text matching
+- Refactor: Used `getByRole('button')` + `textContent` for reliable assertions
+
+**Phase 4 - Verify:**
+- All 21 tests pass (EN + ID locales)
+- Full retail test suite: 160 tests pass
+- Lint + typecheck clean
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved RetailFnBar from "Without Tests" → "Recently Covered"; updated summary counts.
+
+**Phase 7 - Commit:** `test(retail): add RetailFnBar coverage (21 tests) — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Consider testing keyboard navigation (Tab order, Enter activation)
+- Test feature flag disabled states (QUICK_RETURN, TABLE_MANAGEMENT)
+- RetailProductGrid is next highest priority target
+
+---
 
 ### 2026-08-19 — TDD Cycle: TEST_COVERAGE_ANALYSIS.md Validation Mechanism
 

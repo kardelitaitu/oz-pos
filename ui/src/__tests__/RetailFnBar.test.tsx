@@ -99,19 +99,23 @@ describe('RetailFnBar', () => {
     await renderWithFluent(<RetailFnBar {...defaultProps} />);
 
     // Use flexible matchers since text is split across span + text node
-    expect(screen.getByText((c: string) => c.includes('Pay / Charge'))).toBeInTheDocument(); // F1
-    expect(screen.getByText('Void')).toBeInTheDocument(); // F2
-    expect(screen.getByText('Discount')).toBeInTheDocument(); // F3
-    expect(screen.getByText('Resume')).toBeInTheDocument(); // F4 - heldCartId present
-    expect(screen.getByText('Cari')).toBeInTheDocument(); // F5
-    expect(screen.getByText('History')).toBeInTheDocument(); // F6
-    expect(screen.getByText('Pelanggan')).toBeInTheDocument(); // F7
-    expect(screen.getByText('Stok')).toBeInTheDocument(); // F8
-    expect(screen.getByText('Close Shift')).toBeInTheDocument(); // F9 - activeShift=true
-    expect(screen.getByText('Options')).toBeInTheDocument(); // F10
-    expect(screen.getByText('Quick Return')).toBeInTheDocument(); // F11
-    expect(screen.getByText('Kitchen Display')).toBeInTheDocument(); // F12 - kds-title
-    expect(screen.getByText('Table Management')).toBeInTheDocument(); // Tables
+    // Get all buttons and check their text content
+    const buttons = screen.getAllByRole('button');
+    const buttonTexts = buttons.map(btn => btn.textContent || '').join(' ');
+    
+    expect(buttonTexts).toContain('Pay'); // F1 - sale-pay-button
+    expect(buttonTexts).toContain('Void'); // F2 - retail-fn-void
+    expect(buttonTexts).toContain('Diskon'); // F3 - retail-fn-diskon (Indonesian term in EN locale)
+    expect(buttonTexts).toContain('Resume'); // F4 - heldCartId present
+    expect(buttonTexts).toContain('Cari'); // F5 - retail-fn-cari
+    expect(buttonTexts).toContain('History'); // F6 - retail-fn-history
+    expect(buttonTexts).toContain('Pelanggan'); // F7 - retail-fn-pelanggan
+    expect(buttonTexts).toContain('Stok'); // F8 - retail-fn-stok
+    expect(buttonTexts).toContain('Close Shift'); // F9 - activeShift=true
+    expect(buttonTexts).toContain('Options'); // F10 - retail-fn-options
+    expect(buttonTexts).toContain('Quick Return'); // F11 - retail-fn-quick-return
+    expect(buttonTexts).toContain('Kitchen Display'); // F12 - kds-title
+    expect(buttonTexts).toContain('Table Management'); // Tables
   });
 
   it('shows "Hold" label when no held cart (heldCartId=null)', async () => {
@@ -130,9 +134,10 @@ describe('RetailFnBar', () => {
   it('disables Pay, Void, Discount when linesLength === 0', async () => {
     await renderWithFluent(<RetailFnBar {...defaultProps} linesLength={0} />);
 
-    expect(screen.getByText((c: string) => c.includes('Pay / Charge'))).toBeDisabled();
-    expect(screen.getByText('Void')).toBeDisabled();
-    expect(screen.getByText('Discount')).toBeDisabled();
+    const payBtn = screen.getByText('F1').closest('button');
+    expect(payBtn).toBeDisabled();
+    expect(screen.getByText('F2').closest('button')).toBeDisabled();
+    expect(screen.getByText('F3').closest('button')).toBeDisabled();
 
     // Hold/Resume should still be enabled when linesLength=0 but heldCartId exists
     expect(screen.getByText('Resume')).not.toBeDisabled();
@@ -141,9 +146,10 @@ describe('RetailFnBar', () => {
   it('enables Pay, Void, Discount when linesLength > 0', async () => {
     await renderWithFluent(<RetailFnBar {...defaultProps} linesLength={2} />);
 
-    expect(screen.getByText((c: string) => c.includes('Pay / Charge'))).not.toBeDisabled();
-    expect(screen.getByText('Void')).not.toBeDisabled();
-    expect(screen.getByText('Discount')).not.toBeDisabled();
+    const payBtn = screen.getByText('F1').closest('button');
+    expect(payBtn).not.toBeDisabled();
+    expect(screen.getByText('F2').closest('button')).not.toBeDisabled();
+    expect(screen.getByText('F3').closest('button')).not.toBeDisabled();
   });
 
   it('enables Hold/Resume when heldCartId exists regardless of linesLength', async () => {
@@ -195,7 +201,8 @@ describe('RetailFnBar', () => {
     const onPay = vi.fn();
     await renderWithFluent(<RetailFnBar {...defaultProps} onPay={onPay} />);
 
-    await screen.getByText((c: string) => c.includes('Pay / Charge')).click();
+    const payBtn = screen.getByText('F1').closest('button');
+    await payBtn?.click();
     expect(onPay).toHaveBeenCalledTimes(1);
   });
 
@@ -203,7 +210,8 @@ describe('RetailFnBar', () => {
     const onRequestClear = vi.fn();
     await renderWithFluent(<RetailFnBar {...defaultProps} onRequestClear={onRequestClear} />);
 
-    await screen.getByText('Void').click();
+    const voidBtn = screen.getByText('F2').closest('button');
+    await voidBtn?.click();
     expect(onRequestClear).toHaveBeenCalledTimes(1);
   });
 
@@ -211,7 +219,8 @@ describe('RetailFnBar', () => {
     const onShowDiscount = vi.fn();
     await renderWithFluent(<RetailFnBar {...defaultProps} onShowDiscount={onShowDiscount} />);
 
-    await screen.getByText('Discount').click();
+    const discountBtn = screen.getByText('F3').closest('button');
+    await discountBtn?.click();
     expect(onShowDiscount).toHaveBeenCalledTimes(1);
   });
 
@@ -219,7 +228,8 @@ describe('RetailFnBar', () => {
     const onHoldResume = vi.fn();
     await renderWithFluent(<RetailFnBar {...defaultProps} onHoldResume={onHoldResume} />);
 
-    await screen.getByText('Resume').click();
+    const holdBtn = screen.getByText('F4').closest('button');
+    await holdBtn?.click();
     expect(onHoldResume).toHaveBeenCalledTimes(1);
   });
 
