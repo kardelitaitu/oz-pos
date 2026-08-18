@@ -2147,7 +2147,6 @@ impl Store<'_> {
     /// Returns ALL rates at the first matching level (e.g. all product-
     /// level rates). Returns an empty vec when no rate is configured.
     pub fn resolve_best_tax_rates_for_sku(&self, sku: &str) -> Result<Vec<TaxRate>, CoreError> {
-	
         // 1. Product-level tax rates — return ALL assigned rates.
         let product_rate_ids = self.get_product_tax_rates(sku)?;
         if !product_rate_ids.is_empty() {
@@ -5133,19 +5132,19 @@ mod tests {
     fn resolve_best_tax_rates_returns_product_level_rates() {
         let conn = fresh();
         let s = store(&conn);
-        
+
         // Arrange: Create two tax rates and assign both to product
         let vat_rate_id = seed_tax_rate(&conn, "VAT 10%", 1000, false, false);
         let sales_tax_id = seed_tax_rate(&conn, "Sales Tax 5%", 500, false, false);
-        let _product_id = seed_product(&conn, "TEST-SKU", None); 
-        
+        let _product_id = seed_product(&conn, "TEST-SKU", None);
+
         // Assign both tax rates to the product
         s.set_product_tax_rates("TEST-SKU", &[vat_rate_id.clone(), sales_tax_id.clone()])
             .unwrap();
-        
+
         // Act: Resolve tax rates for the SKU
         let rates = s.resolve_best_tax_rates_for_sku("TEST-SKU").unwrap();
-        
+
         // Assert: Both product-level rates should be returned (order may vary)
         assert_eq!(rates.len(), 2);
         let rate_ids: HashSet<_> = rates.iter().map(|r| r.id.as_str()).collect();
@@ -5157,19 +5156,21 @@ mod tests {
     fn resolve_best_tax_rates_falls_back_to_category_level() {
         let conn = fresh();
         let s = store(&conn);
-        
+
         // Arrange: Create category tax rate, product with no direct rates but category assigned
         let cat_rate_id = seed_tax_rate(&conn, "Category Tax 8%", 800, false, false);
         let category_id = "CAT-TEST";
-        s.create_category(category_id, "Test Category", "#ffffff", "").unwrap();
-        s.set_category_tax_rates(category_id, &[cat_rate_id.clone()]).unwrap();
-        
+        s.create_category(category_id, "Test Category", "#ffffff", "")
+            .unwrap();
+        s.set_category_tax_rates(category_id, &[cat_rate_id.clone()])
+            .unwrap();
+
         let product_id = seed_product_with_category(&conn, "TEST-SKU", Some(category_id));
         // Note: No product-level tax rates assigned
-        
+
         // Act: Resolve tax rates for the SKU
         let rates = s.resolve_best_tax_rates_for_sku("TEST-SKU").unwrap();
-        
+
         // Assert: Category-level rate should be returned
         assert_eq!(rates.len(), 1);
         assert_eq!(rates[0].id, cat_rate_id);
@@ -5181,15 +5182,15 @@ mod tests {
     fn resolve_best_tax_rates_falls_back_to_default_store_rate() {
         let conn = fresh();
         let s = store(&conn);
-        
+
         // Arrange: Create default store tax rate, product with no direct or category rates
         let default_rate_id = seed_tax_rate(&conn, "Default Store Tax 5%", 500, true, false);
         let _product_id = seed_product(&conn, "TEST-SKU", None);
         // Note: No product-level tax rates, no category assigned
-        
+
         // Act: Resolve tax rates for the SKU
         let rates = s.resolve_best_tax_rates_for_sku("TEST-SKU").unwrap();
-        
+
         // Assert: Default store rate should be returned
         assert_eq!(rates.len(), 1);
         assert_eq!(rates[0].id, default_rate_id);
@@ -5201,14 +5202,14 @@ mod tests {
     fn resolve_best_tax_rates_returns_empty_when_no_rates_exist() {
         let conn = fresh();
         let s = store(&conn);
-        
+
         // Arrange: Create product with no tax rates assigned anywhere
         let _product_id = seed_product(&conn, "TEST-SKU", None);
         // Note: No tax rates created at all, no product/category assignments
-        
+
         // Act: Resolve tax rates for the SKU
         let rates = s.resolve_best_tax_rates_for_sku("TEST-SKU").unwrap();
-        
+
         // Assert: Empty vector should be returned
         assert!(rates.is_empty());
     }
