@@ -4,6 +4,12 @@ import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import DailyTotalWidget from '@/features/sales/widgets/DailyTotalWidget';
 import salesFtl from '@/locales/sales.ftl?raw';
 import type { DailySummaryRow } from '@/api/sales';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
+
+vi.mock('@/contexts/SubscriptionContext', () => ({
+  useSubscription: vi.fn(),
+}));
 
 const mockExportDailySummary = vi.fn();
 
@@ -13,8 +19,17 @@ vi.mock('@/api/sales', () => ({
   exportSalesByHour: vi.fn(),
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok-1' }),
+}));
+
 beforeEach(() => {
   mockExportDailySummary.mockReset();
+  vi.mocked(useSubscription).mockReturnValue({
+    caps: null,
+    loading: false,
+    refresh: vi.fn(),
+  });
 });
 
 function createRow(overrides: Record<string, unknown> = {}) {
@@ -90,5 +105,59 @@ describe('DailyTotalWidget', () => {
 
     const widget = await screen.findByLabelText('Daily sales summary');
     expect(widget).toBeTruthy();
+  });
+
+  // ── C2.2: Free-tier gate — blurred teaser + upgrade CTA ────────
+
+  it('shows blurred teaser with upgrade CTA for Free tier (C2.2)', () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'free', supportsDailyDashboard: false }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    renderWithFluentSync(<DailyTotalWidget />, salesFtl);
+
+    // TierLockedFeature renders the title and CTA
+    expect(screen.getByText('Daily Sales Dashboard')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /upgrade to plus/i })).toBeInTheDocument();
+
+    // Preview content should be rendered but hidden (aria-hidden)
+    const preview = document.querySelector('.tier-locked-preview');
+    expect(preview).toBeInTheDocument();
+    expect(preview).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('renders full widget for Plus tier with supportsDailyDashboard (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'plus', supportsDailyDashboard: true }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    mockExportDailySummary.mockResolvedValue([
+      { sale_id: 's-1', total_minor: 100000, currency: 'IDR', line_count: 15, status: 'completed', created_at: '2026-07-16T10:00:00Z' } as DailySummaryRow,
+    ]);
+    renderWithFluentSync(<DailyTotalWidget />, salesFtl);
+
+    await waitFor(() => {
+      // The widget header renders via <Localized id="sales-dashboard-daily-total">
+      expect(screen.getByRole('heading', { name: /daily total/i })).toBeInTheDocument();
+    });
+    // Should NOT show the locked feature overlay
+    expect(screen.queryByRole('button', { name: /upgrade to plus/i })).not.toBeInTheDocument();
+  });
+
+  it('shows skeleton while caps are loading (C2.2)', () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: null,
+      loading: true,
+      refresh: vi.fn(),
+    });
+    mockExportDailySummary.mockImplementation(() => new Promise(() => {}));
+    const { container } = renderWithFluentSync(<DailyTotalWidget />, salesFtl);
+
+    // Should show loading skeleton, not the locked feature
+    const skeletons = container.querySelectorAll('.skeleton');
+    expect(skeletons.length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Daily Sales Dashboard')).not.toBeInTheDocument();
   });
 });

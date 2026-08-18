@@ -595,4 +595,14 @@ describe('StaffManagementScreen', () => {
     await waitForTable();
     expect(screen.queryByText(/nearing the Pro plan's 20-staff limit/i)).not.toBeInTheDocument();
   });
-});
+
+  it('hides the approaching-limit banner below 80% threshold on Pro (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'pro', maxStaffUsers: 20, staffCount: 15 }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+    expect(screen.queryByText(/nearing the Pro plan's 20-staff limit/i)).not.toBeInTheDocument();
+  });});
