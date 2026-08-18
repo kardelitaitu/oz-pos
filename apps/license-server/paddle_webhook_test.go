@@ -45,7 +45,7 @@ func stubReceiptEmail(t *testing.T, captured *string) func() {
 func setPaddleEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("PADDLE_WEBHOOK_SECRET", "test-webhook-secret")
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus,pri_test_pro:pro,pri_test_premium:premium")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus:year,pri_test_pro:pro:year,pri_test_premium:premium:year")
 }
 
 // paddleCreatedBody renders a subscription.created payload. email "" omits
@@ -1075,7 +1075,7 @@ func TestPaddleWebhook_CancelUnknownSubscription_Acknowledged(t *testing.T) {
 
 func TestVerifyPaddleConfig_SecretMissing_Fails(t *testing.T) {
 	t.Setenv("PADDLE_WEBHOOK_SECRET", "")
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro:year")
 	err := verifyPaddleConfig()
 	if err == nil {
 		t.Fatal("missing PADDLE_WEBHOOK_SECRET must fail boot")
@@ -1109,41 +1109,64 @@ func TestVerifyPaddleConfig_MalformedPriceTiers_Fails(t *testing.T) {
 
 func TestVerifyPaddleConfig_ValidPasses(t *testing.T) {
 	t.Setenv("PADDLE_WEBHOOK_SECRET", "test-webhook-secret")
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro,pri_test_premium:premium")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro:year,pri_test_premium:premium:year")
 	if err := verifyPaddleConfig(); err != nil {
 		t.Fatalf("valid config should pass the gate: %v", err)
 	}
 }
 
 func TestPaddleTierForPrice_StillWorksViaParser(t *testing.T) {
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro,pri_test_premium:premium")
-	if tier, bundle, ok := paddleTierForPrice("pri_test_premium"); !ok || tier != "premium" || bundle != "" {
-		t.Errorf("pri_test_premium → (%q, %q, %v), want (premium, %q, true)", tier, bundle, ok, "")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro:year,pri_test_premium:premium:year")
+	if tier, period, bundle, ok := paddleTierForPrice("pri_test_premium"); !ok || tier != "premium" || bundle != "" {
+		t.Errorf("pri_test_premium → (%q, %q, %q, %v), want (premium, year, %q, true)", tier, period, bundle, ok, "")
 	}
-	if _, _, ok := paddleTierForPrice("pri_unknown"); ok {
+	if _, _, _, ok := paddleTierForPrice("pri_unknown"); ok {
 		t.Error("unmapped price must return ok=false")
 	}
-	if _, _, ok := paddleTierForPrice(""); ok {
+	if _, _, _, ok := paddleTierForPrice(""); ok {
 		t.Error("empty price must return ok=false")
 	}
 }
 
 func TestPaddlePriceTiers_BundleSegment(t *testing.T) {
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus,pri_test_bundle:plus:restaurant_starter")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus:year,pri_test_bundle:plus:month:restaurant_starter")
 	m, err := paddlePriceTiers()
 	if err != nil {
 		t.Fatalf("bundle entry should parse: %v", err)
 	}
-	if entry, ok := m["pri_test_bundle"]; !ok || entry != "plus:restaurant_starter" {
-		t.Errorf("pri_test_bundle → %q, want plus:restaurant_starter", entry)
+	if entry, ok := m["pri_test_bundle"]; !ok || entry != "plus:month:restaurant_starter" {
+		t.Errorf("pri_test_bundle → %q, want plus:month:restaurant_starter", entry)
 	}
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_bad:plus:fancy_bundle")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_bad:plus:year:fancy_bundle")
 	if _, err := paddlePriceTiers(); err == nil {
 		t.Error("unknown bundle_id must fail parsing loudly")
 	}
 	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_malformed")
 	if _, err := paddlePriceTiers(); err == nil {
 		t.Error("malformed entry (single segment) must fail parsing")
+	}
+}
+
+func TestPaddlePriceTiers_PeriodSegment(t *testing.T) {
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_monthly:plus:month,pri_test_yearly:pro:year")
+	m, err := paddlePriceTiers()
+	if err != nil {
+		t.Fatalf("period entries should parse: %v", err)
+	}
+	if entry, ok := m["pri_test_monthly"]; !ok || entry != "plus:month:" {
+		t.Errorf("pri_test_monthly → %q, want plus:month:", entry)
+	}
+	if entry, ok := m["pri_test_yearly"]; !ok || entry != "pro:year:" {
+		t.Errorf("pri_test_yearly → %q, want pro:year:", entry)
+	}
+	// Backward compat: 2-part entry defaults period to year.
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_legacy:premium")
+	m2, err := paddlePriceTiers()
+	if err != nil {
+		t.Fatalf("legacy 2-part entry should parse: %v", err)
+	}
+	if entry, ok := m2["pri_test_legacy"]; !ok || entry != "premium:year:" {
+		t.Errorf("pri_test_legacy → %q, want premium:year:", entry)
 	}
 }
 
@@ -1383,7 +1406,7 @@ func TestPaddleWebhook_BundleMint(t *testing.T) {
 	resetPaddleDedup()
 	resetRateLimiters()
 	setPaddleEnv(t)
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus,pri_test_pro:pro,pri_test_premium:premium,pri_test_bundle:plus:restaurant_starter")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus:year,pri_test_pro:pro:year,pri_test_premium:premium:year,pri_test_bundle:plus:year:restaurant_starter")
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
 
@@ -1429,7 +1452,7 @@ func TestPaddleWebhook_BundleTamperRejected(t *testing.T) {
 	resetPaddleDedup()
 	resetRateLimiters()
 	setPaddleEnv(t)
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus,pri_test_pro:pro,pri_test_premium:premium,pri_test_bundle:plus:restaurant_starter")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus:year,pri_test_pro:pro:year,pri_test_premium:premium:year,pri_test_bundle:plus:year:restaurant_starter")
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
 

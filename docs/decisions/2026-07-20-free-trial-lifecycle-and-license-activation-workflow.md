@@ -70,6 +70,15 @@
 >   `trial_registrations` collection matches this). The earlier "nothing
 >   stops one device from re-trialling under a fresh email" gap is closed
 >   for devices with a stable hardware anchor.
+>
+> **Deviation 4 (shipped 2026-08-18, verified against the code):** the
+> Paddle webhook's `PADDLE_PRICE_TIERS` format was extended from
+> `price_id:tier_key[:bundle_id]` to `price_id:tier_key:period[:bundle_id]`
+> (period = "month" or "year") to mirror the Midtrans
+> `custom_field3` period cross-check (ADR #39 Deviation 3). The webhook
+> now cross-checks `billing_cycle.interval` against the price-map period
+> so a tampered interval can't drift the expiry cadence. Backward
+> compatibility: 2-part entries without a period default to "year".
 
 ---
 

@@ -315,61 +315,74 @@ func resolvePaddleEmail(sub *paddleSubscription) string {
 // ── Tier mapping ─────────────────────────────────────────────────────
 
 // paddlePriceTiers parses PADDLE_PRICE_TIERS
-// ("pri_x:pro,pri_y:premium[:bundle_id]") into a price→"tier:bundle" map.
-// The optional bundle_id (C3.2) marks a vertical-bundle price: the buyer
-// pays for the tier PLUS the bundle, so the webhook mints with
-// tierQuotas(tier, bundle) (e.g. "pri_z:plus:restaurant_starter"). An
-// unknown bundle id is rejected at parse time — a typo'd bundle must fail
-// provisioning loudly, never silently mint a plain license for a
-// bundle-priced purchase. Returns an error for an unset or malformed value
-// so the boot gate (verifyPaddleConfig) fails fast instead of letting
-// every subscription event 500 during provisioning.
+// ("pri_x:pro:year,pri_y:premium:month[:bundle_id]") into a
+// price→"tier:period:bundle" map. The period ("month" or "year") is the
+// billing cycle the price represents — the webhook cross-checks it
+// against the subscription's billing_cycle.interval so a tampered
+// interval can't drift the expiry cadence (mirroring the Midtrans
+// custom_field3 period cross-check). The optional bundle_id (C3.2)
+// marks a vertical-bundle price: the buyer pays for the tier PLUS the
+// bundle, so the webhook mints with tierQuotas(tier, bundle).
+//
+// Backward compatibility: entries with only 2 parts (price_id:tier_key)
+// default period to "year" — the legacy format before the period
+// cross-check shipped.
+//
+// Returns an error for an unset or malformed value so the boot gate
+// (verifyPaddleConfig) fails fast instead of letting every subscription
+// event 500 during provisioning.
 func paddlePriceTiers() (map[string]string, error) {
 	v := strings.TrimSpace(os.Getenv("PADDLE_PRICE_TIERS"))
 	if v == "" {
-		return nil, fmt.Errorf("PADDLE_PRICE_TIERS is required — without it every subscription webhook fails provisioning with 500; set it to comma-separated price_id:tier_key[:bundle_id] pairs, e.g. pri_01h7abc123:pro or pri_01h7xyz789:plus:restaurant_starter")
+		return nil, fmt.Errorf("PADDLE_PRICE_TIERS is required — without it every subscription webhook fails provisioning with 500; set it to comma-separated price_id:tier_key:period[:bundle_id] pairs, e.g. pri_01h7abc123:pro:year or pri_01h7xyz789:plus:month:restaurant_starter")
 	}
 	m := make(map[string]string)
 	for _, pair := range strings.Split(v, ",") {
 		parts := strings.Split(strings.TrimSpace(pair), ":")
-		if len(parts) < 2 || len(parts) > 3 {
-			return nil, fmt.Errorf("PADDLE_PRICE_TIERS has a malformed entry %q — expected price_id:tier_key[:bundle_id] pairs, e.g. pri_01h7abc123:pro", strings.TrimSpace(pair))
+		if len(parts) < 2 || len(parts) > 4 {
+			return nil, fmt.Errorf("PADDLE_PRICE_TIERS has a malformed entry %q — expected price_id:tier_key:period[:bundle_id] pairs, e.g. pri_01h7abc123:pro:year", strings.TrimSpace(pair))
 		}
 		k := strings.TrimSpace(parts[0])
 		tier := strings.TrimSpace(parts[1])
 		if k == "" || tier == "" {
-			return nil, fmt.Errorf("PADDLE_PRICE_TIERS has a malformed entry %q — expected price_id:tier_key[:bundle_id] pairs", strings.TrimSpace(pair))
+			return nil, fmt.Errorf("PADDLE_PRICE_TIERS has a malformed entry %q — expected price_id:tier_key:period[:bundle_id] pairs", strings.TrimSpace(pair))
+		}
+		// Period defaults to "year" for backward-compatible 2-part entries.
+		period := "year"
+		if len(parts) >= 3 && strings.TrimSpace(parts[2]) != "" {
+			period = strings.TrimSpace(parts[2])
 		}
 		bundle := ""
-		if len(parts) == 3 {
-			bundle = normalizeBundleID(parts[2])
+		if len(parts) == 4 {
+			bundle = normalizeBundleID(parts[3])
 			if bundle == "" {
-				return nil, fmt.Errorf("PADDLE_PRICE_TIERS entry %q has an unknown bundle_id %q — recognized bundles: restaurant_starter", strings.TrimSpace(pair), strings.TrimSpace(parts[2]))
+				return nil, fmt.Errorf("PADDLE_PRICE_TIERS entry %q has an unknown bundle_id %q — recognized bundles: restaurant_starter", strings.TrimSpace(pair), strings.TrimSpace(parts[3]))
 			}
 		}
-		m[k] = tier + ":" + bundle
+		m[k] = tier + ":" + period + ":" + bundle
 	}
 	return m, nil
 }
 
-// paddleTierForPrice maps a Paddle price id to (tier, bundle) via
-// PADDLE_PRICE_TIERS. Returns ("", "", false) when the price is not in the
-// map — the handler then answers 500 so Paddle retries until the operator
-// fixes the map. Env is re-read per call so a redeploy can fix it.
-func paddleTierForPrice(priceID string) (string, string, bool) {
+// paddleTierForPrice maps a Paddle price id to (tier, period, bundle) via
+// PADDLE_PRICE_TIERS. Returns ("", "", "", false) when the price is not in
+// the map — the handler then answers 500 so Paddle retries until the
+// operator fixes the map. Env is re-read per call so a redeploy can fix it.
+func paddleTierForPrice(priceID string) (string, string, string, bool) {
 	if priceID == "" {
-		return "", "", false
+		return "", "", "", false
 	}
 	m, err := paddlePriceTiers()
 	if err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
 	entry, ok := m[priceID]
 	if !ok {
-		return "", "", false
+		return "", "", "", false
 	}
-	tier, bundle, _ := strings.Cut(entry, ":")
-	return tier, bundle, true
+	tier, rest, _ := strings.Cut(entry, ":")
+	period, bundle, _ := strings.Cut(rest, ":")
+	return tier, period, bundle, true
 }
 
 // verifyPaddleConfig is the boot-time webhook gate (called from main
@@ -695,20 +708,32 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		return err
 	}
 
-	// Resolve tier (+ bundle) from the first item's price id. The price is
-	// authoritative for the bundle: custom_data.bundle (C3.2) only labels
+	// Resolve tier (+ period + bundle) from the first item's price id.
+	// The price is authoritative: custom_data.bundle (C3.2) only labels
 	// what the price paid for — a buyer claiming a bundle on a plain price
-	// is rejected.
+	// is rejected. The billing_cycle.interval is cross-checked against the
+	// price-map period so a tampered interval can't drift the expiry
+	// cadence (mirroring the Midtrans custom_field3 cross-check).
 	if len(sub.Items) == 0 || sub.Items[0].Price.ID == "" {
 		return fmt.Errorf("subscription %s has no priced items", sub.ID)
 	}
 	priceID := sub.Items[0].Price.ID
-	tier, bundle, ok := paddleTierForPrice(priceID)
+	tier, period, bundle, ok := paddleTierForPrice(priceID)
 	if !ok {
 		return fmt.Errorf("price %q is not mapped in PADDLE_PRICE_TIERS", priceID)
 	}
 	if cf := strings.TrimSpace(sub.CustomData["bundle"]); cf != "" && cf != bundle {
 		return fmt.Errorf("custom_data.bundle %q disagrees with price-mapped bundle %q for price %q — rejecting", cf, bundle, priceID)
+	}
+	// Cross-check the billing cycle interval against the price-map period.
+	// A tampered interval (e.g. "year" on a monthly price) would let the
+	// subscriptionTimes fallback extend the wrong cadence.
+	if sub.BillingCycle != nil && sub.BillingCycle.Interval != "" {
+		interval := strings.ToLower(strings.TrimSpace(sub.BillingCycle.Interval))
+		// Normalize: Paddle uses "month"/"year" which matches the price map.
+		if interval != period {
+			return fmt.Errorf("billing_cycle.interval %q disagrees with price-mapped period %q for price %q — rejecting", interval, period, priceID)
+		}
 	}
 
 	// Resolve the customer email (custom_data → embedded customer → API).
@@ -922,7 +947,7 @@ func paddleUpdate(app core.App, ev paddleEvent) error {
 		priceID = sub.Items[0].Price.ID
 	}
 	if priceID != "" {
-		if tier, bundle, ok := paddleTierForPrice(priceID); ok {
+		if tier, _, bundle, ok := paddleTierForPrice(priceID); ok {
 			subRecord.Set("tier_key", tier)
 			// A plan-change price may carry no bundle segment; keep the
 			// persisted bundle so an update event never strips kds from a
