@@ -37,6 +37,8 @@ interface MeResponse {
     startsAt?: string;
     expiresAt?: string;
     graceUntil?: string;
+    /** Vertical-bundle id (C3.2) this subscription was purchased with. */
+    bundleId?: string;
   };
 }
 
@@ -155,7 +157,7 @@ export default function AccountView({ locale }: Props) {
     }
   };
 
-  const subscribe = async (priceId: string, tierKey: string) => {
+  const subscribe = async (priceId: string, tierKey: string, bundle?: string) => {
     setSubscribing(tierKey);
     setSubscribeError(false);
     // Indonesian market bills through Midtrans Snap (ADR #39 D1); every
@@ -163,7 +165,9 @@ export default function AccountView({ locale }: Props) {
     const useMidtrans = locale === 'id';
     try {
       if (useMidtrans) {
-        await openMidtransCheckout(tierKey, 'yearly', (completed) => pollAfterCheckout(completed));
+        // The bundle (C3.2) rides the snap request (custom_field4) so the
+        // webhook mints the bundle-widened quota block.
+        await openMidtransCheckout(tierKey, 'yearly', (completed) => pollAfterCheckout(completed), bundle);
         return;
       }
       const email = await getSessionEmail();
@@ -171,7 +175,7 @@ export default function AccountView({ locale }: Props) {
       // After the overlay closes, refresh /me so a completed purchase shows
       // the subscription without a manual reload. The webhook provisions
       // asynchronously, so poll for it (up to ~20s) instead of a single fetch.
-      await openPaddleCheckout(priceId, email, (completed) => pollAfterCheckout(completed));
+      await openPaddleCheckout(priceId, email, (completed) => pollAfterCheckout(completed), bundle);
     } catch (err) {
       console.error('checkout open failed', err);
       setSubscribeError(true);
@@ -246,6 +250,22 @@ export default function AccountView({ locale }: Props) {
       return { tierKey: tier.tierKey, name: tier.name, price: yearly.price, period: yearly.period, priceId: yearly.priceId ?? '' };
     })
     .filter((plan) => (useMidtrans ? true : plan.priceId && !isPlaceholderPriceId(plan.priceId)));
+
+  // Restaurant Starter bundle (C3.2, subscription-tiers.md §5): the Plus
+  // add-on, offered as an in-app upgrade to existing Plus subscribers who
+  // don't own it yet. Gated on the same checkout availability as the
+  // subscribe section — Midtrans needs the license API (the server's
+  // MIDTRANS_PRICE_TIERS carries the bundle amount); Paddle needs a real,
+  // non-placeholder bundle price id plus the client token. Until the real
+  // catalog lands the placeholder ids keep the card hidden, exactly like
+  // the subscribe section hides placeholder plans.
+  const plusBundle = (pricingFor(locale) ?? []).find((tier) => tier.tierKey === 'plus')?.bundle;
+  const bundleYearly = plusBundle?.prices.yearly;
+  const bundleCheckoutAvailable =
+    Boolean(plusBundle) &&
+    (useMidtrans
+      ? Boolean(licenseApiUrl())
+      : Boolean(bundleYearly?.priceId) && !isPlaceholderPriceId(bundleYearly?.priceId) && isPaddleConfigured());
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -366,6 +386,32 @@ export default function AccountView({ locale }: Props) {
               </a>
             </p>
           )}
+          {/* In-app bundle upgrade (C3.2): existing Plus subscribers without
+              the bundle get the Restaurant Starter add-on right here. The
+              checkout carries bundle=restaurant_starter so the webhook
+              mints the kds-widened quota block (Midtrans custom_field4 /
+              Paddle custom_data.bundle). Hidden once bundleId is set. */}
+          {subscription.tierKey === 'plus' && !subscription.bundleId && plusBundle && bundleCheckoutAvailable && (
+            <div className="mt-5 rounded-lg border border-accent/40 p-4" data-testid="account-bundle-upgrade">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="font-semibold">{plusBundle.label}</p>
+                <p className="text-sm text-muted">
+                  {bundleYearly?.price}
+                  {bundleYearly?.period && <span> {bundleYearly.period}</span>}
+                </p>
+              </div>
+              <p className="mt-1 text-sm text-muted">{plusBundle.note}</p>
+              <p className="mt-2 text-sm text-muted">{t(locale, 'account.bundleUpgradeHint')}</p>
+              <button
+                type="button"
+                onClick={() => void subscribe(bundleYearly?.priceId ?? '', 'plus', plusBundle.id)}
+                disabled={subscribing !== null}
+                className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+              >
+                {subscribing === 'plus' ? '…' : t(locale, 'account.bundleUpgrade')}
+              </button>
+            </div>
+          )}
         </section>
       ) : (
         <section className="rounded-xl border border-accent/40 bg-surface/40 p-6" aria-label={t(locale, 'account.subscribe')}>
@@ -398,22 +444,25 @@ export default function AccountView({ locale }: Props) {
               {t(locale, 'account.checkoutUnavailable')}
             </p>
           )}
-          {subscribeError && (
-            <p className="mt-3 text-sm text-link" role="alert">
-              {t(locale, 'checkout.error')}
-            </p>
-          )}
-          {refreshState === 'checking' && (
-            <p className="mt-3 text-sm text-muted" role="status">
-              {t(locale, 'account.checkingSubscription')}
-            </p>
-          )}
-          {refreshState === 'pending' && (
-            <p className="mt-3 text-sm text-muted" role="status">
-              {t(locale, 'account.subscriptionPending')}
-            </p>
-          )}
         </section>
+      )}
+
+      {/* Checkout feedback shared by the subscribe section AND the bundle
+          upgrade card (a Plus subscriber's bundle purchase also polls /me). */}
+      {subscribeError && (
+        <p className="text-sm text-link" role="alert">
+          {t(locale, 'checkout.error')}
+        </p>
+      )}
+      {refreshState === 'checking' && (
+        <p className="text-sm text-muted" role="status">
+          {t(locale, 'account.checkingSubscription')}
+        </p>
+      )}
+      {refreshState === 'pending' && (
+        <p className="text-sm text-muted" role="status">
+          {t(locale, 'account.subscriptionPending')}
+        </p>
       )}
 
       <button

@@ -254,7 +254,9 @@
     "statusExpired": "Expired",
     "statusRevoked": "Revoked",
     "renewHint": "Your subscription is no longer active.",
-    "renewLink": "Renew on the pricing page"
+    "renewLink": "Renew on the pricing page",
+    "bundleUpgrade": "Upgrade to bundle",
+    "bundleUpgradeHint": "Adds the Kitchen Display (KDS) to your Plus plan."
   },
   "footer": {
     "rights": "All rights reserved.",

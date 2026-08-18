@@ -254,7 +254,9 @@
     "statusExpired": "Kedaluwarsa",
     "statusRevoked": "Dicabut",
     "renewHint": "Langganan Anda tidak lagi aktif.",
-    "renewLink": "Perpanjang di halaman harga"
+    "renewLink": "Perpanjang di halaman harga",
+    "bundleUpgrade": "Tingkatkan ke paket",
+    "bundleUpgradeHint": "Menambahkan Layar Dapur (KDS) ke paket Plus Anda."
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",
