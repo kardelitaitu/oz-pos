@@ -10,10 +10,16 @@ import (
 )
 
 // RenewRequest is the JSON body for POST /api/v1/license/renew.
+//
+// Authentication: the api_key field is IGNORED for auth — the Bearer
+// header is the sole credential channel (C1-followup hardening removed
+// the legacy body api_key fallback). The field exists only for backward
+// compatibility with old clients; new clients send api_key via
+// Authorization: Bearer <api_key>.
 type RenewRequest struct {
 	TenantID string `json:"tenant_id"`
-	APIKey   string `json:"api_key"`
-	Key      string `json:"key"` // newly purchased key to extend subscription
+	APIKey   string `json:"api_key"` // ignored for auth — Bearer header is authoritative
+	Key      string `json:"key"`     // newly purchased key to extend subscription
 }
 
 func handleRenew(app core.App) func(e *core.RequestEvent) error {

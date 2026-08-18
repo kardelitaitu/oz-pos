@@ -28,11 +28,12 @@ type ActivateRequest struct {
 	// license.
 	TrialVertical string `json:"trial_vertical"`
 	// BundleID is the optional vertical-bundle id (subscription-tiers.md §3,
-	// TODO C3.2). "restaurant_starter" unlocks the kds workspace type at the
-	// Plus tier. Mirrors trial_vertical's trust boundary: only honored for
-	// trial keys — a client-supplied bundle must never widen a PAYING license
-	// beyond what was purchased (paid bundles are issued by the webhook at
-	// checkout, which the website leg of C3.2 will wire). Unknown values are
+	// C3.2 shipped). "restaurant_starter" unlocks the kds workspace type at
+	// the Plus tier. Mirrors trial_vertical's trust boundary: only honored
+	// for trial keys — a client-supplied bundle must never widen a PAYING
+	// license beyond what was purchased (paid bundles are issued by the
+	// webhook at checkout via the price map's bundle segment, cross-checked
+	// against custom_data.bundle / custom_field4). Unknown values are
 	// ignored.
 	BundleID string `json:"bundle_id"`
 	// HardwareFingerprint is the device-level fingerprint (SPEC-2026-TRIAL-
