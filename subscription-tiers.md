@@ -312,14 +312,19 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 | :--- | :--- | :--- |
 | `docs/BUSINESS_PLAN.md` §2 | Market/pricing plan (IDR, annual) | 1-Time / Standard / Pro / Enterprise — **superseded banner added 2026-08-17**; content kept as historical analysis |
 | `docs/decisions/2026-07-10-subscription-tier-entitlement.md` (ADR #5) | Design intent | Free / Pro / Premium / Enterprise with numeric quotas — **supersession note added 2026-08-17** (mechanism still valid; quotas from §3) |
-| `docs/decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md` (ADR #23) | Trial lifecycle | 90-day trial — **re-scope note added 2026-08-17; segmented trials implemented 2026-08-18** (C2.1: `trial_vertical` in `activate.go`, 14-day Plus general / 14-day Pro restaurant-cafe / 30-day Pro enterprise-referral) |
+| `docs/decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md` (ADR #23) | Trial lifecycle + custom_data contracts | 90-day trial — **re-scope note + 3 deviation notes** (see [cross-ref](docs/decisions/README.md)): **Dev 1:** segmented trials implemented 2026-08-18 (`trial_vertical` in `activate.go`, 14-day Plus general / 14-day Pro restaurant-cafe / 30-day Pro enterprise-referral). **Dev 2:** Paddle `custom_data` contract documented — `email` (register-first, webhook upserts tenant) + `bundle` (C3.2, cross-checked against price map) + `phone` (backfilled); signup vertical **not** carried. **Dev 3:** hardware-fingerprint trial lock shipped (`trial_registrations`, `POST /license/trial`, `enforceTrialLock`, client `get_hardware_fingerprint`). |
+| `docs/decisions/2026-08-18-adr39-midtrans-subscription-payments.md` (ADR #39) | Midtrans webhook + custom-field contracts | Midtrans checkout routing + 8 deviation notes (see [cross-ref](docs/decisions/README.md)): SHA-512 not HMAC, `custom_field1`–`custom_field4` contract (tier/email/period/bundle), period cross-check, amount-authoritative tier resolution, grace, dedup, notification fallthrough, key fast-path. |
 | `website/src/content/docs/{en,id}/{licensing,welcome,installation,activation}.md` | User-facing docs | 90-day / four-tier copy — **updated to the 5-tier free-forever model 2026-08-17** |
-| `crates/oz-core/src/subscription.rs` | Enforcement (client-side quotas) | enum Free/OneTime/Standard/Pro/Premium/Enterprise |
+| `crates/oz-core/src/subscription.rs` | Enforcement (client-side quotas) | enum Free/OneTime/Plus/Pro/Premium/Enterprise |
 | `apps/license-server/paddle_webhook.go` → `tierQuotas(tier, bundle)` | Enforcement (license mint) | pro/premium/enterprise → 0/0/all types; free → 1/1/3 types; plus → 1/2, kds unlocked by `bundle_id == "restaurant_starter"` (**C3.2, implemented 2026-08-18** — activation honors it for trial keys; both webhooks issue paid bundles from the price map's optional `:bundle_id` segment, cross-checked against the checkout custom field) |
-| `apps/license-server/pb_schema.json` | Schema select values | free, pro, premium, enterprise — **needs plus** |
-| `apps/license-server/renew.go` | Offline renewal expiry | free +100y, pro/premium +1y, enterprise +3y |
+| `website/src/components/paddle.ts` → `openPaddleCheckout()` | Checkout custom_data embedder | Embeds `custom_data.email` (required) + `custom_data.bundle` (optional C3.2) + `custom_data.phone` (may ride along); vertical **not** carried (see ADR #23 Dev 2) |
+| `website/src/components/CheckoutButton.tsx` | Pricing-page checkout | Same contract as `paddle.ts`; routes id-locale to Midtrans Snap (`custom_field1`–`custom_field4`) per ADR #39 |
+| `website/src/components/AccountView.tsx` | Dashboard subscribe + bundle upgrade | Same contract; bundle upgrade card passes `bundle=restaurant_starter` via `openPaddleCheckout` |
+| `apps/license-server/pb_schema.json` | Schema select values | free, plus, pro, premium, enterprise |
+| `apps/license-server/renew.go` | Offline renewal expiry | free +100y, plus/pro/premium +1y, enterprise +3y |
 | `website/src/content/pricing/{en,id}.ts` | Live pricing pages | **DONE (2026-08-17)** — free/plus/pro/premium/enterprise, new USD & IDR prices, annual default + "2 months free", ⭐ Pro badge, full §3 matrix |
 | `apps/license-server` `PADDLE_PRICE_TIERS` (env) | Live billing map | 2 prices today: `pri_…racp:pro`, `pri_…8cec:premium` — **needs 6 once D2 lands** (monthly + yearly × Plus/Pro/Premium) |
+| `apps/license-server` `MIDTRANS_PRICE_TIERS` (env) | Midtrans billing map | Fixed IDR amounts mapped to tier + period + optional bundle; cross-checked against webhook `gross_amount` and `custom_field1`–`custom_field4` (ADR #39 Dev 2–4) |
 
 ---
 
