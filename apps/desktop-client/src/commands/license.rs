@@ -10,8 +10,8 @@ use oz_core::crypto::{decrypt_api_key, encrypt_api_key};
 use oz_core::license_verification::{
     ActivateLicenseRequest, RenewLicenseRequest, SignedSubscriptionPayload,
     activate_license as core_activate_license, check_license_status as core_check_license_status,
-    pause_subscription as core_pause_subscription, resume_subscription as core_resume_subscription,
-    renew_license as core_renew_license, store_subscription, verify_license_signature,
+    pause_subscription as core_pause_subscription, renew_license as core_renew_license,
+    resume_subscription as core_resume_subscription, store_subscription, verify_license_signature,
 };
 use oz_core::subscription::TenantSubscription;
 
@@ -659,7 +659,9 @@ pub async fn pause_subscription(
         let mid = Settings::get(&conn, "machine_id")?.unwrap_or_default();
         match api_key_enc {
             Some(ref v) => decrypt_api_key(v, &mid).unwrap_or_else(|e| {
-                tracing::warn!("license.api_key decryption failed, treating as legacy plaintext: {e}");
+                tracing::warn!(
+                    "license.api_key decryption failed, treating as legacy plaintext: {e}"
+                );
                 v.clone()
             }),
             None => {
@@ -686,16 +688,16 @@ pub async fn pause_subscription(
 ///
 /// Reads the stored API key and calls the license server's resume endpoint.
 #[tauri::command]
-pub async fn resume_subscription(
-    state: State<'_, AppState>,
-) -> Result<PauseResumeDto, AppError> {
+pub async fn resume_subscription(state: State<'_, AppState>) -> Result<PauseResumeDto, AppError> {
     let api_key = {
         let conn = state.db.lock().await;
         let api_key_enc = Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty());
         let mid = Settings::get(&conn, "machine_id")?.unwrap_or_default();
         match api_key_enc {
             Some(ref v) => decrypt_api_key(v, &mid).unwrap_or_else(|e| {
-                tracing::warn!("license.api_key decryption failed, treating as legacy plaintext: {e}");
+                tracing::warn!(
+                    "license.api_key decryption failed, treating as legacy plaintext: {e}"
+                );
                 v.clone()
             }),
             None => {
@@ -722,9 +724,13 @@ pub async fn resume_subscription(
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PauseResumeDto {
+    /// New subscription status ("paused" or "active").
     pub status: String,
+    /// Tier key that was paused/resumed.
     pub tier_key: String,
+    /// When the subscription was paused (only on pause response).
     pub paused_at: Option<String>,
+    /// When the pause expires (only on pause response).
     pub paused_until: Option<String>,
 }
 
