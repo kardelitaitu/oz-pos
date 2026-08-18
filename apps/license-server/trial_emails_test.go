@@ -319,3 +319,34 @@ func TestGetTrialUsageSummary(t *testing.T) {
 		t.Error("expected non-empty usage summary")
 	}
 }
+
+func TestWinBackMilestones_HaveBothDays(t *testing.T) {
+	seen := map[int]bool{7: false, 30: false}
+	for _, m := range winBackMilestones {
+		seen[m.DayOffset] = true
+	}
+	for day, found := range seen {
+		if !found {
+			t.Errorf("missing win-back milestone for day %d", day)
+		}
+	}
+}
+
+func TestHashLogKey_Deterministic(t *testing.T) {
+	key1 := hashLogKey("winback_7d")
+	key2 := hashLogKey("winback_7d")
+	if key1 != key2 {
+		t.Errorf("hashLogKey not deterministic: %d != %d", key1, key2)
+	}
+	if key1 >= 0 {
+		t.Errorf("expected negative hash, got %d", key1)
+	}
+}
+
+func TestHashLogKey_DifferentKeysDifferentHashes(t *testing.T) {
+	h1 := hashLogKey("winback_7d")
+	h2 := hashLogKey("winback_30d")
+	if h1 == h2 {
+		t.Errorf("different keys produced same hash: %d", h1)
+	}
+}

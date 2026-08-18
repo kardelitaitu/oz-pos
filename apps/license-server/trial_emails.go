@@ -257,6 +257,9 @@ func runTrialEmailScanner(app core.App) {
 	}
 
 	log.Printf("trial-email-scanner: scan complete — %d emails sent", sent)
+
+	// Win-back scan: find recently expired subscriptions and send re-engagement emails.
+	runWinBackScanner(app)
 }
 
 // emailAlreadySent checks the trial_email_log collection for an existing entry.
@@ -369,4 +372,162 @@ func ensureTrialEmailLogCollection(app core.App) error {
 	})
 
 	return app.Save(collection)
+}
+
+// ── Win-back campaigns (§7) ──────────────────────────────────────
+
+// winBackMilestones defines when to send win-back emails after churn.
+// Day 7 after expiry: "We miss you" with special offer.
+// Day 30 after expiry: "Last chance" with deeper discount.
+var winBackMilestones = []struct {
+	DayOffset                       int
+	SubjectEN, SubjectID            string
+	BodyEN, BodyID                  string
+	LogKey                          string // unique key for idempotency
+}{
+	{
+		DayOffset: 7,
+		LogKey:    "winback_7d",
+		SubjectEN: "We miss you at OZ-POS — here's 20%% off for 3 months",
+		SubjectID: "Kami merindukan Anda di OZ-POS — diskon 20%% untuk 3 bulan",
+		BodyEN: "Hi there,\n\n" +
+			"We noticed your OZ-POS subscription has ended. We'd love to have you back!\n\n" +
+			"As a welcome-back offer, here's 20%% off for the next 3 months:\n" +
+			"https://oz-pos.com/pricing?offer=winback20\n\n" +
+			"Your data is still safe — upgrade now and pick up right where you left off.\n\n" +
+			"— The OZ-POS Team",
+		BodyID: "Halo,\n\n" +
+			"Kami perhatikan langganan OZ-POS Anda sudah berakhir. Kami ingin Anda kembali!\n\n" +
+			"Sebagai penawaran kembali, berikut diskon 20%% untuk 3 bulan ke depan:\n" +
+			"https://oz-pos.com/pricing?offer=winback20\n\n" +
+			"Data Anda masih aman — upgrade sekarang dan lanjutkan dari mana Anda berhenti.\n\n" +
+			"— Tim OZ-POS",
+	},
+	{
+		DayOffset: 30,
+		LogKey:    "winback_30d",
+		SubjectEN: "Last chance: 30%% off OZ-POS — your data expires soon",
+		SubjectID: "Kesempatan terakhir: diskon 30%% OZ-POS — data Anda segera expired",
+		BodyEN: "Hi there,\n\n" +
+			"It's been a month since your OZ-POS subscription ended. This is our final offer.\n\n" +
+			"Upgrade now with 30%% off for 3 months:\n" +
+			"https://oz-pos.com/pricing?offer=winback30\n\n" +
+			"After this, your data will be permanently deleted per our retention policy.\n\n" +
+			"— The OZ-POS Team",
+		BodyID: "Halo,\n\n" +
+			"Sudah sebulan sejak langganan OZ-POS Anda berakhir. Ini penawaran terakhir kami.\n\n" +
+			"Upgrade sekarang dengan diskon 30%% untuk 3 bulan:\n" +
+			"https://oz-pos.com/pricing?offer=winback30\n\n" +
+			"Setelah ini, data Anda akan dihapus permanen sesuai kebijakan retensi kami.\n\n" +
+			"— Tim OZ-POS",
+	},
+}
+
+// runWinBackScanner finds expired subscriptions and sends win-back emails.
+func runWinBackScanner(app core.App) {
+	if os.Getenv("OZ_SMTP_HOST") == "" {
+		return
+	}
+
+	log.Println("winback-scanner: starting daily scan")
+
+	// Find expired subscriptions (status = 'expired' or 'grace_period' past grace_until).
+	subs, err := app.FindRecordsByFilter("subscriptions",
+		"(status = 'expired' || (status = 'grace_period' && grace_until != '' && grace_until < {:now}))",
+		"-created", 0, 0,
+		map[string]any{"now": time.Now().UTC().Format(time.RFC3339)})
+	if err != nil {
+		log.Printf("winback-scanner: failed to query subscriptions: %v", err)
+		return
+	}
+
+	now := time.Now().UTC()
+	sent := 0
+
+	for _, sub := range subs {
+		// Use expires_at as the churn reference point.
+		expiresAt, err := time.Parse(time.RFC3339, sub.GetString("expires_at"))
+		if err != nil {
+			continue
+		}
+		daysSinceExpiry := int(now.Sub(expiresAt).Hours() / 24)
+
+		for _, milestone := range winBackMilestones {
+			if daysSinceExpiry != milestone.DayOffset {
+				continue
+			}
+
+			// Idempotency: check trial_email_log for this subscription + log key.
+			if winBackAlreadySent(app, sub.Id, milestone.LogKey) {
+				continue
+			}
+
+			// Get tenant email.
+			tenantID := sub.GetString("tenant_id")
+			tenant, err := app.FindRecordById("tenants", tenantID)
+			if err != nil {
+				continue
+			}
+			toEmail := tenant.GetString("email")
+			if toEmail == "" {
+				continue
+			}
+
+			locale := detectLocale(tenant)
+			subject := milestone.SubjectEN
+			body := milestone.BodyEN
+			if locale == "id" {
+				subject = milestone.SubjectID
+				body = milestone.BodyID
+			}
+
+			if err := sendTrialEmail(toEmail, subject, body); err != nil {
+				log.Printf("winback-scanner: failed to send to %s for sub %s day %d: %v",
+					toEmail, sub.Id, milestone.DayOffset, err)
+				continue
+			}
+
+			// Log for idempotency (reuse trial_email_log with a negative day_offset
+			// to distinguish from trial milestone emails).
+			if err := logWinBackEmailSent(app, sub.Id, milestone.LogKey); err != nil {
+				log.Printf("winback-scanner: warning — email sent but log write failed: %v", err)
+			}
+
+			sent++
+			log.Printf("winback-scanner: sent %s to %s", milestone.LogKey, toEmail)
+		}
+	}
+
+	log.Printf("winback-scanner: scan complete — %d emails sent", sent)
+}
+
+// winBackAlreadySent checks if a win-back email was already sent.
+func winBackAlreadySent(app core.App, subscriptionID, logKey string) bool {
+	record, err := app.FindFirstRecordByFilter("trial_email_log",
+		"subscription = {:sub} && day_offset = {:day}",
+		map[string]any{"sub": subscriptionID, "day": hashLogKey(logKey)})
+	return err == nil && record != nil
+}
+
+// logWinBackEmailSent records a win-back email as sent.
+func logWinBackEmailSent(app core.App, subscriptionID, logKey string) error {
+	collection, err := app.FindCollectionByNameOrId("trial_email_log")
+	if err != nil {
+		return err
+	}
+	record := core.NewRecord(collection)
+	record.Set("subscription", subscriptionID)
+	record.Set("day_offset", hashLogKey(logKey)) // negative = win-back
+	record.Set("sent_at", time.Now().UTC().Format(time.RFC3339))
+	return app.Save(record)
+}
+
+// hashLogKey converts a string log key to a deterministic integer for
+// storage in the day_offset field. Negative values indicate win-back emails.
+func hashLogKey(key string) int {
+	h := 0
+	for _, c := range key {
+		h = h*31 + int(c)
+	}
+	return -(h%9000 + 1000) // negative, between -1000 and -9999
 }
