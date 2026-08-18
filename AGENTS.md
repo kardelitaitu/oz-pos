@@ -1,6 +1,6 @@
 # Agents Configuration
 
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved A1: version lock and manifests all read 0.0.21 · verified accurate: 4 pre-commit gates; command dirs, ui/src/api rule, Money/i64 policy, .githooks gates -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved A1: version lock and manifests all read 0.0.28 · verified accurate: 4 pre-commit gates; command dirs, ui/src/api rule, Money/i64 policy, .githooks gates -->
 
 ## Global Rules
 
@@ -92,6 +92,40 @@ npm ci --no-audit --no-fund
 - Store all monetary values as integer minor units (`i64`) using the `Money` struct; never use `f32`/`f64` for currency.
 - Use `rusqlite` with transactions for all database writes; never write outside a transaction.
 
+### File Documentation
+
+- Every production `.rs` file must start with a short module-level doc comment (`//!`).
+- Keep it to 5–15 lines maximum.
+- Include:
+  - Purpose of the module
+  - Key types / structs / enums
+  - Main public functions
+  - Important invariants or rules (if any)
+- Do **not** write long 30–50 line summaries.
+- Prefer clear module structure and small files over long comments.
+
+### Test File Organization
+
+- Keep production `.rs` files under 1,000 lines (preferably < 600).
+- Never put tests inside production files.
+
+#### Unit & Logic Tests
+- Place in a sibling file named `*_tests.rs` (e.g. `sales.rs` → `sales_tests.rs`).
+- At the bottom of the production file add:
+
+```rust
+#[cfg(test)]
+#[path = "sales_tests.rs"]
+mod tests;
+```
+
+Inside the test file use `use super::*;`
+
+#### Integration Tests
+Place all integration / black-box tests in the top-level tests/ directory.
+Do not put integration tests inside src/.
+
+
 ### Tauri / UI Standards
 - Tauri commands must be defined in `apps/desktop-client/src/commands/` or `apps/tablet-client/src/commands/` and registered in their respective `lib.rs`.
 - Front-end API calls go through `ui/src/api/` (per-domain files); do not call `invoke` directly in components.
@@ -99,7 +133,8 @@ npm ci --no-audit --no-fund
 - Use `@fluent/react` for all user-visible strings; no hardcoded English strings in JSX.
 
 ### Testing Standards
-- Every new Rust module must include a `#[cfg(test)]` block with at least one unit test.
+- Every new Rust module must include a `#[cfg(test)]` block that imports its sibling test file (e.g., `#[path = "sales_tests.rs"] mod tests;`).
+- Inside the sibling test file (`*_tests.rs`), use `use super::*;` and write unit tests.
 - HAL drivers must have a mock implementation in `crates/oz-hal/src/drivers/mock.rs` for testing.
 - Front-end components must have a corresponding test in `ui/src/__tests__/`.
 
