@@ -51,6 +51,7 @@ var requiredCollections = []string{
 	"subscriptions",
 	"tenant_machines",
 	"trial_registrations",
+	"trial_claims",
 }
 
 // privateKey is the RSA-2048 private key loaded from the
@@ -189,6 +190,13 @@ func main() {
 		// pb_schema.json; existing pb_data volumes get it created here
 		// without reimporting the whole schema.
 		if err := ensureTrialRegistrations(app); err != nil {
+			return err
+		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// lightweight repeat-email detector: same pattern — fresh boots
+		// get trial_claims from pb_schema.json, existing pb_data volumes
+		// get it created here.
+		if err := ensureTrialClaims(app); err != nil {
 			return err
 		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
@@ -544,6 +552,37 @@ func ensureTrialRegistrations(app core.App) error {
 		return fmt.Errorf("failed to create trial_registrations collection: %w", err)
 	}
 	log.Println("migrated: created trial_registrations collection (hardware-fingerprint trial lock)")
+	return nil
+}
+
+// ensureTrialClaims creates the trial_claims collection for deployments
+// that predate the lightweight repeat-email detector (hash of email +
+// device id, recorded per successful trial claim — see recordTrialClaim in
+// trial.go). Fresh boots get it from the embedded pb_schema.json; this is
+// the idempotent in-place upgrade for already-provisioned pb_data volumes.
+func ensureTrialClaims(app core.App) error {
+	if _, err := app.FindCollectionByNameOrId("trial_claims"); err == nil {
+		return nil // already exists
+	}
+	coll := core.NewBaseCollection("trial_claims")
+	coll.Fields.Add(&core.TextField{Name: "claim_hash", Required: true, Pattern: "^[a-f0-9]{64}$", Min: 64, Max: 64})
+	coll.Fields.Add(&core.TextField{Name: "email", Required: true, Max: 320})
+	coll.Fields.Add(&core.TextField{Name: "device_id", Required: true, Max: 128})
+	coll.Fields.Add(&core.RelationField{Name: "tenant_id", CollectionId: "tenants", MaxSelect: 1})
+	coll.Fields.Add(&core.NumberField{Name: "claim_count", Required: true, Min: types.Pointer(1.0), OnlyInt: true})
+	coll.Fields.Add(&core.DateField{Name: "first_claimed_at", Required: true})
+	coll.Fields.Add(&core.DateField{Name: "last_claimed_at", Required: true})
+	coll.Fields.Add(&core.TextField{Name: "trial_keys", Max: 2048})
+	coll.Indexes = append(coll.Indexes,
+		"CREATE UNIQUE INDEX idx_trial_claims_hash ON trial_claims (claim_hash) WHERE claim_hash IS NOT NULL AND claim_hash != ''")
+	coll.CreateRule = types.Pointer("")
+	coll.ListRule = types.Pointer("")
+	coll.ViewRule = types.Pointer("")
+	coll.UpdateRule = types.Pointer("")
+	if err := app.Save(coll); err != nil {
+		return fmt.Errorf("failed to create trial_claims collection: %w", err)
+	}
+	log.Println("migrated: created trial_claims collection (lightweight repeat-email detector)")
 	return nil
 }
 

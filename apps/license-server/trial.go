@@ -22,6 +22,8 @@ package main
 // anchor. Both are stable across app reinstalls and DB wipes.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -159,6 +161,19 @@ func handleTrial(app core.App) func(e *core.RequestEvent) error {
 		}
 		log.Printf("trial: registered hardware fingerprint %q (platform=%s, expires=%s)", fp, platform, trialExpires.Format(time.RFC3339))
 
+		// Lightweight repeat-email detector (NOT the trial-lock gate):
+		// record the (email, device) fingerprint so a repeat claim by the
+		// same email on the same device is observable even before
+		// activation. Errors are non-fatal — the claim itself already
+		// succeeded.
+		if email := strings.ToLower(strings.TrimSpace(req.Email)); email != "" {
+			tenantID := ""
+			if sl := rec.GetStringSlice("tenant_id"); len(sl) > 0 {
+				tenantID = sl[0]
+			}
+			recordTrialClaim(app, email, fp, tenantID, "")
+		}
+
 		return e.JSON(http.StatusOK, map[string]any{
 			"status":               "active",
 			"hardware_fingerprint": fp,
@@ -166,4 +181,92 @@ func handleTrial(app core.App) func(e *core.RequestEvent) error {
 			"days_remaining":       trialDays,
 		})
 	}
+}
+
+// trialClaimHash is the lightweight repeat-claim fingerprint: SHA-256 of
+// the normalized email + "|" + the device id (machine_id at activation,
+// the hardware fingerprint at the claim endpoint). Deterministic, so the
+// same (email, device) pair always yields the same 64-char hex hash — and
+// email normalization (lowercase + trim) keeps "Store@Example.COM " and
+// "store@example.com" on the same row.
+func trialClaimHash(email, deviceID string) string {
+	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(email)) + "|" + deviceID))
+	return hex.EncodeToString(sum[:])
+}
+
+// recordTrialClaim is the lightweight repeat-email detector. It is
+// deliberately NOT the SPEC-2026-TRIAL-LOCK gate (enforceTrialLock) — it
+// never blocks and never answers 403; the full lock only fires across
+// tenants, while a same-tenant reinstall (the same email claiming a fresh
+// trial key on the same device) is allowed by design. This function makes
+// that exact case observable: every successful trial activation (and every
+// /trial claim that carries an email) upserts a row keyed by the (email,
+// device) hash; a second claim bumps claim_count and is logged as a repeat.
+//
+// Returns the claim count (1 = first claim) and the first-claim timestamp
+// (RFC 3339) so callers can surface repeat_claim to the client without the
+// full lock's machinery. Failures are non-fatal (logged, claim proceeds) —
+// detection must never break trial activation.
+func recordTrialClaim(app core.App, email, deviceID, tenantID, key string) (int, string) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" || deviceID == "" {
+		return 0, ""
+	}
+	hash := trialClaimHash(email, deviceID)
+	now := time.Now().UTC()
+
+	existing, err := app.FindFirstRecordByData("trial_claims", "claim_hash", hash)
+	if err == nil {
+		// Repeat claim: bump the count, extend the last-seen stamp, and
+		// append the key to the audit trail.
+		count := existing.GetInt("claim_count") + 1
+		existing.Set("claim_count", count)
+		existing.Set("last_claimed_at", now)
+		if tenantID != "" && existing.GetString("tenant_id") == "" {
+			existing.Set("tenant_id", []string{tenantID})
+		}
+		if key != "" {
+			var keys []string
+			if raw := existing.GetString("trial_keys"); raw != "" {
+				_ = json.Unmarshal([]byte(raw), &keys)
+			}
+			keys = append(keys, key)
+			if b, err := json.Marshal(keys); err == nil {
+				existing.Set("trial_keys", string(b))
+			}
+		}
+		if saveErr := app.Save(existing); saveErr != nil {
+			log.Printf("trial claim: failed to update repeat row for %q: %v", email, saveErr)
+			return count, existing.GetDateTime("first_claimed_at").Time().UTC().Format(time.RFC3339)
+		}
+		if count > 1 {
+			log.Printf("trial claim repeat detected: email=%q device=%q count=%d (full trial-lock gate not involved)", email, deviceID, count)
+		}
+		return count, existing.GetDateTime("first_claimed_at").Time().UTC().Format(time.RFC3339)
+	}
+
+	// First claim for this (email, device) pair.
+	coll, collErr := app.FindCollectionByNameOrId("trial_claims")
+	if collErr != nil {
+		log.Printf("trial claim: trial_claims collection not found: %v", collErr)
+		return 1, now.Format(time.RFC3339)
+	}
+	rec := core.NewRecord(coll)
+	rec.Set("claim_hash", hash)
+	rec.Set("email", email)
+	rec.Set("device_id", deviceID)
+	rec.Set("claim_count", 1)
+	rec.Set("first_claimed_at", now)
+	rec.Set("last_claimed_at", now)
+	if tenantID != "" {
+		rec.Set("tenant_id", []string{tenantID})
+	}
+	if key != "" {
+		rec.Set("trial_keys", `["`+key+`"]`)
+	}
+	if saveErr := app.Save(rec); saveErr != nil {
+		log.Printf("trial claim: failed to record first claim for %q: %v", email, saveErr)
+		return 1, now.Format(time.RFC3339)
+	}
+	return 1, now.Format(time.RFC3339)
 }

@@ -803,11 +803,31 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		// by the brute-force cooldown from earlier typos.
 		keyFailTracker.clearKey(req.Key)
 
+		// ── Lightweight repeat-email detector (NOT the trial-lock gate) ──
+		// Every successful TRIAL activation records the (email, device)
+		// fingerprint; a second claim by the same email on the same device
+		// (the same-tenant reinstall case the full SPEC-2026-TRIAL-LOCK
+		// gate allows by design) bumps the count and is surfaced as
+		// repeat_claim so the client can warn without blocking. Paid keys
+		// are never recorded — the detector watches trial claims only.
+		var repeatClaim any
+		if isTrialKey {
+			if count, firstAt := recordTrialClaim(app, req.Email, req.MachineID, tenantID, req.Key); count > 1 {
+				repeatClaim = map[string]any{
+					"count":            count,
+					"first_claimed_at": firstAt,
+				}
+			}
+		}
+
 		// ── Return signed subscription to POS ─────────────────────
 		resp := map[string]any{
 			"signed_payload": payloadStr,
 			"signature":      signature,
 			"tenant_id":      tenantID,
+		}
+		if repeatClaim != nil {
+			resp["repeat_claim"] = repeatClaim
 		}
 		// api_key is included only for newly created tenants (so the POS can
 		// persist it). The stored value is a bcrypt hash, so the plaintext

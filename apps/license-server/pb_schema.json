@@ -990,5 +990,167 @@
     "indexes": [
       "CREATE UNIQUE INDEX idx_trial_registrations_hw ON trial_registrations (hardware_fingerprint) WHERE hardware_fingerprint IS NOT NULL AND hardware_fingerprint != ''"
     ]
+  },
+  {
+    "id": "trialclaim00001",
+    "name": "trial_claims",
+    "type": "base",
+    "system": false,
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text2000000000",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "SHA-256 of the normalized email + '|' + device id (machine_id at activation, hardware fingerprint at the claim endpoint). Unique — the lightweight repeat-email detector key.",
+        "hidden": false,
+        "id": "text2000000001",
+        "max": 64,
+        "min": 64,
+        "name": "claim_hash",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "^[a-f0-9]{64}$",
+        "primaryKey": false
+      },
+      {
+        "help": "Normalized (lowercased/trimmed) account email the claim was made under.",
+        "hidden": false,
+        "id": "text2000000002",
+        "max": 320,
+        "min": 1,
+        "name": "email",
+        "presentable": true,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Device component of the claim fingerprint (machine_id or hardware fingerprint at claim time).",
+        "hidden": false,
+        "id": "text2000000003",
+        "max": 128,
+        "min": 1,
+        "name": "device_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Tenant the claim belongs to, when known (set at activation; the claim endpoint fills it in when an email is provided).",
+        "hidden": false,
+        "id": "relation2000000000",
+        "name": "tenant_id",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "relation",
+        "cascadeDelete": false,
+        "collectionId": "64d11bd2cc57a18",
+        "maxSelect": 1,
+        "minSelect": 0
+      },
+      {
+        "help": "How many times this (email, device) pair has claimed a trial. 1 = first claim; >1 = repeat email detected.",
+        "hidden": false,
+        "id": "number2000000000",
+        "max": null,
+        "min": 1,
+        "name": "claim_count",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "number",
+        "onlyInt": true
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date2000000000",
+        "name": "first_claimed_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date2000000001",
+        "name": "last_claimed_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "JSON array of the license keys used for each claim (audit trail for repeat detection).",
+        "hidden": false,
+        "id": "text2000000004",
+        "max": 2048,
+        "min": 0,
+        "name": "trial_keys",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "hidden": false,
+        "id": "autodate2000000000",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2000000001",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_trial_claims_hash ON trial_claims (claim_hash) WHERE claim_hash IS NOT NULL AND claim_hash != ''"
+    ]
   }
 ]

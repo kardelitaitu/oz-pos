@@ -152,6 +152,28 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	if err := app.Save(trialRegs); err != nil {
 		t.Fatalf("failed to create trial_registrations collection: %v", err)
 	}
+
+	// Lightweight repeat-email detector: hash of (email, device id) with a
+	// claim counter. Mirrors the production pb_schema.json so the detector
+	// (recordTrialClaim in trial.go) finds its table in tests.
+	trialClaims := core.NewBaseCollection("trial_claims")
+	trialClaims.Fields.Add(&core.TextField{Name: "claim_hash", Required: true, Pattern: "^[a-f0-9]{64}$", Min: 64, Max: 64})
+	trialClaims.Fields.Add(&core.TextField{Name: "email", Required: true, Max: 320})
+	trialClaims.Fields.Add(&core.TextField{Name: "device_id", Required: true, Max: 128})
+	trialClaims.Fields.Add(&core.RelationField{Name: "tenant_id", CollectionId: tenants.Id, MaxSelect: 1})
+	trialClaims.Fields.Add(&core.NumberField{Name: "claim_count", Required: true, Min: types.Pointer(1.0), OnlyInt: true})
+	trialClaims.Fields.Add(&core.DateField{Name: "first_claimed_at", Required: true})
+	trialClaims.Fields.Add(&core.DateField{Name: "last_claimed_at", Required: true})
+	trialClaims.Fields.Add(&core.TextField{Name: "trial_keys", Max: 2048})
+	trialClaims.Indexes = append(trialClaims.Indexes,
+		"CREATE UNIQUE INDEX idx_trial_claims_hash ON trial_claims (claim_hash) WHERE claim_hash IS NOT NULL AND claim_hash != ''")
+	trialClaims.CreateRule = types.Pointer("")
+	trialClaims.ListRule = types.Pointer("")
+	trialClaims.ViewRule = types.Pointer("")
+	trialClaims.UpdateRule = types.Pointer("")
+	if err := app.Save(trialClaims); err != nil {
+		t.Fatalf("failed to create trial_claims collection: %v", err)
+	}
 }
 
 func registerTestRoutes(t *testing.T, app *tests.TestApp) {
@@ -199,6 +221,11 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		// Mirror production boot: ensure the trial_registrations collection
 		// (hardware-fingerprint trial lock, SPEC-2026-TRIAL-LOCK) exists.
 		if err := ensureTrialRegistrations(app); err != nil {
+			return err
+		}
+		// Mirror production boot: ensure the trial_claims collection
+		// (lightweight repeat-email detector) exists.
+		if err := ensureTrialClaims(app); err != nil {
 			return err
 		}
 
