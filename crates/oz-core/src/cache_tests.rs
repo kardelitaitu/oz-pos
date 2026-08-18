@@ -6,68 +6,67 @@ fn usd() -> crate::Currency {
     "USD".parse().unwrap()
 }
 
-fn product_with_details() -> ProductWithDetails {
-    ProductWithDetails {
+#[test]
+fn noop_cache_get_product_returns_none() {
+    let cache = NoopCache;
+    assert!(cache.get_product("anything").is_none());
+}
+
+#[test]
+fn noop_cache_get_inventory_returns_none() {
+    let cache = NoopCache;
+    assert!(cache.get_inventory("any-id").is_none());
+}
+
+#[test]
+fn noop_cache_set_product_is_noop() {
+    let cache = NoopCache;
+    let p = ProductWithDetails {
         product: crate::Product::new(
-            "TEST-SKU",
-            "Test Product",
+            "SKU",
+            "N",
             Money {
-                minor_units: 1000,
+                minor_units: 100,
                 currency: usd(),
             },
         ),
-        category_name: Some("Test Category".into()),
-        stock_qty: Some(42),
-        // ADR #36 popularity_score field (added in-flight by another
-        // agent's products work — completing the initializer so the
-        // crate compiles).
+        category_name: None,
+        stock_qty: None,
         popularity_score: 0.0,
-    }
+    };
+    cache.set_product("sku", &p);
+    assert!(cache.get_product("sku").is_none());
 }
 
 #[test]
-#[ignore = "requires a Redis server on localhost:6379"]
-fn redis_cache_set_get_product() {
-    let cache = RedisCache::connect("redis://127.0.0.1/", 300).unwrap();
-    let p = product_with_details();
-    cache.set_product("TEST-SKU", &p);
-    let cached = cache.get_product("TEST-SKU").unwrap();
-    assert_eq!(cached, p);
+fn noop_cache_set_inventory_is_noop() {
+    let cache = NoopCache;
+    cache.set_inventory("p", 50);
+    assert!(cache.get_inventory("p").is_none());
 }
 
 #[test]
-#[ignore = "requires a Redis server on localhost:6379"]
-fn redis_cache_invalidate_product() {
-    let cache = RedisCache::connect("redis://127.0.0.1/", 300).unwrap();
-    let p = product_with_details();
-    cache.set_product("TEST-INV", &p);
-    assert!(cache.get_product("TEST-INV").is_some());
-    cache.invalidate_product("TEST-INV");
-    assert!(cache.get_product("TEST-INV").is_none());
+fn noop_cache_invalidation_is_noop() {
+    let cache = NoopCache;
+    cache.invalidate_product("sku");
+    cache.invalidate_inventory("p");
 }
 
 #[test]
-#[ignore = "requires a Redis server on localhost:6379"]
-fn redis_cache_set_get_inventory() {
-    let cache = RedisCache::connect("redis://127.0.0.1/", 300).unwrap();
-    cache.set_inventory("prod-1", 50);
-    assert_eq!(cache.get_inventory("prod-1"), Some(50));
+fn noop_cache_is_not_healthy() {
+    let cache = NoopCache;
+    assert!(!cache.is_healthy());
 }
 
 #[test]
-#[ignore = "requires a Redis server on localhost:6379"]
-fn redis_cache_invalidate_inventory() {
-    let cache = RedisCache::connect("redis://127.0.0.1/", 300).unwrap();
-    cache.set_inventory("prod-inv", 10);
-    assert_eq!(cache.get_inventory("prod-inv"), Some(10));
-    cache.invalidate_inventory("prod-inv");
-    assert!(cache.get_inventory("prod-inv").is_none());
+fn noop_cache_start_inventory_pubsub_returns_none() {
+    let cache = NoopCache;
+    let arc_cache: Arc<dyn Cache> = Arc::new(NoopCache);
+    assert!(cache.start_inventory_pubsub(arc_cache, None).is_none());
 }
 
 #[test]
-#[ignore = "requires a Redis server on localhost:6379"]
-fn redis_cache_is_healthy() {
-    let cache = RedisCache::connect("redis://127.0.0.1/", 300).unwrap();
-    assert!(cache.is_healthy());
+fn create_cache_falls_back_to_noop() {
+    let cache = create_cache("redis://127.0.0.1:1/", 300);
+    assert!(!cache.is_healthy());
 }
-    

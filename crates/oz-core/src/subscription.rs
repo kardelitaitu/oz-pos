@@ -1461,4 +1461,136 @@ mod tests {
             SubscriptionTier::Plus
         );
     }
+
+    // ── C4.3: Add-on Marketplace ──────────────────────────────
+
+    /// Helper: build a TenantSubscription with a given signed payload.
+    fn sub_with_payload(payload: &str) -> TenantSubscription {
+        TenantSubscription {
+            tenant_id: "test".into(),
+            tier: SubscriptionTier::Plus,
+            status: "active".into(),
+            expires_at: None,
+            max_stores: 1,
+            max_pos_instances: 2,
+            allowed_types_json: "[]".into(),
+            signature: "BOOTSTRAP_FREE".into(),
+            signed_payload: payload.into(),
+            api_key: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn addons_parses_json_array() {
+        let payload = r#"{"tier":"plus","addons":["advanced_analytics","priority_support"]}"#;
+        let sub = sub_with_payload(payload);
+        let addons = sub.addons();
+        assert_eq!(addons.len(), 2);
+        assert!(addons.contains(&"advanced_analytics".to_string()));
+        assert!(addons.contains(&"priority_support".to_string()));
+    }
+
+    #[test]
+    fn addons_empty_payload_returns_empty_vec() {
+        let sub = sub_with_payload("");
+        assert!(sub.addons().is_empty());
+    }
+
+    #[test]
+    fn addons_no_addons_key_returns_empty_vec() {
+        let payload = r#"{"tier":"plus"}"#;
+        let sub = sub_with_payload(payload);
+        assert!(sub.addons().is_empty());
+    }
+
+    #[test]
+    fn addons_invalid_json_returns_empty_vec() {
+        let sub = sub_with_payload("not json at all");
+        assert!(sub.addons().is_empty());
+    }
+
+    #[test]
+    fn addons_addons_not_array_returns_empty_vec() {
+        let payload = r#"{"addons":"not_an_array"}"#;
+        let sub = sub_with_payload(payload);
+        assert!(sub.addons().is_empty());
+    }
+
+    #[test]
+    fn has_addon_case_insensitive() {
+        let payload = r#"{"addons":["Advanced_Analytics"]}"#;
+        let sub = sub_with_payload(payload);
+        assert!(sub.has_addon("advanced_analytics"));
+        assert!(sub.has_addon("ADVANCED_ANALYTICS"));
+        assert!(sub.has_addon("Advanced_Analytics"));
+    }
+
+    #[test]
+    fn has_addon_returns_false_when_not_present() {
+        let payload = r#"{"addons":["priority_support"]}"#;
+        let sub = sub_with_payload(payload);
+        assert!(!sub.has_addon("advanced_analytics"));
+    }
+
+    #[test]
+    fn has_addon_empty_payload() {
+        let sub = sub_with_payload("");
+        assert!(!sub.has_addon("anything"));
+    }
+
+    #[test]
+    fn supports_analytics_with_addons_plus_tier() {
+        // Plus without addon → no analytics
+        let payload = r#"{"tier":"plus","addons":[]}"#;
+        let sub = sub_with_payload(payload);
+        assert!(!sub.supports_analytics_with_addons());
+
+        // Plus with advanced_analytics addon → analytics enabled
+        let payload = r#"{"tier":"plus","addons":["advanced_analytics"]}"#;
+        let sub = sub_with_payload(payload);
+        assert!(sub.supports_analytics_with_addons());
+    }
+
+    #[test]
+    fn supports_analytics_with_addons_pro_tier() {
+        // Pro always supports analytics regardless of addons
+        let mut sub = sub_with_payload("");
+        sub.tier = SubscriptionTier::Pro;
+        assert!(sub.supports_analytics_with_addons());
+    }
+
+    #[test]
+    fn supports_analytics_with_addons_free_tier() {
+        // Free never supports analytics, even with addon
+        let mut sub = sub_with_payload(r#"{"addons":["advanced_analytics"]}"#);
+        sub.tier = SubscriptionTier::Free;
+        assert!(!sub.supports_analytics_with_addons());
+    }
+
+    #[test]
+    fn supports_analytics_with_addons_premium_tier() {
+        let mut sub = sub_with_payload("");
+        sub.tier = SubscriptionTier::Premium;
+        assert!(sub.supports_analytics_with_addons());
+    }
+
+    #[test]
+    fn addons_empty_array() {
+        let payload = r#"{"addons":[]}"#;
+        let sub = sub_with_payload(payload);
+        assert!(sub.addons().is_empty());
+        assert!(!sub.has_addon("anything"));
+    }
+
+    #[test]
+    fn addons_multiple_addons() {
+        let payload = r#"{"addons":["advanced_analytics","priority_support","extra_storage","custom_hal"]}"#;
+        let sub = sub_with_payload(payload);
+        assert_eq!(sub.addons().len(), 4);
+        assert!(sub.has_addon("advanced_analytics"));
+        assert!(sub.has_addon("priority_support"));
+        assert!(sub.has_addon("extra_storage"));
+        assert!(sub.has_addon("custom_hal"));
+    }
 }
