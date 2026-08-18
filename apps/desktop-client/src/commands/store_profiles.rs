@@ -3,8 +3,8 @@
 //! Each command talks to the `Store` facade via the shared `AppState`
 //! database connection.
 
-use oz_core::subscription::TenantSubscription;
 use oz_core::StoreProfile;
+use oz_core::subscription::TenantSubscription;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 

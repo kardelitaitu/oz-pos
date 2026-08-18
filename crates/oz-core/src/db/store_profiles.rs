@@ -57,9 +57,7 @@ impl Store<'_> {
     pub fn count_store_profiles(&self) -> Result<i64, CoreError> {
         let count: i64 = self
             .conn
-            .query_row("SELECT COUNT(*) FROM store_profiles", [], |row| {
-                row.get(0)
-            })?;
+            .query_row("SELECT COUNT(*) FROM store_profiles", [], |row| row.get(0))?;
         Ok(count)
     }
 
@@ -706,15 +704,17 @@ mod tests {
         // NOT be blocked here (the quota check counts BEFORE the new
         // insert, so current=1, limit=1 → current >= limit → blocked).
         // But Plus also allows 1, Pro allows 2, Premium allows 10.
-        assert!(store
-            .enforce_store_quota(&SubscriptionTier::Pro)
-            .is_ok());
-        assert!(store
-            .enforce_store_quota(&SubscriptionTier::Premium)
-            .is_ok());
-        assert!(store
-            .enforce_store_quota(&SubscriptionTier::Enterprise)
-            .is_ok());
+        assert!(store.enforce_store_quota(&SubscriptionTier::Pro).is_ok());
+        assert!(
+            store
+                .enforce_store_quota(&SubscriptionTier::Premium)
+                .is_ok()
+        );
+        assert!(
+            store
+                .enforce_store_quota(&SubscriptionTier::Enterprise)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -769,9 +769,11 @@ mod tests {
             "Pro with 2 stores must be blocked: {err:?}"
         );
         // Premium (10) still allows it.
-        assert!(store
-            .enforce_store_quota(&SubscriptionTier::Premium)
-            .is_ok());
+        assert!(
+            store
+                .enforce_store_quota(&SubscriptionTier::Premium)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -805,9 +807,11 @@ mod tests {
             store.create_store_profile(&p).unwrap();
         }
         assert_eq!(store.count_store_profiles().unwrap(), 9);
-        assert!(store
-            .enforce_store_quota(&SubscriptionTier::Premium)
-            .is_ok());
+        assert!(
+            store
+                .enforce_store_quota(&SubscriptionTier::Premium)
+                .is_ok()
+        );
         // Add 1 more = 10 total → must be blocked.
         let p = StoreProfile {
             id: "store-9".into(),
@@ -849,8 +853,10 @@ mod tests {
             };
             store.create_store_profile(&p).unwrap();
         }
-        assert!(store
-            .enforce_store_quota(&SubscriptionTier::Enterprise)
-            .is_ok());
+        assert!(
+            store
+                .enforce_store_quota(&SubscriptionTier::Enterprise)
+                .is_ok()
+        );
     }
 }

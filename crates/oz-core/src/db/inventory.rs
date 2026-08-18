@@ -1911,10 +1911,14 @@ mod tests {
     fn count_warehouse_locations_counts_only_warehouses() {
         let conn = fresh();
         let s = store(&conn);
-        s.create_inventory_location("Main Store", "store", "").unwrap();
-        s.create_inventory_location("WH A", "warehouse", "").unwrap();
-        s.create_inventory_location("WH B", "warehouse", "").unwrap();
-        s.create_inventory_location("Transit", "transit", "").unwrap();
+        s.create_inventory_location("Main Store", "store", "")
+            .unwrap();
+        s.create_inventory_location("WH A", "warehouse", "")
+            .unwrap();
+        s.create_inventory_location("WH B", "warehouse", "")
+            .unwrap();
+        s.create_inventory_location("Transit", "transit", "")
+            .unwrap();
         assert_eq!(s.count_warehouse_locations().unwrap(), 2);
     }
 
@@ -1923,22 +1927,26 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         // Free allows 1 warehouse; store/transit types bypass the check.
-        assert!(s
-            .enforce_warehouse_quota(&SubscriptionTier::Free, "store")
-            .is_ok());
-        assert!(s
-            .enforce_warehouse_quota(&SubscriptionTier::Free, "transit")
-            .is_ok());
-        assert!(s
-            .enforce_warehouse_quota(&SubscriptionTier::Free, "damaged")
-            .is_ok());
+        assert!(
+            s.enforce_warehouse_quota(&SubscriptionTier::Free, "store")
+                .is_ok()
+        );
+        assert!(
+            s.enforce_warehouse_quota(&SubscriptionTier::Free, "transit")
+                .is_ok()
+        );
+        assert!(
+            s.enforce_warehouse_quota(&SubscriptionTier::Free, "damaged")
+                .is_ok()
+        );
     }
 
     #[test]
     fn enforce_warehouse_quota_blocks_free_at_limit() {
         let conn = fresh();
         let s = store(&conn);
-        s.create_inventory_location("WH A", "warehouse", "").unwrap();
+        s.create_inventory_location("WH A", "warehouse", "")
+            .unwrap();
         // Free allows 1 warehouse; we have 1 → must be blocked.
         let err = s
             .enforce_warehouse_quota(&SubscriptionTier::Free, "warehouse")
@@ -1953,12 +1961,15 @@ mod tests {
     fn enforce_warehouse_quota_allows_plus_two() {
         let conn = fresh();
         let s = store(&conn);
-        s.create_inventory_location("WH A", "warehouse", "").unwrap();
+        s.create_inventory_location("WH A", "warehouse", "")
+            .unwrap();
         // Plus allows 2 warehouses; we have 1 → OK.
-        assert!(s
-            .enforce_warehouse_quota(&SubscriptionTier::Plus, "warehouse")
-            .is_ok());
-        s.create_inventory_location("WH B", "warehouse", "").unwrap();
+        assert!(
+            s.enforce_warehouse_quota(&SubscriptionTier::Plus, "warehouse")
+                .is_ok()
+        );
+        s.create_inventory_location("WH B", "warehouse", "")
+            .unwrap();
         // Now at 2 → Plus must be blocked.
         let err = s
             .enforce_warehouse_quota(&SubscriptionTier::Plus, "warehouse")
@@ -1973,7 +1984,8 @@ mod tests {
     fn enforce_warehouse_quota_error_message_includes_tier() {
         let conn = fresh();
         let s = store(&conn);
-        s.create_inventory_location("WH A", "warehouse", "").unwrap();
+        s.create_inventory_location("WH A", "warehouse", "")
+            .unwrap();
         let err = s
             .enforce_warehouse_quota(&SubscriptionTier::Free, "warehouse")
             .unwrap_err();
@@ -1985,13 +1997,17 @@ mod tests {
     fn enforce_warehouse_quota_pro_allows_three() {
         let conn = fresh();
         let s = store(&conn);
-        s.create_inventory_location("WH A", "warehouse", "").unwrap();
-        s.create_inventory_location("WH B", "warehouse", "").unwrap();
+        s.create_inventory_location("WH A", "warehouse", "")
+            .unwrap();
+        s.create_inventory_location("WH B", "warehouse", "")
+            .unwrap();
         // Pro allows 3 warehouses; we have 2 → OK.
-        assert!(s
-            .enforce_warehouse_quota(&SubscriptionTier::Pro, "warehouse")
-            .is_ok());
-        s.create_inventory_location("WH C", "warehouse", "").unwrap();
+        assert!(
+            s.enforce_warehouse_quota(&SubscriptionTier::Pro, "warehouse")
+                .is_ok()
+        );
+        s.create_inventory_location("WH C", "warehouse", "")
+            .unwrap();
         // Now at 3 → Pro must be blocked.
         let err = s
             .enforce_warehouse_quota(&SubscriptionTier::Pro, "warehouse")
@@ -2011,9 +2027,10 @@ mod tests {
                 .unwrap();
         }
         // Premium has no warehouse limit — always passes.
-        assert!(s
-            .enforce_warehouse_quota(&SubscriptionTier::Premium, "warehouse")
-            .is_ok());
+        assert!(
+            s.enforce_warehouse_quota(&SubscriptionTier::Premium, "warehouse")
+                .is_ok()
+        );
     }
 
     #[test]
@@ -2025,8 +2042,9 @@ mod tests {
                 .unwrap();
         }
         // Enterprise has no warehouse limit — always passes.
-        assert!(s
-            .enforce_warehouse_quota(&SubscriptionTier::Enterprise, "warehouse")
-            .is_ok());
+        assert!(
+            s.enforce_warehouse_quota(&SubscriptionTier::Enterprise, "warehouse")
+                .is_ok()
+        );
     }
 }
