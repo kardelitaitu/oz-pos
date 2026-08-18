@@ -174,11 +174,21 @@ Receipt email for `OZ-PLUS-GURC-…` also captured.
 | Invalid signature | `signature_key` zeroed | `401 {"error":"invalid signature"}`, nothing created | ✅ |
 | Tampered amount | `gross_amount=123456` (not in map) | `500 {"error":"provisioning failed"}`; log: `gross_amount "123456" is not mapped in MIDTRANS_PRICE_TIERS`; no key minted | ✅ |
 | Bundle claim on plain amount | `custom_field4=restaurant_starter` with `500000` | `500 {"error":"provisioning failed"}`; log: `custom_field4 bundle "restaurant_starter" disagrees with price-mapped bundle "" for amount "500000" — rejecting`; no key minted | ✅ |
+| **Tampered custom_field3** | `1490000` (plus:year) with `custom_field3="month"` | `500 {"error":"provisioning failed"}`; log: `custom_field3 period "month" disagrees with price-mapped period "year" for amount "1490000" — rejecting`; no key minted | ✅ |
 | Renewal | same `subscription_id`, new `order_id`, same amount | **same** key `OZ-PLUS-GURC-…` (no second mint); `midtrans_order_id` updated; `expires_at` extended 07:41:19 → 07:42:02 (+1 year); subscription back to `active`; `bundle_id` + `kds` survived | ✅ |
 | Failed charge | `transaction_status=cancel` for the subscription | subscription → `grace_period` with `grace_until` = the old `expires_at`; later renewal revived it to `active` | ✅ |
 
 Final record counts after all checks: **2 license keys, 2 subscriptions** — the negative
 checks minted nothing.
+
+> **Tampered custom_field3 verification (re-run 2026-08-18):** the period
+> cross-check added in commit `9a9f563f` was re-verified against the HEAD
+> code. A notification with `gross_amount=1490000` (plus:year) and
+> `custom_field3="month"` was rejected with **500** and the server log
+> recorded `custom_field3 period "month" disagrees with price-mapped
+> period "year" for amount "1490000" — rejecting`. No license key was
+> minted. The legacy vocabulary `"monthly"` for the matching monthly amount
+> (`149000`) was accepted (200, key minted, expiry ~+1mo).
 
 ## 5. §11.7 checklist summary
 
@@ -189,6 +199,7 @@ checks minted nothing.
 - [x] Key has `payment_provider=midtrans`, plus quota block (no kds without bundle)
 - [x] Bundle amount (`750000`) → `kds` in `allowed_types` + `bundle_id=restaurant_starter`
 - [x] Replay dedup, invalid signature 401, tampered amount 500, bundle-claim 500
+- [x] **Tampered custom_field3** (`month` on `plus:year` amount) → 500, no key minted
 - [x] Renewal refreshes the same key and extends expiry +1 year
 - [x] Failed charge moves the subscription to `grace_period`
 
