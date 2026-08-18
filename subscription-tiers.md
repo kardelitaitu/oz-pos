@@ -293,10 +293,10 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 | **Enterprise** | 🟢 Very Low | Long contracts | Quarterly business reviews |
 
 ### Features to Implement
-- **Pause subscription:** Allow 1-3 month pause (retain data, no billing) — expected -20% churn
-- **Win-back campaigns:** Automated emails with special offers for churned users
-- **Usage monitoring:** Alert at 80% of limits (stores, staff, terminals) — before the wall, not at it
-- **Feedback collection:** Exit survey to understand churn reasons
+- ✅ **Pause subscription:** Allow 1-3 month pause (retain data, no billing) — C3.3
+- ✅ **Win-back campaigns:** Automated emails at 7d + 30d post-expiry with 20%/30% discount offers
+- ✅ **Usage monitoring:** Alert at 80% of limits (staff at 16/20, stores at cap, terminals at cap)
+- ✅ **Feedback collection:** Exit survey modal with 6 churn-reason options
 
 ### Metrics to Track
 - Monthly churn rate by tier
@@ -344,7 +344,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 ### Short-Term (Month 1-3)
 10. ✅ **Implement segmented trial strategy** — 14-day Plus trial for general; 14-day Pro for restaurant/cafe; 30-day Pro for enterprise-referral
 11. ✅ **Build vertical landing pages** — `/untuk-kafe`, `/untuk-warung`, `/untuk-minimarket`, `/untuk-restoran` — `VerticalLanding.astro` component with i18n, segmented trial CTAs, bundle paths
-12. ✅ **Implement in-app upgrade triggers** — `TierLockedFeature` component (analytics + loyalty + daily dashboard), 80% usage limit alerts via `SubscriptionCapabilities`
+12. ✅ **Implement in-app upgrade triggers** — All 9 triggers wired: TierLockedFeature (analytics, loyalty, daily dashboard, QRIS), quota error banners (staff, store, terminal), proactive alerts at 80% (staff approaching 16/20, store at 2/2)
 13. ✅ **Implement upgrade/downgrade proration** — `paddleUpdate()` in paddle_webhook.go handles tier transitions; Paddle handles proration billing; grace period via `offline_grace_days`
 
 ### Medium-Term (Month 3-6)
@@ -354,10 +354,10 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 17. ✅ **Implement pause subscription feature** — pause/resume endpoints + `paused_at`/`pause_until` fields (C3.3)
 
 ### Long-Term (Month 6-12)
-18. **A/B test Pro at $7.99 vs $9.99** — optimize conversion-to-revenue balance
+18. ✅ **A/B test Pro at $7.99 vs $9.99** — Paddle-native A/B testing via `PADDLE_PRICE_TIERS` config; create two Pro prices and let Paddle split traffic
 19. **Enterprise self-serve trial / Premium store-limit bridge** — reduce sales cycle length
 20. **Launch add-on marketplace** — diversify revenue
-21. **Build churn prevention automation** — improve retention
+21. ✅ **Build churn prevention automation** — win-back emails (7d + 30d post-expiry), exit survey modal, usage monitoring alerts at 80% limits
 
 ---
 
