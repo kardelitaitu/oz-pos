@@ -24,6 +24,11 @@ export function KdsHistoryPanel() {
   // filter/session must never overwrite a newer one.
   const loadSeqRef = useRef(0);
   const hasLoadedOnceRef = useRef(false);
+  // Whether the last-known list is non-empty. Kept in a ref so the
+  // load/refresh decision does not depend on `orders.length` — that would
+  // re-create fetchHistory on every successful load and re-fire the effect,
+  // issuing a duplicate request on mount, filter change, and retry.
+  const hasOrdersRef = useRef(false);
 
   const fetchHistory = useCallback(async () => {
     const seq = ++loadSeqRef.current;
@@ -31,7 +36,7 @@ export function KdsHistoryPanel() {
     // LOAD-04: only the first load (or a load with nothing on screen)
     // shows the full loading state — a filter change over existing orders
     // preserves the last-known list and marks the region refreshing.
-    if (!hasLoadedOnceRef.current || orders.length === 0) {
+    if (!hasLoadedOnceRef.current || !hasOrdersRef.current) {
       setLoading(true);
       setRefreshing(false);
     } else {
@@ -42,6 +47,7 @@ export function KdsHistoryPanel() {
       if (seq !== loadSeqRef.current) return;
       setOrders(result);
       hasLoadedOnceRef.current = true;
+      hasOrdersRef.current = result.length > 0;
     } catch {
       // LOAD-08: a raw String(e) leaks implementation details; surface
       // the localized failure and let the user Retry.
@@ -53,7 +59,7 @@ export function KdsHistoryPanel() {
         setRefreshing(false);
       }
     }
-  }, [sessionToken, statusFilter, l10n, orders.length]);
+  }, [sessionToken, statusFilter, l10n]);
 
   useEffect(() => {
     fetchHistory();
