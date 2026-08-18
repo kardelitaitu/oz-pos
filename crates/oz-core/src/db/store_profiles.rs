@@ -7,6 +7,7 @@
 use rusqlite::params;
 
 use super::Store;
+use crate::subscription::{QuotaError, SubscriptionTier};
 use crate::{CoreError, StoreProfile};
 
 impl Store<'_> {
@@ -50,6 +51,37 @@ impl Store<'_> {
             Some(Err(e)) => Err(e.into()),
             None => Ok(None),
         }
+    }
+
+    /// Count active (non-deleted) store profiles.
+    pub fn count_store_profiles(&self) -> Result<i64, CoreError> {
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM store_profiles", [], |row| {
+                row.get(0)
+            })?;
+        Ok(count)
+    }
+
+    /// Enforce the subscription tier's store-count limit before creating
+    /// a new store profile (C1.2 — §9 pre-launch: prevents revenue
+    /// leakage from unlimited multi-store usage on lower tiers).
+    ///
+    /// When the tier's `max_stores()` cap is reached, returns
+    /// [`QuotaError::StoreLimit`]. Unlimited tiers (`None`) pass.
+    pub fn enforce_store_quota(&self, tier: &SubscriptionTier) -> Result<(), CoreError> {
+        if let Some(limit) = tier.max_stores() {
+            let current = self.count_store_profiles()?;
+            if current >= limit {
+                return Err(QuotaError::StoreLimit {
+                    tier: tier.name().into(),
+                    limit,
+                    current,
+                }
+                .into());
+            }
+        }
+        Ok(())
     }
 
     /// Create a new store profile.
@@ -182,6 +214,7 @@ impl Store<'_> {
 mod tests {
     use super::*;
     use crate::migrations;
+    use crate::subscription::SubscriptionTier;
 
     fn setup() -> (Store<'static>, String) {
         let conn = migrations::fresh_db();
@@ -656,5 +689,99 @@ mod tests {
         let currencies: Vec<&str> = profiles.iter().map(|p| p.currency.as_str()).collect();
         assert!(currencies.contains(&"USD"));
         assert!(currencies.contains(&"EUR"));
+    }
+
+    // ── Store quota enforcement (C1.2, §9 pre-launch) ─────────
+
+    #[test]
+    fn count_store_profiles_returns_seeded() {
+        let (store, _) = setup();
+        assert_eq!(store.count_store_profiles().unwrap(), 1);
+    }
+
+    #[test]
+    fn enforce_store_quota_allows_within_limit() {
+        let (store, _) = setup();
+        // Free allows 1 store; we have 1 seeded → adding another must
+        // NOT be blocked here (the quota check counts BEFORE the new
+        // insert, so current=1, limit=1 → current >= limit → blocked).
+        // But Plus also allows 1, Pro allows 2, Premium allows 10.
+        assert!(store
+            .enforce_store_quota(&SubscriptionTier::Pro)
+            .is_ok());
+        assert!(store
+            .enforce_store_quota(&SubscriptionTier::Premium)
+            .is_ok());
+        assert!(store
+            .enforce_store_quota(&SubscriptionTier::Enterprise)
+            .is_ok());
+    }
+
+    #[test]
+    fn enforce_store_quota_blocks_at_limit() {
+        let (store, _) = setup();
+        // Free allows 1 store; we already have 1 → must be blocked.
+        let err = store
+            .enforce_store_quota(&SubscriptionTier::Free)
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::SubscriptionLimitExceeded(_)),
+            "Free with 1 store must be blocked: {err:?}"
+        );
+    }
+
+    #[test]
+    fn enforce_store_quota_blocks_plus_at_limit() {
+        let (store, _) = setup();
+        // Plus allows 1 store; we already have 1 → must be blocked.
+        let err = store
+            .enforce_store_quota(&SubscriptionTier::Plus)
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::SubscriptionLimitExceeded(_)),
+            "Plus with 1 store must be blocked: {err:?}"
+        );
+    }
+
+    #[test]
+    fn enforce_store_quota_pro_allows_two_stores() {
+        let (store, _) = setup();
+        // Pro allows 2 stores; we have 1 → adding a second is OK.
+        let second = StoreProfile {
+            id: "store-2".into(),
+            name: "Branch 2".into(),
+            address: "".into(),
+            tax_id: "".into(),
+            currency: "USD".into(),
+            timezone: "UTC".into(),
+            is_primary: false,
+            created_at: "2026-07-02T00:00:00Z".into(),
+            updated_at: "2026-07-02T00:00:00Z".into(),
+        };
+        store.create_store_profile(&second).unwrap();
+        assert_eq!(store.count_store_profiles().unwrap(), 2);
+        // Now at 2 stores → Pro must be blocked.
+        let err = store
+            .enforce_store_quota(&SubscriptionTier::Pro)
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::SubscriptionLimitExceeded(_)),
+            "Pro with 2 stores must be blocked: {err:?}"
+        );
+        // Premium (10) still allows it.
+        assert!(store
+            .enforce_store_quota(&SubscriptionTier::Premium)
+            .is_ok());
+    }
+
+    #[test]
+    fn enforce_store_quota_error_message_includes_tier_and_count() {
+        let (store, _) = setup();
+        let err = store
+            .enforce_store_quota(&SubscriptionTier::Free)
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("Free"), "message should name the tier: {msg}");
+        assert!(msg.contains("1"), "message should show the limit: {msg}");
     }
 }

@@ -3,6 +3,7 @@
 //! Each command talks to the `Store` facade via the shared `AppState`
 //! database connection.
 
+use oz_core::subscription::TenantSubscription;
 use oz_core::StoreProfile;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -137,6 +138,14 @@ pub async fn create_store_profile(
 
     let conn = state.db.lock().await;
     let store = oz_core::Store::new(&conn);
+
+    // C1.2: enforce the subscription tier's store-count limit before creating
+    // a new store — Free/Plus allow 1, Pro allows 2, Premium allows 10.
+    let sub = TenantSubscription::load(&conn, "default")?
+        .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+    sub.verify_signature()?;
+    store.enforce_store_quota(&sub.effective_tier())?;
+
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
     let profile = StoreProfile {
