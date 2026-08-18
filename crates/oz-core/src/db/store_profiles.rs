@@ -784,4 +784,73 @@ mod tests {
         assert!(msg.contains("Free"), "message should name the tier: {msg}");
         assert!(msg.contains("1"), "message should show the limit: {msg}");
     }
+
+    #[test]
+    fn enforce_store_quota_premium_allows_nine() {
+        let (store, _) = setup();
+        // Premium allows up to 10 stores (limit is exclusive: >= blocks).
+        // We have 1 seeded; add 8 more = 9 total → OK.
+        for i in 0..8 {
+            let p = StoreProfile {
+                id: format!("store-{i}"),
+                name: format!("Branch {i}"),
+                address: "".into(),
+                tax_id: "".into(),
+                currency: "USD".into(),
+                timezone: "UTC".into(),
+                is_primary: false,
+                created_at: "2026-07-02T00:00:00Z".into(),
+                updated_at: "2026-07-02T00:00:00Z".into(),
+            };
+            store.create_store_profile(&p).unwrap();
+        }
+        assert_eq!(store.count_store_profiles().unwrap(), 9);
+        assert!(store
+            .enforce_store_quota(&SubscriptionTier::Premium)
+            .is_ok());
+        // Add 1 more = 10 total → must be blocked.
+        let p = StoreProfile {
+            id: "store-9".into(),
+            name: "Branch 9".into(),
+            address: "".into(),
+            tax_id: "".into(),
+            currency: "USD".into(),
+            timezone: "UTC".into(),
+            is_primary: false,
+            created_at: "2026-07-02T00:00:00Z".into(),
+            updated_at: "2026-07-02T00:00:00Z".into(),
+        };
+        store.create_store_profile(&p).unwrap();
+        assert_eq!(store.count_store_profiles().unwrap(), 10);
+        let err = store
+            .enforce_store_quota(&SubscriptionTier::Premium)
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::SubscriptionLimitExceeded(_)),
+            "Premium with 10 stores must be blocked: {err:?}"
+        );
+    }
+
+    #[test]
+    fn enforce_store_quota_enterprise_unlimited() {
+        let (store, _) = setup();
+        // Enterprise has no store limit (None) — always passes.
+        for i in 0..15 {
+            let p = StoreProfile {
+                id: format!("store-{i}"),
+                name: format!("Branch {i}"),
+                address: "".into(),
+                tax_id: "".into(),
+                currency: "USD".into(),
+                timezone: "UTC".into(),
+                is_primary: false,
+                created_at: "2026-07-02T00:00:00Z".into(),
+                updated_at: "2026-07-02T00:00:00Z".into(),
+            };
+            store.create_store_profile(&p).unwrap();
+        }
+        assert!(store
+            .enforce_store_quota(&SubscriptionTier::Enterprise)
+            .is_ok());
+    }
 }

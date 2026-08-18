@@ -350,3 +350,33 @@ func TestHashLogKey_DifferentKeysDifferentHashes(t *testing.T) {
 		t.Errorf("different keys produced same hash: %d", h1)
 	}
 }
+
+func TestWinBackAlreadySent(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	ensureTestCollection(t, app, "trial_email_log")
+
+	// Create a win-back log entry (negative day_offset).
+	collection, _ := app.FindCollectionByNameOrId("trial_email_log")
+	record := core.NewRecord(collection)
+	record.Set("subscription", "sub-winback")
+	record.Set("day_offset", hashLogKey("winback_7d"))
+	record.Set("sent_at", time.Now().UTC().Format(time.RFC3339))
+	if err := app.Save(record); err != nil {
+		t.Fatalf("save log: %v", err)
+	}
+
+	// Should return true for existing entry.
+	if !winBackAlreadySent(app, "sub-winback", "winback_7d") {
+		t.Error("expected winBackAlreadySent to return true")
+	}
+
+	// Should return false for different log key.
+	if winBackAlreadySent(app, "sub-winback", "winback_30d") {
+		t.Error("expected winBackAlreadySent to return false for different key")
+	}
+
+	// Should return false for different subscription.
+	if winBackAlreadySent(app, "sub-other", "winback_7d") {
+		t.Error("expected winBackAlreadySent to return false for different subscription")
+	}
+}

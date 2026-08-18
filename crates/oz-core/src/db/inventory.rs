@@ -1980,4 +1980,53 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("Free"), "message should name the tier: {msg}");
     }
+
+    #[test]
+    fn enforce_warehouse_quota_pro_allows_three() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_inventory_location("WH A", "warehouse", "").unwrap();
+        s.create_inventory_location("WH B", "warehouse", "").unwrap();
+        // Pro allows 3 warehouses; we have 2 → OK.
+        assert!(s
+            .enforce_warehouse_quota(&SubscriptionTier::Pro, "warehouse")
+            .is_ok());
+        s.create_inventory_location("WH C", "warehouse", "").unwrap();
+        // Now at 3 → Pro must be blocked.
+        let err = s
+            .enforce_warehouse_quota(&SubscriptionTier::Pro, "warehouse")
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::SubscriptionLimitExceeded(_)),
+            "Pro with 3 warehouses must be blocked: {err:?}"
+        );
+    }
+
+    #[test]
+    fn enforce_warehouse_quota_premium_unlimited() {
+        let conn = fresh();
+        let s = store(&conn);
+        for i in 0..5 {
+            s.create_inventory_location(&format!("WH {i}"), "warehouse", "")
+                .unwrap();
+        }
+        // Premium has no warehouse limit — always passes.
+        assert!(s
+            .enforce_warehouse_quota(&SubscriptionTier::Premium, "warehouse")
+            .is_ok());
+    }
+
+    #[test]
+    fn enforce_warehouse_quota_enterprise_unlimited() {
+        let conn = fresh();
+        let s = store(&conn);
+        for i in 0..10 {
+            s.create_inventory_location(&format!("WH {i}"), "warehouse", "")
+                .unwrap();
+        }
+        // Enterprise has no warehouse limit — always passes.
+        assert!(s
+            .enforce_warehouse_quota(&SubscriptionTier::Enterprise, "warehouse")
+            .is_ok());
+    }
 }
