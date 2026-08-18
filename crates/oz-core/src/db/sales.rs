@@ -2190,7 +2190,10 @@ impl Store<'_> {
             }
         }
 
-        // 3. Default store-wide tax rate.
+        // 3. Default store-wide tax rate (where `is_default = 1`).
+        if let Some(rate) = self.get_default_tax_rate()? {
+            return Ok(vec![rate]);
+        }
 
         Ok(Vec::new())
     }
@@ -5162,10 +5165,10 @@ mod tests {
         let category_id = "CAT-TEST";
         s.create_category(category_id, "Test Category", "#ffffff", "")
             .unwrap();
-        s.set_category_tax_rates(category_id, &[cat_rate_id.clone()])
+        s.set_category_tax_rates(category_id, std::slice::from_ref(&cat_rate_id))
             .unwrap();
 
-        let product_id = seed_product_with_category(&conn, "TEST-SKU", Some(category_id));
+        seed_product_with_category(&conn, "TEST-SKU", Some(category_id));
         // Note: No product-level tax rates assigned
 
         // Act: Resolve tax rates for the SKU

@@ -101,6 +101,30 @@ impl Store<'_> {
         }
     }
 
+    /// Return the active tax rate marked as the store-wide default.
+    ///
+    /// Returns `None` when no default rate is configured or the
+    /// default rate has been archived.
+    pub fn get_default_tax_rate(&self) -> Result<Option<TaxRate>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at
+             FROM tax_rates WHERE is_default = 1 AND is_active = 1",
+        )?;
+        let mut rows = stmt.query([])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(TaxRate {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                rate_bps: row.get("rate_bps")?,
+                is_default: row.get("is_default")?,
+                is_inclusive: row.get("is_inclusive")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })),
+            None => Ok(None),
+        }
+    }
+
     /// Insert a new tax rate.
     pub fn create_tax_rate(
         &self,

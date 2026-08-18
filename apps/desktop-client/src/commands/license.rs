@@ -73,6 +73,7 @@ pub struct LicenseStatusDto {
 /// back to machine_id when omitted and never gates paid keys, so sending it
 /// is always safe.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn activate_license(
     state: State<'_, AppState>,
     key: String,
