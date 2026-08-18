@@ -16,6 +16,24 @@ import { licenseApiUrl } from '../lib/runtime-config';
  * Paddle checkout prefilled with the account email (register-first flow —
  * the account must exist before payment). Graceful in every failure mode:
  * no token, API unset, server error.
+ *
+ * ## Register-first custom_data contract (ADR #23 Deviation 2)
+ *
+ * Both the subscribe section and the bundle upgrade card open the Paddle
+ * checkout via `openPaddleCheckout(priceId, email, onClosed, bundle?)`.
+ * The checkout embeds `custom_data` so the webhook can attach the
+ * subscription to the correct tenant:
+ *
+ * - `custom_data.email` — the buyer's account email. **Required.** The
+ *   webhook upserts the tenant by this value (`resolvePaddleEmail`).
+ * - `custom_data.bundle` — optional C3.2 vertical bundle id
+ *   (e.g. `"restaurant_starter"`). Cross-checked against the price map;
+ *   never trusted alone.
+ * - `custom_data.phone` — may ride along when Paddle collects it;
+ *   backfilled onto the tenant when non-empty.
+ *
+ * The signup vertical is **not** carried — trial segmentation is a
+ * desktop-activation concern, not a billing one.
  */
 const API = licenseApiUrl();
 
@@ -157,6 +175,19 @@ export default function AccountView({ locale }: Props) {
     }
   };
 
+  /**
+   * Open the checkout overlay for the given tier/bundle.
+   *
+   * Register-first custom_data contract (ADR #23 Deviation 2):
+   * - `custom_data.email` — buyer's account email (required; webhook upserts
+   *   the tenant by it)
+   * - `custom_data.bundle` — optional C3.2 bundle id (cross-checked against
+   *   the price map; never trusted alone)
+   * - `custom_data.phone` — may ride along; backfilled onto tenant
+   *
+   * For Midtrans (id-locale), the equivalent fields are custom_field1–4
+   * in the Snap request (see midtrans.ts).
+   */
   const subscribe = async (priceId: string, tierKey: string, bundle?: string) => {
     setSubscribing(tierKey);
     setSubscribeError(false);

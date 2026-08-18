@@ -17,6 +17,30 @@ import { licenseApiUrl } from '../lib/runtime-config';
  * When the locale's checkout provider is unconfigured (PADDLE_CLIENT_TOKEN
  * unset / placeholder price id for Paddle markets, license API unset for
  * id) the button degrades to a mailto fallback (see website-plan.md §7).
+ *
+ * ## Register-first custom_data contract (ADR #23 Deviation 2)
+ *
+ * The Paddle checkout embeds `custom_data` so the webhook
+ * (`paddle_webhook.go`) can attach the subscription to the correct tenant
+ * without a Paddle API key:
+ *
+ * - `custom_data.email` — the buyer's account email (lowercased/trimmed by
+ *   the webhook's `resolvePaddleEmail`). **Required.** The webhook upserts
+ *   the tenant by this value; without it, the webhook falls back to the
+ *   Paddle API fetch (requires `PADDLE_API_KEY`).
+ * - `custom_data.bundle` — optional C3.2 vertical bundle id
+ *   (e.g. `"restaurant_starter"`). Cross-checked against the price map's
+ *   bundle segment; never trusted alone — a bundle claim on a plain price
+ *   is rejected.
+ * - `custom_data.phone` — may be present when the Paddle checkout collects
+ *   it; backfilled onto the tenant when non-empty.
+ *
+ * The signup vertical is **not** carried on Paddle purchases — trial
+ * segmentation is a desktop-activation concern (`trial_vertical` in
+ * `activate.go`), the same decision ADR #39 made for Midtrans.
+ *
+ * For Midtrans (id-locale), the equivalent contract is carried on
+ * `custom_field1`–`custom_field4` in the Snap request (see `midtrans.ts`).
  */
 interface Props {
   /** Billing-resolved tier (price id for the selected period — see PricingGrid). */
