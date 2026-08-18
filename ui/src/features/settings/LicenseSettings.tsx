@@ -3,6 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { getLicenseStatus, checkLicenseStatus, pauseSubscription, resumeSubscription, type ServerLicenseStatus } from '@/api/license';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import ExitSurveyModal from '@/components/ExitSurveyModal';
 import { useToast } from '@/frontend/shared/Toast';
 import { l10nErrorMessage } from '@/utils/app-error';
 import './LicenseSettings.css';
@@ -93,6 +94,7 @@ export default function LicenseSettings() {
   const [flashRows, setFlashRows] = useState<Map<string, 'updated'>>(new Map());
   // C3.3: Pause/resume subscription state
   const [pausing, setPausing] = useState(false);
+  const [showExitSurvey, setShowExitSurvey] = useState(false);
   const [resuming, setResuming] = useState(false);
   const flashTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -229,12 +231,12 @@ export default function LicenseSettings() {
   }, [addToast, l10n, triggerFlash]);
 
   /** C3.3: Pause the subscription for 1 month. */
-  const handlePause = useCallback(async () => {
+  const handlePauseConfirm = useCallback(async () => {
+    setShowExitSurvey(false);
     setPausing(true);
     try {
       await pauseSubscription(1);
       addToast({ type: 'info', message: l10n.getString('settings-license-pause-success') });
-      // Reload status to reflect paused state
       const status = await checkLicenseStatus();
       setServerStatus(status);
     } catch (err) {
@@ -244,6 +246,11 @@ export default function LicenseSettings() {
       setPausing(false);
     }
   }, [addToast, l10n]);
+
+  /** Show exit survey before pausing. */
+  const handlePause = useCallback(() => {
+    setShowExitSurvey(true);
+  }, []);
 
   /** C3.3: Resume a paused subscription. */
   const handleResume = useCallback(async () => {
@@ -532,6 +539,12 @@ export default function LicenseSettings() {
           </>
         )}
       </div>
+
+      <ExitSurveyModal
+        open={showExitSurvey}
+        onClose={() => setShowExitSurvey(false)}
+        onConfirm={handlePauseConfirm}
+      />
     </Card>
   );
 }

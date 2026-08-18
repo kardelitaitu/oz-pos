@@ -1,0 +1,80 @@
+.exit-survey-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.exit-survey-modal {
+  background: var(--surface, #fff);
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.exit-survey-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.exit-survey-message {
+  color: var(--muted, #666);
+  margin: 0 0 1.5rem;
+  font-size: 0.9rem;
+}
+
+.exit-survey-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.exit-survey-reason {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e0e0e0);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.exit-survey-reason:hover {
+  border-color: var(--accent, #0066ff);
+  background: var(--accent-bg, #f0f5ff);
+}
+
+.exit-survey-radio {
+  margin: 0;
+}
+
+.exit-survey-other {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 8px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  box-sizing: border-box;
+}
+
+.exit-survey-other:focus {
+  outline: 2px solid var(--accent, #0066ff);
+  outline-offset: -2px;
+}
+
+.exit-survey-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}

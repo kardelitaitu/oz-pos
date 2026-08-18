@@ -819,3 +819,16 @@ terminal-feature-group-inventory-products = Inventaris & Produk
 terminal-feature-group-hardware = Perangkat Keras
 terminal-feature-group-staff-security = Staf & Keamanan
 terminal-feature-group-system = Sistem
+
+# Exit survey (§7 churn prevention)
+exit-survey-title = Sebelum Anda jeda...
+exit-survey-message = Bantu kami berkembang — apa alasan utama Anda menjeda langganan?
+exit-survey-reason-price = Terlalu mahal
+exit-survey-reason-features = Fitur tidak cukup
+exit-survey-reason-competitor = Beralih ke kompetitor
+exit-survey-reason-closed = Usaha ditutup
+exit-survey-reason-break = Istirahat sementara
+exit-survey-reason-other = Lainnya
+exit-survey-other-placeholder = Ceritakan lebih lanjut...
+exit-survey-cancel = Kembali
+exit-survey-submit = Jeda langganan

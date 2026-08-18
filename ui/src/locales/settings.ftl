@@ -833,3 +833,16 @@ terminal-feature-group-inventory-products = Inventory & Products
 terminal-feature-group-hardware = Hardware
 terminal-feature-group-staff-security = Staff & Security
 terminal-feature-group-system = System
+
+# Exit survey (§7 churn prevention)
+exit-survey-title = Before you pause...
+exit-survey-message = Help us improve — what's the main reason you're pausing?
+exit-survey-reason-price = Too expensive
+exit-survey-reason-features = Not enough features
+exit-survey-reason-competitor = Switching to a competitor
+exit-survey-reason-closed = Business closed
+exit-survey-reason-break = Taking a temporary break
+exit-survey-reason-other = Other
+exit-survey-other-placeholder = Please tell us more...
+exit-survey-cancel = Go back
+exit-survey-submit = Pause subscription
