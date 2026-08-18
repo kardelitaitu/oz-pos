@@ -78,7 +78,10 @@ export default function CheckoutButton({ tier, locale }: Props) {
         window.location.href = loginHref;
         return;
       }
-      await openPaddleCheckout(priceId, email, undefined, tier.bundle);
+      // The mailto guard above guarantees priceId here: the Paddle branch is
+      // only reachable when !useMidtrans and the guard already ruled out a
+      // missing/placeholder price id.
+      await openPaddleCheckout(priceId!, email, undefined, tier.bundle);
     } catch {
       setError(true);
     } finally {

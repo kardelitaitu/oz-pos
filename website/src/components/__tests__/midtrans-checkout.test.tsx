@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import type { CheckoutTier } from '../../content/pricing/types';
 
 // React 19 requires the act environment flag for async act() to work.
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -31,10 +32,7 @@ beforeEach(() => {
   );
 });
 
-async function renderButton(
-  locale: string,
-  tier: { tierKey: string; name: string; cta: string; period: 'monthly' | 'yearly'; priceId?: string; bundle?: string },
-) {
+async function renderButton(locale: string, tier: CheckoutTier) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
