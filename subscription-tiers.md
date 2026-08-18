@@ -203,6 +203,18 @@ history preview with an upgrade CTA, not a hard error.
 - **Downgrades:** Effective at end of current billing cycle; no partial refunds
 - **Downgrade grace period:** 14 days to export data before feature restrictions apply
 
+### Trial Anti-Abuse Lock (Implemented)
+
+A **hardware-fingerprint trial lock** prevents trial reset abuse by limiting one trial per physical device:
+
+- **Implementation:** Server-side `trial_registrations` collection keyed by hardware fingerprint; claim endpoint (`POST /api/v1/license/trial`) and activation-time gate (`enforceTrialLock`).
+- **Trust boundary:** Only **trial keys** are gated; paid keys are never locked.
+- **Client:** `get_hardware_fingerprint()` computes `hw_` + SHA-256 of the same hardware anchor `machine_id` uses (Windows MachineGuid / motherboard UUID / `/etc/machine-id`).
+- **Remaining gap:** Devices with no queryable hardware anchor (minimal containers) fall back to a random UUID stable only within a process; claims are permanent by design, so an expired trial never frees the device.
+
+> For the full specification, see `docs/specs/hardware-fingerprint-trial-lock.md`.
+> For deviations from the original spec and shipped implementation details, see **ADR #23 Deviation 3** in `docs/decisions/2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md`.
+
 ---
 
 ## 5. Vertical Go-to-Market Strategy
