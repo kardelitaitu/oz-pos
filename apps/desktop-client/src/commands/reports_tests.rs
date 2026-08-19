@@ -3,10 +3,17 @@ use oz_core::session::SessionContext;
 use platform_core::StoreDatabaseManager;
 
 /// Build a test AppState with a session and a fresh temp-dir db_manager.
-fn scoped_state(conn: rusqlite::Connection, token: &str, user_id: &str, role_id: &str, store_id: &str) -> AppState {
+fn scoped_state(
+    conn: rusqlite::Connection,
+    token: &str,
+    user_id: &str,
+    role_id: &str,
+    store_id: &str,
+) -> AppState {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut state = AppState::for_test_with_conn(conn);
-    state.db_manager = StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+    state.db_manager =
+        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
     state.session_store.write().unwrap().insert(
         token.into(),
         SessionContext::new(
