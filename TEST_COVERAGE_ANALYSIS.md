@@ -30,7 +30,7 @@
 |---|---|
 | Total Feature Components | ~100 |
 | Components WITH Tests | ~91 |
-| **Components WITHOUT Tests** | **~9** |
+| **Components WITHOUT Tests** | **~5** |
 | Hooks Without Tests | 5 |
 | API Contract Tests Missing | ~30 modules |
 
@@ -55,10 +55,6 @@
 | `topologyRelationshipPicker` | `ui/src/features/stores/topologyRelationshipPicker.tsx` | Connection type selection, validation rules, cyclic detection | ✅ 25 tests (EN + ID locales) |
 | `topologyWireGroup` | `ui/src/features/stores/topologyWireGroup.tsx` | SVG path generation, bend points, hit testing, animation | ✅ 31 tests (EN + ID locales) |
 | `topologyMinimap` | `ui/src/features/stores/topologyMinimap.tsx` | Viewport rect sync, zoom/pan proxy, node clustering | ❌ No tests |
-| `topologyShortcutsHelp` | `ui/src/features/stores/topologyShortcutsHelp.tsx` | Key binding display, modal focus, i18n | ❌ No tests |
-| `topologyValidationWidget` | `ui/src/features/stores/topologyValidationWidget.tsx` | Error aggregation, severity sorting, auto-scroll to error | ❌ No tests |
-| `topologyWarehouseCard` | `ui/src/features/stores/topologyWarehouseCard.tsx` | Special node type, capacity display, allocation logic | ❌ No tests |
-| `NodeTopologyIcons` | `ui/src/features/stores/NodeTopologyIcons.tsx` | Icon mapping, fallback rendering, accessibility labels | ❌ No tests |
 
 ### ⚙️ **Settings / Config** (MEDIUM PRIORITY)
 | Component | File | Risk Areas | Status |
@@ -140,6 +136,10 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 | `RetailProductGrid` | `<commit-hash>` | 56 tests (EN + ID locales) |
 | `RetailFnBar` | `<commit-hash>` | 21 tests (EN + ID locales) |
 | `ReceiptPreview` | `366061d7` | 19 tests (EN + ID locales) |
+| `NodeTopologyIcons` | `pending` | 116 tests (EN + ID locales) |
+| `topologyShortcutsHelp` | `pending` | 14 tests (EN + ID locales) |
+| `topologyValidationWidget` | `pending` | 20 tests (EN + ID locales) |
+| `topologyWarehouseCard` | `pending` | 21 tests (EN + ID locales) |
 
 ---
 
@@ -248,11 +248,50 @@ Based on risk × impact:
 
 ---
 
-*Document version: 1.0 | Next review: After next 2-3 TDD cycles*
+*Document version: 1.1 | Next review: After next 2-3 TDD cycles*
 
 ---
 
 ## 📝 TDD Journal
+
+### 2026-08-19 — TDD Cycle: Topology Sub-component Coverage (4 components)
+
+**Objective:** Add test coverage for 4 untested topology sub-components: NodeTopologyIcons (116 tests), topologyShortcutsHelp (14 tests), topologyValidationWidget (20 tests), topologyWarehouseCard (21 tests).
+
+**Phase 1 - Analyze:** Four pure presentational components extracted from the topology editor:
+- **NodeTopologyIcons**: 27 icon components with size/fill/color props, 7 fallback patterns, edge cases (empty type, zero size)
+- **topologyShortcutsHelp**: F1 button + keyboard shortcuts popover with 19 shortcuts, Escape/outside-click dismissal, aria-expanded state
+- **topologyValidationWidget**: Issues button with settle-timer label, expandable panel with node/graph issue rows, jump-to-wire, add-stock-wire, dismiss actions
+- **topologyWarehouseCard**: Warehouse settings with capacity/low-stock/stock inputs, capacity lock badge for non-Pro tiers, lock hint text
+
+**Phase 2 - Find Weaknesses:**
+- 8 tests failed initially: 4 Indonesian locale (`withFluentLocale` argument order wrong), 2 FTL keys missing (`withFluent` not passed `multiStoreFtl`), 2 duplicate text matchers (`getByText` vs `getAllByText` for multiple lock badges)
+- `withFluentLocale` signature is `(locale, children, ...ftlContents)` — tests had `(children, 'id', { key: value })` pattern
+- `Localized` component renders fallback children when key not in bundle, but tests still expected key resolution
+- Capacity locked renders TWO lock badges (capacity + low-stock) — `getByText` throws on multiples
+
+**Phase 3 - Red → Green → Refactor:**
+- Fixed `withFluentLocale` argument order in all ID locale tests
+- Added `multiStoreFtl` to `withFluent()` calls in EN tests
+- Changed `getByText(/pro/i)` → `getAllByText(/pro/i).length >= 2` for lock badge/upgrade hint assertions
+- All 171 tests pass after fixes
+
+**Phase 4 - Verify:**
+- All 171 tests pass (EN + ID locales) across 4 test files
+- Lint + typecheck clean
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved 4 components from "Without Tests" → "Recently Covered"; updated summary counts.
+
+**Phase 7 - Commit:** `test(stores): add 171 tests for NodeTopologyIcons, shortcuts help, validation widget, warehouse card`
+
+**Follow-ups:**
+- `topologyMinimap` remains the only untested topology sub-component
+- `RetailProductContextMenu` is next highest priority (core POS revenue flow)
+- Consider adding `withFluentMulti` helper that accepts `{ bundleName: ftlString }` objects to prevent future argument-order bugs
+
+---
 
 ### 2026-08-19 — TDD Cycle: RetailFnBar Coverage
 
