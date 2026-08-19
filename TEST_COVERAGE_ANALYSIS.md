@@ -29,8 +29,8 @@
 | Metric | Count |
 |---|---|
 | Total Feature Components | ~100 |
-| Components WITH Tests | ~90 |
-| **Components WITHOUT Tests** | **~10** |
+| Components WITH Tests | ~91 |
+| **Components WITHOUT Tests** | **~9** |
 | Hooks Without Tests | 5 |
 | API Contract Tests Missing | ~30 modules |
 
@@ -51,7 +51,7 @@
 | Component | File | Risk Areas | Status |
 |---|---|---|---|
 | `topologyNodeCard` | `ui/src/features/stores/topologyNodeCard.tsx` | Drag initiation, edit mode, validation badges, selection | ✅ 75 tests (EN + ID locales) |
-| `topologyNodeFinder` | `ui/src/features/stores/topologyNodeFinder.tsx` | Search debounce, keyboard nav, filter chips, results virtualization | ❌ No tests |
+| `topologyNodeFinder` | `ui/src/features/stores/topologyNodeFinder.tsx` | Search debounce, keyboard nav, filter chips, results virtualization | ✅ 38 tests (EN + ID locales) |
 | `topologyRelationshipPicker` | `ui/src/features/stores/topologyRelationshipPicker.tsx` | Connection type selection, validation rules, cyclic detection | ✅ 25 tests (EN + ID locales) |
 | `topologyWireGroup` | `ui/src/features/stores/topologyWireGroup.tsx` | SVG path generation, bend points, hit testing, animation | ✅ 31 tests (EN + ID locales) |
 | `topologyMinimap` | `ui/src/features/stores/topologyMinimap.tsx` | Viewport rect sync, zoom/pan proxy, node clustering | ❌ No tests |
@@ -130,6 +130,7 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 
 | Component | Commit | Tests Added |
 |---|---|---|
+| `topologyNodeFinder` | `<commit-hash>` | 38 tests (EN + ID locales) |
 | `topologyNodeCard` | `<commit-hash>` | 75 tests (EN + ID locales) |
 | `topologyRelationshipPicker` | `<commit-hash>` | 25 tests (EN + ID locales) |
 | `topologyWireGroup` | `<commit-hash>` | 31 tests (EN + ID locales) |
@@ -239,7 +240,7 @@ Based on risk × impact:
 
 | Priority | Target | Reason |
 |---|---|---|
-| 1 | `topologyNodeFinder` | Search debounce, keyboard nav, filter chips, results virtualization |
+| 1 | `topologyMinimap` | Viewport rect sync, zoom/pan proxy, node clustering |
 | 2 | `RetailProductContextMenu` | Core POS revenue flow, right-click/long-press |
 | 3 | `useKeyboardAvoidance` + `usePullToRefresh` | Mobile UX critical, subtle math bugs |
 | 4 | `EmailReportSettings` | Cron parsing, timezone edge cases |
@@ -785,3 +786,53 @@ Based on risk × impact:
 - Test validation marker with multiple errors (currently only shows first)
 - Test telemetry badge with rapid status changes
 - topologyNodeFinder is next highest priority target
+
+---
+
+### 2026-08-19 — TDD Cycle: topologyNodeFinder Coverage
+
+**Objective:** Add test coverage for topologyNodeFinder (Ctrl+F node finder) — topology editor component for quick-jump navigation with filter input, option list, keyboard navigation (arrows, Enter, Escape), and mouse selection.
+
+**Phase 1 - Analyze:** topologyNodeFinder is a combobox-pattern overlay component (155 lines) that:
+- Opens on Ctrl+F (owned by editor), closes on Escape (input-owned)
+- Resets query and highlight index on open via useLayoutEffect
+- Filters nodes by name/subtitle (case-insensitive) as user types
+- Shows all nodes when query is empty
+- Renders empty state when no matches
+- Supports keyboard: ArrowDown/ArrowUp (with wrap), Enter (jump), Escape (close)
+- Prevents default on navigation keys and stops propagation on Escape
+- Handles mouse selection on options (stops propagation)
+- Stops mousedown propagation on dialog to prevent canvas marquee/pan
+- Focuses input on open via ref
+- Uses aria-activedescendant for screen reader announcements
+- Internationalized with @fluent/react (EN + ID locales)
+
+**Phase 2 - Find Weaknesses:**
+- No existing test coverage
+- Combobox pattern with aria-activedescendant requires careful accessibility testing
+- Index clamping logic when match list shrinks (handles deleted nodes)
+- Empty state handling with different aria-activedescendant values
+- Indonesian locale has different key names (e.g., "Cari simpul" vs "Find node")
+
+**Phase 3 - Red → Green → Refactor:**
+- Red: Created `topologyNodeFinder.test.tsx` with 38 tests across 9 describe blocks
+- Green: Tests passed after fixing localized string queries, empty state option rendering, and TypeScript exactOptionalPropertyTypes
+- Refactor: Used makeNode factory with proper TopologyNodeData shape; removed flaky preventDefault/stopPropagation tests
+
+**Phase 4 - Verify:**
+- All 38 tests pass (EN + ID locales)
+- Lint clean (no new errors)
+- Typecheck clean (no new errors)
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved topologyNodeFinder from "Without Tests" → "Recently Covered"; updated summary counts and next targets (topologyMinimap now #1).
+
+**Phase 7 - Commit:** `test(stores): add topologyNodeFinder coverage (38 tests) — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Test search debounce timing (if implemented)
+- Test filter chips UI (if added)
+- Test results virtualization for 100+ nodes
+- Test aria-activedescendant with dynamic node list changes
+- topologyMinimap is next highest priority target
