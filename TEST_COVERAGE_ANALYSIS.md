@@ -31,7 +31,7 @@
 | Total Feature Components | ~100 |
 | Components WITH Tests | ~91 |
 | **Components WITHOUT Tests** | **~2** |
-| Hooks Without Tests | 5 |
+| Hooks Without Tests | **0** |
 | API Contract Tests Missing | ~30 modules |
 
 ---
@@ -43,7 +43,7 @@
 
 | Component | File | Risk Areas | Status |
 |---|---|---|---|
-| `RetailProductContextMenu` | `ui/src/features/retail/RetailProductContextMenu.tsx` | Right-click positioning, touch long-press, action handlers | ❌ No tests |
+| `RetailProductContextMenu` | `ui/src/features/retail/RetailProductContextMenu.tsx` | Right-click positioning, touch long-press, action handlers | ✅ 18 tests |
 
 ### 🏢 **Store Topology Sub-components** (HIGH PRIORITY — Complex DnD)
 *Drag/drop, wire connections, validation, viewport sync*
@@ -68,15 +68,17 @@
 
 ---
 
-## 🪝 Hooks Without Test Coverage
+## 🪝 Hooks — Recently Covered ✅
 
-| Hook | File | Risk Areas | Priority |
+All 5 previously untested hooks now have test coverage:
+
+| Hook | File | Tests | Priority |
 |---|---|---|---|
-| `useCanvasChart` | `ui/src/hooks/useCanvasChart.ts` | Data transform, resize observer, device pixel ratio, cleanup | 🔴 High |
-| `useDeviceIp` | `ui/src/hooks/useDeviceIp.ts` | WebRTC IP detection, fallback chain, permissions, caching | 🟡 Medium |
-| `useKeyAge` | `ui/src/hooks/useKeyAge.ts` | Time calculations, rotation thresholds, storage persistence | 🟡 Medium |
-| `useKeyboardAvoidance` | `ui/src/hooks/useKeyboardAvoidance.ts` | Viewport math, scroll-into-view, iOS/Android differences, resize | 🔴 High |
-| `usePullToRefresh` | `ui/src/hooks/usePullToRefresh.ts` | Touch delta math, threshold, haptic feedback, race conditions | 🔴 High |
+| `useCanvasChart` | `ui/src/hooks/useCanvasChart.ts` | 8 tests (DPR, RAF coalescing, ResizeObserver, getCssVar) | 🔴 High |
+| `useDeviceIp` | `ui/src/hooks/useDeviceIp.ts` | 6 tests (public/local fallback, both fail, non-ok, empty) | 🟡 Medium |
+| `useKeyAge` | `ui/src/hooks/useKeyAge.ts` | 11 tests (getKeyAgeDays, getDaysUntilRotation, toast reminder) | 🟡 Medium |
+| `useKeyboardAvoidance` | `ui/src/hooks/useKeyboardAvoidance.ts` | 6 tests (scrollMargin, focusin/out, custom selector, delay) | 🔴 High |
+| `usePullToRefresh` | `ui/src/hooks/usePullToRefresh.ts` | 10 tests (pull states, resistance, max distance, scroll guard) | 🔴 High |
 
 ---
 
@@ -125,6 +127,7 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 
 | Component | Commit | Tests Added |
 |---|---|---|
+| `topologyMinimap` | `<commit-hash>` | 36 tests (EN + ID locales) |
 | `topologyNodeFinder` | `<commit-hash>` | 38 tests (EN + ID locales) |
 | `topologyNodeCard` | `<commit-hash>` | 75 tests (EN + ID locales) |
 | `topologyRelationshipPicker` | `<commit-hash>` | 25 tests (EN + ID locales) |
@@ -135,14 +138,6 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 | `RetailProductGrid` | `<commit-hash>` | 56 tests (EN + ID locales) |
 | `RetailFnBar` | `<commit-hash>` | 21 tests (EN + ID locales) |
 | `ReceiptPreview` | `366061d7` | 19 tests (EN + ID locales) |
-| `NodeTopologyIcons` | `pending` | 116 tests (EN + ID locales) |
-| `topologyShortcutsHelp` | `pending` | 14 tests (EN + ID locales) |
-| `topologyValidationWidget` | `pending` | 20 tests (EN + ID locales) |
-| `topologyWarehouseCard` | `pending` | 21 tests (EN + ID locales) |
-| `topologyMinimap` | `pending` | 36 tests (EN + ID locales) |
-| `EmailReportSettings` | `pending` | 34 tests (EN + ID locales) |
-| `LicenseSettings` | `pending` | 24 tests (EN + ID locales) |
-| `RetailProductContextMenu` | `pending` | 18 tests (EN + ID locales) |
 
 ---
 
@@ -916,3 +911,54 @@ Based on risk × impact:
 - Test results virtualization for 100+ nodes
 - Test aria-activedescendant with dynamic node list changes
 - topologyMinimap is next highest priority target
+
+---
+
+### 2026-08-19 — TDD Cycle: 5 Hooks Coverage (useCanvasChart, useDeviceIp, useKeyAge, useKeyboardAvoidance, usePullToRefresh)
+
+**Objective:** Eliminate all 5 untested hooks. These are high-risk modules used across retail, KDS, offline queue, settings, and auth screens.
+
+**Phase 1 - Analyze:** Each hook has distinct behavior:
+- `useCanvasChart`: DPR scaling, RAF coalescing, ResizeObserver, CSS variable reading
+- `useDeviceIp`: public→local IP fallback chain, mounted guard, timeout handling
+- `useKeyAge`: backend→localStorage fallback, toast notifications at 90-day threshold
+- `useKeyboardAvoidance`: scrollMargin management, focusin/out, viewport resize
+- `usePullToRefresh`: touch gesture state machine, resistance, max pull, scroll guard
+
+**Phase 2 - Find Weaknesses:**
+- `useCanvasChart`: No cleanup of ResizeObserver on unmount in test (verified real cleanup)
+- `useDeviceIp`: Non-ok responses don't trigger fallback — need separate test
+- `useKeyAge`: `waitFor` incompatible with `useFakeTimers` — must use `advanceTimersByTimeAsync`
+- `useKeyboardAvoidance`: `containerRef.current` must be set BEFORE useEffect runs — requires wrapper component
+- `usePullToRefresh`: Resistance factor (0.5) and maxPullDistance capping need explicit tests
+
+**Phase 3 - Red → Green → Refactor:**
+- useKeyAge: 11 tests (getKeyAgeDays backend/fallback, getDaysUntilRotation, useKeyRotationReminder toast conditions)
+- useDeviceIp: 6 tests (public IP, local fallback, both fail, non-ok, empty IP, initial null state)
+- useCanvasChart: 8 tests (mount RAF, DPR scaling, HiDPI off, RAF coalescing, subsequent frames, getCssVar fallback)
+- useKeyboardAvoidance: 6 tests (containerRef, scrollMargin set/restore, non-matching, custom selector, delay scroll)
+- usePullToRefresh: 10 tests (idle, pulling, ready, onRefresh callback, below threshold reset, resistance, max cap, scroll guard, upward move)
+
+**Bugs/Issues Found:**
+1. `useKeyAge`: `waitFor` + `useFakeTimers()` = infinite timeout. Fixed with `shouldAdvanceTime: true` + `advanceTimersByTimeAsync`
+2. `useCanvasChart`: `canvas.parentElement` cannot be spied in jsdom. Fixed by using real DOM container
+3. `useKeyboardAvoidance`: `containerRef.current = null` at mount → effect bails. Fixed by using wrapper component
+4. `useKeyAge`: `ageDays: 5` gives `daysLeft = 85` (not ≤5). Fixed to `ageDays: 88` for info toast, `ageDays: 30` for no-toast
+5. `.test.ts` with JSX syntax → syntax error. Renamed to `.test.tsx`
+
+**Phase 4 - Verify:**
+- All 41 tests pass across 5 files (5 passed, 41 tests, 0 failed)
+- Lint clean (no new errors)
+- Typecheck clean (no new errors)
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved all 5 hooks from "Without Tests" → "Recently Covered"; updated summary counts (Hooks Without Tests: 5 → 0).
+
+**Phase 7 - Commit:** `test(hooks): add 41 tests covering all 5 untested hooks — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- AnalyticsCardContent (1421 lines, complex echarts mocking) — deferred to dedicated analytics sprint
+- Consider testing `getKeyAgeDays` edge case: localStorage with invalid ISO date
+- Consider testing `useDeviceIp` with `AbortSignal.timeout` behavior
+- `useCanvasChart`: Test ResizeObserver disconnect on unmount
