@@ -382,6 +382,89 @@ export default function PaymentModal({
     return BigInt(Math.round(num * 10 ** exp));
   }, [tendered, total.currency]);
 
+  // Convert base currency amount to selected charge currency using exchange rate
+  const convertToChargeCurrency = useCallback(
+    (minorUnits: number | bigint): number => {
+      if (selectedCurrency === total.currency || !exchangeRateInfo) {
+        return typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
+      }
+      const baseMinor = typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
+      const baseExponent = minorUnitExponent(total.currency);
+      const chargeExponent = minorUnitExponent(selectedCurrency);
+      // Convert: base major units * rate = charge major units, then to charge minor units
+      const baseMajor = baseMinor / 10 ** baseExponent;
+      const chargeMajor = baseMajor * exchangeRateInfo.rate;
+      return Math.round(chargeMajor * 10 ** chargeExponent);
+    },
+    [selectedCurrency, total.currency, exchangeRateInfo],
+  );
+
+  // Get the currency to use for the cart (charge currency if multi-currency, else base)
+  const cartCurrency = multiCurrency && selectedCurrency !== total.currency ? selectedCurrency : total.currency;
+
+  // Get the effective total in the cart currency
+  const effectiveTotalInCartCurrency = useMemo(() => {
+    if (cartCurrency === total.currency) return Number(effectiveTotal);
+    return convertToChargeCurrency(effectiveTotal);
+  }, [effectiveTotal, cartCurrency, total.currency, convertToChargeCurrency]);
+
+  // Convert line item unit prices to cart currency
+  const lineItemsInCartCurrency = useMemo(() => {
+    if (cartCurrency === total.currency) return lineItems;
+    return lineItems.map((line) => ({
+      ...line,
+      unit_price: {
+        minor_units: convertToChargeCurrency(line.unit_price.minor_units),
+        currency: cartCurrency,
+      },
+    }));
+  }, [lineItems, cartCurrency, total.currency, convertToChargeCurrency]);
+
+  // Convert tendered amount to cart currency
+  const tenderedMinorInCartCurrency = useMemo(() => {
+    if (cartCurrency === total.currency) return Number(tenderedMinor);
+    const num = parseFloat(tendered);
+    if (Number.isNaN(num) || num < 0) return 0;
+    const chargeExponent = minorUnitExponent(cartCurrency);
+    return Math.round(num * 10 ** chargeExponent);
+  }, [tendered, cartCurrency, tenderedMinor, total.currency]);
+
+  const { sufficient, change } = useMemo(() => {
+    if (method !== 'cash') return { sufficient: true, change: null };
+    if (tenderedMinorInCartCurrency < effectiveTotalInCartCurrency) return { sufficient: false, change: null };
+    const diff = tenderedMinorInCartCurrency - effectiveTotalInCartCurrency;
+    return {
+      sufficient: true,
+      change: { minor_units: diff, currency: cartCurrency } as Money,
+    };
+  }, [method, tenderedMinorInCartCurrency, effectiveTotalInCartCurrency, cartCurrency]);
+
+  // Parse split amounts using cart currency exponent
+  const parseSplitMinor = useCallback((val: string): bigint => {
+    const num = parseFloat(val);
+    if (Number.isNaN(num) || num < 0) return 0n;
+    const exp = minorUnitExponent(cartCurrency);
+    return BigInt(Math.round(num * 10 ** exp));
+  }, [cartCurrency]);
+
+  const splitTotals = useMemo(() => {
+    let splitSum = 0n;
+    for (const s of splits) {
+      splitSum += parseSplitMinor(s.amountMinor);
+    }
+    return { splitSum, remaining: BigInt(effectiveTotalInCartCurrency) - splitSum };
+  }, [splits, parseSplitMinor, effectiveTotalInCartCurrency]);
+
+  const splitComplete = useMemo(() => {
+    if (splitTotals.remaining !== 0n) return false;
+    // Zero-amount sale: empty splits are acceptable
+    if (effectiveTotalInCartCurrency === 0) return true;
+    return splits.every((s) => {
+      if (s.method === 'other' && !s.otherLabel.trim()) return false;
+      return parseSplitMinor(s.amountMinor) > 0n;
+    });
+  }, [splits, splitTotals, parseSplitMinor, effectiveTotalInCartCurrency]);
+
   const handleQrPay = useCallback(() => {
     const ref = `QR-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     setQrReference(ref);
@@ -394,8 +477,8 @@ export default function PaymentModal({
 
     try {
       const { cartId } = sessionToken
-        ? await startSaleScoped(sessionToken, { currency: total.currency })
-        : await startSale({ currency: total.currency });
+        ? await startSaleScoped(sessionToken, { currency: cartCurrency })
+        : await startSale({ currency: cartCurrency });
 
       if (discountPercent > 0) {
         if (sessionToken) {
@@ -409,7 +492,7 @@ export default function PaymentModal({
         }
       }
 
-      for (const line of lineItems) {
+      for (const line of lineItemsInCartCurrency) {
         const lineArgs = {
           cartId,
           sku: line.sku,
@@ -441,7 +524,7 @@ export default function PaymentModal({
             paymentSplits: [
               {
                 method: 'QRIS',
-                amountMinor: Number(effectiveTotal),
+                amountMinor: effectiveTotalInCartCurrency,
                 gatewayReference: qrReference,
                 gatewayStatus: 'completed',
                 gatewayResponse: 'QRIS payment confirmed',
@@ -458,7 +541,7 @@ export default function PaymentModal({
             paymentSplits: [
               {
                 method: 'QRIS',
-                amountMinor: Number(effectiveTotal),
+                amountMinor: effectiveTotalInCartCurrency,
                 gatewayReference: qrReference,
                 gatewayStatus: 'completed',
                 gatewayResponse: 'QRIS payment confirmed',
@@ -474,7 +557,7 @@ export default function PaymentModal({
             year: 'numeric', month: 'short', day: 'numeric',
           }),
           receiptNumber: `SALE-${saleResult.saleId}`,
-          items: lineItems.map((line, i) => {
+          items: lineItemsInCartCurrency.map((line, i) => {
             const computedLine = completedSale?.lines?.[i];
             const tax = computedLine?.tax_amount
               ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
@@ -491,16 +574,16 @@ export default function PaymentModal({
             };
           }),
           subtotal: completedSale
-            ? { minorUnits: completedSale.subtotal.minor_units, currency: total.currency }
-            : { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+            ? { minorUnits: completedSale.subtotal.minor_units, currency: cartCurrency }
+            : { minorUnits: saleResult.total?.minor_units ?? effectiveTotalInCartCurrency, currency: cartCurrency },
           ...(completedSale && completedSale.taxTotal && completedSale.taxTotal.minor_units > 0
-            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency } }
+            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: cartCurrency } }
             : {}),
-          total: { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+          total: { minorUnits: saleResult.total?.minor_units ?? effectiveTotalInCartCurrency, currency: cartCurrency },
           payments: [
             {
               method: 'QRIS',
-              amount: { minorUnits: total.minor_units, currency: total.currency },
+              amount: { minorUnits: effectiveTotalInCartCurrency, currency: cartCurrency },
               change: null,
             },
           ],
@@ -559,42 +642,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, total, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError, addToast]);
-
-  const { sufficient, change } = useMemo(() => {
-    if (method !== 'cash') return { sufficient: true, change: null };
-    if (tenderedMinor < effectiveTotal) return { sufficient: false, change: null };
-    const diff = Number(tenderedMinor - effectiveTotal);
-    return {
-      sufficient: true,
-      change: { minor_units: diff, currency: total.currency } as Money,
-    };
-  }, [method, total, tenderedMinor, effectiveTotal]);
-
-  const parseSplitMinor = useCallback((val: string): bigint => {
-    const num = parseFloat(val);
-    if (Number.isNaN(num) || num < 0) return 0n;
-    const exp = minorUnitExponent(total.currency);
-    return BigInt(Math.round(num * 10 ** exp));
-  }, [total.currency]);
-
-  const splitTotals = useMemo(() => {
-    let splitSum = 0n;
-    for (const s of splits) {
-      splitSum += parseSplitMinor(s.amountMinor);
-    }
-    return { splitSum, remaining: effectiveTotal - splitSum };
-  }, [splits, parseSplitMinor, effectiveTotal]);
-
-  const splitComplete = useMemo(() => {
-    if (splitTotals.remaining !== 0n) return false;
-    // Zero-amount sale: empty splits are acceptable
-    if (effectiveTotal === 0n) return true;
-    return splits.every((s) => {
-      if (s.method === 'other' && !s.otherLabel.trim()) return false;
-      return parseSplitMinor(s.amountMinor) > 0n;
-    });
-  }, [splits, splitTotals, parseSplitMinor, effectiveTotal]);
+  }, [lineItems, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError, addToast, cartCurrency, lineItemsInCartCurrency, effectiveTotalInCartCurrency]);
 
   const addSplit = useCallback(() => {
     setSplits((prev) => [
@@ -617,13 +665,13 @@ export default function PaymentModal({
   const autoSplitEvenly = useCallback(() => {
     const count = splits.length;
     if (count === 0) return;
-    const exp = minorUnitExponent(total.currency);
+    const exp = minorUnitExponent(cartCurrency);
     // Integer floor division in minor units: every row gets baseMinor, and the
     // exact remainder lands on the last row — avoids float `toFixed` rounding
     // that used to over-split non-divisible totals (e.g. 4,450,001 by 2 became
     // 2,225,001 + 2,225,002 = 4,450,003).
-    const baseMinor = Number(totalMinor / BigInt(count));
-    const remainderMinor = Number(totalMinor % BigInt(count));
+    const baseMinor = Math.floor(effectiveTotalInCartCurrency / count);
+    const remainderMinor = effectiveTotalInCartCurrency % count;
     const fmt = (minor: number) => (minor / 10 ** exp).toFixed(exp);
     setSplits((prev) =>
       prev.map((s, i) => ({
@@ -633,7 +681,7 @@ export default function PaymentModal({
           : fmt(baseMinor),
       })),
     );
-  }, [splits.length, totalMinor, total.currency]);
+  }, [splits.length, effectiveTotalInCartCurrency, cartCurrency]);
 
   const canComplete = useMemo(() => {
     if (splitMode) return splitComplete;
@@ -677,8 +725,8 @@ export default function PaymentModal({
 
 
       const { cartId } = sessionToken
-        ? await startSaleScoped(sessionToken, { currency: total.currency })
-        : await startSale({ currency: total.currency });
+        ? await startSaleScoped(sessionToken, { currency: cartCurrency })
+        : await startSale({ currency: cartCurrency });
 
       if (discountPercent > 0) {
         if (sessionToken) {
@@ -692,7 +740,7 @@ export default function PaymentModal({
         }
       }
 
-      for (const line of lineItems) {
+      for (const line of lineItemsInCartCurrency) {
         const lineArgs = {
           cartId,
           sku: line.sku,
@@ -709,7 +757,7 @@ export default function PaymentModal({
       let paymentSplits: PaymentSplitArg[] | undefined;
 
       if (splitMode) {
-        const exp = minorUnitExponent(total.currency);
+        const exp = minorUnitExponent(cartCurrency);
         paymentSplits = splits.map((s) => ({
           method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
           amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
@@ -734,7 +782,7 @@ export default function PaymentModal({
         ? await completeSaleScoped(sessionToken, {
             cartId,
             paymentMethod: methodLabel,
-            tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
+            tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
             ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
@@ -743,7 +791,7 @@ export default function PaymentModal({
         : await completeSale({
             cartId,
             paymentMethod: methodLabel,
-            tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
+            tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
             userId,
             ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
             ...(paymentSplits ? { paymentSplits } : {}),
@@ -778,7 +826,7 @@ export default function PaymentModal({
             year: 'numeric', month: 'short', day: 'numeric',
           }),
           receiptNumber: `SALE-${saleResult.saleId}`,
-          items: lineItems.map((line, i) => {
+          items: lineItemsInCartCurrency.map((line, i) => {
             const computedLine = completedSale?.lines?.[i];
             const tax = computedLine?.tax_amount
               ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
@@ -795,22 +843,22 @@ export default function PaymentModal({
             };
           }),
           subtotal: completedSale
-            ? { minorUnits: completedSale.subtotal.minor_units, currency: total.currency }
-            : { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+            ? { minorUnits: completedSale.subtotal.minor_units, currency: cartCurrency }
+            : { minorUnits: saleResult.total?.minor_units ?? effectiveTotalInCartCurrency, currency: cartCurrency },
           ...(completedSale && completedSale.taxTotal && completedSale.taxTotal.minor_units > 0
-            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency } }
+            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: cartCurrency } }
             : {}),
-          total: { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+          total: { minorUnits: saleResult.total?.minor_units ?? effectiveTotalInCartCurrency, currency: cartCurrency },
           payments: paymentSplits
             ? paymentSplits.map((ps) => ({
                 method: ps.method,
-                amount: { minorUnits: ps.amountMinor, currency: total.currency },
+                amount: { minorUnits: ps.amountMinor, currency: cartCurrency },
                 change: null,
               }))
             : [
                 {
                   method: methodLabel,
-                  amount: { minorUnits: total.minor_units, currency: total.currency },
+                  amount: { minorUnits: effectiveTotalInCartCurrency, currency: cartCurrency },
                   change: change
                     ? { minorUnits: change.minor_units, currency: change.currency }
                     : null,
@@ -867,7 +915,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError]);
+  }, [method, customerName, lineItems, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError, cartCurrency, effectiveTotalInCartCurrency, lineItemsInCartCurrency, tenderedMinorInCartCurrency, total.currency, total.minor_units]);
 
   useEffect(() => {
     if (!done) return;

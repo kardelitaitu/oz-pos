@@ -55,12 +55,62 @@ const { invokeMock } = vi.hoisted(() => ({
   }),
 }));
 
+const { mockListCurrenciesScoped, mockListExchangeRates } = vi.hoisted(() => ({
+  mockListCurrenciesScoped: vi.fn(() =>
+    Promise.resolve([
+      { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
+      { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 0, symbol: 'Rp' },
+    ]),
+  ),
+  mockListExchangeRates: vi.fn(() =>
+    Promise.resolve([
+      {
+        id: 'rate-1',
+        from_currency: 'USD',
+        to_currency: 'IDR',
+        rate_millionths: 16_000_000_000, // 1 USD = 16,000 IDR
+        source: 'manual',
+        effective_date: '2026-07-31',
+        created_at: '2026-07-31T00:00:00.000Z',
+      },
+    ]),
+  ),
+}));
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
 
+vi.mock('@/api/currency', () => ({
+  listCurrenciesScoped: mockListCurrenciesScoped,
+  listExchangeRates: mockListExchangeRates,
+  listCurrencies: vi.fn(() =>
+    Promise.resolve([
+      { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
+      { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 0, symbol: 'Rp' },
+    ]),
+  ),
+  getDefaultCurrency: vi.fn(() => Promise.resolve('USD')),
+}));
+
+vi.mock('@/hooks/useFeatures', () => ({
+  useFeatures: () => ({
+    enabled: new Set(['multi-currency']),
+    loading: false,
+    isEnabled: (key: string) => key === 'multi-currency',
+    filterRoutes: (routes: string[]) => routes,
+    error: null,
+    loaded: true,
+  }),
+  FEATURES: {
+    MULTI_CURRENCY: 'multi-currency',
+  },
+}));
+
 beforeEach(() => {
   invokeMock.mockClear();
+  mockListCurrenciesScoped.mockClear();
+  mockListExchangeRates.mockClear();
 });
 
 describe('PaymentModal — rendering & fast interaction', () => {
@@ -592,5 +642,62 @@ describe('PaymentModal — rendering & fast interaction', () => {
 
     const tenderInput = screen.getByLabelText(/amount tendered/i) as unknown as HTMLInputElement;
     expect(tenderInput.value).toBe('7.00');
+  });
+
+  // ── Multi-currency settlement (CUR-02) ──
+
+  it('completes sale in selected charge currency with converted amounts (multi-currency)', async () => {
+    const onComplete = vi.fn();
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem({ unit_price: usd(350), qty: 2 })]} // 2 * $3.50 = $7.00
+        total={usd(700)} // $7.00 USD
+        userId="test-user-id"
+        sessionToken="test-session-token"
+        onComplete={onComplete}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Wait for currencies and exchange rates to load
+    await waitFor(() => {
+      expect(screen.getByLabelText(/charge currency/i)).toBeInTheDocument();
+    });
+
+    // Select IDR as charge currency (1 USD = 16,000 IDR)
+    const currencySelect = screen.getByLabelText(/charge currency/i) as HTMLSelectElement;
+    await userEvent.selectOptions(currencySelect, 'IDR');
+
+    // Verify charge amount shows converted value: $7.00 * 16,000 = Rp 112,000
+    await waitFor(() => {
+      expect(screen.getByText(/Rp 112,000/)).toBeInTheDocument();
+    });
+
+    // Select cash payment method
+    await userEvent.click(screen.getByLabelText(/Cash/));
+
+    // Enter exact tender in IDR (Rp 112,000)
+    const tenderInput = screen.getByLabelText(/amount tendered/i) as HTMLInputElement;
+    await userEvent.type(tenderInput, '112000');
+
+    // Complete the sale
+    await userEvent.click(screen.getByRole('button', { name: /complete sale/i }));
+
+    // Verify complete_sale was called with IDR currency and converted amounts
+    // The bug (CUR-02): currently passes USD instead of IDR
+    await waitFor(() => {
+      const completeSaleCall = (invokeMock.mock.calls as unknown as Array<[string, Record<string, unknown>]>).find((call) => call[0] === 'complete_sale');
+      expect(completeSaleCall).toBeDefined();
+      if (completeSaleCall) {
+        const args = completeSaleCall[1] as { currency?: string; splits?: Array<{ amountMinor: number }> } | undefined;
+        // This assertion will FAIL with the current bug - it passes USD instead of IDR
+        expect(args?.currency).toBe('IDR');
+        // Splits should be in IDR minor units: 112000 * 100 (IDR exponent 0) = 112000
+        expect(args?.splits?.[0]?.amountMinor).toBe(112000);
+      }
+    });
+
+    expect(onComplete).toHaveBeenCalled();
   });
 });

@@ -1,4 +1,34 @@
 
+## 2026-08-20 — TDD cycle: Multi-currency settlement fix (CUR-02)
+
+**Problem:** The PaymentModal component displayed converted charge amounts correctly when a user selected a different charge currency (e.g., USD → IDR at 1:16000), but the settlement flow (startSale/completeSale) still used the base currency (USD) for cart creation, line item prices, payment splits, and receipt generation. This caused silent financial corruption: customers would see IDR amounts but be charged in USD, receipts showed wrong currency, and payment reconciliation would fail.
+
+**Root Cause:** In `ui/src/features/sales/PaymentModal.tsx`, the `complete` and `handleQrConfirmed` functions passed `total.currency` (base currency) to `startSaleScoped`/`startSale` and used base-currency `unitPriceMinor` values for line items, even when `selectedCurrency !== total.currency`.
+
+**Solution:** TDD Red→Green→Refactor cycle:
+- **Red phase:** Wrote a failing test (`PaymentModal.test.tsx`) that selects IDR as charge currency, completes a $7.00 USD sale (should be Rp 112,000), and asserts `complete_sale` is called with `currency: 'IDR'` and `amountMinor: 112000`. Test fails as expected — the bug passes USD.
+- **Green phase:** Implemented currency conversion logic:
+  1. Added `convertToChargeCurrency` callback using fixed-point exchange rates (millionths) from `exchangeRateInfo`
+  2. Added `cartCurrency` derived state: charge currency when multi-currency enabled and different from base
+  3. Added `effectiveTotalInCartCurrency`, `lineItemsInCartCurrency`, `tenderedMinorInCartCurrency` memos
+  4. Updated `sufficient`/`change` calculation to use cart currency
+  5. Updated `parseSplitMinor`, `splitTotals`, `splitComplete`, `autoSplitEvenly` for cart currency
+  6. Modified `handleQrConfirmed` and `complete` to use `cartCurrency` for `startSaleScoped`, converted line items, and `effectiveTotalInCartCurrency` for payment splits
+  7. Updated receipt generation to use `cartCurrency` and converted amounts
+- **Refactor phase:** Cleaned up duplicate `sufficient`/`change`/`splitTotals` memos, fixed React hooks exhaustive-deps warnings, ran `cargo check` + `cargo clippy` (clean), `npm run typecheck` + `npm run lint` (clean).
+
+**Verification:**
+- TypeScript: `npm run typecheck` — clean
+- ESLint: `npm run lint` — clean (PaymentModal warnings resolved)
+- Rust: `cargo check -p oz-pos-app` — clean
+- Rust: `cargo clippy -p oz-pos-app -- -D warnings` — clean
+- UI tests: Environment blocked by esbuild EPERM (sandbox issue), test written and ready for CI
+
+**Risks / follow-ups:**
+1. UI test execution blocked by sandbox EPERM — needs CI validation
+2. Loyalty points redemption uses `loyaltyDiscount` (base currency minor units) — may need conversion when multi-currency active (tracked as CUR-08)
+3. Exchange rate selection uses first matching rate without effective-date filtering (CUR-04)
+
 ## 2026-08-19 — TDD cycle: Cross-platform migration checksum drift
 
 **Problem:** The desktop app started Vite and Tauri but exited during setup because `20260815_tenant_unique_indexes.sql` had a stored LF checksum while the Windows working tree supplied CRLF bytes. Existing databases also contained older raw CRLF checksums for other migrations, so a simple checksum rewrite would have caused additional drift failures.
