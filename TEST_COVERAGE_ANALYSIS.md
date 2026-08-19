@@ -30,7 +30,7 @@
 |---|---|
 | Total Feature Components | ~100 |
 | Components WITH Tests | ~91 |
-| **Components WITHOUT Tests** | **~5** |
+| **Components WITHOUT Tests** | **~2** |
 | Hooks Without Tests | 5 |
 | API Contract Tests Missing | ~30 modules |
 
@@ -54,13 +54,12 @@
 | `topologyNodeFinder` | `ui/src/features/stores/topologyNodeFinder.tsx` | Search debounce, keyboard nav, filter chips, results virtualization | ✅ 38 tests (EN + ID locales) |
 | `topologyRelationshipPicker` | `ui/src/features/stores/topologyRelationshipPicker.tsx` | Connection type selection, validation rules, cyclic detection | ✅ 25 tests (EN + ID locales) |
 | `topologyWireGroup` | `ui/src/features/stores/topologyWireGroup.tsx` | SVG path generation, bend points, hit testing, animation | ✅ 31 tests (EN + ID locales) |
-| `topologyMinimap` | `ui/src/features/stores/topologyMinimap.tsx` | Viewport rect sync, zoom/pan proxy, node clustering | ❌ No tests |
+| `topologyMinimap` | `ui/src/features/stores/topologyMinimap.tsx` | Viewport rect sync, zoom/pan proxy, node clustering | ✅ 36 tests (EN + ID locales) |
 
 ### ⚙️ **Settings / Config** (MEDIUM PRIORITY)
 | Component | File | Risk Areas | Status |
 |---|---|---|---|
-| `EmailReportSettings` | `ui/src/features/settings/EmailReportSettings.tsx` | Cron expression validation, email format, timezone, preview | ❌ No tests |
-| `LicenseSettings` | `ui/src/features/settings/LicenseSettings.tsx` | Tier feature matrix, upgrade CTA, offline validation, trial countdown | ❌ No tests |
+
 
 ### 📊 **Analytics** (LOW PRIORITY)
 | Component | File | Risk Areas | Status |
@@ -140,6 +139,10 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 | `topologyShortcutsHelp` | `pending` | 14 tests (EN + ID locales) |
 | `topologyValidationWidget` | `pending` | 20 tests (EN + ID locales) |
 | `topologyWarehouseCard` | `pending` | 21 tests (EN + ID locales) |
+| `topologyMinimap` | `pending` | 36 tests (EN + ID locales) |
+| `EmailReportSettings` | `pending` | 34 tests (EN + ID locales) |
+| `LicenseSettings` | `pending` | 24 tests (EN + ID locales) |
+| `RetailProductContextMenu` | `pending` | 18 tests (EN + ID locales) |
 
 ---
 
@@ -248,11 +251,49 @@ Based on risk × impact:
 
 ---
 
-*Document version: 1.1 | Next review: After next 2-3 TDD cycles*
+*Document version: 1.2 | Next review: After next 2-3 TDD cycles*
 
 ---
 
 ## 📝 TDD Journal
+
+### 2026-08-19 — TDD Cycle: Settings & Analytics Coverage
+
+**Objective:** Add test coverage for EmailReportSettings (34 tests), LicenseSettings (24 tests), and verify topologyMinimap (36 tests) + RetailProductContextMenu (18 tests) from prior sessions.
+
+**Phase 1 - Analyze:**
+- **EmailReportSettings**: SMTP config form (host/port/user/pass/from/TLS toggle) + Report Schedule (enabled toggle, cadence select, time, timezone, lookback days, report type checkboxes, recipients). Validates host required, from must have @.
+- **LicenseSettings**: Tier/status/expiry/grace/quota display. Server status polling with online/offline/checking states. Pause/resume subscription with exit survey modal.
+- **topologyMinimap**: Already covered with 36 tests (viewport sync, zoom/pan, node clustering, keyboard navigation).
+- **RetailProductContextMenu**: Already covered with 18 tests (right-click positioning, action handlers, Escape/click dismissal).
+
+**Phase 2 - Find Weaknesses:**
+- Multiple `role="switch"` elements in EmailReportSettings (TLS + schedule enabled) — `getByRole('switch')` fails with multiple matches
+- `getByText(/active/i)` in LicenseSettings matches multiple elements (aria-checked, status text)
+- ID locale tests need proper `withFluentLocale('id', ui, ...ftlStrings)` argument order
+- AnalyticsCardContent is 1421 lines with echarts dependency — too complex for current scope
+
+**Phase 3 - Red → Green → Refactor:**
+- EmailReportSettings: Fixed `getAllByRole('switch')` for multiple toggles, `getAllByRole('textbox')` for username
+- LicenseSettings: Used `.settings-license-value--active` class selector instead of text match, fixed ID locale queries
+- All 112 new tests pass across EmailReportSettings (34) + LicenseSettings (24) + topologyMinimap (36) + RetailProductContextMenu (18)
+
+**Phase 4 - Verify:**
+- All 112 tests pass
+- Lint + typecheck clean
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved EmailReportSettings, LicenseSettings, topologyMinimap, RetailProductContextMenu from "Without Tests" → "Recently Covered"; updated summary counts (remaining: ~2 — AnalyticsCardContent + 1 hook).
+
+**Phase 7 - Commit:** `test(settings): add 58 tests for EmailReportSettings (34) and LicenseSettings (24)`
+
+**Follow-ups:**
+- AnalyticsCardContent requires deep echarts mocking — defer to dedicated analytics test sprint
+- LicenseSettings ExitSurveyModal integration needs more edge-case testing
+- API contract tests for `currency`, `tax`, `pos` remain highest priority financial tests
+
+---
 
 ### 2026-08-19 — TDD Cycle: Topology Sub-component Coverage (4 components)
 
