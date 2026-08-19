@@ -425,4 +425,6 @@ pub async fn destroy_session(
     Ok(())
 }
 
-#[cfg(test)] #[path = "auth_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "auth_tests.rs"]
+mod tests;

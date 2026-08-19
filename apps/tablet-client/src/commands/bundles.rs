@@ -128,4 +128,6 @@ pub async fn lookup_bundle_by_sku(
     Ok(store.get_bundle_by_sku(&sku)?)
 }
 
-#[cfg(test)] #[path = "bundles_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "bundles_tests.rs"]
+mod tests;

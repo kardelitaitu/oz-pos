@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// Build a deadpool pool from a `postgres://` URL (plaintext — the test
@@ -741,9 +740,9 @@ async fn pg_integration_concurrent_sale_status_transition() {
     for _ in 0..2 {
         let pool = pool.clone();
         let id = sale.id.clone();
-        set.spawn(async move {
-            update_sale_status(&pool, "default", &id, SaleStatus::Active).await
-        });
+        set.spawn(
+            async move { update_sale_status(&pool, "default", &id, SaleStatus::Active).await },
+        );
     }
     let mut results = Vec::new();
     while let Some(res) = set.join_next().await {

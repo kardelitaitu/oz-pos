@@ -1,4 +1,3 @@
-
 use super::*;
 
 // ── Token Rejection ─────────────────────────────────────────────────
@@ -174,8 +173,7 @@ fn picker_state() -> (AppState, tempfile::TempDir) {
     seed_global_users(&conn);
     let temp_dir = tempfile::tempdir().unwrap();
     let mut state = AppState::for_test_with_conn(conn);
-    state.db_manager =
-        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
+    state.db_manager = StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
 
     for (store_id, instance_id) in [("store-a", "ws-a-1"), ("store-b", "ws-b-1")] {
         let conn = state.db_manager.open_store(store_id).unwrap();

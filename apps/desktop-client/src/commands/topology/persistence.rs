@@ -817,4 +817,6 @@ pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, App
 }
 
 // ── Unit tests for pure validation functions ─────────────────────
-#[cfg(test)] #[path = "persistence_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "persistence_tests.rs"]
+mod tests;

@@ -180,4 +180,6 @@ pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, R
     }
 }
 
-#[cfg(test)] #[path = "auth_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "auth_tests.rs"]
+mod tests;

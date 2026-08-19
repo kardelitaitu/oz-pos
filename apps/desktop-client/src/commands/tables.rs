@@ -351,4 +351,6 @@ pub async fn release_table_scoped(
     Ok(table)
 }
 
-#[cfg(test)] #[path = "tables_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "tables_tests.rs"]
+mod tests;

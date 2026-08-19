@@ -263,4 +263,6 @@ async fn run_prune_cycle_pg(pool: &deadpool_postgres::Pool) {
         );
     }
 }
-#[cfg(test)] #[path = "prune_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "prune_tests.rs"]
+mod tests;

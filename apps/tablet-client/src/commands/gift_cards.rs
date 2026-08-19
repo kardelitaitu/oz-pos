@@ -133,4 +133,6 @@ pub async fn unfreeze_gift_card(
     Ok(result)
 }
 
-#[cfg(test)] #[path = "gift_cards_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "gift_cards_tests.rs"]
+mod tests;

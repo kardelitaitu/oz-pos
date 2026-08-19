@@ -241,4 +241,6 @@ fn resolve_require_tls(flag: bool, production: bool) -> bool {
     flag || production
 }
 
-#[cfg(test)] #[path = "config_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;

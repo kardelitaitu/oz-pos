@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn make_lua() -> Lua {
@@ -114,9 +113,7 @@ fn fire_handles_callback_error() {
     let mut bridge = LuaEventBridge::new();
 
     let func = lua
-        .create_function(|_, ()| {
-            Err::<(), _>(mlua::Error::RuntimeError("deliberate fail".into()))
-        })
+        .create_function(|_, ()| Err::<(), _>(mlua::Error::RuntimeError("deliberate fail".into())))
         .unwrap();
 
     bridge.register(&lua, "test.event".into(), func).unwrap();

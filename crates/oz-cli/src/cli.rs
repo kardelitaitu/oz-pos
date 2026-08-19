@@ -303,4 +303,6 @@ pub enum UserAction {
     },
 }
 
-#[cfg(test)] #[path = "cli_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "cli_tests.rs"]
+mod tests;

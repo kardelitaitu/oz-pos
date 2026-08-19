@@ -1,4 +1,3 @@
-
 use super::*;
 use axum::{
     body::Body,
@@ -60,7 +59,8 @@ fn seed_payment(conn: &rusqlite::Connection, gateway_ref: &str, sale_id: &str) {
         "INSERT OR IGNORE INTO sales (id, total_minor, currency, line_count, status, created_at)
          VALUES (?1, 1000, 'USD', 1, 'pending', '2026-07-01T00:00:00Z')",
         params![sale_id],
-    ).ok();
+    )
+    .ok();
 
     conn.execute(
         "INSERT OR IGNORE INTO payments (id, sale_id, method, amount_minor, currency,
@@ -861,8 +861,7 @@ async fn pg_integration_webhooks_restricted_role_after_cutover() {
     };
 
     // Full schema + RLS appendix (ENABLE ROW LEVEL SECURITY + policy).
-    let schema_pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await
-    {
+    let schema_pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await {
         Ok(crate::db::DbPool::Postgres(p)) => p,
         _ => unreachable!("schema pool is postgres"),
     };

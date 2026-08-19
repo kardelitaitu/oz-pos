@@ -59,4 +59,6 @@ pub async fn shutdown_signal() {
     }
 }
 
-#[cfg(test)] #[path = "shutdown_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "shutdown_tests.rs"]
+mod tests;

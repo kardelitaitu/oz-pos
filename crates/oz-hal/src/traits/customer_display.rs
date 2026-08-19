@@ -45,4 +45,6 @@ pub trait CustomerDisplay: Send + Sync {
     fn device_info(&self) -> DeviceInfo;
 }
 
-#[cfg(test)] #[path = "customer_display_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "customer_display_tests.rs"]
+mod tests;

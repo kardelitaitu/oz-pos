@@ -23,4 +23,6 @@ pub async fn health() -> impl IntoResponse {
     })
 }
 
-#[cfg(test)] #[path = "health_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "health_tests.rs"]
+mod tests;

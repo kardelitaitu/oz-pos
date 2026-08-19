@@ -491,4 +491,6 @@ pub async fn list_stock_adjustments_scoped(
         .collect())
 }
 
-#[cfg(test)] #[path = "inventory_counts_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "inventory_counts_tests.rs"]
+mod tests;

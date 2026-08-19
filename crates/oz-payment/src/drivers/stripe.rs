@@ -443,4 +443,6 @@ impl PaymentProcessor for StripePaymentProcessor {
     }
 }
 
-#[cfg(test)] #[path = "stripe_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "stripe_tests.rs"]
+mod tests;

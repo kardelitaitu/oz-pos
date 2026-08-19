@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::migrations;
 
@@ -109,8 +108,7 @@ async fn orchestrator_pairs_terminal_and_mints_with_client_credentials() {
                 if let Some(line) = request.lines().rev().find(|l| !l.trim().is_empty())
                     && let Ok(v) = serde_json::from_str::<serde_json::Value>(line)
                 {
-                    echoed_terminal_id =
-                        v["terminal_id"].as_str().unwrap_or_default().to_string();
+                    echoed_terminal_id = v["terminal_id"].as_str().unwrap_or_default().to_string();
                 }
                 let body = format!(
                     "{{\"terminal_id\":\"{echoed_terminal_id}\",\"device_secret\":\"dev-secret-xyz\"}}"
@@ -122,8 +120,7 @@ async fn orchestrator_pairs_terminal_and_mints_with_client_credentials() {
                 )
             } else {
                 *token_body_server.lock().await = Some(request);
-                let body =
-                    r#"{"token":{"token":"jwt-paired","expires_at":null,"token_id":"t1"}}"#;
+                let body = r#"{"token":{"token":"jwt-paired","expires_at":null,"token_id":"t1"}}"#;
                 format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(),

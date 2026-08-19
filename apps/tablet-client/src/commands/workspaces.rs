@@ -352,4 +352,6 @@ fn resolve_boot_store_core(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "workspaces_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "workspaces_tests.rs"]
+mod tests;

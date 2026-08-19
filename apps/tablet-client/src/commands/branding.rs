@@ -61,4 +61,6 @@ pub async fn set_brand_store_name(
     Ok(Settings::set_brand_store_name(&conn, &name)?)
 }
 
-#[cfg(test)] #[path = "branding_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "branding_tests.rs"]
+mod tests;

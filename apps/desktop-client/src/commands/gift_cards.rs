@@ -34,7 +34,9 @@ pub struct BalanceResult {
     pub status: String,
 }
 
-#[cfg(test)] #[path = "gift_cards_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "gift_cards_tests.rs"]
+mod tests;
 
 /// Issue a new gift card with an initial balance.
 ///

@@ -1,4 +1,3 @@
-
 use super::*;
 #[test]
 fn brand_settings_debug() {

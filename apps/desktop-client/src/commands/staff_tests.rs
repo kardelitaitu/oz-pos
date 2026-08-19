@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// A complete ADR #35 D6 profile for create/update fixtures.
@@ -316,8 +315,7 @@ async fn scoped_create_staff_allows_owner_session() {
     seed_global_users(&conn);
     // Pro (20 staff) — plenty of headroom past the seeded cashier.
     seed_subscription_tier(&conn, "pro");
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -348,8 +346,7 @@ async fn scoped_create_staff_blocked_at_free_tier_staff_limit() {
     // with the subscription-limit error, not silently inserted.
     let conn = oz_core::migrations::fresh_db();
     seed_global_users(&conn);
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -388,8 +385,7 @@ async fn scoped_create_staff_allowed_with_headroom_tier() {
     let conn = oz_core::migrations::fresh_db();
     seed_global_users(&conn);
     seed_subscription_tier(&conn, "plus");
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -593,8 +589,7 @@ async fn scoped_update_staff_protects_last_active_owner() {
             ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
     )
     .unwrap();
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -628,8 +623,7 @@ async fn scoped_update_staff_protects_last_active_owner() {
 async fn scoped_update_staff_rotates_pin_when_provided() {
     let conn = oz_core::migrations::fresh_db();
     seed_global_users(&conn);
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -664,8 +658,7 @@ async fn scoped_update_staff_rotates_pin_when_provided() {
 async fn scoped_update_staff_pin_rotation_invalidates_sessions() {
     let conn = oz_core::migrations::fresh_db();
     seed_global_users(&conn);
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     // A stale session for the cashier whose PIN we rotate.
     state.session_store.write().unwrap().insert(
         "cashier-old-session".into(),
@@ -718,8 +711,7 @@ async fn scoped_update_staff_self_rotation_preserves_callers_session() {
     // the UI immediately reloads with the same token after the update.
     let conn = oz_core::migrations::fresh_db();
     seed_global_users(&conn);
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     // Another terminal session for the same owner (issued under the old
     // PIN) SHOULD be invalidated.
     state.session_store.write().unwrap().insert(
@@ -771,8 +763,7 @@ async fn scoped_update_staff_self_rotation_preserves_callers_session() {
 async fn scoped_update_staff_writes_assignment_scope_atomically() {
     let conn = oz_core::migrations::fresh_db();
     seed_global_users(&conn);
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -824,8 +815,7 @@ async fn scoped_update_staff_pin_rotation_clears_login_attempts() {
     let _ = Store::new(&conn).record_login_attempt("cashier", 3, 60);
     let _ = Store::new(&conn).record_login_attempt("cashier", 3, 60);
     let _ = Store::new(&conn).record_login_attempt("cashier", 3, 60);
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -870,8 +860,7 @@ async fn scoped_update_staff_pin_rotation_never_touches_other_users_sessions() {
     Store::new(&conn)
         .create_user("manager", "hash", "Manager", "role-owner")
         .unwrap();
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     // Target user's stale terminal (issued under the old PIN).
     state.session_store.write().unwrap().insert(
         "cashier-stale-terminal".into(),
@@ -938,8 +927,7 @@ async fn scoped_update_staff_pin_rotation_never_touches_other_users_sessions() {
 async fn scoped_update_staff_rejects_short_pin() {
     let conn = oz_core::migrations::fresh_db();
     seed_global_users(&conn);
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -1010,8 +998,7 @@ async fn scoped_list_roles_carries_each_roles_granted_permission_keys() {
     // a narrow custom role = its exact grants).
     let conn = oz_core::migrations::fresh_db();
     seed_global_users(&conn);
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -1030,8 +1017,7 @@ async fn scoped_list_roles_carries_each_roles_granted_permission_keys() {
 async fn scoped_list_staff_lists_global_identity_db() {
     let conn = oz_core::migrations::fresh_db();
     seed_global_users(&conn);
-    let state =
-        scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+    let state = scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())

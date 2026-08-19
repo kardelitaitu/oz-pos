@@ -160,4 +160,6 @@ pub fn format_receipt(body: &str) -> Vec<u8> {
     buf
 }
 
-#[cfg(test)] #[path = "escpos_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "escpos_tests.rs"]
+mod tests;

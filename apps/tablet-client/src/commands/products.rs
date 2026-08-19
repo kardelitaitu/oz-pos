@@ -666,4 +666,6 @@ pub async fn delete_product(
     Ok(())
 }
 
-#[cfg(test)] #[path = "products_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "products_tests.rs"]
+mod tests;

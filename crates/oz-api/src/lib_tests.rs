@@ -1,4 +1,3 @@
-
 use super::*;
 use axum::{
     body::Body,
@@ -487,7 +486,8 @@ async fn create_product_with_zero_stock_no_inventory_row() {
 #[tokio::test]
 async fn create_product_duplicate_sku_returns_409() {
     let token = auth::create_token("test", Some(1), None, None).unwrap();
-    let body = r#"{"sku":"DRINK-001","name":"Duplicate","price":{"minor_units":100,"currency":"USD"}}"#;
+    let body =
+        r#"{"sku":"DRINK-001","name":"Duplicate","price":{"minor_units":100,"currency":"USD"}}"#;
     let req = auth_post_json("/api/v1/products", &token.token, body);
     let resp = test_app_seeded().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::CONFLICT);
@@ -522,8 +522,7 @@ async fn create_product_empty_name_returns_400() {
 #[tokio::test]
 async fn create_product_negative_price_returns_400() {
     let token = auth::create_token("test", Some(1), None, None).unwrap();
-    let body =
-        r#"{"sku":"SKU-OK","name":"Bad Price","price":{"minor_units":-1,"currency":"USD"}}"#;
+    let body = r#"{"sku":"SKU-OK","name":"Bad Price","price":{"minor_units":-1,"currency":"USD"}}"#;
     let req = auth_post_json("/api/v1/products", &token.token, body);
     let resp = test_app().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
@@ -699,7 +698,8 @@ async fn create_user_returns_fields() {
 
 #[tokio::test]
 async fn create_user_requires_auth() {
-    let body = r#"{"username":"staff","pin_hash":"hash","display_name":"Staff","role_id":"role-staff"}"#;
+    let body =
+        r#"{"username":"staff","pin_hash":"hash","display_name":"Staff","role_id":"role-staff"}"#;
     let req = post_json("/api/v1/users", body);
     let resp = test_app_with_roles().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);

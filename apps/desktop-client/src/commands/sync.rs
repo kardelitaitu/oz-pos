@@ -666,4 +666,6 @@ pub async fn sync_pull(
     }
 }
 
-#[cfg(test)] #[path = "sync_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "sync_tests.rs"]
+mod tests;

@@ -487,4 +487,6 @@ pub async fn get_shift_report(
     Ok(ShiftReportDto::from(report))
 }
 
-#[cfg(test)] #[path = "shifts_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "shifts_tests.rs"]
+mod tests;

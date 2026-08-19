@@ -19,4 +19,6 @@ pub enum ReportingError {
     Io(#[from] std::io::Error),
 }
 
-#[cfg(test)] #[path = "error_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;

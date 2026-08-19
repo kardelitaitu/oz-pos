@@ -1,4 +1,3 @@
-
 use oz_core::Currency;
 
 use super::*;

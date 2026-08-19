@@ -371,4 +371,6 @@ impl EventHandler<CourseFired> for CourseFiredHandler {
 
 // ── Tests ─────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "lan_server_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "lan_server_tests.rs"]
+mod tests;

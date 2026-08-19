@@ -55,4 +55,6 @@ pub async fn list_scale_devices(
     Ok(devices)
 }
 
-#[cfg(test)] #[path = "scale_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "scale_tests.rs"]
+mod tests;

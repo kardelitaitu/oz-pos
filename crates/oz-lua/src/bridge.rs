@@ -215,4 +215,6 @@ impl LuaEventBridge {
     }
 }
 
-#[cfg(test)] #[path = "bridge_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "bridge_tests.rs"]
+mod tests;

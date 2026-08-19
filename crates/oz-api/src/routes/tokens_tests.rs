@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::DEFAULT_CORS_ORIGINS;
 use axum::body::to_bytes;
@@ -39,11 +38,7 @@ fn register_terminal(conn: &rusqlite::Connection, id: &str, secret: &str) {
     .unwrap();
 }
 
-fn body_with_credentials(
-    label: &str,
-    client_id: &str,
-    client_secret: &str,
-) -> CreateTokenRequest {
+fn body_with_credentials(label: &str, client_id: &str, client_secret: &str) -> CreateTokenRequest {
     CreateTokenRequest {
         label: label.into(),
         expiry_hours: Some(24),

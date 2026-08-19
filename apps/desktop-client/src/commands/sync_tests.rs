@@ -1,4 +1,3 @@
-
 use super::*;
 use tauri::Manager as _;
 
@@ -45,8 +44,7 @@ fn sync_probe_never_uses_local_dev_server_while_cloud_testing() {
 
 #[test]
 fn update_sync_settings_deserialize() {
-    let json =
-        r#"{"serverUrl":"https://sync.example.com","apiKey":"sk-abc123","enabled":true}"#;
+    let json = r#"{"serverUrl":"https://sync.example.com","apiKey":"sk-abc123","enabled":true}"#;
     let args: UpdateSyncSettingsArgs = serde_json::from_str(json).unwrap();
     assert_eq!(args.server_url.unwrap(), "https://sync.example.com");
     assert_eq!(args.api_key.unwrap(), "sk-abc123");
@@ -470,8 +468,7 @@ async fn request_token_sends_admin_key_header_when_provided() {
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server_url = format!("http://{}", listener.local_addr().unwrap());
-    let captured: Arc<tokio::sync::Mutex<Option<String>>> =
-        Arc::new(tokio::sync::Mutex::new(None));
+    let captured: Arc<tokio::sync::Mutex<Option<String>>> = Arc::new(tokio::sync::Mutex::new(None));
     let captured_server = captured.clone();
     let task = tokio::spawn(async move {
         let Ok((mut socket, _)) = listener.accept().await else {

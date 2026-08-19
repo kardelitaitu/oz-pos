@@ -192,4 +192,6 @@ impl From<platform_core::error::PlatformError> for AppError {
     }
 }
 
-#[cfg(test)] #[path = "error_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;

@@ -618,4 +618,6 @@ fn base64_standard(input: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(input.as_bytes())
 }
 
-#[cfg(test)] #[path = "qris_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "qris_tests.rs"]
+mod tests;

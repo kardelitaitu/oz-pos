@@ -158,4 +158,6 @@ pub async fn set_tenant_plan_handler(
     }
 }
 
-#[cfg(test)] #[path = "plans_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "plans_tests.rs"]
+mod tests;

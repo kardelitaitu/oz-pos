@@ -183,4 +183,6 @@ impl TlsConfigBuilder {
     }
 }
 
-#[cfg(test)] #[path = "tls_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "tls_tests.rs"]
+mod tests;

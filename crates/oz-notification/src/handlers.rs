@@ -267,4 +267,6 @@ impl EventHandler<SaleCompleted> for PaymentReceiptHandler {
     }
 }
 
-#[cfg(test)] #[path = "handlers_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "handlers_tests.rs"]
+mod tests;

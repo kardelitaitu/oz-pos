@@ -518,4 +518,6 @@ fn enqueue_settings_update(
     Ok(store.enqueue_settings_update_superseding(key, value, terminal_id, "default")?)
 }
 
-#[cfg(test)] #[path = "settings_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "settings_tests.rs"]
+mod tests;

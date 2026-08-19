@@ -218,4 +218,6 @@ fn attributes(name: &str) -> HashMap<String, String> {
     ])
 }
 
-#[cfg(test)] #[path = "linux_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "linux_tests.rs"]
+mod tests;

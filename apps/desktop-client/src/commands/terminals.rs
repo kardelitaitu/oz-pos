@@ -1131,4 +1131,6 @@ pub async fn clear_device_binding_scoped(
     Ok(())
 }
 
-#[cfg(test)] #[path = "terminals_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "terminals_tests.rs"]
+mod tests;

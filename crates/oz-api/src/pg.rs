@@ -1255,4 +1255,6 @@ pub async fn update_sale_status(
     }
 }
 
-#[cfg(test)] #[path = "pg_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "pg_tests.rs"]
+mod tests;

@@ -1215,4 +1215,6 @@ pub(crate) fn run_import_ozpkg(
     Ok(())
 }
 
-#[cfg(test)] #[path = "commands_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "commands_tests.rs"]
+mod tests;

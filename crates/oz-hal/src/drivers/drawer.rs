@@ -156,4 +156,6 @@ impl CashDrawer for SerialCashDrawer {
     }
 }
 
-#[cfg(test)] #[path = "drawer_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "drawer_tests.rs"]
+mod tests;

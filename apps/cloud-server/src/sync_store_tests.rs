@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn fresh_db() -> Arc<Mutex<Connection>> {

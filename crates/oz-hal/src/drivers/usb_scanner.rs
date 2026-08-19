@@ -247,4 +247,6 @@ impl BarcodeScanner for UsbHidBarcodeScanner {
     }
 }
 
-#[cfg(test)] #[path = "usb_scanner_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "usb_scanner_tests.rs"]
+mod tests;

@@ -87,4 +87,6 @@ pub trait ReceiptPrinter: Send + Sync {
     fn device_info(&self) -> DeviceInfo;
 }
 
-#[cfg(test)] #[path = "printer_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "printer_tests.rs"]
+mod tests;

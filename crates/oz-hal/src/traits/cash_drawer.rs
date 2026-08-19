@@ -21,4 +21,6 @@ pub trait CashDrawer: Send + Sync {
     fn device_info(&self) -> DeviceInfo;
 }
 
-#[cfg(test)] #[path = "cash_drawer_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "cash_drawer_tests.rs"]
+mod tests;

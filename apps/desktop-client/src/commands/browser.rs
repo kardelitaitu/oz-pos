@@ -86,4 +86,6 @@ async fn open_in_browser(url: &str) -> Result<(), AppError> {
         .map_err(|e| AppError::Internal(format!("opening browser: {e}")))
 }
 
-#[cfg(test)] #[path = "browser_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "browser_tests.rs"]
+mod tests;

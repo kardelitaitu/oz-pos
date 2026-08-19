@@ -1,4 +1,3 @@
-
 use super::*;
 use foundation::{Email, Phone};
 use oz_core::session::SessionContext;
@@ -49,8 +48,7 @@ async fn scoped_customer_command_rejects_invalid_session() {
         create_customer_scoped("missing-token".into(), create_args("Alice"), app.state()).await;
     assert!(matches!(result, Err(AppError::InvalidSession)));
 
-    let result =
-        delete_customer_scoped("missing-token".into(), "cust-1".into(), app.state()).await;
+    let result = delete_customer_scoped("missing-token".into(), "cust-1".into(), app.state()).await;
     assert!(matches!(result, Err(AppError::InvalidSession)));
 }
 
@@ -348,8 +346,7 @@ fn dto_maps_email_to_string() {
 
 #[test]
 fn dto_maps_phone_to_string() {
-    let customer =
-        oz_core::Customer::new("Test").with_phone(Phone::new("+1-555-0102").unwrap());
+    let customer = oz_core::Customer::new("Test").with_phone(Phone::new("+1-555-0102").unwrap());
     let dto = CustomerDto::from(customer);
     assert_eq!(dto.phone, Some("+1-555-0102".into()));
 }
@@ -727,8 +724,7 @@ async fn delete_customer_scoped_is_blocked_by_loyalty_and_sales_references() {
         .unwrap();
     }
 
-    let result =
-        delete_customer_scoped("store-a-token".into(), "cust-1".into(), app.state()).await;
+    let result = delete_customer_scoped("store-a-token".into(), "cust-1".into(), app.state()).await;
     assert!(
         matches!(result, Err(AppError::Core { .. })),
         "delete must be blocked by the FK guard, got: {result:?}"

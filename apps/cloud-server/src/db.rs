@@ -287,4 +287,6 @@ pub enum DbError {
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "db_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "db_tests.rs"]
+mod tests;

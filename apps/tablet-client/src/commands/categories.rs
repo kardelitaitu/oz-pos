@@ -232,4 +232,6 @@ async fn require_category_permission(
     require_permission_for_user(&store, user_id, permission)
 }
 
-#[cfg(test)] #[path = "categories_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "categories_tests.rs"]
+mod tests;

@@ -145,4 +145,6 @@ pub fn gather_metrics() -> String {
         .unwrap_or_else(|e| format!("# Error encoding metrics: {e}\n"))
 }
 
-#[cfg(test)] #[path = "metrics_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "metrics_tests.rs"]
+mod tests;

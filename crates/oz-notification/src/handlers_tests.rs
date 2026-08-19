@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::mock::MockNotificationClient;
 use oz_core::events::SaleCompletedLine;

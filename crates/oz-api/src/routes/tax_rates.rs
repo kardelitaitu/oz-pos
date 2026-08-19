@@ -117,4 +117,6 @@ pub async fn create_tax_rate(
     }
 }
 
-#[cfg(test)] #[path = "tax_rates_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "tax_rates_tests.rs"]
+mod tests;

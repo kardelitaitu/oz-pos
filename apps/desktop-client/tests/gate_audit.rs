@@ -136,12 +136,11 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
         ],
     ),
     ("stock_transfers", 1, &["INVENTORY_TRANSFER"]),
-    ("store_profiles", 0, &[]),    ("sync", 0, &[]),
+    ("store_profiles", 0, &[]),
+    ("sync", 0, &[]),
     ("subscription", 0, &[]),
     (
         "tables",
-
-
         12,
         &[
             "TABLES_ASSIGN",
@@ -255,12 +254,11 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
             "STAFF_UPDATE",
         ],
     ),
-    ("stock_transfers", 1, &["INVENTORY_TRANSFER"]),    ("sync", 0, &[]),
+    ("stock_transfers", 1, &["INVENTORY_TRANSFER"]),
+    ("sync", 0, &[]),
     ("subscription", 0, &[]),
     (
         "tables",
-
-
         6,
         &[
             "TABLES_ASSIGN",

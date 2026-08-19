@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::drivers::mock::MockBarcodeScanner;
 use crate::drivers::mock::MockCashDrawer;
@@ -42,12 +41,16 @@ async fn register_printer_and_drawer() {
 #[tokio::test]
 async fn register_overwrites_previous() {
     let reg = DriverRegistry::default();
-    let old: Arc<dyn BarcodeScanner> = Arc::new(MockBarcodeScanner::with_info(
-        DeviceInfo::new("v1", "MockScanner", "0001"),
-    ));
-    let new: Arc<dyn BarcodeScanner> = Arc::new(MockBarcodeScanner::with_info(
-        DeviceInfo::new("v2", "MockScanner", "0002"),
-    ));
+    let old: Arc<dyn BarcodeScanner> = Arc::new(MockBarcodeScanner::with_info(DeviceInfo::new(
+        "v1",
+        "MockScanner",
+        "0001",
+    )));
+    let new: Arc<dyn BarcodeScanner> = Arc::new(MockBarcodeScanner::with_info(DeviceInfo::new(
+        "v2",
+        "MockScanner",
+        "0002",
+    )));
     reg.register_scanner("main", old).await;
     reg.register_scanner("main", new).await;
     let got = reg.scanner("main").await.unwrap();

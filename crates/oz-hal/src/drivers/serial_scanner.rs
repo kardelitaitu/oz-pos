@@ -163,4 +163,6 @@ impl BarcodeScanner for SerialBarcodeScanner {
     }
 }
 
-#[cfg(test)] #[path = "serial_scanner_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "serial_scanner_tests.rs"]
+mod tests;

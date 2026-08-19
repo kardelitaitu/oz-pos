@@ -1,4 +1,3 @@
-
 use super::*;
 
 // ── CreateUserRequest deserialization ───────────────────────
@@ -15,7 +14,8 @@ fn create_user_request_minimal() {
 
 #[test]
 fn create_user_request_owner_role() {
-    let json = r#"{"username":"owner","pin_hash":"abc","display_name":"Owner","role_id":"role-owner"}"#;
+    let json =
+        r#"{"username":"owner","pin_hash":"abc","display_name":"Owner","role_id":"role-owner"}"#;
     let req: CreateUserRequest = serde_json::from_str(json).unwrap();
     assert_eq!(req.username, "owner");
     assert_eq!(req.role_id, "role-owner");

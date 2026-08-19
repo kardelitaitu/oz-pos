@@ -539,4 +539,6 @@ fn human_size(bytes: u64) -> String {
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "data_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "data_tests.rs"]
+mod tests;

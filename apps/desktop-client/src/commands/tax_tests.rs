@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::session::SessionContext;
 use platform_core::StoreDatabaseManager;
@@ -69,7 +68,8 @@ fn create_tax_rate_args_debug() {
 
 #[test]
 fn update_tax_rate_args_deserialize_camel_case() {
-    let json = r##"{"id":"t1","name":"VAT Updated","rateBps":1200,"isDefault":false,"isInclusive":true}"##;
+    let json =
+        r##"{"id":"t1","name":"VAT Updated","rateBps":1200,"isDefault":false,"isInclusive":true}"##;
     let args: UpdateTaxRateArgs = serde_json::from_str(json).unwrap();
     assert_eq!(args.id, "t1");
     assert_eq!(args.rate_bps, 1200);
@@ -181,8 +181,7 @@ async fn require_tax_permission_rejects_missing_user() {
     let state = AppState::for_test_with_conn(conn);
 
     assert!(matches!(
-        require_tax_permission(&state, "missing-user", oz_core::permissions::SETTINGS_READ)
-            .await,
+        require_tax_permission(&state, "missing-user", oz_core::permissions::SETTINGS_READ).await,
         Err(AppError::PermissionDenied(_))
     ));
 }

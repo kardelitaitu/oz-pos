@@ -69,4 +69,6 @@ pub async fn set_default_currency(
     Ok(())
 }
 
-#[cfg(test)] #[path = "currencies_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "currencies_tests.rs"]
+mod tests;

@@ -516,4 +516,6 @@ pub async fn display_clear(display_id: String, state: State<'_, AppState>) -> Re
     Ok(())
 }
 
-#[cfg(test)] #[path = "hardware_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "hardware_tests.rs"]
+mod tests;

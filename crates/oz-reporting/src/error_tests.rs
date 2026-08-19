@@ -1,4 +1,3 @@
-
 use super::*;
 
 #[test]
@@ -113,9 +112,8 @@ fn internal_exhaustive_match_all_variants() {
 /// no specifics and refuses to sign off).
 #[test]
 fn invalid_window_preserves_verbatim_reason() {
-    let err = ReportingError::InvalidWindow(
-        "end precedes start by 1 year with timezone shift".into(),
-    );
+    let err =
+        ReportingError::InvalidWindow("end precedes start by 1 year with timezone shift".into());
     assert_eq!(
         err.to_string(),
         "invalid time window: end precedes start by 1 year with timezone shift"

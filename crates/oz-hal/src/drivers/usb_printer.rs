@@ -134,4 +134,6 @@ impl ReceiptPrinter for UsbReceiptPrinter {
     }
 }
 
-#[cfg(test)] #[path = "usb_printer_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "usb_printer_tests.rs"]
+mod tests;

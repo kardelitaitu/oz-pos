@@ -923,4 +923,6 @@ pub async fn scalar_ui_handler() -> Html<String> {
     scalar_html()
 }
 
-#[cfg(test)] #[path = "openapi_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "openapi_tests.rs"]
+mod tests;

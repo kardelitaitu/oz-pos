@@ -98,4 +98,6 @@ pub async fn require_permission_for_session(
     )
 }
 
-#[cfg(test)] #[path = "authz_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "authz_tests.rs"]
+mod tests;

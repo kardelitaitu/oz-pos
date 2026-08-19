@@ -136,4 +136,6 @@ pub trait NotificationClient: Debug + Send + Sync {
     ) -> NotificationResult<bool>;
 }
 
-#[cfg(test)] #[path = "lib_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::migrations;
 use rusqlite::Connection;
@@ -224,8 +223,7 @@ fn refund_with_invalid_currency_returns_error_not_silent_fallback() {
         line_total_minor: 700,
     }];
 
-    let result =
-        run_process_refund(&conn, &sale_id, "test", None, "user-refund-tester", &lines);
+    let result = run_process_refund(&conn, &sale_id, "test", None, "user-refund-tester", &lines);
     // Bug #11: .unwrap_or(sale.currency) silently fell back to USD.
     // After the fix, this must return an error mentioning the invalid currency.
     assert!(

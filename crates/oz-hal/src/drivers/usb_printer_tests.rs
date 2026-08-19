@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::transport::usb::DeviceCategory;
 

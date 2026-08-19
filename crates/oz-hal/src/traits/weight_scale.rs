@@ -29,4 +29,6 @@ pub trait WeightScale: Send + Sync {
     fn device_info(&self) -> crate::types::DeviceInfo;
 }
 
-#[cfg(test)] #[path = "weight_scale_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "weight_scale_tests.rs"]
+mod tests;

@@ -499,4 +499,6 @@ end
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "lib_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

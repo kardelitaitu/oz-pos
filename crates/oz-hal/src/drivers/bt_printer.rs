@@ -110,4 +110,6 @@ impl ReceiptPrinter for BtReceiptPrinter {
     }
 }
 
-#[cfg(test)] #[path = "bt_printer_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "bt_printer_tests.rs"]
+mod tests;

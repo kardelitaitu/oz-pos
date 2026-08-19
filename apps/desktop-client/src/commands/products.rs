@@ -1130,4 +1130,6 @@ pub async fn delete_product_scoped(
     Ok(())
 }
 
-#[cfg(test)] #[path = "products_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "products_tests.rs"]
+mod tests;

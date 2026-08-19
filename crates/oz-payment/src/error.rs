@@ -31,4 +31,6 @@ pub enum PaymentError {
     Duplicate(String),
 }
 
-#[cfg(test)] #[path = "error_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;

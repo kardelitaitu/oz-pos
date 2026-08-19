@@ -273,4 +273,6 @@ pub struct UpdateInstanceRequest {
     pub purpose_key: Option<String>,
 }
 
-#[cfg(test)] #[path = "model_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "model_tests.rs"]
+mod tests;

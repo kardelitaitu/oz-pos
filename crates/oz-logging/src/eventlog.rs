@@ -110,4 +110,6 @@ fn write_debug_string(message: &str) {
     }
 }
 
-#[cfg(test)] #[path = "eventlog_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "eventlog_tests.rs"]
+mod tests;

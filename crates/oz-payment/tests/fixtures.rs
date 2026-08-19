@@ -119,7 +119,10 @@ mod tests {
         let scenario = load_scenario("stripe", "success");
         assert_eq!(scenario.driver, "stripe");
         assert_eq!(scenario.name, "success");
-        assert!(!scenario.exchanges.is_empty(), "fixture must have exchanges");
+        assert!(
+            !scenario.exchanges.is_empty(),
+            "fixture must have exchanges"
+        );
     }
 
     #[test]
@@ -155,7 +158,11 @@ mod tests {
 
         let body: serde_json::Value = resp.json().await.unwrap();
         for (key, value) in first.response_body.as_object().unwrap() {
-            assert_eq!(body.get(key), Some(value), "key {key} mismatch in replayed response");
+            assert_eq!(
+                body.get(key),
+                Some(value),
+                "key {key} mismatch in replayed response"
+            );
         }
     }
 }

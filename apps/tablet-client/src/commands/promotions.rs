@@ -247,4 +247,6 @@ pub async fn get_sale_promotions(
     Ok(store.get_promotion_applications_for_sale(&sale_id)?)
 }
 
-#[cfg(test)] #[path = "promotions_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "promotions_tests.rs"]
+mod tests;

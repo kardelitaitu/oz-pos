@@ -1687,4 +1687,6 @@ pub async fn delete_held_cart_scoped(
 
 // ── Tests ─────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "pos_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "pos_tests.rs"]
+mod tests;

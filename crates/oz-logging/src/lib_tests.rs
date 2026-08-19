@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::visitor::MessageVisitor;
 use std::sync::{Arc, Mutex};

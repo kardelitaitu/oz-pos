@@ -569,4 +569,6 @@ fn right_line(label: &str, value: &str, width: usize) -> String {
 
 // ── Tests ────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "receipt_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "receipt_tests.rs"]
+mod tests;

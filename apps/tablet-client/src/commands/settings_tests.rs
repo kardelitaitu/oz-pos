@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::SyncPriority;
 use oz_core::migrations;
@@ -280,7 +279,8 @@ fn store_settings_dto_serialize() {
 
 #[test]
 fn store_settings_dto_deserialize() {
-    let json = r#"{"name":"Shop","address":"1 Rd","taxId":"TX","currency":"EUR","branch":"A","logo":"L"}"#;
+    let json =
+        r#"{"name":"Shop","address":"1 Rd","taxId":"TX","currency":"EUR","branch":"A","logo":"L"}"#;
     let dto: StoreSettingsDto = serde_json::from_str(json).unwrap();
     assert_eq!(dto.name, "Shop");
     assert_eq!(dto.currency, "EUR");

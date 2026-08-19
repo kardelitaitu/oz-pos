@@ -1,4 +1,3 @@
-
 use super::*;
 use rusqlite::params;
 use serial_test::serial;
@@ -225,8 +224,7 @@ async fn pg_integration_prune_ages_out_old_sent_reports() {
             )
             .await
             .unwrap();
-        let remaining: Vec<(String, String)> =
-            rows.iter().map(|r| (r.get(0), r.get(1))).collect();
+        let remaining: Vec<(String, String)> = rows.iter().map(|r| (r.get(0), r.get(1))).collect();
         assert_eq!(
             remaining,
             vec![

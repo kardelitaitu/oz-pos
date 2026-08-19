@@ -205,4 +205,6 @@ pub fn quadrant_recommendation(quadrant: MenuQuadrant) -> &'static str {
     }
 }
 
-#[cfg(test)] #[path = "menu_engineering_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "menu_engineering_tests.rs"]
+mod tests;

@@ -1173,4 +1173,6 @@ pub async fn set_settings_scoped(
     Ok(())
 }
 
-#[cfg(test)] #[path = "settings_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "settings_tests.rs"]
+mod tests;

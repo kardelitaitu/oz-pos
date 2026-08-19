@@ -419,4 +419,6 @@ impl OzpkArchive {
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "package_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "package_tests.rs"]
+mod tests;

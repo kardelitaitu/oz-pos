@@ -130,4 +130,6 @@ pub async fn lookup_bundle_by_sku(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "bundles_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "bundles_tests.rs"]
+mod tests;

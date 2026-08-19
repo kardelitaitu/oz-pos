@@ -125,4 +125,6 @@ impl ReceiptPrinter for TcpReceiptPrinter {
     }
 }
 
-#[cfg(test)] #[path = "tcp_printer_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "tcp_printer_tests.rs"]
+mod tests;

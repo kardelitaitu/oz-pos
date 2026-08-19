@@ -117,4 +117,6 @@ pub async fn create_user(
     }
 }
 
-#[cfg(test)] #[path = "users_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "users_tests.rs"]
+mod tests;

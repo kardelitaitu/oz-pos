@@ -701,4 +701,6 @@ pub async fn try_auto_print_kds_chits(
     }
 }
 
-#[cfg(test)] #[path = "kds_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "kds_tests.rs"]
+mod tests;

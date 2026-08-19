@@ -80,4 +80,6 @@ pub trait PaymentProcessor: Send + Sync {
     fn device_info(&self) -> DeviceInfo;
 }
 
-#[cfg(test)] #[path = "processor_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "processor_tests.rs"]
+mod tests;

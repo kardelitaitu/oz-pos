@@ -321,4 +321,6 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 
-#[cfg(test)] #[path = "lib_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

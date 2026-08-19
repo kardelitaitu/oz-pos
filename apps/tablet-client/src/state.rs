@@ -374,4 +374,6 @@ impl AppState {
     }
 }
 
-#[cfg(test)] #[path = "state_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "state_tests.rs"]
+mod tests;

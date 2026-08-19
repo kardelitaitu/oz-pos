@@ -403,4 +403,6 @@ fn build_eod_report(db: &rusqlite::Connection) -> Result<EodReport, AppError> {
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "history_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "history_tests.rs"]
+mod tests;

@@ -378,4 +378,6 @@ pub fn start_rate_limit_cleanup(state: RateLimiterState) -> tokio::sync::watch::
 
 // ── Tests ─────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "rate_limit_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "rate_limit_tests.rs"]
+mod tests;

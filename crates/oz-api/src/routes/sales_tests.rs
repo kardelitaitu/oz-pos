@@ -1,4 +1,3 @@
-
 use super::*;
 use axum::http::StatusCode;
 
@@ -47,7 +46,8 @@ fn conflict_error_returns_500_via_catchall() {
 
 #[test]
 fn create_sale_request_single_line() {
-    let json = r#"{"lines":[{"sku":"SKU-1","qty":2,"unit_price":{"minor_units":350,"currency":"USD"}}]}"#;
+    let json =
+        r#"{"lines":[{"sku":"SKU-1","qty":2,"unit_price":{"minor_units":350,"currency":"USD"}}]}"#;
     let req: CreateSaleRequest = serde_json::from_str(json).unwrap();
     assert_eq!(req.lines.len(), 1);
     assert_eq!(req.lines[0].sku, "SKU-1");

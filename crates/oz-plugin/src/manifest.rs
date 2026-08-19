@@ -256,4 +256,6 @@ impl PluginManifest {
     }
 }
 
-#[cfg(test)] #[path = "manifest_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "manifest_tests.rs"]
+mod tests;

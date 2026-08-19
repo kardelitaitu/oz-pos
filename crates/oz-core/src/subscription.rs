@@ -672,4 +672,6 @@ impl From<QuotaError> for CoreError {
     }
 }
 
-#[cfg(test)] #[path = "subscription_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "subscription_tests.rs"]
+mod tests;

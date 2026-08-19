@@ -374,4 +374,6 @@ pub async fn stop_scanner(state: State<'_, AppState>) -> Result<(), AppError> {
     Ok(())
 }
 
-#[cfg(test)] #[path = "hardware_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "hardware_tests.rs"]
+mod tests;

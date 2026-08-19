@@ -460,4 +460,6 @@ async fn read_settings(state: &AppState, tenant: &str) -> Result<SettingsView, S
     })
 }
 
-#[cfg(test)] #[path = "settings_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "settings_tests.rs"]
+mod tests;

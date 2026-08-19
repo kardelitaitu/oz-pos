@@ -276,4 +276,6 @@ pub async fn cancel_stock_transfer_scoped(
     Ok(Store::new(&db).cancel_transfer(&id)?)
 }
 
-#[cfg(test)] #[path = "stock_transfers_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "stock_transfers_tests.rs"]
+mod tests;

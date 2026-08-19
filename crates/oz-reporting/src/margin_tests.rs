@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::migrations;
 use oz_core::{Cart, CartLine, Currency, Money, Sale, SaleStatus, Sku};

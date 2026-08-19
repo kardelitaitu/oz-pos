@@ -184,4 +184,6 @@ pub async fn dismiss_setup_wizard(state: State<'_, AppState>) -> Result<(), AppE
     Ok(())
 }
 
-#[cfg(test)] #[path = "setup_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "setup_tests.rs"]
+mod tests;

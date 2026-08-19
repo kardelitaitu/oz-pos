@@ -175,4 +175,6 @@ impl CustomerDisplay for SerialCustomerDisplay {
     }
 }
 
-#[cfg(test)] #[path = "serial_display_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "serial_display_tests.rs"]
+mod tests;

@@ -44,4 +44,6 @@ impl<'a> tracing::field::Visit for MessageVisitor<'a> {
     }
 }
 
-#[cfg(test)] #[path = "visitor_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "visitor_tests.rs"]
+mod tests;

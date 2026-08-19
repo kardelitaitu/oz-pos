@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::migrations;
 use platform_core::StoreDatabaseManager;
@@ -19,8 +18,7 @@ fn analytics_state() -> (AppState, tempfile::TempDir) {
     }
     let temp_dir = tempfile::tempdir().unwrap();
     let mut state = AppState::for_test_with_conn(conn);
-    state.db_manager =
-        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
+    state.db_manager = StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
 
     let conn = state.db_manager.open_store("store-a").unwrap();
     let db = conn.lock().unwrap();

@@ -60,4 +60,6 @@ pub async fn write_all(stream: &mut TcpStream, data: &[u8]) -> Result<(), HalErr
     Ok(())
 }
 
-#[cfg(test)] #[path = "tcp_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "tcp_tests.rs"]
+mod tests;

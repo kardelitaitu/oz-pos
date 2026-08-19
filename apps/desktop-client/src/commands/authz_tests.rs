@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::migrations;
 use oz_core::permissions;
@@ -49,9 +48,7 @@ fn user_permission_check_uses_database_role() {
     let conn = seeded_store();
     let store = Store::new(&conn);
 
-    assert!(
-        require_permission_for_user(&store, "user-cashier", permissions::LOYALTY_VIEW).is_ok()
-    );
+    assert!(require_permission_for_user(&store, "user-cashier", permissions::LOYALTY_VIEW).is_ok());
     assert!(matches!(
         require_permission_for_user(&store, "user-cashier", permissions::LOYALTY_MANAGE),
         Err(AppError::PermissionDenied(_))
@@ -96,9 +93,7 @@ fn owner_role_grants_loyalty_management() {
     .unwrap();
     let store = Store::new(&conn);
 
-    assert!(
-        require_permission_for_user(&store, "user-owner", permissions::LOYALTY_MANAGE).is_ok()
-    );
+    assert!(require_permission_for_user(&store, "user-owner", permissions::LOYALTY_MANAGE).is_ok());
 }
 
 /// Pins the identity-DB authorization design: scoped commands must
@@ -243,8 +238,7 @@ async fn session_gate_enforces_scoped_assignment_workspace_dimension() {
         0,
     );
     assert!(matches!(
-        require_permission_for_session(&state, &out_of_scope_type, permissions::STAFF_UPDATE)
-            .await,
+        require_permission_for_session(&state, &out_of_scope_type, permissions::STAFF_UPDATE).await,
         Err(AppError::PermissionDenied(_))
     ));
 }

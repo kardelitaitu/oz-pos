@@ -438,4 +438,6 @@ impl WeightScale for MockWeightScale {
     }
 }
 
-#[cfg(test)] #[path = "mock_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "mock_tests.rs"]
+mod tests;

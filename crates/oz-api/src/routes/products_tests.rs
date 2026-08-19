@@ -1,4 +1,3 @@
-
 use super::*;
 use axum::http::StatusCode;
 
@@ -63,8 +62,7 @@ fn money_overflow_error_returns_500_via_catchall() {
 
 #[test]
 fn create_product_request_minimal_fields() {
-    let json =
-        r#"{"sku":"SKU-1","name":"Widget","price":{"minor_units":199,"currency":"USD"}}"#;
+    let json = r#"{"sku":"SKU-1","name":"Widget","price":{"minor_units":199,"currency":"USD"}}"#;
     let req: CreateProductRequest = serde_json::from_str(json).unwrap();
     assert_eq!(req.sku, "SKU-1");
     assert_eq!(req.name, "Widget");

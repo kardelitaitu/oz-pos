@@ -302,4 +302,6 @@ pub async fn list_refunds_scoped(
     Ok(refunds)
 }
 
-#[cfg(test)] #[path = "refunds_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "refunds_tests.rs"]
+mod tests;

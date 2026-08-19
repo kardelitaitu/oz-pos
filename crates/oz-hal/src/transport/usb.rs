@@ -346,4 +346,6 @@ pub fn open_device(
     Ok(handle)
 }
 
-#[cfg(test)] #[path = "usb_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "usb_tests.rs"]
+mod tests;

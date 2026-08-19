@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::Currency;
 use oz_core::migrations;
@@ -72,7 +71,8 @@ fn set_cart_discount_args_deserialize() {
 
 #[test]
 fn complete_sale_args_deserialize_minimal() {
-    let json = r#"{"cartId":"770e8400-e29b-41d4-a716-446655440002","paymentMethod":"cash","userId":"u2"}"#;
+    let json =
+        r#"{"cartId":"770e8400-e29b-41d4-a716-446655440002","paymentMethod":"cash","userId":"u2"}"#;
     let args: CompleteSaleArgs = serde_json::from_str(json).unwrap();
     assert_eq!(args.payment_method, "cash");
     assert!(args.tendered_minor.is_none());

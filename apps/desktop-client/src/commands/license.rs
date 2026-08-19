@@ -735,4 +735,6 @@ pub struct PauseResumeDto {
     pub paused_until: Option<String>,
 }
 
-#[cfg(test)] #[path = "license_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "license_tests.rs"]
+mod tests;

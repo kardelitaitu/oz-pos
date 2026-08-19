@@ -402,4 +402,6 @@ fn run_list_remote_failures(
         .collect())
 }
 
-#[cfg(test)] #[path = "offline_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "offline_tests.rs"]
+mod tests;

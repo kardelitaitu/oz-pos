@@ -134,4 +134,6 @@ pub async fn get_staff_analytics_daily_scoped(
         .collect())
 }
 
-#[cfg(test)] #[path = "analytics_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "analytics_tests.rs"]
+mod tests;

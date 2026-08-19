@@ -171,4 +171,6 @@ pub fn query_top_products(
     .map_err(CoreError::from)
 }
 
-#[cfg(test)] #[path = "daily_summary_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "daily_summary_tests.rs"]
+mod tests;

@@ -44,4 +44,6 @@ pub use error::PaymentError;
 pub use processor::PaymentProcessor;
 pub use types::{PaymentMethod, PaymentReceipt, PaymentRequest, PaymentResult};
 
-#[cfg(test)] #[path = "lib_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

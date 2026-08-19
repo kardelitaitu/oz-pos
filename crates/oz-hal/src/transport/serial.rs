@@ -142,4 +142,6 @@ fn description_for_type(port_type: &SerialPortType) -> String {
     }
 }
 
-#[cfg(test)] #[path = "serial_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "serial_tests.rs"]
+mod tests;

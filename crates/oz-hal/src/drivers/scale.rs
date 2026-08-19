@@ -58,4 +58,6 @@ impl WeightScale for HidWeightScale {
     }
 }
 
-#[cfg(test)] #[path = "scale_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "scale_tests.rs"]
+mod tests;

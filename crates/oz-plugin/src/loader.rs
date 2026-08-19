@@ -156,4 +156,6 @@ pub fn load_plugins(plugins_dir: &Path) -> Result<PluginRegistry, PluginError> {
     Ok(registry)
 }
 
-#[cfg(test)] #[path = "loader_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "loader_tests.rs"]
+mod tests;

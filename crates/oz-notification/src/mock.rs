@@ -160,4 +160,6 @@ impl NotificationClient for MockNotificationClient {
     }
 }
 
-#[cfg(test)] #[path = "mock_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "mock_tests.rs"]
+mod tests;

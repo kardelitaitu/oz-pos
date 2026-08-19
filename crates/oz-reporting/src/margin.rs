@@ -103,4 +103,6 @@ pub fn query_sale_lines_with_margin(
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-#[cfg(test)] #[path = "margin_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "margin_tests.rs"]
+mod tests;

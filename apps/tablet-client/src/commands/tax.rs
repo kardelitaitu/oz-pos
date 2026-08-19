@@ -351,4 +351,6 @@ pub async fn set_category_tax_rates_scoped(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "tax_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "tax_tests.rs"]
+mod tests;

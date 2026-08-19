@@ -145,4 +145,6 @@ pub fn mask_cvv(_cvv: &str) -> String {
     "***".to_string()
 }
 
-#[cfg(test)] #[path = "mask_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "mask_tests.rs"]
+mod tests;

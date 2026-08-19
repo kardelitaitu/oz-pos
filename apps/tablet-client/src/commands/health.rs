@@ -61,4 +61,6 @@ pub async fn get_local_ip() -> Result<String, AppError> {
     Ok("127.0.0.1".into())
 }
 
-#[cfg(test)] #[path = "health_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "health_tests.rs"]
+mod tests;

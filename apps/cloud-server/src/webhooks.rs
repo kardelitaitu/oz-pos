@@ -873,4 +873,6 @@ async fn enqueue_finalize_sale(
     Ok(())
 }
 
-#[cfg(test)] #[path = "webhooks_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "webhooks_tests.rs"]
+mod tests;

@@ -439,4 +439,6 @@ impl PaymentProcessor for SquarePaymentProcessor {
     }
 }
 
-#[cfg(test)] #[path = "square_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "square_tests.rs"]
+mod tests;

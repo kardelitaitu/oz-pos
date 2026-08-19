@@ -175,4 +175,6 @@ pub async fn get_or_create_loyalty_account_scoped(
     Ok(store.get_or_create_loyalty_account(&customer_id)?)
 }
 
-#[cfg(test)] #[path = "loyalty_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "loyalty_tests.rs"]
+mod tests;

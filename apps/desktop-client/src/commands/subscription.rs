@@ -105,4 +105,6 @@ pub async fn get_subscription_capabilities(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "subscription_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "subscription_tests.rs"]
+mod tests;

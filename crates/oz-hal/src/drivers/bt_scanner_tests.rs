@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// Verify that discovery doesn't panic on systems without BT hardware.

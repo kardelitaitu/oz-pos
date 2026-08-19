@@ -515,4 +515,6 @@ impl PluginManager {
     }
 }
 
-#[cfg(test)] #[path = "manager_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "manager_tests.rs"]
+mod tests;

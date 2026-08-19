@@ -461,4 +461,6 @@ pub struct SyncStatusResponse {
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "sync_api_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "sync_api_tests.rs"]
+mod tests;

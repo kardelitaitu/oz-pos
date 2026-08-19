@@ -1,4 +1,3 @@
-
 use super::*;
 use clap::Parser;
 
@@ -22,14 +21,12 @@ fn cli_parse_product_list() {
 
 #[test]
 fn cli_parse_product_create() {
-    let cli =
-        Cli::try_parse_from(["oz", "product", "create", "SKU-1", "Widget", "999"]).unwrap();
+    let cli = Cli::try_parse_from(["oz", "product", "create", "SKU-1", "Widget", "999"]).unwrap();
     match cli.command {
         Some(Command::Product(ProductArgs {
-            action:
-                ProductAction::Create {
-                    sku, name, price, ..
-                },
+            action: ProductAction::Create {
+                sku, name, price, ..
+            },
         })) => {
             assert_eq!(sku, "SKU-1");
             assert_eq!(name, "Widget");
@@ -144,8 +141,7 @@ fn cli_parse_custom_db() {
 #[test]
 fn cli_parse_export_ozpkg() {
     let cli =
-        Cli::try_parse_from(["oz", "export-ozpkg", "-o", "data.ozpkg", "-p", "secret123"])
-            .unwrap();
+        Cli::try_parse_from(["oz", "export-ozpkg", "-o", "data.ozpkg", "-p", "secret123"]).unwrap();
     match cli.command {
         Some(Command::ExportOzpkg {
             output, password, ..
@@ -197,8 +193,7 @@ fn cli_parse_sale_get() {
 
 #[test]
 fn cli_parse_sale_update_status() {
-    let cli =
-        Cli::try_parse_from(["oz", "sale", "update-status", "some-id", "completed"]).unwrap();
+    let cli = Cli::try_parse_from(["oz", "sale", "update-status", "some-id", "completed"]).unwrap();
     assert!(matches!(
         cli.command,
         Some(Command::Sale(SaleArgs {

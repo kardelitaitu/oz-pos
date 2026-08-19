@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::migrations;
 use rusqlite::Connection;
@@ -638,8 +637,7 @@ fn edit_cost_permission_membership_is_manager_only() {
     let store = Store::new(&conn);
     // Owner (`*`) and Manager presets hold it; Staff does not.
     assert!(
-        require_permission_for_user(&store, "user-owner", permissions::PRODUCTS_EDIT_COST)
-            .is_ok()
+        require_permission_for_user(&store, "user-owner", permissions::PRODUCTS_EDIT_COST).is_ok()
     );
     assert!(
         require_permission_for_user(&store, "user-manager", permissions::PRODUCTS_EDIT_COST)

@@ -279,4 +279,6 @@ impl NotificationClient for WhatsAppClient {
     }
 }
 
-#[cfg(test)] #[path = "whatsapp_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "whatsapp_tests.rs"]
+mod tests;

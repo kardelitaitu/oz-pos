@@ -498,4 +498,6 @@ fn validate_customer_fields(
 
 // ── Tests ───────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "customers_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "customers_tests.rs"]
+mod tests;

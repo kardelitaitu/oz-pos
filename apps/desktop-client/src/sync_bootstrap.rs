@@ -248,4 +248,6 @@ async fn resolve_terminal_credentials(
     Some((terminal_id, device_secret))
 }
 
-#[cfg(test)] #[path = "sync_bootstrap_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "sync_bootstrap_tests.rs"]
+mod tests;

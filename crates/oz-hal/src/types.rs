@@ -75,4 +75,6 @@ impl DeviceInfo {
     }
 }
 
-#[cfg(test)] #[path = "types_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "types_tests.rs"]
+mod tests;

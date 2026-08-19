@@ -49,7 +49,9 @@ fn default_true() -> bool {
     true
 }
 
-#[cfg(test)] #[path = "promotions_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "promotions_tests.rs"]
+mod tests;
 /// List all promotions.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_promotions_scoped`.

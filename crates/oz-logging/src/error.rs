@@ -19,4 +19,6 @@ pub enum LoggingError {
     InitFailed(String),
 }
 
-#[cfg(test)] #[path = "error_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;

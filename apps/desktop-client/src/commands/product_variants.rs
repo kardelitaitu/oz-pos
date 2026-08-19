@@ -283,4 +283,6 @@ pub async fn delete_product_variant(
     Ok(())
 }
 
-#[cfg(test)] #[path = "product_variants_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "product_variants_tests.rs"]
+mod tests;

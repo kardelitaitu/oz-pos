@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn test_key() -> String {
@@ -33,8 +32,7 @@ fn qris_base_url_sandbox() {
 
 #[test]
 fn qris_base_url_custom_endpoint() {
-    let proc =
-        QrisPaymentProcessor::new_with_endpoint("sk_test", "http://localhost:9999", false);
+    let proc = QrisPaymentProcessor::new_with_endpoint("sk_test", "http://localhost:9999", false);
     assert_eq!(proc.base_url(), "http://localhost:9999");
 }
 
@@ -143,8 +141,7 @@ fn qris_parse_transaction_status() {
 
 #[test]
 fn qris_parse_error_response() {
-    let json =
-        r#"{"status_code": "402", "status_message": "Transaction amount exceeds limit"}"#;
+    let json = r#"{"status_code": "402", "status_message": "Transaction amount exceeds limit"}"#;
     let err: MidtransErrorResponse = serde_json::from_str(json).unwrap();
     assert_eq!(err.status_code, "402");
     assert_eq!(err.status_message, "Transaction amount exceeds limit");

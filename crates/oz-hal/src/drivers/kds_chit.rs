@@ -116,4 +116,6 @@ fn center_text(s: &str, width: usize) -> String {
     }
 }
 
-#[cfg(test)] #[path = "kds_chit_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "kds_chit_tests.rs"]
+mod tests;

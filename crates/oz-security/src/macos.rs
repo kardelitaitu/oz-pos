@@ -77,4 +77,6 @@ impl Keyring for MacOsKeychain {
     // from the `Keyring` trait.
 }
 
-#[cfg(test)] #[path = "macos_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "macos_tests.rs"]
+mod tests;

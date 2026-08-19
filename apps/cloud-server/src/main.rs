@@ -474,4 +474,6 @@ pub fn build_router(
         ))
 } // ── Tests ─────────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "main_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;

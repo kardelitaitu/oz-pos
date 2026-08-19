@@ -145,4 +145,6 @@ pub async fn get_setup_status(state: State<'_, AppState>) -> Result<SetupStatus,
     Ok(SetupStatus { completed, preset })
 }
 
-#[cfg(test)] #[path = "setup_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "setup_tests.rs"]
+mod tests;

@@ -236,4 +236,6 @@ fn get_store_name(store: &Store<'_>) -> Result<String, String> {
     Ok(name.unwrap_or_else(|| "OZ-POS Store".to_string()))
 }
 
-#[cfg(test)] #[path = "email_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "email_tests.rs"]
+mod tests;

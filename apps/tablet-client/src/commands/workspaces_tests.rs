@@ -1,4 +1,3 @@
-
 use super::*;
 
 use oz_core::StoreProfile;
@@ -45,8 +44,7 @@ fn picker_state() -> (AppState, tempfile::TempDir) {
     seed_global_users(&conn);
     let temp_dir = tempfile::tempdir().unwrap();
     let mut state = AppState::for_test_with_conn(conn);
-    state.db_manager =
-        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
+    state.db_manager = StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
 
     let conn = state.db_manager.open_store("store-a").unwrap();
     let db = conn.lock().unwrap();
@@ -362,8 +360,7 @@ fn binding_state() -> (AppState, tempfile::TempDir, oz_security::InMemoryKeyring
 
     let temp_dir = tempfile::tempdir().unwrap();
     let mut state = AppState::for_test_with_conn(conn);
-    state.db_manager =
-        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
+    state.db_manager = StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
     let conn = state.db_manager.open_store("store-a").unwrap();
     let db = conn.lock().unwrap();
     let store = Store::new(&db);
@@ -430,8 +427,7 @@ async fn resolve_boot_store_unknown_device_falls_back_to_primary() {
     let (state, _dir, keyring) = binding_state();
     let db = state.db.lock().await;
     let resolution =
-        resolve_boot_store_core(&db, &state.db_manager, "ghost-device", Some(&keyring))
-            .unwrap();
+        resolve_boot_store_core(&db, &state.db_manager, "ghost-device", Some(&keyring)).unwrap();
     assert!(!resolution.is_bound);
     assert_eq!(resolution.store_id, "store-main");
 }

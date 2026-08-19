@@ -262,4 +262,6 @@ pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, 
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "history_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "history_tests.rs"]
+mod tests;

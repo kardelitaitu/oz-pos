@@ -183,4 +183,6 @@ pub async fn register_terminal_handler(
     }
 }
 
-#[cfg(test)] #[path = "terminals_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "terminals_tests.rs"]
+mod tests;

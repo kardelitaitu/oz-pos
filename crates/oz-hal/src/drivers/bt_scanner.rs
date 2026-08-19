@@ -184,4 +184,6 @@ impl BarcodeScanner for BtBarcodeScanner {
     }
 }
 
-#[cfg(test)] #[path = "bt_scanner_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "bt_scanner_tests.rs"]
+mod tests;

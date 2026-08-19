@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::db::assignments::{AssignmentSpec, ScopeMode};
 use oz_core::migrations;
@@ -22,8 +21,7 @@ fn analytics_state() -> (AppState, tempfile::TempDir) {
     }
     let temp_dir = tempfile::tempdir().unwrap();
     let mut state = AppState::for_test_with_conn(conn);
-    state.db_manager =
-        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
+    state.db_manager = StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
 
     // Store-a: the store DB has no identity rows, but shifts.user_id FKs
     // to users(id) — seed the store-side user rows (as the shift open

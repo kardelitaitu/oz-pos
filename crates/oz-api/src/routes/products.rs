@@ -298,4 +298,6 @@ pub async fn patch_stock(
     }
 }
 
-#[cfg(test)] #[path = "products_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "products_tests.rs"]
+mod tests;

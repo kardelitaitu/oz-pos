@@ -411,4 +411,6 @@ fn base64_encode(bytes: &[u8]) -> String {
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "db_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "db_tests.rs"]
+mod tests;

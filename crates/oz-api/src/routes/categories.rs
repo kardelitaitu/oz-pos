@@ -41,4 +41,6 @@ pub async fn list_categories(State(state): State<AppState>) -> Response {
     }
 }
 
-#[cfg(test)] #[path = "categories_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "categories_tests.rs"]
+mod tests;

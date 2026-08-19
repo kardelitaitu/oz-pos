@@ -87,4 +87,6 @@ pub async fn delete_exchange_rate(id: String, state: State<'_, AppState>) -> Res
     Ok(())
 }
 
-#[cfg(test)] #[path = "exchange_rates_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "exchange_rates_tests.rs"]
+mod tests;

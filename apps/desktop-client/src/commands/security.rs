@@ -122,4 +122,6 @@ pub async fn rotate_encryption_key() -> Result<RotationInfo, AppError> {
     .await
 }
 
-#[cfg(test)] #[path = "security_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "security_tests.rs"]
+mod tests;

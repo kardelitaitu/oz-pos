@@ -146,4 +146,6 @@ async fn send_email_via_smtp(
     Ok(())
 }
 
-#[cfg(test)] #[path = "email_scheduler_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "email_scheduler_tests.rs"]
+mod tests;

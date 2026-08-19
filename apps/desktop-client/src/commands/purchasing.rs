@@ -417,4 +417,6 @@ pub async fn receive_purchase_order(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "purchasing_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "purchasing_tests.rs"]
+mod tests;

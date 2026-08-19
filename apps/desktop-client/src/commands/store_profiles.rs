@@ -210,4 +210,6 @@ pub async fn delete_store_profile(id: String, state: State<'_, AppState>) -> Res
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "store_profiles_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "store_profiles_tests.rs"]
+mod tests;

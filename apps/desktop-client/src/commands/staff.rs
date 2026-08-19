@@ -909,4 +909,6 @@ fn run_bootstrap_owner(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "staff_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "staff_tests.rs"]
+mod tests;

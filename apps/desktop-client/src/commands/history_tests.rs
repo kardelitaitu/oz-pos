@@ -1,4 +1,3 @@
-
 use super::*;
 use foundation::{Currency, Money};
 use oz_core::SaleLine;

@@ -155,4 +155,6 @@ pub async fn create_token_handler(
     }
 }
 
-#[cfg(test)] #[path = "tokens_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "tokens_tests.rs"]
+mod tests;

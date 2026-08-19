@@ -776,4 +776,6 @@ pub async fn void_pending_sale(
     Ok(())
 }
 
-#[cfg(test)] #[path = "inventory_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "inventory_tests.rs"]
+mod tests;

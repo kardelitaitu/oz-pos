@@ -619,4 +619,6 @@ pub async fn build_custom_report_scoped(
     Ok(Store::new(&db).build_custom_report(request)?)
 }
 
-#[cfg(test)] #[path = "reports_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "reports_tests.rs"]
+mod tests;

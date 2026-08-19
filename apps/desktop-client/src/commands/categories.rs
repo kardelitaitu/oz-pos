@@ -261,4 +261,6 @@ async fn require_category_permission(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "categories_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "categories_tests.rs"]
+mod tests;

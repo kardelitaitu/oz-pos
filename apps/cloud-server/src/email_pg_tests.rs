@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::export::email_report::SMTP_CONFIG_SETTINGS_KEY;
 
@@ -69,7 +68,11 @@ async fn pg_integration_email_loop_reads_postgres() {
     .unwrap();
     tx.execute(
         "INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES ($1, $2, 4, $3)",
-        &[&product_id, &oz_core::inventory::CANONICAL_DEFAULT_LOCATION_UUID, &now],
+        &[
+            &product_id,
+            &oz_core::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            &now,
+        ],
     )
     .await
     .unwrap();

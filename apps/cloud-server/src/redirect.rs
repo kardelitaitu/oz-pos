@@ -62,4 +62,6 @@ pub async fn redirect_middleware(
     next.run(req).await
 }
 
-#[cfg(test)] #[path = "redirect_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "redirect_tests.rs"]
+mod tests;

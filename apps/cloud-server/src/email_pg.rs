@@ -1321,4 +1321,6 @@ async fn category_forecast_pg(
     Ok(out)
 }
 
-#[cfg(test)] #[path = "email_pg_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "email_pg_tests.rs"]
+mod tests;

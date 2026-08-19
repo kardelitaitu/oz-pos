@@ -174,4 +174,6 @@ pub async fn pick_logo_file(app_handle: tauri::AppHandle) -> Result<Option<Strin
     Ok(file.map(|f| f.to_string()))
 }
 
-#[cfg(test)] #[path = "branding_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "branding_tests.rs"]
+mod tests;

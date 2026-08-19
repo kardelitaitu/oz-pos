@@ -382,4 +382,6 @@ pub async fn export_audit_log_scoped(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "audit_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "audit_tests.rs"]
+mod tests;

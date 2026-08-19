@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::migrations;
 use rusqlite::Connection;

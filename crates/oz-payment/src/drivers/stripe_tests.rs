@@ -1,4 +1,3 @@
-
 use super::*;
 use std::str;
 
@@ -69,8 +68,7 @@ fn stripe_parse_intent_success() {
 
 #[test]
 fn stripe_parse_intent_no_amount_received() {
-    let json =
-        r#"{"id":"pi_test_456","amount":2000,"currency":"usd","status":"requires_capture"}"#;
+    let json = r#"{"id":"pi_test_456","amount":2000,"currency":"usd","status":"requires_capture"}"#;
     let intent = StripePaymentProcessor::parse_intent(json).unwrap();
     assert_eq!(intent.amount, 2000);
     assert_eq!(intent.amount_received, None);
@@ -193,8 +191,7 @@ fn stripe_clone_preserves_config() {
 
 #[test]
 fn stripe_new_with_endpoint_uses_custom_base() {
-    let proc =
-        StripePaymentProcessor::new_with_endpoint("sk_test", "http://localhost:9999", false);
+    let proc = StripePaymentProcessor::new_with_endpoint("sk_test", "http://localhost:9999", false);
     let debug = format!("{:?}", proc);
     assert!(debug.contains("localhost:9999"));
 }

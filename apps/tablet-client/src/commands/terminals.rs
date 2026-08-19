@@ -468,4 +468,6 @@ pub async fn delete_terminal_override(
     Ok(())
 }
 
-#[cfg(test)] #[path = "terminals_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "terminals_tests.rs"]
+mod tests;

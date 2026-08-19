@@ -856,4 +856,6 @@ pub async fn resolve_boot_store(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "workspaces_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "workspaces_tests.rs"]
+mod tests;

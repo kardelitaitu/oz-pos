@@ -769,4 +769,6 @@ async fn pg_snapshot_users(
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "sync_store_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "sync_store_tests.rs"]
+mod tests;

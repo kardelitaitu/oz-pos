@@ -1,4 +1,3 @@
-
 use super::*;
 
 #[test]
@@ -12,8 +11,7 @@ fn create_args_reject_legacy_actor_field() {
 
 #[test]
 fn complete_args_use_camel_case() {
-    let args: CompleteStockCountArgs =
-        serde_json::from_str(r#"{"countId":"count-1"}"#).unwrap();
+    let args: CompleteStockCountArgs = serde_json::from_str(r#"{"countId":"count-1"}"#).unwrap();
     assert_eq!(args.count_id, "count-1");
 }
 

@@ -511,4 +511,6 @@ fn all_feature_metadata() -> Vec<(Feature, &'static str, &'static str, &'static 
     ]
 }
 
-#[cfg(test)] #[path = "features_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "features_tests.rs"]
+mod tests;

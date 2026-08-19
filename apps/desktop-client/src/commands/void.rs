@@ -89,4 +89,6 @@ pub async fn void_sale_scoped(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "void_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "void_tests.rs"]
+mod tests;

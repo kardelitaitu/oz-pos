@@ -286,4 +286,6 @@ pub async fn cancel_stock_transfer_scoped(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "stock_transfers_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "stock_transfers_tests.rs"]
+mod tests;

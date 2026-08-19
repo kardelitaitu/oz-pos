@@ -27,4 +27,6 @@ pub use error::ReportingError;
 #[cfg(feature = "metrics")]
 pub use metrics::*;
 
-#[cfg(test)] #[path = "lib_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

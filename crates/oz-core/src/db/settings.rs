@@ -275,4 +275,6 @@ impl Store<'_> {
 
 // ── Tests ─────────────────────────────────────────────────────────────
 
-#[cfg(test)] #[path = "settings_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "settings_tests.rs"]
+mod tests;

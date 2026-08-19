@@ -240,4 +240,6 @@ pub fn try_init_json_with_file(
     Ok(())
 }
 
-#[cfg(test)] #[path = "lib_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

@@ -235,4 +235,6 @@ impl DriverRegistry {
     }
 }
 
-#[cfg(test)] #[path = "registry_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "registry_tests.rs"]
+mod tests;

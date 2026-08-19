@@ -78,4 +78,6 @@ pub struct PaymentReceipt {
     pub raw_data: Option<String>,
 }
 
-#[cfg(test)] #[path = "types_tests.rs"] mod tests;
+#[cfg(test)]
+#[path = "types_tests.rs"]
+mod tests;

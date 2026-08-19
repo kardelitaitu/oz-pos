@@ -1,4 +1,3 @@
-
 use super::*;
 use oz_core::session::SessionContext;
 use platform_core::StoreDatabaseManager;
@@ -245,7 +244,6 @@ async fn scoped_transfer_denies_user_without_transfer_permission() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let result =
-        list_stock_transfers_scoped("cashier-transfer-token".into(), app.state()).await;
+    let result = list_stock_transfers_scoped("cashier-transfer-token".into(), app.state()).await;
     assert!(matches!(result, Err(AppError::PermissionDenied(_))));
 }

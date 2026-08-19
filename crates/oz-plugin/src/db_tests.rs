@@ -1,4 +1,3 @@
-
 use super::*;
 
 // ── Static regex compile guard ─────────────────────────────────────
@@ -336,8 +335,7 @@ fn validate_allows_multiple_prefixed_tables_in_from() {
 
 #[test]
 fn validate_rejects_mixed_prefix_and_non_prefix() {
-    let err =
-        validate_sql("SELECT * FROM plugin_test_items, sales", "plugin_test_").unwrap_err();
+    let err = validate_sql("SELECT * FROM plugin_test_items, sales", "plugin_test_").unwrap_err();
     assert!(err.to_string().contains("prefix"));
 }
 
@@ -365,9 +363,8 @@ fn extract_tables_from_join() {
 
 #[test]
 fn extract_tables_skips_cte_names() {
-    let tables = extract_table_references(
-        "WITH cte AS (SELECT * FROM plugin_test_items) SELECT * FROM cte",
-    );
+    let tables =
+        extract_table_references("WITH cte AS (SELECT * FROM plugin_test_items) SELECT * FROM cte");
     // cte should NOT appear (it's a CTE name, not a real table)
     // plugin_test_items should appear
     assert!(tables.contains(&"plugin_test_items".to_string()));
