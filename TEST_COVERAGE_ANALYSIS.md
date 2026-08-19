@@ -29,8 +29,8 @@
 | Metric | Count |
 |---|---|
 | Total Feature Components | ~100 |
-| Components WITH Tests | ~88 |
-| **Components WITHOUT Tests** | **~12** |
+| Components WITH Tests | ~89 |
+| **Components WITHOUT Tests** | **~11** |
 | Hooks Without Tests | 5 |
 | API Contract Tests Missing | ~30 modules |
 
@@ -53,7 +53,7 @@
 | `topologyNodeCard` | `ui/src/features/stores/topologyNodeCard.tsx` | Drag initiation, edit mode, validation badges, selection | ❌ No tests |
 | `topologyNodeFinder` | `ui/src/features/stores/topologyNodeFinder.tsx` | Search debounce, keyboard nav, filter chips, results virtualization | ❌ No tests |
 | `topologyRelationshipPicker` | `ui/src/features/stores/topologyRelationshipPicker.tsx` | Connection type selection, validation rules, cyclic detection | ❌ No tests |
-| `topologyWireGroup` | `ui/src/features/stores/topologyWireGroup.tsx` | SVG path generation, bend points, hit testing, animation | ❌ No tests |
+| `topologyWireGroup` | `ui/src/features/stores/topologyWireGroup.tsx` | SVG path generation, bend points, hit testing, animation | ✅ 31 tests (EN + ID locales) |
 | `topologyMinimap` | `ui/src/features/stores/topologyMinimap.tsx` | Viewport rect sync, zoom/pan proxy, node clustering | ❌ No tests |
 | `topologyShortcutsHelp` | `ui/src/features/stores/topologyShortcutsHelp.tsx` | Key binding display, modal focus, i18n | ❌ No tests |
 | `topologyValidationWidget` | `ui/src/features/stores/topologyValidationWidget.tsx` | Error aggregation, severity sorting, auto-scroll to error | ❌ No tests |
@@ -130,6 +130,7 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 
 | Component | Commit | Tests Added |
 |---|---|---|
+| `topologyWireGroup` | `<commit-hash>` | 31 tests (EN + ID locales) |
 | `RetailSubViews` | `<commit-hash>` | 5 tests (EN + ID locales) |
 | `RetailModals` | `<commit-hash>` | 11 tests (EN + ID locales) — Clear confirm modal slice |
 | `RetailHeader` | `<commit-hash>` | 27 tests (EN + ID locales) |
@@ -236,8 +237,8 @@ Based on risk × impact:
 
 | Priority | Target | Reason |
 |---|---|---|
-| 1 | `RetailProductContextMenu` | Core POS revenue flow, right-click/long-press |
-| 2 | `topologyWireGroup` + `topologyRelationshipPicker` | Complex SVG math, connection validation |
+| 1 | `topologyRelationshipPicker` | Complex connection validation, cyclic detection, focus management |
+| 2 | `RetailProductContextMenu` | Core POS revenue flow, right-click/long-press |
 | 3 | `useKeyboardAvoidance` + `usePullToRefresh` | Mobile UX critical, subtle math bugs |
 | 4 | `EmailReportSettings` | Cron parsing, timezone edge cases |
 | 5 | API contract tests for `currency`, `tax`, `pos` | Financial precision, rounding bugs |
@@ -637,3 +638,49 @@ Based on risk × impact:
 - Test keyboard navigation in sub-views (Tab order, Escape handling)
 - Test feature flag disabled states for TableManagementView
 - RetailProductContextMenu is next highest priority target
+
+---
+
+### 2026-08-19 — TDD Cycle: topologyWireGroup Coverage
+
+**Objective:** Add test coverage for topologyWireGroup (topology wire group) — core topology editor component rendering SVG wires with pulse animation, validation markers, bend editing, and directional arrows.
+
+**Phase 1 - Analyze:** topologyWireGroup is a memoized component (212 lines) rendering SVG wire geometry with multiple visual states and interaction affordances:
+- Wire hitbox with keyboard parity (Enter/Space to cycle direction)
+- Simulation pulse circle (30ms tick animation)
+- Validation marker with tooltip for wire-scoped errors
+- Ghost bend circles on hover/selection for bend creation
+- Draggable bend handles with double-click to remove
+- Directional arrow markers (one-way, reverse, two-way)
+- Native SVG tooltips with wire label + toggle hint
+
+**Phase 2 - Find Weaknesses:**
+- No existing test coverage
+- Component uses React.memo — tests must handle re-render isolation
+- SVG elements don't have data-testid attributes — must query by class/role
+- Arrow markers use kebab-case SVG attributes (marker-end, marker-start)
+- Only one end dot rendered (at source), not both endpoints
+- WireDirection type is 'one-way' | 'reverse' | 'two-way' (not 'forward')
+- Indonesian locale requires multi-store.ftl keys
+
+**Phase 3 - Red → Green → Refactor:**
+- Red: Created `topologyWireGroup.test.tsx` with 31 tests across 7 describe blocks
+- Green: Tests passed after fixing SVG attribute casing, className assertions, and WireDirection enum
+- Refactor: Split className tests into separate `it` blocks for render isolation; used document.querySelector for SVG elements
+
+**Phase 4 - Verify:**
+- All 31 tests pass (EN + ID locales)
+- Lint clean (no new errors)
+- Typecheck clean (no new errors)
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved topologyWireGroup from "Without Tests" → "Recently Covered"; updated summary counts and next targets.
+
+**Phase 7 - Commit:** `test(stores): add topologyWireGroup coverage (31 tests) — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Test bend editing edge cases (rapid segment changes, bend handle drag boundaries)
+- Test pulse animation cleanup on unmount
+- Test validation marker with multiple errors (currently only shows first)
+- topologyRelationshipPicker is next highest priority target
