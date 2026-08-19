@@ -50,7 +50,7 @@
 
 | Component | File | Risk Areas | Status |
 |---|---|---|---|
-| `topologyNodeCard` | `ui/src/features/stores/topologyNodeCard.tsx` | Drag initiation, edit mode, validation badges, selection | ❌ No tests |
+| `topologyNodeCard` | `ui/src/features/stores/topologyNodeCard.tsx` | Drag initiation, edit mode, validation badges, selection | ✅ 75 tests (EN + ID locales) |
 | `topologyNodeFinder` | `ui/src/features/stores/topologyNodeFinder.tsx` | Search debounce, keyboard nav, filter chips, results virtualization | ❌ No tests |
 | `topologyRelationshipPicker` | `ui/src/features/stores/topologyRelationshipPicker.tsx` | Connection type selection, validation rules, cyclic detection | ✅ 25 tests (EN + ID locales) |
 | `topologyWireGroup` | `ui/src/features/stores/topologyWireGroup.tsx` | SVG path generation, bend points, hit testing, animation | ✅ 31 tests (EN + ID locales) |
@@ -130,6 +130,7 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 
 | Component | Commit | Tests Added |
 |---|---|---|
+| `topologyNodeCard` | `<commit-hash>` | 75 tests (EN + ID locales) |
 | `topologyRelationshipPicker` | `<commit-hash>` | 25 tests (EN + ID locales) |
 | `topologyWireGroup` | `<commit-hash>` | 31 tests (EN + ID locales) |
 | `RetailSubViews` | `<commit-hash>` | 5 tests (EN + ID locales) |
@@ -238,7 +239,7 @@ Based on risk × impact:
 
 | Priority | Target | Reason |
 |---|---|---|
-| 1 | `topologyNodeCard` | Drag initiation, edit mode, validation badges, selection |
+| 1 | `topologyNodeFinder` | Search debounce, keyboard nav, filter chips, results virtualization |
 | 2 | `RetailProductContextMenu` | Core POS revenue flow, right-click/long-press |
 | 3 | `useKeyboardAvoidance` + `usePullToRefresh` | Mobile UX critical, subtle math bugs |
 | 4 | `EmailReportSettings` | Cron parsing, timezone edge cases |
@@ -727,3 +728,60 @@ Based on risk × impact:
 - Test Escape key handling for closing picker
 - Test picker with dynamic option changes (add/remove options)
 - topologyNodeCard is next highest priority target
+
+---
+
+### 2026-08-19 — TDD Cycle: topologyNodeCard Coverage
+
+**Objective:** Add test coverage for topologyNodeCard (node card) — core topology editor component representing a single node with header, rename input, workspace fields, validation notes, telemetry, stock wire hint, overlap badge, and port sockets.
+
+**Phase 1 - Analyze:** topologyNodeCard is a memoized component (334 lines) that:
+- Renders node type icon and name for store/workspace/warehouse/hardware types
+- Shows subtitle and metadata (workspace type key)
+- Handles selection, connecting source, fresh, dimmed states with CSS classes
+- Shows overlay markers for branch diff (only-here/differing)
+- Supports rename mode with input, placeholder per node type
+- Renders workspace-specific fields: name input, enabled checkbox
+- Shows validation notes with icon, message, count badge, dismiss button (for warehouse-missing-stock-routing)
+- Renders stock wire hint with arrow icon and localized text
+- Shows overlap badge when hasOverlap=true
+- Displays telemetry badge with status (online/warning/offline)
+- Renders port sockets (left/right based on node type) with active/highlight/compatible/incompatible states
+- Handles keyboard: Enter/Space for selection, double-click for rename, Escape for cancel
+- Handles hover: onHoverNode on enter/leave
+- Handles context menu: onOpenNodeMenu
+- Handles drag start: onCardMouseDown (not on controls/ports)
+- Calls onPortClick when port clicked
+- Internationalized with @fluent/react (EN + ID locales)
+
+**Phase 2 - Find Weaknesses:**
+- No existing test coverage
+- Complex conditional rendering based on node type and state
+- Multiple interaction handlers (keyboard, mouse, hover, context menu)
+- Port sockets use aria-label for identification (role="button" with dynamic labels)
+- Workspace fields only render for workspace type
+- Validation dismiss only for specific error code (warehouse-missing-stock-routing)
+- Indonesian locale requires different key names
+
+**Phase 3 - Red → Green → Refactor:**
+- Red: Created `topologyNodeCard.test.tsx` with 75 tests across 12 describe blocks
+- Green: Tests passed after fixing mock l10n getString signature, aria-label queries for ports/workspace fields, and port selection
+- Refactor: Used specific aria-label matchers for port buttons; split rename input queries by placeholder
+
+**Phase 4 - Verify:**
+- All 75 tests pass (EN + ID locales)
+- Lint clean (no new errors)
+- Typecheck clean (no new errors)
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved topologyNodeCard from "Without Tests" → "Recently Covered"; updated summary counts and next targets (topologyNodeFinder now #1).
+
+**Phase 7 - Commit:** `test(stores): add topologyNodeCard coverage (75 tests) — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Test drag initiation edge cases (mouse down on various elements)
+- Test bend editing integration (if applicable)
+- Test validation marker with multiple errors (currently only shows first)
+- Test telemetry badge with rapid status changes
+- topologyNodeFinder is next highest priority target
