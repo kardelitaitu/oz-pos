@@ -78,19 +78,21 @@ export default function ExitSurveyModal({ open, onClose, onConfirm }: ExitSurvey
 
         <div className="exit-survey-reasons" role="radiogroup" aria-label={l10n.getString('exit-survey-title')}>
           {SURVEY_REASONS.map(({ value, labelKey }) => (
-            <label key={value} className="exit-survey-reason">
+            <span key={value} className="exit-survey-reason">
               <input
                 type="radio"
+                id={`exit-reason-${value}`}
                 name="exit-survey-reason"
                 value={value}
                 checked={selectedReason === value}
                 onChange={() => setSelectedReason(value)}
                 className="exit-survey-radio"
+                aria-labelledby={`exit-label-${value}`}
               />
               <Localized id={labelKey}>
-                <span>{value}</span>
+                <span id={`exit-label-${value}`}>{value}</span>
               </Localized>
-            </label>
+            </span>
           ))}
         </div>
 

@@ -11,8 +11,7 @@ vi.mock('@/api/reports', () => ({
 }));
 
 vi.mock('@/contexts/WorkspaceContext', () => {
-  const { createContext } = require('react');
-  const ctx = createContext({ sessionToken: 'test-token' });
+  const ctx = React.createContext({ sessionToken: 'test-token' });
   return { WorkspaceContext: ctx };
 });
 
