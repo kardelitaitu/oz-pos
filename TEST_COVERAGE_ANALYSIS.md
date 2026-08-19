@@ -30,7 +30,7 @@
 |---|---|
 | Total Feature Components | ~100 |
 | Components WITH Tests | ~91 |
-| **Components WITHOUT Tests** | **~2** |
+| **Components WITHOUT Tests** | **1** |
 | Hooks Without Tests | **0** |
 | API Contract Tests Missing | ~30 modules |
 
@@ -138,6 +138,11 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 | `RetailProductGrid` | `<commit-hash>` | 56 tests (EN + ID locales) |
 | `RetailFnBar` | `<commit-hash>` | 21 tests (EN + ID locales) |
 | `ReceiptPreview` | `366061d7` | 19 tests (EN + ID locales) |
+| `AboutSection` | `af73d34e` | 18 tests (update state machine, buttons, callbacks) |
+| `CategoryPieChartWidget` | `af73d34e` | 6 tests (loading, error, empty, chart render) |
+| `HourlyHeatmapWidget` | `af73d34e` | 6 tests (loading, error, empty, chart render) |
+| `RevenueLineChartWidget` | `af73d34e` | 7 tests (loading, error, KPI, total revenue) |
+| `LicenseActivationScreen` | `af73d34e` | 15 tests (form, validation, activation flow, clipboard) |
 
 ---
 
@@ -962,3 +967,55 @@ Based on risk × impact:
 - Consider testing `getKeyAgeDays` edge case: localStorage with invalid ISO date
 - Consider testing `useDeviceIp` with `AbortSignal.timeout` behavior
 - `useCanvasChart`: Test ResizeObserver disconnect on unmount
+
+---
+
+### 2026-08-19 — TDD Cycle: 5 Feature Components (AboutSection, CategoryPieChartWidget, HourlyHeatmapWidget, RevenueLineChartWidget, LicenseActivationScreen)
+
+**Objective:** Eliminate all remaining untested feature components except AnalyticsCardContent (1421 lines, complex echarts — deferred to dedicated sprint).
+
+**Phase 1 - Analyze:** 5 components with distinct patterns:
+- `AboutSection` (176 lines): Pure presentational — update state machine with conditional button rendering
+- `CategoryPieChartWidget` (117 lines): Data loading + canvas pie chart, 30-day window
+- `HourlyHeatmapWidget` (117 lines): Data loading + canvas heatmap, 7-day window
+- `RevenueLineChartWidget` (119 lines): Data loading + canvas line chart + revenue KPI, 14-day window
+- `LicenseActivationScreen` (378 lines): Form with validation, async activation, clipboard, context menu
+
+**Phase 2 - Find Weaknesses:**
+- All 3 chart widgets share identical mock structure (WorkspaceContext, CurrencyContext, chart component)
+- `vi.mock('@fluent/react')` returning new `l10n` object every render causes infinite effect loops in chart widgets — `useCallback` dep on `l10n` recreates `load` → re-trigger `useEffect` → state update → re-render → new `l10n`
+- `WorkspaceContext` mock requires `require('react')` inside `vi.mock` factory (not `import`) — `import` creates different React instance
+- `LicenseActivationScreen` submit button is disabled when fields empty — `userEvent.click` does nothing; need `fireEvent.submit(form)`
+- `AboutSection` "Checking…" text is in status `<span>`, NOT inside the `<Button>` component — `closest('button')` returns null
+- IP address text wrapped in `<Localized>` breaks text matching — need regex matcher
+
+**Phase 3 - Red → Green → Refactor:**
+- AboutSection: 18 tests (update state machine, button visibility, callbacks)
+- CategoryPieChartWidget: 6 tests (loading, error, empty, chart render, null categories, API date range)
+- HourlyHeatmapWidget: 6 tests (loading, error, empty, chart render, API date range, title)
+- RevenueLineChartWidget: 7 tests (loading, error, chart render, revenue KPI, title, date range, $0.00)
+- LicenseActivationScreen: 15 tests (form render, version/IP, empty/invalid/short validation, activation success/fail/error, loading state, uppercase, initial error, clipboard clear buttons)
+
+**Bugs/Issues Found:**
+1. `useLocalization` mock returning new object per render → infinite effect loop in chart widgets. Fixed with stable `const` outside factory
+2. `WorkspaceContext` mock with `import('react')` creates different instance than component uses. Fixed with `require('react')` inside `vi.mock` factory
+3. Disabled submit button blocks `userEvent.click`. Fixed with `fireEvent.submit(form)`
+4. "Checking…" in status span, not button. Fixed with `getByRole('button', { name: 'Check for Updates' })`
+5. Whitespace/newlines in `<Localized>` output break exact text matching. Fixed with regex matchers
+
+**Phase 4 - Verify:**
+- All 51 tests pass across 5 files (5 passed, 51 tests, 0 failed)
+- Lint clean (no new errors)
+- Typecheck clean (no new errors)
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved 5 components from "Without Tests" → "Recently Covered"; updated summary counts (Components WITHOUT Tests: ~2 → 1).
+
+**Phase 7 - Commit:** `test(feature): add 51 tests covering AboutSection, chart widgets, and LicenseActivationScreen — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- AnalyticsCardContent (1421 lines) — deferred to dedicated analytics sprint
+- Consider testing `fmtWidgetMoney` edge cases (zero, very large amounts)
+- Consider testing LicenseActivationScreen context menu (right-click paste)
+- Consider testing LicenseActivationScreen phone number with international format variations
