@@ -394,3 +394,240 @@ fn runtime_plan_preserves_distinct_stock_targets_in_route_order() {
         vec!["warehouse-b", "warehouse-a"]
     );
 }
+
+// ── Scoped command integration tests ─────────────────────────────
+
+use oz_core::session::SessionContext;
+use platform_core::StoreDatabaseManager;
+use tauri::Manager as _;
+
+fn seed_owner(conn: &rusqlite::Connection) {
+    let store = Store::new(conn);
+    store.seed_default_roles().unwrap();
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+         VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+}
+
+fn scoped_state(
+    conn: rusqlite::Connection,
+    token: &str,
+    user_id: &str,
+    role_id: &str,
+    store_id: &str,
+) -> AppState {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut state = AppState::for_test_with_conn(conn);
+    state.db_manager =
+        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+    state.session_store.write().unwrap().insert(
+        token.into(),
+        SessionContext::new(
+            user_id.into(),
+            role_id.into(),
+            "terminal-1".into(),
+            store_id.into(),
+            "instance-1".into(),
+            "pos".into(),
+            None,
+            0,
+        ),
+    );
+    state
+}
+
+// ── Session validation ────────────────────────────────────────────
+
+#[tokio::test]
+async fn scoped_hold_cart_rejects_invalid_token() {
+    let conn = oz_core::migrations::fresh_db();
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = hold_cart_scoped(
+        "bad-token".into(),
+        HoldCartArgs {
+            label: "Test".into(),
+            cart_data: "{}".into(),
+            item_count: 1,
+            total_minor: 500,
+            currency: "USD".into(),
+            bill_type: "regular".into(),
+            customer_name: None,
+            deduction_location_id: None,
+        },
+        app.state(),
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::InvalidSession)));
+}
+
+#[tokio::test]
+async fn scoped_list_held_carts_rejects_invalid_token() {
+    let conn = oz_core::migrations::fresh_db();
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = list_held_carts_scoped("bad-token".into(), app.state()).await;
+    assert!(matches!(result, Err(AppError::InvalidSession)));
+}
+
+// ── Owner hold_cart CRUD ─────────────────────────────────────────
+
+#[tokio::test]
+async fn owner_can_hold_cart() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = hold_cart_scoped(
+        "tok".into(),
+        HoldCartArgs {
+            label: "Table 5".into(),
+            cart_data: r#"{"lines":[]}"#.into(),
+            item_count: 2,
+            total_minor: 1500,
+            currency: "USD".into(),
+            bill_type: "regular".into(),
+            customer_name: None,
+            deduction_location_id: None,
+        },
+        app.state(),
+    )
+    .await;
+    assert!(result.is_ok(), "owner should hold a cart");
+}
+
+#[tokio::test]
+async fn owner_can_list_held_carts() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Hold two carts.
+    for i in 0..2 {
+        hold_cart_scoped(
+            "tok".into(),
+            HoldCartArgs {
+                label: format!("Table {i}"),
+                cart_data: "{}".into(),
+                item_count: 1,
+                total_minor: 500,
+                currency: "USD".into(),
+                bill_type: "regular".into(),
+                customer_name: None,
+                deduction_location_id: None,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+    }
+
+    let carts = list_held_carts_scoped("tok".into(), app.state()).await.unwrap();
+    assert_eq!(carts.len(), 2);
+}
+
+#[tokio::test]
+async fn list_held_carts_empty_when_none() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let carts = list_held_carts_scoped("tok".into(), app.state()).await.unwrap();
+    assert!(carts.is_empty());
+}
+
+// ── Owner open_bills ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn owner_can_list_open_bills_empty() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let bills = list_open_bills_scoped("tok".into(), app.state()).await.unwrap();
+    assert!(bills.is_empty());
+}
+
+// ── Permission matrix: staff (has SALES_PROCESS) ─────────────────
+
+#[tokio::test]
+async fn staff_can_hold_cart() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+         VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    let state = scoped_state(conn, "tok", "user-staff", "role-staff", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = hold_cart_scoped(
+        "tok".into(),
+        HoldCartArgs {
+            label: "Staff hold".into(),
+            cart_data: "{}".into(),
+            item_count: 1,
+            total_minor: 500,
+            currency: "USD".into(),
+            bill_type: "regular".into(),
+            customer_name: None,
+            deduction_location_id: None,
+        },
+        app.state(),
+    )
+    .await;
+    assert!(result.is_ok(), "staff has SALES_PROCESS permission");
+}
+
+#[tokio::test]
+async fn staff_can_list_held_carts() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+         VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    let state = scoped_state(conn, "tok", "user-staff", "role-staff", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = list_held_carts_scoped("tok".into(), app.state()).await;
+    assert!(result.is_ok(), "staff has SALES_PROCESS permission");
+    assert!(result.unwrap().is_empty());
+}
