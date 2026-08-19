@@ -1,4 +1,9 @@
 use super::*;
+use oz_core::session::SessionContext;
+use platform_core::StoreDatabaseManager;
+use tauri::Manager as _;
+
+// ── Existing deserialization tests (preserved) ────────────────────
 
 #[test]
 fn create_promotion_args_deserialize_minimal() {
@@ -88,9 +93,292 @@ fn create_promotion_args_debug() {
     assert!(debug.contains("2026-07-01"));
 }
 
-#[test]
-fn promotions_scoped_rejects_invalid_token() {
-    let state = AppState::for_test();
-    let result = state.resolve_session("nonexistent-token");
+// ── Helpers ───────────────────────────────────────────────────────
+
+fn seed_owner(conn: &rusqlite::Connection) {
+    let store = Store::new(conn);
+    store.seed_default_roles().unwrap();
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+         VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+}
+
+fn seed_staff(conn: &rusqlite::Connection) {
+    let store = Store::new(conn);
+    store.seed_default_roles().unwrap();
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+         VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+}
+
+fn scoped_state(
+    conn: rusqlite::Connection,
+    token: &str,
+    user_id: &str,
+    role_id: &str,
+    store_id: &str,
+) -> AppState {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut state = AppState::for_test_with_conn(conn);
+    state.db_manager =
+        StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+    state.session_store.write().unwrap().insert(
+        token.into(),
+        SessionContext::new(
+            user_id.into(),
+            role_id.into(),
+            "terminal-1".into(),
+            store_id.into(),
+            "instance-1".into(),
+            "pos".into(),
+            None,
+            0,
+        ),
+    );
+    state
+}
+
+fn make_promo_args(name: &str) -> CreatePromotionArgs {
+    CreatePromotionArgs {
+        name: name.into(),
+        description: format!("Test promotion: {name}"),
+        promo_type: "percentage".into(),
+        value_minor: 10,
+        min_qty: None,
+        trigger_sku: None,
+        reward_sku: None,
+        reward_qty: None,
+        starts_at: None,
+        ends_at: None,
+        min_order_minor: 0,
+        category_id: None,
+        active: true,
+    }
+}
+
+// ── Session validation ────────────────────────────────────────────
+
+#[tokio::test]
+async fn scoped_list_promotions_rejects_invalid_token() {
+    let conn = oz_core::migrations::fresh_db();
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = list_promotions_scoped("bad-token".into(), app.state()).await;
     assert!(matches!(result, Err(AppError::InvalidSession)));
+}
+
+// ── Permission matrix: owner has PROMOTIONS_CREATE/EDIT/DELETE ────
+
+#[tokio::test]
+async fn owner_can_create_promotion() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result =
+        create_promotion_scoped("tok".into(), make_promo_args("10% Off"), app.state()).await;
+    assert!(result.is_ok(), "owner should create a promotion");
+    let p = result.unwrap();
+    assert_eq!(p.name, "10% Off");
+    assert!(!p.id.is_empty());
+}
+
+#[tokio::test]
+async fn owner_can_list_promotions() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    create_promotion_scoped("tok".into(), make_promo_args("Promo A"), app.state())
+        .await
+        .unwrap();
+    create_promotion_scoped("tok".into(), make_promo_args("Promo B"), app.state())
+        .await
+        .unwrap();
+
+    let list = list_promotions_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
+    assert_eq!(list.len(), 2);
+    assert!(list.iter().any(|p| p.name == "Promo A"));
+    assert!(list.iter().any(|p| p.name == "Promo B"));
+}
+
+#[tokio::test]
+async fn owner_can_get_promotion_by_id() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let created = create_promotion_scoped("tok".into(), make_promo_args("Promo"), app.state())
+        .await
+        .unwrap();
+    let fetched = get_promotion_scoped("tok".into(), created.id.clone(), app.state()).await;
+    assert!(fetched.is_ok());
+    assert!(fetched.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn owner_can_update_promotion() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let mut created =
+        create_promotion_scoped("tok".into(), make_promo_args("Old Name"), app.state())
+            .await
+            .unwrap();
+    created.name = "New Name".into();
+    let result = update_promotion_scoped("tok".into(), created, app.state()).await;
+    assert!(result.is_ok(), "owner should update a promotion");
+    assert_eq!(result.unwrap().name, "New Name");
+}
+
+#[tokio::test]
+async fn owner_can_delete_promotion() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let created = create_promotion_scoped("tok".into(), make_promo_args("Delete Me"), app.state())
+        .await
+        .unwrap();
+    let result = delete_promotion_scoped("tok".into(), created.id.clone(), app.state()).await;
+    assert!(result.is_ok(), "owner should delete a promotion");
+
+    let fetched = get_promotion_scoped("tok".into(), created.id, app.state())
+        .await
+        .unwrap();
+    assert!(fetched.is_none(), "deleted promotion should not exist");
+}
+
+// ── Permission matrix: staff (no PROMOTIONS_* permissions) ────────
+
+#[tokio::test]
+async fn staff_denied_create_promotion() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_staff(&conn);
+    let state = scoped_state(conn, "tok", "user-staff", "role-staff", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result =
+        create_promotion_scoped("tok".into(), make_promo_args("Staff Promo"), app.state()).await;
+    assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+}
+
+#[tokio::test]
+async fn staff_can_list_promotions() {
+    // list_promotions_scoped has no permission gate — it's a read-only
+    // endpoint that only requires a valid session.
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    seed_staff(&conn);
+    let state = scoped_state(conn, "tok", "user-staff", "role-staff", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = list_promotions_scoped("tok".into(), app.state()).await;
+    assert!(
+        result.is_ok(),
+        "read-only list should be accessible to staff"
+    );
+    assert!(result.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn staff_denied_delete_promotion() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    seed_staff(&conn);
+    let state = scoped_state(conn, "owner-tok", "user-owner", "role-owner", "s1");
+    state.session_store.write().unwrap().insert(
+        "staff-tok".into(),
+        SessionContext::new(
+            "user-staff".into(),
+            "role-staff".into(),
+            "terminal-1".into(),
+            "s1".into(),
+            "instance-1".into(),
+            "pos".into(),
+            None,
+            0,
+        ),
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result =
+        delete_promotion_scoped("staff-tok".into(), "nonexistent".into(), app.state()).await;
+    assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+}
+
+// ── Edge cases ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn list_promotions_empty_when_none() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let list = list_promotions_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
+    assert!(list.is_empty());
+}
+
+#[tokio::test]
+async fn get_promotion_returns_none_for_unknown() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = get_promotion_scoped("tok".into(), "nonexistent-id".into(), app.state())
+        .await
+        .unwrap();
+    assert!(result.is_none());
 }
