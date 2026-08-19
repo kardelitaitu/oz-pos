@@ -16,8 +16,7 @@ fn create_args_reject_legacy_actor_field() {
 
 #[test]
 fn complete_args_use_camel_case() {
-    let args: CompleteStockCountArgs =
-        serde_json::from_str(r#"{"countId":"count-1"}"#).unwrap();
+    let args: CompleteStockCountArgs = serde_json::from_str(r#"{"countId":"count-1"}"#).unwrap();
     assert_eq!(args.count_id, "count-1");
 }
 
@@ -162,10 +161,9 @@ async fn owner_can_get_stock_count_by_id() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let created =
-        create_stock_count_scoped("tok".into(), make_count_args("cyclic"), app.state())
-            .await
-            .unwrap();
+    let created = create_stock_count_scoped("tok".into(), make_count_args("cyclic"), app.state())
+        .await
+        .unwrap();
     let fetched = get_stock_count_scoped("tok".into(), created.id.clone(), app.state()).await;
     assert!(fetched.is_ok());
     assert!(fetched.unwrap().is_some());
@@ -188,7 +186,9 @@ async fn owner_can_list_stock_counts() {
         .await
         .unwrap();
 
-    let counts = list_stock_counts_scoped("tok".into(), app.state()).await.unwrap();
+    let counts = list_stock_counts_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
     assert_eq!(counts.len(), 2);
 }
 
@@ -203,10 +203,9 @@ async fn owner_can_add_count_line() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let count =
-        create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
-            .await
-            .unwrap();
+    let count = create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
+        .await
+        .unwrap();
 
     let args = AddCountLineArgs {
         count_id: count.id.clone(),
@@ -229,10 +228,9 @@ async fn owner_can_get_count_lines() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let count =
-        create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
-            .await
-            .unwrap();
+    let count = create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
+        .await
+        .unwrap();
 
     add_count_line_scoped(
         "tok".into(),
@@ -263,10 +261,9 @@ async fn owner_can_update_count_line() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let count =
-        create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
-            .await
-            .unwrap();
+    let count = create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
+        .await
+        .unwrap();
 
     let line = add_count_line_scoped(
         "tok".into(),
@@ -305,10 +302,9 @@ async fn owner_can_remove_count_line() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let count =
-        create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
-            .await
-            .unwrap();
+    let count = create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
+        .await
+        .unwrap();
 
     let line = add_count_line_scoped(
         "tok".into(),
@@ -323,8 +319,12 @@ async fn owner_can_remove_count_line() {
     .await
     .unwrap();
 
-    let result =
-        remove_count_line_scoped("tok".into(), RemoveCountLineArgs { line_id: line.id }, app.state()).await;
+    let result = remove_count_line_scoped(
+        "tok".into(),
+        RemoveCountLineArgs { line_id: line.id },
+        app.state(),
+    )
+    .await;
     assert!(result.is_ok(), "owner should remove a count line");
 
     let lines = get_count_lines_scoped("tok".into(), count.id, app.state())
@@ -343,10 +343,9 @@ async fn owner_can_complete_stock_count() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let count =
-        create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
-            .await
-            .unwrap();
+    let count = create_stock_count_scoped("tok".into(), make_count_args("full"), app.state())
+        .await
+        .unwrap();
 
     let result = complete_stock_count_scoped(
         "tok".into(),
@@ -457,7 +456,9 @@ async fn list_stock_counts_empty_when_none() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let counts = list_stock_counts_scoped("tok".into(), app.state()).await.unwrap();
+    let counts = list_stock_counts_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
     assert!(counts.is_empty());
 }
 
@@ -471,8 +472,7 @@ async fn get_stock_count_returns_none_for_unknown() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let result =
-        get_stock_count_scoped("tok".into(), "nonexistent-id".into(), app.state()).await;
+    let result = get_stock_count_scoped("tok".into(), "nonexistent-id".into(), app.state()).await;
     assert!(result.is_ok());
     assert!(result.unwrap().is_none());
 }
