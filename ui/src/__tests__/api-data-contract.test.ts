@@ -11,8 +11,6 @@ import {
   exportData,
   importPreview,
   importData,
-  pickExportPath,
-  pickImportFile,
 } from '@/api/data';
 
 describe('data.ts API contract', () => {
@@ -43,27 +41,13 @@ describe('data.ts API contract', () => {
   it('importPreview calls correct command', async () => {
     mockInvoke.mockResolvedValue({ rows: [], errors: [] });
     await importPreview('/path/to/file.csv', 'pass');
-    expect(mockInvoke).toHaveBeenCalledWith('import_preview', { filePath: '/path/to/file.csv', password: 'pass' });
+    expect(mockInvoke).toHaveBeenCalledWith('import_preview', { args: { file_path: '/path/to/file.csv', password: 'pass' } });
   });
 
   it('importData calls correct command', async () => {
     mockInvoke.mockResolvedValue({ imported: 5 });
     await importData('/path/to/file.csv', 'pass');
-    expect(mockInvoke).toHaveBeenCalledWith('import_data', { filePath: '/path/to/file.csv', password: 'pass' });
-  });
-
-  it('pickExportPath calls correct command (no args)', async () => {
-    mockInvoke.mockResolvedValue('/tmp/export.csv');
-    const result = await pickExportPath();
-    expect(mockInvoke).toHaveBeenCalledWith('pick_export_path');
-    expect(result).toBe('/tmp/export.csv');
-  });
-
-  it('pickImportFile calls correct command (no args)', async () => {
-    mockInvoke.mockResolvedValue('/tmp/import.csv');
-    const result = await pickImportFile();
-    expect(mockInvoke).toHaveBeenCalledWith('pick_import_file');
-    expect(result).toBe('/tmp/import.csv');
+    expect(mockInvoke).toHaveBeenCalledWith('import_data', { args: { file_path: '/path/to/file.csv', password: 'pass' } });
   });
 
   it('propagates errors', async () => {

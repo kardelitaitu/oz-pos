@@ -57,7 +57,7 @@ describe('audit.ts API contract', () => {
   it('listAuditLog calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
     await listAuditLog(100, 0);
-    expect(mockInvoke).toHaveBeenCalledWith('list_audit_log', { limit: 100, offset: 0 });
+    expect(mockInvoke).toHaveBeenCalledWith('list_audit_log', { args: { limit: 100, offset: 0 } });
   });
 
   it('getAuditReviewStatusScoped calls correct command', async () => {

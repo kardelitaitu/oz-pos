@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/label-has-associated-control -- <label> wraps radio inputs with <Localized> text */
 import { useState, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { Button } from '@/components/Button';
@@ -78,21 +79,19 @@ export default function ExitSurveyModal({ open, onClose, onConfirm }: ExitSurvey
 
         <div className="exit-survey-reasons" role="radiogroup" aria-label={l10n.getString('exit-survey-title')}>
           {SURVEY_REASONS.map(({ value, labelKey }) => (
-            <span key={value} className="exit-survey-reason">
+            <label key={value} className="exit-survey-reason">
               <input
                 type="radio"
-                id={`exit-reason-${value}`}
                 name="exit-survey-reason"
                 value={value}
                 checked={selectedReason === value}
                 onChange={() => setSelectedReason(value)}
                 className="exit-survey-radio"
-                aria-labelledby={`exit-label-${value}`}
               />
               <Localized id={labelKey}>
-                <span id={`exit-label-${value}`}>{value}</span>
+                <span>{value}</span>
               </Localized>
-            </span>
+            </label>
           ))}
         </div>
 

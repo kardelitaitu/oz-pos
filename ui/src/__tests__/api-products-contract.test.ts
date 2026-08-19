@@ -85,7 +85,7 @@ describe('products.ts API contract', () => {
     await deleteProductScoped(TOKEN, 'SKU-001');
     expect(mockInvoke).toHaveBeenCalledWith('delete_product_scoped', {
       sessionToken: TOKEN,
-      sku: 'SKU-001',
+      args: { sku: 'SKU-001' },
     });
   });
 
