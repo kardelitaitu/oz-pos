@@ -132,3 +132,7 @@ pub async fn save_report_schedule(
         .save_report_schedule(&config)
         .map_err(|e| AppError::Internal(format!("Failed to save report schedule: {e}")))
 }
+
+#[cfg(test)]
+#[path = "email_tests.rs"]
+mod tests;
