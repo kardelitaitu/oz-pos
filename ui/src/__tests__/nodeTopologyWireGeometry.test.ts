@@ -74,6 +74,57 @@ describe('wireUnderCardSegments', () => {
   });
 });
 
+  describe('excludeIds', () => {
+    it('skips boxes whose id is in the excludeIds set', () => {
+      // A horizontal wire at y=364 passes through a card at (380,260)
+      // [380,620]×[260,500]. When that card's id is excluded, the wire
+      // should NOT produce an under-card segment — the exclusion works.
+      const d = wireUnderCardSegments(
+        horizontalWire(),
+        [{ x: 380, y: 260, id: 'target-card' }],
+        new Set(['target-card']),
+      );
+      expect(d).toBe('');
+    });
+
+    it('still clips boxes NOT in the excludeIds set', () => {
+      // Two cards on the path: one excluded, one not. Only the non-excluded
+      // card should contribute a segment.
+      const d = wireUnderCardSegments(
+        horizontalWire(),
+        [
+          { x: 380, y: 260, id: 'excluded' },
+          { x: 470, y: 260, id: 'included' },
+        ],
+        new Set(['excluded']),
+      );
+      expect(d).not.toBe('');
+      // Only one M command (one card contributes).
+      expect(d.match(/M /g)?.length).toBe(1);
+    });
+
+    it('produces the same result as manual filtering when excludeIds is empty', () => {
+      const boxes = [
+        { x: 380, y: 260, id: 'a' },
+        { x: 470, y: 260, id: 'b' },
+      ];
+      const filtered = boxes.filter((b) => !new Set<string>().has(b.id));
+      const d1 = wireUnderCardSegments(horizontalWire(), filtered);
+      const d2 = wireUnderCardSegments(horizontalWire(), boxes, new Set<string>());
+      expect(d2).toBe(d1);
+    });
+
+    it('skips boxes without an id field (undefined id is never in the set)', () => {
+      const d = wireUnderCardSegments(
+        horizontalWire(),
+        [{ x: 380, y: 260 }],
+        new Set(['some-other-id']),
+      );
+      // The box has no id, so it is NOT excluded — segment should appear.
+      expect(d).not.toBe('');
+    });
+  });
+
 describe('pointUnderCards', () => {
   it('is true for a point inside a card box (strict interior)', () => {
     expect(pointUnderCards({ x: 500, y: 364 }, [{ x: 380, y: 260 }])).toBe(true);

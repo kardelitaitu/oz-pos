@@ -402,55 +402,61 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
  * Exact dirty check: true when two canvas states differ in their PERSISTED
  * fields. Transient fields are excluded — telemetryBadge/telemetryStatus
  * (never edited), and metadata.persisted (an internal sync bookkeeping flag
- * flipped by the save-triggered instance reload, not user content). Projecting
- * to a fixed key order keeps the JSON comparison order-stable across the
- * spread-based mutation paths (drag, inspector, idMap remap, preset load).
+ * flipped by the save-triggered instance reload, not user content).
  *
  * The persisted-field set is TRIPLE-COUPLED: it lives here, in the load
  * effect's backend mapping, and in the onSave serialization. Adding a new
  * persisted field must touch all three, or the dirty check silently weakens.
+ *
+ * Zero-allocation field-by-field comparison (replaced the original
+ * projected-array + JSON.stringify approach to eliminate ~80 KB of
+ * temporary objects per call during drag — the primary OOM vector).
  */
-function canvasStateEqual(
+/** Exported for zero-allocation regression tests. */
+export function canvasStateEqual(
   aNodes: TopologyNodeData[],
   aWires: TopologyWireData[],
   bNodes: TopologyNodeData[],
   bWires: TopologyWireData[],
 ): boolean {
   if (aNodes.length !== bNodes.length || aWires.length !== bWires.length) return false;
-  const projNodes = (ns: TopologyNodeData[]) =>
-    ns.map((n) => ({
-      id: n.id,
-      type: n.type,
-      name: n.name,
-      subtitle: n.subtitle,
-      x: n.x,
-      y: n.y,
-      ...(n.tierRequirement !== undefined ? { tierRequirement: n.tierRequirement } : {}),
-      // metadata is typed with an index signature — bracket access required.
-      ...(n.metadata ? {
-        metadata: {
-          typeKey: n.metadata['typeKey'],
-          purposeKey: n.metadata['purposeKey'],
-          enabled: n.metadata['enabled'],
-          capacity: n.metadata['capacity'],
-          lowStockThreshold: n.metadata['lowStockThreshold'],
-          stock: n.metadata['stock'],
-        },
-      } : {}),
-    }));
-  const projWires = (ws: TopologyWireData[]) =>
-    ws.map((w) => ({
-      id: w.id,
-      fromNodeId: w.fromNodeId,
-      toNodeId: w.toNodeId,
-      ...(w.fromPort !== undefined ? { fromPort: w.fromPort } : {}),
-      ...(w.toPort !== undefined ? { toPort: w.toPort } : {}),
-      direction: w.direction,
-      ...(w.label !== undefined ? { label: w.label } : {}),
-      ...(w.bends !== undefined ? { bends: w.bends } : {}),
-    }));
-  return JSON.stringify(projNodes(aNodes)) === JSON.stringify(projNodes(bNodes))
-    && JSON.stringify(projWires(aWires)) === JSON.stringify(projWires(bWires));
+  for (let i = 0; i < aNodes.length; i++) {
+    const a = aNodes[i]!;
+    const b = bNodes[i]!;
+    if (a.id !== b.id || a.type !== b.type || a.name !== b.name
+      || (a.subtitle ?? '') !== (b.subtitle ?? '')
+      || a.x !== b.x || a.y !== b.y) return false;
+    if ((a.tierRequirement ?? null) !== (b.tierRequirement ?? null)) return false;
+    // metadata is typed with an index signature — bracket access required.
+    const am = a.metadata;
+    const bm = b.metadata;
+    if ((am?.['typeKey'] ?? null) !== (bm?.['typeKey'] ?? null)) return false;
+    if ((am?.['purposeKey'] ?? null) !== (bm?.['purposeKey'] ?? null)) return false;
+    if ((am?.['enabled'] ?? null) !== (bm?.['enabled'] ?? null)) return false;
+    if ((am?.['capacity'] ?? null) !== (bm?.['capacity'] ?? null)) return false;
+    if ((am?.['lowStockThreshold'] ?? null) !== (bm?.['lowStockThreshold'] ?? null)) return false;
+    if ((am?.['stock'] ?? null) !== (bm?.['stock'] ?? null)) return false;
+  }
+  for (let i = 0; i < aWires.length; i++) {
+    const a = aWires[i]!;
+    const b = bWires[i]!;
+    if (a.id !== b.id || a.fromNodeId !== b.fromNodeId || a.toNodeId !== b.toNodeId
+      || a.direction !== b.direction) return false;
+    if ((a.fromPort ?? null) !== (b.fromPort ?? null)) return false;
+    if ((a.toPort ?? null) !== (b.toPort ?? null)) return false;
+    if ((a.label ?? null) !== (b.label ?? null)) return false;
+    const ab = a.bends;
+    const bb = b.bends;
+    const aLen = ab?.length ?? 0;
+    const bLen = bb?.length ?? 0;
+    if (aLen !== bLen) return false;
+    if (aLen > 0 && ab && bb) {
+      for (let j = 0; j < aLen; j++) {
+        if (ab[j]!.x !== bb[j]!.x || ab[j]!.y !== bb[j]!.y) return false;
+      }
+    }
+  }
+  return true;
 }
 
 /** Canvas px the dragged node's edge/center may drift from a stationary
@@ -1206,6 +1212,9 @@ export default function NodeTopologyEditor({
     // job is to be a dependency so the memo re-derives after commitSnapshot
     // bumps it (a ref alone cannot trigger a re-render).
     void snapshotVersion;
+    // During a drag the canvas is always dirty (positions changing). Skip
+    // the per-field comparison to avoid O(N+W) allocation per mousemove.
+    if (dragHasMovedRef.current) return true;
     return !canvasStateEqual(snap.nodes, snap.wires, nodes, wires);
   }, [nodes, wires, snapshotVersion]);
 
@@ -1494,13 +1503,17 @@ export default function NodeTopologyEditor({
    *  the box edge, so they would false-positive). */
   const wireUnderCardPaths = useMemo(() => {
     const m = new Map<string, string>();
-    const boxes = nodes.map((n) => ({ id: n.id, x: n.x, y: n.y }));
+    // Pass the FULL node list once with per-wire excludeIds — avoids the
+    // O(W×N) per-wire boxes.filter() allocation that was the primary OOM
+    // hot path during drag (each wire allocated a ~N-element array).
+    const allBoxes: Array<{ x: number; y: number; id: string }> = nodes.map((n) => ({ id: n.id, x: n.x, y: n.y }));
     for (const wire of wires) {
       const geo = wireGeometries.get(wire.id);
       if (!geo) continue;
       const d = wireUnderCardSegments(
         geo,
-        boxes.filter((b) => b.id !== wire.fromNodeId && b.id !== wire.toNodeId),
+        allBoxes,
+        new Set<string>([wire.fromNodeId, wire.toNodeId]),
       );
       if (d) m.set(wire.id, d);
     }
@@ -3732,7 +3745,13 @@ export default function NodeTopologyEditor({
           }
         }
       }
-      setHoveredTarget(closest ? { nodeId: closest.nodeId, port: closest.port, variantIndex: closest.variantIndex } : null);
+      setHoveredTarget((prev) => {
+        if (!closest) return prev === null ? prev : null;
+        // Only create a new object when values actually changed — prevents
+        // all memoized node cards from re-rendering on every mousemove.
+        if (prev && prev.nodeId === closest.nodeId && prev.port === closest.port && prev.variantIndex === closest.variantIndex) return prev;
+        return { nodeId: closest.nodeId, port: closest.port, variantIndex: closest.variantIndex };
+      });
     }
   };
 
@@ -6091,7 +6110,11 @@ export default function NodeTopologyEditor({
               );
             })}
 
-                        {nodes.map((node) => (
+                        {nodes.map((node) => {
+              // Pre-compute per-port hover booleans so React.memo can
+              // skip re-rendering unaffected cards when the target moves.
+              const _htn = hoveredTarget?.nodeId === node.id ? hoveredTarget : null;
+              return (
               <TopologyNodeCard
                 key={node.id}
                 node={node}
@@ -6099,7 +6122,8 @@ export default function NodeTopologyEditor({
                 isConnectingSource={connectingFromNodeId === node.id}
                 connectingFromNodeId={connectingFromNodeId}
                 connectingFromPort={connectingFromPort}
-                hoveredTarget={hoveredTarget}
+                isLeftPortHovered={_htn?.port === 'left'}
+                isRightPortHovered={_htn?.port === 'right'}
                 nodeErrors={nodeErrorsByNode.get(node.id) ?? EMPTY_ERRORS}
                 countBadge={excessBadgeByNode.get(node.id) ?? null}
                 hasOverlap={overlappingNodeIds.has(node.id)}
@@ -6135,7 +6159,8 @@ export default function NodeTopologyEditor({
                 isPortCompatible={isPortCompatible}
                 overlayMarker={overlayMarkerById.get(node.id) ?? null}
               />
-            ))}
+              );
+            })}
 
             {/* Round 158: the compare panel's spatial diff. Other-only
                 workspaces render as ghost cards at their SAVED positions in

@@ -55,7 +55,8 @@ function defaultProps(overrides: Partial<{
   isConnectingSource: boolean;
   connectingFromNodeId: string | null;
   connectingFromPort: PortName | null;
-  hoveredTarget: { nodeId: string; port: PortName } | null;
+  isLeftPortHovered: boolean;
+  isRightPortHovered: boolean;
   nodeErrors: TopologyValidationError[];
   countBadge: string | null;
   hasOverlap: boolean;
@@ -94,7 +95,8 @@ function defaultProps(overrides: Partial<{
     isConnectingSource: false,
     connectingFromNodeId: null,
     connectingFromPort: null,
-    hoveredTarget: null,
+    isLeftPortHovered: false,
+    isRightPortHovered: false,
     nodeErrors: [],
     countBadge: null as string | null,
     hasOverlap: false,
@@ -548,7 +550,8 @@ describe('TopologyNodeCard', () => {
         <TopologyNodeCard
           {...defaultProps({
             connectingFromNodeId: 'node-2',
-            hoveredTarget: { nodeId: 'node-1', port: 'left' },
+            isLeftPortHovered: true,
+            isRightPortHovered: false,
             isPortCompatible: () => true,
           })}
         />
@@ -558,6 +561,47 @@ describe('TopologyNodeCard', () => {
       const leftPort = screen.getByRole('button', { name: /port.*location.*in.*aria/i });
       expect(leftPort).toBeInTheDocument();
       expect(leftPort).toHaveClass('port-highlight');
+    });
+
+    it('applies port-highlight to the right port when isRightPortHovered is true', async () => {
+      await renderWithFluent(
+        <TopologyNodeCard
+          {...defaultProps({
+            connectingFromNodeId: 'node-2',
+            isLeftPortHovered: false,
+            isRightPortHovered: true,
+            isPortCompatible: () => true,
+          })}
+        />
+      );
+
+      // Find ports by their CSS class — the right port has .port-right.
+      const rightPort = document.querySelector('.port-right');
+      expect(rightPort).toBeInTheDocument();
+      expect(rightPort).toHaveClass('port-highlight');
+
+      // Left port must NOT be highlighted.
+      const leftPort = document.querySelector('.port-left');
+      expect(leftPort).toBeInTheDocument();
+      expect(leftPort).not.toHaveClass('port-highlight');
+    });
+
+    it('does not apply port-highlight when no port is hovered', async () => {
+      await renderWithFluent(
+        <TopologyNodeCard
+          {...defaultProps({
+            connectingFromNodeId: 'node-2',
+            isLeftPortHovered: false,
+            isRightPortHovered: false,
+            isPortCompatible: () => true,
+          })}
+        />
+      );
+
+      const ports = document.querySelectorAll('.node-port-socket');
+      ports.forEach((port) => {
+        expect(port).not.toHaveClass('port-highlight');
+      });
     });
 
     it('applies port-compatible class when compatible', async () => {

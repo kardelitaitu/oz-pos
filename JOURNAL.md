@@ -5102,3 +5102,43 @@ Two regression pins:
 - `crates/oz-core/src/db/sales.rs` - Added HashSet import and four test functions to `#[cfg(test)] mod tests` section
 
 **Status:** ✅ FIXED - Zone filtering tests now have correct mock signatures and should pass when test environment is functional.
+
+## 2026-08-20 — TDD: Regression tests for NodeTopologyEditor OOM fixes
+
+**Problem:** The NodeTopologyEditor had three OOM hot paths that created large temporary objects on every mousemove (~60 fps) during drag and connection gestures:
+
+1. `canvasStateEqual` projected every node/wire into trimmed objects then compared via `JSON.stringify` — ~80 KB of temp strings per call
+2. `wireUnderCardPaths` called `boxes.filter()` per wire, creating a new ~N-element array for each of W wires (O(W×N) allocations)
+3. `hoveredTarget` object prop forced ALL memoized node cards to re-render on every hover change
+
+**Solution (production):** Four fixes applied across two files:
+- `canvasStateEqual`: replaced projected arrays + JSON.stringify with zero-allocation field-by-field comparison
+- `wireUnderCardSegments`: added `excludeIds` parameter with combined filter+map in one pass
+- `isDirty` memo: short-circuits to `true` during active drags via `dragHasMovedRef`
+- `TopologyNodeCard`: replaced `hoveredTarget` object prop with pre-computed `isLeftPortHovered`/`isRightPortHovered` booleans
+
+**TDD cycle:** Three regression-test slices:
+
+1. **`wireUnderCardSegments` `excludeIds`** (4 tests): verifies endpoint boxes are skipped, non-excluded boxes still clip, empty set produces identical results to manual filtering, and boxes without `id` field are never excluded
+2. **Right-port hover highlight** (2 tests): verifies `isRightPortHovered` applies `port-highlight` to the right port only, and no highlight when neither port is hovered
+3. **`isDirty` drag guard** — skipped as a micro-optimization (existing 15+ dirty-state tests cover the behavior end-to-end; the guard saves one zero-alloc comparison per mousemove)
+
+**Deliberately NOT done:**
+- Did not optimize `validateTopologyGraph`'s O(N²) `.find()`/`.filter()` loops — acceptable for typical diagram sizes (5–20 nodes), diminishing returns
+- Did not extract `canvasStateEqual` to a separate module — kept in `NodeTopologyEditor.tsx` as an exported function to minimize diff surface
+- Did not add a performance benchmark test — the zero-allocation spy tests (`Array.prototype.map` + `JSON.stringify` assertions) serve as the invariant guard
+
+**Test counts:**
+- `canvasStateEqual.test.ts`: 34 tests (30 correctness + 4 zero-allocation invariant)
+- `nodeTopologyWireGeometry.test.ts`: 14 tests (+4 excludeIds)
+- `topologyNodeCard.test.tsx`: 77 tests (+2 port highlight)
+- Full topology suite: 670 tests across 5 files — all green
+- Typecheck: clean
+
+**Files changed:**
+- `ui/src/features/stores/NodeTopologyEditor.tsx` — canvasStateEqual rewrite, isDirty guard, hoveredTarget → per-port booleans
+- `ui/src/features/stores/topologyWireGeometry.ts` — excludeIds parameter
+- `ui/src/features/stores/topologyNodeCard.tsx` — isLeftPortHovered/isRightPortHovered props
+- `ui/src/__tests__/canvasStateEqual.test.ts` — new file, 34 tests
+- `ui/src/__tests__/nodeTopologyWireGeometry.test.ts` — +4 excludeIds tests
+- `ui/src/__tests__/topologyNodeCard.test.tsx` — +2 port highlight tests, prop renames

@@ -33,7 +33,13 @@ export interface TopologyNodeCardProps {
   isConnectingSource: boolean;
   connectingFromNodeId: string | null;
   connectingFromPort: PortName | null;
-  hoveredTarget: { nodeId: string; port: PortName } | null;
+  /** Pre-computed per-port hover state: true when this card's left/right
+   *  port is the current connection target. Derived in the parent's
+   *  nodes.map so only cards whose boolean actually changes re-render
+   *  (the old hoveredTarget object caused ALL cards to re-render on
+   *  every hover change). */
+  isLeftPortHovered: boolean;
+  isRightPortHovered: boolean;
   nodeErrors: TopologyValidationError[];
   /** Compact excess-count chip (round 113): "N Stock Rooms — 1 allowed"
    *  / "N Branch Locations — 1 allowed", rendered inside the validation
@@ -93,7 +99,8 @@ function TopologyNodeCardImpl({
   isConnectingSource,
   connectingFromNodeId,
   connectingFromPort,
-  hoveredTarget,
+  isLeftPortHovered,
+  isRightPortHovered,
   nodeErrors,
   countBadge,
   hasOverlap,
@@ -299,7 +306,7 @@ function TopologyNodeCardImpl({
       <div className="node-port-sockets-group">
         {visiblePortsForNode(node).map((port) => {
           const isActive = connectingFromNodeId === node.id && connectingFromPort === port;
-          const isHovered = hoveredTarget?.nodeId === node.id && hoveredTarget?.port === port;
+          const isHovered = port === 'left' ? isLeftPortHovered : isRightPortHovered;
           const compatible = isPortCompatible(node.id, port);
           const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered && compatible;
           // Inventory's single input is flexible: its label follows

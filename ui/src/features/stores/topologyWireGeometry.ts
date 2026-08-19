@@ -45,14 +45,23 @@ export function wireUnderCardSegments(
     x1: number; y1: number; x2: number; y2: number; dx: number;
     polyline?: Array<[number, number]>;
   },
-  boxes: Array<{ x: number; y: number }>,
+  boxes: Array<{ x: number; y: number; id?: string }>,
+  /** When provided, boxes whose `id` is in this set are skipped — avoids
+   *  the caller allocating a per-wire filtered array (OOM hot path). */
+  excludeIds?: Set<string>,
 ): string {
-  const rects = boxes.map((b) => ({
-    left: b.x,
-    right: b.x + NODE_WIDTH,
-    top: b.y,
-    bottom: b.y + NODE_HEIGHT,
-  }));
+  // Combined filter+map in one pass: avoids a per-wire O(N) filtered-array
+  // allocation that was the primary OOM hot path during drag.
+  const rects: Array<{ left: number; right: number; top: number; bottom: number }> = [];
+  for (const b of boxes) {
+    if (excludeIds && b.id && excludeIds.has(b.id)) continue;
+    rects.push({
+      left: b.x,
+      right: b.x + NODE_WIDTH,
+      top: b.y,
+      bottom: b.y + NODE_HEIGHT,
+    });
+  }
   const paths: string[] = [];
   if (geo.polyline) {
     for (const r of rects) {
