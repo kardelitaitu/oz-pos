@@ -29,8 +29,8 @@
 | Metric | Count |
 |---|---|
 | Total Feature Components | ~100 |
-| Components WITH Tests | ~87 |
-| **Components WITHOUT Tests** | **~13** |
+| Components WITH Tests | ~88 |
+| **Components WITHOUT Tests** | **~12** |
 | Hooks Without Tests | 5 |
 | API Contract Tests Missing | ~30 modules |
 
@@ -44,7 +44,6 @@
 | Component | File | Risk Areas | Status |
 |---|---|---|---|
 | `RetailProductContextMenu` | `ui/src/features/retail/RetailProductContextMenu.tsx` | Right-click positioning, touch long-press, action handlers | ❌ No tests |
-| `RetailSubViews` | `ui/src/features/retail/RetailSubViews.tsx` | Tab switching, state preservation, lazy loading | ❌ No tests |
 
 ### 🏢 **Store Topology Sub-components** (HIGH PRIORITY — Complex DnD)
 *Drag/drop, wire connections, validation, viewport sync*
@@ -131,6 +130,7 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 
 | Component | Commit | Tests Added |
 |---|---|---|
+| `RetailSubViews` | `<commit-hash>` | 5 tests (EN + ID locales) |
 | `RetailModals` | `<commit-hash>` | 11 tests (EN + ID locales) — Clear confirm modal slice |
 | `RetailHeader` | `<commit-hash>` | 27 tests (EN + ID locales) |
 | `RetailProductGrid` | `<commit-hash>` | 56 tests (EN + ID locales) |
@@ -236,7 +236,7 @@ Based on risk × impact:
 
 | Priority | Target | Reason |
 |---|---|---|
-| 1 | `RetailProductContextMenu` + `RetailSubViews` | Core POS revenue flow, right-click/long-press, tab state |
+| 1 | `RetailProductContextMenu` | Core POS revenue flow, right-click/long-press |
 | 2 | `topologyWireGroup` + `topologyRelationshipPicker` | Complex SVG math, connection validation |
 | 3 | `useKeyboardAvoidance` + `usePullToRefresh` | Mobile UX critical, subtle math bugs |
 | 4 | `EmailReportSettings` | Cron parsing, timezone edge cases |
@@ -598,3 +598,42 @@ Based on risk × impact:
 - Add validation script to CI pipeline
 - Consider adding pre-commit hook for this validation
 - Update coverage summary counts after next TDD cycle (currently shows ~17 without tests, doc has 18)
+
+---
+
+### 2026-08-19 — TDD Cycle: RetailSubViews Coverage
+
+**Objective:** Add test coverage for RetailSubViews (sub-view routing) — critical retail POS component managing Sales History, Table Management, and Stock Inquiry full-screen views.
+
+**Phase 1 - Analyze:** RetailSubViews exports three view components (SalesHistoryView, TableManagementView, StockInquiryView) — each a full-screen sub-view reusing RetailHeader in minimal variant with different content screens. Key behaviors:
+- SalesHistoryView renders SalesHistoryScreen with minimal header (title: retail-fn-history, skipTarget, onBack)
+- TableManagementView renders TableManagementScreen with minimal header (title: tables-title, skipTarget, onBack)
+- StockInquiryView renders ProductLookupScreen with minimal header (title: retail-fn-stok, skipTarget, onBack) and passes onAddProduct callback that transforms ProductDto from camelCase API shape to snake_case internal shape
+
+**Phase 2 - Find Weaknesses:**
+- No existing test coverage for any of the three views
+- Component does NOT pass `theme` prop to RetailHeader (contrary to what props suggest)
+- React StrictMode causes double-invocation in tests — must handle flexible call counts
+- ProductDto transformation uses camelCase (inStock, stockQty, productType, createdAt, priceUpdatedAt) but must output snake_case (in_stock, stock_qty, product_type, created_at, price_updated_at)
+- Indonesian locale has different key names (e.g., "Riwayat" for retail-fn-history)
+
+**Phase 3 - Red → Green → Refactor:**
+- Red: Created `RetailSubViews.test.tsx` with 5 tests across 3 describe blocks
+- Green: Tests passed after fixing mock call counts, locale expectations, and product transformation assertions
+- Refactor: Used flexible call count checking (`toHaveBeenCalled` + first call extraction) to handle StrictMode
+
+**Phase 4 - Verify:**
+- All 5 tests pass (EN + ID locales)
+- Lint clean (no new errors)
+- Typecheck clean (no new errors)
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved RetailSubViews from "Without Tests" → "Recently Covered"; updated summary counts and next targets.
+
+**Phase 7 - Commit:** `test(retail): add RetailSubViews coverage (5 tests) — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Test keyboard navigation in sub-views (Tab order, Escape handling)
+- Test feature flag disabled states for TableManagementView
+- RetailProductContextMenu is next highest priority target
