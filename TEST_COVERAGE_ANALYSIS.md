@@ -32,7 +32,7 @@
 | Components WITH Tests | ~91 |
 | **Components WITHOUT Tests** | **0** |
 | Hooks Without Tests | **0** |
-| API Contract Tests Missing | ~30 modules |
+| API Contract Tests Missing | ~25 modules (4 new files added) |
 
 ---
 
@@ -1057,3 +1057,46 @@ Based on risk × impact:
 - Individual card data shapes could be tested more thoroughly with correct DTOs (revenue as Bucket[], payments as PaymentMethodRow[], etc.)
 - Consider testing the `useMoney` hook independently
 - Consider testing `chartHeight()` function for all card keys
+
+---
+
+### 2026-08-19 — TDD Cycle: API Contract Tests (sales, hardware, kds, license)
+
+**Objective:** Add IPC contract tests for 4 high-priority (🔴) API modules to prevent silent command-name drift between frontend and Rust backend.
+
+**Phase 1 - Analyze:** 4 API modules using `loggedInvoke` wrapper:
+- `sales.ts` (38 functions): Cart operations, history, void, hold carts, refunds, reports, receipt printing
+- `hardware.ts` (13 functions): Cash drawer, receipt printing, barcode scanner, customer display, weight scale, USB discovery
+- `kds.ts` (19 functions): Order listing, queue, status updates, create from sale, items, print chit, line items
+- `license.ts` (13 functions): Status checks, machine ID, activation, renewal, pause/resume, auth ping
+
+**Phase 2 - Find Weaknesses:**
+- `loggedInvoke(cmd)` called without args results in `(cmd, undefined)` in the mock — no-args assertions need `undefined` as second argument
+- Functions using `loggedInvoke` wrapper (not raw `invoke`) need `@/utils/logged-invoke` mock, not `@tauri-apps/api/core`
+- Some functions have scoped (sessionToken) and legacy (userId) variants — both must be tested
+- `activateLicense` has 4 optional params (trialVertical, bundleId, hardwareFingerprint) that must be conditionally included
+
+**Phase 3 - Red → Green → Refactor:**
+- sales.ts: 38 tests (startSale, addLine, completeSale, setCartDiscount, overrideLinePrice, listSales, getSale, voidSale, holdCart, listHeldCarts, getHeldCart, deleteHeldCart, processRefund, listRefunds, finalizeSale, voidPendingSale, exportDailySummary, exportEodReport, printSalesReceipt, lookupSaleByReceiptBarcode + scoped variants + error propagation)
+- hardware.ts: 13 tests (openCashDrawer, printReceipt, printSalesReceiptScoped, listScanners, startScanner, stopScanner, listDisplays, displayShow, displayClear, readScaleWeight, discoverHardware + error propagation)
+- kds.ts: 19 tests (listKdsOrders, getKdsQueue, updateKdsStatus, createKdsOrderFromSale, getKdsOrder, updateKdsOrderItems, printKdsChitScoped, getKdsOrderLinesScoped, updateKdsLineItemStatusScoped + scoped variants + status filtering + error propagation)
+- license.ts: 13 tests (getLicenseStatus, checkLicenseStatus, getMachineId, getHardwareFingerprint, activateLicense with 4 optional params, renewLicense, pauseSubscription, resumeSubscription, testAuthConnection + error propagation)
+
+**Bugs/Issues Found:**
+1. `loggedInvoke(cmd)` without args passes `undefined` as second arg — no-args assertions need `toHaveBeenCalledWith('cmd', undefined)`
+2. `loggedInvoke` wrapper requires mocking `@/utils/logged-invoke`, not `@tauri-apps/api/core` (different from older contract tests)
+
+**Phase 4 - Verify:**
+- All 83 tests pass across 4 files (4 passed, 83 tests, 0 failed)
+- Lint clean
+- Typecheck clean
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Updated API Contract Tests Missing count (~30 → ~25 modules). Journal entry added.
+
+**Phase 7 - Commit:** `test(api): add 83 IPC contract tests for sales, hardware, kds, and license — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Add contract tests for remaining 🔴 modules: offline, pos (now just re-exports), tax, topology
+- Add contract tests for 🟡 modules: audit, branding, currency, email, features, giftCards, inventoryCounts, loyalty, products, promotions, purchasing, reports, security, settings, shifts, staff, stores, subscription, tables, workspaces
