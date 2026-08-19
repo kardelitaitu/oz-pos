@@ -1,58 +1,75 @@
-// ── IPC contract tests for audit.ts ───────────────────────────
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockInvoke } = vi.hoisted(() => ({
-  mockInvoke: vi.fn(),
-}));
-
+const mockInvoke = vi.fn();
 vi.mock('@/utils/logged-invoke', () => ({
-  loggedInvoke: (cmd: string, args?: Record<string, unknown>) => mockInvoke(cmd, args),
+  loggedInvoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
 import {
-  listAuditLog,
   listAuditLogScoped,
-  getAuditReviewStatusScoped,
   markAuditReviewedScoped,
   exportAuditLogScoped,
+  listAuditLog,
+  getAuditReviewStatusScoped,
 } from '@/api/audit';
 
-describe('audit.ts IPC contract', () => {
-  beforeEach(() => mockInvoke.mockReset());
+describe('audit.ts API contract', () => {
+  const TOKEN = 'tok_audit';
 
-  it('listAuditLog → list_audit_log with { args: { limit, offset } }', async () => {
-    mockInvoke.mockResolvedValue([]);
-    await listAuditLog(50, 10);
-    expect(mockInvoke).toHaveBeenCalledWith('list_audit_log', { args: { limit: 50, offset: 10 } });
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('listAuditLogScoped → list_audit_log_scoped with sessionToken + args', async () => {
+  it('listAuditLogScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue({ entries: [], total: 0 });
-    await listAuditLogScoped('tok', { limit: 20, offset: 0, action: 'sale.completed' });
-    expect(mockInvoke).toHaveBeenCalledWith('list_audit_log_scoped', { sessionToken: 'tok', args: expect.objectContaining({ limit: 20 }) });
+    await listAuditLogScoped(TOKEN, { limit: 50 });
+    expect(mockInvoke).toHaveBeenCalledWith('list_audit_log_scoped', {
+      sessionToken: TOKEN,
+      args: { limit: 50 },
+    });
   });
 
-  it('getAuditReviewStatusScoped → get_audit_review_status_scoped', async () => {
-    mockInvoke.mockResolvedValue({ lastReviewedAt: null, pendingCount: 5 });
-    await getAuditReviewStatusScoped('tok');
-    expect(mockInvoke).toHaveBeenCalledWith('get_audit_review_status_scoped', { sessionToken: 'tok' });
+  it('markAuditReviewedScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ reviewedAt: '2026-01-01' });
+    await markAuditReviewedScoped(TOKEN, {
+      reviewedThroughCreatedAt: '2026-01-01T00:00:00Z',
+      reviewedThroughId: 'entry-1',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('mark_audit_reviewed_scoped', {
+      sessionToken: TOKEN,
+      args: {
+        reviewedThroughCreatedAt: '2026-01-01T00:00:00Z',
+        reviewedThroughId: 'entry-1',
+      },
+    });
   });
 
-  it('markAuditReviewedScoped → mark_audit_reviewed_scoped', async () => {
-    mockInvoke.mockResolvedValue({ lastReviewedAt: '2026-08-19T00:00:00Z', pendingCount: 0 });
-    await markAuditReviewedScoped('tok', { upToEntryId: 'e1' });
-    expect(mockInvoke).toHaveBeenCalledWith('mark_audit_reviewed_scoped', { sessionToken: 'tok', args: { upToEntryId: 'e1' } });
+  it('exportAuditLogScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ csv: 'col1,col2', row_count: 10 });
+    const result = await exportAuditLogScoped(TOKEN, { outcome: 'success' });
+    expect(mockInvoke).toHaveBeenCalledWith('export_audit_log_scoped', {
+      sessionToken: TOKEN,
+      args: { outcome: 'success' },
+    });
+    expect(result.row_count).toBe(10);
   });
 
-  it('exportAuditLogScoped → export_audit_log_scoped', async () => {
-    mockInvoke.mockResolvedValue({ csv: 'action,timestamp\nsale.completed,2026-08-19' });
-    await exportAuditLogScoped('tok', { from: '2026-08-01', to: '2026-08-19' });
-    expect(mockInvoke).toHaveBeenCalledWith('export_audit_log_scoped', { sessionToken: 'tok', args: { from: '2026-08-01', to: '2026-08-19' } });
+  it('listAuditLog calls correct command', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listAuditLog(100, 0);
+    expect(mockInvoke).toHaveBeenCalledWith('list_audit_log', { limit: 100, offset: 0 });
   });
 
-  it('propagates backend errors', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('permission denied'));
-    await expect(listAuditLog()).rejects.toThrow('permission denied');
+  it('getAuditReviewStatusScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ total: 100, reviewed: 50 });
+    await getAuditReviewStatusScoped(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('get_audit_review_status_scoped', {
+      sessionToken: TOKEN,
+    });
+  });
+
+  it('propagates errors', async () => {
+    mockInvoke.mockRejectedValue(new Error('db error'));
+    await expect(listAuditLogScoped(TOKEN, {})).rejects.toThrow('db error');
   });
 });

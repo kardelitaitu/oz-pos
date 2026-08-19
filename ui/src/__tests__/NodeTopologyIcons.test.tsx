@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import {
   StoreIcon,
   PosIcon,
@@ -18,12 +18,6 @@ import {
   MinusIcon,
   WarningIcon,
 } from '@/features/stores/NodeTopologyIcons';
-
-// ── Helper ────────────────────────────────────────────────────────
-
-function getSvg(name: string) {
-  return screen.getByRole('img', { hidden: true }) || document.querySelector('svg');
-}
 
 // ── All icons render SVG ──────────────────────────────────────────
 

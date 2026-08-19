@@ -79,23 +79,23 @@ describe('features.ts API contract', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('listAllFeatures calls correct command (no args)', async () => {
-    mockInvoke.mockResolvedValue({ features: {} });
+    mockInvoke.mockResolvedValue({ features: [] });
     await listAllFeatures();
     expect(mockInvoke).toHaveBeenCalledWith('list_all_features');
   });
 
   it('setFeature calls correct command', async () => {
-    mockInvoke.mockResolvedValue({ key: 'kds', enabled: true });
+    mockInvoke.mockResolvedValue({ success: true, features: [], auto_enabled: [] });
     const result = await setFeature('kds', true);
     expect(mockInvoke).toHaveBeenCalledWith('set_feature', {
       args: { key: 'kds', enabled: true },
     });
-    expect(result.key).toBe('kds');
+    expect(result.success).toBe(true);
   });
 
   it('setFeaturesBulk calls correct command', async () => {
     const keys = ['kds', 'inventory'];
-    mockInvoke.mockResolvedValue({ features: {} });
+    mockInvoke.mockResolvedValue({ features: [], auto_enabled: [] });
     await setFeaturesBulk(keys, false);
     expect(mockInvoke).toHaveBeenCalledWith('set_features_bulk', {
       args: { keys, enabled: false },
@@ -156,17 +156,17 @@ describe('security.ts API contract', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('getKeyRotationInfo calls correct command (no args)', async () => {
-    mockInvoke.mockResolvedValue({ lastRotation: '2026-01-01', daysUntilRotation: 20 });
+    mockInvoke.mockResolvedValue({ hasKey: true, createdAt: '2026-01-01', ageDays: 20 });
     const result = await getKeyRotationInfo();
     expect(mockInvoke).toHaveBeenCalledWith('get_key_rotation_info');
-    expect(result.daysUntilRotation).toBe(20);
+    expect(result.ageDays).toBe(20);
   });
 
   it('rotateEncryptionKey calls correct command (no args)', async () => {
-    mockInvoke.mockResolvedValue({ rotated: true });
+    mockInvoke.mockResolvedValue({ keyName: 'oz-pos/encryption-key', createdAt: '2026-08-20', keyBytes: 32 });
     const result = await rotateEncryptionKey();
     expect(mockInvoke).toHaveBeenCalledWith('rotate_encryption_key');
-    expect(result.rotated).toBe(true);
+    expect(result.keyBytes).toBe(32);
   });
 });
 
@@ -181,14 +181,14 @@ describe('email.ts API contract', () => {
   });
 
   it('getReportSchedule calls correct command (no args)', async () => {
-    mockInvoke.mockResolvedValue({ enabled: true, cron: '0 8 * * 1' });
+    mockInvoke.mockResolvedValue({ enabled: true, cadence: 'weekly', report_types: ['revenue'], recipients: [], send_at_time: '08:00', timezone: 'UTC', lookback_days: 7 });
     const result = await getReportSchedule();
     expect(mockInvoke).toHaveBeenCalledWith('get_report_schedule');
     expect(result.enabled).toBe(true);
   });
 
   it('saveReportSchedule calls correct command', async () => {
-    const config = { enabled: false, cron: '' };
+    const config = { enabled: false, cadence: 'daily', report_types: [], recipients: [], send_at_time: '09:00', timezone: 'UTC', lookback_days: 1 };
     mockInvoke.mockResolvedValue(undefined);
     await saveReportSchedule(config);
     expect(mockInvoke).toHaveBeenCalledWith('save_report_schedule', { config });

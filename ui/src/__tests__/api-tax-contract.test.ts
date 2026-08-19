@@ -24,7 +24,7 @@ describe('tax.ts API contract', () => {
   });
 
   it('computeCartTax calls correct command', async () => {
-    const lines = [{ productId: 'p1', qty: 2, price: 1000 }];
+    const lines = [{ sku: 'SKU-001', qty: 2, unit_price_minor: 1000 }];
     mockInvoke.mockResolvedValue(200);
     const result = await computeCartTax(TOKEN, lines, 'IDR');
     expect(mockInvoke).toHaveBeenCalledWith('compute_cart_tax_scoped', {
@@ -44,7 +44,7 @@ describe('tax.ts API contract', () => {
   });
 
   it('createTaxRateScoped calls correct command', async () => {
-    const args = { name: 'PPN', rate: 1100 };
+    const args = { name: 'PPN', rateBps: 1100, isDefault: false, isInclusive: false };
     mockInvoke.mockResolvedValue({ id: 't1', ...args });
     const result = await createTaxRateScoped(TOKEN, args);
     expect(mockInvoke).toHaveBeenCalledWith('create_tax_rate_scoped', {
@@ -55,7 +55,7 @@ describe('tax.ts API contract', () => {
   });
 
   it('updateTaxRateScoped calls correct command', async () => {
-    const args = { id: 't1', name: 'PPN Updated', rate: 1200 };
+    const args = { id: 't1', name: 'PPN Updated', rateBps: 1200, isDefault: false, isInclusive: false };
     mockInvoke.mockResolvedValue(args);
     await updateTaxRateScoped(TOKEN, args);
     expect(mockInvoke).toHaveBeenCalledWith('update_tax_rate_scoped', {

@@ -65,7 +65,7 @@ describe('currency.ts API contract', () => {
   });
 
   it('createExchangeRate calls correct command', async () => {
-    const args = { from: 'USD', to: 'IDR', rate: 15700 };
+    const args = { from_currency: 'USD', to_currency: 'IDR', rate_millionths: 15700000000 };
     mockInvoke.mockResolvedValue({ id: 'er1', ...args });
     const result = await createExchangeRate(args);
     expect(mockInvoke).toHaveBeenCalledWith('create_exchange_rate', { args });

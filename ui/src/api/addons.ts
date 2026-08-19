@@ -4,7 +4,6 @@
 // API. Add-ons extend tier capabilities (e.g. "advanced_analytics"
 // adds analytics to Plus without upgrading to Pro).
 
-import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A single add-on in the marketplace catalog. */
 export interface AddonDefinition {

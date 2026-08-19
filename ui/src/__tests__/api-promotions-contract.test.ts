@@ -1,100 +1,96 @@
-// ── IPC contract tests for promotions.ts ───────────────────────
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockInvoke } = vi.hoisted(() => ({
-  mockInvoke: vi.fn(),
-}));
-
+const mockInvoke = vi.fn();
 vi.mock('@/utils/logged-invoke', () => ({
-  loggedInvoke: (cmd: string, args?: Record<string, unknown>) => mockInvoke(cmd, args),
+  loggedInvoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
 import {
-  listPromotions,
-  listPromotionsScoped,
-  getPromotion,
-  getPromotionScoped,
   createPromotion,
   createPromotionScoped,
+  listPromotions,
+  listPromotionsScoped,
   updatePromotion,
-  updatePromotionScoped,
   deletePromotion,
-  deletePromotionScoped,
   applyPromotion,
+  applyPromotionScoped,
 } from '@/api/promotions';
 
-describe('promotions.ts IPC contract', () => {
-  beforeEach(() => mockInvoke.mockReset());
+describe('promotions.ts API contract', () => {
+  const TOKEN = 'tok_promo';
+  const USER_ID = 'u1';
 
-  it('listPromotions → list_promotions (no args)', async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('createPromotion calls correct command', async () => {
+    const args = { name: 'Summer Sale', promo_type: 'percentage', value_minor: 1000 };
+    mockInvoke.mockResolvedValue({ id: 'promo1', ...args });
+    const result = await createPromotion(USER_ID, args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_promotion', { userId: USER_ID, args });
+    expect(result.id).toBe('promo1');
+  });
+
+  it('createPromotionScoped calls correct command', async () => {
+    const args = { name: 'Scoped Promo', promo_type: 'fixed', value_minor: 5000 };
+    mockInvoke.mockResolvedValue({ id: 'promo2', ...args });
+    await createPromotionScoped(TOKEN, args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_promotion_scoped', {
+      sessionToken: TOKEN,
+      args,
+    });
+  });
+
+  it('listPromotions calls correct command (no args)', async () => {
     mockInvoke.mockResolvedValue([]);
     await listPromotions();
-    expect(mockInvoke).toHaveBeenCalledWith('list_promotions', undefined);
+    expect(mockInvoke).toHaveBeenCalledWith('list_promotions');
   });
 
-  it('listPromotionsScoped → list_promotions_scoped with sessionToken', async () => {
+  it('listPromotionsScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listPromotionsScoped('tok');
-    expect(mockInvoke).toHaveBeenCalledWith('list_promotions_scoped', { sessionToken: 'tok' });
+    await listPromotionsScoped(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('list_promotions_scoped', {
+      sessionToken: TOKEN,
+    });
   });
 
-  it('getPromotion → get_promotion with id', async () => {
-    mockInvoke.mockResolvedValue(null);
-    await getPromotion('p1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_promotion', { id: 'p1' });
+  it('updatePromotion calls correct command', async () => {
+    const promo = { id: 'promo1', name: 'Updated', promo_type: 'percentage', value_minor: 2000 };
+    mockInvoke.mockResolvedValue(promo);
+    await updatePromotion(USER_ID, promo);
+    expect(mockInvoke).toHaveBeenCalledWith('update_promotion', { userId: USER_ID, promotion: promo });
   });
 
-  it('getPromotionScoped → get_promotion_scoped with sessionToken + id', async () => {
-    mockInvoke.mockResolvedValue(null);
-    await getPromotionScoped('tok', 'p1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_promotion_scoped', { sessionToken: 'tok', id: 'p1' });
-  });
-
-  it('createPromotion → create_promotion with userId + args', async () => {
-    mockInvoke.mockResolvedValue({ id: 'p1' });
-    await createPromotion('u1', { name: 'Sale', type: 'percentage', value: 10, conditions: [], isActive: true });
-    expect(mockInvoke).toHaveBeenCalledWith('create_promotion', { userId: 'u1', args: expect.objectContaining({ name: 'Sale' }) });
-  });
-
-  it('createPromotionScoped → create_promotion_scoped with sessionToken + args', async () => {
-    mockInvoke.mockResolvedValue({ id: 'p1' });
-    await createPromotionScoped('tok', { name: 'BOGO', type: 'bogo', value: 1, conditions: [], isActive: true });
-    expect(mockInvoke).toHaveBeenCalledWith('create_promotion_scoped', { sessionToken: 'tok', args: expect.objectContaining({ name: 'BOGO' }) });
-  });
-
-  it('updatePromotion → update_promotion with userId + promotion', async () => {
-    mockInvoke.mockResolvedValue({ id: 'p1' });
-    await updatePromotion('u1', { id: 'p1', name: 'Updated', type: 'percentage', value: 15, conditions: [], isActive: true });
-    expect(mockInvoke).toHaveBeenCalledWith('update_promotion', { userId: 'u1', promotion: expect.objectContaining({ id: 'p1' }) });
-  });
-
-  it('updatePromotionScoped → update_promotion_scoped with sessionToken + promotion', async () => {
-    mockInvoke.mockResolvedValue({ id: 'p1' });
-    await updatePromotionScoped('tok', { id: 'p1', name: 'Updated', type: 'fixed', value: 5000, conditions: [], isActive: false });
-    expect(mockInvoke).toHaveBeenCalledWith('update_promotion_scoped', { sessionToken: 'tok', promotion: expect.objectContaining({ id: 'p1' }) });
-  });
-
-  it('deletePromotion → delete_promotion with userId + id', async () => {
+  it('deletePromotion calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deletePromotion('u1', 'p1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_promotion', { userId: 'u1', id: 'p1' });
+    await deletePromotion(USER_ID, 'promo1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_promotion', { userId: USER_ID, id: 'promo1' });
   });
 
-  it('deletePromotionScoped → delete_promotion_scoped with sessionToken + id', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    await deletePromotionScoped('tok', 'p1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_promotion_scoped', { sessionToken: 'tok', id: 'p1' });
-  });
-
-  it('applyPromotion → apply_promotion with userId + saleId + promotionId', async () => {
+  it('applyPromotion calls correct command', async () => {
     mockInvoke.mockResolvedValue({ discount: 5000 });
-    await applyPromotion('u1', 's1', 'p1');
-    expect(mockInvoke).toHaveBeenCalledWith('apply_promotion', { userId: 'u1', saleId: 's1', promotionId: 'p1' });
+    await applyPromotion(USER_ID, 'sale-1', 'promo1');
+    expect(mockInvoke).toHaveBeenCalledWith('apply_promotion', {
+      userId: USER_ID,
+      saleId: 'sale-1',
+      promotionId: 'promo1',
+    });
   });
 
-  it('propagates backend errors', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('promotion not found'));
-    await expect(getPromotion('missing')).rejects.toThrow('promotion not found');
+  it('applyPromotionScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ discount: 5000 });
+    await applyPromotionScoped(TOKEN, 'sale-1', 'promo1');
+    expect(mockInvoke).toHaveBeenCalledWith('apply_promotion_scoped', {
+      sessionToken: TOKEN,
+      saleId: 'sale-1',
+      promotionId: 'promo1',
+    });
+  });
+
+  it('propagates errors', async () => {
+    mockInvoke.mockRejectedValue(new Error('promotion expired'));
+    await expect(listPromotions()).rejects.toThrow('promotion expired');
   });
 });

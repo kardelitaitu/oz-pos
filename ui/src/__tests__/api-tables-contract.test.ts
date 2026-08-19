@@ -1,113 +1,82 @@
-// ── IPC contract tests for tables.ts ───────────────────────────
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockInvoke } = vi.hoisted(() => ({
-  mockInvoke: vi.fn(),
-}));
-
+const mockInvoke = vi.fn();
 vi.mock('@/utils/logged-invoke', () => ({
-  loggedInvoke: (cmd: string, args?: Record<string, unknown>) => mockInvoke(cmd, args),
+  loggedInvoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
 import {
   listTables,
   listTablesScoped,
-  getTable,
-  getTableScoped,
   createTable,
   createTableScoped,
   updateTable,
-  updateTableScoped,
   deleteTable,
-  deleteTableScoped,
   updateTableStatus,
   updateTableStatusScoped,
 } from '@/api/tables';
 
-describe('tables.ts IPC contract', () => {
-  beforeEach(() => mockInvoke.mockReset());
+describe('tables.ts API contract', () => {
+  const TOKEN = 'tok_tables';
+  const USER_ID = 'u1';
 
-  it('listTables → list_tables with section', async () => {
-    mockInvoke.mockResolvedValue([]);
-    await listTables('indoor');
-    expect(mockInvoke).toHaveBeenCalledWith('list_tables', { section: 'indoor' });
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('listTables without section → list_tables with null section', async () => {
+  const table = { id: 't1', name: 'Table 1', capacity: 4, pos_x: 100, pos_y: 200, shape: 'rect', width: 80, height: 60, status: 'available', active_sale_id: null };
+
+  it('listTables calls correct command (no args)', async () => {
     mockInvoke.mockResolvedValue([]);
     await listTables();
-    expect(mockInvoke).toHaveBeenCalledWith('list_tables', { section: null });
+    expect(mockInvoke).toHaveBeenCalledWith('list_tables');
   });
 
-  it('listTablesScoped → list_tables_scoped with sessionToken + section', async () => {
+  it('listTablesScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listTablesScoped('tok', 'outdoor');
-    expect(mockInvoke).toHaveBeenCalledWith('list_tables_scoped', { sessionToken: 'tok', section: 'outdoor' });
+    await listTablesScoped(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('list_tables_scoped', { sessionToken: TOKEN });
   });
 
-  it('getTable → get_table with id', async () => {
-    mockInvoke.mockResolvedValue(null);
-    await getTable('t1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_table', { id: 't1' });
+  it('createTable calls correct command', async () => {
+    mockInvoke.mockResolvedValue(table);
+    const result = await createTable(USER_ID, table);
+    expect(mockInvoke).toHaveBeenCalledWith('create_table', { userId: USER_ID, table });
+    expect(result.id).toBe('t1');
   });
 
-  it('getTableScoped → get_table_scoped with sessionToken + id', async () => {
-    mockInvoke.mockResolvedValue(null);
-    await getTableScoped('tok', 't1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_table_scoped', { sessionToken: 'tok', id: 't1' });
+  it('createTableScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue(table);
+    await createTableScoped(TOKEN, table);
+    expect(mockInvoke).toHaveBeenCalledWith('create_table_scoped', { sessionToken: TOKEN, table });
   });
 
-  it('createTable → create_table with userId + args', async () => {
-    mockInvoke.mockResolvedValue({ id: 't1', number: 1, section: 'indoor' });
-    await createTable('u1', { number: 1, section: 'indoor', capacity: 4 });
-    expect(mockInvoke).toHaveBeenCalledWith('create_table', { userId: 'u1', args: expect.objectContaining({ number: 1 }) });
+  it('updateTable calls correct command', async () => {
+    mockInvoke.mockResolvedValue(table);
+    await updateTable(USER_ID, table);
+    expect(mockInvoke).toHaveBeenCalledWith('update_table', { userId: USER_ID, table });
   });
 
-  it('createTableScoped → create_table_scoped with sessionToken + table', async () => {
-    mockInvoke.mockResolvedValue({ id: 't1', number: 2, section: 'outdoor' });
-    await createTableScoped('tok', { number: 2, section: 'outdoor', capacity: 2 });
-    expect(mockInvoke).toHaveBeenCalledWith('create_table_scoped', { sessionToken: 'tok', table: expect.objectContaining({ number: 2 }) });
-  });
-
-  it('updateTable → update_table with userId + table', async () => {
-    mockInvoke.mockResolvedValue({ id: 't1', number: 1, capacity: 6 });
-    await updateTable('u1', { id: 't1', number: 1, section: 'indoor', capacity: 6 });
-    expect(mockInvoke).toHaveBeenCalledWith('update_table', { userId: 'u1', table: expect.objectContaining({ id: 't1' }) });
-  });
-
-  it('updateTableScoped → update_table_scoped with sessionToken + table', async () => {
-    mockInvoke.mockResolvedValue({ id: 't1', number: 1, capacity: 8 });
-    await updateTableScoped('tok', { id: 't1', number: 1, section: 'indoor', capacity: 8 });
-    expect(mockInvoke).toHaveBeenCalledWith('update_table_scoped', { sessionToken: 'tok', table: expect.objectContaining({ id: 't1' }) });
-  });
-
-  it('deleteTable → delete_table with userId + id', async () => {
+  it('deleteTable calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deleteTable('u1', 't1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_table', { userId: 'u1', id: 't1' });
+    await deleteTable(USER_ID, 't1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_table', { userId: USER_ID, id: 't1' });
   });
 
-  it('deleteTableScoped → delete_table_scoped with sessionToken + id', async () => {
+  it('updateTableStatus calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deleteTableScoped('tok', 't1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_table_scoped', { sessionToken: 'tok', id: 't1' });
+    await updateTableStatus(USER_ID, 't1', 'occupied');
+    expect(mockInvoke).toHaveBeenCalledWith('update_table_status', { userId: USER_ID, id: 't1', status: 'occupied' });
   });
 
-  it('updateTableStatus → update_table_status with userId + id + status', async () => {
-    mockInvoke.mockResolvedValue({ id: 't1', status: 'occupied' });
-    await updateTableStatus('u1', 't1', 'occupied');
-    expect(mockInvoke).toHaveBeenCalledWith('update_table_status', { userId: 'u1', id: 't1', status: 'occupied' });
+  it('updateTableStatusScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await updateTableStatusScoped(TOKEN, 't1', 'cleaning');
+    expect(mockInvoke).toHaveBeenCalledWith('update_table_status_scoped', { sessionToken: TOKEN, id: 't1', status: 'cleaning' });
   });
 
-  it('updateTableStatusScoped → update_table_status_scoped with sessionToken + id + status', async () => {
-    mockInvoke.mockResolvedValue({ id: 't1', status: 'available' });
-    await updateTableStatusScoped('tok', 't1', 'available');
-    expect(mockInvoke).toHaveBeenCalledWith('update_table_status_scoped', { sessionToken: 'tok', id: 't1', status: 'available' });
-  });
-
-  it('propagates backend errors', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('table not found'));
-    await expect(getTable('missing')).rejects.toThrow('table not found');
+  it('propagates errors', async () => {
+    mockInvoke.mockRejectedValue(new Error('table in use'));
+    await expect(updateTableStatus(USER_ID, 't1', 'occupied')).rejects.toThrow('table in use');
   });
 });

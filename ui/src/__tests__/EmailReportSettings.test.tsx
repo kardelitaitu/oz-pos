@@ -216,7 +216,7 @@ describe('EmailReportSettings — EN', () => {
 
   it('toggles TLS off', async () => {
     await renderWithFluent(<EmailReportSettings />);
-    const toggle = screen.getAllByRole('switch')[0];
+    const toggle = screen.getAllByRole('switch')[0]!;
     fireEvent.click(toggle);
     expect(toggle).not.toBeChecked();
   });

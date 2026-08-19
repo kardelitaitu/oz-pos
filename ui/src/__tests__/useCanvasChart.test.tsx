@@ -61,26 +61,6 @@ describe('useCanvasChart', () => {
     vi.restoreAllMocks();
   });
 
-  function Wrapper({
-    draw,
-    deps,
-    options,
-  }: {
-    draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
-    deps: unknown[];
-    options?: { enableHiDpi?: boolean };
-  }) {
-    const { canvasRef } = useCanvasChart(draw, deps, options);
-    // Use a callback ref to assign to the pre-created canvas
-    return React.createElement('div', {
-      ref: (node: HTMLDivElement | null) => {
-        if (node && canvasRef.current !== canvas) {
-          (canvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = canvas;
-        }
-      },
-    });
-  }
-
   it('returns canvasRef, redraw, and getCssVar', () => {
     const draw = vi.fn();
     const { result } = renderHook(() => useCanvasChart(draw, []));

@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
@@ -112,7 +113,7 @@ describe('usePullToRefresh', () => {
 
     // Release
     await act(async () => {
-      await result.current.containerProps.onTouchEnd();
+      await result.current.containerProps.onTouchEnd({} as React.TouchEvent);
     });
 
     expect(onRefresh).toHaveBeenCalledTimes(1);
@@ -140,7 +141,7 @@ describe('usePullToRefresh', () => {
     expect(result.current.state).toBe('pulling');
 
     await act(async () => {
-      await result.current.containerProps.onTouchEnd();
+      await result.current.containerProps.onTouchEnd({} as React.TouchEvent);
     });
 
     expect(onRefresh).not.toHaveBeenCalled();

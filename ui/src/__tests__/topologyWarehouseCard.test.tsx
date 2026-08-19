@@ -97,7 +97,7 @@ describe('WarehouseSettingsCard — EN', () => {
     const onChange = vi.fn();
     await renderWithFluent(<WarehouseSettingsCard {...defaultProps} onChange={onChange} />);
     const inputs = screen.getAllByRole('spinbutton');
-    fireEvent.change(inputs[0], { target: { value: '600' } });
+    fireEvent.change(inputs[0]!, { target: { value: '600' } });
     expect(onChange).toHaveBeenCalledWith('wh-1', { capacity: 600 });
   });
 
@@ -105,7 +105,7 @@ describe('WarehouseSettingsCard — EN', () => {
     const onChange = vi.fn();
     await renderWithFluent(<WarehouseSettingsCard {...defaultProps} onChange={onChange} />);
     const inputs = screen.getAllByRole('spinbutton');
-    fireEvent.change(inputs[1], { target: { value: '75' } });
+    fireEvent.change(inputs[1]!, { target: { value: '75' } });
     expect(onChange).toHaveBeenCalledWith('wh-1', { lowStockThreshold: 75 });
   });
 
@@ -113,7 +113,7 @@ describe('WarehouseSettingsCard — EN', () => {
     const onChange = vi.fn();
     await renderWithFluent(<WarehouseSettingsCard {...defaultProps} onChange={onChange} />);
     const inputs = screen.getAllByRole('spinbutton');
-    fireEvent.change(inputs[2], { target: { value: '200' } });
+    fireEvent.change(inputs[2]!, { target: { value: '200' } });
     expect(onChange).toHaveBeenCalledWith('wh-1', { stock: 200 });
   });
 
@@ -121,7 +121,7 @@ describe('WarehouseSettingsCard — EN', () => {
     const onChange = vi.fn();
     await renderWithFluent(<WarehouseSettingsCard {...defaultProps} onChange={onChange} />);
     const inputs = screen.getAllByRole('spinbutton');
-    fireEvent.change(inputs[0], { target: { value: '' } });
+    fireEvent.change(inputs[0]!, { target: { value: '' } });
     expect(onChange).toHaveBeenCalledWith('wh-1', { capacity: 0 });
   });
 

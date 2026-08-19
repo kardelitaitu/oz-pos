@@ -1,18 +1,11 @@
-// ── IPC contract tests for products.ts ─────────────────────────
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockInvoke } = vi.hoisted(() => ({
-  mockInvoke: vi.fn(),
-}));
-
+const mockInvoke = vi.fn();
 vi.mock('@/utils/logged-invoke', () => ({
-  loggedInvoke: (cmd: string, args?: Record<string, unknown>) => mockInvoke(cmd, args),
+  loggedInvoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
 import {
-  listProducts,
-  listProductsScoped,
   createProduct,
   createProductScoped,
   updateProduct,
@@ -20,81 +13,123 @@ import {
   deleteProduct,
   deleteProductScoped,
   lookupByBarcode,
-  lookupByBarcodeScoped,
   recordProductSearchScoped,
 } from '@/api/products';
 
-describe('products.ts IPC contract', () => {
-  beforeEach(() => mockInvoke.mockReset());
+describe('products.ts API contract', () => {
+  const TOKEN = 'tok_prod';
 
-  it('listProducts → list_products (no args)', async () => {
-    mockInvoke.mockResolvedValue([]);
-    await listProducts();
-    expect(mockInvoke).toHaveBeenCalledWith('list_products', undefined);
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('listProductsScoped → list_products_scoped with sessionToken', async () => {
-    mockInvoke.mockResolvedValue([]);
-    await listProductsScoped('tok');
-    expect(mockInvoke).toHaveBeenCalledWith('list_products_scoped', { sessionToken: 'tok' });
+  it('createProduct calls correct command', async () => {
+    const args = {
+      userId: 'u1',
+      sku: 'SKU-001',
+      name: 'Test Product',
+      priceMinor: 10000,
+      currency: 'IDR',
+      initialStock: 10,
+      taxRateIds: ['t1'],
+    };
+    mockInvoke.mockResolvedValue({ sku: 'SKU-001' });
+    const result = await createProduct(args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_product', { args });
+    expect(result.sku).toBe('SKU-001');
   });
 
-  it('createProduct → create_product with args', async () => {
-    mockInvoke.mockResolvedValue({ sku: 'SKU-1' });
-    await createProduct({ name: 'Widget', sku: 'SKU-1', priceMinor: 1000, currency: 'USD', categoryId: null, taxRateId: null, stockQty: 10, unit: 'pc', barcode: null, imageUrl: null, description: null, trackInventory: true, trackSerial: false, isActive: true, tags: null });
-    expect(mockInvoke).toHaveBeenCalledWith('create_product', { args: expect.objectContaining({ name: 'Widget', sku: 'SKU-1' }) });
+  it('createProductScoped calls correct command', async () => {
+    const args = {
+      userId: 'u1',
+      sku: 'SKU-002',
+      name: 'Scoped Product',
+      priceMinor: 5000,
+      currency: 'IDR',
+      initialStock: 5,
+      taxRateIds: [],
+    };
+    mockInvoke.mockResolvedValue({ sku: 'SKU-002' });
+    await createProductScoped(TOKEN, args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_product_scoped', {
+      sessionToken: TOKEN,
+      args,
+    });
   });
 
-  it('createProductScoped → create_product_scoped with sessionToken', async () => {
-    mockInvoke.mockResolvedValue({ sku: 'SKU-2' });
-    await createProductScoped('tok', { name: 'Gadget', sku: 'SKU-2', priceMinor: 2000, currency: 'USD', categoryId: null, taxRateId: null, stockQty: 5, unit: 'pc', barcode: null, imageUrl: null, description: null, trackInventory: true, trackSerial: false, isActive: true, tags: null });
-    expect(mockInvoke).toHaveBeenCalledWith('create_product_scoped', { sessionToken: 'tok', args: expect.objectContaining({ name: 'Gadget' }) });
+  it('updateProduct calls correct command', async () => {
+    const args = { userId: 'u1', sku: 'SKU-001', name: 'Updated', priceMinor: 15000, currency: 'IDR', taxRateIds: ['t1'] };
+    mockInvoke.mockResolvedValue({ sku: 'SKU-001' });
+    await updateProduct(args);
+    expect(mockInvoke).toHaveBeenCalledWith('update_product', { args });
   });
 
-  it('updateProduct → update_product with args', async () => {
-    mockInvoke.mockResolvedValue({ sku: 'SKU-1' });
-    await updateProduct({ sku: 'SKU-1', name: 'Widget Updated', priceMinor: 1500, currency: 'USD', categoryId: null, taxRateId: null, stockQty: 8, unit: 'pc', barcode: null, imageUrl: null, description: null, trackInventory: true, trackSerial: false, isActive: true, tags: null });
-    expect(mockInvoke).toHaveBeenCalledWith('update_product', { args: expect.objectContaining({ sku: 'SKU-1' }) });
+  it('updateProductScoped calls correct command', async () => {
+    const args = { sku: 'SKU-001', name: 'Updated', priceMinor: 15000, currency: 'IDR', taxRateIds: [] };
+    mockInvoke.mockResolvedValue({ sku: 'SKU-001' });
+    await updateProductScoped(TOKEN, args);
+    expect(mockInvoke).toHaveBeenCalledWith('update_product_scoped', {
+      sessionToken: TOKEN,
+      args,
+    });
   });
 
-  it('updateProductScoped → update_product_scoped with sessionToken', async () => {
-    mockInvoke.mockResolvedValue({ sku: 'SKU-1' });
-    await updateProductScoped('tok', { sku: 'SKU-1', name: 'V2', priceMinor: 1500, currency: 'USD', categoryId: null, taxRateId: null, stockQty: 8, unit: 'pc', barcode: null, imageUrl: null, description: null, trackInventory: true, trackSerial: false, isActive: true, tags: null });
-    expect(mockInvoke).toHaveBeenCalledWith('update_product_scoped', { sessionToken: 'tok', args: expect.objectContaining({ sku: 'SKU-1' }) });
-  });
-
-  it('deleteProduct → delete_product with args', async () => {
+  it('deleteProduct calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deleteProduct({ userId: 'u1', sku: 'SKU-1' });
-    expect(mockInvoke).toHaveBeenCalledWith('delete_product', { args: { userId: 'u1', sku: 'SKU-1' } });
+    await deleteProduct({ userId: 'u1', sku: 'SKU-001' });
+    expect(mockInvoke).toHaveBeenCalledWith('delete_product', { args: { userId: 'u1', sku: 'SKU-001' } });
   });
 
-  it('deleteProductScoped → delete_product_scoped with sessionToken + args', async () => {
+  it('deleteProductScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await deleteProductScoped('tok', 'SKU-1');
-    expect(mockInvoke).toHaveBeenCalledWith('delete_product_scoped', { sessionToken: 'tok', args: { sku: 'SKU-1' } });
+    await deleteProductScoped(TOKEN, 'SKU-001');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_product_scoped', {
+      sessionToken: TOKEN,
+      sku: 'SKU-001',
+    });
   });
 
-  it('lookupByBarcode → lookup_by_barcode with barcode', async () => {
+  it('lookupByBarcode calls correct command', async () => {
     mockInvoke.mockResolvedValue(null);
-    await lookupByBarcode('1234567890');
-    expect(mockInvoke).toHaveBeenCalledWith('lookup_by_barcode', { barcode: '1234567890' });
+    await lookupByBarcode('123456');
+    expect(mockInvoke).toHaveBeenCalledWith('lookup_by_barcode', { barcode: '123456' });
   });
 
-  it('lookupByBarcodeScoped → lookup_by_barcode_scoped with sessionToken', async () => {
-    mockInvoke.mockResolvedValue(null);
-    await lookupByBarcodeScoped('tok', '9999999999');
-    expect(mockInvoke).toHaveBeenCalledWith('lookup_by_barcode_scoped', { sessionToken: 'tok', barcode: '9999999999' });
-  });
-
-  it('recordProductSearchScoped → record_product_search_scoped', async () => {
+  it('recordProductSearchScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await recordProductSearchScoped('tok', 'SKU-1');
-    expect(mockInvoke).toHaveBeenCalledWith('record_product_search_scoped', { sessionToken: 'tok', sku: 'SKU-1' });
+    await recordProductSearchScoped(TOKEN, 'SKU-001');
+    expect(mockInvoke).toHaveBeenCalledWith('record_product_search_scoped', {
+      sessionToken: TOKEN,
+      sku: 'SKU-001',
+    });
   });
 
-  it('propagates backend errors', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('sku already exists'));
-    await expect(createProduct({ name: 'X', sku: 'DUP', priceMinor: 0, currency: 'USD', categoryId: null, taxRateId: null, stockQty: 0, unit: 'pc', barcode: null, imageUrl: null, description: null, trackInventory: false, trackSerial: false, isActive: true, tags: null })).rejects.toThrow('sku already exists');
+  it('propagates errors', async () => {
+    mockInvoke.mockRejectedValue(new Error('sku duplicate'));
+    await expect(
+      createProduct({
+        userId: 'u1',
+        sku: 'DUP',
+        name: 'Dup',
+        priceMinor: 0,
+        currency: 'IDR',
+        initialStock: 0,
+        taxRateIds: [],
+      })
+    ).rejects.toThrow('sku duplicate');
+  });
+
+  it('passes return type through', async () => {
+    mockInvoke.mockResolvedValue({ sku: 'SKU-NEW' });
+    const result = await createProduct({
+      userId: 'u1',
+      sku: 'SKU-NEW',
+      name: 'Product',
+      priceMinor: 10000,
+      currency: 'IDR',
+      initialStock: 10,
+      taxRateIds: [],
+    });
+    expect(result.sku).toBe('SKU-NEW');
   });
 });

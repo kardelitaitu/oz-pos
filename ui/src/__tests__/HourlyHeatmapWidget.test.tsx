@@ -102,7 +102,8 @@ describe('HourlyHeatmapWidget', () => {
     await waitFor(() => {
       expect(mockGetHourlyHeatmap).toHaveBeenCalled();
     });
-    const [start, end] = mockGetHourlyHeatmap.mock.calls[0];
+    const args = mockGetHourlyHeatmap.mock.calls[0] as string[];
+    const [start, end] = args;
     expect(start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(end).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });

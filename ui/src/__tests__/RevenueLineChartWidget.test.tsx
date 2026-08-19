@@ -117,7 +117,8 @@ describe('RevenueLineChartWidget', () => {
     await waitFor(() => {
       expect(mockGetDailyRevenue).toHaveBeenCalled();
     });
-    const [start, end] = mockGetDailyRevenue.mock.calls[0];
+    const args = mockGetDailyRevenue.mock.calls[0] as string[];
+    const [start, end] = args;
     expect(start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(end).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });

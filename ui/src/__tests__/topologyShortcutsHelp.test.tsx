@@ -3,7 +3,6 @@ import { screen, fireEvent } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import { withFluent, withFluentLocale } from '@/locales/test-utils';
 import { TopologyShortcutsHelp } from '@/features/stores/topologyShortcutsHelp';
-import type { ReactLocalization } from '@fluent/react';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
 import multiStoreIdFtl from '@/locales/multi-store.id.ftl?raw';
 

@@ -114,7 +114,8 @@ describe('CategoryPieChartWidget', () => {
     await waitFor(() => {
       expect(mockGetCategoryBreakdown).toHaveBeenCalled();
     });
-    const [start, end] = mockGetCategoryBreakdown.mock.calls[0];
+    const args = mockGetCategoryBreakdown.mock.calls[0] as string[];
+    const [start, end] = args;
     expect(start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(end).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });

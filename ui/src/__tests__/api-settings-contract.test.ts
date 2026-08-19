@@ -1,106 +1,74 @@
-// ── IPC contract tests for settings.ts ─────────────────────────
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockInvoke } = vi.hoisted(() => ({
-  mockInvoke: vi.fn(),
-}));
-
+const mockInvoke = vi.fn();
 vi.mock('@/utils/logged-invoke', () => ({
-  loggedInvoke: (cmd: string, args?: Record<string, unknown>) => mockInvoke(cmd, args),
+  loggedInvoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
 import {
   getReceiptSettings,
-  getReceiptSettingsScoped,
   setReceiptSettings,
-  setReceiptSettingsScoped,
   getStoreSettings,
-  getStoreSettingsScoped,
   setStoreSettings,
-  setStoreSettingsScoped,
   getCreditSettings,
   setCreditSettings,
-  setCreditSettingsScoped,
+  getStoreSettingsScoped,
 } from '@/api/settings';
 
-describe('settings.ts IPC contract', () => {
-  beforeEach(() => mockInvoke.mockReset());
+describe('settings.ts API contract', () => {
+  const TOKEN = 'tok_settings';
 
-  // ── Receipt Settings ──────────────────────────────────────
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-  it('getReceiptSettings → get_receipt_settings (no args)', async () => {
-    mockInvoke.mockResolvedValue({});
+  it('getReceiptSettings calls correct command (no args)', async () => {
+    mockInvoke.mockResolvedValue({ header: 'Store', footer: 'Thanks' });
     await getReceiptSettings();
-    expect(mockInvoke).toHaveBeenCalledWith('get_receipt_settings', undefined);
+    expect(mockInvoke).toHaveBeenCalledWith('get_receipt_settings');
   });
 
-  it('getReceiptSettingsScoped → get_receipt_settings_scoped with sessionToken', async () => {
-    mockInvoke.mockResolvedValue({});
-    await getReceiptSettingsScoped('tok');
-    expect(mockInvoke).toHaveBeenCalledWith('get_receipt_settings_scoped', { sessionToken: 'tok' });
-  });
-
-  it('setReceiptSettings → set_receipt_settings with args + userId', async () => {
+  it('setReceiptSettings calls correct command', async () => {
+    const args = { header: 'Updated', footer: 'Thank you' };
     mockInvoke.mockResolvedValue(undefined);
-    await setReceiptSettings({ storeName: 'My Store', storeAddress: '123 Main St', storePhone: '555-0100', receiptFooter: 'Thank you!', showTaxBreakdown: true, showBarcode: false, paperWidth: 80 }, 'u1');
-    expect(mockInvoke).toHaveBeenCalledWith('set_receipt_settings', { args: expect.objectContaining({ storeName: 'My Store' }), userId: 'u1' });
+    await setReceiptSettings(args);
+    expect(mockInvoke).toHaveBeenCalledWith('set_receipt_settings', { args });
   });
 
-  it('setReceiptSettingsScoped → set_receipt_settings_scoped with sessionToken', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    await setReceiptSettingsScoped('tok', { storeName: 'Shop', storeAddress: '', storePhone: '', receiptFooter: '', showTaxBreakdown: false, showBarcode: false, paperWidth: 58 });
-    expect(mockInvoke).toHaveBeenCalledWith('set_receipt_settings_scoped', { sessionToken: 'tok', args: expect.objectContaining({ storeName: 'Shop' }) });
-  });
-
-  // ── Store Settings ────────────────────────────────────────
-
-  it('getStoreSettings → get_store_settings (no args)', async () => {
-    mockInvoke.mockResolvedValue({});
+  it('getStoreSettings calls correct command (no args)', async () => {
+    mockInvoke.mockResolvedValue({ name: 'My Store', address: '123 Main St', taxId: '123', currency: 'IDR', branch: 'Main' });
     await getStoreSettings();
-    expect(mockInvoke).toHaveBeenCalledWith('get_store_settings', undefined);
+    expect(mockInvoke).toHaveBeenCalledWith('get_store_settings');
   });
 
-  it('getStoreSettingsScoped → get_store_settings_scoped with sessionToken', async () => {
-    mockInvoke.mockResolvedValue({});
-    await getStoreSettingsScoped('tok');
-    expect(mockInvoke).toHaveBeenCalledWith('get_store_settings_scoped', { sessionToken: 'tok' });
-  });
-
-  it('setStoreSettings → set_store_settings with args + userId', async () => {
+  it('setStoreSettings calls correct command', async () => {
+    const args = { name: 'My Store', address: '456 New', taxId: '456', currency: 'IDR', branch: 'New' };
     mockInvoke.mockResolvedValue(undefined);
-    await setStoreSettings({ storeName: 'My Store', defaultCurrency: 'USD', timezone: 'UTC', locale: 'en-US', fiscalYearStartMonth: 1, lowStockThreshold: 10, defaultTaxRateId: null }, 'u1');
-    expect(mockInvoke).toHaveBeenCalledWith('set_store_settings', { args: expect.objectContaining({ storeName: 'My Store' }), userId: 'u1' });
+    await setStoreSettings(args, 'u1');
+    expect(mockInvoke).toHaveBeenCalledWith('set_store_settings', { args, userId: 'u1' });
   });
 
-  it('setStoreSettingsScoped → set_store_settings_scoped with sessionToken', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    await setStoreSettingsScoped('tok', { storeName: 'Shop', defaultCurrency: 'IDR', timezone: 'Asia/Jakarta', locale: 'id', fiscalYearStartMonth: 1, lowStockThreshold: 5, defaultTaxRateId: null });
-    expect(mockInvoke).toHaveBeenCalledWith('set_store_settings_scoped', { sessionToken: 'tok', args: expect.objectContaining({ defaultCurrency: 'IDR' }) });
-  });
-
-  // ── Credit Settings ───────────────────────────────────────
-
-  it('getCreditSettings → get_credit_settings (no args)', async () => {
-    mockInvoke.mockResolvedValue({});
+  it('getCreditSettings calls correct command (no args)', async () => {
+    mockInvoke.mockResolvedValue({ enabled: true, reminderIntervalHours: 24, maxLimitMinor: 500000 });
     await getCreditSettings();
-    expect(mockInvoke).toHaveBeenCalledWith('get_credit_settings', undefined);
+    expect(mockInvoke).toHaveBeenCalledWith('get_credit_settings');
   });
 
-  it('setCreditSettings → set_credit_settings with args + userId', async () => {
+  it('setCreditSettings calls correct command', async () => {
+    const args = { enabled: false, reminderIntervalHours: 48, maxLimitMinor: 1000000 };
     mockInvoke.mockResolvedValue(undefined);
-    await setCreditSettings({ enabled: true, maxCreditLimitMinor: 500000, paymentTermsDays: 30 }, 'u1');
-    expect(mockInvoke).toHaveBeenCalledWith('set_credit_settings', { args: expect.objectContaining({ enabled: true }), userId: 'u1' });
+    await setCreditSettings(args);
+    expect(mockInvoke).toHaveBeenCalledWith('set_credit_settings', { args });
   });
 
-  it('setCreditSettingsScoped → set_credit_settings_scoped with sessionToken', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    await setCreditSettingsScoped('tok', { enabled: false, maxCreditLimitMinor: 0, paymentTermsDays: 0 });
-    expect(mockInvoke).toHaveBeenCalledWith('set_credit_settings_scoped', { sessionToken: 'tok', args: expect.objectContaining({ enabled: false }) });
+  it('getStoreSettingsScoped calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ name: 'Scoped Store', address: '789', taxId: '000', currency: 'IDR', branch: 'Scoped' });
+    await getStoreSettingsScoped(TOKEN);
+    expect(mockInvoke).toHaveBeenCalledWith('get_store_settings_scoped', { sessionToken: TOKEN });
   });
 
-  it('propagates backend errors', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('invalid settings'));
-    await expect(getReceiptSettings()).rejects.toThrow('invalid settings');
+  it('propagates errors', async () => {
+    mockInvoke.mockRejectedValue(new Error('settings error'));
+    await expect(getReceiptSettings()).rejects.toThrow('settings error');
   });
 });

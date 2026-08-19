@@ -22,7 +22,7 @@ function makeNodeIssue(overrides: Partial<TopologyValidationNodeIssue> = {}): To
 
 function makeGraphIssue(overrides: Partial<TopologyValidationError> = {}): TopologyValidationError {
   return {
-    code: 'wire-cyclic',
+    code: 'cycle-detected',
     messageId: 'topology-validation-wire-cyclic',
     wireId: 'wire-1',
     ...overrides,
@@ -211,7 +211,7 @@ describe('TopologyValidationWidget — EN', () => {
   });
 
   it('static graph issues (no wireId) are not clickable', async () => {
-    const graphIssues = [makeGraphIssue({ wireId: undefined, messageId: 'static-msg' })];
+    const graphIssues = [makeGraphIssue({ messageId: 'static-msg' })];
     await renderWithFluent(
       <TopologyValidationWidget {...defaultProps} open={true} graphIssues={graphIssues} />,
     );

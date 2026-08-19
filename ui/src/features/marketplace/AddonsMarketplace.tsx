@@ -8,11 +8,10 @@
  */
 
 import { useCallback } from 'react';
-import { Localized, useLocalization } from '@fluent/react';
+import { Localized } from '@fluent/react';
 import { Button } from '@/components/Button';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import {
-  ADDON_CATALOG,
   getAddonsForTier,
   tenantHasAddon,
   type AddonDefinition,
@@ -74,7 +73,6 @@ function AddonCard({ addon, owned, onPurchase }: AddonCardProps) {
  * Purchase opens Paddle checkout via the existing `openPaddleCheckout` helper.
  */
 export default function AddonsMarketplace() {
-  const { l10n } = useLocalization();
   const { caps } = useSubscription();
 
   const tier = caps?.tier ?? 'free';

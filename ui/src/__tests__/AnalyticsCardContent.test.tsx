@@ -78,14 +78,12 @@ describe('ExportCsvButton', () => {
 
 describe('AnalyticsCardContent', () => {
   const baseProps = {
-    granularity: 'day' as const,
-    workspaceView: 'all' as const,
+    granularity: 'daily' as const,
+    workspaceView: 'retail' as const,
     from: '2026-08-01',
     to: '2026-08-19',
     sessionToken: 'test-token',
     title: 'Revenue',
-    expanded: false,
-    compare: false,
   };
 
   beforeEach(() => {
@@ -94,7 +92,7 @@ describe('AnalyticsCardContent', () => {
 
   it('shows error state when query fails', () => {
     mockUseAnalyticsQuery.mockReturnValue({ data: undefined, isLoading: false, error: new Error('network') });
-    render(<AnalyticsCardContent cardKey="revenue" {...baseProps} />);
+    render(<AnalyticsCardContent {...baseProps} cardKey="revenue" />);
     expect(screen.getByText('Failed to load')).toBeInTheDocument();
   });
 
@@ -104,7 +102,7 @@ describe('AnalyticsCardContent', () => {
       isLoading: false,
       error: null,
     });
-    render(<AnalyticsCardContent cardKey="aov" {...baseProps} />);
+    render(<AnalyticsCardContent {...baseProps} cardKey="aov" />);
     expect(screen.getByTestId('echarts')).toBeInTheDocument();
   });
 
@@ -114,7 +112,7 @@ describe('AnalyticsCardContent', () => {
       isLoading: false,
       error: null,
     });
-    render(<AnalyticsCardContent cardKey="customers" {...baseProps} />);
+    render(<AnalyticsCardContent {...baseProps} cardKey="customers" />);
     expect(screen.getByTestId('echarts')).toBeInTheDocument();
   });
 
@@ -124,7 +122,7 @@ describe('AnalyticsCardContent', () => {
       isLoading: false,
       error: null,
     });
-    render(<AnalyticsCardContent cardKey="basket" {...baseProps} />);
+    render(<AnalyticsCardContent {...baseProps} cardKey="basket" />);
     expect(screen.getByTestId('echarts')).toBeInTheDocument();
   });
 
@@ -137,21 +135,21 @@ describe('AnalyticsCardContent', () => {
       isLoading: false,
       error: null,
     });
-    const { container } = render(<AnalyticsCardContent cardKey="low-stock" {...baseProps} />);
+    const { container } = render(<AnalyticsCardContent {...baseProps} cardKey="low-stock" />);
     expect(container.querySelector('.analytics-card-visual')).toBeInTheDocument();
   });
 
   it('returns null for unknown card key', () => {
     mockUseAnalyticsQuery.mockReturnValue({ data: null, isLoading: false, error: null });
     const { container } = render(
-      <AnalyticsCardContent cardKey="nonexistent" {...baseProps} />,
+      <AnalyticsCardContent {...baseProps} cardKey="nonexistent" />,
     );
     expect(container.innerHTML).toBe('');
   });
 
   it('passes sessionToken to query', () => {
     mockUseAnalyticsQuery.mockReturnValue({ data: null, isLoading: true, error: null });
-    render(<AnalyticsCardContent cardKey="revenue" {...baseProps} sessionToken="tok-123" />);
+    render(<AnalyticsCardContent {...baseProps} cardKey="revenue" sessionToken="tok-123" />);
     expect(mockUseAnalyticsQuery).toHaveBeenCalled();
   });
 
@@ -161,7 +159,7 @@ describe('AnalyticsCardContent', () => {
       isLoading: false,
       error: null,
     });
-    render(<AnalyticsCardContent cardKey="aov" {...baseProps} compare={true} />);
+    render(<AnalyticsCardContent {...baseProps} cardKey="aov" compare={true} />);
     expect(screen.getByTestId('echarts')).toBeInTheDocument();
   });
 
@@ -171,7 +169,7 @@ describe('AnalyticsCardContent', () => {
       isLoading: false,
       error: null,
     });
-    render(<AnalyticsCardContent cardKey="aov" {...baseProps} expanded={true} />);
+    render(<AnalyticsCardContent {...baseProps} cardKey="aov" expanded={true} />);
     expect(screen.getByTestId('echarts')).toBeInTheDocument();
   });
 });

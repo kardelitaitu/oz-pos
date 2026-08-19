@@ -1,13 +1,8 @@
-// ── IPC contract tests for giftCards.ts ────────────────────────
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockInvoke } = vi.hoisted(() => ({
-  mockInvoke: vi.fn(),
-}));
-
+const mockInvoke = vi.fn();
 vi.mock('@/utils/logged-invoke', () => ({
-  loggedInvoke: (cmd: string, args?: Record<string, unknown>) => mockInvoke(cmd, args),
+  loggedInvoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
 import {
@@ -21,59 +16,76 @@ import {
   unfreezeGiftCard,
 } from '@/api/giftCards';
 
-describe('giftCards.ts IPC contract', () => {
-  beforeEach(() => mockInvoke.mockReset());
-
-  it('issueGiftCard → issue_gift_card with input', async () => {
-    mockInvoke.mockResolvedValue({ id: 'gc1', cardNumber: 'GC-001', balance: 50000 });
-    await issueGiftCard({ initialBalanceMinor: 50000, currency: 'USD', note: 'Gift' });
-    expect(mockInvoke).toHaveBeenCalledWith('issue_gift_card', { input: expect.objectContaining({ initialBalanceMinor: 50000 }) });
+describe('giftCards.ts API contract', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('getGiftCard → get_gift_card with cardNumberOrId', async () => {
+  it('issueGiftCard calls correct command', async () => {
+    const input = {
+      card_number: 'GC-001',
+      initial_amount_minor: 100000,
+      currency: 'IDR',
+      created_by: 'u1',
+    };
+    mockInvoke.mockResolvedValue({ card_number: 'GC-001', balance: 100000, transactions: [] });
+    const result = await issueGiftCard(input);
+    expect(mockInvoke).toHaveBeenCalledWith('issue_gift_card', { input });
+    expect(result.card_number).toBe('GC-001');
+  });
+
+  it('getGiftCard calls correct command', async () => {
     mockInvoke.mockResolvedValue(null);
     await getGiftCard('GC-001');
     expect(mockInvoke).toHaveBeenCalledWith('get_gift_card', { cardNumberOrId: 'GC-001' });
   });
 
-  it('listGiftCards → list_gift_cards with filter', async () => {
+  it('listGiftCards calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listGiftCards({ status: 'active' });
-    expect(mockInvoke).toHaveBeenCalledWith('list_gift_cards', { filter: { status: 'active' } });
+    await listGiftCards({});
+    expect(mockInvoke).toHaveBeenCalledWith('list_gift_cards', { filter: {} });
   });
 
-  it('getGiftCardBalance → get_gift_card_balance with cardNumberOrId', async () => {
-    mockInvoke.mockResolvedValue({ balance: 50000, currency: 'USD' });
-    await getGiftCardBalance('GC-001');
+  it('getGiftCardBalance calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ balance: 50000 });
+    const result = await getGiftCardBalance('GC-001');
     expect(mockInvoke).toHaveBeenCalledWith('get_gift_card_balance', { cardNumberOrId: 'GC-001' });
+    expect(result?.balance).toBe(50000);
   });
 
-  it('redeemGiftCard → redeem_gift_card with cardNumberOrId + amountMinor + saleId', async () => {
-    mockInvoke.mockResolvedValue({ success: true, remainingBalance: 40000 });
-    await redeemGiftCard('GC-001', 10000, 'sale-1');
-    expect(mockInvoke).toHaveBeenCalledWith('redeem_gift_card', { cardNumberOrId: 'GC-001', amountMinor: 10000, saleId: 'sale-1' });
+  it('redeemGiftCard calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ remaining: 30000 });
+    await redeemGiftCard('GC-001', 20000, 'sale-1');
+    expect(mockInvoke).toHaveBeenCalledWith('redeem_gift_card', {
+      cardNumberOrId: 'GC-001',
+      amountMinor: 20000,
+      saleId: 'sale-1',
+    });
   });
 
-  it('topUpGiftCard → top_up_gift_card with cardNumberOrId + amountMinor', async () => {
-    mockInvoke.mockResolvedValue({ balance: 60000 });
-    await topUpGiftCard('GC-001', 10000);
-    expect(mockInvoke).toHaveBeenCalledWith('top_up_gift_card', { cardNumberOrId: 'GC-001', amountMinor: 10000 });
+  it('topUpGiftCard calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ balance: 150000 });
+    await topUpGiftCard('GC-001', 50000);
+    expect(mockInvoke).toHaveBeenCalledWith('top_up_gift_card', {
+      cardNumberOrId: 'GC-001',
+      amountMinor: 50000,
+    });
   });
 
-  it('freezeGiftCard → freeze_gift_card with cardNumberOrId', async () => {
-    mockInvoke.mockResolvedValue({ id: 'gc1', status: 'frozen' });
+  it('freezeGiftCard calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ card_number: 'GC-001', frozen: true });
     await freezeGiftCard('GC-001');
     expect(mockInvoke).toHaveBeenCalledWith('freeze_gift_card', { cardNumberOrId: 'GC-001' });
   });
 
-  it('unfreezeGiftCard → unfreeze_gift_card with cardNumberOrId', async () => {
-    mockInvoke.mockResolvedValue({ id: 'gc1', status: 'active' });
+  it('unfreezeGiftCard calls correct command', async () => {
+    mockInvoke.mockResolvedValue({ card_number: 'GC-001', frozen: false });
     await unfreezeGiftCard('GC-001');
     expect(mockInvoke).toHaveBeenCalledWith('unfreeze_gift_card', { cardNumberOrId: 'GC-001' });
   });
 
-  it('propagates backend errors', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('card not found'));
-    await expect(getGiftCard('MISSING')).rejects.toThrow('card not found');
+  it('propagates errors', async () => {
+    mockInvoke.mockRejectedValue(new Error('card not found'));
+    await expect(getGiftCard('bad')).rejects.toThrow('card not found');
   });
 });

@@ -8,7 +8,8 @@ import salesIdFtl from '@/locales/sales.id.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import sharedIdFtl from '@/locales/shared.id.ftl?raw';
 import RetailHeader from '@/features/retail/RetailHeader';
-import type { StoreSettingsDto, ShiftDto } from '@/api/settings';
+import type { StoreSettingsDto } from '@/api/settings';
+import type { ShiftDto } from '@/api/shifts';
 
 const defaultStoreSettings: StoreSettingsDto = {
   name: 'TOKO TEST',

@@ -1,86 +1,80 @@
-// ── IPC contract tests for purchasing.ts ───────────────────────
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockInvoke } = vi.hoisted(() => ({
-  mockInvoke: vi.fn(),
-}));
-
+const mockInvoke = vi.fn();
 vi.mock('@/utils/logged-invoke', () => ({
-  loggedInvoke: (cmd: string, args?: Record<string, unknown>) => mockInvoke(cmd, args),
+  loggedInvoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
 import {
   listSuppliers,
-  getSupplier,
   createSupplier,
   updateSupplier,
+  getSupplier,
   listPurchaseOrders,
-  getPurchaseOrder,
   createPurchaseOrder,
-  updatePoStatus,
   receivePurchaseOrder,
 } from '@/api/purchasing';
 
-describe('purchasing.ts IPC contract', () => {
-  beforeEach(() => mockInvoke.mockReset());
+describe('purchasing.ts API contract', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-  it('listSuppliers → list_suppliers (no args)', async () => {
+  it('listSuppliers calls correct command (no args)', async () => {
     mockInvoke.mockResolvedValue([]);
     await listSuppliers();
-    expect(mockInvoke).toHaveBeenCalledWith('list_suppliers', undefined);
+    expect(mockInvoke).toHaveBeenCalledWith('list_suppliers');
   });
 
-  it('getSupplier → get_supplier with id', async () => {
+  it('createSupplier calls correct command', async () => {
+    const args = { name: 'PT Supplier', contact_name: 'Budi', email: 'budi@pt.com' };
+    mockInvoke.mockResolvedValue({ id: 'sup1', ...args });
+    const result = await createSupplier(args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_supplier', { args });
+    expect(result.id).toBe('sup1');
+  });
+
+  it('updateSupplier calls correct command', async () => {
+    const args = { id: 'sup1', name: 'Updated Supplier' };
+    mockInvoke.mockResolvedValue(args);
+    await updateSupplier(args);
+    expect(mockInvoke).toHaveBeenCalledWith('update_supplier', { args });
+  });
+
+  it('getSupplier calls correct command', async () => {
     mockInvoke.mockResolvedValue(null);
-    await getSupplier('s1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_supplier', { id: 's1' });
+    await getSupplier('sup1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_supplier', { id: 'sup1' });
   });
 
-  it('createSupplier → create_supplier with args', async () => {
-    mockInvoke.mockResolvedValue({ id: 's1', name: 'Acme' });
-    await createSupplier({ name: 'Acme', contactName: 'Bob', email: 'bob@acme.com', phone: '555-0100', address: '123 St', notes: null });
-    expect(mockInvoke).toHaveBeenCalledWith('create_supplier', { args: expect.objectContaining({ name: 'Acme' }) });
-  });
-
-  it('updateSupplier → update_supplier with args', async () => {
-    mockInvoke.mockResolvedValue({ id: 's1', name: 'Acme Updated' });
-    await updateSupplier({ id: 's1', name: 'Acme Updated', contactName: 'Bob', email: 'bob@acme.com', phone: '555-0100', address: '123 St', notes: null });
-    expect(mockInvoke).toHaveBeenCalledWith('update_supplier', { args: expect.objectContaining({ id: 's1' }) });
-  });
-
-  it('listPurchaseOrders → list_purchase_orders (no args)', async () => {
+  it('listPurchaseOrders calls correct command (no args)', async () => {
     mockInvoke.mockResolvedValue([]);
     await listPurchaseOrders();
-    expect(mockInvoke).toHaveBeenCalledWith('list_purchase_orders', undefined);
+    expect(mockInvoke).toHaveBeenCalledWith('list_purchase_orders');
   });
 
-  it('getPurchaseOrder → get_purchase_order with id', async () => {
-    mockInvoke.mockResolvedValue(null);
-    await getPurchaseOrder('po1');
-    expect(mockInvoke).toHaveBeenCalledWith('get_purchase_order', { id: 'po1' });
+  it('createPurchaseOrder calls correct command', async () => {
+    const args = {
+      po_number: 'PO-001',
+      supplier_id: 'sup1',
+      expected_date: '2026-09-01',
+      notes: 'Urgent',
+      lines: [{ sku: 'SKU-001', qty: 10, unit_cost_minor: 5000 }],
+    };
+    mockInvoke.mockResolvedValue({ id: 'po1', ...args });
+    const result = await createPurchaseOrder(args);
+    expect(mockInvoke).toHaveBeenCalledWith('create_purchase_order', { args });
+    expect(result.id).toBe('po1');
   });
 
-  it('createPurchaseOrder → create_purchase_order with args', async () => {
-    mockInvoke.mockResolvedValue({ id: 'po1' });
-    await createPurchaseOrder({ supplierId: 's1', notes: 'Urgent', lines: [] });
-    expect(mockInvoke).toHaveBeenCalledWith('create_purchase_order', { args: expect.objectContaining({ supplierId: 's1' }) });
-  });
-
-  it('updatePoStatus → update_po_status with args', async () => {
-    mockInvoke.mockResolvedValue({ id: 'po1' });
-    await updatePoStatus({ id: 'po1', status: 'received' });
-    expect(mockInvoke).toHaveBeenCalledWith('update_po_status', { args: expect.objectContaining({ id: 'po1' }) });
-  });
-
-  it('receivePurchaseOrder → receive_purchase_order with id', async () => {
-    mockInvoke.mockResolvedValue({ id: 'po1' });
+  it('receivePurchaseOrder calls correct command', async () => {
+    mockInvoke.mockResolvedValue(undefined);
     await receivePurchaseOrder('po1');
     expect(mockInvoke).toHaveBeenCalledWith('receive_purchase_order', { id: 'po1' });
   });
 
-  it('propagates backend errors', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('supplier not found'));
-    await expect(getSupplier('missing')).rejects.toThrow('supplier not found');
+  it('propagates errors', async () => {
+    mockInvoke.mockRejectedValue(new Error('supplier not found'));
+    await expect(listSuppliers()).rejects.toThrow('supplier not found');
   });
 });

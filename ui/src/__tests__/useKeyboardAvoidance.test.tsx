@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
@@ -6,7 +7,7 @@ import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 
 function TestHarness({ options }: { options?: { selector?: string; scrollPadding?: number } }) {
   const { containerRef } = useKeyboardAvoidance(options);
-  return <div ref={containerRef} data-testid="container" />;
+  return <div ref={containerRef as React.RefObject<HTMLDivElement>} data-testid="container" />;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
