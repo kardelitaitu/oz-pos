@@ -29,8 +29,8 @@
 | Metric | Count |
 |---|---|
 | Total Feature Components | ~100 |
-| Components WITH Tests | ~89 |
-| **Components WITHOUT Tests** | **~11** |
+| Components WITH Tests | ~90 |
+| **Components WITHOUT Tests** | **~10** |
 | Hooks Without Tests | 5 |
 | API Contract Tests Missing | ~30 modules |
 
@@ -52,7 +52,7 @@
 |---|---|---|---|
 | `topologyNodeCard` | `ui/src/features/stores/topologyNodeCard.tsx` | Drag initiation, edit mode, validation badges, selection | ❌ No tests |
 | `topologyNodeFinder` | `ui/src/features/stores/topologyNodeFinder.tsx` | Search debounce, keyboard nav, filter chips, results virtualization | ❌ No tests |
-| `topologyRelationshipPicker` | `ui/src/features/stores/topologyRelationshipPicker.tsx` | Connection type selection, validation rules, cyclic detection | ❌ No tests |
+| `topologyRelationshipPicker` | `ui/src/features/stores/topologyRelationshipPicker.tsx` | Connection type selection, validation rules, cyclic detection | ✅ 25 tests (EN + ID locales) |
 | `topologyWireGroup` | `ui/src/features/stores/topologyWireGroup.tsx` | SVG path generation, bend points, hit testing, animation | ✅ 31 tests (EN + ID locales) |
 | `topologyMinimap` | `ui/src/features/stores/topologyMinimap.tsx` | Viewport rect sync, zoom/pan proxy, node clustering | ❌ No tests |
 | `topologyShortcutsHelp` | `ui/src/features/stores/topologyShortcutsHelp.tsx` | Key binding display, modal focus, i18n | ❌ No tests |
@@ -130,6 +130,7 @@ No `api-*-contract.test.ts` exists for these modules (should validate IPC wire s
 
 | Component | Commit | Tests Added |
 |---|---|---|
+| `topologyRelationshipPicker` | `<commit-hash>` | 25 tests (EN + ID locales) |
 | `topologyWireGroup` | `<commit-hash>` | 31 tests (EN + ID locales) |
 | `RetailSubViews` | `<commit-hash>` | 5 tests (EN + ID locales) |
 | `RetailModals` | `<commit-hash>` | 11 tests (EN + ID locales) — Clear confirm modal slice |
@@ -237,7 +238,7 @@ Based on risk × impact:
 
 | Priority | Target | Reason |
 |---|---|---|
-| 1 | `topologyRelationshipPicker` | Complex connection validation, cyclic detection, focus management |
+| 1 | `topologyNodeCard` | Drag initiation, edit mode, validation badges, selection |
 | 2 | `RetailProductContextMenu` | Core POS revenue flow, right-click/long-press |
 | 3 | `useKeyboardAvoidance` + `usePullToRefresh` | Mobile UX critical, subtle math bugs |
 | 4 | `EmailReportSettings` | Cron parsing, timezone edge cases |
@@ -684,3 +685,45 @@ Based on risk × impact:
 - Test pulse animation cleanup on unmount
 - Test validation marker with multiple errors (currently only shows first)
 - topologyRelationshipPicker is next highest priority target
+
+---
+
+### 2026-08-19 — TDD Cycle: topologyRelationshipPicker Coverage
+
+**Objective:** Add test coverage for topologyRelationshipPicker (relationship picker popover) — topology editor component for choosing connection type when a port drop admits multiple relationships.
+
+**Phase 1 - Analyze:** topologyRelationshipPicker is a popover dialog component (111 lines) that:
+- Focuses first option on mount via useEffect
+- Clamps position to viewport on every pan/zoom using useLayoutEffect
+- Renders relationship options from picker.state.options
+- Provides cancel button to abort connection
+- Stops mousedown propagation to prevent canvas marquee/pan
+
+**Phase 2 - Find Weaknesses:**
+- No existing test coverage
+- Position clamping logic uses canvas.clientWidth/Height (0 in jsdom) with fallbacks
+- SemanticPortId is a strict union type — test data must use valid values
+- Component lacks native Enter/Space keyboard handlers for buttons (only onClick)
+- Indonesian locale has different key names (e.g., "Pilih jenis koneksi" vs "Choose connection type")
+
+**Phase 3 - Red → Green → Refactor:**
+- Red: Created `topologyRelationshipPicker.test.tsx` with 25 tests across 8 describe blocks
+- Green: Tests passed after fixing SemanticPortId types, jsdom canvas dimensions, and keyboard handler expectations
+- Refactor: Split focus management tests; used Object.defineProperty for clientWidth/Height in jsdom
+
+**Phase 4 - Verify:**
+- All 25 tests pass (EN + ID locales)
+- Lint clean (no new errors)
+- Typecheck clean (no new errors)
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Moved topologyRelationshipPicker from "Without Tests" → "Recently Covered"; updated summary counts and next targets.
+
+**Phase 7 - Commit:** `test(stores): add topologyRelationshipPicker coverage (25 tests) — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Add native Enter/Space keyboard handlers to option/cancel buttons
+- Test Escape key handling for closing picker
+- Test picker with dynamic option changes (add/remove options)
+- topologyNodeCard is next highest priority target
