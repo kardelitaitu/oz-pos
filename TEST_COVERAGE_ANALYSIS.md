@@ -32,7 +32,7 @@
 | Components WITH Tests | ~91 |
 | **Components WITHOUT Tests** | **0** |
 | Hooks Without Tests | **0** |
-| API Contract Tests Missing | ~25 modules (4 new files added) |
+| API Contract Tests Missing | ~20 modules (9 new files added) |
 
 ---
 
@@ -1098,5 +1098,52 @@ Based on risk × impact:
 **Phase 7 - Commit:** `test(api): add 83 IPC contract tests for sales, hardware, kds, and license — updates TEST_COVERAGE_ANALYSIS.md`
 
 **Follow-ups:**
-- Add contract tests for remaining 🔴 modules: offline, pos (now just re-exports), tax, topology
-- Add contract tests for 🟡 modules: audit, branding, currency, email, features, giftCards, inventoryCounts, loyalty, products, promotions, purchasing, reports, security, settings, shifts, staff, stores, subscription, tables, workspaces
+- Add contract tests for remaining 🔴 modules: offline, pos (now just re-exports), tax
+- Add contract tests for 🟡 modules: audit, branding, currency, email, features, giftCards, inventoryCounts, loyalty, promotions, purchasing, reports, security, staff, stores, subscription, tables
+
+---
+
+### 2026-08-19 — TDD Cycle: API Contract Tests batch 2 (products, settings, workspaces, topology, shifts)
+
+**Objective:** Add IPC contract tests for 5 more API modules to expand drift prevention coverage.
+
+**Phase 1 - Analyze:** 5 API modules using `loggedInvoke` wrapper:
+- `products.ts` (12 tested): CRUD, barcode lookup, search tracking, scoped variants
+- `settings.ts` (12 tested): Receipt, store, and credit settings — get/set with scoped variants
+- `workspaces.ts` (10 tested): Boot resolution, workspace instances, screens, user assignments
+- `topology.ts` (4 tested): Topology save/load/canSave — simpler module with only 3 exports
+- `shifts.ts` (13 tested): Open/close shifts, active shift, list, report, cash payouts
+
+**Phase 2 - Find Weaknesses:**
+- Different modules use different parameter wrapping patterns: `{ args: {...} }` vs flat `{ key: val }` vs `{ req: {...} }`
+- `loadTopology()` without branchId passes `undefined` as second arg (not omitted)
+- `openShift` wraps params in `{ args: { userId, terminalId, openingBalanceMinor } }` — includes `terminalId: null` even when not provided
+- `updateWorkspaceInstanceScoped` passes fields flat (`{ name, description, colour }`) not wrapped in `args`
+- `topology.ts` only exports 3 functions (`canSaveTopology`, `loadTopology`, `applyTopologyDiff`) — not the instance CRUD functions assumed from the import path
+
+**Phase 3 - Red → Green → Refactor:**
+- products.ts: 12 tests (list, listScoped, create, createScoped, update, updateScoped, delete, deleteScoped, lookup, lookupScoped, recordSearch, error)
+- settings.ts: 12 tests (receipt get/set + scoped, store get/set + scoped, credit get/set + scoped, error)
+- workspaces.ts: 10 tests (boot, list, get, create, update, archive, screens, setUser, getUser, error)
+- topology.ts: 4 tests (canSave, load, load with branchId, error)
+- shifts.ts: 13 tests (open, openScoped, openScoped no terminal, close, closeScoped, closeScoped no notes, active, activeScoped, list, listScoped, shift, report, error)
+
+**Bugs/Issues Found:**
+1. Functions using different parameter wrapping patterns — some use `{ args: {...} }`, others flat `{ key: val }`, others `{ req: {...} }`
+2. `topology.ts` only exports 3 functions — instance CRUD is in a different module
+3. `loadTopology()` passes `undefined` as second arg when branchId is not provided
+
+**Phase 4 - Verify:**
+- All 51 tests pass across 5 files (5 passed, 51 tests, 0 failed)
+- Lint clean
+- Typecheck clean
+
+**Phase 5 - Journal:** This entry.
+
+**Phase 6 - Update Docs:** Updated API Contract Tests Missing count (~25 → ~20 modules). Journal entry added.
+
+**Phase 7 - Commit:** `test(api): add 51 IPC contract tests for products, settings, workspaces, topology, and shifts — updates TEST_COVERAGE_ANALYSIS.md`
+
+**Follow-ups:**
+- Add contract tests for remaining modules: audit, branding, currency, email, features, giftCards, inventoryCounts, loyalty, promotions, purchasing, reports, security, staff, stores, subscription, tables
+- Consider creating a shared mock factory for `loggedInvoke` to reduce boilerplate across contract test files
