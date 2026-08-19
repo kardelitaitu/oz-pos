@@ -541,7 +541,9 @@ async fn owner_can_list_held_carts() {
         .unwrap();
     }
 
-    let carts = list_held_carts_scoped("tok".into(), app.state()).await.unwrap();
+    let carts = list_held_carts_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
     assert_eq!(carts.len(), 2);
 }
 
@@ -555,7 +557,9 @@ async fn list_held_carts_empty_when_none() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let carts = list_held_carts_scoped("tok".into(), app.state()).await.unwrap();
+    let carts = list_held_carts_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
     assert!(carts.is_empty());
 }
 
@@ -571,7 +575,9 @@ async fn owner_can_list_open_bills_empty() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let bills = list_open_bills_scoped("tok".into(), app.state()).await.unwrap();
+    let bills = list_open_bills_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
     assert!(bills.is_empty());
 }
 

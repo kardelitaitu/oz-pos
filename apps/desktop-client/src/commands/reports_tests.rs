@@ -639,7 +639,10 @@ async fn owner_payment_method_breakdown_empty() {
         app.state(),
     )
     .await;
-    assert!(result.is_ok(), "owner should access payment method breakdown");
+    assert!(
+        result.is_ok(),
+        "owner should access payment method breakdown"
+    );
 }
 
 #[tokio::test]

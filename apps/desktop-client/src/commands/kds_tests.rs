@@ -1,6 +1,6 @@
 use super::*;
-use oz_core::{CreateKdsOrderInput, Sale, SaleStatus, Money, Currency};
 use oz_core::session::SessionContext;
+use oz_core::{CreateKdsOrderInput, Currency, Money, Sale, SaleStatus};
 use platform_core::StoreDatabaseManager;
 use tauri::Manager as _;
 
@@ -190,7 +190,10 @@ fn create_sale_in_store(state: &AppState, sale_id: &str) {
     let s = Store::new(&db);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let usd: Currency = "USD".parse().unwrap();
-    let zero = Money { minor_units: 0, currency: usd.clone() };
+    let zero = Money {
+        minor_units: 0,
+        currency: usd.clone(),
+    };
     let sale = Sale {
         id: sale_id.into(),
         status: SaleStatus::Pending,
@@ -329,14 +332,9 @@ async fn list_kds_orders_filters_by_status() {
         .unwrap();
 
     // Move order2 to "ready" via the status update command.
-    update_kds_status_scoped(
-        "tok".into(),
-        order2.id.clone(),
-        "ready".into(),
-        app.state(),
-    )
-    .await
-    .unwrap();
+    update_kds_status_scoped("tok".into(), order2.id.clone(), "ready".into(), app.state())
+        .await
+        .unwrap();
 
     // Now filter by status.
     let pending_orders = list_kds_orders_scoped("tok".into(), Some("pending".into()), app.state())
