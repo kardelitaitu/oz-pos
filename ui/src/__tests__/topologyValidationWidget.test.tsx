@@ -211,7 +211,7 @@ describe('TopologyValidationWidget — EN', () => {
   });
 
   it('static graph issues (no wireId) are not clickable', async () => {
-    const graphIssues = [makeGraphIssue({ messageId: 'static-msg' })];
+    const graphIssues: TopologyValidationError[] = [{ code: 'missing-branch-location', messageId: 'static-msg' }];
     await renderWithFluent(
       <TopologyValidationWidget {...defaultProps} open={true} graphIssues={graphIssues} />,
     );
