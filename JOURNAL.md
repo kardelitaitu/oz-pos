@@ -1,4 +1,14 @@
 
+## 2026-08-19 — TDD cycle: Cross-platform migration checksum drift
+
+**Problem:** The desktop app started Vite and Tauri but exited during setup because `20260815_tenant_unique_indexes.sql` had a stored LF checksum while the Windows working tree supplied CRLF bytes. Existing databases also contained older raw CRLF checksums for other migrations, so a simple checksum rewrite would have caused additional drift failures.
+
+**Solution:** Canonicalized LF/CRLF line endings before hashing, accepted only exact legacy raw line-ending checksums, and transactionally upgraded those records to the canonical checksum. Added regression coverage for line-ending stability and legacy checksum migration. Backed up and repaired the active database at `%APPDATA%\\com.ozpos.app\\oz-pos.db`; all tracked migration checksums now match and the app boots normally.
+
+**Verification:** Migration tests 19/19 passed; targeted clippy passed; rustfmt check passed; Vite is listening on port 1420 and `oz-pos-app.exe` launched without the migration panic. Sync-daemon warnings remain expected while the local backend on port 3099 is stopped.
+
+**Risks / follow-ups:** The full workspace format check still reports unrelated pre-existing formatting changes in `apps/desktop-client/src/commands/{kds_tests.rs,pos_tests.rs,reports_tests.rs}`. The skill-drift shell script could not run directly because its working copy has CRLF line endings; no skill files were changed.
+
 ## 2026-08-17 — TDD cycle: ReceiptPreview component — first test coverage for receipt rendering
 
 ### Zero-coverage presentational component now pinned with 19 regression tests (EN + ID locales)

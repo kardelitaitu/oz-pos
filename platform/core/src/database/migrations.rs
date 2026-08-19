@@ -59,12 +59,22 @@ pub fn run(conn: &mut Connection, migrations: &[Migration]) -> Result<(), Platfo
                 // installs vs upgrades.
                 let current = checksum_hex(mig.sql);
                 if *stored != current {
-                    return Err(PlatformError::Internal(format!(
-                        "migration {} definition drift: applied checksum {stored} != current {current}. \
-                         Historical migrations must never be edited in place (audit/29 DB-02). \
-                         Restore the original file, or add a new migration.",
-                        mig.id
-                    )));
+                    // Databases created before line-ending canonicalization
+                    // may contain the raw Windows checksum. Accept that
+                    // exact legacy representation and rewrite it to the
+                    // canonical checksum; any other mismatch remains a hard
+                    // failure for DB-02.
+                    if has_legacy_checksum(stored, mig.sql) {
+                        update_checksum(conn, mig.id, &current)?;
+                        tracing::info!(migration = mig.id, "normalized legacy migration checksum");
+                    } else {
+                        return Err(PlatformError::Internal(format!(
+                            "migration {} definition drift: applied checksum {stored} != current {current}. \
+                             Historical migrations must never be edited in place (audit/29 DB-02). \
+                             Restore the original file, or add a new migration.",
+                            mig.id
+                        )));
+                    }
                 }
                 tracing::debug!(migration = mig.id, "already applied; checksum verified");
             }
@@ -72,10 +82,7 @@ pub fn run(conn: &mut Connection, migrations: &[Migration]) -> Result<(), Platfo
                 // Row applied before checksum tracking existed: adopt the
                 // current definition as the baseline (one-time backfill).
                 let current = checksum_hex(mig.sql);
-                conn.execute(
-                    "UPDATE schema_migrations SET checksum = ?1 WHERE id = ?2",
-                    params![current, mig.id],
-                )?;
+                update_checksum(conn, mig.id, &current)?;
                 tracing::info!(migration = mig.id, "backfilled legacy checksum");
             }
             None => apply_one(conn, mig)?,
@@ -206,10 +213,53 @@ fn load_applied_ordered(conn: &Connection) -> Result<Vec<String>, PlatformError>
 }
 
 /// SHA-256 hex checksum of a migration's SQL (DB-02).
+///
+/// Migration files are stored with LF endings, but a Windows working tree may
+/// provide CRLF text to `include_str!`. Canonicalize line endings before
+/// hashing so the checksum represents the SQL definition rather than the
+/// checkout platform.
 fn checksum_hex(sql: &str) -> String {
+    let canonical = canonicalize_line_endings(sql);
+    checksum_hex_bytes(canonical.as_bytes())
+}
+
+/// Whether a stored checksum matches a pre-canonicalization line ending form.
+fn has_legacy_checksum(stored: &str, sql: &str) -> bool {
+    let canonical = canonicalize_line_endings(sql);
+    stored == legacy_checksum_hex(sql)
+        || stored == legacy_checksum_hex(&canonical.replace('\n', "\r\n"))
+}
+
+/// Normalize CRLF and bare CR line endings to LF.
+fn canonicalize_line_endings(sql: &str) -> String {
+    sql.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+/// SHA-256 hex checksum using the pre-canonicalization byte representation.
+fn legacy_checksum_hex(sql: &str) -> String {
+    checksum_hex_bytes(sql.as_bytes())
+}
+
+/// Hash bytes as a lowercase SHA-256 hex string.
+fn checksum_hex_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(sql.as_bytes());
+    hasher.update(bytes);
     hex::encode(hasher.finalize())
+}
+
+/// Update a stored migration checksum atomically.
+fn update_checksum(
+    conn: &mut Connection,
+    migration_id: &str,
+    checksum: &str,
+) -> Result<(), PlatformError> {
+    let tx = conn.transaction()?;
+    tx.execute(
+        "UPDATE schema_migrations SET checksum = ?1 WHERE id = ?2",
+        params![checksum, migration_id],
+    )?;
+    tx.commit()?;
+    Ok(())
 }
 
 /// Whether the connection currently enforces foreign keys (DB-05).
@@ -297,6 +347,46 @@ mod tests {
         run(&mut conn, TEST_MIGRATIONS).unwrap();
         let applied = load_applied(&conn).unwrap();
         assert_eq!(applied.len(), TEST_MIGRATIONS.len());
+    }
+
+    #[test]
+    fn migration_checksums_are_stable_across_line_endings() {
+        let lf = "CREATE TABLE test_table (id INTEGER PRIMARY KEY)\n";
+        let crlf = lf.replace('\n', "\r\n");
+
+        assert_eq!(checksum_hex(lf), checksum_hex(&crlf));
+    }
+
+    #[test]
+    fn legacy_line_ending_checksum_is_migrated() {
+        use sha2::Digest;
+
+        let migrations = [Migration {
+            id: "001_line_endings.sql",
+            sql: "CREATE TABLE line_endings (id INTEGER PRIMARY KEY)\n",
+        }];
+        let mut conn = fresh();
+        run(&mut conn, &migrations).unwrap();
+
+        let legacy_sql = migrations[0].sql.replace('\n', "\r\n");
+        let legacy_checksum = hex::encode(sha2::Sha256::digest(legacy_sql.as_bytes()));
+        let tx = conn.transaction().unwrap();
+        tx.execute(
+            "UPDATE schema_migrations SET checksum = ?1 WHERE id = ?2",
+            params![legacy_checksum, migrations[0].id],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        run(&mut conn, &migrations).unwrap();
+        let stored: String = conn
+            .query_row(
+                "SELECT checksum FROM schema_migrations WHERE id = ?1",
+                params![migrations[0].id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, checksum_hex(migrations[0].sql));
     }
 
     #[test]
