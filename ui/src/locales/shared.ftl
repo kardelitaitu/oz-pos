@@ -411,6 +411,13 @@ pick-logo-aria = Pick logo file
 reset-appearance-aria = Reset all appearance settings
 save-appearance-aria = Save appearance
 
+# Stock alert bell (global header)
+stock-alert-bell-empty-aria = No stock alerts
+stock-alert-bell-count-aria = { $count ->
+    [one] { $count } active stock alert
+   *[other] { $count } active stock alerts
+}
+
 # Workspace home — Insights section (owner/admin only)
 workspace-home-insights-section = Insights
 workspace-home-analytics-title = Analytics

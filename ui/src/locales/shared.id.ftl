@@ -408,6 +408,13 @@ pick-logo-aria = Pilih file logo
 reset-appearance-aria = Kembalikan semua pengaturan tampilan
 save-appearance-aria = Simpan tampilan
 
+# Stock alert bell (global header)
+stock-alert-bell-empty-aria = Tidak ada peringatan stok
+stock-alert-bell-count-aria = { $count ->
+    [one] { $count } peringatan stok aktif
+   *[other] { $count } peringatan stok aktif
+}
+
 # Workspace home — Insights section (owner/admin only)
 workspace-home-insights-section = Wawasan
 workspace-home-analytics-title = Analitik

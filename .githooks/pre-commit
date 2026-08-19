@@ -26,6 +26,21 @@ if [ -z "$RUSTUP" ]; then
     exit 1
 fi
 
+# Locate Python portably. Git Bash on Windows ships `python` (not
+# `python3`), while WSL/Linux have `python3` — hardcoding either breaks
+# the bundle-parity / FTL-dedupe gates for the other environment.
+PYTHON=""
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON="python"
+fi
+
+if [ -z "$PYTHON" ]; then
+    echo "error: python3/python not found — install Python or add it to PATH. Aborting commit." >&2
+    exit 1
+fi
+
 # Run cargo fmt, capturing output if it fails
 if ! "$RUSTUP" run stable cargo fmt --all 2>/dev/null; then
     echo "error: cargo fmt failed — aborting commit." >&2
@@ -132,7 +147,7 @@ if [ -f scripts/verify-bundle-parity.py ]; then
         | grep -E '\.(tsx|ts)$' || true)
     # || true: swallow grep no-match (e.g. no .tsx/.ts staged) + mask any upstream pipe failure.
     if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
-        if ! python3 scripts/verify-bundle-parity.py --staged-only "${STAGED_FILES[@]}"; then
+        if ! "$PYTHON" scripts/verify-bundle-parity.py --staged-only "${STAGED_FILES[@]}"; then
             printf '%s\n' "error: bundle parity — staged files reference keys missing from one or both .ftl bundles. See verify-bundle-parity.py output above." >&2
             exit 1
         fi
@@ -150,7 +165,7 @@ fi
 # path silences the "no duplicates" line entirely while the loud
 # path prints the actual file list alongside the error.
 if [ -f scripts/dedupe-ftl.py ]; then
-    if output=$(python3 scripts/dedupe-ftl.py --dry-run 2>&1); then
+    if output=$("$PYTHON" scripts/dedupe-ftl.py --dry-run 2>&1); then
         : # clean — silently discard the "no duplicates" line
     else
         printf '%s\n' "error: FTL duplicates detected — run 'npm run dedupe:ftl' to fix:" >&2

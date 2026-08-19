@@ -1,4 +1,28 @@
 
+## 2026-08-20 — TDD cycle: StockAlertBell i18n + first test coverage (UI)
+
+**Problem:** The global-header stock alert bell (`ui/src/components/StockAlertBell.tsx`) hardcoded English in its accessible names — `'No stock alerts'` and `` `${count} active stock alert(s)` `` — violating the i18n golden rule (all user-visible strings via `@fluent/react`). Screen-reader users got English regardless of locale. The component also had zero test coverage for its polling, badge, and click behavior.
+
+**Solution:** TDD Red→Green→Refactor cycle:
+- **Red phase:** Wrote `ui/src/__tests__/StockAlertBell.test.tsx` with 11 tests: 8 behavior tests (polling args incl. default location, no-fetch without session token, badge count, 99+ cap, hidden badge at zero, click handler) plus 3 i18n tests asserting the aria-label comes from the Fluent bundle. Confirmed Red: the 3 i18n assertions failed against the hardcoded-English component while the 7 behavior tests passed.
+- **Green phase:** Switched `StockAlertBell` to `useLocalization()` + `l10n.getString('stock-alert-bell-count-aria', { count })` / `'stock-alert-bell-empty-aria'`, and added both keys to `ui/src/locales/shared.ftl` (EN, with `[one]`/`[other]` plural variants) and `shared.id.ftl` (ID).
+- **Test-design fix:** Initial marker-FTL approach was shadowed by `withFluent`'s auto-prepended real `shared.ftl` (Fluent keeps the first-defined message). Reworked to assert real translations, adding an Indonesian-locale assertion (via `withFluentLocale('id', …, sharedId)`) as the true regression killer — a hardcoded-English component cannot satisfy it.
+
+**Verification:**
+- `npm run test -- src/__tests__/StockAlertBell.test.tsx` — 11/11 pass
+- Consumer shell tests (`AppShell`, `TabletAppShell`, `ShellLayout.a11y`, `keyboardNavigationCompliance`) — 41/41 pass
+- `npm run lint` — 0 errors (5 pre-existing warnings in untouched files)
+- `npm run typecheck` — clean
+- `scripts/verify-bundle-parity.py --report-only` — 0 missing keys (both en + id bundles)
+- `scripts/dedupe-ftl.py --dry-run` — no duplicates
+- `i18nBundle.test.tsx` — 20/20 pass
+- skill-drift-guard — no drift
+
+**Risks / follow-ups:**
+1. `scripts/lint-i18n.sh` could not run under WSL bash (rollup optional-dep platform mismatch for `@rollup/rollup-linux-x64-gnu`); its two fail-closed checks were run natively instead (dedupe + i18nBundle vitest).
+2. `skill-drift-guard detect.sh` working copy has CRLF endings that break WSL bash; ran via an LF-converted copy. Consider normalizing script line endings repo-wide.
+3. Remaining untested components: `AccessibleChartSummary`, `Canvas{Heatmap,LineChart,PieChart}`, `EmptyStateIllustrations`, `LazyBoundary`, `Localized` (re-export) — future coverage slices.
+
 ## 2026-08-20 — TDD cycle: Multi-currency settlement fix (CUR-02)
 
 **Problem:** The PaymentModal component displayed converted charge amounts correctly when a user selected a different charge currency (e.g., USD → IDR at 1:16000), but the settlement flow (startSale/completeSale) still used the base currency (USD) for cart creation, line item prices, payment splits, and receipt generation. This caused silent financial corruption: customers would see IDR amounts but be charged in USD, receipts showed wrong currency, and payment reconciliation would fail.
