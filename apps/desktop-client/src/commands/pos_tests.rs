@@ -399,7 +399,6 @@ fn runtime_plan_preserves_distinct_stock_targets_in_route_order() {
 
 use oz_core::session::SessionContext;
 use platform_core::StoreDatabaseManager;
-use tauri::Manager as _;
 
 fn seed_owner(conn: &rusqlite::Connection) {
     let store = Store::new(conn);

@@ -584,12 +584,8 @@ async fn owner_can_get_active_stock_alerts() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let result = active_stock_alerts_scoped(
-        "owner-token".into(),
-        "loc-default".into(),
-        app.state(),
-    )
-    .await;
+    let result =
+        active_stock_alerts_scoped("owner-token".into(), "loc-default".into(), app.state()).await;
     assert!(result.is_ok(), "owner should get active stock alerts");
     assert!(result.unwrap().is_empty());
 }

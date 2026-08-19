@@ -192,12 +192,12 @@ fn create_sale_in_store(state: &AppState, sale_id: &str) {
     let usd: Currency = "USD".parse().unwrap();
     let zero = Money {
         minor_units: 0,
-        currency: usd.clone(),
+        currency: usd,
     };
     let sale = Sale {
         id: sale_id.into(),
         status: SaleStatus::Pending,
-        total: zero.clone(),
+        total: zero,
         line_count: 0,
         currency: usd,
         payment_method: None,
@@ -208,7 +208,7 @@ fn create_sale_in_store(state: &AppState, sale_id: &str) {
         lines: Vec::new(),
         discount_percent: 0,
         discount_label: None,
-        subtotal: zero.clone(),
+        subtotal: zero,
         tax_total: zero,
         customer_id: None,
         version: 1,

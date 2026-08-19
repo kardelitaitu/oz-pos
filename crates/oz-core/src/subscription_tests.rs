@@ -1,3 +1,5 @@
+#![allow(deprecated)] // OneTime is intentionally tested for DB back-compat verification
+
 use super::*;
 
 // ── InstanceStatus ────────────────────────────────────

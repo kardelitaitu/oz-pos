@@ -371,7 +371,9 @@ async fn owner_can_list_terminals_empty() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    let terminals = list_terminals_scoped("tok".into(), app.state()).await.unwrap();
+    let terminals = list_terminals_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
     assert!(terminals.is_empty());
 }
 
@@ -456,7 +458,8 @@ async fn owner_can_list_terminal_overrides() {
         .unwrap();
 
     // Need a terminal_id — use an empty string to test the endpoint exists.
-    let result = list_terminal_overrides_scoped("tok".into(), "any-terminal".into(), app.state()).await;
+    let result =
+        list_terminal_overrides_scoped("tok".into(), "any-terminal".into(), app.state()).await;
     assert!(result.is_ok());
     assert!(result.unwrap().is_empty());
 }

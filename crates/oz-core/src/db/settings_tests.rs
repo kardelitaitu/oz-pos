@@ -1,3 +1,5 @@
+#![allow(deprecated)] // Deprecated currency methods tested here for DB back-compat verification
+
 use super::*;
 use crate::migrations;
 use rusqlite::Connection;
