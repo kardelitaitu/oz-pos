@@ -1,8 +1,14 @@
-
 use super::*;
 use oz_core::session::SessionContext;
 use platform_core::StoreDatabaseManager;
 use tauri::Manager as _;
+
+fn price(minor: i64) -> oz_core::Money {
+    oz_core::Money {
+        minor_units: minor,
+        currency: "USD".parse().unwrap(),
+    }
+}
 
 /// Seed a user with inventory:view but NOT inventory:locations_manage.
 /// The new role-staff preset grants both, so a limited user must use a
@@ -136,8 +142,7 @@ async fn owner_can_create_and_deactivate_locations() {
     .unwrap();
     assert!(!id.is_empty());
 
-    let deactivated =
-        deactivate_inventory_location("owner-token".into(), id, app.state()).await;
+    let deactivated = deactivate_inventory_location("owner-token".into(), id, app.state()).await;
     assert!(deactivated.is_ok());
 }
 
@@ -220,4 +225,213 @@ async fn location_read_is_scoped_to_session_store() {
         !store_b.iter().any(|l| l.name == "Store A Only"),
         "store B must not see store A locations"
     );
+}
+
+// ── LOC-07: update inventory location ──────────────────────────────
+
+#[tokio::test]
+async fn owner_can_update_location_name_and_type() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner_user(&conn);
+    let state = scoped_state_with_token(
+        conn,
+        "owner-token",
+        "user-owner",
+        "role-owner",
+        "store-owner",
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let id = create_inventory_location(
+        "owner-token".into(),
+        "Original".into(),
+        "warehouse".into(),
+        String::new(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    update_inventory_location(
+        "owner-token".into(),
+        id.clone(),
+        "Renamed".into(),
+        "shelf".into(),
+        "".into(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    let listed = list_inventory_locations("owner-token".into(), app.state())
+        .await
+        .unwrap();
+    let loc = listed.iter().find(|l| l.id == id).unwrap();
+    assert_eq!(loc.name, "Renamed");
+    assert_eq!(loc.location_type, "shelf");
+}
+
+#[tokio::test]
+async fn cashier_cannot_update_location() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_cashier_user(&conn);
+    let state = scoped_state_with_token(
+        conn,
+        "cashier-token",
+        "user-cashier",
+        "role-lite",
+        "store-cashier",
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // First create a location as owner to have something to update.
+    let owner_conn = oz_core::migrations::fresh_db();
+    seed_owner_user(&owner_conn);
+    let owner_state = scoped_state_with_token(
+        owner_conn,
+        "owner-token",
+        "user-owner",
+        "role-owner",
+        "store-owner",
+    );
+    let owner_app = tauri::test::mock_builder()
+        .manage(owner_state)
+        .build(tauri::generate_context!())
+        .unwrap();
+    let id = create_inventory_location(
+        "owner-token".into(),
+        "Target".into(),
+        "warehouse".into(),
+        String::new(),
+        owner_app.state(),
+    )
+    .await
+    .unwrap();
+
+    let result = update_inventory_location(
+        "cashier-token".into(),
+        id,
+        "Hacked".into(),
+        "warehouse".into(),
+        "".into(),
+        app.state(),
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+}
+
+// ── SHIFT-01: inventory shift lifecycle ────────────────────────────
+
+#[tokio::test]
+async fn owner_can_start_and_end_inventory_shift() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner_user(&conn);
+    let state = scoped_state_with_token(
+        conn,
+        "owner-token",
+        "user-owner",
+        "role-owner",
+        "store-owner",
+    );
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Create a location first.
+    let loc_id = create_inventory_location(
+        "owner-token".into(),
+        "Warehouse".into(),
+        "warehouse".into(),
+        String::new(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    // Start shift.
+    let shift = start_inventory_shift(
+        "owner-token".into(),
+        loc_id,
+        "Morning count".into(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert!(!shift.id.is_empty());
+
+    // Active shift should exist.
+    let active = get_active_inventory_shift("owner-token".into(), app.state())
+        .await
+        .unwrap();
+    assert!(active.is_some());
+    assert_eq!(active.unwrap().id, shift.id);
+
+    // End shift.
+    end_inventory_shift("owner-token".into(), shift.id, app.state())
+        .await
+        .unwrap();
+
+    // No active shift after ending.
+    let after = get_active_inventory_shift("owner-token".into(), app.state())
+        .await
+        .unwrap();
+    assert!(after.is_none());
+}
+
+// ── THRESHOLD-01: stock threshold management ───────────────────────
+
+#[tokio::test]
+async fn owner_can_set_and_list_stock_thresholds() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner_user(&conn);
+
+    let state = scoped_state_with_token(
+        conn,
+        "owner-token",
+        "user-owner",
+        "role-owner",
+        "store-owner",
+    );
+
+    // Create a product in the store-DB managed by db_manager (not the
+    // raw conn) because set_stock_threshold opens the store via
+    // db_manager.open_store("store-owner").
+    let product_id = {
+        let store_db_arc = state.db_manager.open_store("store-owner").unwrap();
+        let db = store_db_arc.lock().unwrap();
+        let store = Store::new(&db);
+        let p = store
+            .create_product("WG-001", "Widget", price(1000), None, None, 0, None)
+            .unwrap();
+        p.id.clone()
+    };
+
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // stock_thresholds.product_id is a UUID FK — pass the real id, not SKU.
+    set_stock_threshold(
+        "owner-token".into(),
+        product_id.clone(),
+        None,
+        5,
+        true,
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    let thresholds = get_stock_thresholds("owner-token".into(), None, app.state())
+        .await
+        .unwrap();
+    assert!(!thresholds.is_empty());
 }
