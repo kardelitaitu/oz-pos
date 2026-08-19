@@ -32,7 +32,7 @@
 | Components WITH Tests | ~91 |
 | **Components WITHOUT Tests** | **0** |
 | Hooks Without Tests | **0** |
-| API Contract Tests Missing | ~15 modules (14 new files added) |
+| API Contract Tests Missing | ~10 modules (19 new files added) |
 
 ---
 
