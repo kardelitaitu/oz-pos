@@ -60,7 +60,7 @@ describe('inventoryCounts.ts API contract', () => {
   });
 
   it('updateCountLine calls correct command', async () => {
-    const args = { lineId: 'line1', countedQty: 12 };
+    const args = { lineId: 'line1', countedQty: 12, notes: 'counted manually' };
     mockInvoke.mockResolvedValue(undefined);
     await updateCountLine(TOKEN, args);
     expect(mockInvoke).toHaveBeenCalledWith('update_count_line_scoped', {
@@ -71,19 +71,19 @@ describe('inventoryCounts.ts API contract', () => {
 
   it('removeCountLine calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await removeCountLine(TOKEN, 'line1');
+    await removeCountLine(TOKEN, { lineId: 'line1' });
     expect(mockInvoke).toHaveBeenCalledWith('remove_count_line_scoped', {
       sessionToken: TOKEN,
-      lineId: 'line1',
+      args: { lineId: 'line1' },
     });
   });
 
   it('completeStockCount calls correct command', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await completeStockCount(TOKEN, 'sc1');
+    await completeStockCount(TOKEN, { countId: 'sc1' });
     expect(mockInvoke).toHaveBeenCalledWith('complete_stock_count_scoped', {
       sessionToken: TOKEN,
-      countId: 'sc1',
+      args: { countId: 'sc1' },
     });
   });
 

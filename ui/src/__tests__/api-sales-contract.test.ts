@@ -1,14 +1,7 @@
-// ── IPC contract tests for sales.ts ───────────────────────────
-//
-// Verifies that every exported function calls loggedInvoke with the
-// correct IPC command name and argument shape. This prevents silent
-// drift when the Rust command names change.
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CartId } from '@/types/domain';
 
 const mockInvoke = vi.fn();
-
 vi.mock('@/utils/logged-invoke', () => ({
   loggedInvoke: (...args: unknown[]) => mockInvoke(...args),
 }));
@@ -40,14 +33,14 @@ describe('sales.ts API contract', () => {
 
   it('startSale calls correct command', async () => {
     mockInvoke.mockResolvedValue({ saleId: 's1', cartId: 'c1' });
-    await startSale({ userId: 'u1' });
-    expect(mockInvoke).toHaveBeenCalledWith('start_sale', { args: { userId: 'u1' } });
+    await startSale({ currency: 'IDR' });
+    expect(mockInvoke).toHaveBeenCalledWith('start_sale', { args: { currency: 'IDR' } });
   });
 
   it('startSaleScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue({ saleId: 's1', cartId: 'c1' });
-    await startSaleScoped('tok', { userId: 'u1' });
-    expect(mockInvoke).toHaveBeenCalledWith('start_sale_scoped', { sessionToken: 'tok', args: { userId: 'u1' } });
+    await startSaleScoped('tok', { currency: 'IDR' });
+    expect(mockInvoke).toHaveBeenCalledWith('start_sale_scoped', { sessionToken: 'tok', args: { currency: 'IDR' } });
   });
 
   it('addLine calls correct command', async () => {
@@ -76,20 +69,20 @@ describe('sales.ts API contract', () => {
 
   it('holdCart calls correct command', async () => {
     mockInvoke.mockResolvedValue({ id: 'held-1' });
-    await holdCart({ cartId: 'c1' as CartId });
-    expect(mockInvoke).toHaveBeenCalledWith('hold_cart', { args: { cartId: 'c1' } });
+    await holdCart({ label: 'My Table', cart_data: '{}', item_count: 2, total_minor: 5000, currency: 'IDR' });
+    expect(mockInvoke).toHaveBeenCalledWith('hold_cart', { args: { label: 'My Table', cart_data: '{}', item_count: 2, total_minor: 5000, currency: 'IDR' } });
   });
 
   it('holdCartScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue({ id: 'held-1' });
-    await holdCartScoped('tok', { cartId: 'c1' as CartId });
-    expect(mockInvoke).toHaveBeenCalledWith('hold_cart_scoped', { sessionToken: 'tok', args: { cartId: 'c1' } });
+    await holdCartScoped('tok', { label: 'Table 2', cart_data: '{}', item_count: 1, total_minor: 3000, currency: 'IDR' });
+    expect(mockInvoke).toHaveBeenCalledWith('hold_cart_scoped', { sessionToken: 'tok', args: { label: 'Table 2', cart_data: '{}', item_count: 1, total_minor: 3000, currency: 'IDR' } });
   });
 
   it('voidSale calls correct command', async () => {
     mockInvoke.mockResolvedValue({ voided: true });
-    await voidSale({ saleId: 's1', reason: 'Damaged' });
-    expect(mockInvoke).toHaveBeenCalledWith('void_sale', { args: { saleId: 's1', reason: 'Damaged' } });
+    await voidSale({ saleId: 's1', userId: 'u1', reason: 'Damaged' });
+    expect(mockInvoke).toHaveBeenCalledWith('void_sale', { args: { saleId: 's1', userId: 'u1', reason: 'Damaged' } });
   });
 
   it('voidSaleScoped calls correct command', async () => {
@@ -99,9 +92,9 @@ describe('sales.ts API contract', () => {
   });
 
   it('processRefund calls correct command', async () => {
-    mockInvoke.mockResolvedValue({ refunded: true });
-    await processRefund({ saleId: 's1', amountMinor: 1000, reason: 'Customer request' });
-    expect(mockInvoke).toHaveBeenCalledWith('process_refund', { args: { saleId: 's1', amountMinor: 1000, reason: 'Customer request' } });
+    mockInvoke.mockResolvedValue({ refundId: 'r1' });
+    await processRefund({ saleId: 's1', userId: 'u1', reason: 'Wrong item', lines: [] });
+    expect(mockInvoke).toHaveBeenCalledWith('process_refund', { args: { saleId: 's1', userId: 'u1', reason: 'Wrong item', lines: [] } });
   });
 
   it('listSales calls correct command (no args)', async () => {
@@ -142,6 +135,6 @@ describe('sales.ts API contract', () => {
 
   it('propagates errors', async () => {
     mockInvoke.mockRejectedValue(new Error('cart not found'));
-    await expect(startSale({ userId: 'u1' })).rejects.toThrow('cart not found');
+    await expect(startSale({ currency: 'IDR' })).rejects.toThrow('cart not found');
   });
 });

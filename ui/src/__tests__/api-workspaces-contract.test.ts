@@ -17,10 +17,16 @@ describe('workspaces.ts API contract', () => {
     vi.clearAllMocks();
   });
 
-  it('resolveBootStore calls correct command (no args)', async () => {
+  it('resolveBootStore calls correct command', async () => {
     mockInvoke.mockResolvedValue({ id: 'ws1', name: 'Default' });
+    await resolveBootStore('device-1');
+    expect(mockInvoke).toHaveBeenCalledWith('resolve_boot_store', { deviceId: 'device-1' });
+  });
+
+  it('resolveBootStore with no args defaults to null', async () => {
+    mockInvoke.mockResolvedValue({ id: 'ws1' });
     await resolveBootStore();
-    expect(mockInvoke).toHaveBeenCalledWith('resolve_boot_store');
+    expect(mockInvoke).toHaveBeenCalledWith('resolve_boot_store', { deviceId: null });
   });
 
   it('listWorkspacesScoped calls correct command', async () => {
@@ -31,14 +37,14 @@ describe('workspaces.ts API contract', () => {
 
   it('listWorkspaceScreensScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listWorkspaceScreensScoped('tok');
-    expect(mockInvoke).toHaveBeenCalledWith('list_workspace_screens_scoped', { sessionToken: 'tok' });
+    await listWorkspaceScreensScoped('tok', 'pos');
+    expect(mockInvoke).toHaveBeenCalledWith('list_workspace_screens_scoped', { sessionToken: 'tok', typeKey: 'pos' });
   });
 
-  it('listWorkspaces calls correct command (no args)', async () => {
+  it('listWorkspaces calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listWorkspaces();
-    expect(mockInvoke).toHaveBeenCalledWith('list_workspaces');
+    await listWorkspaces('ticket-1', 'store-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_workspaces', { ticket: 'ticket-1', storeId: 'store-1' });
   });
 
   it('propagates errors', async () => {

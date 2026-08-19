@@ -47,10 +47,10 @@ describe('giftCards.ts API contract', () => {
   });
 
   it('getGiftCardBalance calls correct command', async () => {
-    mockInvoke.mockResolvedValue({ card_number: 'GC-001', balance: 50000 });
+    mockInvoke.mockResolvedValue({ balance_minor: 50000, currency: 'IDR', status: 'active' });
     const result = await getGiftCardBalance('GC-001');
     expect(mockInvoke).toHaveBeenCalledWith('get_gift_card_balance', { cardNumberOrId: 'GC-001' });
-    expect(result?.balance).toBe(50000);
+    expect(result?.balance_minor).toBe(50000);
   });
 
   it('redeemGiftCard calls correct command', async () => {

@@ -177,11 +177,12 @@ describe('reports.ts API contract', () => {
 
   it('getInventoryTurnover calls correct command', async () => {
     mockInvoke.mockResolvedValue({});
-    await getInventoryTurnover(START, END, TOKEN);
+    await getInventoryTurnover(START, END, TOKEN, 'loc-1');
     expect(mockInvoke).toHaveBeenCalledWith('get_inventory_turnover_scoped', {
       sessionToken: TOKEN,
       startDate: START,
       endDate: END,
+      locationId: 'loc-1',
     });
   });
 

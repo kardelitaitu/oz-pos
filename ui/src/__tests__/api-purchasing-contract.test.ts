@@ -27,15 +27,15 @@ describe('purchasing.ts API contract', () => {
   });
 
   it('createSupplier calls correct command', async () => {
-    const args = { name: 'PT Supplier', contact_name: 'Budi', email: 'budi@pt.com' };
-    mockInvoke.mockResolvedValue({ id: 'sup1', ...args });
+    const args = { code: 'SUP-001', name: 'PT Supplier', contact_person: 'Budi', email: 'budi@pt.com' };
+    mockInvoke.mockResolvedValue({ id: 'sup1', ...args, phone: null, address: null, tax_id: null, payment_terms: null, notes: null });
     const result = await createSupplier(args);
     expect(mockInvoke).toHaveBeenCalledWith('create_supplier', { args });
     expect(result.id).toBe('sup1');
   });
 
   it('updateSupplier calls correct command', async () => {
-    const args = { id: 'sup1', name: 'Updated Supplier' };
+    const args = { id: 'sup1', code: 'SUP-001', name: 'Updated Supplier' };
     mockInvoke.mockResolvedValue(args);
     await updateSupplier(args);
     expect(mockInvoke).toHaveBeenCalledWith('update_supplier', { args });
@@ -57,11 +57,9 @@ describe('purchasing.ts API contract', () => {
     const args = {
       po_number: 'PO-001',
       supplier_id: 'sup1',
-      expected_date: '2026-09-01',
-      notes: 'Urgent',
-      lines: [{ sku: 'SKU-001', qty: 10, unit_cost_minor: 5000 }],
+      lines: [{ sku: 'SKU-001', product_name: 'Widget', qty: 10, unit_cost_minor: 5000 }],
     };
-    mockInvoke.mockResolvedValue({ id: 'po1', ...args });
+    mockInvoke.mockResolvedValue({ id: 'po1', ...args, status: 'draft', created_at: '2026-01-01' });
     const result = await createPurchaseOrder(args);
     expect(mockInvoke).toHaveBeenCalledWith('create_purchase_order', { args });
     expect(result.id).toBe('po1');

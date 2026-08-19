@@ -23,16 +23,9 @@ describe('stockTransfers.ts API contract', () => {
   });
 
   it('createStockTransfer calls correct command', async () => {
+    const lines = [{ id: 'l1', transfer_id: 'st1', sku: 'SKU-1', product_name: 'Widget', qty: 5, received_qty: 0 }];
     mockInvoke.mockResolvedValue({ id: 'st1', status: 'draft' });
-    const result = await createStockTransfer(
-      TOKEN,
-      'loc-src',
-      'loc-dst',
-      'term-1',
-      'term-2',
-      'test transfer',
-      [{ sku: 'SKU-1', qty: 5 }]
-    );
+    const result = await createStockTransfer(TOKEN, 'loc-src', 'loc-dst', 'term-1', 'term-2', 'test transfer', lines);
     expect(mockInvoke).toHaveBeenCalledWith('create_stock_transfer_scoped', {
       sessionToken: TOKEN,
       sourceLocation: 'loc-src',
@@ -40,7 +33,7 @@ describe('stockTransfers.ts API contract', () => {
       sourceTerminalId: 'term-1',
       destinationTerminalId: 'term-2',
       notes: 'test transfer',
-      lines: [{ sku: 'SKU-1', qty: 5 }],
+      lines,
     });
     expect(result.id).toBe('st1');
   });

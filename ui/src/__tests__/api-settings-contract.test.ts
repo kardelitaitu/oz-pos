@@ -23,16 +23,16 @@ describe('settings.ts API contract', () => {
   });
 
   it('getReceiptSettings calls correct command (no args)', async () => {
-    mockInvoke.mockResolvedValue({ header: 'Store', footer: 'Thanks' });
+    mockInvoke.mockResolvedValue({ showCurrency: true, decimalSeparator: '.', showTax: true, footer: 'Thanks', paperWidth: '80mm', showTableNumber: true, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 });
     await getReceiptSettings();
     expect(mockInvoke).toHaveBeenCalledWith('get_receipt_settings');
   });
 
   it('setReceiptSettings calls correct command', async () => {
-    const args = { header: 'Updated', footer: 'Thank you' };
+    const args = { showCurrency: true, decimalSeparator: '.', showTax: true, footer: 'Thank you', paperWidth: '80mm', showTableNumber: true, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 };
     mockInvoke.mockResolvedValue(undefined);
-    await setReceiptSettings(args);
-    expect(mockInvoke).toHaveBeenCalledWith('set_receipt_settings', { args });
+    await setReceiptSettings(args, 'u1');
+    expect(mockInvoke).toHaveBeenCalledWith('set_receipt_settings', { args, userId: 'u1' });
   });
 
   it('getStoreSettings calls correct command (no args)', async () => {
@@ -57,8 +57,8 @@ describe('settings.ts API contract', () => {
   it('setCreditSettings calls correct command', async () => {
     const args = { enabled: false, reminderIntervalHours: 48, maxLimitMinor: 1000000 };
     mockInvoke.mockResolvedValue(undefined);
-    await setCreditSettings(args);
-    expect(mockInvoke).toHaveBeenCalledWith('set_credit_settings', { args });
+    await setCreditSettings(args, 'u1');
+    expect(mockInvoke).toHaveBeenCalledWith('set_credit_settings', { args, userId: 'u1' });
   });
 
   it('getStoreSettingsScoped calls correct command', async () => {

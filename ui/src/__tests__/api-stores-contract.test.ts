@@ -40,15 +40,15 @@ describe('stores.ts API contract', () => {
   });
 
   it('createStore calls correct command', async () => {
-    const args = { name: 'New Store', address: '123 Main St' };
-    mockInvoke.mockResolvedValue({ id: 's2', ...args });
+    const args = { id: 's2', name: 'New Store', address: '123 Main St', tax_id: '123', currency: 'IDR', timezone: 'Asia/Jakarta' };
+    mockInvoke.mockResolvedValue({ ...args });
     const result = await createStore(args);
     expect(mockInvoke).toHaveBeenCalledWith('create_store_profile', { args });
     expect(result.id).toBe('s2');
   });
 
   it('updateStore calls correct command', async () => {
-    const args = { id: 's1', name: 'Updated Store' };
+    const args = { id: 's1', name: 'Updated Store', address: '456 New', tax_id: '456', currency: 'IDR', timezone: 'Asia/Jakarta' };
     mockInvoke.mockResolvedValue(args);
     await updateStore(args);
     expect(mockInvoke).toHaveBeenCalledWith('update_store_profile', { args });

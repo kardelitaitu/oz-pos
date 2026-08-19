@@ -25,7 +25,7 @@ describe('bundles.ts API contract', () => {
       name: 'Drink Combo',
       items: [{ sku: 'COKE', qty: 2 }],
     };
-    const bundleWithItems = { bundle: { id: 'b1', ...args, bundle_price_minor: null, currency: 'IDR' }, items: args.items };
+    const bundleWithItems = { bundle: { id: 'b1', ...args, bundle_price_minor: null, currency: 'IDR', description: '', active: true, created_at: '2026-01-01', updated_at: '2026-01-01' }, items: args.items };
     mockInvoke.mockResolvedValue(bundleWithItems);
     const result = await createBundle(args);
     expect(mockInvoke).toHaveBeenCalledWith('create_bundle', { args });
@@ -51,7 +51,7 @@ describe('bundles.ts API contract', () => {
   });
 
   it('updateBundle calls correct command', async () => {
-    const bundleWithItems = { bundle: { id: 'b1', bundle_sku: 'B-001', name: 'Updated', bundle_price_minor: null, currency: 'IDR' }, items: [] };
+    const bundleWithItems = { bundle: { id: 'b1', bundle_sku: 'B-001', name: 'Updated', bundle_price_minor: null, currency: 'IDR', description: '', active: true, created_at: '2026-01-01', updated_at: '2026-01-01' }, items: [] };
     mockInvoke.mockResolvedValue(bundleWithItems);
     await updateBundle(bundleWithItems);
     expect(mockInvoke).toHaveBeenCalledWith('update_bundle', { bundle: bundleWithItems });

@@ -24,24 +24,28 @@ describe('tables.ts API contract', () => {
     vi.clearAllMocks();
   });
 
-  const table = { id: 't1', name: 'Table 1', capacity: 4, pos_x: 100, pos_y: 200, shape: 'rect', width: 80, height: 60, status: 'available', active_sale_id: null };
+  const table = {
+    id: 't1', name: 'Table 1', capacity: 4, pos_x: 100, pos_y: 200,
+    shape: 'rect', width: 80, height: 60, status: 'available',
+    active_sale_id: null, section: 'main', active: true, sort_order: 1,
+  };
 
   it('listTables calls correct command (no args)', async () => {
     mockInvoke.mockResolvedValue([]);
     await listTables();
-    expect(mockInvoke).toHaveBeenCalledWith('list_tables');
+    expect(mockInvoke).toHaveBeenCalledWith('list_tables', { section: null });
   });
 
   it('listTablesScoped calls correct command', async () => {
     mockInvoke.mockResolvedValue([]);
     await listTablesScoped(TOKEN);
-    expect(mockInvoke).toHaveBeenCalledWith('list_tables_scoped', { sessionToken: TOKEN });
+    expect(mockInvoke).toHaveBeenCalledWith('list_tables_scoped', { sessionToken: TOKEN, section: null });
   });
 
   it('createTable calls correct command', async () => {
     mockInvoke.mockResolvedValue(table);
     const result = await createTable(USER_ID, table);
-    expect(mockInvoke).toHaveBeenCalledWith('create_table', { userId: USER_ID, table });
+    expect(mockInvoke).toHaveBeenCalledWith('create_table', { userId: USER_ID, args: table });
     expect(result.id).toBe('t1');
   });
 

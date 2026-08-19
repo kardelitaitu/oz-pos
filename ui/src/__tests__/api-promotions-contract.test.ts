@@ -20,13 +20,20 @@ describe('promotions.ts API contract', () => {
   const TOKEN = 'tok_promo';
   const USER_ID = 'u1';
 
+  const promo = {
+    id: 'promo1', name: 'Summer Sale', description: 'Big sale', promo_type: 'percentage',
+    value_minor: 1000, min_qty: null, trigger_sku: null, reward_sku: null, reward_qty: null,
+    starts_at: null, ends_at: null, min_order_minor: 0, category_id: null,
+    active: true, created_at: '2026-01-01', updated_at: '2026-01-01',
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('createPromotion calls correct command', async () => {
     const args = { name: 'Summer Sale', promo_type: 'percentage', value_minor: 1000 };
-    mockInvoke.mockResolvedValue({ id: 'promo1', ...args });
+    mockInvoke.mockResolvedValue(promo);
     const result = await createPromotion(USER_ID, args);
     expect(mockInvoke).toHaveBeenCalledWith('create_promotion', { userId: USER_ID, args });
     expect(result.id).toBe('promo1');
@@ -34,7 +41,7 @@ describe('promotions.ts API contract', () => {
 
   it('createPromotionScoped calls correct command', async () => {
     const args = { name: 'Scoped Promo', promo_type: 'fixed', value_minor: 5000 };
-    mockInvoke.mockResolvedValue({ id: 'promo2', ...args });
+    mockInvoke.mockResolvedValue({ ...promo, name: 'Scoped Promo' });
     await createPromotionScoped(TOKEN, args);
     expect(mockInvoke).toHaveBeenCalledWith('create_promotion_scoped', {
       sessionToken: TOKEN,
@@ -57,7 +64,6 @@ describe('promotions.ts API contract', () => {
   });
 
   it('updatePromotion calls correct command', async () => {
-    const promo = { id: 'promo1', name: 'Updated', promo_type: 'percentage', value_minor: 2000 };
     mockInvoke.mockResolvedValue(promo);
     await updatePromotion(USER_ID, promo);
     expect(mockInvoke).toHaveBeenCalledWith('update_promotion', { userId: USER_ID, promotion: promo });
