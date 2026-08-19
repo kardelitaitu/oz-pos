@@ -247,3 +247,68 @@ async fn scoped_transfer_denies_user_without_transfer_permission() {
     let result = list_stock_transfers_scoped("cashier-transfer-token".into(), app.state()).await;
     assert!(matches!(result, Err(AppError::PermissionDenied(_))));
 }
+
+// ── Additional CRUD tests ────────────────────────────────────────
+
+use tauri::Manager as _;
+
+#[tokio::test]
+async fn scoped_list_stock_transfers_rejects_invalid_token() {
+    let conn = oz_core::migrations::fresh_db();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut state = AppState::for_test_with_conn(conn);
+    state.db_manager =
+        platform_core::StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = list_stock_transfers_scoped("bad-token".into(), app.state()).await;
+    assert!(matches!(result, Err(AppError::InvalidSession)));
+}
+
+#[tokio::test]
+async fn scoped_get_stock_transfer_rejects_invalid_token() {
+    let conn = oz_core::migrations::fresh_db();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut state = AppState::for_test_with_conn(conn);
+    state.db_manager =
+        platform_core::StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = get_stock_transfer_scoped("bad-token".into(), "any-id".into(), app.state()).await;
+    assert!(matches!(result, Err(AppError::InvalidSession)));
+}
+
+#[tokio::test]
+async fn scoped_list_stock_transfers_empty() {
+    let app = scoped_test_app();
+    let result = list_stock_transfers_scoped("transfer-token".into(), app.state()).await;
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn scoped_list_in_transit_transfers_empty() {
+    let app = scoped_test_app();
+    let result = list_in_transit_transfers_scoped("transfer-token".into(), app.state()).await;
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn scoped_get_stock_transfer_not_found() {
+    let app = scoped_test_app();
+    let result = get_stock_transfer_scoped(
+        "transfer-token".into(),
+        "nonexistent".into(),
+        app.state(),
+    )
+    .await;
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_none());
+}
