@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { NODE_HEIGHT, NODE_WIDTH } from '../features/stores/nodeTopologyClamp';
-import { pointUnderCards, wireUnderCardSegments } from '../features/stores/topologyWireGeometry';
+import {
+  cubicBezier,
+  pointUnderCards,
+  polylinePoint,
+  wireUnderCardSegments,
+} from '../features/stores/topologyWireGeometry';
 
 /** A horizontal store→warehouse wire at port height (NODE_PORT_Y = 224). */
 function horizontalWire(y = 140) {
@@ -144,5 +149,99 @@ describe('pointUnderCards', () => {
 
   it('handles multiple boxes', () => {
     expect(pointUnderCards({ x: 500, y: 364 }, [{ x: 80, y: 140 }, { x: 380, y: 260 }])).toBe(true);
+  });
+});
+
+/* ── polylinePoint ───────────────────────────────────────────────── */
+
+describe('polylinePoint', () => {
+  it('returns the first point for fewer than 2 vertices', () => {
+    expect(polylinePoint([], 0.5)).toEqual({ x: 0, y: 0 });
+    expect(polylinePoint([[10, 20]], 0.5)).toEqual({ x: 10, y: 20 });
+  });
+
+  it('returns the first vertex at t=0', () => {
+    expect(polylinePoint([[10, 20], [50, 80]], 0)).toEqual({ x: 10, y: 20 });
+  });
+
+  it('returns the last vertex at t=1', () => {
+    expect(polylinePoint([[10, 20], [50, 80]], 1)).toEqual({ x: 50, y: 80 });
+  });
+
+  it('interpolates along a single horizontal segment weighted by Manhattan distance', () => {
+    // Horizontal segment 40px long. t=0.5 → halfway = 10 + 20 = 30.
+    expect(polylinePoint([[10, 20], [50, 20]], 0.5)).toEqual({ x: 30, y: 20 });
+  });
+
+  it('interpolates along a single vertical segment', () => {
+    // Vertical segment 60px long. t=0.5 → halfway = 20 + 30 = 50.
+    expect(polylinePoint([[10, 20], [10, 80]], 0.5)).toEqual({ x: 10, y: 50 });
+  });
+
+  it('distributes t across unequal segments by Manhattan length', () => {
+    // Two segments: (0,0)→(0, 100) = 100px, then (0,100)→(100,100) = 100px.
+    // Total = 200. t=0.25 → 25% of 200 = 50px → halfway through first segment
+    // (0, 50). t=0.75 → 75% of 200 = 150px → 100 + 50 = halfway through second
+    // segment (50, 100).
+    const pts: Array<[number, number]> = [[0, 0], [0, 100], [100, 100]];
+    expect(polylinePoint(pts, 0.25)).toEqual({ x: 0, y: 50 });
+    expect(polylinePoint(pts, 0.75)).toEqual({ x: 50, y: 100 });
+  });
+
+  it('handles a degenerate polyline (all points the same)', () => {
+    const pts: Array<[number, number]> = [[10, 20], [10, 20], [10, 20]];
+    expect(polylinePoint(pts, 0)).toEqual({ x: 10, y: 20 });
+    expect(polylinePoint(pts, 0.5)).toEqual({ x: 10, y: 20 });
+    expect(polylinePoint(pts, 1)).toEqual({ x: 10, y: 20 });
+  });
+
+  it('clamps the last segment boundary at the total length', () => {
+    // Single segment: total = 100. t=0.99 → 99px → (0 + 99/100 * 100, 0) = (99, 0).
+    expect(polylinePoint([[0, 0], [100, 0]], 0.99)).toEqual({ x: 99, y: 0 });
+  });
+});
+
+/* ── cubicBezier ─────────────────────────────────────────────────── */
+
+describe('cubicBezier', () => {
+  it('returns p0 at t=0', () => {
+    expect(cubicBezier(0, 10, 30, 50, 200)).toBe(10);
+  });
+
+  it('returns p3 at t=1', () => {
+    expect(cubicBezier(1, 10, 30, 50, 200)).toBe(200);
+  });
+
+  it('evaluates the midpoint correctly', () => {
+    // (p0 + 3p1 + 3p2 + p3) / 8 = (10 + 90 + 150 + 200) / 8 = 450/8 = 56.25
+    expect(cubicBezier(0.5, 10, 30, 50, 200)).toBeCloseTo(56.25, 5);
+  });
+
+  it('is constant when all control points are equal', () => {
+    expect(cubicBezier(0, 42, 42, 42, 42)).toBe(42);
+    expect(cubicBezier(0.5, 42, 42, 42, 42)).toBe(42);
+    expect(cubicBezier(1, 42, 42, 42, 42)).toBe(42);
+  });
+
+  it('interpolates at t=0.25', () => {
+    // u = 0.75: u³·p0 + 3u²t·p1 + 3ut²·p2 + t³·p3
+    // = 0.421875·0 + 3·0.5625·0.25·0 + 3·0.75·0.0625·0 + 0.015625·100
+    // = 1.5625
+    expect(cubicBezier(0.25, 0, 0, 0, 100)).toBeCloseTo(1.5625, 4);
+  });
+
+  it('interpolates at t=0.75', () => {
+    // u = 0.25: u³·p0 + 3u²t·p1 + 3ut²·p2 + t³·p3
+    // = 0.015625·0 + 3·0.0625·0.75·0 + 3·0.25·0.5625·100 + 0.421875·100
+    // = 42.1875 + 42.1875 = 84.375. NOTE: (0, 0, 100, 100) is NOT a
+    // straight line — a linear ramp needs p1 = 33⅓ and p2 = 66⅔.
+    expect(cubicBezier(0.75, 0, 0, 100, 100)).toBeCloseTo(84.375, 5);
+  });
+
+  it('evaluates the linear-ramp control set exactly', () => {
+    // p0 = 0, p1 = 33⅓, p2 = 66⅔, p3 = 100 → the curve IS the line y = 100t.
+    expect(cubicBezier(0.25, 0, 100 / 3, 200 / 3, 100)).toBeCloseTo(25, 4);
+    expect(cubicBezier(0.5, 0, 100 / 3, 200 / 3, 100)).toBeCloseTo(50, 4);
+    expect(cubicBezier(0.75, 0, 100 / 3, 200 / 3, 100)).toBeCloseTo(75, 4);
   });
 });
