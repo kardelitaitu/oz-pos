@@ -25,6 +25,7 @@ import { Button } from '@/components/Button';
 import { Spinner } from '@/components/Spinner';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { minorUnitExponent } from '@/types/domain';
+import { buildCsv, downloadCsv } from './csv';
 import './MenuEngineeringScreen.css';
 
 const QUADRANT_META: Record<
@@ -242,7 +243,6 @@ export default function MenuEngineeringScreen() {
     return Math.max(...result.rows.map((r) => r.total_margin_minor), result.median_margin) * 1.15;
   }, [result]);
 
-  // Recommendation text for a quadrant.
   // ── CSV Export ──────────────────────────────────────────────────────
   const exportCsv = () => {
     if (!result) return;
@@ -251,7 +251,7 @@ export default function MenuEngineeringScreen() {
       'Unit Price', 'Unit Cost', 'Quadrant', 'Recommendation',
     ];
     const rows = rowsWithMeta.map((r) => [
-      `"${r.name}"`,
+      r.name,
       r.sku,
       String(r.total_volume),
       fmtCurrency(r.total_revenue_minor, currency),
@@ -260,17 +260,10 @@ export default function MenuEngineeringScreen() {
       fmtCurrency(r.unit_price_minor, currency),
       fmtCurrency(r.unit_cost_minor, currency),
       r.quadrant,
-      `"${recommendation(r.quadrant)}"`,
+      recommendation(r.quadrant),
     ]);
-    const bom = '\uFEFF';
-    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `menu-engineering-${startDate}-${endDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const csv = buildCsv(headers, rows);
+    downloadCsv(csv, `menu-engineering-${startDate}-${endDate}.csv`);
   };
 
   function recKey(q: MenuQuadrant): string {

@@ -300,14 +300,15 @@ describe('InventoryReportScreen', () => {
       reader.onerror = () => reject(reader.error);
       reader.readAsText(blob);
     });
-    // Header line is unquoted; data cells are quoted.
+    // Header line is unquoted; data cells containing special chars are quoted per RFC 4180.
     expect(text).toContain('Threshold,Unit Price,Unit Cost,Unit Margin,Margin,Stock Value');
     // Price $15.00, cost $9.00, unit margin $6.00, margin 40.0%, stock value $45.00
     // (id-ID locale renders decimals with commas: "$ 15,00").
+    // Fields with commas (currency values) are quoted; Margin (40.0%) has no special chars, so unquoted.
     expect(text).toContain('"$ 15,00"');
     expect(text).toContain('"$ 9,00"');
     expect(text).toContain('"$ 6,00"');
-    expect(text).toContain('"40.0%"');
+    expect(text).toContain('40.0%'); // unquoted - no comma/quote/newline
     expect(text).toContain('"$ 45,00"');
     createUrl.mockRestore();
     revokeUrl.mockRestore();

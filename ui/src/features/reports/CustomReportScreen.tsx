@@ -3,6 +3,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { buildCustomReport, type CustomReportRequest, type CustomReportResponse } from '@/api/reports';
+import { buildCsv, downloadCsv } from './csv';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './CustomReportScreen.css';
@@ -204,18 +205,8 @@ export default function CustomReportScreen() {
 
   const exportCsv = useCallback(() => {
     if (!result || result.rows.length === 0) return;
-    const bom = '\uFEFF';
-    const csv = [
-      result.columns.join(','),
-      ...result.rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
-    ].join('\n');
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `custom-report-${dataset}-${startDate}-${endDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const csv = buildCsv(result.columns, result.rows);
+    downloadCsv(csv, `custom-report-${dataset}-${startDate}-${endDate}.csv`);
   }, [result, dataset, startDate, endDate]);
 
   const hasResults = result && result.rows.length > 0;
