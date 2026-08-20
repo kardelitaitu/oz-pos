@@ -1,4 +1,23 @@
 
+## 2026-08-20 — TDD cycle: LazyBoundary first test coverage (UI)
+
+**Problem:** `LazyBoundary` — the shared Suspense wrapper for PERF-01 route-level code splitting, used ~30× across `AppShell` / `TabletAppShell` / widget hosts — had zero direct tests. Its fallback contract (default polite "Loading…" status region, custom fallback override, fallback→content swap on resolve) was only exercised implicitly through shell screens.
+
+**Solution:** Coverage cycle (existing behavior pinned; no production code change needed):
+- Wrote `ui/src/__tests__/LazyBoundary.test.tsx` with 4 tests using a manually-suspending component whose promise is resolved inside `act()` — no reliance on real dynamic imports:
+  1. Default fallback renders `Loading…` inside `role="status"` + `aria-live="polite"`.
+  2. Custom fallback (e.g. skeleton) replaces the default.
+  3. Non-suspending children render directly with no status region.
+  4. Resolving the suspense promise swaps fallback → content.
+
+**Verification:**
+- `npm run test -- src/__tests__/LazyBoundary.test.tsx` — 4/4 pass
+- Consumers (`AppShell`, `TabletAppShell`, `SalesDashboardScreen`) — 35/35 pass
+- `npm run lint` — my file clean
+- `npm run typecheck` — clean
+
+**Risks / follow-ups:** Remaining untested components: `Canvas{Heatmap,LineChart,PieChart}` drawing internals, `EmptyStateIllustrations`, `Localized` (re-export). The `Localized` re-export (`ui/src/components/Localized.tsx`) is a 1-line `export { Localized } from '@fluent/react'` — likely not worth a dedicated test file.
+
 ## 2026-08-20 — TDD cycle: AccessibleChartSummary direct unit tests + falsy-child fix (UI)
 
 **Problem:** The shared A11Y-09 primitive behind every canvas chart (`AccessibleChartSummary`) had no direct unit tests — only indirect coverage through the chart-level suites (`chartsA11y.test.tsx`). Its `hasItems` logic was also inconsistent: the array branch treated falsy-but-valid items correctly (`c !== null && c !== undefined`), but the single-child branch used `Boolean(children)`, which dropped valid ReactNodes like `0` or `''` from the accessibility tree.
