@@ -15,6 +15,7 @@ import { renderHook, act } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { useRetailColumnPrefs } from '@/features/retail/hooks/useRetailColumnPrefs';
 import { RETAIL_COLUMNS, RETAIL_COLUMN_DEFAULTS } from '@/features/retail/hooks/useRetailColumnPrefs';
+import * as settingsApi from '@/api/settings';
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -262,7 +263,8 @@ describe('useRetailColumnPrefs', () => {
     });
     expect(result.current.prefs.visibleColumns).toContain('barcode');
     expect(result.current.prefs.hideInactive).toBe(true);
-    const settingsMock = (await import('@/api/settings')) as { setUserPreferencesScoped: ReturnType<typeof vi.fn> };
-    expect(settingsMock.setUserPreferencesScoped).not.toHaveBeenCalled();
+    // The server write is mocked at module level; the static import above
+    // resolves to that mock, so we can assert it was never called.
+    expect(vi.mocked(settingsApi.setUserPreferencesScoped)).not.toHaveBeenCalled();
   });
 });

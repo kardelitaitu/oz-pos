@@ -213,10 +213,10 @@ describe('useSound', () => {
     act(() => { result.current.playSuccess(); });
     // Three oscillators for the three notes.
     expect(mockAudioCtx.createOscillator).toHaveBeenCalledTimes(3);
-    const freqs = mockAudioCtx.createOscillator.mock.results.map((r: { value: { frequency: { value: number } } }) => r.value.frequency.value);
+    const freqs = mockAudioCtx.createOscillator.mock.results.map((r) => r.value.frequency.value);
     expect(freqs).toEqual([523, 659, 784]);
     // Each oscillator uses a sine wave.
-    const types = mockAudioCtx.createOscillator.mock.results.map((r: { value: { type: string } }) => r.value.type);
+    const types = mockAudioCtx.createOscillator.mock.results.map((r) => r.value.type);
     expect(types).toEqual(['sine', 'sine', 'sine']);
   });
 
@@ -226,10 +226,10 @@ describe('useSound', () => {
     const { result } = renderSound();
     act(() => { result.current.playAlert(); });
     expect(mockAudioCtx.createOscillator).toHaveBeenCalledTimes(3);
-    const freqs = mockAudioCtx.createOscillator.mock.results.map((r: { value: { frequency: { value: number } } }) => r.value.frequency.value);
+    const freqs = mockAudioCtx.createOscillator.mock.results.map((r) => r.value.frequency.value);
     expect(freqs).toEqual([523, 659, 784]);
     // Alert uses square waves.
-    const types = mockAudioCtx.createOscillator.mock.results.map((r: { value: { type: string } }) => r.value.type);
+    const types = mockAudioCtx.createOscillator.mock.results.map((r) => r.value.type);
     expect(types).toEqual(['square', 'square', 'square']);
   });
 

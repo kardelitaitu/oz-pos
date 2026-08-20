@@ -58,7 +58,7 @@ describe('empty state illustration icons', () => {
     expect(svg!.getAttribute('viewBox')).toBe('0 0 48 48');
   });
 
-  it.each(ALL_ICONS)('%s accepts custom width and height', (name, Icon) => {
+  it.each(ALL_ICONS)('%s accepts custom width and height', (_name, Icon) => {
     const { container } = render(<Icon width={64} height={96} />);
     const svg = container.querySelector('svg')!;
     expect(svg.getAttribute('width')).toBe('64');

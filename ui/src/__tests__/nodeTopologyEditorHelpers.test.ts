@@ -84,7 +84,7 @@ describe('elbowPoints', () => {
       [10, 5, 0, 5],
       [-20, -20, 20, 20],
       [50, 50, 50, 50],
-    ]) {
+    ] as Array<[number, number, number, number]>) {
       expect(elbowPoints(x1, y1, x2, y2)).toHaveLength(4);
     }
   });
