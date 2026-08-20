@@ -1174,6 +1174,8 @@ pub async fn get_sale(pool: &Pool, tenant_id: &str, id: &str) -> Result<Option<S
         tender_rate_millionths: sale_row
             .try_get("tender_rate_millionths")
             .map_err(|e| PgError::Db(e.to_string()))?,
+        tip_minor: sale_row.try_get("tip_minor").unwrap_or(0),
+        service_charge_minor: sale_row.try_get("service_charge_minor").unwrap_or(0),
     };
 
     let line_rows = tx
