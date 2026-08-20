@@ -3148,3 +3148,64 @@ fn resolve_best_tax_rates_returns_empty_when_no_rates_exist() {
     // Assert: Empty vector should be returned
     assert!(rates.is_empty());
 }
+
+// ── Multi-terminal: list_sales_by_user ─────────────────────────
+
+#[test]
+fn list_sales_by_user_filters_correctly() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+    // Create 3 sales: 2 for user-alice, 1 for user-bob.
+    for (uid, i) in [("alice", 0u32), ("alice", 1), ("bob", 2)].iter() {
+        let sale = crate::Sale {
+            id: uuid::Uuid::now_v7().to_string(),
+            status: crate::SaleStatus::Completed,
+            total: crate::Money {
+                minor_units: 500,
+                currency: "USD".parse().unwrap(),
+            },
+            currency: "USD".parse().unwrap(),
+            line_count: 1,
+            payment_method: Some("cash".into()),
+            tendered_minor: Some(500),
+            discount_percent: 0,
+            discount_label: None,
+            user_id: Some(uid.to_string()),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            subtotal: crate::Money {
+                minor_units: 500,
+                currency: "USD".parse().unwrap(),
+            },
+            tax_total: crate::Money {
+                minor_units: 0,
+                currency: "USD".parse().unwrap(),
+            },
+            customer_id: None,
+            lines: vec![],
+            version: 1,
+        };
+        s.create_sale(&sale).unwrap();
+    }
+
+    // Filter by alice — should get 2.
+    let alice_sales = s.list_sales_by_user("alice").unwrap();
+    assert_eq!(alice_sales.len(), 2);
+    assert!(
+        alice_sales
+            .iter()
+            .all(|s| s.user_id.as_deref() == Some("alice"))
+    );
+
+    // Filter by bob — should get 1.
+    let bob_sales = s.list_sales_by_user("bob").unwrap();
+    assert_eq!(bob_sales.len(), 1);
+    assert_eq!(bob_sales[0].user_id.as_deref(), Some("bob"));
+
+    // Filter by unknown user — should get 0.
+    let unknown = s.list_sales_by_user("nobody").unwrap();
+    assert!(unknown.is_empty());
+}

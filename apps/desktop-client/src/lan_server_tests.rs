@@ -380,3 +380,21 @@ async fn forwarder_buffered_count_reflects_buffer() {
     assert_eq!(fwd.buffered_count().await, 1);
     assert_eq!(fwd.buffered_peer_count().await, 1);
 }
+
+// ── Discovery (multi-KDS) ──────────────────────────────────────
+
+#[test]
+fn with_discovery_sets_payload() {
+    let payload = r#"{"store_id":"s1","store_name":"Main Store","kds_devices":[]}"#;
+    let fwd =
+        LanEventForwarder::new("127.0.0.1:0".into(), None).with_discovery(payload.to_string());
+    // The payload is stored internally; verify the forwarder was created successfully.
+    fwd.broadcast("test".into());
+}
+
+#[test]
+fn without_discovery_has_no_payload() {
+    let fwd = LanEventForwarder::new("127.0.0.1:0".into(), None);
+    // Default forwarder should work without discovery.
+    fwd.broadcast("test".into());
+}

@@ -1,4 +1,5 @@
 use super::*;
+use oz_core::RegisterKdsDeviceInput;
 use oz_core::session::SessionContext;
 use oz_core::{CreateKdsOrderInput, Currency, Money, Sale, SaleStatus};
 use platform_core::StoreDatabaseManager;
@@ -535,4 +536,136 @@ async fn staff_can_update_kds_status() {
     )
     .await;
     assert!(result.is_ok(), "staff has KDS_UPDATE permission");
+}
+
+// ── Tests for kds_device.rs scoped commands ─────────────────────
+
+#[tokio::test]
+async fn register_kds_device_scoped_rejects_invalid_token() {
+    let conn = oz_core::migrations::fresh_db();
+    let state = scoped_state(conn, "tok", "u1", "r1", "s1", "kds-main");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = crate::commands::kds_device::register_kds_device_scoped(
+        "bad-token".into(),
+        RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hash-test".into(),
+            pairing_expires_at: "2099-01-01T00:00:00.000Z".into(),
+        },
+        app.state(),
+    )
+    .await;
+    assert!(result.is_err(), "invalid token should be rejected");
+}
+
+#[tokio::test]
+async fn register_and_list_kds_devices_scoped() {
+    let conn = oz_core::migrations::fresh_db();
+    // Seed a terminal for FK constraint.
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    // Seed owner.
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Register a device.
+    let reg_result = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Kitchen Screen".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec!["grill".into(), "bar".into()],
+            pairing_token_hash: "hash-test".into(),
+            pairing_expires_at: "2099-01-01T00:00:00.000Z".into(),
+        },
+        app.state(),
+    )
+    .await;
+    assert!(
+        reg_result.is_ok(),
+        "register should succeed: {:?}",
+        reg_result.err()
+    );
+
+    // List devices.
+    let list_result =
+        crate::commands::kds_device::list_kds_devices_scoped("tok".into(), app.state()).await;
+    assert!(list_result.is_ok(), "list should succeed");
+    let devices = list_result.unwrap();
+    assert_eq!(devices.len(), 1, "should have 1 device");
+    assert_eq!(devices[0].name, "Kitchen Screen");
+}
+
+#[tokio::test]
+async fn ack_kds_order_scoped_rejects_invalid_token() {
+    let conn = oz_core::migrations::fresh_db();
+    let state = scoped_state(conn, "tok", "u1", "r1", "s1", "kds-main");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = crate::commands::kds_device::ack_kds_order_scoped(
+        "bad-token".into(),
+        "some-order-id".into(),
+        "kds-device-1".into(),
+        app.state(),
+    )
+    .await;
+    assert!(result.is_err(), "invalid token should be rejected");
+}
+
+// ── Tests for kds_routing.rs scoped command ─────────────────────
+
+#[tokio::test]
+async fn resolve_kds_targets_scoped_rejects_invalid_token() {
+    let conn = oz_core::migrations::fresh_db();
+    let state = scoped_state(conn, "tok", "u1", "r1", "s1", "kds-main");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = crate::commands::kds_routing::resolve_kds_targets_scoped(
+        "bad-token".into(),
+        "sale-123".into(),
+        app.state(),
+    )
+    .await;
+    assert!(result.is_err(), "invalid token should be rejected");
+}
+
+#[tokio::test]
+async fn resolve_kds_targets_scoped_returns_empty_for_no_devices() {
+    let conn = oz_core::migrations::fresh_db();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "kds-main");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = crate::commands::kds_routing::resolve_kds_targets_scoped(
+        "tok".into(),
+        "sale-123".into(),
+        app.state(),
+    )
+    .await;
+    assert!(result.is_ok(), "should succeed with empty targets");
+    let targets = result.unwrap();
+    assert!(targets.is_empty(), "no KDS devices → no targets");
 }
