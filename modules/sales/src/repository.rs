@@ -20,7 +20,7 @@ impl<'a> SalesRepository<'a> {
     /// Retrieve a sale by ID including its line items.
     pub fn get_sale(&self, id: &str) -> Result<Option<Sale>, SalesError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, status, total_minor, line_count, currency, payment_method, tendered_minor, user_id, created_at, updated_at, discount_percent, discount_label, subtotal_minor, tax_total_minor, customer_id, version
+            "SELECT id, status, total_minor, line_count, currency, payment_method, tendered_minor, user_id, created_at, updated_at, discount_percent, discount_label, subtotal_minor, tax_total_minor, customer_id, version, base_currency, base_total_minor, tender_rate_millionths
              FROM sales WHERE id = ?1",
         )?;
 
@@ -118,6 +118,11 @@ impl<'a> SalesRepository<'a> {
             subtotal,
             tax_total,
             customer_id: row.get(14)?,
+            // CUR-02: multi-currency tender fields (nullable — None for
+            // single-currency sales, matching the migration defaults).
+            base_currency: row.get(16)?,
+            base_total_minor: row.get(17)?,
+            tender_rate_millionths: row.get(18)?,
             version: row.get(15).unwrap_or(1),
         }))
     }
@@ -128,8 +133,8 @@ impl<'a> SalesRepository<'a> {
             .trim_matches('"')
             .to_string();
         tx.execute(
-            "INSERT INTO sales (id, status, total_minor, line_count, currency, payment_method, tendered_minor, user_id, created_at, updated_at, discount_percent, discount_label, subtotal_minor, tax_total_minor, customer_id, version)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT INTO sales (id, status, total_minor, line_count, currency, payment_method, tendered_minor, user_id, created_at, updated_at, discount_percent, discount_label, subtotal_minor, tax_total_minor, customer_id, version, base_currency, base_total_minor, tender_rate_millionths)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             params![
                 sale.id,
                 status_str,
@@ -147,6 +152,9 @@ impl<'a> SalesRepository<'a> {
                 sale.tax_total.minor_units,
                 sale.customer_id,
                 sale.version,
+                sale.base_currency,
+                sale.base_total_minor,
+                sale.tender_rate_millionths,
             ],
         )?;
 

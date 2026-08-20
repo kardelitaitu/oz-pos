@@ -1163,6 +1163,17 @@ pub async fn get_sale(pool: &Pool, tenant_id: &str, id: &str) -> Result<Option<S
         version: sale_row
             .try_get("version")
             .map_err(|e| PgError::Db(e.to_string()))?,
+        // CUR-02: multi-currency tender fields (nullable — None for
+        // single-currency sales, matching the migration defaults).
+        base_currency: sale_row
+            .try_get("base_currency")
+            .map_err(|e| PgError::Db(e.to_string()))?,
+        base_total_minor: sale_row
+            .try_get("base_total_minor")
+            .map_err(|e| PgError::Db(e.to_string()))?,
+        tender_rate_millionths: sale_row
+            .try_get("tender_rate_millionths")
+            .map_err(|e| PgError::Db(e.to_string()))?,
     };
 
     let line_rows = tx

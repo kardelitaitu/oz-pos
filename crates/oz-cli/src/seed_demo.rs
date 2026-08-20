@@ -11,6 +11,44 @@ use rusqlite::{Connection, params};
 
 use crate::cli::SeedDemoArgs;
 
+/// Resolve the payment method for a retail sale from a 0..100 roll.
+///
+/// Mirrors the distribution seeded by `seed_retail`: 45% cash, 30% QRIS,
+/// 20% debit, 5% split. Pure so the threshold boundaries are unit-testable
+/// without running the full seeder.
+fn retail_payment_method(roll: u32) -> &'static str {
+    match roll {
+        0..=44 => "cash",
+        45..=74 => "qris",
+        75..=94 => "debit",
+        _ => "split",
+    }
+}
+
+/// Resolve the payment method for a restaurant order from a 0..100 roll.
+///
+/// Mirrors the distribution seeded by `seed_restaurant`: 40% cash, 30%
+/// QRIS, 20% debit, 10% split.
+fn restaurant_payment_method(roll: u32) -> &'static str {
+    match roll {
+        0..=39 => "cash",
+        40..=69 => "qris",
+        70..=89 => "debit",
+        _ => "split",
+    }
+}
+
+/// True when a directory entry is a per-store database file.
+///
+/// Matches `store-*.sqlite` but excludes WAL/SHM/journal siblings that
+/// share the stem. Pure so the pattern is unit-testable.
+fn is_store_db_filename(fname: &str) -> bool {
+    fname.starts_with("store-")
+        && fname.ends_with(".sqlite")
+        && !fname.ends_with("-wal")
+        && !fname.ends_with("-shm")
+}
+
 /// Entry point: dispatch seed-demo based on CLI flags.
 ///
 /// Seeds the main database (for cross-store data) and also all per-store
@@ -82,7 +120,7 @@ fn seed_store_databases(
                 .unwrap_or_default();
 
             // Match store-*.sqlite but exclude WAL/SHM/index files
-            if !fname.starts_with("store-") || !fname.ends_with(".sqlite") {
+            if !is_store_db_filename(&fname) {
                 continue;
             }
             // Skip journal/WAL files that happen to match the pattern
@@ -411,12 +449,7 @@ fn seed_retail(conn: &Connection, days: u32) -> Result<()> {
             } else {
                 "pending"
             };
-            let payment_method = match rng.gen_range(0u32..100) {
-                0..=44 => "cash",
-                45..=74 => "qris",
-                75..=94 => "debit",
-                _ => "split",
-            };
+            let payment_method = retail_payment_method(rng.gen_range(0u32..100));
             let customer_id = if rng.gen_bool(0.4) {
                 Some(&customer_ids[rng.gen_range(0usize..customer_ids.len())])
             } else {
@@ -623,12 +656,7 @@ fn seed_restaurant(conn: &Connection, days: u32) -> Result<()> {
             } else {
                 "pending"
             };
-            let payment_method = match rng.gen_range(0u32..100) {
-                0..=39 => "cash",
-                40..=69 => "qris",
-                70..=89 => "debit",
-                _ => "split",
-            };
+            let payment_method = restaurant_payment_method(rng.gen_range(0u32..100));
             let _table = format!("table-{:02}", rng.gen_range(1u32..13));
             let _cashier = &staff_ids[0];
 
@@ -658,3 +686,7 @@ fn seed_restaurant(conn: &Connection, days: u32) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "seed_demo_tests.rs"]
+mod tests;
