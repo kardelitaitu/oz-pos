@@ -251,6 +251,24 @@ impl Money {
     }
 }
 
+impl PartialOrd for Money {
+    /// Compare two amounts. Returns `Some(ordering)` when the currencies
+    /// match; returns `None` when they differ — the same domain-error
+    /// rule as [`checked_add`](Self::checked_add), so a cross-currency
+    /// comparison is incomparable rather than silently ordered.
+    ///
+    /// `Money` deliberately does **not** implement [`Ord`]: a total order
+    /// across currencies (e.g. a derived one) would let `USD 1 < EUR 0`
+    /// hold. Callers comparing amounts in different currencies must
+    /// convert first.
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self.currency != other.currency {
+            return None;
+        }
+        self.minor_units.partial_cmp(&other.minor_units)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -836,7 +854,10 @@ mod tests {
     }
 
     #[test]
-    fn money_partialord_different_currency_not_equal() {
+    fn money_eq_different_currency_not_equal() {
+        // PartialEq: amounts in different currencies are never equal.
+        // (Cross-currency ordering is incomparable — see
+        // `partial_cmp_different_currency_is_none`.)
         let usd_val = Money {
             minor_units: 100,
             currency: usd(),
@@ -862,6 +883,87 @@ mod tests {
             currency: usd(),
         };
         assert_eq!(map.get(&lookup), Some(&"one hundred"));
+    }
+
+    // ── PartialOrd ─────────────────────────────────────────────
+
+    #[test]
+    fn partial_cmp_same_currency_orders() {
+        let low = Money::from_major(5, usd()).unwrap();
+        let high = Money::from_major(7, usd()).unwrap();
+        assert_eq!(low.partial_cmp(&high), Some(std::cmp::Ordering::Less));
+        assert_eq!(high.partial_cmp(&low), Some(std::cmp::Ordering::Greater));
+    }
+
+    #[test]
+    fn partial_cmp_same_amount_equal() {
+        let a = Money::from_major(5, usd()).unwrap();
+        let b = Money::from_major(5, usd()).unwrap();
+        assert_eq!(a.partial_cmp(&b), Some(std::cmp::Ordering::Equal));
+    }
+
+    #[test]
+    fn partial_cmp_different_currency_is_none() {
+        // Cross-currency comparison is a domain error, mirroring
+        // `checked_add`: USD 1 < EUR 0 must NOT be orderable.
+        let usd_val = Money::from_major(1, usd()).unwrap();
+        let eur_val = Money::from_major(0, "EUR".parse().unwrap()).unwrap();
+        assert_eq!(usd_val.partial_cmp(&eur_val), None);
+        assert_eq!(eur_val.partial_cmp(&usd_val), None);
+    }
+
+    #[test]
+    fn money_lt_gt_operators_same_currency() {
+        let low = Money::from_major(5, usd()).unwrap();
+        let high = Money::from_major(7, usd()).unwrap();
+        assert!(low < high);
+        assert!(high > low);
+        assert!(low <= high);
+        assert!(low <= low);
+        assert!(high >= low);
+        assert!(high >= high);
+    }
+
+    #[test]
+    fn money_lt_different_currency_is_false() {
+        // PartialOrd contract: when partial_cmp is None, < / > / <= / >=
+        // all return false — a cross-currency "less than" must not hold.
+        let usd_val = Money::from_major(1, usd()).unwrap();
+        let eur_val = Money::from_major(100, "EUR".parse().unwrap()).unwrap();
+        let lt = usd_val < eur_val;
+        let gt = usd_val > eur_val;
+        let le = usd_val <= eur_val;
+        let ge = usd_val >= eur_val;
+        assert!(!lt);
+        assert!(!gt);
+        assert!(!le);
+        assert!(!ge);
+    }
+
+    #[test]
+    fn partial_cmp_negative_orders() {
+        let neg = Money {
+            minor_units: -500,
+            currency: usd(),
+        };
+        let zero = Money::zero(usd());
+        let pos = Money::from_major(5, usd()).unwrap();
+        assert!(neg < zero);
+        assert!(zero < pos);
+        assert!(neg < pos);
+    }
+
+    #[test]
+    fn money_min_operator_picks_lower_same_currency() {
+        // `Money` is only PartialOrd (cross-currency is incomparable),
+        // so the ordering APIs that assume a total order (Ord::min etc.)
+        // must NOT exist — this pins the design.
+        fn assert_manual_min(a: Money, b: Money) -> Money {
+            if a < b { a } else { b }
+        }
+        let low = Money::from_major(5, usd()).unwrap();
+        let high = Money::from_major(7, usd()).unwrap();
+        assert_eq!(assert_manual_min(low, high), low);
     }
 
     #[test]

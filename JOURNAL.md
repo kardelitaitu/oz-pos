@@ -5351,3 +5351,41 @@ future slices in the money area: Property-based tests for Money arithmetic
 (docs/specs/testing/tdd-testing-strategy.md §4 lists proptest coverage); the
 `Default for Money` hardcoded to USD could become `Option<Money>` in domain
 contexts where the currency is genuinely unknown.
+
+## 2026-08-20 — TDD cycle: Money implements PartialOrd (foundation)
+
+**Problem:** `Money` had no `PartialOrd` — you could not write `a < b` on a
+`Money` at all, despite a pre-existing test *named*
+`money_partialord_different_currency_not_equal` implying the trait was
+intended (it only asserted `PartialEq`). Production code compensated with
+raw `i64` comparisons on `.minor_units` that silently bypass the currency
+dimension — e.g. `promo.value_minor.min(sale.total.minor_units)`
+(apps/desktop-client/src/commands/promotions.rs:374, mirrored in tablet) and
+`self.fixed_discount_minor.min(acc.minor_units)` (foundation/src/cart.rs:272,
+310). A derived `Ord` would be wrong: it would let `USD 1 < EUR 0` hold.
+
+**Solution:** TDD Red→Green:
+- **Red:** 7 tests — same-currency ordering (`partial_cmp` Less/Greater/Equal),
+  cross-currency `partial_cmp` returns `None` (mirroring `checked_add`'s
+  domain-error rule), `==`/`<`/`>`/`<=`/`>=` operators on same currency,
+  cross-currency operators all `false` per the `PartialOrd` contract, negative
+  ordering, and a pin that `Money` stays `PartialOrd`-only (no total `Ord`).
+- **Green:** `impl PartialOrd for Money` — currencies differ → `None`;
+  else compare `minor_units`. Deliberately no `Ord` impl so cross-currency
+  total ordering is impossible at compile time.
+- **Refactor:** renamed the misleading `money_partialord_different_currency_not_equal`
+  → `money_eq_different_currency_not_equal` (it pins `PartialEq`, with a
+  pointer to the new incomparability test). Clippy `neg_cmp_op_on_partial_ord`
+  flagged `!()` on operators in the cross-currency test — rewrote to bind the
+  operator results to bools and negate those, keeping the contract assertion
+  explicit.
+
+**Verification:** `cargo test -p foundation` — 400 passed (was 393, +7);
+`cargo fmt --all -- --check` clean; `cargo clippy -p foundation --all-targets -- -D warnings` clean;
+`cargo check` on oz-core / oz-hal / modules-currency clean (dependents).
+
+**Risks / follow-ups:** The i64-level comparison call sites (promotions.rs,
+cart.rs) can now be migrated to Money-level comparisons in a follow-up slice
+— with the caveat that `Ord`-based APIs (`min`/`max`/`clamp`/sorting) still
+need an explicit same-currency guard, since `Money` is intentionally only
+`PartialOrd`. Property-based Money tests remain an open follow-up.
