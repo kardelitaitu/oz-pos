@@ -1229,6 +1229,71 @@ impl Store<'_> {
     }
 }
 
+// ── KDS Device Health Monitoring ────────────────────────────────
+
+impl Store<'_> {
+    /// Mark connected devices as stale if they haven't communicated recently.
+    ///
+    /// A device is considered stale if `last_seen_at` is older than
+    /// `stale_threshold_secs` seconds ago. Called periodically by the
+    /// health monitoring daemon (plan §4.0).
+    ///
+    /// Returns the number of devices transitioned to stale.
+    pub fn mark_stale_kds_devices(&self, stale_threshold_secs: i64) -> Result<usize, CoreError> {
+        let cutoff = (chrono::Utc::now() - chrono::Duration::seconds(stale_threshold_secs))
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
+
+        let affected = self.conn.execute(
+            "UPDATE kds_devices
+             SET connection_status = 'stale', updated_at = ?1
+             WHERE connection_status = 'connected'
+               AND last_seen_at IS NOT NULL
+               AND last_seen_at < ?2",
+            params![cutoff, cutoff],
+        )?;
+
+        if affected > 0 {
+            tracing::info!(count = affected, "KDS devices marked stale");
+        }
+
+        Ok(affected)
+    }
+
+    /// Deactivate devices that have been stale for too long.
+    ///
+    /// A device is deactivated if `connection_status = 'stale'` and
+    /// `updated_at` is older than `max_stale_duration_secs` seconds ago.
+    /// This prevents permanently-offline devices from accumulating.
+    ///
+    /// Returns the number of devices deactivated.
+    pub fn deactivate_stale_kds_devices(
+        &self,
+        max_stale_duration_secs: i64,
+    ) -> Result<usize, CoreError> {
+        let cutoff = (chrono::Utc::now() - chrono::Duration::seconds(max_stale_duration_secs))
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
+
+        let affected = self.conn.execute(
+            "UPDATE kds_devices
+             SET is_active = 0, updated_at = ?1
+             WHERE connection_status = 'stale'
+               AND updated_at < ?2",
+            params![cutoff, cutoff],
+        )?;
+
+        if affected > 0 {
+            tracing::info!(
+                count = affected,
+                "KDS devices auto-deactivated after prolonged stale period"
+            );
+        }
+
+        Ok(affected)
+    }
+}
+
 #[cfg(test)]
 #[path = "kds_tests.rs"]
 mod tests;

@@ -19,6 +19,8 @@ import { KdsSettingsPanel, type KdsSettings, DEFAULT_SETTINGS } from '@/features
 import { KdsHistoryPanel } from '@/features/kds/KdsHistoryPanel';
 import { KdsProductPickerModal } from '@/features/kds/components/KdsProductPickerModal';
 import type { ProductPickerResult } from '@/features/kds/components/KdsProductPickerModal';
+import { KdsDeviceStatusIndicator } from '@/features/kds/components/KdsDeviceStatusIndicator';
+import { KdsEnrollmentModal } from '@/features/kds/components/KdsEnrollmentModal';
 import './KdsScreen.css';
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
@@ -61,7 +63,7 @@ const SHORTCUTS: { key: string; id: string }[] = [
 export default function KdsScreen() {
   const workspaceScope = useWorkspaceScope();
   const { l10n } = useLocalization();
-  const { sessionToken: rawToken } = useWorkspace();
+  const { sessionToken: rawToken, terminalId } = useWorkspace();
   const sessionToken = rawToken || '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,8 @@ export default function KdsScreen() {
   const zoneTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   // 3f: Product picker state — which order is being edited.
   const [pickerOrderId, setPickerOrderId] = useState<string | null>(null);
+  // KDS device enrollment modal state.
+  const [showEnrollment, setShowEnrollment] = useState(false);
   // Re-entry guard for the picker confirm: the merge is async and the modal
   // stays open until it resolves, so a fast double-tap would fire the merge
   // twice and duplicate the items on the ticket. Pinned by KdsScreen.test.tsx
@@ -534,6 +538,18 @@ export default function KdsScreen() {
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
             </svg>
           </button>
+          {/* Device status indicator — shows connected device count */}
+          <KdsDeviceStatusIndicator sessionToken={sessionToken} />
+          {/* Enroll new KDS device button */}
+          <button
+            className="kds-enroll-btn"
+            onClick={() => setShowEnrollment(true)}
+            aria-label={requiredLocalized(l10n, 'kds-enrollment-title')}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+          </button>
           {/* Settings + layout — only when prefs loaded */}
           {!prefsLoading && (<>
             <KdsSettingsPanel
@@ -722,6 +738,17 @@ export default function KdsScreen() {
           }
         }}
         onClose={() => setPickerOrderId(null)}
+      />
+
+      {/* KDS device enrollment modal */}
+      <KdsEnrollmentModal
+        sessionToken={sessionToken}
+        restaurantPosId={terminalId}
+        isOpen={showEnrollment}
+        onEnrolled={() => {
+          setShowEnrollment(false);
+        }}
+        onClose={() => setShowEnrollment(false)}
       />
     </div>
     </Profiler>

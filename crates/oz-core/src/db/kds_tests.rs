@@ -2167,3 +2167,297 @@ fn zone_based_routing_only_matches_relevant_devices() {
     assert!(targets.contains(&broadcast_id));
     assert!(!targets.contains(&bar_id));
 }
+
+// ── Device Health Monitoring ─────────────────────────────────
+
+#[test]
+fn mark_stale_devices_transitions_connected_to_stale() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hash".into(),
+            pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+        })
+        .unwrap();
+
+    // Mark as connected with a stale last_seen_at.
+    s.update_kds_device_status(&device.id, crate::kds::KdsConnectionStatus::Connected)
+        .unwrap();
+
+    // Manually backdate last_seen_at to simulate a stale device.
+    conn.execute(
+        "UPDATE kds_devices SET last_seen_at = '2020-01-01T00:00:00.000Z' WHERE id = ?1",
+        rusqlite::params![device.id],
+    )
+    .unwrap();
+
+    let marked = s.mark_stale_kds_devices(30).unwrap(); // 30 second threshold
+    assert_eq!(marked, 1);
+
+    let fetched = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert_eq!(
+        fetched.connection_status,
+        crate::kds::KdsConnectionStatus::Stale
+    );
+}
+
+#[test]
+fn mark_stale_devices_skips_already_disconnected() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hash".into(),
+            pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+        })
+        .unwrap();
+
+    // Device is disconnected (default) — should not be marked stale.
+    let marked = s.mark_stale_kds_devices(30).unwrap();
+    assert_eq!(marked, 0);
+}
+
+#[test]
+fn deactivate_stale_devices_removes_long_offline_devices() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hash".into(),
+            pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+        })
+        .unwrap();
+
+    // Set device to stale with an old updated_at.
+    conn.execute(
+        "UPDATE kds_devices SET connection_status = 'stale', updated_at = '2020-01-01T00:00:00.000Z' WHERE id = ?1",
+        rusqlite::params![device.id],
+    ).unwrap();
+
+    let deactivated = s.deactivate_stale_kds_devices(3600).unwrap(); // 1 hour threshold
+    assert_eq!(deactivated, 1);
+
+    let fetched = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert!(!fetched.is_active);
+}
+
+#[test]
+fn deactivate_stale_devices_skips_recently_stale() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hash".into(),
+            pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+        })
+        .unwrap();
+
+    // Mark as connected, then stale (recently).
+    s.update_kds_device_status(&device.id, crate::kds::KdsConnectionStatus::Connected)
+        .unwrap();
+    s.update_kds_device_status(&device.id, crate::kds::KdsConnectionStatus::Stale)
+        .unwrap();
+
+    // Should not be deactivated — just went stale.
+    let deactivated = s.deactivate_stale_kds_devices(3600).unwrap();
+    assert_eq!(deactivated, 0);
+
+    let fetched = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert!(fetched.is_active);
+}
+
+// ── End-to-End Enrollment Flow ──────────────────────────────
+
+#[test]
+fn e2e_enrollment_flow_register_validate_route_ack() {
+    use std::collections::HashMap;
+
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    // 1. Create a product with a kitchen zone.
+    s.create_product(
+        "BURGER",
+        "Classic Burger",
+        price(1200),
+        None,
+        None,
+        100,
+        Some("restaurant"),
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE products SET kitchen_zone = 'grill' WHERE sku = 'BURGER'",
+        [],
+    )
+    .unwrap();
+
+    // 2. Generate a pairing token and hash it (simulating QR generation).
+    let token = "abcdef1234567890abcdef1234567890";
+    let token_hash = {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(token.as_bytes());
+        format!("{:x}", hasher.finalize())
+    };
+    let expires_at = "2099-01-01T00:00:00Z";
+
+    // 3. Register the KDS device with the hashed token.
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Grill Display".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec!["grill".into()],
+            pairing_token_hash: token_hash.clone(),
+            pairing_expires_at: expires_at.into(),
+        })
+        .unwrap();
+    assert!(device.is_active);
+    assert_eq!(
+        device.connection_status,
+        crate::kds::KdsConnectionStatus::Disconnected
+    );
+
+    // 4. Validate the pairing token — should succeed.
+    let valid = s.validate_pairing_token(&token_hash, &device.id).unwrap();
+    assert!(valid, "pairing token should be valid");
+
+    // 5. Validate with wrong hash — should fail.
+    let wrong = s.validate_pairing_token("wrong_hash", &device.id);
+    assert!(wrong.is_err(), "wrong hash should fail");
+
+    // 6. Simulate device connecting (update status to connected).
+    s.update_kds_device_status(&device.id, crate::kds::KdsConnectionStatus::Connected)
+        .unwrap();
+    let fetched = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert_eq!(
+        fetched.connection_status,
+        crate::kds::KdsConnectionStatus::Connected
+    );
+    assert!(fetched.last_seen_at.is_some());
+
+    // 7. Create a sale and KDS order.
+    let sale_id = uuid::Uuid::now_v7().to_string();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let sale = crate::Sale {
+        id: sale_id.clone(),
+        status: crate::SaleStatus::Completed,
+        total: price(1200),
+        currency: usd(),
+        line_count: 1,
+        payment_method: None,
+        tendered_minor: None,
+        discount_percent: 0,
+        discount_label: None,
+        user_id: None,
+        created_at: now.clone(),
+        updated_at: now,
+        subtotal: price(1200),
+        tax_total: price(0),
+        customer_id: None,
+        lines: vec![],
+        version: 1,
+    };
+    s.create_sale(&sale).unwrap();
+
+    let kds_order = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale_id.clone(),
+            store_id: None,
+            items_summary: "Classic Burger".into(),
+            item_count: 1,
+            kitchen_zone: Some("grill".into()),
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+    assert_eq!(kds_order.status, "pending");
+
+    // 8. Route the order — should target the grill device.
+    let devices = s.list_kds_devices_for_restaurant("resto-1").unwrap();
+    let mut sku_to_station: HashMap<String, Option<String>> = HashMap::new();
+    let zone = s.product_kitchen_zone_by_sku("BURGER").unwrap();
+    sku_to_station.insert("BURGER".into(), zone);
+
+    let items = vec![crate::kds::KdsLineItem {
+        id: "li-1".into(),
+        kds_order_id: kds_order.id.clone(),
+        sku: "BURGER".into(),
+        display_name: "Classic Burger".into(),
+        qty: 1,
+        course: None,
+        modifiers: vec![],
+        line_position: 0,
+        item_status: "pending".into(),
+        started_at: None,
+        ready_at: None,
+        served_at: None,
+        created_at: "2025-01-01T00:00:00Z".into(),
+    }];
+
+    let targets = crate::kds::resolve_kds_targets(&items, &devices, |sku| {
+        sku_to_station.get(sku).cloned().flatten()
+    });
+    assert_eq!(targets.len(), 1);
+    assert_eq!(targets[0], device.id);
+
+    // 9. Ack the order — should succeed.
+    let acked = s.ack_kds_order(&kds_order.id, &device.id).unwrap();
+    assert!(acked);
+
+    // 10. Double-ack should fail (already acked).
+    let acked2 = s.ack_kds_order(&kds_order.id, "other-device").unwrap();
+    assert!(!acked2);
+
+    // 11. Verify order is now in 'ready' state.
+    let order = s.get_kds_order(&kds_order.id).unwrap().unwrap();
+    assert_eq!(order.status, "ready");
+
+    // 12. Replay should not include this order (it's old and ready).
+    let replayed = s
+        .replay_kds_orders_since("2020-01-01T00:00:00.000Z", Some("pending"))
+        .unwrap();
+    assert!(
+        replayed.is_empty(),
+        "acknowledged order should not appear in pending replay"
+    );
+
+    // 13. Simulate device going stale and being deactivated.
+    conn.execute(
+        "UPDATE kds_devices SET last_seen_at = '2020-01-01T00:00:00.000Z', connection_status = 'connected' WHERE id = ?1",
+        rusqlite::params![device.id],
+    ).unwrap();
+    s.mark_stale_kds_devices(30).unwrap();
+    let fetched = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert_eq!(
+        fetched.connection_status,
+        crate::kds::KdsConnectionStatus::Stale
+    );
+
+    // 14. Cleanup old orders — this order is recent, should not be deleted.
+    let deleted = s.cleanup_old_kds_orders(30).unwrap();
+    assert_eq!(deleted, 0);
+}
