@@ -14,7 +14,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from 'recharts';
 import { printSalesReceipt } from '@/api/sales';
 import {
@@ -266,7 +265,6 @@ export default function SalesReportScreen() {
       heatmapGrid[row.day_of_week]![row.hour] = row.total_minor;
     }
   }
-  const heatmapMax = Math.max(...heatmapGrid.flat(), 1);
   const exportCsv = () => {
     const escapeCsvField = (field: string): string => {
       if (field.includes(',') || field.includes('"') || field.includes('\n')) {
@@ -363,50 +361,50 @@ export default function SalesReportScreen() {
         <div className="sales-report-header">
           <Skeleton width="10rem" height="1.75rem" />
           <div className="sales-report-controls">
-            <Skeleton weight="5rem" height="2rem" />
-            <Skeleton weight="5rem" height="2rem" />
-            <Skeleton weight="8rem" height="2rem" />
-            <Skeleton weight="4rem" height="2rem" />
-            <Skeleton weight="6rem" height="2rem" />
+            <Skeleton width="5rem" height="2rem" />
+            <Skeleton width="5rem" height="2rem" />
+            <Skeleton width="8rem" height="2rem" />
+            <Skeleton width="4rem" height="2rem" />
+            <Skeleton width="6rem" height="2rem" />
           </div>
         </div>
         {/* Revenue chart card */}
         <Card shadow="sm" className="sales-report-chart-card">
-          <Skeleton weight="5rem" height="1.25rem" />
-          <Skeleton variant="block" weight="100%" height="300px" style={{ borderRadius: 'var(--radius-lg)', marginTop: 'var(--space-3)' }} />
+          <Skeleton width="5rem" height="1.25rem" />
+          <Skeleton variant="block" width="100%" height="300px" style={{ borderRadius: 'var(--radius-lg)', marginTop: 'var(--space-3)' }} />
           <div className="sales-report-totals" style={{ marginTop: 'var(--space-3)' }}>
-            <Skeleton weight="6rem" height="1rem" />
-            <Skeleton weight="4rem" height="1rem" />
+            <Skeleton width="6rem" height="1rem" />
+            <Skeleton width="4rem" height="1rem" />
           </div>
         </Card>
         {/* Two-column layout */}
         <div className="sales-report-columns">
           <Card shadow="sm" className="sales-report-chart-card">
-            <Skeleton weight="6rem" height="1.25rem" />
-            <Skeleton variant="block" weight="100%" height="250px" style={{ borderRadius: 'var(--radius-lg)', marginTop: 'var(--space-3)' }} />
+            <Skeleton width="6rem" height="1.25rem" />
+            <Skeleton variant="block" width="100%" height="250px" style={{ borderRadius: 'var(--radius-lg)', marginTop: 'var(--space-3)' }} />
           </Card>
           <Card shadow="sm" className="sales-report-chart-card">
-            <Skeleton weight="6rem" height="1.25rem" />
+            <Skeleton width="6rem" height="1.25rem" />
             {/* 4-column table header + 4 skeleton rows */}
             <div className="sales-report-top-header">
-              <Skeleton weight="1rem" height="0.75rem" />
-              <Skeleton weight="3rem" height="0.75rem" />
-              <Skeleton weight="2rem" height="0.75rem" />
-              <Skeleton weight="3rem" height="0.75rem" />
+              <Skeleton width="1rem" height="0.75rem" />
+              <Skeleton width="3rem" height="0.75rem" />
+              <Skeleton width="2rem" height="0.75rem" />
+              <Skeleton width="3rem" height="0.75rem" />
             </div>
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="sales-report-top-row">
-                <Skeleton weight="1rem" height="0.875rem" />
-                <Skeleton weight="5rem" height="0.875rem" />
-                <Skeleton weight="2rem" height="0.875rem" />
-                <Skeleton weight="4rem" height="0.875rem" />
+                <Skeleton width="1rem" height="0.875rem" />
+                <Skeleton width="5rem" height="0.875rem" />
+                <Skeleton width="2rem" height="0.875rem" />
+                <Skeleton width="4rem" height="0.875rem" />
               </div>
             ))}
           </Card>
         </div>
         {/* Heatmap card */}
         <Card shadow="sm" className="sales-report-chart-card">
-          <Skeleton weight="6rem" height="1.25rem" />
+          <Skeleton width="6rem" height="1.25rem" />
         </Card>
       </div>
     );
@@ -747,7 +745,7 @@ export default function SalesReportScreen() {
             </p>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
-                <LineChart>
+                <LineChart data={trendData as unknown as Record<string, unknown>[]}>
                   <XAxis
                     dataKey="period_start"
                     tick={{ fontSize: 12 }}
@@ -815,7 +813,7 @@ export default function SalesReportScreen() {
                 <Tooltip
                   formatter={(value: unknown) => fmtCurrency(Number(value), currency, numLocale)}
                 />
-                {categoryForecast.map((row, index) => (
+                {categoryForecast.map((_row, index) => (
                   <Line
                     key={index}
                     dataKey="forecast"

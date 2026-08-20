@@ -152,7 +152,7 @@ function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: numbe
   };
 }
 
-function buildWeeklyRevenue(overrides: Partial<{ week_start: string; total_minor: number; currency: string; sale_count: number; cogs_mino: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+function buildWeeklyRevenue(overrides: Partial<{ week_start: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
   const total_minor = overrides.total_minor ?? 500000;
   const cogs_minor = overrides.cogs_minor ?? 200000;
   return {
@@ -1133,58 +1133,73 @@ describe('SalesReportScreen', () => {
     //
     // Scenario:
     // 1. Initial feed for date A completes (UI shows $1,000.00)
-    // 2. User changes start date to date B -> second feed starts (loading=true)
-    // 3. FIRST feed (for date A) resolves AFTER second feed started
-    //    -> without guard, this stale feed would overwrite the UI
-    // 4. Second feed (for date B) resolves -> should win
+    // 2. User changes start date to date B -> second feed starts (deferred, gen 2)
+    // 3. User QUICKLY changes start date to date C -> third feed starts (fast, gen 3)
+    // 4. Second feed (gen 2, for date B) resolves -> should be IGNORED (generation mismatch)
+    // 5. Third feed (gen 3, for date C) resolves -> should WIN
 
-    // Deferred promise for the SECOND feed
+    // Deferred promise for the second feed
     let resolveSecondFeed: (value: DailyRevenueRow[]) => void;
     const secondFeedPromise = new Promise<DailyRevenueRow[]>((resolve) => {
       resolveSecondFeed = resolve;
     });
 
-    // STEP 1: Initial feed for date A (Jan 1) - use mockResolvedValue
-    // Returns $1,000.00 (100000 minor units)
+    // STEP 1: Initial feed for date A (Jan 1) - completes normally
     mockGetDailyRevenue.mockResolvedValue([
       buildDailyRevenue({ total_minor: 100000, sale_count: 5 }),
     ]);
     mockGetTopProducts.mockResolvedValue([]);
     mockGetHourlyHeatmap.mockResolvedValue([]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([]);
 
     renderScreen();
 
-    // Wait for initial feed to load (UI shows $1,000.00)
+    // Wait for initial feed to load (UI shows $1,000.00, controls visible)
     await waitFor(() => {
       expect(screen.getByText(/\$1,000\.00/)).toBeTruthy();
     });
 
-    // STEP 2: User QUICKLY changes start date to date B (Feb 1)
-    // This triggers a SECOND feed for date B (deferred)
-    mockGetDailyRevenue.mockImplementationOnce(() => resolveSecondFeed);
+    // STEP 2: User changes start date to date B (Feb 1) -> gen 2 feed (deferred)
+    mockGetDailyRevenue.mockImplementationOnce(() => secondFeedPromise);
     mockGetTopProducts.mockResolvedValue([]);
     mockGetHourlyHeatmap.mockResolvedValue([]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([]);
 
     const startInput = document.getElementById('start-date') as HTMLInputElement;
     expect(startInput).toBeTruthy();
     fireEvent.change(startInput, { target: { value: '2026-02-01' } });
 
-    // STEP 3: FIRST feed (stale, for date A) resolves NOW
-    // It returns $1,500.00 (different from the initial $1,000.00 to detect overwrite)
-    // This simulates the case where the first feed takes longer than expected
+    // STEP 3: User QUICKLY changes start date to date C (Mar 1) -> gen 3 feed (fast)
+    // This happens while gen 2 is still pending
     mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ total_minor: 200000, sale_count: 10 }),
+    ]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([]);
+
+    fireEvent.change(startInput, { target: { value: '2026-03-01' } });
+
+    // STEP 4: Second feed (stale, gen 2, for date B) resolves NOW
+    // Returns $1,500.00 - but should be IGNORED due to generation mismatch (current is gen 3)
+    resolveSecondFeed!([
       buildDailyRevenue({ total_minor: 150000, sale_count: 8 }),
     ]);
 
-    // STEP 4: Second feed (current, for date B) resolves
-    // Returns $2,000.00
-    resolveSecondFeed!([
-      buildDailyRevenue({ total_minor: 200000, sale_count: 10 }),
-    ]);
+    // STEP 5: Third feed (current, gen 3, for date C) resolves
+    // Returns $2,000.00 - this should WIN
+    // Already mocked as mockResolvedValue above
 
-    // The UI should show the SECOND feed's data ($2,000.00), not the stale first ($1,500.00)
+    // The UI should show the THIRD feed's data ($2,000.00), not the stale second ($1,500.00)
     await waitFor(() => {
       expect(screen.getByText(/\$2,000\.00/)).toBeTruthy();
       expect(screen.queryByText(/\$1,500\.00/)).toBeNull();
