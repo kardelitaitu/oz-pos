@@ -1358,6 +1358,74 @@ fn compute_sale_tax_rejects_negative_line_total() {
     ));
 }
 
+// ── MONEY-AUDIT-1: compute_sale_tax must not silently zero on overflow ──
+//
+// The subtotal/tax accumulation previously used `acc.checked_add(...)` and
+// then folded a `None` (overflow) back into `Money::zero(currency)` — a
+// sale whose line totals exceeded i64 would have been recorded with
+// subtotal = 0 and tax_total = 0 instead of failing. Overflow must
+// propagate as a `Validation` error (same contract as compute_cart_tax).
+#[test]
+fn compute_sale_tax_subtotal_overflow_returns_validation_error() {
+    let conn = fresh();
+    let s = store(&conn);
+    // No tax rates: the accumulation path is exercised directly.
+    seed_product_with_category(&conn, "COFFEE", None);
+    seed_product_with_category(&conn, "BAGEL", None);
+
+    let mut sale = make_single_line_sale("COFFEE", 1, i64::MAX);
+    // Second line pushes the subtotal sum past i64::MAX.
+    let mut line2 = sale.lines[0].clone();
+    line2.id = uuid::Uuid::now_v7().to_string();
+    line2.sku = "BAGEL".into();
+    line2.line_position = 2;
+    sale.lines.push(line2);
+
+    let err = s
+        .compute_sale_tax(&mut sale, &[], RoundingMode::HalfUp)
+        .unwrap_err();
+    match err {
+        CoreError::Validation { field, message } => {
+            assert!(
+                field == "subtotal" || field == "tax",
+                "expected subtotal/tax overflow field, got {field}: {message}"
+            );
+            assert!(
+                message.contains("overflow"),
+                "expected overflow message, got: {message}"
+            );
+        }
+        other => panic!("overflow must not silently zero, got: {other:?}"),
+    }
+    // The sale must not have been partially mutated into zero totals.
+    assert_eq!(
+        sale.subtotal.minor_units,
+        i64::MAX,
+        "subtotal not clobbered"
+    );
+}
+
+/// MONEY-AUDIT-2: `compute_sale_tax` must propagate overflow from the
+/// *line tax* accumulation too (the per-line `line_tax.checked_add` path).
+#[test]
+fn compute_sale_tax_line_tax_overflow_returns_validation_error() {
+    let conn = fresh();
+    let s = store(&conn);
+    // Max legal rate (1_000_000 bps) over a huge base overflows the
+    // tax product: (i64::MAX/1000) * 1_000_000 > i64::MAX.
+    seed_tax_rate(&conn, "VAT huge", 1_000_000, true, false);
+    seed_product_with_category(&conn, "COFFEE", None);
+
+    let mut sale = make_single_line_sale("COFFEE", 1, i64::MAX / 1000);
+    let err = s
+        .compute_sale_tax(&mut sale, &[], RoundingMode::HalfUp)
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        CoreError::Validation { field, .. } if field == "tax"
+    ));
+}
+
 #[test]
 fn void_sale_succeeds_regardless_of_stock() {
     let conn = fresh();

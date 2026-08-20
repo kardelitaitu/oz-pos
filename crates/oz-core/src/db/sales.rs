@@ -2055,15 +2055,34 @@ impl Store<'_> {
 
             total_tax = match total_tax {
                 None => Some(line_tax),
-                Some(acc) => acc.checked_add(line_tax),
+                Some(acc) => {
+                    Some(
+                        acc.checked_add(line_tax)
+                            .ok_or_else(|| CoreError::Validation {
+                                field: "tax",
+                                message: "sale tax total overflow".into(),
+                            })?,
+                    )
+                }
             };
 
-            subtotal = match subtotal {
-                None => Some(line.line_total),
-                Some(acc) => acc.checked_add(line.line_total),
-            };
+            subtotal =
+                match subtotal {
+                    None => Some(line.line_total),
+                    Some(acc) => Some(acc.checked_add(line.line_total).ok_or_else(|| {
+                        CoreError::Validation {
+                            field: "subtotal",
+                            message: "sale subtotal overflow".into(),
+                        }
+                    })?),
+                };
         }
 
+        // A sale always has ≥ 1 line (the loop above runs once per line), so
+        // `subtotal`/`total_tax` are always `Some` here — overflow would have
+        // already returned a `Validation` error. `unwrap_or_else` is defensive
+        // only; it must NOT silently zero real money, which is why overflow
+        // is propagated above instead of folded into `None`.
         sale.subtotal = subtotal.unwrap_or_else(|| Money::zero(currency));
         sale.tax_total = total_tax.unwrap_or_else(|| Money::zero(currency));
         Ok(())
