@@ -23,10 +23,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source files (explicit filenames to avoid test files).
-COPY main.go activate.go renew.go status.go helpers.go expiry.go ratelimit.go health.go api_key.go contact.go web_otp.go paddle_webhook.go smtp_mail.go web_password.go trial.go pause.go resume.go midtrans_webhook.go ./
-COPY healthcheck.go ./
-COPY pb_schema.json ./
+# Copy all source files (.dockerignore excludes test files).
+COPY . .
 
 RUN CGO_ENABLED=1 go build -o /pb/pocketbase -ldflags="-s -w" .
 # P8-4: Build standalone healthcheck binary (no curl dependency in runtime).

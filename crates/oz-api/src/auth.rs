@@ -160,6 +160,7 @@ fn error_code_for(e: &jsonwebtoken::errors::Error) -> &'static str {
 /// Returns a structured 401 body (`token_expired` / `invalid_token` /
 /// `missing_token`) plus `WWW-Authenticate: Bearer` so clients can tell
 /// why auth failed (ADR sync-auth-hardening P4).
+#[allow(clippy::result_large_err)]
 pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, Response> {
     let auth_header = req
         .headers()
