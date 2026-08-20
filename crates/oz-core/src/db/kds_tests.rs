@@ -1813,7 +1813,7 @@ fn replay_orders_since_returns_only_newer() {
     let conn = fresh();
     let s = store(&conn);
 
-    let old = seed_kds_order_at(&s, &conn, "2025-01-01T10:00:00.000Z", "ready");
+    let _old = seed_kds_order_at(&s, &conn, "2025-01-01T10:00:00.000Z", "ready");
     let new1 = seed_kds_order_at(&s, &conn, "2025-01-01T12:00:00.000Z", "pending");
     let new2 = seed_kds_order_at(&s, &conn, "2025-01-01T13:00:00.000Z", "pending");
 
@@ -2293,7 +2293,7 @@ fn mark_stale_devices_skips_already_disconnected() {
     let s = store(&conn);
     seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
 
-    let device = s
+    let _device = s
         .register_kds_device(crate::kds::RegisterKdsDeviceInput {
             name: "Test KDS".into(),
             restaurant_pos_id: "resto-1".into(),

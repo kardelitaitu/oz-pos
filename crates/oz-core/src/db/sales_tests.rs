@@ -3203,7 +3203,7 @@ fn list_sales_by_user_filters_correctly() {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
     // Create 3 sales: 2 for user-alice, 1 for user-bob.
-    for (uid, i) in [("alice", 0u32), ("alice", 1), ("bob", 2)].iter() {
+    for (uid, _i) in [("alice", 0u32), ("alice", 1), ("bob", 2)].iter() {
         let sale = crate::Sale {
             id: uuid::Uuid::now_v7().to_string(),
             status: crate::SaleStatus::Completed,

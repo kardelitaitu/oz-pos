@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -48,6 +49,9 @@ export const KdsEnrollmentModal = memo(function KdsEnrollmentModal({
   const [step, setStep] = useState<EnrollmentStep>('form');
   const [name, setName] = useState('');
   const [stationInput, setStationInput] = useState('');
+  const [pairingToken, setPairingToken] = useState<string | null>(null);
+  const [tokenExpiry, setTokenExpiry] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
   const [stations, setStations] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [enrolledDevice, setEnrolledDevice] = useState<KdsDevice | null>(null);
@@ -62,8 +66,27 @@ export const KdsEnrollmentModal = memo(function KdsEnrollmentModal({
     setStationInput('');
     setError(null);
     setEnrolledDevice(null);
+    setPairingToken(null);
+    setTokenExpiry(null);
+    setTimeLeft(0);
     requestAnimationFrame(() => nameRef.current?.focus());
   }, [isOpen]);
+
+  // Countdown timer for token expiry.
+  useEffect(() => {
+    if (step !== 'qr' || !tokenExpiry) return;
+
+    const tick = () => {
+      const remaining = Math.max(
+        0,
+        Math.floor((new Date(tokenExpiry).getTime() - Date.now()) / 1000),
+      );
+      setTimeLeft(remaining);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [step, tokenExpiry]);
 
   const addStation = useCallback(() => {
     const trimmed = stationInput.trim();
@@ -124,6 +147,8 @@ export const KdsEnrollmentModal = memo(function KdsEnrollmentModal({
 
       const device = await registerKdsDeviceScoped(sessionToken, input);
       setEnrolledDevice(device);
+      setPairingToken(token);
+      setTokenExpiry(expiresAt);
       setStep('qr');
       onEnrolled(device);
     } catch (e) {
@@ -269,22 +294,41 @@ export const KdsEnrollmentModal = memo(function KdsEnrollmentModal({
         )}
 
         {/* Step: QR Display */}
-        {step === 'qr' && enrolledDevice && (
+        {step === 'qr' && enrolledDevice && pairingToken && (
           <div className="kds-enrollment-body kds-enrollment-qr-body">
-            <div className="kds-enrollment-success-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-                <polyline points="22 4 12 14.01 9 11.01" />
-              </svg>
-            </div>
             <p className="kds-enrollment-device-name">
               {enrolledDevice.name}
             </p>
+            <div className="kds-enrollment-qr-wrapper">
+              <QRCodeSVG
+                value={JSON.stringify({
+                  device_id: enrolledDevice.id,
+                  device_name: enrolledDevice.name,
+                  token: pairingToken,
+                  restaurant_pos_id: restaurantPosId,
+                  expires_at: tokenExpiry,
+                  stations: enrolledDevice.station_ids,
+                })}
+                size={200}
+                level="M"
+                bgColor="var(--kds-bg, #ffffff)"
+                fgColor="var(--kds-text, #111827)"
+                aria-label={requiredLocalized(
+                  l10n,
+                  'kds-enrollment-qr-aria',
+                  { name: enrolledDevice.name },
+                )}
+              />
+            </div>
             <p className="kds-enrollment-success-text">
-              {requiredLocalized(l10n, 'kds-enrollment-success')}
+              {requiredLocalized(l10n, 'kds-enrollment-scan-instruction')}
             </p>
             <p className="kds-enrollment-expiry-note">
-              {requiredLocalized(l10n, 'kds-enrollment-expiry-note')}
+              {timeLeft > 0
+                ? requiredLocalized(l10n, 'kds-enrollment-countdown', {
+                    seconds: String(timeLeft),
+                  })
+                : requiredLocalized(l10n, 'kds-enrollment-expired')}
             </p>
           </div>
         )}

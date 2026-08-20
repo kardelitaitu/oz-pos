@@ -165,13 +165,25 @@ fn scoped_state(
     store_id: &str,
     instance_id: &str,
 ) -> AppState {
+    scoped_state_with_restaurant(conn, token, user_id, role_id, store_id, instance_id, None)
+}
+
+fn scoped_state_with_restaurant(
+    conn: rusqlite::Connection,
+    token: &str,
+    user_id: &str,
+    role_id: &str,
+    store_id: &str,
+    instance_id: &str,
+    restaurant_pos_id: Option<String>,
+) -> AppState {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut state = AppState::for_test_with_conn(conn);
     state.db_manager =
         StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
     state.session_store.write().unwrap().insert(
         token.into(),
-        SessionContext::new(
+        SessionContext::new_with_restaurant_pos(
             user_id.into(),
             role_id.into(),
             "terminal-1".into(),
@@ -180,9 +192,23 @@ fn scoped_state(
             "pos".into(),
             None,
             0,
+            restaurant_pos_id,
         ),
     );
     state
+}
+
+/// Seed a terminal into the store DB (via db_manager) so FK constraints
+/// on kds_devices.restaurant_pos_id are satisfied.
+fn seed_terminal_in_store(state: &AppState, store_id: &str, id: &str, name: &str, device_id: &str) {
+    let store_db = state.db_manager.open_store(store_id).unwrap();
+    let db = store_db.lock().unwrap();
+    db.execute(
+        "INSERT OR IGNORE INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        rusqlite::params![id, name, device_id],
+    )
+    .unwrap();
 }
 
 fn create_sale_in_store(state: &AppState, sale_id: &str) {
@@ -572,16 +598,19 @@ async fn register_kds_device_scoped_rejects_invalid_token() {
 #[tokio::test]
 async fn register_and_list_kds_devices_scoped() {
     let conn = oz_core::migrations::fresh_db();
-    // Seed a terminal for FK constraint.
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
     // Seed owner.
     seed_owner(&conn);
-    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let state = scoped_state_with_restaurant(
+        conn,
+        "tok",
+        "user-owner",
+        "role-owner",
+        "s1",
+        "resto-1",
+        Some("resto-1".into()),
+    );
+    // Seed terminal in the store DB (where kds_devices lives).
+    seed_terminal_in_store(&state, "s1", "resto-1", "Restaurant POS", "dev-resto");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -664,9 +693,33 @@ async fn resolve_kds_targets_scoped_returns_empty_for_no_devices() {
         .build(tauri::generate_context!())
         .unwrap();
 
+    // Create a valid order so get_kds_order succeeds.
+    let order = create_kds_order_in_store(
+        &app.state::<AppState>(),
+        &KdsOrder {
+            id: "order-empty".into(),
+            sale_id: "sale-empty".into(),
+            store_id: None,
+            target_instance_id: None,
+            status: "pending".into(),
+            items_summary: "Item".into(),
+            item_count: 1,
+            display_number: None,
+            received_at: "2026-08-21T10:00:00.000Z".into(),
+            started_at: None,
+            ready_at: None,
+            served_at: None,
+            prep_time_seconds: 0,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        },
+    );
+
     let result = crate::commands::kds_routing::resolve_kds_targets_scoped(
         "tok".into(),
-        "sale-123".into(),
+        order.id.clone(),
         app.state(),
     )
     .await;
@@ -684,14 +737,17 @@ async fn resolve_kds_targets_scoped_returns_empty_for_no_devices() {
 #[tokio::test]
 async fn integration_enrollment_full_lifecycle() {
     let conn = oz_core::migrations::fresh_db();
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
     seed_owner(&conn);
-    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let state = scoped_state_with_restaurant(
+        conn,
+        "tok",
+        "user-owner",
+        "role-owner",
+        "s1",
+        "resto-1",
+        Some("resto-1".into()),
+    );
+    seed_terminal_in_store(&state, "s1", "resto-1", "Restaurant POS", "dev-resto");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -861,21 +917,22 @@ async fn integration_enrollment_full_lifecycle() {
 
 // ══════════════════════════════════════════════════════════════════
 // Integration: Multi-device station-based routing
-// ══════════════════════════════════════════════════════════════════
-
-/// Two devices with different station assignments receive only the
+// ══════════════════════════════════════════════════════════════════/// Two devices with different station assignments receive only the
 /// orders matching their stations.
 #[tokio::test]
 async fn integration_multi_device_station_routing() {
     let conn = oz_core::migrations::fresh_db();
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
     seed_owner(&conn);
-    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let state = scoped_state_with_restaurant(
+        conn,
+        "tok",
+        "user-owner",
+        "role-owner",
+        "s1",
+        "resto-1",
+        Some("resto-1".into()),
+    );
+    seed_terminal_in_store(&state, "s1", "resto-1", "Restaurant POS", "dev-resto");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -910,13 +967,39 @@ async fn integration_multi_device_station_routing() {
     .await
     .unwrap();
 
-    // Create a KDS order for a grill item.
+    // Create a product with kitchen_zone = 'grill'.
+    {
+        let state_ref = app.state::<AppState>();
+        let db_ref = state_ref.db_manager.open_store("s1").unwrap();
+        let db = db_ref.lock().unwrap();
+        let s = Store::new(&db);
+        s.create_product(
+            "STEAK",
+            "Steak",
+            oz_core::Money {
+                minor_units: 1500,
+                currency: "USD".parse().unwrap(),
+            },
+            None,
+            None,
+            100,
+            Some("restaurant"),
+        )
+        .unwrap();
+        db.execute(
+            "UPDATE products SET kitchen_zone = 'grill' WHERE sku = 'STEAK'",
+            [],
+        )
+        .unwrap();
+    }
+
+    // Create a sale + KDS order with a line item referencing the grill product.
     let order = create_kds_order_in_store(
         &app.state::<AppState>(),
         &KdsOrder {
             id: "order-grill".into(),
             sale_id: "sale-grill".into(),
-            store_id: Some("s1".into()),
+            store_id: None,
             target_instance_id: None,
             status: "pending".into(),
             items_summary: "Steak".into(),
@@ -933,6 +1016,25 @@ async fn integration_multi_device_station_routing() {
             priority: false,
         },
     );
+
+    // Insert a line item for the grill product.
+    {
+        let state_ref = app.state::<AppState>();
+        let db_ref = state_ref.db_manager.open_store("s1").unwrap();
+        let db = db_ref.lock().unwrap();
+        let s = Store::new(&db);
+        s.create_kds_line_items(
+            &order.id,
+            &[oz_core::kds::CreateKdsLineItemInput {
+                sku: "STEAK".into(),
+                display_name: "Steak".into(),
+                qty: 1,
+                course: None,
+                modifiers: vec![],
+            }],
+        )
+        .unwrap();
+    }
 
     // Resolve targets — should only include grill device.
     let targets = crate::commands::kds_routing::resolve_kds_targets_scoped(
@@ -959,14 +1061,17 @@ async fn integration_multi_device_station_routing() {
 #[tokio::test]
 async fn integration_broadcast_device_receives_all_orders() {
     let conn = oz_core::migrations::fresh_db();
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
     seed_owner(&conn);
-    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let state = scoped_state_with_restaurant(
+        conn,
+        "tok",
+        "user-owner",
+        "role-owner",
+        "s1",
+        "resto-1",
+        Some("resto-1".into()),
+    );
+    seed_terminal_in_store(&state, "s1", "resto-1", "Restaurant POS", "dev-resto");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -1035,14 +1140,17 @@ async fn integration_broadcast_device_receives_all_orders() {
 #[tokio::test]
 async fn integration_inactive_device_excluded_from_routing() {
     let conn = oz_core::migrations::fresh_db();
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
     seed_owner(&conn);
-    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let state = scoped_state_with_restaurant(
+        conn,
+        "tok",
+        "user-owner",
+        "role-owner",
+        "s1",
+        "resto-1",
+        Some("resto-1".into()),
+    );
+    seed_terminal_in_store(&state, "s1", "resto-1", "Restaurant POS", "dev-resto");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -1116,14 +1224,17 @@ async fn integration_inactive_device_excluded_from_routing() {
 #[tokio::test]
 async fn integration_duplicate_device_name_rejected() {
     let conn = oz_core::migrations::fresh_db();
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
     seed_owner(&conn);
-    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let state = scoped_state_with_restaurant(
+        conn,
+        "tok",
+        "user-owner",
+        "role-owner",
+        "s1",
+        "resto-1",
+        Some("resto-1".into()),
+    );
+    seed_terminal_in_store(&state, "s1", "resto-1", "Restaurant POS", "dev-resto");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -1161,14 +1272,17 @@ async fn integration_duplicate_device_name_rejected() {
 #[tokio::test]
 async fn integration_concurrent_ack_only_first_wins() {
     let conn = oz_core::migrations::fresh_db();
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
     seed_owner(&conn);
-    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let state = scoped_state_with_restaurant(
+        conn,
+        "tok",
+        "user-owner",
+        "role-owner",
+        "s1",
+        "resto-1",
+        Some("resto-1".into()),
+    );
+    seed_terminal_in_store(&state, "s1", "resto-1", "Restaurant POS", "dev-resto");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -1259,14 +1373,17 @@ async fn integration_concurrent_ack_only_first_wins() {
 #[tokio::test]
 async fn integration_health_monitoring_cycle() {
     let conn = oz_core::migrations::fresh_db();
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
     seed_owner(&conn);
-    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let state = scoped_state_with_restaurant(
+        conn,
+        "tok",
+        "user-owner",
+        "role-owner",
+        "s1",
+        "resto-1",
+        Some("resto-1".into()),
+    );
+    seed_terminal_in_store(&state, "s1", "resto-1", "Restaurant POS", "dev-resto");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -1384,20 +1501,18 @@ async fn integration_health_monitoring_cycle() {
 #[tokio::test]
 async fn integration_device_isolation_between_restaurants() {
     let conn = oz_core::migrations::fresh_db();
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-1', 'Restaurant A', 'dev-a', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
-         VALUES ('resto-2', 'Restaurant B', 'dev-b', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-        [],
-    )
-    .unwrap();
     seed_owner(&conn);
-    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let state = scoped_state_with_restaurant(
+        conn,
+        "tok",
+        "user-owner",
+        "role-owner",
+        "s1",
+        "resto-1",
+        Some("resto-1".into()),
+    );
+    seed_terminal_in_store(&state, "s1", "resto-1", "Restaurant A", "dev-a");
+    seed_terminal_in_store(&state, "s1", "resto-2", "Restaurant B", "dev-b");
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
@@ -1432,7 +1547,7 @@ async fn integration_device_isolation_between_restaurants() {
                 pairing_token_hash: "hb".into(),
                 pairing_expires_at: "2099-01-01".into(),
             })
-            .unwrap();
+            .expect("register device B should succeed");
     }
 
     // list_kds_devices_scoped only returns devices for the session's restaurant.

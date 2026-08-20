@@ -50,6 +50,7 @@ use oz_core::cache::Cache;
 use oz_plugin::PluginManager;
 
 use rusqlite::Connection;
+use rusqlite::OptionalExtension;
 use tauri::AppHandle;
 use tauri::Manager;
 use tokio::sync::{Mutex, oneshot};
@@ -527,30 +528,83 @@ impl AppState {
     /// Returns the resolved [`SessionContext`] and an [`Arc`]`<Mutex<Connection>>`
     /// for the store-scoped SQLite database. The caller must call `.lock()` on
     /// the returned connection before querying.
+    ///
+    /// # Multi-KDS scoping (plan_multi_kds_one_location)
+    ///
+    /// | `restaurant_pos_id` | Effective store |
+    /// |---|---|
+    /// | `None` (default) | `session.store_id` — identical to today |
+    /// | `Some(id)` | Terminal binding's `bound_store_id` for `id` |
+    ///
+    /// When `restaurant_pos_id` is `Some`, we look up the terminal's
+    /// binding in the global `terminals` table to find which store it
+    /// is bound to. The global DB lock is acquired via `blocking_lock()`
+    /// for the brief duration of a single SELECT — acceptable because:
+    ///
+    /// - The lock is held for microseconds (one indexed query).
+    /// - `blocking_lock()` is already used in other sync contexts
+    ///   (setup hooks, state tests, plugin watchers).
+    /// - The alternative (making this async) would require updating
+    ///   90+ callers across both desktop-client and tablet-client.
+    ///
+    /// If the terminal is not found or has no binding, we fall back to
+    /// `session.store_id` — a safe default.
     pub fn resolve_scope(
         &self,
         token: &str,
     ) -> Result<(SessionContext, Arc<std::sync::Mutex<Connection>>), AppError> {
         let session = self.resolve_session(token)?;
         let effective_store_id = match session.restaurant_pos_id.as_deref() {
-            Some(_resto_id) => {
-                // Multi-KDS mode: the Restaurant POS's terminal_id IS the store
-                // scope key — each Restaurant POS owns its own KDS database.
-                // For now, fall through to session.store_id; when the KDS
-                // device registry is implemented, this will resolve the
-                // restaurant_pos_id → store_id binding from settings.
-                session.store_id.clone()
+            Some(resto_id) => {
+                // Multi-KDS mode: resolve the Restaurant POS terminal's
+                // binding to find its store database. The terminals table
+                // maps terminal_id → bound_store_id.
+                self.resolve_restaurant_pos_store(resto_id)
+                    .unwrap_or_else(|e| {
+                        tracing::warn!(
+                            restaurant_pos_id = %resto_id,
+                            error = %e,
+                            "failed to resolve restaurant POS store binding, \
+                             falling back to session.store_id"
+                        );
+                        session.store_id.clone()
+                    })
             }
-            None => {
-                // Legacy mode: unchanged behavior.
-                session.store_id.clone()
-            }
+            None => session.store_id.clone(),
         };
         let conn = self
             .db_manager
             .open_store(&effective_store_id)
             .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
         Ok((session, conn))
+    }
+
+    /// Look up the store ID bound to a Restaurant POS terminal.
+    ///
+    /// Queries the global `terminals` table for the terminal's
+    /// `bound_store_id`. Used by [`resolve_scope`] when a session
+    /// carries a `restaurant_pos_id`.
+    ///
+    /// Uses `blocking_lock()` on the tokio Mutex — safe here because
+    /// the lock is held for a single indexed SELECT (microseconds).
+    ///
+    /// Returns `AppError::Invalid` if the terminal is not found or
+    /// has no binding.
+    fn resolve_restaurant_pos_store(&self, restaurant_pos_id: &str) -> Result<String, AppError> {
+        let db = self.db.blocking_lock();
+        let binding: Option<String> = db
+            .query_row(
+                "SELECT bound_store_id FROM terminals WHERE id = ?1",
+                rusqlite::params![restaurant_pos_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| AppError::Internal(format!("querying terminal binding: {e}")))?;
+        binding.ok_or_else(|| {
+            AppError::Invalid(format!(
+                "restaurant POS '{restaurant_pos_id}' not found or has no store binding"
+            ))
+        })
     }
 
     /// Resolve a session token and return only the store-scoped database

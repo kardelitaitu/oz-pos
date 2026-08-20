@@ -155,6 +155,10 @@ kds-enrollment-cancel = Cancel
 kds-enrollment-create-btn = Create Device
 kds-enrollment-done = Done
 kds-enrollment-error = Failed to register device
+kds-enrollment-scan-instruction = Scan this QR code with the KDS device to complete pairing.
+kds-enrollment-qr-aria = QR code for enrolling { $name }
+kds-enrollment-countdown = Token expires in { $seconds }s
+kds-enrollment-expired = Token has expired — close and re-enroll to generate a new one
 
 # ── KDS Device Status ──
 kds-device-status-connected = Connected

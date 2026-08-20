@@ -157,6 +157,10 @@ kds-enrollment-cancel = Batal
 kds-enrollment-create-btn = Buat Perangkat
 kds-enrollment-done = Selesai
 kds-enrollment-error = Gagal mendaftarkan perangkat
+kds-enrollment-scan-instruction = Pindai kode QR ini dengan perangkat KDS untuk menyelesaikan pemasangan.
+kds-enrollment-qr-aria = Kode QR untuk mendaftarkan { $name }
+kds-enrollment-countdown = Token kedaluwarsa dalam { $seconds }d
+kds-enrollment-expired = Token telah kedaluwarsa — tutup dan daftar ulang untuk membuat yang baru
 
 # ── KDS Device Status ──
 kds-device-status-connected = Terhubung

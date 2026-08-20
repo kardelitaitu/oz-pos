@@ -40,14 +40,19 @@ pub async fn resolve_kds_targets_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    // Get the order's line items.
-    let order = store
+    // Validate the order exists and get its line items.
+    store
         .get_kds_order(&order_id)?
         .ok_or_else(|| AppError::Invalid(format!("KDS order not found: {order_id}")))?;
     let line_items = store.get_kds_order_lines(&order_id)?;
 
     // Get active devices for this restaurant.
-    let resto_id = order.store_id.as_deref().unwrap_or(&session.terminal_id);
+    // Use session.restaurant_pos_id (set by KDS device sessions) or
+    // fall back to the terminal_id (Restaurant POS sessions).
+    let resto_id = session
+        .restaurant_pos_id
+        .as_deref()
+        .unwrap_or(&session.terminal_id);
     let devices = store.list_kds_devices_for_restaurant(resto_id)?;
 
     // Filter to active only.
