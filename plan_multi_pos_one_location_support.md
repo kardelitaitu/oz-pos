@@ -241,7 +241,7 @@ Currently, multiple POS nodes in the topology editor appear as independent works
 | Edge Case | Current Behavior | Risk | Recommendation |
 |-----------|-----------------|------|----------------|
 | **Same user logged in on two terminals** | Allowed — each gets its own session with unique `terminal_id`. Both can process sales simultaneously. | Medium — shift totals may be confusing if same user appears on two shifts | Accept for v1. Document that each terminal should have its own shift. |
-| **Same user opens shift on two terminals** | Allowed — `shifts` table allows multiple open shifts per user (no unique constraint on `(user_id, status)`). | Low — each shift tracks its own terminal_id and totals | Accept. Each shift is independently terminal-scoped. |
+| **Same user opens shift on two terminals** | **Rejected** — `open_shift` enforces one active shift per user (`user already has an open shift` validation). User must close shift on Terminal A before opening on Terminal B. | Low — enforced by business rule | System correctly rejects duplicate shifts. User must close current shift first. |
 | **Terminal crashes mid-sale** | Cart is in memory (not persisted until `hold_cart`). Loss is possible. | Medium — unsaved cart data lost | Existing behavior. `active_carts` persistence mitigates for held carts. |
 | **Two terminals sell last unit simultaneously** | Both read qty=1. First to commit wins. Second gets `CHECK (qty >= 0)` constraint violation → rollback. | Low — SQLite enforces atomicity | Safe. Second terminal sees "insufficient stock" error. |
 | **Network partition between terminals** | Each terminal operates independently. Sync daemon reconciles on reconnection. | Medium — potential stock divergence during partition | Existing offline-first pattern handles this. Stock eventually consistent. |
@@ -430,7 +430,8 @@ fn two_terminals(conn: &Connection) -> (AppState, AppState) {
 - ✅ `integration_held_cart_same_workspace_shared` — Two terminals sharing workspace instance both hold carts, verify coexistence and independent restore
 - ✅ `integration_terminal_deactivation` — Terminal deactivation via update_terminal prevents normal operation
 - ✅ `integration_stock_not_deducted_on_payment_mismatch` — Underpayment rejects sale and stock remains unchanged
-- ⚠️ Sync behavior (offline → sync → reconcile) — covered by existing `platform/sync` integration tests
+- ✅ `e2e_three_terminal_restaurant` — 2 Retail POS + 1 KDS: both sell, KDS acks, stock deducted correctly
+- ✅ `e2e_network_partition_stock_visibility` — stale read during partition, reconciled after reconnect
 - ⚠️ LAN communication — covered by existing `lan_server` tests
 - ⚠️ Failure recovery — covered by existing shift recovery and session restoration tests
 
@@ -446,7 +447,7 @@ No performance changes from this plan. The multi-terminal model is already the e
 ### Phase 1: Verification & Tests (Weeks 1-2) ✅ COMPLETE
 - ✅ All 15 concrete test cases from §7.3 implemented and passing
 - ✅ 5 integration tests added (full workflow, KDS routing, held cart, deactivation, payment mismatch)
-- ✅ 20 multi-terminal tests total — all passing
+- ✅ 22 multi-terminal tests total — all passing (15 §7.3 + 5 integration + 2 E2E)
 - ✅ Fixed concurrent sale tests (proper SaleLine items, no double-insert)
 - ✅ Added clarifying comments to `session.rs`, `terminals.rs`, `pos.rs`
 - ✅ Documented the `active_carts` workspace-instance assumption

@@ -1259,6 +1259,9 @@ impl Store<'_> {
     /// Writes a delta row to the `stock_movements` ledger (ADR #6)
     /// and updates the materialised `inventory` and `stock_summary` tables.
     /// The `reason` parameter is recorded in the ledger for audit purposes.
+    /// Multi-terminal: stock adjustments are store-scoped and shared across all
+    /// terminals. The CHECK (qty >= 0) constraint on stock_summary prevents
+    /// concurrent last-unit oversells from producing negative inventory.
     #[deprecated(note = "use adjust_stock_at_location_with_reason instead")]
     #[allow(deprecated)]
     pub fn adjust_stock(&self, sku: &str, delta: i64) -> Result<i64, CoreError> {

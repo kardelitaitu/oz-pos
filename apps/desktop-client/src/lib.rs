@@ -20,6 +20,11 @@ pub mod email_scheduler;
 /// Single error type for every Tauri command.
 pub mod error;
 /// LAN event forwarding for multi-terminal setups.
+///
+/// Multi-terminal: each POS terminal runs its own process with its own
+/// AppState. The LAN server broadcasts events (KDS orders, stock changes)
+/// to all connected terminals in the same store. Terminal identification
+/// happens at startup via device_id lookup (see state.rs).
 pub mod lan_server;
 /// Global application state (DB, kernel, sync daemon, registry).
 pub mod state;

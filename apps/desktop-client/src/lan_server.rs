@@ -190,6 +190,10 @@ impl LanEventForwarder {
 
     /// Send an event JSON string to all connected peers.
     ///
+    /// Multi-terminal: events broadcast to ALL connected terminals in the
+    /// same store. Terminal-specific events (e.g., KDS ack) should be
+    /// filtered by the receiver using terminal_id from the event payload.
+    ///
     /// This is non-blocking — broadcast messages are queued in the
     /// channel and delivered asynchronously.
     pub fn broadcast(&self, event_json: String) {

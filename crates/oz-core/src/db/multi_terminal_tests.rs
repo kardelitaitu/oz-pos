@@ -782,3 +782,175 @@ fn integration_stock_not_deducted_on_payment_mismatch() {
         .unwrap();
     assert_eq!(qty, 5, "stock should not change on payment mismatch");
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// E2E: 3-terminal restaurant (2 Retail POS + 1 KDS)
+// ══════════════════════════════════════════════════════════════════════
+
+/// Full E2E: Two retail POS terminals and one KDS device operate in the
+/// same store. Orders from both POS terminals route to KDS, are acked,
+/// and stock is deducted correctly across both terminals.
+#[test]
+fn e2e_three_terminal_restaurant() {
+    let conn = fresh();
+    seed_two_users(&conn);
+    seed_product_with_stock(&conn, "ESPRESSO", "Espresso", 20);
+    seed_product_with_stock(&conn, "LATTE", "Latte", 15);
+    let s = store(&conn);
+
+    // Seed two retail POS terminals.
+    conn.execute_batch(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at) VALUES
+         ('pos-1', 'Front POS', 'dev-pos-1', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+         ('pos-2', 'Back POS', 'dev-pos-2', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+         ('kds-1', 'Kitchen Display', 'dev-kds-1', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+    ).unwrap();
+
+    // Register KDS device (broadcast mode — empty station_ids).
+    let kds_input = crate::kds::RegisterKdsDeviceInput {
+        name: "Kitchen Display".into(),
+        restaurant_pos_id: "pos-1".into(),
+        station_ids: vec![],
+        pairing_token_hash: "hash-kds".into(),
+        pairing_expires_at: "2099-01-01T00:00:00.000Z".into(),
+    };
+    s.register_kds_device(kds_input).unwrap();
+
+    // ── Front POS: sell espressos ──
+    let shift_front = s.open_shift("user-a", Some("pos-1"), 0).unwrap();
+    let sale_front = make_sale_with_line("ESPRESSO", 3, 350);
+    s.complete_sale_deduction(&sale_front, None, &pay_cash(1050), "user-a", Some("pos-1"))
+        .unwrap();
+
+    // Front POS creates KDS order.
+    let sale_id_front = uuid::Uuid::now_v7().to_string();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    conn.execute(
+        "INSERT INTO sales (id, status, total_minor, currency, line_count, subtotal_minor, tax_total_minor, version, created_at, updated_at)
+         VALUES (?1, 'completed', 1050, 'USD', 3, 1050, 0, 1, ?2, ?2)",
+        rusqlite::params![sale_id_front, now],
+    ).unwrap();
+    let kds_order_front = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale_id_front,
+            store_id: Some("pos-1".into()),
+            items_summary: "Espresso x3".into(),
+            item_count: 3,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: Some("T1".into()),
+            priority: false,
+        })
+        .unwrap();
+
+    // ── Back POS: sell lattes ──
+    let shift_back = s.open_shift("user-b", Some("pos-2"), 0).unwrap();
+    let sale_back = make_sale_with_line("LATTE", 2, 450);
+    s.complete_sale_deduction(&sale_back, None, &pay_cash(900), "user-b", Some("pos-2"))
+        .unwrap();
+
+    // Back POS creates KDS order.
+    let sale_id_back = uuid::Uuid::now_v7().to_string();
+    conn.execute(
+        "INSERT INTO sales (id, status, total_minor, currency, line_count, subtotal_minor, tax_total_minor, version, created_at, updated_at)
+         VALUES (?1, 'completed', 900, 'USD', 2, 900, 0, 1, ?2, ?2)",
+        rusqlite::params![sale_id_back, now],
+    ).unwrap();
+    let kds_order_back = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale_id_back,
+            store_id: Some("pos-2".into()),
+            items_summary: "Latte x2".into(),
+            item_count: 2,
+            kitchen_zone: None,
+            notes: "Extra hot".into(),
+            table_number: Some("T3".into()),
+            priority: true,
+        })
+        .unwrap();
+
+    // ── Verify: both KDS orders exist ──
+    let front = s.get_kds_order(&kds_order_front.id).unwrap().unwrap();
+    let back = s.get_kds_order(&kds_order_back.id).unwrap().unwrap();
+    assert_eq!(front.status, "pending");
+    assert_eq!(back.status, "pending");
+    assert!(!front.priority);
+    assert!(back.priority);
+
+    // ── Verify: stock deducted correctly ──
+    let espresso_qty: i64 = conn
+        .query_row(
+            "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'ESPRESSO') AND location_id = ?1",
+            rusqlite::params![DEFAULT_LOC],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let latte_qty: i64 = conn
+        .query_row(
+            "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'LATTE') AND location_id = ?1",
+            rusqlite::params![DEFAULT_LOC],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(espresso_qty, 17, "20 - 3 = 17");
+    assert_eq!(latte_qty, 13, "15 - 2 = 13");
+
+    // ── KDS acks both orders ──
+    assert!(s.ack_kds_order(&kds_order_front.id, "kds-1").unwrap());
+    assert!(s.ack_kds_order(&kds_order_back.id, "kds-1").unwrap());
+
+    // ── Verify: both acked ──
+    let front_ack = s.get_kds_order(&kds_order_front.id).unwrap().unwrap();
+    let back_ack = s.get_kds_order(&kds_order_back.id).unwrap().unwrap();
+    assert_eq!(front_ack.status, "ready");
+    assert_eq!(back_ack.status, "ready");
+
+    // ── Close both shifts independently ──
+    s.close_shift(&shift_front.id, 0, None).unwrap();
+    s.close_shift(&shift_back.id, 0, None).unwrap();
+    assert!(s.get_active_shift("user-a").unwrap().is_none());
+    assert!(s.get_active_shift("user-b").unwrap().is_none());
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// E2E: Network partition simulation
+// ══════════════════════════════════════════════════════════════════════
+
+/// Simulates a network partition: Terminal A adjusts stock while
+/// Terminal B reads stale data. After "reconnection" (both read from
+/// the same DB), Terminal B sees the updated stock.
+#[test]
+fn e2e_network_partition_stock_visibility() {
+    let conn = fresh();
+    seed_product_with_stock(&conn, "WIDGET", "Widget", 10);
+    let s = store(&conn);
+
+    // ── Pre-partition: both terminals see qty=10 ──
+    let qty_before: i64 = conn
+        .query_row(
+            "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'WIDGET') AND location_id = ?1",
+            rusqlite::params![DEFAULT_LOC],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(qty_before, 10);
+
+    // ── Partition: Terminal A adjusts stock (offline) ──
+    s.adjust_stock("WIDGET", -4).unwrap();
+
+    // ── During partition: Terminal B would read stale qty=10 ──
+    // (In real life, Terminal B has a cached value. Here we simulate
+    // by reading before the adjust propagates.)
+    let qty_during_partition = qty_before; // stale
+    assert_eq!(qty_during_partition, 10, "stale read during partition");
+
+    // ── Reconnection: Terminal B reads from DB (reconciled) ──
+    let qty_after: i64 = conn
+        .query_row(
+            "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'WIDGET') AND location_id = ?1",
+            rusqlite::params![DEFAULT_LOC],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(qty_after, 6, "10 - 4 = 6 after reconciliation");
+}

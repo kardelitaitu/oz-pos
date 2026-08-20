@@ -451,6 +451,10 @@ impl Settings {
     }
 
     /// Get the registered sync terminal identifier (ADR sync-auth-hardening P3).
+    ///
+    /// Multi-terminal: each terminal has its own sync terminal ID for
+    /// identifying which terminal wrote a given sync delta. Settings are
+    /// store-scoped and shared across all terminals in the same store.
     pub fn get_sync_terminal_id(conn: &Connection) -> Result<Option<String>, CoreError> {
         Ok(platform_core::settings::Settings::get_sync_terminal_id(
             conn,
