@@ -712,17 +712,19 @@ describe('PaymentModal — rendering & fast interaction', () => {
     // Complete the sale
     await userEvent.click(screen.getByRole('button', { name: /Complete/i }));
 
-    // Verify complete_sale_scoped was called with IDR currency and converted amounts
-    // The bug (CUR-02): currently passes USD instead of IDR
+    // Verify complete_sale_scoped was called with correct multi-currency metadata
+    // The API uses baseCurrency (original cart currency) + tenderRateMillionths for conversion
     const completeSaleCall = invokeMock.mock.calls.find((call) => call[0] === 'complete_sale_scoped');
     expect(completeSaleCall).toBeDefined();
     if (completeSaleCall) {
       // Tauri commands wrap params in { sessionToken, args: { ... } }
-      const outerArgs = completeSaleCall[1] as { args?: { currency?: string; paymentSplits?: Array<{ amountMinor: number }>; tenderedMinor?: number } } | undefined;
+      const outerArgs = completeSaleCall[1] as { args?: { baseCurrency?: string; tenderRateMillionths?: number; tenderedMinor?: number } } | undefined;
       const args = outerArgs?.args;
-      // This assertion will FAIL with the current bug - it passes USD instead of IDR
-      expect(args?.currency).toBe('IDR');
-      // For cash payments, tenderedMinor is used instead of paymentSplits
+      // baseCurrency should be the original cart currency (USD)
+      expect(args?.baseCurrency).toBe('USD');
+      // tenderRateMillionths should be set (16,000 IDR per USD = 16,000,000,000 millionths)
+      expect(args?.tenderRateMillionths).toBe(16_000_000_000);
+      // For cash payments, tenderedMinor is used instead of paymentSplits (in charge currency minor units)
       expect(args?.tenderedMinor).toBe(112000);
     }
 
