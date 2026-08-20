@@ -448,7 +448,7 @@ fn save_rejects_unknown_from_port_variant() {
     );
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
-    assert!(err.contains("unknown from_port"), "got: {err}");
+    assert!(err.contains("unknown port"), "got: {err}");
     assert!(load_topology_data(&conn).unwrap().is_none());
 }
 
@@ -464,7 +464,7 @@ fn save_rejects_unknown_to_port_variant() {
     );
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
-    assert!(err.contains("unknown to_port"), "got: {err}");
+    assert!(err.contains("unknown port"), "got: {err}");
     assert!(load_topology_data(&conn).unwrap().is_none());
 }
 

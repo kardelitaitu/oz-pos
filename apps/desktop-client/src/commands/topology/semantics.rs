@@ -58,6 +58,11 @@ fn map_topology_error(err: CoreError) -> AppError {
     }
 }
 
+/// Resolve the settings key for one Apply request's revision ledger.
+///
+/// Validates the request id against the same control-char/slash length rules
+/// as the topology branch keys; the ledger is stored under
+/// `TOPOLOGY_APPLY_REQUEST_PREFIX`.
 pub(crate) fn topology_apply_request_key(request_id: &str) -> Result<String, AppError> {
     if request_id.trim().is_empty()
         || request_id.len() > 200
@@ -70,10 +75,16 @@ pub(crate) fn topology_apply_request_key(request_id: &str) -> Result<String, App
     Ok(format!("{TOPOLOGY_APPLY_REQUEST_PREFIX}{request_id}"))
 }
 
+/// Read the `revision` field from a stored topology envelope (`0` when absent).
 pub(crate) fn topology_revision_from_json(value: &Value) -> u64 {
     value.get("revision").and_then(Value::as_u64).unwrap_or(0)
 }
 
+/// Hash the full Apply request into a stable idempotency fingerprint.
+///
+/// SHA-256 over the canonical JSON of every Apply input; the same logical
+/// request always yields the same fingerprint, so the request ledger can
+/// detect and reject replay after a crash or retry.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn topology_apply_fingerprint(
     store_id: &str,
@@ -104,6 +115,7 @@ pub(crate) fn topology_apply_fingerprint(
     Ok(hex::encode(hasher.finalize()))
 }
 
+/// Serialise the request ledger entry (revision + fingerprint) for storage.
 pub(crate) fn topology_apply_ledger_json(
     revision: u64,
     fingerprint: &str,
@@ -115,6 +127,7 @@ pub(crate) fn topology_apply_ledger_json(
     .map_err(|e| AppError::Internal(format!("serialize topology request ledger: {e}")))
 }
 
+/// Read the current revision of a stored topology envelope (`0` when absent).
 pub(crate) fn current_topology_revision(
     conn: &Connection,
     setting_key: &str,
@@ -127,6 +140,11 @@ pub(crate) fn current_topology_revision(
     Ok(topology_revision_from_json(&value))
 }
 
+/// Serialise the versioned graph envelope, defaulting missing wire ports.
+///
+/// Mirrors the save-side port normalization (`from_port ?? right`, `to_port
+/// ?? left`) so the stored envelope matches what the frontend loader
+/// expects.
 pub(crate) fn topology_envelope_json(
     nodes: &[Value],
     wires: &[Value],
@@ -188,6 +206,7 @@ pub(crate) fn legacy_topology_belongs_to_branch(
     Ok(semantic_branch_profile_id(nodes, wires) == Some(branch_id))
 }
 
+/// Build a desktop `AppError::TopologyValidation` failure with optional ids.
 pub(crate) fn topology_validation(
     code: &str,
     node_id: Option<&str>,

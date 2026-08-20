@@ -99,6 +99,7 @@ pub(crate) fn topology_setting_key(branch_id: Option<&str>) -> Result<String, Ap
     Ok(format!("{TOPOLOGY_SETTING_KEY}/{branch_id}"))
 }
 
+/// Test convenience wrapper: save a topology envelope under an explicit key.
 #[cfg(test)]
 pub(crate) fn save_topology_json_at_key(
     conn: &Connection,
@@ -109,6 +110,14 @@ pub(crate) fn save_topology_json_at_key(
     save_topology_json_at_key_with_revision(conn, nodes, wires, setting_key, &[], None, None)
 }
 
+/// Save a versioned topology envelope under a settings key.
+///
+/// Runs the semantic-ownership and diagram-payload gates, then writes the
+/// diagram and its compiled runtime plan in one IMMEDIATE transaction,
+/// bumping the revision. With `expected_revision`, a concurrent writer that
+/// committed first aborts this save with a `topology-revision-conflict`.
+/// When `request` is given, the request ledger is persisted and the Apply
+/// recovery journal is cleared in the same transaction.
 pub(crate) fn save_topology_json_at_key_with_revision(
     conn: &Connection,
     nodes: Vec<Value>,
@@ -237,6 +246,7 @@ pub(crate) fn restore_topology_setting(
     Ok(())
 }
 
+/// Persist the Apply compensation journal for crash-recovery replay.
 pub(crate) fn persist_topology_recovery(
     conn: &Connection,
     recovery: &TopologyApplyRecovery,
@@ -249,6 +259,7 @@ pub(crate) fn persist_topology_recovery(
     Ok(())
 }
 
+/// Remove the Apply compensation journal once both databases are settled.
 pub(crate) fn clear_topology_recovery(conn: &Connection) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
     oz_core::Settings::remove(&tx, TOPOLOGY_APPLY_RECOVERY_KEY)?;
@@ -274,6 +285,10 @@ pub async fn recover_pending_topology_apply_at_startup(state: &AppState) -> Resu
     recover_pending_topology_apply(state, &expected_store_id).await
 }
 
+/// Replay or compensate a pending cross-database Apply for one store.
+///
+/// Shared by the startup recovery daemon and the tests; verifies the journal
+/// belongs to the expected store before touching either database.
 pub(crate) async fn recover_pending_topology_apply(
     state: &AppState,
     expected_store_id: &str,
@@ -467,6 +482,7 @@ pub(crate) fn validate_apply_gate(
     validate_diagram_payloads(nodes, wires)
 }
 
+/// Enforce the subscription-tier warehouse count quota for a topology save.
 pub(crate) fn validate_warehouse_quota(
     nodes: &[Value],
     tier: &oz_core::subscription::SubscriptionTier,
@@ -655,18 +671,28 @@ pub(crate) fn validate_topology_structure(
     Ok(())
 }
 
-/// Serialise and persist topology data to the settings store.
+/// Test-only legacy compat: serialise typed topology payloads to the
+/// settings store under the unscoped `oz-pos/topology` key.
 ///
 /// Writes the nodes + wires payloads as JSON under the
 /// `oz-pos/topology` key. Any previous topology is overwritten.
 /// The write is wrapped in a transaction to satisfy the project
 /// rule that all database writes must occur inside a transaction.
 ///
+/// Kept under `cfg(test)`: production topology persistence is exclusively
+/// `apply_topology_diff` (revision-guarded, semantic-gated, journaled).
+/// This helper round-trips the legacy typed payloads for the unit tests
+/// without exposing a second production write path.
+///
 /// # Validation
 ///
-/// - Wire IDs must be unique within the topology.
-/// - Wire `from_node_id` and `to_node_id` must reference existing nodes.
-pub fn save_topology_data(
+/// Structural validation is delegated to [`validate_topology_structure`]
+/// after the null-port normalization, so the validator sees the exact
+/// values that will be stored: node and wire IDs must be unique, node
+/// types/directions/ports must be known, and wire endpoints must
+/// reference existing nodes.
+#[cfg(test)]
+pub(crate) fn save_topology_data(
     conn: &Connection,
     nodes: Vec<TopologyNodePayload>,
     wires: Vec<TopologyWirePayload>,
@@ -688,81 +714,16 @@ pub fn save_topology_data(
         })
         .collect();
 
-    // Validate wire IDs are unique.
-    let mut seen_wire_ids = std::collections::HashSet::new();
-    for wire in &wires {
-        if !seen_wire_ids.insert(&wire.id) {
-            return Err(AppError::Internal(format!(
-                "duplicate wire id: {}",
-                wire.id
-            )));
-        }
-    }
-
-    // Validate node IDs are unique.
-    //
-    // Without this, the `node_ids` HashSet built below would silently
-    // collapse duplicate node ids, making wire endpoint resolution
-    // ambiguous (a wire pointing at "n1" could resolve to either
-    // duplicate). This mirrors the wire-id uniqueness check.
-    let mut seen_node_ids = std::collections::HashSet::new();
-    for node in &nodes {
-        if !seen_node_ids.insert(&node.id) {
-            return Err(AppError::Internal(format!(
-                "duplicate node id: {}",
-                node.id
-            )));
-        }
-    }
-
-    // Validate node types are known (reject #[serde(other)]).
-    for node in &nodes {
-        if node.node_type == NodeType::Unknown {
-            return Err(AppError::Internal(format!(
-                "node {} has unknown type",
-                node.id
-            )));
-        }
-    }
-
-    // Validate wire directions and ports are known.
-    for wire in &wires {
-        if wire.direction == WireDirection::Unknown {
-            return Err(AppError::Internal(format!(
-                "wire {} has unknown direction",
-                wire.id
-            )));
-        }
-        if wire.from_port == Some(PortName::Unknown) {
-            return Err(AppError::Internal(format!(
-                "wire {} has unknown from_port",
-                wire.id
-            )));
-        }
-        if wire.to_port == Some(PortName::Unknown) {
-            return Err(AppError::Internal(format!(
-                "wire {} has unknown to_port",
-                wire.id
-            )));
-        }
-    }
-
-    // Validate wire endpoints reference existing nodes.
-    let node_ids: std::collections::HashSet<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
-    for wire in &wires {
-        if !node_ids.contains(wire.from_node_id.as_str()) {
-            return Err(AppError::Internal(format!(
-                "wire {} references unknown from_node_id: {}",
-                wire.id, wire.from_node_id
-            )));
-        }
-        if !node_ids.contains(wire.to_node_id.as_str()) {
-            return Err(AppError::Internal(format!(
-                "wire {} references unknown to_node_id: {}",
-                wire.id, wire.to_node_id
-            )));
-        }
-    }
+    // Reuse the shared structural validator (duplicate ids, unknown node
+    // types/directions/ports, ghost endpoints) instead of maintaining a
+    // second inline copy whose error text drifted from
+    // validate_topology_structure. The node-id uniqueness check matters
+    // beyond the duplicate-id error itself: without it the validator's
+    // `node_ids` set would silently collapse duplicate node ids, making
+    // wire endpoint resolution ambiguous (a wire pointing at "n1" could
+    // resolve to either duplicate). The null-port normalization above ran
+    // first, so these checks see the exact values that will be stored.
+    validate_topology_structure(&nodes, &wires)?;
 
     let data = TopologyData { nodes, wires };
     let json = serde_json::to_string(&serde_json::json!({
@@ -777,11 +738,13 @@ pub fn save_topology_data(
     Ok(())
 }
 
-/// Load and deserialise persisted topology data.
+/// Test-only legacy compat: load and deserialise persisted topology data.
 ///
 /// Returns `None` when no topology has been saved yet.
 ///
-/// Returns `None` when no topology has been saved yet.
+/// Kept under `cfg(test)` with [`save_topology_data`]: production loads go
+/// through the `load_topology` command, which serves the raw JSON so the
+/// frontend's documented load-time healing can run.
 ///
 /// # Why ports stay raw on the load side
 ///
@@ -793,7 +756,8 @@ pub fn save_topology_data(
 /// 'left'`) at every consumption point anyway. A load -> save cycle heals a
 /// legacy row via the save-side normalization; the load boundary stays raw.
 /// Pinned by the `..._preserves_raw_legacy_null_ports` test below.
-pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, AppError> {
+#[cfg(test)]
+pub(crate) fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, AppError> {
     let raw = oz_core::Settings::get(conn, TOPOLOGY_SETTING_KEY)?;
     match raw {
         Some(json) => {

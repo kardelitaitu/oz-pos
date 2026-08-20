@@ -7,6 +7,8 @@
 - Maintain documentation integrity. Preserve all existing comments and docstrings unless explicitly modified.
 - Never switch local branches unless explicitly asked by the user.
 - Never create new branches unless explicitly asked by the user.
+- Always use codebase-memory-mcp to quickly explore the area you looking for
+- Always read file using 100 lines of chunks
 
 ## Quick Setup
 

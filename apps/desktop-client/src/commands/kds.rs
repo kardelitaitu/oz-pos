@@ -15,10 +15,9 @@ use oz_core::permissions;
 use serde_json::Value;
 
 use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
+use crate::commands::topology::TOPOLOGY_RUNTIME_SETTING_KEY;
 use crate::error::AppError;
 use crate::state::AppState;
-
-const TOPOLOGY_RUNTIME_SETTING_KEY: &str = "oz-pos/topology-runtime";
 
 /// Select every KDS workspace instance targeted by POS runtime routes.
 ///

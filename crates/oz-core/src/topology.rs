@@ -142,25 +142,23 @@ pub fn semantic_node_type(node: &Value) -> Option<&str> {
 /// Return true when a geometric wire has no deterministic semantic migration.
 /// Known legacy identities remain readable; ambiguous workspace relationships
 /// must be repaired in the editor before Apply can persist or compile them.
-fn ambiguous_legacy_wire(nodes: &[Value], wire: &Value) -> bool {
+fn ambiguous_legacy_wire(
+    node_by_id: &std::collections::HashMap<&str, &Value>,
+    wire: &Value,
+) -> bool {
     if ["from_port_id", "to_port_id", "relationship_type"]
         .iter()
         .any(|key| wire.get(*key).is_some())
     {
         return false;
     }
-    let Some(from_node) = value_string(wire, "from_node_id").and_then(|id| {
-        nodes
-            .iter()
-            .find(|node| value_string(node, "id") == Some(id))
-    }) else {
+    let Some(from_node) =
+        value_string(wire, "from_node_id").and_then(|id| node_by_id.get(id).copied())
+    else {
         return false;
     };
-    let Some(to_node) = value_string(wire, "to_node_id").and_then(|id| {
-        nodes
-            .iter()
-            .find(|node| value_string(node, "id") == Some(id))
-    }) else {
+    let Some(to_node) = value_string(wire, "to_node_id").and_then(|id| node_by_id.get(id).copied())
+    else {
         return false;
     };
     let from_type = semantic_node_type(from_node);
@@ -319,7 +317,45 @@ fn topology_validation(
 /// one Restaurant POS operation feed. Geometry and display names are never
 /// used to infer ownership here.
 pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), CoreError> {
-    if let Some(wire) = wires.iter().find(|wire| ambiguous_legacy_wire(nodes, wire)) {
+    // Index the graph once so the per-wire and per-node gates below are
+    // O(N + W) instead of O(N × W). `node_by_id` keeps the FIRST node for
+    // each id (matching the previous linear `find` scans); the id sets and
+    // the incoming-wire index preserve wire order and first-match
+    // semantics, so no gate changes its result or its report order.
+    let mut node_by_id: std::collections::HashMap<&str, &Value> = std::collections::HashMap::new();
+    for node in nodes {
+        if let Some(id) = value_string(node, "id") {
+            node_by_id.entry(id).or_insert(node);
+        }
+    }
+    let warehouse_ids: std::collections::HashSet<&str> = nodes
+        .iter()
+        .filter(|node| semantic_node_type(node) == Some("warehouse"))
+        .filter_map(|node| value_string(node, "id"))
+        .collect();
+    let restaurant_pos_ids: std::collections::HashSet<&str> = nodes
+        .iter()
+        .filter(|node| semantic_type_key(node) == "restaurant-pos")
+        .filter_map(|node| value_string(node, "id"))
+        .collect();
+    let retail_pos_ids: std::collections::HashSet<&str> = nodes
+        .iter()
+        .filter(|node| {
+            semantic_node_type(node) == Some("workspace") && semantic_type_key(node) == "store-pos"
+        })
+        .filter_map(|node| value_string(node, "id"))
+        .collect();
+    let mut incoming_by_target: std::collections::HashMap<&str, Vec<&Value>> =
+        std::collections::HashMap::new();
+    for wire in wires {
+        if let Some(target) = value_string(wire, "to_node_id") {
+            incoming_by_target.entry(target).or_default().push(wire);
+        }
+    }
+    if let Some(wire) = wires
+        .iter()
+        .find(|wire| ambiguous_legacy_wire(&node_by_id, wire))
+    {
         return Err(topology_validation(
             "ambiguous-legacy-wire",
             None,
@@ -393,6 +429,7 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
         .filter(|node| value_string(node, "type") == Some("workspace"))
         .filter_map(|node| value_string(node, "id"))
         .collect();
+    let workspace_id_set: std::collections::HashSet<&str> = workspace_ids.iter().copied().collect();
     let mut seen_location_wires = std::collections::HashSet::new();
     for wire in wires {
         if value_string(wire, "relationship_type") != Some("location") {
@@ -424,11 +461,8 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
             // two-way are all legal — normalizeWireDirection). Rejecting a
             // location wire whose direction was cycled in the editor would
             // be a frontend/backend contract drift.
-            || (!workspace_ids.contains(&value_string(wire, "to_node_id").unwrap_or_default())
-                && !nodes.iter().any(|node| {
-                    value_string(node, "id") == value_string(wire, "to_node_id")
-                        && semantic_node_type(node) == Some("warehouse")
-                }))
+            || (!workspace_id_set.contains(value_string(wire, "to_node_id").unwrap_or_default())
+                && !warehouse_ids.contains(value_string(wire, "to_node_id").unwrap_or_default()))
         {
             return Err(topology_validation(
                 "invalid-location-connection",
@@ -453,21 +487,18 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
         ));
     }
 
-    let node_by_id = |node_id: Option<&str>| {
-        node_id.and_then(|id| {
-            nodes
-                .iter()
-                .find(|node| value_string(node, "id") == Some(id))
-        })
-    };
     for wire in wires {
         if value_string(wire, "relationship_type") == Some("location") {
             continue;
         }
-        let Some(from_node) = node_by_id(value_string(wire, "from_node_id")) else {
+        let Some(from_node) =
+            value_string(wire, "from_node_id").and_then(|id| node_by_id.get(id).copied())
+        else {
             continue;
         };
-        let Some(to_node) = node_by_id(value_string(wire, "to_node_id")) else {
+        let Some(to_node) =
+            value_string(wire, "to_node_id").and_then(|id| node_by_id.get(id).copied())
+        else {
             continue;
         };
         let is_kds_operation = value_string(wire, "from_port_id") == Some("operation-out")
@@ -496,16 +527,13 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
         }
     }
 
-    for workspace_id in workspace_ids {
-        let purpose_key = nodes
-            .iter()
-            .find(|node| value_string(node, "id") == Some(workspace_id))
+    for &workspace_id in &workspace_ids {
+        let workspace_node = node_by_id.get(workspace_id).copied();
+        let purpose_key = workspace_node
             .and_then(|node| node.get("metadata"))
             .and_then(|metadata| value_string(metadata, "purposeKey"))
             .unwrap_or("general");
-        let type_key = nodes
-            .iter()
-            .find(|node| value_string(node, "id") == Some(workspace_id))
+        let type_key = workspace_node
             .and_then(|node| node.get("metadata"))
             .and_then(|metadata| value_string(metadata, "typeKey"))
             .unwrap_or("store-pos");
@@ -531,22 +559,24 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
             ));
         }
         let is_kds = type_key == "kds";
-        let operation_inputs: Vec<&Value> = wires
+        let incoming_slice: &[&Value] = incoming_by_target
+            .get(workspace_id)
+            .map_or(&[], |wires| wires.as_slice());
+        let operation_inputs: Vec<&Value> = incoming_slice
             .iter()
             .filter(|wire| {
                 value_string(wire, "relationship_type") == Some("generic")
-                    && value_string(wire, "to_node_id") == Some(workspace_id)
                     && value_string(wire, "to_port_id") == Some("operation-in")
             })
+            .copied()
             .collect();
         let incoming = if is_kds {
             operation_inputs.len()
         } else {
-            wires
+            incoming_slice
                 .iter()
                 .filter(|wire| {
                     value_string(wire, "relationship_type") == Some("location")
-                        && value_string(wire, "to_node_id") == Some(workspace_id)
                         && value_string(wire, "to_port_id") == Some("location-in")
                 })
                 .count()
@@ -585,13 +615,8 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
             let operation_wire = operation_inputs[0];
             let source_is_restaurant_pos =
                 operation_wire.get("from_port_id").and_then(Value::as_str) == Some("operation-out")
-                    && nodes.iter().any(|node| {
-                        value_string(node, "id") == value_string(operation_wire, "from_node_id")
-                            && node
-                                .get("metadata")
-                                .and_then(|metadata| value_string(metadata, "typeKey"))
-                                == Some("restaurant-pos")
-                    });
+                    && restaurant_pos_ids
+                        .contains(value_string(operation_wire, "from_node_id").unwrap_or_default());
             if !source_is_restaurant_pos {
                 return Err(topology_validation(
                     "invalid-operation-source",
@@ -613,23 +638,26 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
         .filter(|node| semantic_node_type(node) == Some("warehouse"))
     {
         let warehouse_id = value_string(warehouse, "id").unwrap_or_default();
-        let location_inputs: Vec<&Value> = wires
+        let incoming_slice: &[&Value] = incoming_by_target
+            .get(warehouse_id)
+            .map_or(&[], |wires| wires.as_slice());
+        let location_inputs: Vec<&Value> = incoming_slice
             .iter()
             .filter(|wire| {
                 value_string(wire, "relationship_type") == Some("location")
-                    && value_string(wire, "to_node_id") == Some(warehouse_id)
                     && is_warehouse_primary_input_port(value_string(wire, "to_port_id"))
                     && value_string(wire, "to_port_id") == Some("location-in")
             })
+            .copied()
             .collect();
-        let operation_inputs: Vec<&Value> = wires
+        let operation_inputs: Vec<&Value> = incoming_slice
             .iter()
             .filter(|wire| {
                 value_string(wire, "relationship_type") == Some("generic")
-                    && value_string(wire, "to_node_id") == Some(warehouse_id)
                     && is_warehouse_primary_input_port(value_string(wire, "to_port_id"))
                     && value_string(wire, "to_port_id") == Some("operation-in")
             })
+            .copied()
             .collect();
         let primary_count = location_inputs.len() + operation_inputs.len();
         if primary_count == 0 {
@@ -659,12 +687,9 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
             ));
         }
         for operation_wire in operation_inputs {
-            let source_is_retail_pos = nodes.iter().any(|node| {
-                value_string(node, "id") == value_string(operation_wire, "from_node_id")
-                    && semantic_node_type(node) == Some("workspace")
-                    && semantic_type_key(node) == "store-pos"
-                    && value_string(operation_wire, "from_port_id") == Some("operation-out")
-            });
+            let source_is_retail_pos = retail_pos_ids
+                .contains(value_string(operation_wire, "from_node_id").unwrap_or_default())
+                && value_string(operation_wire, "from_port_id") == Some("operation-out");
             if !source_is_retail_pos {
                 return Err(topology_validation(
                     "invalid-warehouse-operation-source",

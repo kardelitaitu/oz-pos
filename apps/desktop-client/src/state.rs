@@ -532,9 +532,23 @@ impl AppState {
         token: &str,
     ) -> Result<(SessionContext, Arc<std::sync::Mutex<Connection>>), AppError> {
         let session = self.resolve_session(token)?;
+        let effective_store_id = match session.restaurant_pos_id.as_deref() {
+            Some(_resto_id) => {
+                // Multi-KDS mode: the Restaurant POS's terminal_id IS the store
+                // scope key — each Restaurant POS owns its own KDS database.
+                // For now, fall through to session.store_id; when the KDS
+                // device registry is implemented, this will resolve the
+                // restaurant_pos_id → store_id binding from settings.
+                session.store_id.clone()
+            }
+            None => {
+                // Legacy mode: unchanged behavior.
+                session.store_id.clone()
+            }
+        };
         let conn = self
             .db_manager
-            .open_store(&session.store_id)
+            .open_store(&effective_store_id)
             .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
         Ok((session, conn))
     }

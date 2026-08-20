@@ -48,14 +48,22 @@ pub struct SessionContext {
     /// Unix timestamp (seconds) of when this session was created.
     /// Used for deterministic LRU eviction when the session store is full.
     pub created_at: i64,
+    /// Optional Restaurant POS identifier for multi-KDS routing.
+    ///
+    /// When `Some(id)`, the session is scoped to a specific Restaurant POS
+    /// and `resolve_store` opens that POS's database. When `None` (the
+    /// default for all current sessions), falls back to `store_id` scoping
+    /// — identical to today's behavior.
+    ///
+    /// Added as part of multi-KDS architecture (plan_multi_kds_one_location).
+    pub restaurant_pos_id: Option<String>,
 }
 
 impl SessionContext {
-    /// Create a new session context.
+    /// Create a new session context (legacy 8-field constructor).
     ///
-    /// Eight positional parameters is justified because this is a struct
-    /// constructor that sets all 8 fields at once. A builder would add
-    /// ceremony without preventing misuse.
+    /// Sets `restaurant_pos_id` to `None` (default for all current sessions).
+    /// For multi-KDS sessions, use [`new_with_restaurant_pos`] instead.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         user_id: String,
@@ -76,6 +84,36 @@ impl SessionContext {
             type_key,
             expires_at,
             created_at,
+            restaurant_pos_id: None,
+        }
+    }
+
+    /// Create a session context scoped to a specific Restaurant POS.
+    ///
+    /// Used by KDS devices that need to be isolated to a single Restaurant POS.
+    /// When `restaurant_pos_id` is `None`, behaves identically to [`new`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_restaurant_pos(
+        user_id: String,
+        role_id: String,
+        terminal_id: String,
+        store_id: String,
+        instance_id: String,
+        type_key: String,
+        expires_at: Option<i64>,
+        created_at: i64,
+        restaurant_pos_id: Option<String>,
+    ) -> Self {
+        Self {
+            user_id,
+            role_id,
+            terminal_id,
+            store_id,
+            instance_id,
+            type_key,
+            expires_at,
+            created_at,
+            restaurant_pos_id,
         }
     }
 

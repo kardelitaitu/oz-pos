@@ -244,6 +244,7 @@ pub struct TopologyWirePayload {
     pub to_port: Option<PortName>,
 }
 
+/// Default wire direction when the field is absent or explicitly null.
 pub(crate) fn default_direction() -> WireDirection {
     WireDirection::OneWay
 }

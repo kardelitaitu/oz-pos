@@ -30,7 +30,11 @@ pub use persistence::recover_pending_topology_apply_at_startup;
 pub use model::{
     NodeType, PortName, TopologyData, TopologyNodePayload, TopologyWirePayload, WireDirection,
 };
-pub use persistence::{load_topology_data, save_topology_data};
+
+// Shared settings key consumed by sibling command modules (pos, kds); the
+// model module stays private, only the constant is re-exported so the
+// "oz-pos/topology-runtime" string has exactly one definition.
+pub(crate) use model::TOPOLOGY_RUNTIME_SETTING_KEY;
 
 // Tauri's #[command] macro generates hidden `__cmd__*` wrapper macros in the
 // defining module; the root must re-export them so lib.rs's
@@ -56,6 +60,12 @@ pub(crate) use semantics::*;
 
 #[cfg(test)]
 mod topology_command_tests;
+#[cfg(test)]
+mod topology_field_tests;
+#[cfg(test)]
+mod topology_persistence_tests;
+#[cfg(test)]
+mod topology_serde_tests;
 #[cfg(test)]
 mod topology_stress_tests;
 #[cfg(test)]

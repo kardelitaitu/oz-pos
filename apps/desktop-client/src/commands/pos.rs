@@ -18,10 +18,9 @@ use oz_core::events::{SaleCompleted, SaleCompletedLine};
 use oz_core::{Cart, CartId, CartLine, LineId, Money, PaymentSplitArg, SaleStatus, Sku};
 
 use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
+use crate::commands::topology::TOPOLOGY_RUNTIME_SETTING_KEY;
 use crate::error::AppError;
 use crate::state::AppState;
-
-const TOPOLOGY_RUNTIME_SETTING_KEY: &str = "oz-pos/topology-runtime";
 
 /// Select every distinct warehouse target from validated POS stock routes.
 ///

@@ -1,3 +1,10 @@
+//! Unit tests for the oz-core semantic topology validation engine:
+//! the vendored contract parity check, semantic ownership gates,
+//! typed-connection gates, and cycle detection.
+//!
+//! Loaded as the `tests` module of `topology.rs` via `#[path]`; the
+//! crate namespace resolves through `use super::*`.
+
 use super::*;
 use serde_json::json;
 
@@ -145,8 +152,12 @@ fn ambiguous_legacy_wire_is_detected() {
         "to_node_id": "ws-2",
         "direction": "one-way",
     });
+    let node_by_id: std::collections::HashMap<&str, &Value> = nodes
+        .iter()
+        .filter_map(|node| value_string(node, "id").map(|id| (id, node)))
+        .collect();
     assert!(
-        ambiguous_legacy_wire(&nodes, &wire),
+        ambiguous_legacy_wire(&node_by_id, &wire),
         "workspace-to-workspace geometric wire has no deterministic semantic migration"
     );
 }
