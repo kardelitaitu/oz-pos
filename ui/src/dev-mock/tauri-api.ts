@@ -2070,11 +2070,19 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'list_currencies_scoped': () => MOCK_CURRENCIES,
   'get_default_currency': () => 'IDR',
   'set_default_currency': () => null,
+  'get_default_currency_scoped': () => 'IDR',
+  'set_default_currency_scoped': () => null,
   'list_exchange_rates': () => [
     { id: 'rate-1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 1_6000000, source: 'manual', effective_date: '2026-08-01', created_at: new Date().toISOString() },
   ],
+  'list_exchange_rates_scoped': () => [
+    { id: 'rate-1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 1_6000000, source: 'manual', effective_date: '2026-08-01', created_at: new Date().toISOString() },
+  ],
   'create_exchange_rate': () => null,
+  'create_exchange_rate_scoped': () => null,
   'delete_exchange_rate': () => null,
+  'delete_exchange_rate_scoped': () => null,
+  'get_latest_exchange_rate_scoped': () => ({ id: 'rate-1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 1_6000000, source: 'manual', effective_date: '2026-08-01', created_at: new Date().toISOString() }),
 
   // ═══════════════════════════════════════════════════════════════
   // CUSTOMERS

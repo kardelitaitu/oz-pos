@@ -149,7 +149,16 @@ async fn spawn_test_peer(
 
     let server_handle = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
-        handle_peer(stream, "test-peer".into(), rx, buffer, initial_events, None).await;
+        handle_peer(
+            stream,
+            "test-peer".into(),
+            rx,
+            buffer,
+            initial_events,
+            None,
+            None,
+        )
+        .await;
     });
 
     let client = TcpStream::connect(addr).await.unwrap();
