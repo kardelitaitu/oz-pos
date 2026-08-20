@@ -1,4 +1,27 @@
 
+## 2026-08-20 — TDD cycle: format_minor(i64::MIN) overflow (foundation)
+
+**Problem:** `format_minor` (foundation/src/money.rs) computed the fractional part
+as `minor.abs() % div`. For `minor = i64::MIN` (reachable: `Money.minor_units` is a
+public `i64`) `abs()` overflows — panics in debug, wraps negative in release — so
+extreme refund/void totals could render garbage like `"-92233720368547758.-8"`.
+
+**Solution:** TDD Red→Green:
+- **Red:** Added `format_minor_i64_min_does_not_panic` — reproduced the exact
+  garbage output `"-92233720368547758.-8"` before the fix.
+- **Green:** `minor.abs() % div` → `(minor % div).unsigned_abs()`. The remainder
+  keeps the dividend's sign and never overflows; `unsigned_abs()` yields the
+  magnitude (8 → `"08"`). Existing negative cases (`-0.12`, `-12.00`, `-0.012`) unchanged.
+
+**Verification:** `cargo test -p foundation --lib` — 383/383 pass (incl. new test);
+`cargo fmt --all -- --check` clean; `cargo clippy -p foundation -- -D warnings` clean.
+
+**Risks / follow-ups:**
+- `negate()` / `abs()` still panic on `i64::MIN` in debug (documented ⚠️) — a
+  follow-up slice could add `checked_negate` / `checked_abs` or make them saturating.
+- `fuzz/fuzz_targets/money_parse.rs` never calls `format_minor`, so it cannot find
+  this class of bug — worth adding a format branch next time the fuzz harness runs.
+
 ## 2026-08-20 — TDD cycle: LazyBoundary first test coverage (UI)
 
 **Problem:** `LazyBoundary` — the shared Suspense wrapper for PERF-01 route-level code splitting, used ~30× across `AppShell` / `TabletAppShell` / widget hosts — had zero direct tests. Its fallback contract (default polite "Loading…" status region, custom fallback override, fallback→content swap on resolve) was only exercised implicitly through shell screens.

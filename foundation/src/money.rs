@@ -74,7 +74,10 @@ pub fn format_minor(minor: i64, currency: Currency) -> String {
     } else {
         let div = 10_i64.pow(exp);
         let major = minor / div;
-        let frac = minor.abs() % div;
+        // `minor % div` keeps the dividend's sign (never overflows); take
+        // the unsigned magnitude so `i64::MIN` cannot panic (`abs()` would)
+        // or render as a negative fraction.
+        let frac = (minor % div).unsigned_abs();
         // Integer division truncates toward zero, so a negative sub-major
         // amount (e.g. -12 cents) would otherwise render as "0.12" and lose
         // its sign — prefix it explicitly.
@@ -587,6 +590,14 @@ mod tests {
     #[test]
     fn format_minor_usd_one_cent() {
         assert_eq!(format_minor(1, usd()), "0.01");
+    }
+
+    #[test]
+    fn format_minor_i64_min_does_not_panic() {
+        // `i64::MIN.abs()` overflows (panics in debug, wraps negative in
+        // release). The fractional part must render as "08", not "-8" or a
+        // panic: -9_223_372_036_854_775_808 / 100 → -92_233_720_368_547_758.08.
+        assert_eq!(format_minor(i64::MIN, usd()), "-92233720368547758.08");
     }
 
     #[test]
