@@ -18,7 +18,7 @@
   },
   "pageDesc": {
     "features": "Offline-first point of sale: sales, shifts, and stock that keep working with zero connectivity.",
-    "pricing": "Five plans — Free forever, Plus, Pro, Premium, and Enterprise. Yearly = 2 months free.",
+    "pricing": "Simple pricing — start free for 90 days. Trial, Pro, Premium, and Enterprise plans.",
     "download": "Download OZ-POS for Windows. macOS, Linux, Android, and iOS are coming soon.",
     "support": "Get help with OZ-POS — email support and answers to the most common questions.",
     "login": "Sign in to your OZ-POS account with just your email.",
@@ -44,8 +44,8 @@
     "faqTitle": "Frequently asked questions",
     "faq": [
       {
-        "q": "How do I start using OZ-POS for free?",
-        "a": "Download OZ-POS and launch it — the free plan starts immediately, no signup required."
+        "q": "How do I start the free trial?",
+        "a": "Download OZ-POS and launch it — the 90-day trial starts automatically, no signup required."
       },
       {
         "q": "Does OZ-POS work without internet?",
@@ -99,7 +99,7 @@
   "hero": {
     "title": "The Offline-First POS Platform",
     "subtitle": "Keep selling through outages. OZ-POS runs entirely on your device and syncs to the cloud when the connection returns.",
-    "ctaPrimary": "Download free",
+    "ctaPrimary": "Start Free Trial",
     "ctaSecondary": "See Pricing"
   },
   "features": {
@@ -138,11 +138,11 @@
   },
   "pricingPreview": {
     "title": "Simple pricing",
-    "subtitle": "Start free forever. Upgrade when you're ready.",
+    "subtitle": "Start free for 90 days. Upgrade when you're ready.",
     "viewAll": "Compare all plans"
   },
   "ctaBanner": {
-    "title": "Start free today",
+    "title": "Start your free trial today",
     "subtitle": "No credit card, no signup. Download and sell.",
     "cta": "Download OZ-POS"
   },
@@ -152,21 +152,13 @@
     "trust1": "30-day money back",
     "trust2": "Cancel anytime",
     "note": "One-time (perpetual) licensing is not available yet — see the roadmap.",
-    "comparison": "Feature comparison across plans",
-    "mostPopular": "⭐ Most Popular",
-    "billing": {
-      "label": "Billing period",
-      "monthly": "Monthly",
-      "yearly": "Yearly",
-      "yearlyNote": "2 months free",
-      "billedYearly": "Billed yearly · 2 months free"
-    }
+    "comparison": "Feature comparison across plans"
   },
   "download": {
     "title": "Download OZ-POS",
-    "subtitle": "Version 0.0.28 — free forever, no signup required.",
+    "subtitle": "Version 0.0.27 — free 90-day trial, no signup required.",
     "version": "Current version",
-    "versionValue": "0.0.28",
+    "versionValue": "0.0.27",
     "platformsTitle": "Choose your platform",
     "requirementsTitle": "System requirements",
     "requirements": [
@@ -178,9 +170,7 @@
     ],
     "note": "Release downloads are published on GitHub Releases.",
     "releaseLink": "View GitHub Releases",
-    "comingSoon": "Coming soon",
-    "trialCallout": "You came from a restaurant/cafe page — your trial key unlocks a 14-day Pro trial.",
-    "trialCalloutEnterprise": "Referral — your trial key unlocks a 30-day Pro trial."
+    "comingSoon": "Coming soon"
   },
   "login": {
     "title": "Sign in to your account",
@@ -254,21 +244,19 @@
     "statusExpired": "Expired",
     "statusRevoked": "Revoked",
     "renewHint": "Your subscription is no longer active.",
-    "renewLink": "Renew on the pricing page",
-    "bundleUpgrade": "Upgrade to bundle",
-    "bundleUpgradeHint": "Adds the Kitchen Display (KDS) to your Plus plan."
+    "renewLink": "Renew on the pricing page"
   },
   "footer": {
     "rights": "All rights reserved.",
     "privacy": "Privacy",
     "terms": "Terms",
-    "legal": "Legal",
-    "business": "Business types"
+    "legal": "Legal"
   },
   "legal": {
     "privacyTitle": "Privacy Policy",
     "termsTitle": "Terms of Service",
-    "placeholder": "This page is a placeholder. Legal text will be added before launch."
+    "effective": "Effective",
+    "version": "Version"
   },
   "notFound": {
     "title": "Page not found",
@@ -310,104 +298,8 @@
     "errorRegister": "Couldn't create the account. Please try again.",
     "errorExists": "An account with this email already exists. Sign in instead.",
     "haveAccount": "Already have an account?",
-    "signInLink": "Sign in"
-  },
-  "vertical": {
-    "positioning": "OZ-POS is the QRIS-native POS with offline-first reliability — priced for the Indonesian market.",
-    "whyTitle": "Why OZ-POS for your business?",
-    "otherTitle": "Built for your kind of business",
-    "otherSubtitle": "OZ-POS adapts to how you sell — pick your industry.",
-    "ctaSecondary": "Download free",
-    "bundleCta": "Plus + KDS — Restaurant Starter bundle",
-    "kafe": {
-      "label": "Coffee shops",
-      "title": "A POS that keeps your coffee shop flowing",
-      "tagline": "KDS, analytics, and multi-terminal — working fully offline.",
-      "tierAnchor": "pro",
-      "ctaPrimary": "See the Pro plan",
-      "leadWithTrial": true,
-      "trialCta": "Start your 14-day Pro trial",
-      "features": [
-        { "title": "Kitchen display (KDS)", "description": "Orders land on the kitchen screen in real time — no more shouting over the grinder." },
-        { "title": "Peak-hours analytics", "description": "See which hours sell, what moves, and where you can cut waste." },
-        { "title": "Multi-terminal", "description": "Up to 5 registers per store with one shared menu and stock." },
-        { "title": "Offline-first", "description": "Keep taking orders and printing receipts even when Wi-Fi drops." }
-      ],
-      "benefits": [
-        "The QRIS-native POS — your customers already pay with QR.",
-        "Set up in minutes; your team already knows how to use it.",
-        "Works without internet — no more lost sales during outages."
-      ]
-    },
-    "minimarket": {
-      "label": "Minimarkets",
-      "title": "Stock control for your minimarket",
-      "tagline": "Warehouses, multi-terminal, and live stock visibility.",
-      "tierAnchor": "pro",
-      "ctaPrimary": "See the Pro plan",
-      "features": [
-        { "title": "Live stock visibility", "description": "Know what's on the shelf, in the back, and at the warehouse — in real time." },
-        { "title": "Multi-terminal", "description": "Up to 5 registers per store, all sharing one inventory." },
-        { "title": "Warehouses", "description": "Route stock across up to 3 warehouses in one workspace." },
-        { "title": "Offline-first", "description": "Keep scanning and selling during outages — data syncs when you're back." }
-      ],
-      "benefits": [
-        "No more stockouts or over-ordering — see what's moving.",
-        "QRIS at the counter without extra hardware.",
-        "Cloud backup so your data is never lost."
-      ]
-    },
-    "warung": {
-      "label": "Warung / kiosk",
-      "title": "The POS that grows with your warung",
-      "tagline": "QRIS payments and a daily sales dashboard — free to start.",
-      "tierAnchor": "plus",
-      "ctaPrimary": "See the Plus plan",
-      "features": [
-        { "title": "Daily Sales Dashboard", "description": "See yesterday's sales, best sellers, and cash vs. QRIS at a glance every morning." },
-        { "title": "QRIS payments", "description": "Accept the QR payments your customers already use — no extra hardware." },
-        { "title": "Cloud backup", "description": "Your sales history is backed up and safe, even if the device breaks." },
-        { "title": "Free forever", "description": "One store, one register, and 30 days of history — free, no card required." }
-      ],
-      "benefits": [
-        "Simple enough for a warung — no training needed.",
-        "Track what sells so you stock smarter.",
-        "Offline-first: never lose a sale during an outage."
-      ]
-    },
-    "restoran": {
-      "label": "Restaurants",
-      "title": "From kitchen to checkout, in sync",
-      "tagline": "KDS, loyalty points, and scheduled reports for your restaurant.",
-      "tierAnchor": "premium",
-      "ctaPrimary": "See the Premium plan",
-      "features": [
-        { "title": "Kitchen display (KDS)", "description": "Orders flow from POS to kitchen in seconds — ticket times drop." },
-        { "title": "Loyalty points", "description": "Reward regulars with points and keep them coming back." },
-        { "title": "Scheduled reports", "description": "Get sales reports emailed to you automatically — daily or weekly." },
-        { "title": "Multi-store", "description": "Run multiple outlets with unlimited stores and terminals." }
-      ],
-      "benefits": [
-        "Faster table turns with a kitchen that stays in sync.",
-        "Built-in loyalty that increases repeat visits.",
-        "QRIS-native payments your customers already use."
-      ]
-    },
-    "enterpriseTrial": {
-      "title": "Enterprise Self-Serve Trial",
-      "metaDesc": "Start a 30-day Enterprise trial of OZ-POS with your approval code.",
-      "subtitle": "Enter your approval code to start a 30-day Enterprise trial with unlimited stores, staff, and all workspace types.",
-      "codeLabel": "Approval Code",
-      "codePlaceholder": "ENT-XXXXXXXX",
-      "emailLabel": "Work Email",
-      "emailPlaceholder": "you@company.com",
-      "submitButton": "Request Enterprise Trial",
-      "successTitle": "Your Enterprise Trial Key is Ready!",
-      "successMessage": "Copy the key below and paste it into the OZ-POS app when prompted to activate. Your trial includes unlimited stores, staff, and all workspace types for 30 days.",
-      "yourKeyLabel": "Your License Key",
-      "copyButton": "Copy",
-      "nextSteps": "Next: Open OZ-POS, paste this key along with your email, and start using Enterprise features immediately.",
-      "downloadButton": "Download OZ-POS"
-    }
+    "signInLink": "Sign in",
+    "agreeBefore": "By signing up, you agree to the",
+    "agreeSeparator": "and"
   }
 }

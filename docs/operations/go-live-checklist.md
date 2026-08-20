@@ -49,9 +49,12 @@ code change can do them. Do them **before** the §3 deploy so the checkout overl
 webhook delivery work the moment the new image is up.
 
 1. **Set the default payment link** — Paddle (sandbox) → **Checkout → Checkout settings →
-   Default payment link** → pick a product (e.g. **Pro — $19 USD**) → Save. Without it the
-   checkout overlay dies with **"Something went wrong"** before Paddle even opens.
-   `localhost` is allowed for sandbox testing, so the local site works too.
+   Default payment link** heading → enter a URL (the site homepage, e.g.
+   `https://oz-pos.adikaradwiatmaja.workers.dev`) → Save. This is a **URL input field**,
+   NOT a product picker. Without it the checkout service rejects every transaction with
+   `transaction_default_checkout_url_not_set` and the overlay dies with
+   **"Something went wrong"** before Paddle even opens. `https://localhost/` is also
+   accepted for sandbox testing (docs: "If you don't have one, enter https://localhost/").
 2. **Webhook destination — DONE (verified 2026-08-17 via the Paddle API):**
    `ntfset_01m05htpgfq0qmcvb0er6byrsx` now posts to
    `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook` (was the unowned

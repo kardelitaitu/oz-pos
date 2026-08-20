@@ -18,7 +18,7 @@
   },
   "pageDesc": {
     "features": "Kasir offline-first: penjualan, shift, dan stok yang tetap berjalan tanpa koneksi sama sekali.",
-    "pricing": "Lima paket — Gratis selamanya, Plus, Pro, Premium, dan Enterprise. Tahunan = 2 bulan gratis.",
+    "pricing": "Harga sederhana — mulai gratis 90 hari. Paket Trial, Pro, Premium, dan Enterprise.",
     "download": "Unduh OZ-POS untuk Windows. macOS, Linux, Android, dan iOS segera hadir.",
     "support": "Dapatkan bantuan OZ-POS — dukungan email dan jawaban untuk pertanyaan paling umum.",
     "login": "Masuk ke akun OZ-POS Anda hanya dengan email.",
@@ -44,8 +44,8 @@
     "faqTitle": "Pertanyaan yang sering diajukan",
     "faq": [
       {
-        "q": "Bagaimana mulai menggunakan OZ-POS secara gratis?",
-        "a": "Unduh OZ-POS dan jalankan — paket gratis langsung aktif, tanpa pendaftaran."
+        "q": "Bagaimana memulai uji coba gratis?",
+        "a": "Unduh OZ-POS dan jalankan — uji coba 90 hari dimulai otomatis, tanpa pendaftaran."
       },
       {
         "q": "Apakah OZ-POS berfungsi tanpa internet?",
@@ -99,7 +99,7 @@
   "hero": {
     "title": "Platform POS Offline-First",
     "subtitle": "Tetap jualan saat gangguan koneksi. OZ-POS berjalan penuh di perangkat Anda dan sinkron ke cloud begitu koneksi kembali.",
-    "ctaPrimary": "Unduh Gratis",
+    "ctaPrimary": "Mulai Uji Coba Gratis",
     "ctaSecondary": "Lihat Harga"
   },
   "features": {
@@ -138,11 +138,11 @@
   },
   "pricingPreview": {
     "title": "Harga sederhana",
-    "subtitle": "Mulai gratis selamanya. Tingkatkan saat Anda siap.",
+    "subtitle": "Mulai gratis 90 hari. Tingkatkan saat Anda siap.",
     "viewAll": "Bandingkan semua paket"
   },
   "ctaBanner": {
-    "title": "Mulai gratis hari ini",
+    "title": "Mulai uji coba gratis hari ini",
     "subtitle": "Tanpa kartu kredit, tanpa pendaftaran. Unduh dan langsung berjualan.",
     "cta": "Unduh OZ-POS"
   },
@@ -152,21 +152,13 @@
     "trust1": "Garansi uang kembali 30 hari",
     "trust2": "Batalkan kapan saja",
     "note": "Lisensi satu kali (perpetual) belum tersedia — lihat peta jalan.",
-    "comparison": "Perbandingan fitur antar paket",
-    "mostPopular": "⭐ Paling Populer",
-    "billing": {
-      "label": "Periode penagihan",
-      "monthly": "Bulanan",
-      "yearly": "Tahunan",
-      "yearlyNote": "2 bulan gratis",
-      "billedYearly": "Ditagih tahunan · 2 bulan gratis"
-    }
+    "comparison": "Perbandingan fitur antar paket"
   },
   "download": {
     "title": "Unduh OZ-POS",
-    "subtitle": "Versi 0.0.28 — gratis selamanya, tanpa pendaftaran.",
+    "subtitle": "Versi 0.0.27 — uji coba gratis 90 hari, tanpa pendaftaran.",
     "version": "Versi saat ini",
-    "versionValue": "0.0.28",
+    "versionValue": "0.0.27",
     "platformsTitle": "Pilih platform Anda",
     "requirementsTitle": "Persyaratan sistem",
     "requirements": [
@@ -178,9 +170,7 @@
     ],
     "note": "Unduhan rilis dipublikasikan di GitHub Releases.",
     "releaseLink": "Lihat GitHub Releases",
-    "comingSoon": "Segera hadir",
-    "trialCallout": "Anda datang dari halaman kafe/restoran — kunci trial Anda membuka trial Pro 14 hari.",
-    "trialCalloutEnterprise": "Referensi — kunci trial Anda membuka trial Pro 30 hari."
+    "comingSoon": "Segera hadir"
   },
   "login": {
     "title": "Masuk ke akun Anda",
@@ -254,21 +244,19 @@
     "statusExpired": "Kedaluwarsa",
     "statusRevoked": "Dicabut",
     "renewHint": "Langganan Anda tidak lagi aktif.",
-    "renewLink": "Perpanjang di halaman harga",
-    "bundleUpgrade": "Tingkatkan ke paket",
-    "bundleUpgradeHint": "Menambahkan Layar Dapur (KDS) ke paket Plus Anda."
+    "renewLink": "Perpanjang di halaman harga"
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",
     "privacy": "Privasi",
     "terms": "Ketentuan",
-    "legal": "Legal",
-    "business": "Jenis bisnis"
+    "legal": "Legal"
   },
   "legal": {
     "privacyTitle": "Kebijakan Privasi",
     "termsTitle": "Ketentuan Layanan",
-    "placeholder": "Halaman ini masih placeholder. Teks hukum akan ditambahkan sebelum peluncuran."
+    "effective": "Mulai berlaku",
+    "version": "Versi"
   },
   "notFound": {
     "title": "Halaman tidak ditemukan",
@@ -310,104 +298,8 @@
     "errorRegister": "Tidak dapat membuat akun. Silakan coba lagi.",
     "errorExists": "Akun dengan email ini sudah ada. Masuk saja.",
     "haveAccount": "Sudah punya akun?",
-    "signInLink": "Masuk"
-  },
-  "vertical": {
-    "positioning": "OZ-POS — kasir native QRIS dengan keandalan offline-first, harga untuk pasar Indonesia.",
-    "whyTitle": "Mengapa OZ-POS untuk bisnis Anda?",
-    "otherTitle": "Dibuat untuk jenis bisnis Anda",
-    "otherSubtitle": "OZ-POS menyesuaikan cara Anda berjualan — pilih industri Anda.",
-    "ctaSecondary": "Unduh gratis",
-    "bundleCta": "Plus + KDS — Paket Restaurant Starter",
-    "kafe": {
-      "label": "Kafe / Coffee shop",
-      "title": "Kasir yang menjaga kafe Anda tetap ramai",
-      "tagline": "KDS, analitik, dan multi-terminal — bekerja penuh offline.",
-      "tierAnchor": "pro",
-      "ctaPrimary": "Lihat paket Pro",
-      "leadWithTrial": true,
-      "trialCta": "Mulai trial Pro 14 hari",
-      "features": [
-        { "title": "Layar dapur (KDS)", "description": "Pesanan langsung masuk ke layar dapur secara real-time — tidak perlu berteriak ke dapur." },
-        { "title": "Analitik jam sibuk", "description": "Lihat jam berapa penjualan ramai, produk apa yang laris, dan di mana Anda bisa mengurangi pemborosan." },
-        { "title": "Multi-terminal", "description": "Hingga 5 register per toko dengan menu dan stok yang sama." },
-        { "title": "Offline-first", "description": "Tetap terima pesanan dan cetak struk meski Wi-Fi bermasalah." }
-      ],
-      "benefits": [
-        "Kasir native QRIS — pelanggan Anda sudah terbiasa membayar dengan QR.",
-        "Instalasi hitungan menit; tim Anda langsung paham cara pakainya.",
-        "Berfungsi tanpa internet — tidak ada penjualan yang hilang saat gangguan."
-      ]
-    },
-    "minimarket": {
-      "label": "Minimarket",
-      "title": "Kontrol stok untuk minimarket Anda",
-      "tagline": "Gudang, multi-terminal, dan visibilitas stok real-time.",
-      "tierAnchor": "pro",
-      "ctaPrimary": "Lihat paket Pro",
-      "features": [
-        { "title": "Visibilitas stok real-time", "description": "Ketahui apa yang ada di rak, di gudang belakang, dan di pusat — secara real-time." },
-        { "title": "Multi-terminal", "description": "Hingga 5 register per toko, semua berbagi satu inventaris." },
-        { "title": "Gudang", "description": "Kelola stok lintas hingga 3 gudang dalam satu ruang kerja." },
-        { "title": "Offline-first", "description": "Tetap scan dan jualan saat gangguan — data tersinkron saat kembali online." }
-      ],
-      "benefits": [
-        "Tidak ada lagi stok kosong atau salah belanja — lihat produk yang bergerak cepat.",
-        "QRIS di kasir tanpa perangkat tambahan.",
-        "Cadangan cloud agar data tidak pernah hilang."
-      ]
-    },
-    "warung": {
-      "label": "Warung / kios",
-      "title": "Kasir yang tumbuh bersama warung Anda",
-      "tagline": "Pembayaran QRIS dan dasbor penjualan harian — gratis untuk memulai.",
-      "tierAnchor": "plus",
-      "ctaPrimary": "Lihat paket Plus",
-      "features": [
-        { "title": "Dasbor Penjualan Harian", "description": "Lihat penjualan kemarin, produk terlaris, dan perbandingan tunai vs QRIS setiap pagi." },
-        { "title": "Pembayaran QRIS", "description": "Terima pembayaran QR yang sudah dipakai pelanggan Anda — tanpa perangkat tambahan." },
-        { "title": "Cadangan cloud", "description": "Riwayat penjualan Anda aman tersimpan, meski perangkat rusak." },
-        { "title": "Gratis selamanya", "description": "Satu toko, satu register, dan riwayat 30 hari — gratis, tanpa kartu." }
-      ],
-      "benefits": [
-        "Cukup sederhana untuk warung — tanpa perlu pelatihan.",
-        "Lacak produk yang laris agar stok lebih cerdas.",
-        "Offline-first: jangan pernah kehilangan penjualan saat gangguan."
-      ]
-    },
-    "restoran": {
-      "label": "Restoran",
-      "title": "Dari dapur hingga kasir, tetap sinkron",
-      "tagline": "KDS, poin loyalitas, dan laporan terjadwal untuk restoran Anda.",
-      "tierAnchor": "premium",
-      "ctaPrimary": "Lihat paket Premium",
-      "features": [
-        { "title": "Layar dapur (KDS)", "description": "Pesanan mengalir dari kasir ke dapur dalam hitungan detik — waktu antar berkurang." },
-        { "title": "Poin loyalitas", "description": "Berikan poin kepada pelanggan tetap dan pertahankan mereka kembali." },
-        { "title": "Laporan terjadwal", "description": "Terima laporan penjualan otomatis via email — harian atau mingguan." },
-        { "title": "Multi-toko", "description": "Kelola banyak outlet dengan toko dan terminal tanpa batas." }
-      ],
-      "benefits": [
-        "Perputaran meja lebih cepat dengan dapur yang tetap sinkron.",
-        "Loyalitas bawaan yang meningkatkan kunjungan berulang.",
-        "Pembayaran native QRIS yang sudah dipakai pelanggan Anda."
-      ]
-    },
-    "enterpriseTrial": {
-      "title": "Trial Enterprise Mandiri",
-      "metaDesc": "Mulai trial Enterprise 30 hari OZ-POS dengan kode persetujuan Anda.",
-      "subtitle": "Masukkan kode persetujuan Anda untuk memulai trial Enterprise 30 hari dengan toko, staf, dan semua jenis workspace tanpa batas.",
-      "codeLabel": "Kode Persetujuan",
-      "codePlaceholder": "ENT-XXXXXXXX",
-      "emailLabel": "Email Kantor",
-      "emailPlaceholder": "anda@perusahaan.com",
-      "submitButton": "Minta Trial Enterprise",
-      "successTitle": "Kunci Trial Enterprise Anda Siap!",
-      "successMessage": "Salin kunci di bawah dan tempel ke aplikasi OZ-POS saat diminta untuk mengaktifkan. Trial Anda mencakup toko, staf, dan semua jenis workspace tanpa batas selama 30 hari.",
-      "yourKeyLabel": "Kunci Lisensi Anda",
-      "copyButton": "Salin",
-      "nextSteps": "Langkah berikutnya: Buka OZ-POS, tempel kunci ini bersama email Anda, dan mulai menggunakan fitur Enterprise segera.",
-      "downloadButton": "Unduh OZ-POS"
-    }
+    "signInLink": "Masuk",
+    "agreeBefore": "Dengan mendaftar, Anda menyetujui",
+    "agreeSeparator": "dan"
   }
 }
