@@ -483,3 +483,302 @@ fn stock_never_goes_negative() {
     let result = s.adjust_stock("SKU-1", -1);
     assert!(result.is_err(), "should fail: stock would go negative");
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// §7.3 #14: Same user opens shift on both terminals
+// ══════════════════════════════════════════════════════════════════════
+
+/// #14: Same user tries to open shifts on two terminals.
+/// System correctly rejects the second shift (one active shift per user).
+#[test]
+fn same_user_opens_shift_on_both_terminals() {
+    let conn = fresh();
+    seed_two_users(&conn);
+    let s = store(&conn);
+
+    // User opens a shift on Terminal A.
+    let shift_a = s.open_shift("user-a", Some("term-a"), 100).unwrap();
+    assert_eq!(shift_a.status, "open");
+    assert_eq!(shift_a.terminal_id.as_deref(), Some("term-a"));
+
+    // Same user tries to open a shift on Terminal B — should be rejected.
+    let result = s.open_shift("user-a", Some("term-b"), 200);
+    assert!(
+        result.is_err(),
+        "second shift for same user should be rejected"
+    );
+
+    // Original shift is still active.
+    let active = s.get_active_shift("user-a").unwrap().unwrap();
+    assert_eq!(active.id, shift_a.id);
+
+    // Close the shift.
+    s.close_shift(&shift_a.id, 150, None).unwrap();
+    assert!(s.get_active_shift("user-a").unwrap().is_none());
+
+    // Now user can open a shift on Terminal B.
+    let shift_b = s.open_shift("user-a", Some("term-b"), 200).unwrap();
+    assert_eq!(shift_b.terminal_id.as_deref(), Some("term-b"));
+    s.close_shift(&shift_b.id, 250, None).unwrap();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Integration: Complete multi-terminal POS workflow
+// ══════════════════════════════════════════════════════════════════════
+
+/// Full workflow: Terminal A opens shift → sells item → holds cart →
+/// Terminal B opens shift → sells item → both close shifts →
+/// verify independent totals.
+#[test]
+fn integration_full_multi_terminal_workflow() {
+    let conn = fresh();
+    seed_two_users(&conn);
+    seed_product_with_stock(&conn, "COFFEE", "Coffee", 10);
+    let s = store(&conn);
+
+    // ── Terminal A: open shift, sell, hold cart ──
+    let shift_a = s.open_shift("user-a", Some("term-a"), 500).unwrap();
+    let sale_a = make_sale_with_line("COFFEE", 2, 350);
+    s.complete_sale_deduction(&sale_a, None, &pay_cash(700), "user-a", Some("term-a"))
+        .unwrap();
+    let held_id = s
+        .hold_cart(
+            "Workspace-A",
+            r#"{"lines":[{"sku":"COFFEE","qty":1}]}"#,
+            1,
+            350,
+            "USD",
+            "hold",
+            None,
+            None,
+        )
+        .unwrap();
+
+    // ── Terminal B: open shift, sell ──
+    let shift_b = s.open_shift("user-b", Some("term-b"), 300).unwrap();
+    let sale_b = make_sale_with_line("COFFEE", 1, 350);
+    s.complete_sale_deduction(&sale_b, None, &pay_cash(350), "user-b", Some("term-b"))
+        .unwrap();
+
+    // ── Verify: shifts are independent ──
+    let loaded_a = s.get_active_shift("user-a").unwrap().unwrap();
+    let loaded_b = s.get_active_shift("user-b").unwrap().unwrap();
+    assert_eq!(loaded_a.id, shift_a.id);
+    assert_eq!(loaded_b.id, shift_b.id);
+    assert_ne!(loaded_a.id, loaded_b.id);
+
+    // ── Verify: held cart exists and is retrievable ──
+    let cart = s.get_held_cart(&held_id).unwrap();
+    assert!(cart.is_some(), "held cart should exist");
+    assert_eq!(cart.unwrap().label, "Workspace-A");
+
+    // ── Verify: stock was deducted (10 - 2 - 1 = 7) ──
+    let qty: i64 = conn
+        .query_row(
+            "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'COFFEE') AND location_id = ?1",
+            rusqlite::params![DEFAULT_LOC],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(qty, 7, "10 - 2 (A sale) - 1 (B sale) = 7");
+
+    // ── Both shifts close independently ──
+    s.close_shift(&shift_a.id, 600, None).unwrap();
+    s.close_shift(&shift_b.id, 400, None).unwrap();
+
+    // ── Verify: no active shifts remain ──
+    assert!(s.get_active_shift("user-a").unwrap().is_none());
+    assert!(s.get_active_shift("user-b").unwrap().is_none());
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Integration: KDS routing from multiple POS terminals
+// ══════════════════════════════════════════════════════════════════════
+
+/// Orders created from different terminals all route to KDS correctly.
+#[test]
+fn integration_kds_routing_from_multiple_terminals() {
+    let conn = fresh();
+    seed_two_users(&conn);
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at) VALUES ('resto-pos', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    ).unwrap();
+    let s = store(&conn);
+
+    // Register a KDS device that receives all orders (broadcast).
+    let kds_input = crate::kds::RegisterKdsDeviceInput {
+        name: "Kitchen Display".into(),
+        restaurant_pos_id: "resto-pos".into(),
+        station_ids: vec![],
+        pairing_token_hash: "hash-1".into(),
+        pairing_expires_at: "2099-01-01T00:00:00.000Z".into(),
+    };
+    s.register_kds_device(kds_input).unwrap();
+
+    // Seed sales so KDS orders can reference them (FK constraint).
+    let sale_id_a = uuid::Uuid::now_v7().to_string();
+    let sale_id_b = uuid::Uuid::now_v7().to_string();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    for sid in [&sale_id_a, &sale_id_b] {
+        conn.execute(
+            "INSERT INTO sales (id, status, total_minor, currency, line_count, subtotal_minor, tax_total_minor, version, created_at, updated_at)
+             VALUES (?1, 'completed', 500, 'USD', 1, 500, 0, 1, ?2, ?2)",
+            rusqlite::params![sid, now],
+        ).unwrap();
+    }
+
+    // Terminal A creates an order.
+    let order_a = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale_id_a,
+            store_id: Some("default".into()),
+            items_summary: "Espresso x2".into(),
+            item_count: 2,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: Some("5".into()),
+            priority: false,
+        })
+        .unwrap();
+
+    // Terminal B creates an order.
+    let order_b = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale_id_b,
+            store_id: Some("default".into()),
+            items_summary: "Latte x1".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: "Extra hot".into(),
+            table_number: Some("3".into()),
+            priority: true,
+        })
+        .unwrap();
+
+    // Both orders exist and are pending.
+    let loaded_a = s.get_kds_order(&order_a.id).unwrap().unwrap();
+    let loaded_b = s.get_kds_order(&order_b.id).unwrap().unwrap();
+    assert_eq!(loaded_a.status, "pending");
+    assert_eq!(loaded_b.status, "pending");
+    assert_eq!(loaded_a.table_number.as_deref(), Some("5"));
+    assert_eq!(loaded_b.table_number.as_deref(), Some("3"));
+    assert!(!loaded_a.priority);
+    assert!(loaded_b.priority);
+
+    // Either terminal can ack the order.
+    let acked = s.ack_kds_order(&order_a.id, "kds-1").unwrap();
+    assert!(acked, "first ack should succeed");
+
+    // Second ack returns false (already acked).
+    let acked2 = s.ack_kds_order(&order_a.id, "kds-2").unwrap_or(false);
+    assert!(!acked2, "second ack should return false");
+
+    // Order B is still pending.
+    let still_pending = s.get_kds_order(&order_b.id).unwrap().unwrap();
+    assert_eq!(still_pending.status, "pending");
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Integration: Held cart conflict detection
+// ══════════════════════════════════════════════════════════════════════
+
+/// When two terminals share the same workspace instance and both hold
+/// carts, both carts exist (workspace-instance isolation, not terminal
+/// isolation). This verifies the documented behavior.
+#[test]
+fn integration_held_cart_same_workspace_shared() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    // Both terminals use the same workspace instance.
+    let id_a = s
+        .hold_cart(
+            "Shared-WS",
+            r#"{"item":"A"}"#,
+            1,
+            100,
+            "USD",
+            "hold",
+            None,
+            None,
+        )
+        .unwrap();
+    let id_b = s
+        .hold_cart(
+            "Shared-WS",
+            r#"{"item":"B"}"#,
+            1,
+            200,
+            "USD",
+            "hold",
+            None,
+            None,
+        )
+        .unwrap();
+
+    // Both carts coexist — workspace-instance isolation means same label
+    // is allowed. In practice each terminal uses a unique workspace instance.
+    assert_ne!(id_a, id_b);
+    assert_eq!(s.list_held_carts().unwrap().len(), 2);
+
+    // Each cart can be restored independently.
+    let cart_a = s.get_held_cart(&id_a).unwrap().unwrap();
+    let cart_b = s.get_held_cart(&id_b).unwrap().unwrap();
+    assert_eq!(cart_a.total_minor, 100);
+    assert_eq!(cart_b.total_minor, 200);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Integration: Terminal deactivation affects shift eligibility
+// ════════════════════════════════════════════════════
+
+/// Deactivating a terminal updates its status.
+#[test]
+fn integration_terminal_deactivation() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    let t1 = make_terminal("term-x", "Express", "device-x");
+    s.create_terminal(&t1).unwrap();
+
+    // Initially findable.
+    let found = s.get_terminal_by_device_id("device-x").unwrap();
+    assert!(found.is_some());
+    assert!(found.unwrap().is_active);
+
+    // Deactivate.
+    let mut updated = t1.clone();
+    updated.is_active = false;
+    s.update_terminal(&updated).unwrap();
+
+    let after = s.get_terminal_by_device_id("device-x").unwrap().unwrap();
+    assert!(!after.is_active, "terminal should be inactive after update");
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Edge case: Stock deduction rollback on payment mismatch
+// ══════════════════════════════════════════════════════════════════════
+
+/// When payment doesn't cover the total, the sale is rejected and stock
+/// is NOT deducted.
+#[test]
+fn integration_stock_not_deducted_on_payment_mismatch() {
+    let conn = fresh();
+    seed_product_with_stock(&conn, "WIDGET", "Widget", 5);
+    let s = store(&conn);
+
+    let sale = make_sale_with_line("WIDGET", 3, 500); // total = 1500
+    let result = s.complete_sale_deduction(&sale, None, &pay_cash(1000), "user-a", None);
+    assert!(result.is_err(), "underpayment should fail");
+
+    // Stock unchanged.
+    let qty: i64 = conn
+        .query_row(
+            "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'WIDGET') AND location_id = ?1",
+            rusqlite::params![DEFAULT_LOC],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(qty, 5, "stock should not change on payment mismatch");
+}
