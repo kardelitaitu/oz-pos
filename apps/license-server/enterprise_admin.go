@@ -24,11 +24,11 @@ type GenerateCodeRequest struct {
 
 // GenerateCodeResponse is the JSON response from the code generation endpoint.
 type GenerateCodeResponse struct {
-	Code        string `json:"code"`
-	Email       string `json:"email,omitempty"`
+	Code         string `json:"code"`
+	Email        string `json:"email,omitempty"`
 	ProspectName string `json:"prospect_name,omitempty"`
-	Status      string `json:"status"`
-	CreatedAt   string `json:"created_at"`
+	Status       string `json:"status"`
+	CreatedAt    string `json:"created_at"`
 }
 
 // handleGenerateEnterpriseCode returns an HTTP handler for creating enterprise
@@ -157,10 +157,11 @@ func handleListEnterpriseCodes(app core.App) func(e *core.RequestEvent) error {
 		if statusFilter != "" {
 			records, err = app.FindRecordsByFilter("enterprise_approvals",
 				"status = {:status}", "-created", 100, 0,
-				map[string]any{"status": statusFilter})			} else {
-				records, err = app.FindRecordsByFilter("enterprise_approvals",
-					"", "-created", 100, 0, nil)
-			}
+				map[string]any{"status": statusFilter})
+		} else {
+			records, err = app.FindRecordsByFilter("enterprise_approvals",
+				"", "-created", 100, 0, nil)
+		}
 		if err != nil {
 			return e.JSON(http.StatusInternalServerError, map[string]any{
 				"error": "failed to list approval codes",
@@ -200,5 +201,3 @@ func generateApprovalCode() string {
 	_, _ = rand.Read(b)
 	return "ENT-" + strings.ToUpper(hex.EncodeToString(b))
 }
-
-

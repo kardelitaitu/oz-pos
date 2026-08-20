@@ -380,10 +380,10 @@ func ensureTrialEmailLogCollection(app core.App) error {
 // Day 7 after expiry: "We miss you" with special offer.
 // Day 30 after expiry: "Last chance" with deeper discount.
 var winBackMilestones = []struct {
-	DayOffset                       int
-	SubjectEN, SubjectID            string
-	BodyEN, BodyID                  string
-	LogKey                          string // unique key for idempotency
+	DayOffset            int
+	SubjectEN, SubjectID string
+	BodyEN, BodyID       string
+	LogKey               string // unique key for idempotency
 }{
 	{
 		DayOffset: 7,

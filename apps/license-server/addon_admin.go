@@ -87,10 +87,10 @@ func handleAddLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 		log.Printf("addon-admin: added addon %s to key %s", req.AddonID, req.LicenseKey[:8]+"****")
 
 		return e.JSON(http.StatusOK, map[string]any{
-			"status":  "addon_added",
+			"status":      "addon_added",
 			"license_key": req.LicenseKey,
-			"addon_id": req.AddonID,
-			"addons":  existingAddons,
+			"addon_id":    req.AddonID,
+			"addons":      existingAddons,
 		})
 	}
 }
@@ -160,10 +160,10 @@ func handleRemoveLicenseAddon(app core.App) func(e *core.RequestEvent) error {
 		log.Printf("addon-admin: removed addon %s from key %s", req.AddonID, req.LicenseKey[:8]+"****")
 
 		return e.JSON(http.StatusOK, map[string]any{
-			"status":  "addon_removed",
+			"status":      "addon_removed",
 			"license_key": req.LicenseKey,
-			"addon_id": req.AddonID,
-			"addons":  newAddons,
+			"addon_id":    req.AddonID,
+			"addons":      newAddons,
 		})
 	}
 }
