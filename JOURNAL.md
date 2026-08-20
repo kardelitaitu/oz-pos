@@ -5310,3 +5310,44 @@ Two regression pins:
 - `ui/src/__tests__/canvasStateEqual.test.ts` — new file, 34 tests
 - `ui/src/__tests__/nodeTopologyWireGeometry.test.ts` — +4 excludeIds tests
 - `ui/src/__tests__/topologyNodeCard.test.tsx` — +2 port highlight tests, prop renames
+
+## 2026-08-20 — TDD cycle: Money::checked_abs / checked_negate (foundation)
+
+**Problem:** `Money::abs()` and `Money::negate()` (foundation/src/money.rs) were the
+only two Money operations without a panic-free `checked_*` variant. Both panic on
+`i64::MIN` in debug mode (wrap in release) — the doc comments said so explicitly —
+violating the "never panic in library code" rule. The workspace release profile
+sets `overflow-checks = true` (Cargo.toml), so in production this is a real panic
+path, not just a debug artifact. Verified via codebase-memory graph: zero
+production callers of `Money::abs()`/`Money::negate()` outside the module's own
+tests (all other `.abs()` hits are f64/f32 math), so the hazard was latent but
+reachable through public fields (`Money { minor_units: i64::MIN, .. }`).
+
+**Solution:** TDD Red→Green:
+- **Red:** Added 10 tests (5 per method) — positive/negative/zero/`i64::MIN`
+  returns `None`/currency preservation + negate-twice identity. Confirmed
+  compile failure `E0599` (methods absent) before any implementation.
+- **Green:** `checked_negate` → `i64::checked_neg()` (returns `None` on
+  `i64::MIN`), `checked_abs` → `i64::checked_abs()` (same), both mapping onto a
+  `Money` with the currency preserved, `#[must_use]`, doc comments matching the
+  `checked_mul`/`checked_div` pattern.
+- **Refactor:** `negate()`/`abs()` doc comments now cross-reference their
+  `checked_*` counterparts (previously they suggested the `checked_sub`-on-zero
+  workaround, which is superseded).
+
+**Verification:** `cargo test -p foundation` — 393 passed (incl. 10 new);
+`cargo fmt --all -- --check` clean; `cargo clippy -p foundation --all-targets -- -D warnings` clean;
+`cargo check -p oz-core` clean (main dependent). (Note: `scripts/test-tdd.sh` /
+`test-changed.sh` are bash — unavailable on this Windows session; ran the
+equivalent cargo commands directly with `CARGO_PROFILE=tdd` and
+`--config 'build.rustc-wrapper=""'` to bypass the timing-out sccache wrapper.)
+
+**Test counts:** foundation lib: 393 passed, 0 failed (was 383 before this slice).
+
+**Risks / follow-ups:** None for this slice — purely additive, no behavior
+change to existing callers. Related journal entry (format_minor i64::MIN, above)
+listed this exact hazard as a known follow-up; this slice closes it. Possible
+future slices in the money area: Property-based tests for Money arithmetic
+(docs/specs/testing/tdd-testing-strategy.md §4 lists proptest coverage); the
+`Default for Money` hardcoded to USD could become `Option<Money>` in domain
+contexts where the currency is genuinely unknown.

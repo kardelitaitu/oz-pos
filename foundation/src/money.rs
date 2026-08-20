@@ -195,12 +195,33 @@ impl Money {
         })
     }
 
+    /// Negate the amount. Same currency. Returns `None` on `i64::MIN`
+    /// overflow (where [`negate`](Self::negate) would panic).
+    #[must_use]
+    pub fn checked_negate(self) -> Option<Money> {
+        self.minor_units.checked_neg().map(|v| Self {
+            minor_units: v,
+            currency: self.currency,
+        })
+    }
+
+    /// Absolute value of the amount. Same currency. Returns `None` on
+    /// `i64::MIN` overflow (where [`abs`](Self::abs) would panic).
+    #[must_use]
+    pub fn checked_abs(self) -> Option<Money> {
+        self.minor_units.checked_abs().map(|v| Self {
+            minor_units: v,
+            currency: self.currency,
+        })
+    }
+
     /// Negate the amount. Positive becomes negative and vice versa.
     /// Same currency.
     ///
     /// ⚠️ **Panics on `i64::MIN` in debug mode** (wraps in release) —
-    /// same behaviour as `i64::neg`. Use [`checked_sub`](Self::checked_sub)
-    /// on `Money::zero()` if you need overflow safety.
+    /// same behaviour as `i64::neg`. Prefer
+    /// [`checked_negate`](Self::checked_negate) when the amount could be
+    /// `i64::MIN`.
     #[must_use]
     pub fn negate(self) -> Money {
         Money {
@@ -212,7 +233,9 @@ impl Money {
     /// Absolute value of the amount. Same currency.
     ///
     /// ⚠️ **Panics on `i64::MIN` in debug mode** (wraps in release) —
-    /// same behaviour as [`i64::abs`].
+    /// same behaviour as [`i64::abs`]. Prefer
+    /// [`checked_abs`](Self::checked_abs) when the amount could be
+    /// `i64::MIN`.
     #[must_use]
     pub fn abs(self) -> Money {
         Money {
@@ -460,6 +483,95 @@ mod tests {
             currency: jpy,
         };
         assert_eq!(m.abs().currency, jpy);
+    }
+
+    // ── checked_negate ─────────────────────────────────────────
+
+    #[test]
+    fn checked_negate_positive_becomes_negative() {
+        let m = Money::from_major(5, usd()).unwrap();
+        let neg = m.checked_negate().unwrap();
+        assert_eq!(neg.minor_units, -500);
+        assert_eq!(neg.currency, usd());
+    }
+
+    #[test]
+    fn checked_negate_negative_becomes_positive() {
+        let m = Money {
+            minor_units: -500,
+            currency: usd(),
+        };
+        let pos = m.checked_negate().unwrap();
+        assert_eq!(pos.minor_units, 500);
+    }
+
+    #[test]
+    fn checked_negate_zero_stays_zero() {
+        let m = Money::zero(usd()).checked_negate().unwrap();
+        assert_eq!(m.minor_units, 0);
+        assert_eq!(m.currency, usd());
+    }
+
+    #[test]
+    fn checked_negate_i64_min_returns_none() {
+        // -i64::MIN overflows; must not panic like `negate()` does.
+        let m = Money {
+            minor_units: i64::MIN,
+            currency: usd(),
+        };
+        assert!(m.checked_negate().is_none());
+    }
+
+    #[test]
+    fn checked_negate_twice_is_identity() {
+        let m = Money::from_major(5, usd()).unwrap();
+        assert_eq!(m.checked_negate().and_then(|n| n.checked_negate()), Some(m));
+    }
+
+    // ── checked_abs ────────────────────────────────────────────
+
+    #[test]
+    fn checked_abs_positive_is_noop() {
+        let m = Money::from_major(5, usd()).unwrap();
+        let a = m.checked_abs().unwrap();
+        assert_eq!(a.minor_units, 500);
+        assert_eq!(a.currency, usd());
+    }
+
+    #[test]
+    fn checked_abs_negative_becomes_positive() {
+        let m = Money {
+            minor_units: -500,
+            currency: usd(),
+        };
+        let a = m.checked_abs().unwrap();
+        assert_eq!(a.minor_units, 500);
+    }
+
+    #[test]
+    fn checked_abs_zero_is_zero() {
+        let a = Money::zero(usd()).checked_abs().unwrap();
+        assert_eq!(a.minor_units, 0);
+    }
+
+    #[test]
+    fn checked_abs_i64_min_returns_none() {
+        // i64::MIN.abs() overflows; must not panic like `abs()` does.
+        let m = Money {
+            minor_units: i64::MIN,
+            currency: usd(),
+        };
+        assert!(m.checked_abs().is_none());
+    }
+
+    #[test]
+    fn checked_abs_preserves_currency() {
+        let jpy: Currency = "JPY".parse().unwrap();
+        let m = Money {
+            minor_units: -1000,
+            currency: jpy,
+        };
+        assert_eq!(m.checked_abs().unwrap().currency, jpy);
     }
 
     // ── is_zero ────────────────────────────────────────────────
