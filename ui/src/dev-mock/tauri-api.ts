@@ -2360,6 +2360,36 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   },
 
   // ═══════════════════════════════════════════════════════════════
+  // KDS DEVICE MANAGEMENT
+  // ═══════════════════════════════════════════════════════════════
+
+  'list_kds_devices_scoped': () => [] as unknown[],
+  'register_kds_device_scoped': (args: unknown) => {
+    const input = (args as { input?: Record<string, unknown> })?.input ?? {};
+    return {
+      id: `kds-device-mock-${Date.now()}`,
+      name: input['name'] ?? 'Mock KDS Device',
+      restaurant_pos_id: input['restaurant_pos_id'] ?? 'resto-1',
+      station_ids: input['station_ids'] ?? [],
+      is_active: true,
+      last_seen_at: new Date().toISOString(),
+      connection_status: 'connected',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  },
+  'get_kds_device_scoped': () => null,
+  'update_kds_device_status_scoped': () => {},
+  'deactivate_kds_device_scoped': () => {},
+  'ack_kds_order_scoped': () => true,
+  'resolve_kds_targets_scoped': () => [] as string[],
+  'generate_kds_pairing_token_scoped': () => ({
+    token: `mock-pairing-token-${Date.now()}`,
+    expires_at: new Date(Date.now() + 300_000).toISOString(),
+  }),
+  'print_kds_chit_scoped': () => true,
+
+  // ═══════════════════════════════════════════════════════════════
   // PROMOTIONS
   // ═══════════════════════════════════════════════════════════════
 

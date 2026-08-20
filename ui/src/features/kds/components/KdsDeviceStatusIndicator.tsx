@@ -56,8 +56,8 @@ export const KdsDeviceStatusIndicator = memo(
       if (!sessionToken) return;
       setLoading(true);
       try {
-        const result = await listKdsDevicesScoped(sessionToken);
-        setDevices(result);
+      const result = await listKdsDevicesScoped(sessionToken);
+      setDevices(Array.isArray(result) ? result : []);
       } catch {
         // Silent — indicator is non-critical UI.
       } finally {
@@ -73,7 +73,7 @@ export const KdsDeviceStatusIndicator = memo(
     }, [fetchDevices, pollIntervalMs]);
 
     // Don't render if no devices are registered.
-    if (devices.length === 0 && !loading) {
+    if ((!devices || devices.length === 0) && !loading) {
       return null;
     }
 
