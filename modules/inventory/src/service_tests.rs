@@ -1,5 +1,5 @@
 use super::*;
-use foundation::{Money, Sku};
+
 use rusqlite::Connection;
 
 fn fresh() -> Connection {
