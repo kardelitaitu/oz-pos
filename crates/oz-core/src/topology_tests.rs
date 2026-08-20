@@ -142,7 +142,7 @@ fn shared_semantics_contract_parses() {
 
 #[test]
 fn ambiguous_legacy_wire_is_detected() {
-    let nodes = vec![
+    let nodes = [
         semantic_node("ws-1", "workspace", None),
         semantic_node("ws-2", "workspace", None),
     ];

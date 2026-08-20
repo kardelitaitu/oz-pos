@@ -155,7 +155,7 @@ fn row_to_product_maps_full_row() {
         .unwrap();
     let mut rows = stmt.query([]).unwrap();
     let row = rows.next().unwrap().unwrap();
-    let product = row_to_product(&row).unwrap();
+    let product = row_to_product(row).unwrap();
 
     assert_eq!(product.id, "p-1");
     assert_eq!(product.sku.as_str(), "SKU-1");
@@ -170,14 +170,14 @@ fn row_to_product_maps_full_row() {
         product.barcode.as_ref().map(|b| b.as_str()),
         Some("8991234567890")
     );
-    assert_eq!(product.track_serial, true);
+    assert!(product.track_serial);
     assert_eq!(product.version, 3);
     assert_eq!(product.cost_minor, 1500);
     assert_eq!(product.brand.as_deref(), Some("Acme"));
     assert_eq!(product.rack_location.as_deref(), Some("A-1"));
     assert_eq!(product.notes.as_deref(), Some("note"));
     assert_eq!(product.unit.as_deref(), Some("pc"));
-    assert_eq!(product.is_active, true);
+    assert!(product.is_active);
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn row_to_product_defaults_optional_columns() {
         .unwrap();
     let mut rows = stmt.query([]).unwrap();
     let row = rows.next().unwrap().unwrap();
-    let product = row_to_product(&row).unwrap();
+    let product = row_to_product(row).unwrap();
 
     assert_eq!(product.sku.as_str(), "SKU-2");
     assert_eq!(product.price.minor_units, 100);
@@ -207,11 +207,11 @@ fn row_to_product_defaults_optional_columns() {
     // Optional fields default.
     assert!(product.category_id.is_none());
     assert!(product.barcode.is_none());
-    assert_eq!(product.track_serial, false);
+    assert!(!product.track_serial);
     assert_eq!(product.version, 1);
     assert_eq!(product.cost_minor, 0);
     assert!(product.brand.is_none());
-    assert_eq!(product.is_active, true, "is_active defaults to true (1)");
+    assert!(product.is_active, "is_active defaults to true (1)");
 }
 
 #[test]
@@ -229,5 +229,5 @@ fn row_to_product_fails_on_invalid_currency() {
         .unwrap();
     let mut rows = stmt.query([]).unwrap();
     let row = rows.next().unwrap().unwrap();
-    assert!(row_to_product(&row).is_err(), "invalid currency must error");
+    assert!(row_to_product(row).is_err(), "invalid currency must error");
 }
