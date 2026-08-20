@@ -46,3 +46,7 @@ impl<'a> ReportingRepository<'a> {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "repository_tests.rs"]
+mod tests;

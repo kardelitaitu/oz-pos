@@ -20,3 +20,7 @@ impl SettingsService {
         repo.set(key, value)
     }
 }
+
+#[cfg(test)]
+#[path = "service_tests.rs"]
+mod tests;

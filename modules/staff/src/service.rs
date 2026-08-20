@@ -21,3 +21,7 @@ impl StaffService {
         repo.get_role(id)
     }
 }
+
+#[cfg(test)]
+#[path = "service_tests.rs"]
+mod tests;

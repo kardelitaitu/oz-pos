@@ -41,3 +41,7 @@ impl<'a> TerminalRepository<'a> {
         }))
     }
 }
+
+#[cfg(test)]
+#[path = "repository_tests.rs"]
+mod tests;

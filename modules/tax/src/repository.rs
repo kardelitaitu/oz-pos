@@ -73,3 +73,7 @@ impl<'a> TaxRepository<'a> {
         rows.map(|r| Ok(r?)).collect()
     }
 }
+
+#[cfg(test)]
+#[path = "repository_tests.rs"]
+mod tests;

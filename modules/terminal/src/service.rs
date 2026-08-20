@@ -15,3 +15,7 @@ impl TerminalService {
         repo.get_terminal(id)
     }
 }
+
+#[cfg(test)]
+#[path = "service_tests.rs"]
+mod tests;
