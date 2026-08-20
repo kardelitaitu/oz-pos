@@ -72,6 +72,10 @@ export default function CustomReportScreen() {
   const [result, setResult] = useState<CustomReportResponse | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Pagination state (REP-07)
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 1000; // Matches backend MAX_LIMIT
+
   // Drag state
   const dragItemRef = useRef<number | null>(null);
   const dragOverRef = useRef<number | null>(null);
@@ -186,6 +190,8 @@ export default function CustomReportScreen() {
         columns: orderedSelected,
         start_date: dsDef.hasDateFilter ? startDate : null,
         end_date: dsDef.hasDateFilter ? endDate : null,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
       };
       const resp = await buildCustomReport(req, sessionToken);
       setResult(resp);
@@ -194,7 +200,7 @@ export default function CustomReportScreen() {
     } finally {
       setLoading(false);
     }
-  }, [dataset, columnOrder, selectedCols, startDate, endDate, dsDef, sessionToken]);
+  }, [dataset, columnOrder, selectedCols, startDate, endDate, dsDef, sessionToken, page]);
 
   const exportCsv = useCallback(() => {
     if (!result || result.rows.length === 0) return;
@@ -362,6 +368,11 @@ export default function CustomReportScreen() {
               <Localized id="custom-report-export-csv">Export CSV</Localized>
             </Button>
           </div>
+          {result?.truncated && (
+            <p className="custom-report-truncated" role="status" aria-live="polite">
+              {l10n.getString('custom-report-truncated', { limit: String(PAGE_SIZE) })}
+            </p>
+          )}
           <div className="custom-report-table-wrap">
             <table className="custom-report-table">
               <thead>
@@ -381,6 +392,29 @@ export default function CustomReportScreen() {
 </tbody>
             </table>
           </div>
+          {result?.truncated && (
+            <div className="custom-report-pagination" role="navigation" aria-label={requiredLocalized(l10n, 'custom-report-pagination-aria')}>
+              <Button
+                variant="ghost"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+                aria-label={requiredLocalized(l10n, 'custom-report-prev-page-aria')}
+              >
+                <Localized id="custom-report-prev-page">Previous</Localized>
+              </Button>
+              <span className="custom-report-page-info" aria-live="polite">
+                {l10n.getString('custom-report-page-of', { page: String(page) })}
+              </span>
+              <Button
+                variant="ghost"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={loading || !result?.truncated}
+                aria-label={requiredLocalized(l10n, 'custom-report-next-page-aria')}
+              >
+                <Localized id="custom-report-next-page">Next</Localized>
+              </Button>
+            </div>
+          )}
         </Card>
       )}
     </div>

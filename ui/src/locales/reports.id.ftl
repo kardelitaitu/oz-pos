@@ -154,6 +154,15 @@ custom-report-region-aria = Pembuat Laporan Kustom
 custom-report-export-aria = Ekspor CSV
 custom-report-columns-selected = { $selected } / { $total } dipilih
 
+# Custom Report — Pagination (REP-07)
+custom-report-truncated = Hasil dibatasi hingga { $limit } baris. Gunakan paginasi untuk melihat lebih banyak.
+custom-report-pagination-aria = Paginasi hasil
+custom-report-prev-page = Sebelumnya
+custom-report-prev-page-aria = Halaman sebelumnya
+custom-report-next-page = Selanjutnya
+custom-report-next-page-aria = Halaman selanjutnya
+custom-report-page-of = Halaman { $page }
+
 # Export
 dashboard-export-csv = CSV
 dashboard-export-csv-aria = Ekspor data dasbor sebagai CSV

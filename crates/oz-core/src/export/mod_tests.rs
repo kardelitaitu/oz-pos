@@ -237,6 +237,8 @@ fn custom_report_customers_dataset() {
         columns: vec!["id".to_string(), "name".to_string(), "email".to_string()],
         start_date: None,
         end_date: None,
+        limit: None,
+        offset: None,
     };
     let resp = s.build_custom_report(req).unwrap();
     assert_eq!(resp.columns.len(), 3);
@@ -258,6 +260,8 @@ fn custom_report_staff_dataset() {
         ],
         start_date: None,
         end_date: None,
+        limit: None,
+        offset: None,
     };
     let resp = s.build_custom_report(req).unwrap();
     assert_eq!(resp.columns.len(), 3);
@@ -275,6 +279,8 @@ fn custom_report_tax_rates_dataset() {
         columns: vec!["name".to_string(), "rate_bps".to_string()],
         start_date: None,
         end_date: None,
+        limit: None,
+        offset: None,
     };
     let resp = s.build_custom_report(req).unwrap();
     assert_eq!(resp.columns.len(), 2);
@@ -295,6 +301,8 @@ fn custom_report_shifts_dataset() {
         ],
         start_date: None,
         end_date: None,
+        limit: None,
+        offset: None,
     };
     let resp = s.build_custom_report(req).unwrap();
     assert_eq!(resp.columns.len(), 3);
@@ -313,6 +321,8 @@ fn custom_report_shifts_date_filter_uses_opened_at() {
         columns: vec!["id".to_string(), "status".to_string()],
         start_date: Some("2026-01-01".to_string()),
         end_date: Some("2026-12-31".to_string()),
+        limit: None,
+        offset: None,
     };
     // Should not error — if it used created_at against shifts table, the
     // SQL would be invalid since shifts has opened_at, not created_at.
@@ -330,6 +340,8 @@ fn custom_report_unknown_dataset() {
         columns: vec!["id".to_string()],
         start_date: None,
         end_date: None,
+        limit: None,
+        offset: None,
     };
     let err = s.build_custom_report(req).unwrap_err();
     assert!(
@@ -349,6 +361,8 @@ fn custom_report_invalid_columns_filtered() {
         columns: vec!["id".to_string(), "password_hash".to_string()],
         start_date: None,
         end_date: None,
+        limit: None,
+        offset: None,
     };
     let resp = s.build_custom_report(req).unwrap();
     // Only "id" is in the whitelist
@@ -371,6 +385,8 @@ fn custom_report_sales_basic() {
         ],
         start_date: None,
         end_date: None,
+        limit: None,
+        offset: None,
     };
     let resp = s.build_custom_report(req).unwrap();
     assert_eq!(resp.columns.len(), 3);
@@ -392,6 +408,8 @@ fn custom_report_inventory_columns() {
         ],
         start_date: None,
         end_date: None,
+        limit: None,
+        offset: None,
     };
     let resp = s.build_custom_report(req).unwrap();
     assert_eq!(resp.columns.len(), 3);
@@ -411,6 +429,8 @@ fn custom_report_empty_columns_returns_empty() {
         columns: vec![],
         start_date: None,
         end_date: None,
+        limit: None,
+        offset: None,
     };
     let resp = s.build_custom_report(req).unwrap();
     assert!(resp.columns.is_empty());
@@ -455,6 +475,126 @@ fn csv_export_empty_bundle_writes_metadata_only() {
     // Only metadata.json should be written (bundle is empty)
     assert_eq!(files.len(), 1);
     assert!(files[0].ends_with("metadata.json"));
+}
+
+// ── REP-07: Custom report pagination ──────────────────────────────
+
+#[test]
+fn custom_report_unbounded_without_limit() {
+    let conn = migrations::fresh_db();
+    let s = Store::new(&conn);
+
+    // Create 150 products to test unbounded results
+    for i in 0..150 {
+        let sku = format!("PROD{:03}", i);
+        s.create_product(&sku, &sku, price(100), None, None, 100, None)
+            .unwrap();
+    }
+
+    // Request without limit should return all rows (current behavior - unbounded)
+    let req = CustomReportRequest {
+        dataset: "inventory".to_string(),
+        columns: vec!["sku".to_string(), "name".to_string()],
+        start_date: None,
+        end_date: None,
+        limit: None,
+        offset: None,
+    };
+    let resp = s.build_custom_report(req).unwrap();
+    assert_eq!(resp.columns.len(), 2);
+    assert_eq!(resp.rows.len(), 150); // All 150 products returned
+    assert!(!resp.truncated, "without limit, should not be truncated");
+}
+
+#[test]
+fn custom_report_respects_limit() {
+    let conn = migrations::fresh_db();
+    let s = Store::new(&conn);
+
+    // Create 150 products
+    for i in 0..150 {
+        let sku = format!("PROD{:03}", i);
+        s.create_product(&sku, &sku, price(100), None, None, 100, None)
+            .unwrap();
+    }
+
+    // Request with limit=50 should return only 50 rows
+    let req = CustomReportRequest {
+        dataset: "inventory".to_string(),
+        columns: vec!["sku".to_string(), "name".to_string()],
+        start_date: None,
+        end_date: None,
+        limit: Some(50),
+        offset: None,
+    };
+    let resp = s.build_custom_report(req).unwrap();
+    assert_eq!(resp.columns.len(), 2);
+    assert_eq!(resp.rows.len(), 50);
+    assert!(
+        resp.truncated,
+        "with limit < total rows, should be truncated"
+    );
+}
+
+#[test]
+fn custom_report_respects_offset_and_limit() {
+    let conn = migrations::fresh_db();
+    let s = Store::new(&conn);
+
+    // Create 150 products
+    for i in 0..150 {
+        let sku = format!("PROD{:03}", i);
+        s.create_product(&sku, &sku, price(100), None, None, 100, None)
+            .unwrap();
+    }
+
+    // Request with offset=50, limit=50 should return rows 51-100
+    let req = CustomReportRequest {
+        dataset: "inventory".to_string(),
+        columns: vec!["sku".to_string(), "name".to_string()],
+        start_date: None,
+        end_date: None,
+        limit: Some(50),
+        offset: Some(50),
+    };
+    let resp = s.build_custom_report(req).unwrap();
+    assert_eq!(resp.columns.len(), 2);
+    assert_eq!(resp.rows.len(), 50);
+    assert!(resp.truncated);
+    // First row should be PROD050 (0-indexed)
+    assert_eq!(resp.rows[0][0], "PROD050");
+}
+
+#[test]
+fn custom_report_limit_clamped_to_max() {
+    let conn = migrations::fresh_db();
+    let s = Store::new(&conn);
+
+    // Create 150 products
+    for i in 0..150 {
+        let sku = format!("PROD{:03}", i);
+        s.create_product(&sku, &sku, price(100), None, None, 100, None)
+            .unwrap();
+    }
+
+    // Request with limit=10000 (exceeds max) should be clamped to 1000
+    // But we only have 150 products, so we get all 150 (not truncated)
+    let req = CustomReportRequest {
+        dataset: "inventory".to_string(),
+        columns: vec!["sku".to_string(), "name".to_string()],
+        start_date: None,
+        end_date: None,
+        limit: Some(10000),
+        offset: None,
+    };
+    let resp = s.build_custom_report(req).unwrap();
+    assert_eq!(resp.columns.len(), 2);
+    // Should be clamped to MAX_LIMIT (1000) but we only have 150 products
+    assert_eq!(resp.rows.len(), 150);
+    assert!(
+        !resp.truncated,
+        "should not be truncated when total < clamped limit"
+    );
 }
 
 #[test]

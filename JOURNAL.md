@@ -199,6 +199,49 @@ extreme refund/void totals could render garbage like `"-92233720368547758.-8"`.
 1. The `fetchGenerationRef` is shared between `fetchData` and `fetchPrevData` — a rapid toggle of "Compare period" could theoretically race with a date change, but both use the same counter so the last interaction wins (correct behavior).
 2. Other report screens (`CustomReportScreen`, `InventoryReportScreen`, `MenuEngineeringScreen`) may have similar race conditions — tracked as separate follow-ups.
 
+## 2026-08-20 — TDD cycle: Custom report pagination and bounded results (REP-07)
+
+**Problem:** The Custom Report builder allowed unbounded result sets — a query for "inventory" without date filters would return ALL products in the database. For large stores with thousands of products, this could:
+- Cause expensive SQLite full-table scans
+- Generate massive IPC payloads (megabytes of JSON)
+- Exhaust browser memory when rendering huge tables
+- Expose sensitive customer/staff data unnecessarily
+
+**Root Cause:** In `crates/oz-core/src/export/mod.rs`, `build_custom_report` had no `limit` or `offset` parameters. The `CustomReportRequest` and `CustomReportResponse` structs lacked pagination fields. The UI `CustomReportScreen.tsx` rendered all returned rows without pagination controls.
+
+**Solution:** TDD Red→Green→Refactor cycle:
+- **Red phase:** Wrote failing tests in `export/mod_tests.rs` that:
+  1. Create 150 products, request without limit → expects all 150 (unbounded behavior)
+  2. Request with limit=50 → expects only 50 rows, `truncated=true`
+  3. Request with offset=50, limit=50 → expects rows 51-100
+  4. Request with limit=10000 → clamped to MAX_LIMIT (1000)
+  Tests fail without the fix — struct fields don't exist and no LIMIT/OFFSET in SQL.
+- **Green phase:** 
+  1. Added `limit: Option<u32>` and `offset: Option<u32>` to `CustomReportRequest`
+  2. Added `truncated: bool` to `CustomReportResponse`
+  3. Added `MAX_LIMIT = 1000` constant in `build_custom_report`
+  4. Applied `LIMIT ? OFFSET ?` to SQL query with clamped limit
+  5. Set `truncated = rows.len() >= limit`
+  6. Updated UI API types in `ui/src/api/reports.ts` to match
+  7. Added pagination state (`page`, `PAGE_SIZE=1000`) to `CustomReportScreen.tsx`
+  8. Added "Previous/Next" pagination controls with truncation notice
+  9. Added Fluent localization keys for pagination strings (EN + ID)
+- **Refactor phase:** All 14 custom report tests pass. UI tests (19/19) pass. Applied consistent pagination pattern across backend, IPC, and frontend.
+
+**Verification:**
+- Rust: `cargo test -p oz-core --lib export::tests::custom_report` — **14/14 pass**
+- TypeScript: `npm run typecheck` — clean
+- ESLint: `npm run lint` — clean (pre-existing warnings only)
+- Rust: `cargo check -p oz-pos-app` — clean
+- Rust: `cargo clippy -p oz-pos-app -- -D warnings` — clean
+- UI tests: `npm run test -- src/__tests__/CustomReportScreen.test.tsx` — **19/19 pass**
+- UI tests: `npm run test -- src/__tests__/SalesReportScreen.test.tsx` — **44/44 pass**
+
+**Risks / follow-ups:**
+1. The `PAGE_SIZE` of 1000 matches backend `MAX_LIMIT` — if backend limit changes, UI must be updated. Consider making this configurable or discoverable via API.
+2. Other export paths (analytics bundle CSV, scheduled reports) may need similar bounds — tracked separately.
+3. The "truncated" notice is informational; for large datasets, a streaming/file-based export (ADR follow-up) would be more appropriate than pagination.
+
 ## 2026-08-19 — TDD cycle: Cross-platform migration checksum drift
 
 **Problem:** The desktop app started Vite and Tauri but exited during setup because `20260815_tenant_unique_indexes.sql` had a stored LF checksum while the Windows working tree supplied CRLF bytes. Existing databases also contained older raw CRLF checksums for other migrations, so a simple checksum rewrite would have caused additional drift failures.

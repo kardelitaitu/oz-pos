@@ -47,6 +47,10 @@ pub struct CustomReportRequest {
     pub start_date: Option<String>,
     /// Optional ISO-8601 end date for date-filterable datasets.
     pub end_date: Option<String>,
+    /// Maximum number of rows to return (clamped to MAX_LIMIT). None = no limit.
+    pub limit: Option<u32>,
+    /// Number of rows to skip before returning results.
+    pub offset: Option<u32>,
 }
 
 /// Response from the custom report builder — a generic grid suitable for
@@ -57,6 +61,8 @@ pub struct CustomReportResponse {
     pub columns: Vec<String>,
     /// Row data — each inner vec matches the length of `columns`.
     pub rows: Vec<Vec<String>>,
+    /// Whether the result was truncated due to a limit.
+    pub truncated: bool,
 }
 
 /// Convert a rusqlite Value to its string representation.
@@ -574,10 +580,19 @@ impl Store<'_> {
     /// | `staff` | `users` | none |
     /// | `tax_rates` | `tax_rates` | none |
     /// | `shifts` | `shifts` | `opened_at` |
+    ///
+    /// # Limits
+    ///
+    /// The request may specify `limit` (clamped to 1000) and `offset`.
+    /// The response includes a `truncated` flag indicating whether results
+    /// were limited.
     pub fn build_custom_report(
         &self,
         req: CustomReportRequest,
     ) -> Result<CustomReportResponse, CoreError> {
+        // Maximum rows per custom report request
+        const MAX_LIMIT: u32 = 1000;
+
         let dataset = Self::get_dataset_def(&req.dataset)?;
 
         // Filter requested columns through the whitelist
@@ -597,8 +612,13 @@ impl Store<'_> {
             return Ok(CustomReportResponse {
                 columns: Vec::new(),
                 rows: Vec::new(),
+                truncated: false,
             });
         }
+
+        // Apply limit and offset (clamped to MAX_LIMIT)
+        let limit = req.limit.map(|l| l.min(MAX_LIMIT)).unwrap_or(MAX_LIMIT);
+        let offset = req.offset.unwrap_or(0);
 
         // Build safe SQL — column names come from our whitelist, table name
         // from our dataset definitions, both hardcoded and validated above.
@@ -624,6 +644,9 @@ impl Store<'_> {
                 params.push(format!("{} 23:59:59", end_date));
             }
         }
+
+        // Add LIMIT and OFFSET
+        sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
 
         let mut stmt = self.conn.prepare(&sql).map_err(|e| {
             CoreError::Internal(format!("failed to prepare custom report query: {e}"))
@@ -652,9 +675,12 @@ impl Store<'_> {
                 CoreError::Internal(format!("failed to collect custom report rows: {e}"))
             })?;
 
+        let truncated = rows.len() >= limit as usize;
+
         Ok(CustomReportResponse {
             columns: safe_cols.iter().map(|&s| s.to_string()).collect(),
             rows,
+            truncated,
         })
     }
 

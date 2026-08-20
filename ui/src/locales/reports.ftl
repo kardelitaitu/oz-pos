@@ -166,6 +166,15 @@ custom-report-region-aria = Custom Report Builder
 custom-report-export-aria = Export CSV
 custom-report-columns-selected = { $selected } / { $total } selected
 
+# Custom Report — Pagination (REP-07)
+custom-report-truncated = Results limited to { $limit } rows. Use pagination to view more.
+custom-report-pagination-aria = Results pagination
+custom-report-prev-page = Previous
+custom-report-prev-page-aria = Previous page
+custom-report-next-page = Next
+custom-report-next-page-aria = Next page
+custom-report-page-of = Page { $page }
+
 # Export
 dashboard-export-csv = CSV
 dashboard-export-csv-aria = Export dashboard data as CSV
