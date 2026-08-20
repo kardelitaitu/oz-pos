@@ -107,8 +107,9 @@ export type WireDirection = 'one-way' | 'reverse' | 'two-way';
 const WIRE_DIRECTION_CYCLE: WireDirection[] = ['one-way', 'reverse', 'two-way'];
 export type PortName = 'top' | 'right' | 'bottom' | 'left';
 
-/** Convert legacy vertical anchors to the UX's canonical left/right sides. */
-function normalizeVisualPort(port: string | null | undefined, fallback: PortName): PortName {
+/** Convert legacy vertical anchors to the UX's canonical left/right sides.
+ *  Exported for unit tests. */
+export function normalizeVisualPort(port: string | null | undefined, fallback: PortName): PortName {
   if (port === 'top' || port === 'bottom') return fallback;
   if (port === 'left' || port === 'right') return port;
   return fallback;
@@ -147,8 +148,9 @@ const CONTEXT_ADD_TYPES: NodeType[] = ['store', 'workspace', 'warehouse', 'hardw
  *  midpoint, drop/rise to the target row, then run into the target port.
  *  When the target sits BEHIND the source (reverse flows), detour right
  *  past the source before dropping, so the elbow never folds back through
- *  the source card. Returns the polyline vertices in canvas coords. */
-function elbowPoints(x1: number, y1: number, x2: number, y2: number): Array<[number, number]> {
+ *  the source card. Returns the polyline vertices in canvas coords.
+ *  Exported for unit tests. */
+export function elbowPoints(x1: number, y1: number, x2: number, y2: number): Array<[number, number]> {
   if (x2 < x1) {
     const detour = x1 + 48;
     return [[x1, y1], [detour, y1], [detour, y2], [x2, y2]];
@@ -157,8 +159,8 @@ function elbowPoints(x1: number, y1: number, x2: number, y2: number): Array<[num
   return [[x1, y1], [mx, y1], [mx, y2], [x2, y2]];
 }
 
-/** SVG path for a polyline of H/V segments. */
-function polylineD(pts: Array<[number, number]>): string {
+/** SVG path for a polyline of H/V segments. Exported for unit tests. */
+export function polylineD(pts: Array<[number, number]>): string {
   if (pts.length === 0) return '';
   return `M ${pts[0]![0]} ${pts[0]![1]} ${pts.slice(1).map(([px, py]) => `L ${px} ${py}`).join(' ')}`;
 }
@@ -485,8 +487,8 @@ interface AlignmentResult {
  *  per axis — so a group can snap on a non-grabbed member's edge, exactly
  *  like Figma. The resulting delta shifts the whole group rigidly. The
  *  dragged set is excluded from the reference pool so a group never aligns
- *  to itself. */
-function computeAlignmentGuides(
+ *  to itself. Exported for unit tests. */
+export function computeAlignmentGuides(
   targets: Map<string, { x: number; y: number }>,
   draggedIds: Set<string>,
   nodes: TopologyNodeData[],
@@ -531,8 +533,9 @@ function computeAlignmentGuides(
 /** True when the diagram's bounding box (plus zoomToFit's breathing room)
  *  exceeds the MEASURED canvas viewport — the trigger for the one-shot
  *  load auto-fit. A zero/negative measured size (jsdom, pre-layout) returns
- *  false so the identity view is never yanked by a phantom constraint. */
-function diagramOverflowsCanvas(canvas: HTMLElement, nodes: TopologyNodeData[]): boolean {
+ *  false so the identity view is never yanked by a phantom constraint.
+ *  Exported for unit tests. */
+export function diagramOverflowsCanvas(canvas: HTMLElement, nodes: TopologyNodeData[]): boolean {
   const viewW = canvas.clientWidth;
   const viewH = canvas.clientHeight;
   if (viewW <= 0 || viewH <= 0 || nodes.length === 0) return false;
@@ -590,8 +593,9 @@ const graphIssueKey = (messageId: string) => `graph:${messageId}`;
  *  editor treats it differently from a generic save failure: it reloads the
  *  authoritative topology instead of keeping a canvas that can never apply.
  *  The backend serializes TopologyValidation as
- *  { kind: 'topologyValidation', code: 'topology-revision-conflict', ... }. */
-function isTopologyRevisionConflict(err: unknown): boolean {
+ *  { kind: 'topologyValidation', code: 'topology-revision-conflict', ... }.
+ *  Exported for unit tests. */
+export function isTopologyRevisionConflict(err: unknown): boolean {
   const typed = parseAppError(err);
   return typed !== null
     && (typed as { kind?: string }).kind === 'topologyValidation'
@@ -602,8 +606,9 @@ function isTopologyRevisionConflict(err: unknown): boolean {
  *  pulse is JS-driven on a 30ms interval — CSS @media gates cannot stop
  *  the state churn — so the interval and the pulse position consult this
  *  directly. jsdom has no matchMedia: the safe default is false (animate),
- *  and the reduced-motion tests stub matchMedia to pin the gated path. */
-function prefersReducedMotion(): boolean {
+ *  and the reduced-motion tests stub matchMedia to pin the gated path.
+ *  Exported for unit tests. */
+export function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -674,8 +679,8 @@ const CanvasCursorReadout = memo(function CanvasCursorReadout({ pan, zoom }: { p
  *  canvases (no canonical branch identity) keep their non-blocking path
  *  unless the real topology screen opts into strict validation
  *  (allowLegacyApply=false). Shared by the live badge surface AND the
- *  Apply handler so the two can never drift apart. */
-function validateEditorGraph(
+ *  Apply handler so the two can never drift apart. Exported for unit tests. */
+export function validateEditorGraph(
   nodes: TopologyNodeData[],
   wires: TopologyWireData[],
   allowLegacyApply: boolean,
