@@ -87,7 +87,9 @@ export function registerNavItem(item: NavItemRegistration): void {
 /**
  * Get all registered nav items (in registration order), optionally
  * filtered by enabled features and user role.
- * If `userRole` is omitted, role gating is skipped.
+ * Role gating is fail-closed: an omitted `userRole` DENIES role-gated
+ * items (a gate with a required role is not satisfied by an unknown
+ * user).
  */
 export function getNavItems(
   enabledFeatures?: Set<string>,

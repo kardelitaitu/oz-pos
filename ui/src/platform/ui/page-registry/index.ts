@@ -113,7 +113,9 @@ export function getAllPages(): PageRegistration[] {
 /**
  * Get pages that are enabled given the current feature set and user role.
  * If `enabledFeatures` is omitted, all pages are returned.
- * If `userRole` is omitted, role gating is skipped.
+ * Role gating is fail-closed: an omitted `userRole` DENIES role-gated
+ * pages (a gate with a required role is not satisfied by an unknown
+ * user). Omit it only when no gated pages should be reachable.
  */
 export function getEnabledPages(
   enabledFeatures?: Set<string>,
