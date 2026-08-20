@@ -246,6 +246,27 @@ describe('DashboardScreen', () => {
     });
   });
 
+  // ── REP-02: Dashboard KPI never sums across currencies ──────────────
+  it('shows per-currency revenue KPI when the period spans multiple currencies', async () => {
+    // Backend groups by currency; two-currency period arrives as two rows.
+    // 10000 USD minor = $100.00 + 500000 IDR minor = Rp 500,000
+    // The bug would collapse this to $5,100.00 (510000 minor formatted as USD).
+    const revenue = [
+      buildRevenueRow({ date: '2026-07-01', total_minor: 10000, currency: 'USD', sale_count: 1 }),
+      buildRevenueRow({ date: '2026-07-01', total_minor: 500000, currency: 'IDR', sale_count: 2 }),
+    ];
+    resolveAllWithDefaults();
+    mockGetDailyRevenue.mockResolvedValue(revenue);
+    renderScreen();
+    await waitFor(() => {
+      // Each currency's total should render in its own currency...
+      expect(screen.getByText((content) => content.includes('$100.00'))).toBeTruthy();
+      expect(screen.getByText((content) => content.includes('IDR 500,000'))).toBeTruthy();
+      // ...and the collapsed single total must NOT appear.
+      expect(screen.queryByText((content) => content.includes('$5,100.00'))).toBeNull();
+    });
+  });
+
   it('shows top product name or dash when none', async () => {
     resolveAllWithDefaults();
     renderScreen();

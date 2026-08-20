@@ -14,6 +14,7 @@ import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
 import { minorUnitExponent } from '@/types/domain';
+import { sumRevenueByCurrency, sumGrossProfitByCurrency } from './revenueTotals';
 import { downloadCsv } from '@/utils/export-csv';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
@@ -251,18 +252,34 @@ export default function DashboardScreen() {
 
   // KPI totals are sums over the WHOLE selected range (not "today") — the
   // delta compares them against the previous equal-length period.
+  // REP-02: Never sum minor units across currencies. Compute per-currency
+  // totals and only render a single KPI when the period is single-currency.
   const rangeKPIs = useMemo(() => {
-    const rangeRev = dailyRevenue.reduce((s, r) => s + r.total_minor, 0);
-    const rangeProfit = dailyRevenue.reduce((s, r) => s + r.gross_profit_minor, 0);
+    const revenueTotals = sumRevenueByCurrency(dailyRevenue);
+    const profitTotals = sumGrossProfitByCurrency(dailyRevenue);
+    const prevRevenueTotals = sumRevenueByCurrency(prevDaily);
+    const prevProfitTotals = sumGrossProfitByCurrency(prevDaily);
+
+    const rangeRev = revenueTotals.reduce((s, t) => s + t.total_minor, 0);
+    const rangeProfit = profitTotals.reduce((s, t) => s + t.gross_profit_minor, 0);
     const rangeOrders = dailyRevenue.reduce((s, r) => s + r.sale_count, 0);
-    const prevRev = prevDaily.reduce((s, r) => s + r.total_minor, 0);
-    const prevProfit = prevDaily.reduce((s, r) => s + r.gross_profit_minor, 0);
+    const prevRev = prevRevenueTotals.reduce((s, t) => s + t.total_minor, 0);
+    const prevProfit = prevProfitTotals.reduce((s, t) => s + t.gross_profit_minor, 0);
     const prevOrders = prevDaily.reduce((s, r) => s + r.sale_count, 0);
     const top = topProducts[0];
+
+    const multiCurrency = revenueTotals.length > 1;
+    // For single-currency periods, use that currency; otherwise undefined
+    // signals the render layer to display per-currency breakdown.
+    const singleCurrency = multiCurrency ? undefined : revenueTotals[0]?.currency ?? currency;
+
     return {
       rangeRev, rangeProfit, rangeOrders, top,
       prevRev, prevProfit, prevOrders,
-      currency: dailyRevenue[0]?.currency ?? currency,
+      currency: singleCurrency,
+      multiCurrency,
+      revenueTotals,
+      profitTotals,
     };
   }, [dailyRevenue, prevDaily, topProducts, currency]);
 
@@ -426,18 +443,30 @@ export default function DashboardScreen() {
       <div className="dashboard-kpi-row">
         <Card shadow="sm" className="dashboard-kpi">
           <span className="dashboard-kpi-label"><Localized id="dashboard-revenue"><span>Revenue</span></Localized></span>
-          <span className="dashboard-kpi-value">{fmtCurrency(rangeKPIs.rangeRev, rangeKPIs.currency, numLocale)}</span>
-          <span className={`dashboard-kpi-delta${rangeKPIs.rangeRev >= rangeKPIs.prevRev ? '' : ' dashboard-kpi-delta--down'}`}>
-            {renderDelta(rangeKPIs.rangeRev, rangeKPIs.prevRev)}
+          {rangeKPIs.multiCurrency ? (
+            <span className="dashboard-kpi-value dashboard-kpi-value--multi">
+              {rangeKPIs.revenueTotals.map((t) => fmtCurrency(t.total_minor, t.currency, numLocale)).join(' · ')}
+            </span>
+          ) : (
+            <span className="dashboard-kpi-value">{fmtCurrency(rangeKPIs.rangeRev, rangeKPIs.currency ?? currency, numLocale)}</span>
+          )}
+          <span className={`dashboard-kpi-delta${!rangeKPIs.multiCurrency && rangeKPIs.rangeRev >= rangeKPIs.prevRev ? '' : ' dashboard-kpi-delta--down'}`}>
+            {!rangeKPIs.multiCurrency ? renderDelta(rangeKPIs.rangeRev, rangeKPIs.prevRev) : null}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">
           <span className="dashboard-kpi-label"><Localized id="dashboard-gross-profit"><span>Gross Profit</span></Localized></span>
-          <span className={`dashboard-kpi-value${rangeKPIs.rangeProfit < 0 ? ' dashboard-kpi-negative' : ''}`}>
-            {fmtCurrency(rangeKPIs.rangeProfit, rangeKPIs.currency, numLocale)}
-          </span>
-          <span className={`dashboard-kpi-delta${rangeKPIs.rangeProfit >= rangeKPIs.prevProfit ? '' : ' dashboard-kpi-delta--down'}`}>
-            {renderDelta(rangeKPIs.rangeProfit, rangeKPIs.prevProfit)}
+          {rangeKPIs.multiCurrency ? (
+            <span className="dashboard-kpi-value dashboard-kpi-value--multi">
+              {rangeKPIs.profitTotals.map((t) => fmtCurrency(t.gross_profit_minor, t.currency, numLocale)).join(' · ')}
+            </span>
+          ) : (
+            <span className={`dashboard-kpi-value${rangeKPIs.rangeProfit < 0 ? ' dashboard-kpi-negative' : ''}`}>
+              {fmtCurrency(rangeKPIs.rangeProfit, rangeKPIs.currency ?? currency, numLocale)}
+            </span>
+          )}
+          <span className={`dashboard-kpi-delta${!rangeKPIs.multiCurrency && rangeKPIs.rangeProfit >= rangeKPIs.prevProfit ? '' : ' dashboard-kpi-delta--down'}`}>
+            {!rangeKPIs.multiCurrency ? renderDelta(rangeKPIs.rangeProfit, rangeKPIs.prevProfit) : null}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">

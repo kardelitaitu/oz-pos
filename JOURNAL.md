@@ -89,6 +89,36 @@
 2. Loyalty points redemption uses `loyaltyDiscount` (base currency minor units) — may need conversion when multi-currency active (tracked as CUR-08)
 3. Exchange rate selection uses first matching rate without effective-date filtering (CUR-04)
 
+## 2026-08-20 — TDD cycle: Multi-currency revenue KPI fix (REP-02)
+
+**Problem:** The DashboardScreen KPI bar summed daily revenue minor units across all currencies in the selected period, then formatted the total using only the first row's currency (or the store's base currency from `useCurrency`). A multi-currency date range (e.g., USD $100 + IDR 500,000) would display as a single collapsed number ($5,100.00) — a mathematically invalid total that misleads financial decisions.
+
+**Root Cause:** In `ui/src/features/reports/DashboardScreen.tsx`, `rangeKPIs` computed `rangeRev = dailyRevenue.reduce((s, r) => s + r.total_minor, 0)` without partitioning by currency.
+
+**Solution:** TDD Red→Green→Refactor cycle:
+- **Red phase:** Wrote a failing test (`DashboardScreen.test.tsx`) that provides two daily revenue rows with different currencies (USD $100 + IDR 500,000) and asserts the KPI shows "$100.00 · IDR 500,000" while the collapsed "$5,100.00" is absent.
+- **Green phase:** 
+  1. Imported `sumRevenueByCurrency` and `sumGrossProfitByCurrency` from `./revenueTotals` (already implemented for SalesReportScreen).
+  2. Updated `rangeKPIs` memo to compute per-currency totals and detect `multiCurrency` periods.
+  3. When `multiCurrency` is true, `currency` is set to `undefined` and the KPI renders per-currency breakdowns joined with " · "; delta comparison is suppressed (meaningless over mixed currencies).
+  4. Single-currency periods render exactly as before (single total + delta).
+- **Refactor phase:** Applied same pattern to Gross Profit KPI. Verified existing tests still pass.
+
+**Verification:**
+- TypeScript: `npm run typecheck` — clean
+- ESLint: `npm run lint` — clean (no new warnings)
+- Rust: `cargo check -p oz-pos-app` — clean
+- Rust: `cargo clippy -p oz-pos-app -- -D warnings` — clean
+- UI tests: `npm run test -- src/__tests__/DashboardScreen.test.tsx` — **23/23 pass** (new multi-currency test + all existing)
+- UI tests: `npm run test -- src/__tests__/SalesReportScreen.test.tsx` — **43/43 pass** (unchanged, uses same helpers)
+- Pre-commit hooks: i18n lint + bundle parity clean
+
+**Risks / follow-ups:**
+1. Revenue trend chart still uses single `currency` for axis/tooltip — multi-currency chart semantics tracked as separate follow-up.
+2. Category donut and top-products bar chart sum across currencies — same follow-up.
+3. Period comparison (delta) is suppressed for multi-currency periods — deliberate; a single % over mixed currencies is meaningless.
+4. Export CSV already emits per-currency rows (correct, unchanged).
+
 ## 2026-08-19 — TDD cycle: Cross-platform migration checksum drift
 
 **Problem:** The desktop app started Vite and Tauri but exited during setup because `20260815_tenant_unique_indexes.sql` had a stored LF checksum while the Windows working tree supplied CRLF bytes. Existing databases also contained older raw CRLF checksums for other migrations, so a simple checksum rewrite would have caused additional drift failures.
