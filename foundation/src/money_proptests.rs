@@ -190,18 +190,17 @@ proptest! {
         let mc = Money { minor_units: cc, currency: c };
         let left = ma.checked_add(mb).and_then(|x| x.checked_add(mc));
         let right = mb.checked_add(mc).and_then(|x| ma.checked_add(x));
-        match (left, right) {
-            // Both intermediates fit → the full sums must be identical.
-            (Some(l), Some(r)) => assert_eq!(
+        // Both intermediates fit → the full sums must be identical.
+        // At least one intermediate overflowed. The other path may
+        // still produce a value (different intermediate), but a path
+        // that DID overflow must be None — checked arithmetic must
+        // never wrap.
+        if let (Some(l), Some(r)) = (left, right) {
+            assert_eq!(
                 l.minor_units,
                 r.minor_units,
                 "associativity when both intermediates fit: a={a} b={b} c={cc}"
-            ),
-            // At least one intermediate overflowed. The other path may
-            // still produce a value (different intermediate), but a path
-            // that DID overflow must be None — checked arithmetic must
-            // never wrap.
-            (None, Some(_)) | (Some(_), None) | (None, None) => {}
+            );
         }
     }
 
@@ -245,7 +244,7 @@ proptest! {
             let expected = format!("{expected_sign}{major}.{:0width$}", frac, width = exp as usize);
             assert_eq!(s, expected, "decimal rendering matches integer math");
             // Every negative amount (except -0.00 cases) keeps its sign.
-            if minor < 0 && !(minor > -div && minor < 0) {
+            if minor <= -div {
                 assert!(s.starts_with('-'), "negative amount renders with sign: {s}");
             }
         }
