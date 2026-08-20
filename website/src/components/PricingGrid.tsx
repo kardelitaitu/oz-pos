@@ -104,7 +104,7 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
             period: billing,
             priceId: price.priceId,
             bundle: bundleActive && tier.bundle ? tier.bundle.id : undefined,
-            abVariant: abActive ? abVariant : undefined,
+            abVariant: abActive && abVariant ? abVariant : undefined,
           };
           return (
             <article
