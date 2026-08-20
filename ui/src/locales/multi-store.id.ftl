@@ -290,6 +290,11 @@ topology-purpose-kitchen-hot-line = Jalur dapur panas
 topology-purpose-stock-control = Pengendalian stok
 topology-purpose-receiving = Penerimaan
 
+# ── Peer group (multi-POS Phase 2) ──
+topology-workspace-peer-group-label = Grup peer
+topology-workspace-peer-group-placeholder = cth. Kasir Depan
+topology-peer-group-badge = Grup peer: { $group }
+
 # ── Toast messages ──
 topology-toast-save-error = Gagal menyimpan topologi
 topology-toast-revision-conflict = Topologi berubah di tempat lain — versi terbaru telah dimuat. Terapkan kembali perubahan Anda.

@@ -200,6 +200,17 @@ function TopologyNodeCardImpl({
         </div>
         <div className="node-body-status">
           {(() => {
+            const peerGroup = node.metadata?.['peerGroup'] as string | undefined;
+            if (peerGroup) {
+              return (
+                <span className="node-peer-group-badge" aria-hidden="true" title={topologyUiString(l10n, 'topology-peer-group-badge', { group: peerGroup })}>
+                  {peerGroup}
+                </span>
+              );
+            }
+            return null;
+          })()}
+          {(() => {
             const telemetry = getTelemetry(node);
             if (!telemetry) return null;
             return (

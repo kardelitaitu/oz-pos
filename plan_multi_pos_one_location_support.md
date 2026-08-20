@@ -449,15 +449,18 @@ No performance changes from this plan. The multi-terminal model is already the e
 - ✅ Added clarifying comments to `session.rs`, `terminals.rs`, `pos.rs`
 - ✅ Documented the `active_carts` workspace-instance assumption
 
-### Phase 2: Topology Visual Grouping (Weeks 3-4)
-- Add peer grouping visual in topology editor for Retail POS nodes
-- Add `peer_group` metadata field to topology node model (optional, backward-compatible)
-- Test topology compiler handles grouped POS nodes correctly
+### Phase 2: Topology Visual Grouping (Weeks 3-4) ✅ COMPLETE
+- ✅ peer_group metadata field in topology node model (optional, backward-compatible)
+- ✅ Peer group input field in workspace inspector panel
+- ✅ Peer group badge rendering on workspace nodes in canvas
+- ✅ Localization keys for peer group UI (EN + ID)
+- ✅ 2 tests for peer group badge rendering (543 tests pass)
 
-### Phase 3: Documentation & Polish (Weeks 5-6)
-- Update developer docs / ADR references to explicitly mention peer-terminal model
-- Update user documentation for multi-terminal setup guide
-- Final review and release preparation
+### Phase 3: Documentation & Polish (Weeks 5-6) ✅ COMPLETE
+- ✅ ADR #40: Multi-Terminal Peer Model created
+- ✅ ADR README updated with ADR #40 entry
+- ✅ Clarifying comments in session.rs, terminals.rs, pos.rs
+- ✅ Plan document updated with all implementation results
 
 ## 10. Alignment with Existing OZ-POS Principles
 

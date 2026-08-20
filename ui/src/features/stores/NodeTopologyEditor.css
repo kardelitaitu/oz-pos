@@ -1071,6 +1071,27 @@
   border: 1px solid var(--color-warning);
 }
 
+/* Peer group badge: shows the peer_group label on workspace nodes that
+   belong to a multi-POS peer group (round multi-POS Phase 2). */
+.node-peer-group-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  width: fit-content;
+  background: var(--color-info-subtle, #e8f0fe);
+  color: var(--color-info, #1a73e8);
+  border: 1px solid var(--color-info, #1a73e8);
+}
+
 /* Wire-scoped validation marker — a warning badge at the midpoint of a
    flagged wire (warehouse-at-capacity and other wire-level errors). */
 .wire-validation-marker {

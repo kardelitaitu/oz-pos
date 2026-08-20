@@ -6459,6 +6459,22 @@ export default function NodeTopologyEditor({
                       </option>
                     ))}
                   </select>
+                  {/* Peer group: optional grouping label for multi-POS terminals */}
+                  <label className="inspector-field">
+                    <span><Localized id="topology-workspace-peer-group-label">Peer group</Localized></span>
+                    <input
+                      type="text"
+                      placeholder={l10n.getString('topology-workspace-peer-group-placeholder')}
+                      value={(selectedNode.metadata?.['peerGroup'] as string) ?? ''}
+                      onChange={(e) => {
+                        beginInspectorEdit(selectedNode.id);
+                        const peerGroup = e.target.value || undefined;
+                        setNodes((prev) => prev.map((n) => n.id === selectedNode.id
+                          ? { ...n, metadata: { ...n.metadata, ...(peerGroup ? { peerGroup } : { peerGroup: undefined }) } }
+                          : n));
+                      }}
+                    />
+                  </label>
                   {renderWorkspaceCard(selectedNode)}
                 </div>
               )}

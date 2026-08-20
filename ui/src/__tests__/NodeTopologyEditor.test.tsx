@@ -11614,3 +11614,46 @@ describe('NodeTopologyEditor — pre-existing overlap indicator', () => {
     expect(badgeCount()).toBe(0);
   });
 });
+
+describe('NodeTopologyEditor — peer group badge', () => {
+  const nodeBy = (id: string) =>
+    document.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
+
+  it('renders a peer group badge on workspace nodes with peerGroup metadata', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'My Store', x: 80, y: 80 },
+        { id: 'pos-1', type: 'workspace', name: 'POS #1', x: 380, y: 80, metadata: { typeKey: 'store-pos', peerGroup: 'Front Counter' } },
+        { id: 'pos-2', type: 'workspace', name: 'POS #2', x: 380, y: 200, metadata: { typeKey: 'store-pos', peerGroup: 'Front Counter' } },
+        { id: 'kds-1', type: 'workspace', name: 'KDS', x: 680, y: 140, metadata: { typeKey: 'kds' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(4));
+
+    // POS nodes should show peer group badges; KDS should not.
+    const pos1 = nodeBy('pos-1');
+    const pos2 = nodeBy('pos-2');
+    const kds1 = nodeBy('kds-1');
+    expect(pos1.querySelector('.node-peer-group-badge')).toBeTruthy();
+    expect(pos1.querySelector('.node-peer-group-badge')?.textContent).toBe('Front Counter');
+    expect(pos2.querySelector('.node-peer-group-badge')).toBeTruthy();
+    expect(kds1.querySelector('.node-peer-group-badge')).toBeNull();
+  });
+
+  it('does not render peer group badge when peerGroup is empty', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'My Store', x: 80, y: 80 },
+        { id: 'pos-1', type: 'workspace', name: 'POS #1', x: 380, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+
+    const pos1 = nodeBy('pos-1');
+    expect(pos1.querySelector('.node-peer-group-badge')).toBeNull();
+  });
+});

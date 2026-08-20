@@ -292,6 +292,11 @@ topology-purpose-kitchen-hot-line = Kitchen hot line
 topology-purpose-stock-control = Stock control
 topology-purpose-receiving = Receiving
 
+# ── Peer group (multi-POS Phase 2) ──
+topology-workspace-peer-group-label = Peer group
+topology-workspace-peer-group-placeholder = e.g. Front Counter
+topology-peer-group-badge = Peer group: { $group }
+
 # ── Toast messages ──
 topology-toast-save-error = Failed to save topology
 topology-toast-revision-conflict = The topology changed elsewhere — loaded the latest version. Re-apply your changes.
