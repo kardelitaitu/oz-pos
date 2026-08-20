@@ -1,4 +1,37 @@
 
+## 2026-08-20 — TDD cycle: expand Money unit/logic coverage + extract to sibling tests (foundation)
+
+**Problem:** `foundation/src/money.rs` carried its whole test module inline (lines
+295–1066), pushing the file to 1066 lines — over the AGENTS.md 1000-line cap and
+against the `*_tests.rs` sibling-file convention. Coverage also had gaps: no tests
+for `Default`, `Currency`/`InvalidCurrencyCode` `Display`, the custom
+`Currency`/derived `Money` serde impls, negative-operand arithmetic, `i64::MIN`
+mul/div overflow edges, or `format_minor` at 3-decimal `i64::MIN`.
+
+**Solution:** Coverage cycle (existing behavior pinned; no production code change needed):
+- Extracted the 71-test module verbatim from `money.rs` into the sibling
+  `foundation/src/money_tests.rs` (`#[cfg(test)] #[path = "money_tests.rs"] mod tests;`
+  at the bottom of `money.rs` — now 297 lines, under the cap).
+- Added 21 new unit/logic tests in the same section style:
+  - `Default` = zero USD; `Currency` `Display`; `InvalidCurrencyCode` message.
+  - Serde: `Currency` string roundtrip + lowercase acceptance + invalid-code
+    errors; `Money` JSON roundtrip + invalid-currency error.
+  - `from_major` zero & negative major; `checked_add` with negative operand
+    (refund netting) and zero identity; `checked_sub` yielding a negative balance.
+  - `checked_mul` negative scalar + `i64::MIN * -1` overflow; `checked_div`
+    `i64::MIN / -1` overflow + negative truncation toward zero.
+  - `format_minor(i64::MIN, KWD)` 3-decimal extreme.
+  - lowercase `Currency` parse == uppercase; `PartialOrd`/`min` at i64 extremes.
+
+**Verification:** `cargo test -p foundation money` — 109/109 pass (88 existing +
+21 new); full `cargo test -p foundation` clean (incl. doctests); `cargo fmt -p
+foundation -- --check` clean.
+
+**Risks / follow-ups:** `foundation` is the last crate still using inline test
+modules (`cart.rs`, `validation.rs`, …) — extracting the others to `*_tests.rs`
+would complete the convention. Property-based tests (proptest) over the
+`checked_*` ops are a candidate future slice.
+
 ## 2026-08-20 — TDD cycle: receipt `truncate` UTF-8 boundary panic (oz-hal)
 
 **Problem:** `truncate` (crates/oz-hal/src/drivers/receipt.rs) cut product names
