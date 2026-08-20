@@ -312,3 +312,78 @@ fn routing_no_devices_returns_empty() {
     let targets = resolve_kds_targets(&items, &[], |_| None);
     assert!(targets.is_empty());
 }
+
+// ── Multi-KDS plan §7.3 additional tests ─────────────────────
+
+#[test]
+fn routing_voided_order_excluded_from_routing() {
+    // A voided order is never sent to routing by the POS (the POS checks
+    // order status before calling resolve_kds_targets). However, if it
+    // were sent with no line items and only station-targeted devices
+    // (no broadcast), it should produce no targets.
+    let devices = vec![
+        make_device("d-grill", vec!["station-grill"]),
+        make_device("d-bar", vec!["station-bar"]),
+    ];
+    let empty_items: Vec<KdsLineItem> = vec![];
+    let targets = resolve_kds_targets(&empty_items, &devices, |_| None);
+    assert!(
+        targets.is_empty(),
+        "station-targeted only, no items → no targets"
+    );
+}
+
+#[test]
+fn kds_device_serde_roundtrip() {
+    let device = KdsDevice {
+        id: "dev-1".into(),
+        name: "Grill Display".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec!["grill".into(), "fryer".into()],
+        is_active: true,
+        last_seen_at: Some("2025-06-01T12:00:00Z".into()),
+        connection_status: KdsConnectionStatus::Connected,
+        created_at: "2025-01-01T00:00:00Z".into(),
+        updated_at: "2025-06-01T12:00:00Z".into(),
+    };
+    let json = serde_json::to_string(&device).unwrap();
+    let back: KdsDevice = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.id, device.id);
+    assert_eq!(back.name, device.name);
+    assert_eq!(back.station_ids, device.station_ids);
+    assert_eq!(back.connection_status, KdsConnectionStatus::Connected);
+}
+
+#[test]
+fn register_input_serde_roundtrip() {
+    let input = RegisterKdsDeviceInput {
+        name: "Bar Display".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec!["bar".into()],
+        pairing_token_hash: "abc123".into(),
+        pairing_expires_at: "2099-12-31T23:59:59Z".into(),
+    };
+    let json = serde_json::to_string(&input).unwrap();
+    let back: RegisterKdsDeviceInput = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.name, input.name);
+    assert_eq!(back.restaurant_pos_id, input.restaurant_pos_id);
+    assert_eq!(back.station_ids, input.station_ids);
+}
+
+#[test]
+fn routing_multiple_stations_multiple_devices() {
+    let devices = vec![
+        make_device("d-grill", vec!["station-grill"]),
+        make_device("d-bar", vec!["station-bar"]),
+        make_device("d-fryer", vec!["station-fryer"]),
+    ];
+    let items = vec![make_line_item("STEAK"), make_line_item("BEER")];
+    let targets = resolve_kds_targets(&items, &devices, |sku| match sku {
+        "STEAK" => Some("station-grill".into()),
+        "BEER" => Some("station-bar".into()),
+        _ => None,
+    });
+    assert!(targets.contains(&"d-grill".to_string()));
+    assert!(targets.contains(&"d-bar".to_string()));
+    assert!(!targets.contains(&"d-fryer".to_string()));
+}

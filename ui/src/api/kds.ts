@@ -136,3 +136,81 @@ export const updateKdsLineItemStatusScoped = (
   status: KdsStatus,
 ): Promise<KdsLineItem> =>
   loggedInvoke<KdsLineItem>('update_kds_line_item_status_scoped', { sessionToken, itemId, status });
+
+// ── KDS Device Management ──────────────────────────────────────
+
+/** Connection status of a KDS device. */
+export type KdsConnectionStatus = 'connected' | 'disconnected' | 'stale';
+
+/** A registered KDS display device bound to one Restaurant POS. */
+export interface KdsDevice {
+  id: string;
+  name: string;
+  restaurant_pos_id: string;
+  /** Topology station IDs this device is responsible for. Empty = broadcast. */
+  station_ids: string[];
+  is_active: boolean;
+  last_seen_at: string | null;
+  connection_status: KdsConnectionStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Input for registering a new KDS device. */
+export interface RegisterKdsDeviceInput {
+  name: string;
+  restaurant_pos_id: string;
+  station_ids: string[];
+  pairing_token_hash: string;
+  pairing_expires_at: string;
+}
+
+/** Register a new KDS device (scoped — ADR #7). */
+export const registerKdsDeviceScoped = (
+  sessionToken: string,
+  input: RegisterKdsDeviceInput,
+): Promise<KdsDevice> =>
+  loggedInvoke<KdsDevice>('register_kds_device_scoped', { sessionToken, input });
+
+/** List all KDS devices for the Restaurant POS (scoped — ADR #7). */
+export const listKdsDevicesScoped = (
+  sessionToken: string,
+): Promise<KdsDevice[]> =>
+  loggedInvoke<KdsDevice[]>('list_kds_devices_scoped', { sessionToken });
+
+/** Get a single KDS device by ID (scoped — ADR #7). */
+export const getKdsDeviceScoped = (
+  sessionToken: string,
+  deviceId: string,
+): Promise<KdsDevice | null> =>
+  loggedInvoke<KdsDevice | null>('get_kds_device_scoped', { sessionToken, deviceId });
+
+/** Update a KDS device's connection status (scoped — ADR #7). */
+export const updateKdsDeviceStatusScoped = (
+  sessionToken: string,
+  deviceId: string,
+  status: KdsConnectionStatus,
+): Promise<void> =>
+  loggedInvoke<void>('update_kds_device_status_scoped', { sessionToken, deviceId, status });
+
+/** Deactivate a KDS device (soft-delete) (scoped — ADR #7). */
+export const deactivateKdsDeviceScoped = (
+  sessionToken: string,
+  deviceId: string,
+): Promise<void> =>
+  loggedInvoke<void>('deactivate_kds_device_scoped', { sessionToken, deviceId });
+
+/** Acknowledge a KDS order (scoped — ADR #7). Returns true if ack succeeded. */
+export const ackKdsOrderScoped = (
+  sessionToken: string,
+  orderId: string,
+  deviceId: string,
+): Promise<boolean> =>
+  loggedInvoke<boolean>('ack_kds_order_scoped', { sessionToken, orderId, deviceId });
+
+/** Resolve which KDS device IDs should receive an order (scoped — ADR #7). */
+export const resolveKdsTargetsScoped = (
+  sessionToken: string,
+  orderId: string,
+): Promise<string[]> =>
+  loggedInvoke<string[]>('resolve_kds_targets_scoped', { sessionToken, orderId });

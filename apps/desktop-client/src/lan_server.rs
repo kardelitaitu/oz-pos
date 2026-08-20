@@ -55,6 +55,12 @@ struct HelloMsg {
     psk: String,
 }
 
+/// A peer request for KDS discovery information.
+#[derive(Debug, Deserialize)]
+struct DiscoverMsg {
+    op: String,
+}
+
 // ── LanEventForwarder ────────────────────────────────────────────────
 
 /// A lightweight TCP event forwarder that broadcasts domain events to
@@ -73,6 +79,9 @@ pub struct LanEventForwarder {
     /// When `Some`, peers must send `{"op":"hello","psk":"<value>"}`
     /// as their first message or the connection is dropped.
     psk: Option<Arc<String>>,
+    /// Discovery payload returned when a peer sends `{"op":"discover"}`.
+    /// Set at construction time; `None` disables discovery responses.
+    discovery_payload: Option<Arc<String>>,
 }
 
 /// Handle for registering event bus handlers.
@@ -92,7 +101,19 @@ impl LanEventForwarder {
             offline_buffer: Arc::new(Mutex::new(HashMap::new())),
             bind_addr,
             psk: psk.map(Arc::new),
+            discovery_payload: None,
         }
+    }
+
+    /// Set the discovery payload for KDS device enrollment.
+    ///
+    /// When set, a peer can send `{"op":"discover"}` after the
+    /// PSK handshake (if any) and receive this JSON payload as a
+    /// response. The payload should contain the restaurant POS
+    /// identity, active devices, and version information.
+    pub fn with_discovery(mut self, payload: String) -> Self {
+        self.discovery_payload = Some(Arc::new(payload));
+        self
     }
 
     /// Return a handle for registering event bus subscribers.
@@ -149,6 +170,7 @@ impl LanEventForwarder {
                     let rx = self.tx.subscribe();
                     let buffer = self.offline_buffer.clone();
                     let psk_clone = psk.clone();
+                    let discovery = self.discovery_payload.clone();
                     tokio::spawn(handle_peer(
                         stream,
                         addr,
@@ -156,6 +178,7 @@ impl LanEventForwarder {
                         buffer,
                         initial_events,
                         psk_clone,
+                        discovery,
                     ));
                 }
                 Err(e) => {
@@ -191,6 +214,17 @@ impl Default for LanEventForwarder {
     }
 }
 
+/// Discovery endpoint response for KDS device enrollment.
+#[derive(Debug, serde::Serialize)]
+pub struct KdsDiscoverResponse {
+    /// The Restaurant POS terminal ID.
+    pub restaurant_pos_id: String,
+    /// Active KDS devices registered under this POS.
+    pub devices: Vec<oz_core::kds::KdsDevice>,
+    /// Application version.
+    pub version: &'static str,
+}
+
 // ── Peer handler ─────────────────────────────────────────────────────
 
 /// Read events from the broadcast channel and write newline-delimited
@@ -205,6 +239,7 @@ async fn handle_peer(
     offline_buffer: Arc<Mutex<HashMap<String, Vec<String>>>>,
     initial_events: Vec<String>,
     psk: Option<Arc<String>>,
+    discovery_payload: Option<Arc<String>>,
 ) {
     // Phase 0: PSK handshake (only when configured for external bind).
     // The handshake runs inside the spawned task so a slow/malicious
@@ -241,7 +276,48 @@ async fn handle_peer(
         }
     }
 
-    // Phase 1: Flush any buffered events first.
+    // Phase 1: Handle discovery request (if enabled).
+    // KDS devices send `{"op":"discover"}` after connecting to learn
+    // the Restaurant POS identity and available devices.
+    if let Some(ref payload) = discovery_payload {
+        let mut reader = BufReader::new(&mut stream);
+        let mut line = String::new();
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(PSK_HANDSHAKE_TIMEOUT_SECS),
+            reader.read_line(&mut line),
+        )
+        .await
+        {
+            Ok(Ok(_)) => {
+                if let Ok(msg) = serde_json::from_str::<DiscoverMsg>(line.trim()) {
+                    if msg.op == "discover" {
+                        let response = format!("{payload}\n");
+                        if let Err(e) = stream.write_all(response.as_bytes()).await {
+                            tracing::debug!(
+                                peer = %peer_addr,
+                                error = %e,
+                                "failed to send discovery response"
+                            );
+                            return;
+                        }
+                        tracing::debug!(peer = %peer_addr, "KDS discovery response sent");
+                    }
+                }
+            }
+            Ok(Err(e)) => {
+                tracing::debug!(
+                    peer = %peer_addr,
+                    error = %e,
+                    "discovery read failed"
+                );
+            }
+            Err(_elapsed) => {
+                // No discovery request — proceed to normal event streaming.
+            }
+        }
+    }
+
+    // Phase 2: Flush any buffered events first.
     for event in initial_events {
         let line = format!("{event}\n");
         if let Err(e) = stream.write_all(line.as_bytes()).await {
@@ -261,7 +337,7 @@ async fn handle_peer(
         }
     }
 
-    // Phase 2: Normal broadcast loop with heartbeat.
+    // Phase 3: Normal broadcast loop with heartbeat.
     let mut heartbeat =
         tokio::time::interval(std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
     // Skip the immediate first tick so the heartbeat doesn't fire

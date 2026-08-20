@@ -893,10 +893,29 @@ use crate::kds::{KdsConnectionStatus, KdsDevice, RegisterKdsDeviceInput};
 
 impl Store<'_> {
     /// Register a new KDS device.
+    ///
+    /// Returns a `Validation` error if a device with the same name already
+    /// exists under the same Restaurant POS.
     pub fn register_kds_device(
         &self,
         input: RegisterKdsDeviceInput,
     ) -> Result<KdsDevice, CoreError> {
+        // Enforce unique name per restaurant POS.
+        let existing: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM kds_devices WHERE name = ?1 AND restaurant_pos_id = ?2",
+            params![input.name, input.restaurant_pos_id],
+            |row| row.get(0),
+        )?;
+        if existing > 0 {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: format!(
+                    "device name '{}' already exists for restaurant POS '{}'",
+                    input.name, input.restaurant_pos_id
+                ),
+            });
+        }
+
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let station_ids_json = serde_json::to_string(&input.station_ids)
@@ -927,6 +946,50 @@ impl Store<'_> {
             created_at: now.clone(),
             updated_at: now,
         })
+    }
+
+    /// Validate a pairing token against a device's stored hash and expiry.
+    ///
+    /// Returns `Ok(true)` if the token hash matches AND the token has not
+    /// expired. Returns `Ok(false)` if the device is not found.
+    /// Returns `Err` for expired tokens or hash mismatches.
+    pub fn validate_pairing_token(
+        &self,
+        token_hash: &str,
+        device_id: &str,
+    ) -> Result<bool, CoreError> {
+        // Query the pairing fields directly (not exposed on domain struct).
+        let result: Result<(String, String), _> = self.conn.query_row(
+            "SELECT pairing_token_hash, pairing_expires_at FROM kds_devices WHERE id = ?1",
+            params![device_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        );
+
+        let (stored_hash, expires_at) = match result {
+            Ok(pair) => pair,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(false),
+            Err(e) => return Err(e.into()),
+        };
+
+        // Check hash match.
+        if stored_hash != token_hash {
+            return Err(CoreError::Validation {
+                field: "token_hash",
+                message: "pairing token hash mismatch".into(),
+            });
+        }
+
+        // Check expiry.
+        if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&expires_at) {
+            if chrono::Utc::now() > expires {
+                return Err(CoreError::Validation {
+                    field: "pairing_expires_at",
+                    message: "pairing token has expired".into(),
+                });
+            }
+        }
+
+        Ok(true)
     }
 
     /// Retrieve a KDS device by ID.
@@ -1076,6 +1139,89 @@ impl Store<'_> {
             params![device_id, now, order_id],
         )?;
         Ok(updated > 0)
+    }
+}
+
+// ── KDS Event Replay & Cleanup ──────────────────────────────────
+
+impl Store<'_> {
+    /// Replay KDS orders created or updated since a given ISO-8601 timestamp.
+    ///
+    /// Used by KDS devices on reconnection to catch up with missed events.
+    /// Returns orders whose `received_at` is strictly after `since`, ordered
+    /// by `received_at ASC` (oldest first, so the device processes them
+    /// in the correct sequence).
+    pub fn replay_kds_orders_since(
+        &self,
+        since: &str,
+        status_filter: Option<&str>,
+    ) -> Result<Vec<KdsOrder>, CoreError> {
+        let mut sql = String::from(
+            "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
+                    received_at, started_at, ready_at, served_at,
+                    prep_time_seconds, kitchen_zone, notes, table_number, priority
+             FROM kds_orders WHERE received_at > ?1",
+        );
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(since.to_owned())];
+        if let Some(s) = status_filter {
+            sql.push_str(" AND status = ?2");
+            params.push(Box::new(s.to_owned()));
+        }
+        sql.push_str(" ORDER BY received_at ASC");
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt.query_map(param_refs.as_slice(), Self::row_to_kds_order)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Prune KDS orders older than the given number of days.
+    ///
+    /// Returns the number of orders deleted. Used by the daily cleanup
+    /// daemon to prevent unbounded event log growth (plan §4.0).
+    /// Only prunes orders in terminal states (ready, served, cancelled).
+    pub fn cleanup_old_kds_orders(&self, retention_days: i64) -> Result<usize, CoreError> {
+        let cutoff = (chrono::Utc::now() - chrono::Duration::days(retention_days))
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
+
+        // Delete line items first (FK constraint).
+        let deleted_items = self.conn.execute(
+            "DELETE FROM kds_line_items WHERE kds_order_id IN (
+                SELECT id FROM kds_orders WHERE received_at < ?1
+                AND status IN ('ready', 'served', 'cancelled')
+            )",
+            params![cutoff],
+        )?;
+
+        // Delete order targets.
+        let deleted_targets = self.conn.execute(
+            "DELETE FROM kds_order_targets WHERE kds_order_id IN (
+                SELECT id FROM kds_orders WHERE received_at < ?1
+                AND status IN ('ready', 'served', 'cancelled')
+            )",
+            params![cutoff],
+        )?;
+
+        // Delete orders.
+        let deleted_orders = self.conn.execute(
+            "DELETE FROM kds_orders WHERE received_at < ?1
+             AND status IN ('ready', 'served', 'cancelled')",
+            params![cutoff],
+        )?;
+
+        if deleted_orders > 0 {
+            tracing::info!(
+                orders = deleted_orders,
+                line_items = deleted_items,
+                targets = deleted_targets,
+                retention_days,
+                "KDS event log cleanup completed"
+            );
+        }
+
+        Ok(deleted_orders)
     }
 }
 

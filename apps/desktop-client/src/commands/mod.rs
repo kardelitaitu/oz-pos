@@ -47,6 +47,10 @@ pub mod inventory;
 pub mod inventory_counts;
 /// Kitchen Display System commands.
 pub mod kds;
+/// KDS device management commands (register, list, status, ack).
+pub mod kds_device;
+/// KDS order routing resolution.
+pub mod kds_routing;
 /// License commands.
 pub mod license;
 /// Loyalty / rewards commands.

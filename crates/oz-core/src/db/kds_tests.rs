@@ -1522,3 +1522,369 @@ fn ack_order_already_ready_is_noop() {
     let result = s.ack_kds_order(&kds_order.id, "device-a").unwrap();
     assert!(!result, "ack on non-pending order should return false");
 }
+
+// ── Multi-KDS plan §7.3 tests ────────────────────────────────
+
+#[test]
+fn register_device_rejects_duplicate_name() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let input = crate::kds::RegisterKdsDeviceInput {
+        name: "Expo Screen".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec![],
+        pairing_token_hash: "hash1".into(),
+        pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+    };
+    s.register_kds_device(input.clone()).unwrap();
+
+    let err = s.register_kds_device(input).unwrap_err();
+    assert!(matches!(err, crate::CoreError::Validation { field, .. } if field == "name"));
+}
+
+#[test]
+fn register_device_allows_same_name_different_restaurant() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant A", "pc-1");
+    seed_terminal(&conn, "resto-2", "Restaurant B", "pc-2");
+
+    let make = |resto_id: &str| crate::kds::RegisterKdsDeviceInput {
+        name: "Expo Screen".into(),
+        restaurant_pos_id: resto_id.into(),
+        station_ids: vec![],
+        pairing_token_hash: "hash".into(),
+        pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+    };
+
+    s.register_kds_device(make("resto-1")).unwrap();
+    s.register_kds_device(make("resto-2")).unwrap();
+
+    let devices = s.list_kds_devices_for_restaurant("resto-1").unwrap();
+    assert_eq!(devices.len(), 1);
+    let devices = s.list_kds_devices_for_restaurant("resto-2").unwrap();
+    assert_eq!(devices.len(), 1);
+}
+
+#[test]
+fn get_devices_filtered_by_restaurant_pos() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant A", "pc-1");
+    seed_terminal(&conn, "resto-2", "Restaurant B", "pc-2");
+
+    let make = |name: &str, resto_id: &str| crate::kds::RegisterKdsDeviceInput {
+        name: name.into(),
+        restaurant_pos_id: resto_id.into(),
+        station_ids: vec![],
+        pairing_token_hash: "hash".into(),
+        pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+    };
+
+    s.register_kds_device(make("KDS-1", "resto-1")).unwrap();
+    s.register_kds_device(make("KDS-2", "resto-1")).unwrap();
+    s.register_kds_device(make("KDS-3", "resto-2")).unwrap();
+
+    let resto1_devices = s.list_kds_devices_for_restaurant("resto-1").unwrap();
+    assert_eq!(resto1_devices.len(), 2);
+    let resto2_devices = s.list_kds_devices_for_restaurant("resto-2").unwrap();
+    assert_eq!(resto2_devices.len(), 1);
+    let empty = s.list_kds_devices_for_restaurant("resto-99").unwrap();
+    assert!(empty.is_empty());
+}
+
+#[test]
+fn update_status_connected_to_disconnected() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hash".into(),
+            pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+        })
+        .unwrap();
+    assert_eq!(
+        device.connection_status,
+        crate::kds::KdsConnectionStatus::Disconnected
+    );
+
+    s.update_kds_device_status(&device.id, crate::kds::KdsConnectionStatus::Connected)
+        .unwrap();
+    let fetched = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert_eq!(
+        fetched.connection_status,
+        crate::kds::KdsConnectionStatus::Connected
+    );
+    assert!(fetched.last_seen_at.is_some());
+
+    s.update_kds_device_status(&device.id, crate::kds::KdsConnectionStatus::Disconnected)
+        .unwrap();
+    let fetched = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert_eq!(
+        fetched.connection_status,
+        crate::kds::KdsConnectionStatus::Disconnected
+    );
+}
+
+#[test]
+fn deactivate_device_no_longer_listed_as_active() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hash".into(),
+            pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+        })
+        .unwrap();
+    assert!(device.is_active);
+
+    s.deactivate_kds_device(&device.id).unwrap();
+    let fetched = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert!(!fetched.is_active);
+}
+
+#[test]
+fn ack_order_records_device_and_timestamp() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("SKU-1"), 1, price(100)))
+        .unwrap();
+    let sale = Sale::from_cart_with_user(&cart, None).unwrap();
+    s.create_sale(&sale).unwrap();
+
+    let kds_order = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale.id.clone(),
+            store_id: None,
+            items_summary: "Item".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+    let result = s.ack_kds_order(&kds_order.id, "device-alpha").unwrap();
+    assert!(result);
+
+    // Verify the order has acked_by_device and acked_at set.
+    let fetched = s.get_kds_order(&kds_order.id).unwrap().unwrap();
+    assert_eq!(fetched.status, "ready");
+}
+
+// ── Event Replay & Cleanup ───────────────────────────────────
+
+fn seed_kds_order_at(
+    s: &Store<'_>,
+    conn: &Connection,
+    received_at: &str,
+    status: &str,
+) -> crate::KdsOrder {
+    // Create a sale first (FK requirement).
+    let sale_id = uuid::Uuid::now_v7().to_string();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let sale = crate::Sale {
+        id: sale_id.clone(),
+        status: crate::SaleStatus::Completed,
+        total: price(0),
+        currency: usd(),
+        line_count: 0,
+        payment_method: None,
+        tendered_minor: None,
+        discount_percent: 0,
+        discount_label: None,
+        user_id: None,
+        created_at: now.clone(),
+        updated_at: now,
+        subtotal: price(0),
+        tax_total: price(0),
+        customer_id: None,
+        lines: vec![],
+        version: 1,
+    };
+    s.create_sale(&sale).unwrap();
+
+    let id = uuid::Uuid::now_v7().to_string();
+    conn.execute(
+        "INSERT INTO kds_orders (id, sale_id, status, items_summary, item_count, display_number, received_at, prep_time_seconds, priority)
+         VALUES (?1, ?2, ?3, 'Item', 1, 1, ?4, 0, 0)",
+        rusqlite::params![id, sale_id, status, received_at],
+    ).unwrap();
+    s.get_kds_order(&id).unwrap().unwrap()
+}
+
+#[test]
+fn replay_orders_since_returns_only_newer() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    let old = seed_kds_order_at(&s, &conn, "2025-01-01T10:00:00.000Z", "ready");
+    let new1 = seed_kds_order_at(&s, &conn, "2025-01-01T12:00:00.000Z", "pending");
+    let new2 = seed_kds_order_at(&s, &conn, "2025-01-01T13:00:00.000Z", "pending");
+
+    let replayed = s
+        .replay_kds_orders_since("2025-01-01T11:00:00.000Z", None)
+        .unwrap();
+    assert_eq!(replayed.len(), 2);
+    assert_eq!(replayed[0].id, new1.id);
+    assert_eq!(replayed[1].id, new2.id);
+}
+
+#[test]
+fn replay_orders_since_respects_status_filter() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    seed_kds_order_at(&s, &conn, "2025-01-01T12:00:00.000Z", "pending");
+    seed_kds_order_at(&s, &conn, "2025-01-01T12:05:00.000Z", "ready");
+    seed_kds_order_at(&s, &conn, "2025-01-01T12:10:00.000Z", "pending");
+
+    let replayed = s
+        .replay_kds_orders_since("2025-01-01T11:00:00.000Z", Some("pending"))
+        .unwrap();
+    assert_eq!(replayed.len(), 2);
+    assert!(replayed.iter().all(|o| o.status == "pending"));
+}
+
+#[test]
+fn replay_orders_since_empty_when_nothing_newer() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    seed_kds_order_at(&s, &conn, "2025-01-01T10:00:00.000Z", "pending");
+
+    let replayed = s
+        .replay_kds_orders_since("2025-06-01T00:00:00.000Z", None)
+        .unwrap();
+    assert!(replayed.is_empty());
+}
+
+#[test]
+fn cleanup_old_kds_orders_removes_terminal_states() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    // Old orders in terminal states.
+    seed_kds_order_at(&s, &conn, "2024-01-01T10:00:00.000Z", "ready");
+    seed_kds_order_at(&s, &conn, "2024-01-02T10:00:00.000Z", "served");
+    seed_kds_order_at(&s, &conn, "2024-01-03T10:00:00.000Z", "cancelled");
+
+    // Recent order (should not be deleted).
+    seed_kds_order_at(&s, &conn, "2025-06-01T10:00:00.000Z", "pending");
+
+    let deleted = s.cleanup_old_kds_orders(365).unwrap();
+    assert_eq!(deleted, 3);
+
+    let remaining = s.list_kds_orders(None).unwrap();
+    assert_eq!(remaining.len(), 1);
+}
+
+#[test]
+fn cleanup_old_kds_orders_preserves_pending_orders() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    // Old but still pending — should NOT be deleted.
+    seed_kds_order_at(&s, &conn, "2024-01-01T10:00:00.000Z", "pending");
+    seed_kds_order_at(&s, &conn, "2024-01-01T10:05:00.000Z", "preparing");
+
+    let deleted = s.cleanup_old_kds_orders(365).unwrap();
+    assert_eq!(deleted, 0);
+
+    let remaining = s.list_kds_orders(None).unwrap();
+    assert_eq!(remaining.len(), 2);
+}
+
+// ── Pairing Token Validation ──────────────────────────────────
+
+#[test]
+fn validate_pairing_token_accepts_valid_hash() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "correct-hash".into(),
+            pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+        })
+        .unwrap();
+
+    let result = s
+        .validate_pairing_token("correct-hash", &device.id)
+        .unwrap();
+    assert!(result);
+}
+
+#[test]
+fn validate_pairing_token_rejects_wrong_hash() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "correct-hash".into(),
+            pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+        })
+        .unwrap();
+
+    let err = s
+        .validate_pairing_token("wrong-hash", &device.id)
+        .unwrap_err();
+    assert!(matches!(err, crate::CoreError::Validation { field, .. } if field == "token_hash"));
+}
+
+#[test]
+fn validate_pairing_token_rejects_expired() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    let device = s
+        .register_kds_device(crate::kds::RegisterKdsDeviceInput {
+            name: "Test KDS".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hash".into(),
+            pairing_expires_at: "2020-01-01T00:00:00Z".into(), // already expired
+        })
+        .unwrap();
+
+    let err = s.validate_pairing_token("hash", &device.id).unwrap_err();
+    assert!(
+        matches!(err, crate::CoreError::Validation { field, .. } if field == "pairing_expires_at")
+    );
+}
+
+#[test]
+fn validate_pairing_token_returns_false_for_missing_device() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    let result = s
+        .validate_pairing_token("hash", "nonexistent-device")
+        .unwrap();
+    assert!(!result);
+}
