@@ -1,3 +1,14 @@
+/*
+last audited 13-08-26 by RSA-Agent
+crate: foundation (money.rs) | status: SAFE | lint: CLEAN
+findings: MONEY-AUDIT-1 fixed in oz-core compute_sale_tax (overflow no longer
+  silently zeroes sale totals). MONEY-AUDIT-2 fixed in Percentage (apply_to /
+  complement_apply_to are now overflow-free via x=100q+r decomposition —
+  100% of i64::MAX returns i64::MAX instead of None). Default impl retained as
+  documented serde-only fallback. checked_* arithmetic: i64::MIN edges covered.
+next: Phase 2 (frontend money arithmetic) | perf: hot-path checked ops are
+  branch-predictable; Percentage decomposition adds two integer ops.
+*/
 //! Money and currency primitives.
 //!
 //! Money is **always** stored as integer minor units (e.g., cents for USD,
@@ -17,6 +28,20 @@ pub struct Money {
     pub currency: Currency,
 }
 
+/// `serde`-default fallback only — **never construct business money this
+/// way**.
+///
+/// This impl exists so `#[serde(default)]` fields of type `Money` (e.g.
+/// `modules/sales` `SaleLine::tax_amount`, `Sale::subtotal`) can
+/// deserialize legacy payloads that omit the key. The currency is
+/// hard-coded to USD, which is almost certainly NOT the sale's currency —
+/// the value is a stand-in, not real money.
+///
+/// All production construction goes through [`Money::zero`] or
+/// [`Money::from_major`], which take an explicit currency. Do not add new
+/// call sites of `Money::default()`; if you need a serde fallback for a
+/// new field, use `#[serde(default = "...")]` with a function that builds
+/// `Money::zero` in the correct currency.
 impl Default for Money {
     fn default() -> Self {
         Self {
@@ -295,3 +320,7 @@ impl PartialOrd for Money {
 #[cfg(test)]
 #[path = "money_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "money_proptests.rs"]
+mod proptests;
