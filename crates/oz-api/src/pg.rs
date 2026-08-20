@@ -1088,7 +1088,9 @@ pub async fn get_sale(pool: &Pool, tenant_id: &str, id: &str) -> Result<Option<S
         .query_opt(
             "SELECT id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                     discount_percent, discount_label, user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor, customer_id, version
+                    subtotal_minor, tax_total_minor, customer_id, version,
+                    base_currency, base_total_minor, tender_rate_millionths,
+                    tip_minor, service_charge_minor
              FROM sales WHERE id = $1",
             &[&id],
         )

@@ -119,6 +119,7 @@ pub fn sync_router_with_plan_enforcement(state: SyncState, enforce_plans: bool) 
 /// on the `free` plan (or with no assigned plan — fail closed) is rejected
 /// with a structured 403 `{"error":"plan_required"}`. Runs after auth so
 /// claims are available, before the handler.
+#[allow(clippy::result_large_err)]
 pub async fn plan_middleware(
     Extension(enforce_plans): Extension<bool>,
     Extension(store): Extension<crate::sync_store::SyncStore>,
