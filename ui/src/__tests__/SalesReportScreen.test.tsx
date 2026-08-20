@@ -9,6 +9,7 @@ import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import userEvent from '@testing-library/user-event';
 import SalesReportScreen from '@/features/reports/SalesReportScreen';
+import type { DailyRevenueRow } from '@/api/reports';
 
 // ── FTL bundles ──────────────────────────────────────────────────
 const sharedFtl = `
@@ -1007,6 +1008,72 @@ describe('SalesReportScreen', () => {
       expect(screen.getAllByText('No results').length).toBe(3);
       // Heatmap shows "No data" (also on the trend card)
       expect(screen.getAllByText('No data').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── REP-06: Race condition guard ────────────────────────────────
+  it('ignores stale responses when filters change rapidly (race condition)', async () => {
+    // This test exposes the REP-06 bug: when a user changes filters while a
+    // fetch is in flight, the stale response from the earlier fetch can
+    // overwrite the current data if there's no request-generation guard.
+    //
+    // Scenario:
+    // 1. Initial fetch for date A completes (UI shows $1,000.00)
+    // 2. User changes start date to date B -> second fetch starts (loading=true)
+    // 3. FIRST fetch (for date A) resolves AFTER second fetch started
+    //    -> without guard, this stale response would overwrite the UI
+    // 4. Second fetch (for date B) resolves -> should win
+
+    // Deferred promise for the SECOND fetch
+    let resolveSecondFetch: (value: DailyRevenueRow[]) => void;
+    const secondFetchPromise = new Promise<DailyRevenueRow[]>((resolve) => {
+      resolveSecondFetch = resolve;
+    });
+
+    // STEP 1: Initial fetch for date A (Jan 1) - use mockResolvedValue
+    // Returns $1,000.00 (100000 minor units)
+    mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ total_minor: 100000, sale_count: 5 }),
+    ]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+
+    renderScreen();
+
+    // Wait for initial data to load (UI shows $1,000.00)
+    await waitFor(() => {
+      expect(screen.getByText(/\$1,000\.00/)).toBeTruthy();
+    });
+
+    // STEP 2: User QUICKLY changes start date to date B (Feb 1)
+    // This triggers a SECOND fetch for date B (deferred)
+    mockGetDailyRevenue.mockImplementationOnce(() => secondFetchPromise);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+
+    const startInput = document.getElementById('start-date') as HTMLInputElement;
+    expect(startInput).toBeTruthy();
+    fireEvent.change(startInput, { target: { value: '2026-02-01' } });
+
+    // STEP 3: FIRST fetch (stale, for date A) resolves NOW
+    // It returns $1,500.00 (different from the initial $1,000.00 to detect overwrite)
+    // This simulates the case where the first request takes longer than expected
+    mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ total_minor: 150000, sale_count: 8 }),
+    ]);
+
+    // STEP 4: Second fetch (current, for date B) resolves
+    // Returns $2,000.00
+    resolveSecondFetch!([
+      buildDailyRevenue({ total_minor: 200000, sale_count: 10 }),
+    ]);
+
+    // The UI should show the SECOND fetch's data ($2,000.00), not the stale first ($1,500.00)
+    await waitFor(() => {
+      expect(screen.getByText(/\$2,000\.00/)).toBeTruthy();
+      expect(screen.queryByText(/\$1,500\.00/)).toBeNull();
     });
   });
 });

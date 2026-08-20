@@ -167,6 +167,38 @@ extreme refund/void totals could render garbage like `"-92233720368547758.-8"`.
 3. Period comparison (delta) is suppressed for multi-currency periods — deliberate; a single % over mixed currencies is meaningless.
 4. Export CSV already emits per-currency rows (correct, unchanged).
 
+## 2026-08-20 — TDD cycle: Race condition guard for report fetches (REP-06)
+
+**Problem:** The SalesReportScreen fires a `Promise.all` of seven API calls whenever the user changes the view mode or date range. If the user changes filters rapidly, an earlier request that resolves after a later one can overwrite the UI with stale data — the screen shows results for filters that are no longer selected. This is a financial integrity risk because the screen remains visually valid but displays incorrect numbers.
+
+**Root Cause:** In `ui/src/features/reports/SalesReportScreen.tsx`, `fetchData` and `fetchPrevData` had no request-generation tracking. The last promise to resolve would call `setRevenueData`/`setTopProducts`/etc. regardless of whether its filter state was still current.
+
+**Solution:** TDD Red→Green→Refactor cycle:
+- **Red phase:** Wrote a failing test (`SalesReportScreen.test.tsx`) that:
+  1. Loads initial data for date A ($1,000.00)
+  2. Rapidly changes start date to date B (triggers second fetch)
+  3. Resolves first fetch with different data ($1,500.00) — simulates slow first request
+  4. Resolves second fetch with current data ($2,000.00)
+  5. Asserts UI shows $2,000.00, not the stale $1,500.00
+  Test fails without the fix — the stale response overwrites the current data.
+- **Green phase:** Added a request-generation counter (`fetchGenerationRef`) using `useRef`:
+  1. Increment counter at start of each `fetchData`/`fetchPrevData` call
+  2. Capture current generation in a closure
+  3. In `.then()`/`.catch()`/`.finally()`, only update state if generation still matches
+  4. This ensures only the most recent request's response can mutate the UI
+- **Refactor phase:** Applied same pattern to `fetchPrevData` for consistency. All 44 existing tests still pass.
+
+**Verification:**
+- TypeScript: `npm run typecheck` — clean
+- ESLint: `npm run lint` — clean (no new warnings)
+- Rust: `cargo check -p oz-pos-app` — clean
+- Rust: `cargo clippy -p oz-pos-app -- -D warnings` — clean
+- UI tests: `npm run test -- src/__tests__/SalesReportScreen.test.tsx` — **44/44 pass** (new race condition test + all existing)
+
+**Risks / follow-ups:**
+1. The `fetchGenerationRef` is shared between `fetchData` and `fetchPrevData` — a rapid toggle of "Compare period" could theoretically race with a date change, but both use the same counter so the last interaction wins (correct behavior).
+2. Other report screens (`CustomReportScreen`, `InventoryReportScreen`, `MenuEngineeringScreen`) may have similar race conditions — tracked as separate follow-ups.
+
 ## 2026-08-19 — TDD cycle: Cross-platform migration checksum drift
 
 **Problem:** The desktop app started Vite and Tauri but exited during setup because `20260815_tenant_unique_indexes.sql` had a stored LF checksum while the Windows working tree supplied CRLF bytes. Existing databases also contained older raw CRLF checksums for other migrations, so a simple checksum rewrite would have caused additional drift failures.

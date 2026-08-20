@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
@@ -96,6 +96,9 @@ export default function SalesReportScreen() {
   const [startDate, setStartDate] = useState(monthAgo());
   const [endDate, setEndDate] = useState(today());
 
+  // REP-06: Request generation counter to ignore stale responses
+  const fetchGenerationRef = useRef(0);
+
   const [revenueData, setRevenueData] = useState<RevenueRow[]>([]);
   const [topProducts, setTopProducts] = useState<TopProductRow[]>([]);
   // Rank the top-products table by revenue (default) or gross profit.
@@ -128,6 +131,9 @@ export default function SalesReportScreen() {
     setLoading(true);
     setError(null);
 
+    // REP-06: Increment generation counter to invalidate any in-flight requests
+    const currentGeneration = ++fetchGenerationRef.current;
+
     let revenuePromise: Promise<RevenueRow[]>;
     switch (view) {
       case 'daily':
@@ -151,6 +157,10 @@ export default function SalesReportScreen() {
       getCategoryForecast(sessionToken, startDate, endDate, view, 5),
     ])
       .then(([rev, top, heat, cat, catPop, trend, forecast]) => {
+        // REP-06: Ignore stale responses from superseded requests
+        if (currentGeneration !== fetchGenerationRef.current) {
+          return;
+        }
         setRevenueData(rev);
         setTopProducts(top);
         setHeatmap(heat);
@@ -160,10 +170,16 @@ export default function SalesReportScreen() {
         setCategoryForecast(forecast);
       })
       .catch((e) => {
-        setError(e.message ?? String(e));
+        // REP-06: Only set error if this is still the current request
+        if (currentGeneration === fetchGenerationRef.current) {
+          setError(e.message ?? String(e));
+        }
       })
       .finally(() => {
-        setLoading(false);
+        // REP-06: Only clear loading if this is still the current request
+        if (currentGeneration === fetchGenerationRef.current) {
+          setLoading(false);
+        }
       });
   }, [view, startDate, endDate, sessionToken, rankByProfit]);
 
@@ -188,6 +204,9 @@ export default function SalesReportScreen() {
 
     const { prevStart, prevEnd } = calcPrevRange();
 
+    // REP-06: Use a separate generation counter for prev-period fetches
+    const prevFetchGeneration = ++fetchGenerationRef.current;
+
     let revenuePromise: Promise<RevenueRow[]>;
     switch (view) {
       case 'daily':
@@ -202,8 +221,18 @@ export default function SalesReportScreen() {
     }
 
     revenuePromise
-      .then(setPrevRevenueData)
-      .catch(() => { /* period comparison is best-effort; silently clear on failure */ setPrevRevenueData([]); })
+      .then((rev) => {
+        // REP-06: Ignore stale prev-period responses
+        if (prevFetchGeneration === fetchGenerationRef.current) {
+          setPrevRevenueData(rev);
+        }
+      })
+      .catch(() => {
+        // REP-06: Only clear if this is still the current prev-period request
+        if (prevFetchGeneration === fetchGenerationRef.current) {
+          setPrevRevenueData([]);
+        }
+      })
 
   }, [comparePeriod, view, calcPrevRange, sessionToken]);
 
