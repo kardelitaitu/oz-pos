@@ -592,6 +592,75 @@ export default function SalesReportScreen() {
         </div>
       </Card>
 
+      {/* Top Products */}
+      <Card shadow="sm" className="sales-report-chart-card">
+        <div className="sales-report-top-products-header">
+          <Localized id="sales-report-top-products">
+            <h2 className="sales-report-section-title">Top Products</h2>
+          </Localized>
+          <div className="sales-report-rank-toggle" role="radiogroup" aria-label={requiredLocalized(l10n, 'sales-report-top-rank-aria')}>
+            <label>
+              <input
+                type="radio"
+                name="rank-by"
+                role="radio"
+                checked={!rankByProfit}
+                aria-checked={!rankByProfit}
+                onChange={() => setRankByProfit(false)}
+              />
+              <Localized id="sales-report-top-rank-revenue-aria"><span>Rank by revenue</span></Localized>
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="rank-by"
+                role="radio"
+                checked={rankByProfit}
+                aria-checked={rankByProfit}
+                onChange={() => setRankByProfit(true)}
+              />
+              <Localized id="sales-report-top-rank-profit-aria"><span>Rank by gross profit</span></Localized>
+            </label>
+          </div>
+        </div>
+        {topProducts.length === 0 ? (
+          <p className="sales-report-no-data">
+            <Localized id="no-results">
+              <span>No results</span>
+            </Localized>
+          </p>
+        ) : (
+          <div className="sales-report-top-products-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th><Localized id="top-products-name"><span>Name</span></Localized></th>
+                  <th><Localized id="top-products-quantity"><span>Qty</span></Localized></th>
+                  <th><Localized id="top-products-revenue"><span>Revenue</span></Localized></th>
+                  <th><Localized id="top-products-gross-profit"><span>Gross Profit</span></Localized></th>
+                  <th><Localized id="top-products-margin"><span>Margin</span></Localized></th>
+                </tr>
+              </thead>
+              <tbody>
+                {topProducts.map((p, i) => (
+                  <tr key={p.product_id ?? i}>
+                    <td>{i + 1}</td>
+                    <td>{p.name}</td>
+                    <td>{p.total_qty}</td>
+                    <td>{fmtCurrency(p.total_minor, currency, numLocale)}</td>
+                    <td className={p.gross_profit_minor < 0 ? 'sales-report-top-negative' : ''}>
+                      {fmtCurrency(p.gross_profit_minor, currency, numLocale)}
+                    </td>
+                    <td>{p.gross_margin_percent.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
       <div className="sales-report-columns">
         <Card shadow="sm" className="sales-report-chart-card">
           <Localized id="sales-report-category-breakdown">
@@ -629,9 +698,46 @@ export default function SalesReportScreen() {
             )}
         </Card>
 
+        {/* Category Popularity Leaderboard */}
         <Card shadow="sm" className="sales-report-chart-card">
           <Localized id="sales-report-category-popularity">
-            <h2 className="sales-report-section-title">Category Popularity Trend</h2>
+            <h2 className="sales-report-section-title">Category Popularity</h2>
+          </Localized>
+          {categoryPopularity.length === 0 ? (
+            <p className="sales-report-no-data">
+              <Localized id="no-results">
+                <span>No results</span>
+              </Localized>
+            </p>
+          ) : (
+            <table className="sales-report-popularity-table">
+              <thead>
+                <tr>
+                  <th><Localized id="sales-report-category-popularity-category"><span>Category</span></Localized></th>
+                  <th><Localized id="sales-report-category-popularity-products"><span>Products</span></Localized></th>
+                  <th><Localized id="sales-report-category-popularity-mean"><span>Popularity</span></Localized></th>
+                  <th><Localized id="sales-report-category-popularity-top"><span>Top Sellers</span></Localized></th>
+                </tr>
+              </thead>
+              <tbody>
+                {categoryPopularity.map((cat, i) => (
+                  <tr key={cat.category_id ?? i}>
+                    <td>{cat.category_name ?? l10n.getString('sales-report-category-popularity-uncategorized')}</td>
+                    <td>{cat.product_count}</td>
+                    <td>{cat.catalog_ratio.toFixed(1)}×</td>
+                    <td>{(cat.top_products as Array<{ name: string; rank: number }>).length > 0
+                      ? (cat.top_products as Array<{ name: string; rank: number }>).map(p => `${p.rank}. ${p.name}`).join(' · ')
+                      : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+
+        <Card shadow="sm" className="sales-report-chart-card">
+          <Localized id="sales-report-popularity-trend">
+            <h2 className="sales-report-section-title">Popularity Trend</h2>
           </Localized>
           {popularityTrend.length === 0 ? (
             <p className="sales-report-no-data">
@@ -666,39 +772,111 @@ export default function SalesReportScreen() {
       </div>
 
       <Card shadow="sm" className="sales-report-chart-card">
-          <Localized id="sales-report-category-forecast">
-            <h2 className="sales-report-section-title">Category Forecast</h2>
-          </Localized>
-          {categoryForecast.length === 0 ? (
-            <p className="sales-report-no-data">
-              <Localized id="no-results">
-                <span>No results</span>
-              </Localized>
-            </p>
-            ) : (
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart>
-                  <XAxis
-                    dataKey="period_start"
-                    tick={{ fontSize: 12 }}
+        <Localized id="sales-report-demand-forecast">
+          <h2 className="sales-report-section-title">Demand Forecast</h2>
+        </Localized>
+        {categoryForecast.length === 0 ? (
+          <p className="sales-report-no-data">
+            <Localized id="no-results">
+              <span>No results</span>
+            </Localized>
+          </p>
+        ) : (
+          <>
+            <table className="sales-report-forecast-table">
+              <thead>
+                <tr>
+                  <th><Localized id="sales-report-demand-forecast-category"><span>Category</span></Localized></th>
+                  <th><Localized id="sales-report-demand-forecast-avg"><span>Avg / period</span></Localized></th>
+                  <th><Localized id="sales-report-demand-forecast-trend"><span>Trend</span></Localized></th>
+                  <th><Localized id="sales-report-demand-forecast-next"><span>Next period</span></Localized></th>
+                </tr>
+              </thead>
+              <tbody>
+                {categoryForecast.map((f, i) => (
+                  <tr key={f.category_id ?? i}>
+                    <td>{f.category_name}</td>
+                    <td>{f.recent_avg_units.toFixed(1)}</td>
+                    <td className={f.trend_per_period < 0 ? 'sales-report-forecast-down' : 'sales-report-forecast-up'}>
+                      {f.trend_per_period >= 0 ? '▲' : '▼'} {Math.abs(f.trend_per_period).toFixed(1)}
+                    </td>
+                    <td>{f.forecast_units}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart>
+                <XAxis
+                  dataKey="period_start"
+                  tick={{ fontSize: 12 }}
+                />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip
+                  formatter={(value: unknown) => fmtCurrency(Number(value), currency, numLocale)}
+                />
+                {categoryForecast.map((row, index) => (
+                  <Line
+                    key={index}
+                    dataKey="forecast"
+                    stroke={PIE_COLORS[index % PIE_COLORS.length]!}
+                    strokeWidth={2}
+                    aria-label={l10n.getString('sales-report-category-forecast')}
                   />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    formatter={(value: unknown) => fmtCurrency(Number(value), currency, numLocale)}
-                  />
-                  {categoryForecast.map((row, index) => (
-                    <Line
-                      key={index}
-                      dataKey="forecast"
-                      stroke={PIE_COLORS[index % PIE_COLORS.length]!}
-                      strokeWidth={2}
-                      aria-label={l10n.getString('sales-report-category-forecast')}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-        </Card>
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </>
+        )}
+      </Card>
+
+      {/* Hourly Heatmap */}
+      <Card shadow="sm" className="sales-report-chart-card">
+        <Localized id="sales-report-hourly-heatmap">
+          <h2 className="sales-report-section-title">Busiest Hours</h2>
+        </Localized>
+        {heatmap.length === 0 ? (
+          <p className="sales-report-no-data">
+            <Localized id="heatmap-no-data">
+              <span>No data</span>
+            </Localized>
+          </p>
+        ) : (
+          <div className="sales-report-heatmap" role="grid" aria-label={requiredLocalized(l10n, 'sales-report-hourly-heatmap-aria')}>
+            {DAY_KEYS.map((dayKey, dayIdx) => (
+              <div key={dayKey} className="sales-report-heatmap-row" role="row">
+                <div className="sales-report-heatmap-day-label" role="rowheader">
+                  <Localized id={`day-${dayKey}`}>
+                    <span>{dayKey.charAt(0).toUpperCase() + dayKey.slice(1, 3)}</span>
+                  </Localized>
+                </div>
+                {Array.from({ length: 24 }, (_, h) => {
+                  const cell = heatmap.find((c) => c.day_of_week === dayIdx && c.hour === h);
+                  const value = cell ? cell.total_minor : 0;
+                  const sales = cell ? cell.sale_count : 0;
+                  return (
+                    <div
+                      key={h}
+                      className="sales-report-heatmap-cell"
+                      role="gridcell"
+                      aria-label={
+                        cell
+                          ? `${dayKey.charAt(0).toUpperCase() + dayKey.slice(1, 3)} ${String(h).padStart(2, '0')}:00 - ${fmtCurrency(value, currency, numLocale)} (${sales} orders)`
+                          : `${dayKey.charAt(0).toUpperCase() + dayKey.slice(1, 3)} ${String(h).padStart(2, '0')}:00 - $0.00 (0 orders)`
+                      }
+                      style={{
+                        backgroundColor: value > 0 ? HEATMAP_COLORS[Math.min(Math.floor((value / 50000) * 7), 7)] : 'transparent',
+                      }}
+                    >
+                      {sales > 0 ? sales : ''}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
     </div>
   );

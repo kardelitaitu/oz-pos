@@ -64,6 +64,7 @@ heatmap-title = Jam Tersibuk
 heatmap-hour = Jam
 heatmap-sales = Penjualan
 heatmap-no-data = Tidak ada data penjualan
+sales-report-hourly-heatmap-aria = Heatmap Per Jam
 day-sunday = Min
 day-monday = Sen
 day-tuesday = Sel

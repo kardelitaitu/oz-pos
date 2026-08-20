@@ -40,6 +40,7 @@ top-products-gross-profit = Gross Profit
 top-products-margin = Margin
 heatmap-title = Busiest Hours
 heatmap-no-data = No data
+sales-report-hourly-heatmap-aria = Hourly heatmap
 
 # Sales Report — a11y labels
 sales-report-region-aria = Sales Report
@@ -369,7 +370,7 @@ describe('SalesReportScreen', () => {
   // ── Daily view data ──────────────────────────────────────────
   it('displays total revenue and total orders for daily data', async () => {
     mockGetDailyRevenue.mockResolvedValue([
-      buildDailyRevenue({ total_minor: 250, sale_count: 5 }),
+      buildDailyRevenue({ total_minor: 250000, sale_count: 5 }),
       buildDailyRevenue({ total_minor: 100000, sale_count: 3 }),
     ]);
     mockGetTopProducts.mockResolvedValue([]);
@@ -377,7 +378,7 @@ describe('SalesReportScreen', () => {
     mockGetCategoryBreakdown.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      // $3,500.00 total (2500 + 1000)
+      // $3,500.00 total (250000 + 100000) = 350000 minor units
       expect(screen.getByText(/\$3,500\.00/)).toBeTruthy();
       // 8 orders (5 + 3)
       expect(screen.getByText(/8/)).toBeTruthy();
@@ -386,7 +387,7 @@ describe('SalesReportScreen', () => {
 
   it('shows gross profit total in daily view (HPP exposure)', async () => {
     mockGetDailyRevenue.mockResolvedValue([
-      buildDailyRevenue({ total_minor: 250, cogs_minor: 100000, sale_count: 5 }),
+      buildDailyRevenue({ total_minor: 250000, cogs_minor: 100000, sale_count: 5 }),
       buildDailyRevenue({ total_minor: 100000, cogs_minor: 40000, sale_count: 3 }),
     ]);
     mockGetTopProducts.mockResolvedValue([]);
@@ -766,6 +767,9 @@ describe('SalesReportScreen', () => {
     mockGetTopProducts.mockResolvedValue([]);
     mockGetHourlyHeatmap.mockResolvedValue(heatmapData);
     mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
       const grid = screen.getByRole('grid', { name: 'Hourly heatmap' });
@@ -781,6 +785,9 @@ describe('SalesReportScreen', () => {
     mockGetTopProducts.mockResolvedValue([]);
     mockGetHourlyHeatmap.mockResolvedValue([buildHeatmap({ day_of_week: 1, hour: 14, total_minor: 25000 })]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
       // Cell aria-label: "Mon 14:00 - $250.00"
@@ -1087,6 +1094,9 @@ describe('SalesReportScreen', () => {
       { day_of_week: 6, hour: 23, total_minor: 200, sale_count: 2 },
     ]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
       expect(screen.getByRole('grid', { name: 'Hourly heatmap' })).toBeTruthy();
@@ -1099,14 +1109,18 @@ describe('SalesReportScreen', () => {
     mockGetTopProducts.mockResolvedValue([]);
     mockGetHourlyHeatmap.mockResolvedValue([]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
       // Revenue section still renders (heading + $0.00 total)
       expect(screen.getAllByText('Revenue').length).toBeGreaterThanOrEqual(1);
-      // Category breakdown and top products both show "No results"
-      // Top products, category breakdown, and category popularity.
-      expect(screen.getAllByText('No results').length).toBe(3);
-      // Heatmap shows "No data" (also on the trend card)
+      // All sections show "No results" or "No data" when empty:
+      // Top Products, Category Breakdown, Category Popularity,
+      // Category Popularity Trend, Demand Forecast = 5 "No results"
+      expect(screen.getAllByText('No results').length).toBe(5);
+      // Heatmap shows "No data"
       expect(screen.getAllByText('No data').length).toBeGreaterThanOrEqual(1);
     });
   });
@@ -1161,13 +1175,13 @@ describe('SalesReportScreen', () => {
     // It returns $1,500.00 (different from the initial $1,000.00 to detect overwrite)
     // This simulates the case where the first feed takes longer than expected
     mockGetDailyRevenue.mockResolvedValue([
-      buildDailyRevenue({ total_minor: 150, sale_count: 8 }),
+      buildDailyRevenue({ total_minor: 150000, sale_count: 8 }),
     ]);
 
     // STEP 4: Second feed (current, for date B) resolves
     // Returns $2,000.00
     resolveSecondFeed!([
-      buildDailyRevenue({ total_minor: 200, sale_count: 10 }),
+      buildDailyRevenue({ total_minor: 200000, sale_count: 10 }),
     ]);
 
     // The UI should show the SECOND feed's data ($2,000.00), not the stale first ($1,500.00)

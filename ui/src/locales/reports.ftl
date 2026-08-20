@@ -40,6 +40,7 @@ sales-report-demand-forecast-trend = Trend
 sales-report-demand-forecast-next = Next period
 heatmap-title = Busiest Hours
 heatmap-no-data = No data
+sales-report-hourly-heatmap-aria = Hourly heatmap
 day-sunday = Sun
 day-monday = Mon
 day-tuesday = Tue
