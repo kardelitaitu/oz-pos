@@ -22,8 +22,14 @@ export function downloadCsv(filename: string, columns: CsvColumn[], rows: Record
   URL.revokeObjectURL(url);
 }
 
-function escapeCsv(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+/**
+ * Escape a single CSV cell per RFC 4180: fields containing commas, double
+ * quotes, CR, or LF are quoted, and internal quotes are doubled.
+ * Exported for unit tests (same precedent as `escapeCsvField` in
+ * features/reports/csv.ts — the two must not drift).
+ */
+export function escapeCsv(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
