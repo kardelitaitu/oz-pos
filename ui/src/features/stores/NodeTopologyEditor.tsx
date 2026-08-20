@@ -6460,6 +6460,7 @@ export default function NodeTopologyEditor({
                     ))}
                   </select>
                   {/* Peer group: optional grouping label for multi-POS terminals */}
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
                   <label className="inspector-field">
                     <span><Localized id="topology-workspace-peer-group-label">Peer group</Localized></span>
                     <input
