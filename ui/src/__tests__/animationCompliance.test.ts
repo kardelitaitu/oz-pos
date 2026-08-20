@@ -26,7 +26,7 @@ function findCssFiles(dir: string, results: string[] = []): string[] {
 const ESSENTIAL_KEYFRAMES = new Set([
   // Spinners
   'btn-spin', 'spinner-rotate', 'login-spin', 'staff-login-spin',
-  'fastpin-spin', 'qris-spin',
+  'fastpin-spin', 'qris-spin', 'kds-enrollment-spin',
   // Skeleton / shimmer
   'skeleton-pulse', 'ws-shimmer', 'machine-id-shimmer',
   'license-skeleton-pulse', 'license-live-pulse',

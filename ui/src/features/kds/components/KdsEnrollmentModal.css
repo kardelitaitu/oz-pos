@@ -7,7 +7,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-bg-overlay);
   backdrop-filter: blur(2px);
 }
 
@@ -17,8 +17,8 @@
   display: flex;
   flex-direction: column;
   background: var(--kds-bg, #fff);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
   overflow: hidden;
 }
 
@@ -26,13 +26,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--kds-border, #e5e7eb);
 }
 
 .kds-enrollment-title {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--kds-text, #111827);
 }
@@ -41,13 +41,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--space-7);
+  height: var(--space-7);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--kds-text-secondary, #6b7280);
-  font-size: 20px;
+  font-size: var(--text-xl);
   cursor: pointer;
 }
 
@@ -58,27 +58,27 @@
 .kds-enrollment-body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: var(--space-5);
 }
 
 .kds-enrollment-field {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .kds-enrollment-label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
+  margin-bottom: var(--space-1_5);
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--kds-text-secondary, #6b7280);
 }
 
 .kds-enrollment-input {
   width: 100%;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--kds-border, #d1d5db);
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
   color: var(--kds-text, #111827);
   background: var(--kds-input-bg, #fff);
   outline: none;
@@ -92,8 +92,8 @@
 .kds-enrollment-station-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 8px 0 0;
+  gap: var(--space-1_5);
+  margin: var(--space-2) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -101,25 +101,25 @@
 .kds-enrollment-station-tag {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 6px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
   background: var(--kds-tag-bg, #eff6ff);
   color: var(--kds-tag-text, #1d4ed8);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .kds-enrollment-station-remove {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: var(--space-4);
+  height: var(--space-4);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;
-  font-size: 14px;
+  font-size: var(--text-sm);
   cursor: pointer;
   opacity: 0.6;
 }
@@ -129,8 +129,8 @@
 }
 
 .kds-enrollment-station-hint {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin: var(--space-1_5) 0 0;
+  font-size: var(--text-xs);
   color: var(--kds-text-muted, #9ca3af);
 }
 
@@ -140,13 +140,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 40px 20px;
+  gap: var(--space-3);
+  padding: var(--space-10) var(--space-5);
 }
 
 .kds-enrollment-spinner {
-  width: 32px;
-  height: 32px;
+  width: var(--space-8);
+  height: var(--space-8);
   border: 3px solid var(--kds-border, #e5e7eb);
   border-top-color: var(--kds-primary, #3b82f6);
   border-radius: 50%;
@@ -164,33 +164,33 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 32px 20px;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-5);
 }
 
 .kds-enrollment-success-icon {
-  width: 48px;
-  height: 48px;
+  width: var(--space-12);
+  height: var(--space-12);
   color: var(--kds-success, #10b981);
 }
 
 .kds-enrollment-device-name {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--kds-text, #111827);
 }
 
 .kds-enrollment-success-text {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-sm);
   color: var(--kds-text-secondary, #6b7280);
   text-align: center;
 }
 
 .kds-enrollment-expiry-note {
-  margin: 8px 0 0;
-  font-size: 12px;
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
   color: var(--kds-text-muted, #9ca3af);
   text-align: center;
 }
@@ -199,12 +199,12 @@
 .kds-enrollment-error {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  gap: var(--space-2);
+  padding: var(--space-2_5) var(--space-3);
+  border-radius: var(--radius-md);
   background: var(--kds-error-bg, #fef2f2);
   color: var(--kds-error-text, #dc2626);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .kds-enrollment-retry {
@@ -220,19 +220,19 @@
 .kds-enrollment-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--kds-border, #e5e7eb);
 }
 
 .kds-enrollment-cancel,
 .kds-enrollment-done {
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   border: 1px solid var(--kds-border, #d1d5db);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--kds-text, #374151);
-  font-size: 14px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -242,12 +242,12 @@
 }
 
 .kds-enrollment-confirm {
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--kds-primary, #3b82f6);
-  color: #fff;
-  font-size: 14px;
+  color: var(--color-accent-fg);
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
 }

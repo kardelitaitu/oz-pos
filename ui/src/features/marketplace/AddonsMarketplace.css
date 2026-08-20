@@ -10,8 +10,8 @@
 }
 
 .addons-marketplace-empty {
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-base);
 }
 
 .addons-marketplace-header {
@@ -19,14 +19,14 @@
 }
 
 .addons-marketplace-title {
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
   font-weight: 600;
   margin: 0 0 var(--space-1);
 }
 
 .addons-marketplace-subtitle {
-  color: var(--muted);
-  font-size: 0.875rem;
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-base);
   margin: 0;
 }
 
@@ -42,26 +42,26 @@
   display: flex;
   gap: var(--space-3);
   padding: var(--space-4);
-  border: 1px solid var(--border, #e0e0e0);
-  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .addon-card:hover {
-  border-color: var(--accent, #0066ff);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .addon-card--owned {
-  border-color: var(--success, #22c55e);
-  background: var(--success-bg, #f0fdf4);
+  border-color: var(--color-success);
+  background: var(--color-success-bg);
 }
 
 .addon-card-icon {
-  font-size: 1.75rem;
+  font-size: var(--text-3xl);
   line-height: 1;
   flex-shrink: 0;
-  width: 40px;
+  width: var(--space-10);
   text-align: center;
 }
 
@@ -71,14 +71,14 @@
 }
 
 .addon-card-name {
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-weight: 600;
   margin: 0 0 var(--space-1);
 }
 
 .addon-card-desc {
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
   margin: 0 0 var(--space-3);
   line-height: 1.4;
 }
@@ -91,16 +91,16 @@
 }
 
 .addon-card-price {
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   font-weight: 600;
-  color: var(--accent, #0066ff);
+  color: var(--color-accent);
 }
 
 .addon-card-badge {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 600;
-  color: var(--success, #22c55e);
+  color: var(--color-success);
   padding: var(--space-1) var(--space-2);
-  border-radius: 6px;
-  background: var(--success-bg, #f0fdf4);
+  border-radius: var(--radius-md);
+  background: var(--color-success-bg);
 }
