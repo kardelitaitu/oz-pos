@@ -114,7 +114,7 @@ fn square_payment_result_completed() {
         },
         created_at: None,
     };
-    let (success, money) = SquarePaymentProcessor::payment_result(&data);
+    let (success, money) = SquarePaymentProcessor::payment_result(&data).unwrap();
     assert!(success);
     assert_eq!(money.minor_units, 1000);
 }
@@ -130,7 +130,7 @@ fn square_payment_result_approved() {
         },
         created_at: None,
     };
-    let (success, _) = SquarePaymentProcessor::payment_result(&data);
+    let (success, _) = SquarePaymentProcessor::payment_result(&data).unwrap();
     assert!(success);
 }
 
@@ -145,14 +145,23 @@ fn square_payment_result_failed() {
         },
         created_at: None,
     };
-    let (success, _) = SquarePaymentProcessor::payment_result(&data);
+    let (success, _) = SquarePaymentProcessor::payment_result(&data).unwrap();
     assert!(!success);
 }
 
 #[test]
 fn square_to_money_constructs() {
-    let m = SquarePaymentProcessor::to_money(1000, "USD");
+    let m = SquarePaymentProcessor::to_money(1000, "USD").unwrap();
     assert_eq!(m.minor_units, 1000);
+}
+
+// PA-02: an unknown gateway currency code must be a hard error, never a
+// silent USD fallback that mislabels the recorded amount.
+#[test]
+fn square_to_money_rejects_unknown_currency() {
+    assert!(SquarePaymentProcessor::to_money(1000, "XX").is_err());
+    assert!(SquarePaymentProcessor::to_money(1000, "US").is_err());
+    assert!(SquarePaymentProcessor::to_money(1000, "usd1").is_err());
 }
 
 #[test]

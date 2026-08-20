@@ -343,7 +343,9 @@ async fn authorize_sends_correct_form_body() {
 
     let body = std::str::from_utf8(&received[0].body).unwrap();
     assert!(body.contains("amount=5000"), "body: {body}");
-    assert!(body.contains("currency=usd"), "body: {body}");
+    // PA-02: the request currency must come from the Money value (USD),
+    // not a hardcoded lowercase "usd" that would mislabel non-USD charges.
+    assert!(body.contains("currency=USD"), "body: {body}");
     assert!(
         body.contains("payment_method_types%5B%5D=card"),
         "body: {body}"

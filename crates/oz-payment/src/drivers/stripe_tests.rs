@@ -38,21 +38,30 @@ fn stripe_to_stripe_amount() {
 
 #[test]
 fn stripe_to_currency_usd() {
-    let c = StripePaymentProcessor::to_currency("usd");
+    let c = StripePaymentProcessor::to_currency("usd").unwrap();
     assert_eq!(currency_code(&c), "USD");
 }
 
 #[test]
 fn stripe_to_currency_eur() {
-    let c = StripePaymentProcessor::to_currency("eur");
+    let c = StripePaymentProcessor::to_currency("eur").unwrap();
     assert_eq!(currency_code(&c), "EUR");
 }
 
 #[test]
 fn stripe_to_money_constructs() {
-    let m = StripePaymentProcessor::to_money(1000, "usd");
+    let m = StripePaymentProcessor::to_money(1000, "usd").unwrap();
     assert_eq!(m.minor_units, 1000);
     assert_eq!(currency_code(&m.currency), "USD");
+}
+
+// PA-02: an unknown gateway currency code must be a hard error, never a
+// silent USD fallback that mislabels the recorded amount.
+#[test]
+fn stripe_to_currency_rejects_unknown() {
+    assert!(StripePaymentProcessor::to_currency("xx").is_err());
+    assert!(StripePaymentProcessor::to_currency("us").is_err());
+    assert!(StripePaymentProcessor::to_money(1000, "notacurrency").is_err());
 }
 
 #[test]
@@ -121,7 +130,7 @@ fn stripe_intent_result_succeeded() {
         currency: "usd".into(),
         status: "succeeded".into(),
     };
-    let (success, money) = StripePaymentProcessor::intent_result(&intent);
+    let (success, money) = StripePaymentProcessor::intent_result(&intent).unwrap();
     assert!(success);
     assert_eq!(money.minor_units, 1000);
 }
@@ -135,7 +144,7 @@ fn stripe_intent_result_requires_capture() {
         currency: "usd".into(),
         status: "requires_capture".into(),
     };
-    let (success, money) = StripePaymentProcessor::intent_result(&intent);
+    let (success, money) = StripePaymentProcessor::intent_result(&intent).unwrap();
     assert!(success);
     assert_eq!(money.minor_units, 2000);
 }
@@ -149,7 +158,7 @@ fn stripe_intent_result_canceled() {
         currency: "usd".into(),
         status: "canceled".into(),
     };
-    let (success, _) = StripePaymentProcessor::intent_result(&intent);
+    let (success, _) = StripePaymentProcessor::intent_result(&intent).unwrap();
     assert!(!success);
 }
 

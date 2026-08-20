@@ -228,6 +228,58 @@ fn redeem_insufficient_balance_fails() {
     ));
 }
 
+// PA-01: redemption balance must be decremented atomically by the DB and
+// the ledger row's `balance_after_minor` must reflect the true
+// post-deduction value. Two redeems on different sales must both deduct —
+// a stale pre-txn read must never overwrite the balance.
+#[test]
+fn redeem_atomic_decrement_keeps_ledger_in_sync() {
+    let conn = fresh();
+    seed_user(&conn, "staff-1");
+    store(&conn)
+        .issue_gift_card(IssueGiftCardInput {
+            card_number: "GC-5002".into(),
+            pin: None,
+            initial_amount_minor: 30000,
+            currency: "IDR".into(),
+            issued_to: None,
+            created_by: "staff-1".into(),
+            expiry_date: None,
+        })
+        .unwrap();
+
+    for (sale_id, amount, expected_after) in
+        [("sale-a1", 10000, 20000i64), ("sale-a2", 15000, 5000i64)]
+    {
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES (?1, 30000, 'IDR', 0, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 30000, 0)",
+            [sale_id],
+        )
+        .unwrap();
+        let r = store(&conn)
+            .redeem_gift_card("GC-5002", amount, sale_id)
+            .unwrap();
+        assert_eq!(
+            r.card.current_balance_minor, expected_after,
+            "card balance after {sale_id}"
+        );
+        assert_eq!(
+            r.transaction.balance_after_minor, expected_after,
+            "ledger balance_after must equal card balance after {sale_id}"
+        );
+    }
+
+    // Both deductions applied — a lost update would leave 15000 (only one
+    // deduction) instead of 5000.
+    let balance = store(&conn)
+        .get_gift_card_balance("GC-5002")
+        .unwrap()
+        .unwrap()
+        .0;
+    assert_eq!(balance, 5000, "both redemptions must have been applied");
+}
+
 #[test]
 fn top_up_increases_balance() {
     let conn = fresh();

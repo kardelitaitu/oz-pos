@@ -400,9 +400,40 @@ impl Store<'_> {
 
         let txn_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let new_balance = card.current_balance_minor - amount_minor;
 
         let tx = self.conn.unchecked_transaction()?;
+
+        // PA-01: atomic conditional UPDATE — matches the loyalty redeem
+        // pattern. The DB computes `current_balance_minor - amount_minor`,
+        // so a concurrent redeem (different sale, same card) that started
+        // between the read and this write will see the updated balance and
+        // the `>= amount_minor` guard will fail, rolling back.
+        // This prevents the lost-update race that the unconditional
+        // `SET current_balance_minor = <stale value>` would allow.
+        let changed = tx.execute(
+            "UPDATE gift_cards SET
+                current_balance_minor = current_balance_minor - ?1,
+                updated_at = ?2
+             WHERE id = ?3 AND current_balance_minor >= ?1",
+            params![amount_minor, now, card.id],
+        )?;
+        if changed != 1 {
+            tx.rollback()?;
+            return Err(CoreError::Validation {
+                field: "current_balance_minor",
+                message: "gift card balance changed during redemption — try again".into(),
+            });
+        }
+
+        // Re-read the balance inside the transaction so the ledger row's
+        // `balance_after_minor` reflects the true post-deduction value even
+        // under concurrent redemptions (a value computed before the txn
+        // could be stale).
+        let balance_after: i64 = tx.query_row(
+            "SELECT current_balance_minor FROM gift_cards WHERE id = ?1",
+            params![card.id],
+            |row| row.get(0),
+        )?;
 
         tx.execute(
             "INSERT INTO gift_card_transactions (id, gift_card_id, sale_id, txn_type, amount_minor,
@@ -413,7 +444,7 @@ impl Store<'_> {
                 card.id,
                 sale_id,
                 -amount_minor,
-                new_balance,
+                balance_after,
                 format!(
                     "Redeemed {} on sale {}",
                     format_minor(amount_minor, parse_currency(&card.currency)),
@@ -423,13 +454,8 @@ impl Store<'_> {
             ],
         )?;
 
-        tx.execute(
-            "UPDATE gift_cards SET current_balance_minor = ?1, updated_at = ?2 WHERE id = ?3",
-            params![new_balance, now, card.id],
-        )?;
-
         // If balance is zero, auto-set status to redeemed.
-        if new_balance == 0 {
+        if balance_after == 0 {
             tx.execute(
                 "UPDATE gift_cards SET status = 'redeemed' WHERE id = ?1",
                 params![card.id],
@@ -453,7 +479,7 @@ impl Store<'_> {
                 sale_id: Some(sale_id.to_owned()),
                 txn_type: "redeem".into(),
                 amount_minor: -amount_minor,
-                balance_after_minor: new_balance,
+                balance_after_minor: balance_after,
                 notes: format!(
                     "Redeemed {} on sale {}",
                     format_minor(amount_minor, parse_currency(&card.currency)),
@@ -496,7 +522,6 @@ impl Store<'_> {
 
         let txn_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let new_balance = card.current_balance_minor + amount_minor;
 
         let tx = self.conn.unchecked_transaction()?;
 
@@ -508,6 +533,33 @@ impl Store<'_> {
             )?;
         }
 
+        // PA-01: atomic conditional UPDATE (same pattern as redeem). The DB
+        // computes the new balance, so a concurrent redeem/top-up that
+        // started between the read and this write cannot be lost. The
+        // `<= i64::MAX - amount` guard rejects overflow.
+        let changed = tx.execute(
+            "UPDATE gift_cards SET
+                current_balance_minor = current_balance_minor + ?1,
+                updated_at = ?2
+             WHERE id = ?3 AND current_balance_minor <= ?4",
+            params![amount_minor, now, card.id, i64::MAX - amount_minor],
+        )?;
+        if changed != 1 {
+            tx.rollback()?;
+            return Err(CoreError::Validation {
+                field: "current_balance_minor",
+                message: "gift card balance overflow on top-up — try again".into(),
+            });
+        }
+
+        // Re-read the balance inside the transaction so the ledger row's
+        // `balance_after_minor` reflects the true post-addition value.
+        let balance_after: i64 = tx.query_row(
+            "SELECT current_balance_minor FROM gift_cards WHERE id = ?1",
+            params![card.id],
+            |row| row.get(0),
+        )?;
+
         tx.execute(
             "INSERT INTO gift_card_transactions (id, gift_card_id, sale_id, txn_type, amount_minor,
              balance_after_minor, notes, created_at)
@@ -516,7 +568,7 @@ impl Store<'_> {
                 txn_id,
                 card.id,
                 amount_minor,
-                new_balance,
+                balance_after,
                 format!(
                     "Top-up of {} on card {}",
                     format_minor(amount_minor, parse_currency(&card.currency)),
@@ -524,11 +576,6 @@ impl Store<'_> {
                 ),
                 now,
             ],
-        )?;
-
-        tx.execute(
-            "UPDATE gift_cards SET current_balance_minor = ?1, updated_at = ?2 WHERE id = ?3",
-            params![new_balance, now, card.id],
         )?;
 
         tx.commit()?;

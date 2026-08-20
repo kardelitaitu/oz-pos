@@ -181,16 +181,21 @@ impl SquarePaymentProcessor {
     }
 
     /// Convert a Square currency code (uppercase) to a [`foundation::Currency`].
-    fn to_currency(code: &str) -> Currency {
-        code.to_uppercase().parse().unwrap_or(Currency(*b"USD"))
+    ///
+    /// PA-02: unknown codes are a hard error, not a silent USD fallback —
+    /// a malformed gateway currency would otherwise mislabel the recorded
+    /// amount.
+    fn to_currency(code: &str) -> Result<Currency, PaymentError> {
+        code.parse::<Currency>()
+            .map_err(|_| PaymentError::Network(format!("unknown gateway currency code: {code}")))
     }
 
     /// Convert Square amount + currency code to [`Money`].
-    fn to_money(minor_units: i64, currency: &str) -> Money {
-        Money {
+    fn to_money(minor_units: i64, currency: &str) -> Result<Money, PaymentError> {
+        Ok(Money {
             minor_units,
-            currency: Self::to_currency(currency),
-        }
+            currency: Self::to_currency(currency)?,
+        })
     }
 
     /// Perform an HTTP POST to the Square API and return (status, body).
@@ -301,21 +306,22 @@ impl SquarePaymentProcessor {
     }
 
     /// Extract success status and amount from payment data.
-    fn payment_result(data: &PaymentData) -> (bool, Money) {
+    fn payment_result(data: &PaymentData) -> Result<(bool, Money), PaymentError> {
         let success = data.status == "COMPLETED" || data.status == "APPROVED";
-        let amount = Self::to_money(data.amount_money.amount, &data.amount_money.currency);
-        (success, amount)
+        let amount = Self::to_money(data.amount_money.amount, &data.amount_money.currency)?;
+        Ok((success, amount))
     }
 }
 
 #[async_trait]
 impl PaymentProcessor for SquarePaymentProcessor {
     async fn authorize(&self, request: &PaymentRequest) -> Result<PaymentResult, PaymentError> {
+        let currency_str = String::from_utf8_lossy(&request.amount.currency.0).into_owned();
         let body = CreatePaymentRequest {
             idempotency_key: Uuid::now_v7().to_string(),
             amount_money: MoneyAmount {
                 amount: Self::to_square_amount(&request.amount),
-                currency: "USD".to_string(),
+                currency: currency_str,
             },
             source_id: "EXTERNAL".to_string(),
             location_id: self.location_id.clone(),
@@ -329,7 +335,7 @@ impl PaymentProcessor for SquarePaymentProcessor {
         }
 
         let payment = Self::parse_payment(&body_text)?;
-        let (success, amount) = Self::payment_result(&payment);
+        let (success, amount) = Self::payment_result(&payment)?;
 
         Ok(PaymentResult {
             success,
@@ -348,7 +354,7 @@ impl PaymentProcessor for SquarePaymentProcessor {
         }
 
         let payment = Self::parse_payment(&body_text)?;
-        let (success, amount) = Self::payment_result(&payment);
+        let (success, amount) = Self::payment_result(&payment)?;
 
         Ok(PaymentResult {
             success,
@@ -365,12 +371,13 @@ impl PaymentProcessor for SquarePaymentProcessor {
         amount: Option<Money>,
     ) -> Result<PaymentResult, PaymentError> {
         let charged_amount = amount.unwrap_or(Money::zero(Currency(*b"USD")));
+        let currency_str = String::from_utf8_lossy(&charged_amount.currency.0).into_owned();
         let body = CreateRefundRequest {
             idempotency_key: Uuid::now_v7().to_string(),
             payment_id: transaction_id.to_string(),
             amount_money: MoneyAmount {
                 amount: Self::to_square_amount(&charged_amount),
-                currency: "USD".to_string(),
+                currency: currency_str,
             },
         };
 
@@ -381,7 +388,7 @@ impl PaymentProcessor for SquarePaymentProcessor {
 
         let refund = Self::parse_refund(&body_text)?;
         let refund_amount =
-            Self::to_money(refund.amount_money.amount, &refund.amount_money.currency);
+            Self::to_money(refund.amount_money.amount, &refund.amount_money.currency)?;
 
         Ok(PaymentResult {
             success: refund.status == "COMPLETED"
@@ -402,7 +409,7 @@ impl PaymentProcessor for SquarePaymentProcessor {
         }
 
         let payment = Self::parse_payment(&body_text)?;
-        let (success, amount) = Self::payment_result(&payment);
+        let (success, amount) = Self::payment_result(&payment)?;
 
         Ok(PaymentResult {
             success,
@@ -421,7 +428,7 @@ impl PaymentProcessor for SquarePaymentProcessor {
         }
 
         let payment = Self::parse_payment(&body_text)?;
-        let (_, amount) = Self::payment_result(&payment);
+        let (_, amount) = Self::payment_result(&payment)?;
 
         Ok(PaymentReceipt {
             transaction_id: payment.id,

@@ -194,16 +194,21 @@ impl StripePaymentProcessor {
     }
 
     /// Convert a Stripe currency code (lowercase) to a [`foundation::Currency`].
-    fn to_currency(code: &str) -> Currency {
-        code.to_uppercase().parse().unwrap_or(Currency(*b"USD"))
+    ///
+    /// PA-02: unknown codes are a hard error, not a silent USD fallback —
+    /// a malformed gateway currency would otherwise mislabel the recorded
+    /// amount.
+    fn to_currency(code: &str) -> Result<Currency, PaymentError> {
+        code.parse::<Currency>()
+            .map_err(|_| PaymentError::Network(format!("unknown gateway currency code: {code}")))
     }
 
     /// Convert Stripe amount + currency code to [`Money`].
-    fn to_money(minor_units: i64, currency: &str) -> Money {
-        Money {
+    fn to_money(minor_units: i64, currency: &str) -> Result<Money, PaymentError> {
+        Ok(Money {
             minor_units,
-            currency: Self::to_currency(currency),
-        }
+            currency: Self::to_currency(currency)?,
+        })
     }
 
     /// Perform an HTTP POST to the Stripe API and return (status, body).
@@ -308,13 +313,13 @@ impl StripePaymentProcessor {
     }
 
     /// Extract success status and amount from an intent response.
-    fn intent_result(intent: &PaymentIntentResponse) -> (bool, Money) {
+    fn intent_result(intent: &PaymentIntentResponse) -> Result<(bool, Money), PaymentError> {
         let success = intent.status == "succeeded" || intent.status == "requires_capture";
         let amount = Self::to_money(
             intent.amount_received.unwrap_or(intent.amount),
             &intent.currency,
-        );
-        (success, amount)
+        )?;
+        Ok((success, amount))
     }
 }
 
@@ -322,9 +327,10 @@ impl StripePaymentProcessor {
 impl PaymentProcessor for StripePaymentProcessor {
     async fn authorize(&self, request: &PaymentRequest) -> Result<PaymentResult, PaymentError> {
         let amount_str = Self::to_stripe_amount(&request.amount).to_string();
+        let currency_str = String::from_utf8_lossy(&request.amount.currency.0).into_owned();
         let mut form = vec![
             ("amount", amount_str.as_str()),
-            ("currency", "usd"),
+            ("currency", currency_str.as_str()),
             ("payment_method_types[]", self.pm_type()),
             ("capture_method", "manual"),
         ];
@@ -338,7 +344,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let intent = Self::parse_intent(&body)?;
-        let (success, amount) = Self::intent_result(&intent);
+        let (success, amount) = Self::intent_result(&intent)?;
 
         Ok(PaymentResult {
             success,
@@ -361,7 +367,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let intent = Self::parse_intent(&body)?;
-        let (success, amount) = Self::intent_result(&intent);
+        let (success, amount) = Self::intent_result(&intent)?;
 
         Ok(PaymentResult {
             success,
@@ -384,7 +390,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let refund = Self::parse_refund(&body)?;
-        let amount = Self::to_money(refund.amount, &refund.currency);
+        let amount = Self::to_money(refund.amount, &refund.currency)?;
 
         Ok(PaymentResult {
             success: refund.status == "succeeded",
@@ -407,7 +413,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let intent = Self::parse_intent(&body)?;
-        let (success, amount) = Self::intent_result(&intent);
+        let (success, amount) = Self::intent_result(&intent)?;
 
         Ok(PaymentResult {
             success,
@@ -427,7 +433,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let intent = Self::parse_intent(&body)?;
-        let (_, amount) = Self::intent_result(&intent);
+        let (_, amount) = Self::intent_result(&intent)?;
 
         Ok(PaymentReceipt {
             transaction_id: intent.id,

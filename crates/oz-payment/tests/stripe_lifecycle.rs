@@ -491,7 +491,7 @@ async fn authorize_sends_description_and_metadata() {
         "body should contain amount: {body}"
     );
     assert!(
-        body.contains("currency=usd"),
+        body.contains("currency=USD"),
         "body should contain currency: {body}"
     );
     assert!(
