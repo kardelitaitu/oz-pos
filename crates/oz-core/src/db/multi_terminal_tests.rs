@@ -4,6 +4,8 @@
 //! peer registration, shift isolation, concurrent stock, held cart isolation,
 //! and session independence.
 
+#![allow(deprecated)] // pre-existing tests use deprecated adjust_stock helper
+
 use super::*;
 use crate::migrations;
 use rusqlite::Connection;
