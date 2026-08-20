@@ -1087,6 +1087,9 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
             }]
         };
 
+        // Multi-terminal: terminal_id is passed to complete_sale so that
+        // the sale record tracks which terminal processed it. This enables
+        // per-terminal reporting and cash drawer isolation.
         store.complete_sale_with_resolved_shortfalls(
             &sale,
             Some(deduction_instance_id),

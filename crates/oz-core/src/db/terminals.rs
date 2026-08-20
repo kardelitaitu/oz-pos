@@ -254,3 +254,7 @@ impl Store<'_> {
 #[cfg(test)]
 #[path = "terminals_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "multi_terminal_tests.rs"]
+mod multi_terminal_tests;

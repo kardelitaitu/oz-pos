@@ -27,6 +27,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// The frontend never passes `store_id` as a command parameter.
 /// Instead, commands receive an opaque `session_token` which the backend
 /// maps to this context via an in-memory session store.
+///
+/// **Multi-terminal model**: Each POS terminal runs its own process with
+/// its own `AppState`, but they all share the same `store_id` database.
+/// The `(terminal_id, store_id)` pair uniquely identifies a terminal
+/// instance within a store — two terminals bound to the same store have
+/// different `terminal_id` values but identical `store_id`. All stores
+/// within the same workspace instance share the same `instance_id`.
 #[derive(Debug, Clone)]
 pub struct SessionContext {
     /// Authenticated user ID.

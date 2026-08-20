@@ -482,6 +482,10 @@ pub async fn register_terminal(
     store.create_terminal(&terminal)?;
     drop(db);
 
+    // Multi-terminal: multiple terminals may be registered to the same store_id.
+    // Each terminal gets a unique `id` (UUID) and is identified by its `device_id`
+    // (hostname). At startup, AppState looks up the terminal by device_id to set
+    // the session's `terminal_id`. Binding to a store is a separate step.
     tracing::info!(id = %terminal.id, name = %terminal.name, "terminal registered");
     Ok(RegisterTerminalResult { id: terminal.id })
 }

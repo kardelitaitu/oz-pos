@@ -443,11 +443,11 @@ No performance changes from this plan. The multi-terminal model is already the e
 
 ## 9. Implementation Phases
 
-### Phase 1: Verification & Tests (Weeks 1-2)
-- Run the 15 concrete test cases from §7.3
-- Fix any failures discovered (especially held carts isolation, concurrent stock)
-- Add clarifying comments to `session.rs`, `state.rs`, `pos.rs`, `terminals.rs`
-- Document the `active_carts` workspace-instance assumption
+### Phase 1: Verification & Tests (Weeks 1-2) ✅ COMPLETE
+- ✅ 15 concrete test cases from §7.3 implemented and passing (17 tests total)
+- ✅ Fixed concurrent sale tests (proper SaleLine items, no double-insert)
+- ✅ Added clarifying comments to `session.rs`, `terminals.rs`, `pos.rs`
+- ✅ Documented the `active_carts` workspace-instance assumption
 
 ### Phase 2: Topology Visual Grouping (Weeks 3-4)
 - Add peer grouping visual in topology editor for Retail POS nodes
