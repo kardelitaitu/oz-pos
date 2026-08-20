@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useLockedCartPersistence } from '@/features/sales/posScreenHooks';
-import type { CartLine, LineId } from '@/types/domain';
+import type { CartLine, LineId, Sku } from '@/types/domain';
 
 describe('useLockedCartPersistence', () => {
   const mockSetLines = vi.fn();
@@ -11,8 +11,8 @@ describe('useLockedCartPersistence', () => {
   const mockLogout = vi.fn();
 
   const sampleLines: CartLine[] = [
-    { id: 'line-1' as LineId, sku: 'COFFEE' as any, name: 'Coffee', qty: 2, unit_price: { minor_units: 350, currency: 'USD' }, category: 'Drinks' },
-    { id: 'line-2' as LineId, sku: 'BAGEL' as any, name: 'Bagel', qty: 1, unit_price: { minor_units: 250, currency: 'USD' }, category: 'Food' },
+    { id: 'line-1' as LineId, sku: 'COFFEE' as unknown as Sku, name: 'Coffee', qty: 2, unit_price: { minor_units: 350, currency: 'USD' }, category: 'Drinks' },
+    { id: 'line-2' as LineId, sku: 'BAGEL' as unknown as Sku, name: 'Bagel', qty: 1, unit_price: { minor_units: 250, currency: 'USD' }, category: 'Food' },
   ];
 
   beforeEach(() => {

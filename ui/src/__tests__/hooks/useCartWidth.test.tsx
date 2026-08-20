@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import type React from 'react';
 import { useCartWidth } from '@/features/sales/posScreenHooks';
 
 describe('useCartWidth', () => {
@@ -58,7 +59,7 @@ describe('useCartWidth', () => {
     const originalUserSelect = document.body.style.userSelect;
 
     act(() => {
-      result.current.startResize({ preventDefault: vi.fn() } as any);
+      result.current.startResize({ preventDefault: vi.fn() } as React.MouseEvent<HTMLDivElement>);
     });
 
     expect(document.body.style.cursor).toBe('col-resize');
@@ -73,7 +74,7 @@ describe('useCartWidth', () => {
     const { result } = renderHook(() => useCartWidth(mockRef));
 
     act(() => {
-      result.current.startResize({ preventDefault: vi.fn() } as any);
+      result.current.startResize({ preventDefault: vi.fn() } as React.MouseEvent<HTMLDivElement>);
     });
 
     // Simulate mousemove
@@ -92,7 +93,7 @@ describe('useCartWidth', () => {
     const { result } = renderHook(() => useCartWidth(mockRef));
 
     act(() => {
-      result.current.startResize({ preventDefault: vi.fn() } as any);
+      result.current.startResize({ preventDefault: vi.fn() } as React.MouseEvent<HTMLDivElement>);
     });
 
     act(() => {
