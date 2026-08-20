@@ -73,7 +73,7 @@ function fmtCurrency(minor: number, currency: string, locale = 'en'): string {
       minimumFractionDigits: exp,
       maximumFractionDigits: exp,
     }).format(minor / 10 ** exp);
-  } catch (e) {
+  } catch {
     // Fallback to plain number formatting if currency is invalid
     const fmt = new Intl.NumberFormat(locale, {
       minimumFractionDigits: exp,
@@ -354,7 +354,13 @@ export default function SalesReportScreen() {
     return names;
   }, [popularityTrend, l10n]);
 
-  if (loading) {
+  // The skeleton replaces the whole screen ONLY on the first load (no data
+  // rendered yet). Refreshes after a filter change keep the existing content
+  // and controls visible (the LoadingStatus `busy` pattern) — otherwise the
+  // date picker would unmount mid-refresh and rapid filter changes would be
+  // impossible, defeating the REP-06 generation guard this screen uses to
+  // discard stale responses.
+  if (loading && revenueData.length === 0) {
     return (
       <div className="sales-report-loading-skeleton" aria-hidden="true">
         {/* Header: title + controls */}
@@ -597,28 +603,26 @@ export default function SalesReportScreen() {
             <h2 className="sales-report-section-title">Top Products</h2>
           </Localized>
           <div className="sales-report-rank-toggle" role="radiogroup" aria-label={requiredLocalized(l10n, 'sales-report-top-rank-aria')}>
-            <label>
+            <div className="sales-report-rank-option">
               <input
                 type="radio"
                 name="rank-by"
-                role="radio"
                 checked={!rankByProfit}
-                aria-checked={!rankByProfit}
                 onChange={() => setRankByProfit(false)}
+                aria-label={requiredLocalized(l10n, 'sales-report-top-rank-revenue-aria')}
               />
               <Localized id="sales-report-top-rank-revenue-aria"><span>Rank by revenue</span></Localized>
-            </label>
-            <label>
+            </div>
+            <div className="sales-report-rank-option">
               <input
                 type="radio"
                 name="rank-by"
-                role="radio"
                 checked={rankByProfit}
-                aria-checked={rankByProfit}
                 onChange={() => setRankByProfit(true)}
+                aria-label={requiredLocalized(l10n, 'sales-report-top-rank-profit-aria')}
               />
               <Localized id="sales-report-top-rank-profit-aria"><span>Rank by gross profit</span></Localized>
-            </label>
+            </div>
           </div>
         </div>
         {topProducts.length === 0 ? (
