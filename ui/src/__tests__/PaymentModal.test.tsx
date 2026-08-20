@@ -681,9 +681,9 @@ describe('PaymentModal — rendering & fast interaction', () => {
     await userEvent.selectOptions(currencySelect, 'IDR');
 
     // Verify charge amount shows converted value: $7.00 * 16,000 = Rp 112,000
-    // Indonesian locale formats with dots as thousand separators: Rp 11.200.000
+    // Indonesian locale formats with dots as thousand separators: Rp 112.000
     await waitFor(() => {
-      expect(screen.getByText(/Rp 11\.200\.000/)).toBeInTheDocument();
+      expect(screen.getByText(/Rp 112\.000/)).toBeInTheDocument();
     });
 
     // Select cash payment method

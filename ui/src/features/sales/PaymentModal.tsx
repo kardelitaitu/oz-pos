@@ -1187,7 +1187,7 @@ export default function PaymentModal({
                   </Localized>
                   <span>
                     {formatMoney({
-                      minor_units: Math.round(total.minor_units * (exchangeRateInfo?.rate ?? 1)),
+                      minor_units: convertToChargeCurrency(total.minor_units),
                       currency: selectedCurrency,
                     } as Money)}
                   </span>

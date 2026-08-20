@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { CartLine, CourseId, LineId, ModifierSelection, Money, Product } from '@/types/domain';
 import { triggerInteraction } from '@/utils/interaction';
 
@@ -38,19 +38,56 @@ export function usePosState() {
   const [serviceChargePercent, setServiceChargePercentState] = useState<number>(
     SERVICE_CHARGE_DEFAULT_PERCENT,
   );
+  // The cart's currency: the currency of the first line added. Read inside
+  // the addProduct guard so a mixed-currency product is rejected against
+  // the current cart state (refs avoid stale closures over `lines`).
+  const cartCurrencyRef = useRef<string | null>(null);
+
+  // Keep the currency ref in sync with the cart (first line's currency).
+  // `lines[0]` is the currency anchor; an empty cart resets the anchor so a
+  // new cart can start in any currency after a reset/clear.
+  useEffect(() => {
+    cartCurrencyRef.current = lines.length > 0 ? lines[0]!.unit_price.currency : null;
+  }, [lines]);
 
   /**
    * Add a product to the cart, or increment qty if already present.
    * Category is captured on the cart line so that course chips render
    * without re-querying the product catalogue for every line.
+   *
+   * **Currency guard:** the POS supports single-currency carts only.
+   * If the cart already has lines and the product's currency differs
+   * from the first line's currency, the product is NOT added and the
+   * function returns `false`. The backend `Cart::add_line` enforces the
+   * same rule, so this guard keeps the front-end preview consistent
+   * with the IPC boundary.
+   *
    * @param product The product to add.
    * @param qty Quantity to add (defaults to 1). Used for bundle expansion.
    * @param meta Optional line attributes to apply to the created/merged
    *   line — used by the retail undo path to restore a removed line's
    *   course assignment and modifiers faithfully instead of re-adding a
    *   bare product.
+   * @returns `true` if the product was added, `false` if rejected
+   *   (currency mismatch).
    */
-  const addProduct = useCallback((product: Product, qty: number = 1, meta?: { courseId?: CourseId; modifiers?: ModifierSelection[] }) => {
+  const addProduct = useCallback((product: Product, qty: number = 1, meta?: { courseId?: CourseId; modifiers?: ModifierSelection[] }): boolean => {
+    // MONEY-AUDIT-F1: reject mixed-currency carts at the source. The backend
+    // `Cart::add_line` enforces single-currency carts, so the front-end
+    // preview must not silently sum amounts in different currencies.
+    // The cart's currency is the currency of its first line; a product whose
+    // currency differs is refused (returns false) instead of being summed
+    // under the wrong currency.
+    const cartCurrency = cartCurrencyRef.current;
+    if (cartCurrency !== null && product.price.currency !== cartCurrency) {
+      return false;
+    }
+    // Anchor the cart currency on the first line synchronously so that
+    // back-to-back adds in one event loop (e.g. bundle expansion) are
+    // guarded against mixing, not just adds across separate renders.
+    if (cartCurrency === null) {
+      cartCurrencyRef.current = product.price.currency;
+    }
     triggerInteraction('add-to-cart');
     setLines((prev) => {
       const existing = prev.find((l) => l.sku === product.sku);
@@ -79,6 +116,7 @@ export function usePosState() {
         },
       ];
     });
+    return true;
   }, []);
 
   /** Remove a line from the cart by ID. */
@@ -94,13 +132,23 @@ export function usePosState() {
     );
   }, []);
 
-  /** Override the unit price of a line (manager price override). */
-  const updateLinePrice = useCallback((lineId: LineId, newPrice: Money) => {
+  /**
+   * Override the unit price of a line (manager price override).
+   *
+   * The new price must be in the cart's currency — a cross-currency override
+   * would silently mix amounts in the preview. Rejects (returns `false`)
+   * and leaves the line unchanged when the currency differs.
+   */
+  const updateLinePrice = useCallback((lineId: LineId, newPrice: Money): boolean => {
+    if (cartCurrencyRef.current !== null && newPrice.currency !== cartCurrencyRef.current) {
+      return false;
+    }
     setLines((prev) =>
       prev.map((line) =>
         line.id === lineId ? { ...line, unit_price: newPrice } : line,
       ),
     );
+    return true;
   }, [setLines]);
 
   /**
@@ -257,6 +305,7 @@ export function usePosState() {
   /** Clear all lines and reset discount, tip, service charge. */
   const resetCart = useCallback(() => {
     setLines([]);
+    cartCurrencyRef.current = null; // new cart may start in any currency
     setDiscountPercent(0);
     setDiscountLabel('');
     setTipPercentState(0);
