@@ -123,6 +123,7 @@ RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
 # invalidate this layer). ui/ is intentionally NOT copied: oz-core vendors
 # its topologySemantics.json contract and the server build must never
 # depend on the UI tree (.dockerignore excludes ui entirely).
+ARG CACHE_BUST=1
 COPY crates/ crates/
 COPY foundation/ foundation/
 COPY platform/ platform/
