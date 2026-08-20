@@ -113,10 +113,6 @@
   margin-bottom: var(--space-4);
 }
 
-.sales-report-top-table {
-  width: 100%;
-}
-
 .sales-report-top-negative {
   color: var(--color-danger);
 }
@@ -149,18 +145,84 @@
 }
 
 /* Top-products card heading — title + rank toggle on one row */
-.sales-report-top-heading {
+.sales-report-top-products-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-}
-
-.sales-report-top-heading .sales-report-section-title {
   margin-bottom: var(--space-3);
 }
 
+.sales-report-rank-toggle {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.sales-report-rank-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+}
+
+.sales-report-top-products-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.sales-report-top-products-table th,
+.sales-report-top-products-table td {
+  padding: var(--space-1_5) var(--space-2);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sales-report-top-products-table th {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+}
+
+/* Category Popularity table */
+.sales-report-popularity-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.sales-report-popularity-table th,
+.sales-report-popularity-table td {
+  padding: var(--space-1_5) var(--space-2);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sales-report-popularity-table th {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+}
+
 /* Demand forecast card — trend direction + next-period projection */
+.sales-report-forecast-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.sales-report-forecast-table th,
+.sales-report-forecast-table td {
+  padding: var(--space-1_5) var(--space-2);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sales-report-forecast-table th {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+}
+
 .sales-report-forecast-up {
   color: var(--color-success, #16a34a);
   font-weight: var(--font-weight-semibold);
@@ -170,43 +232,19 @@
   color: var(--color-danger, #dc2626);
 }
 
-.sales-report-forecast-next {
-  font-family: var(--font-mono);
-  font-weight: var(--font-weight-semibold);
-}
-
 /* ── Heatmap ──────────────────────────────────────────────── */
-
-.sales-report-heatmap-header {
-  font-size: var(--text-xs);
-  color: var(--color-fg-secondary);
-  margin-bottom: var(--space-2);
-}
 
 .sales-report-heatmap {
   display: grid;
-  grid-template-columns: auto repeat(7, 1fr);
+  grid-template-columns: auto repeat(24, 1fr);
   font-size: var(--text-xs);
-}
-
-.sales-report-heatmap-corner {
-  padding: var(--space-1);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-fg-secondary);
-}
-
-.sales-report-heatmap-col-header {
-  padding: var(--space-1);
-  text-align: center;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-fg-secondary);
 }
 
 .sales-report-heatmap-row {
   display: contents;
 }
 
-.sales-report-heatmap-row-label {
+.sales-report-heatmap-day-label {
   padding: var(--space-1);
   color: var(--color-fg-secondary);
   text-align: right;

@@ -183,6 +183,15 @@
   font-family: var(--font-mono);
 }
 
+/* Multi-currency KPI: several values joined by " · " — smaller so the
+   row stays on one line without overflowing the card. */
+.dashboard-kpi-value--multi {
+  font-size: var(--text-lg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dashboard-kpi-value--name {
   font-family: var(--font-sans);
   font-size: var(--text-lg);
