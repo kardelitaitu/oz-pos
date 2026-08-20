@@ -887,6 +887,198 @@ impl Store<'_> {
     }
 }
 
+// ── KDS Device Management ───────────────────────────────────────
+
+use crate::kds::{KdsConnectionStatus, KdsDevice, RegisterKdsDeviceInput};
+
+impl Store<'_> {
+    /// Register a new KDS device.
+    pub fn register_kds_device(
+        &self,
+        input: RegisterKdsDeviceInput,
+    ) -> Result<KdsDevice, CoreError> {
+        let id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let station_ids_json = serde_json::to_string(&input.station_ids)
+            .map_err(|e| CoreError::Internal(format!("serialize station_ids: {e}")))?;
+
+        self.conn.execute(
+            "INSERT INTO kds_devices (id, name, restaurant_pos_id, station_ids, pairing_token_hash, pairing_expires_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            params![
+                id,
+                input.name,
+                input.restaurant_pos_id,
+                station_ids_json,
+                input.pairing_token_hash,
+                input.pairing_expires_at,
+                now,
+            ],
+        )?;
+
+        Ok(KdsDevice {
+            id,
+            name: input.name,
+            restaurant_pos_id: input.restaurant_pos_id,
+            station_ids: input.station_ids,
+            is_active: true,
+            last_seen_at: None,
+            connection_status: KdsConnectionStatus::Disconnected,
+            created_at: now.clone(),
+            updated_at: now,
+        })
+    }
+
+    /// Retrieve a KDS device by ID.
+    pub fn get_kds_device(&self, id: &str) -> Result<Option<KdsDevice>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, restaurant_pos_id, station_ids, is_active, last_seen_at, connection_status, created_at, updated_at
+             FROM kds_devices WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query(params![id])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(self.row_to_kds_device(row)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// List all KDS devices for a Restaurant POS.
+    pub fn list_kds_devices_for_restaurant(
+        &self,
+        restaurant_pos_id: &str,
+    ) -> Result<Vec<KdsDevice>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, restaurant_pos_id, station_ids, is_active, last_seen_at, connection_status, created_at, updated_at
+             FROM kds_devices WHERE restaurant_pos_id = ?1 ORDER BY name",
+        )?;
+        let rows = stmt.query_map(params![restaurant_pos_id], |row| {
+            Ok(KdsDeviceRow {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                restaurant_pos_id: row.get("restaurant_pos_id")?,
+                station_ids: row.get("station_ids")?,
+                is_active: row.get::<_, i64>("is_active")? != 0,
+                last_seen_at: row.get("last_seen_at")?,
+                connection_status: row.get("connection_status")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?;
+        rows.map(|r| {
+            let row = r?;
+            self.row_from_kds_device_row(row)
+        })
+        .collect()
+    }
+
+    /// Update a KDS device's connection status.
+    pub fn update_kds_device_status(
+        &self,
+        id: &str,
+        status: KdsConnectionStatus,
+    ) -> Result<(), CoreError> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let last_seen = if status == KdsConnectionStatus::Connected {
+            Some(now.clone())
+        } else {
+            None
+        };
+        let affected = self.conn.execute(
+            "UPDATE kds_devices SET connection_status = ?1, last_seen_at = ?2, updated_at = ?3 WHERE id = ?4",
+            params![status.as_str(), last_seen, now, id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "kds_device",
+                id: id.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Deactivate a KDS device.
+    pub fn deactivate_kds_device(&self, id: &str) -> Result<(), CoreError> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let affected = self.conn.execute(
+            "UPDATE kds_devices SET is_active = 0, updated_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "kds_device",
+                id: id.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    fn row_to_kds_device(&self, row: &rusqlite::Row) -> rusqlite::Result<KdsDevice> {
+        let station_ids_str: String = row.get("station_ids")?;
+        let station_ids: Vec<String> = serde_json::from_str(&station_ids_str).unwrap_or_default();
+        let status_str: String = row.get("connection_status")?;
+        Ok(KdsDevice {
+            id: row.get("id")?,
+            name: row.get("name")?,
+            restaurant_pos_id: row.get("restaurant_pos_id")?,
+            station_ids,
+            is_active: row.get::<_, i64>("is_active")? != 0,
+            last_seen_at: row.get("last_seen_at")?,
+            connection_status: KdsConnectionStatus::from_str(&status_str)
+                .unwrap_or(KdsConnectionStatus::Disconnected),
+            created_at: row.get("created_at")?,
+            updated_at: row.get("updated_at")?,
+        })
+    }
+
+    fn row_from_kds_device_row(&self, row: KdsDeviceRow) -> Result<KdsDevice, CoreError> {
+        let station_ids: Vec<String> = serde_json::from_str(&row.station_ids).unwrap_or_default();
+        Ok(KdsDevice {
+            id: row.id,
+            name: row.name,
+            restaurant_pos_id: row.restaurant_pos_id,
+            station_ids,
+            is_active: row.is_active,
+            last_seen_at: row.last_seen_at,
+            connection_status: KdsConnectionStatus::from_str(&row.connection_status)
+                .unwrap_or(KdsConnectionStatus::Disconnected),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+    }
+}
+
+/// Intermediate row type for query_map closures.
+struct KdsDeviceRow {
+    id: String,
+    name: String,
+    restaurant_pos_id: String,
+    station_ids: String,
+    is_active: bool,
+    last_seen_at: Option<String>,
+    connection_status: String,
+    created_at: String,
+    updated_at: String,
+}
+
+// ── Order Acknowledgment ─────────────────────────────────────────
+
+impl Store<'_> {
+    /// Acknowledge a KDS order — atomically transitions status from 'pending' to 'acked'.
+    ///
+    /// Uses an `UPDATE ... WHERE status = 'pending'` pattern for optimistic
+    /// locking: only one device can win the race. Returns `Ok(true)` on
+    /// success, `Ok(false)` if another device already acknowledged it.
+    pub fn ack_kds_order(&self, order_id: &str, device_id: &str) -> Result<bool, CoreError> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let updated = self.conn.execute(
+            "UPDATE kds_orders SET status = 'ready', acked_by_device = ?1, acked_at = ?2
+             WHERE id = ?3 AND status = 'pending'",
+            params![device_id, now, order_id],
+        )?;
+        Ok(updated > 0)
+    }
+}
+
 #[cfg(test)]
 #[path = "kds_tests.rs"]
 mod tests;

@@ -53,6 +53,7 @@ fn resolve_session_expired_token_is_rejected_and_removed() {
         type_key: "pos".into(),
         expires_at: Some(1),
         created_at: 0,
+        restaurant_pos_id: None,
     };
     state
         .session_store
@@ -91,6 +92,7 @@ fn resolve_scope_isolates_store_databases() {
                 type_key: "pos".into(),
                 expires_at: None,
                 created_at: 0,
+                restaurant_pos_id: None,
             },
         );
     }
@@ -131,6 +133,7 @@ fn resolve_session_valid_token_returns_context() {
         type_key: "pos".into(),
         expires_at: None,
         created_at: 0,
+        restaurant_pos_id: None,
     };
     {
         let mut store = state.session_store.write().unwrap();
@@ -155,6 +158,7 @@ fn resolve_session_returns_clone_not_reference() {
         type_key: "pos".into(),
         expires_at: None,
         created_at: 0,
+        restaurant_pos_id: None,
     };
     {
         let mut store = state.session_store.write().unwrap();

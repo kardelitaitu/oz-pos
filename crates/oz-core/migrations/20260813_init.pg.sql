@@ -462,6 +462,26 @@ CREATE TABLE IF NOT EXISTS terminals (
     updated_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 , bound_store_id TEXT REFERENCES store_profiles(id), bound_instance_id TEXT, binding_signature TEXT);
 
+-- Multi-KDS: device registry (added 20260820)
+CREATE TABLE IF NOT EXISTS kds_devices (
+    id                  TEXT PRIMARY KEY,
+    name                TEXT NOT NULL,
+    restaurant_pos_id   TEXT NOT NULL,
+    station_ids         TEXT NOT NULL DEFAULT '[]',
+    pairing_token_hash  TEXT NOT NULL,
+    pairing_expires_at  TEXT NOT NULL,
+    is_active           BIGINT NOT NULL DEFAULT 1,
+    last_seen_at        TEXT,
+    connection_status   TEXT NOT NULL DEFAULT 'disconnected'
+                        CHECK (connection_status IN ('connected', 'disconnected', 'stale')),
+    created_at          TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    updated_at          TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    FOREIGN KEY (restaurant_pos_id) REFERENCES terminals(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kds_devices_restaurant
+    ON kds_devices(restaurant_pos_id);
+
 
 CREATE TABLE IF NOT EXISTS "products" (
     id          TEXT PRIMARY KEY,
@@ -908,7 +928,7 @@ CREATE TABLE IF NOT EXISTS "kds_orders" (
     served_at       TEXT,
     prep_time_seconds BIGINT DEFAULT 0,
     notes           TEXT NOT NULL DEFAULT ''
-, store_id TEXT, kitchen_zone TEXT, table_number TEXT, priority BIGINT NOT NULL DEFAULT 0, target_instance_id TEXT);
+, store_id TEXT, kitchen_zone TEXT, table_number TEXT, priority BIGINT NOT NULL DEFAULT 0, target_instance_id TEXT, restaurant_pos_id TEXT, acked_by_device TEXT, acked_at TEXT);
 
 
 CREATE TABLE IF NOT EXISTS loyalty_transactions (
@@ -1088,7 +1108,8 @@ CREATE TABLE IF NOT EXISTS kds_line_items (
     started_at      TEXT,
     ready_at        TEXT,
     served_at       TEXT,
-    created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+    created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    restaurant_pos_id TEXT
 );
 
 
@@ -1096,6 +1117,7 @@ CREATE TABLE IF NOT EXISTS kds_order_targets (
     kds_order_id     TEXT NOT NULL REFERENCES kds_orders(id) ON DELETE CASCADE,
     target_instance_id TEXT NOT NULL,
     created_at       TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    restaurant_pos_id TEXT,
     PRIMARY KEY (kds_order_id, target_instance_id)
 );
 
@@ -1342,6 +1364,14 @@ CREATE INDEX IF NOT EXISTS idx_kds_order_targets_instance
 
 CREATE INDEX IF NOT EXISTS idx_kds_orders_target_instance
     ON kds_orders(target_instance_id);
+
+-- Multi-KDS indexes (added 20260820)
+CREATE INDEX IF NOT EXISTS idx_kds_orders_restaurant_pos
+    ON kds_orders(restaurant_pos_id);
+CREATE INDEX IF NOT EXISTS idx_kds_line_items_restaurant_pos
+    ON kds_line_items(restaurant_pos_id);
+CREATE INDEX IF NOT EXISTS idx_kds_order_targets_restaurant_pos
+    ON kds_order_targets(restaurant_pos_id);
 
 
 CREATE INDEX IF NOT EXISTS idx_login_attempts_attempted_at ON login_attempts(attempted_at);

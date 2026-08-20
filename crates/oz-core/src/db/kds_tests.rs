@@ -15,6 +15,14 @@ fn usd() -> crate::Currency {
     "USD".parse().unwrap()
 }
 
+fn seed_terminal(conn: &Connection, id: &str, name: &str, device_id: &str) {
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active) VALUES (?1, ?2, ?3, 1)",
+        rusqlite::params![id, name, device_id],
+    )
+    .unwrap();
+}
+
 fn price(minor: i64) -> Money {
     Money {
         minor_units: minor,
@@ -1296,4 +1304,221 @@ fn create_kds_order_rejects_negative_item_count() {
             ..
         }
     ));
+}
+
+// ── KDS Device CRUD ────────────────────────────────────────────
+
+use crate::kds::{KdsConnectionStatus, RegisterKdsDeviceInput};
+
+#[test]
+fn register_kds_device_and_retrieve() {
+    let conn = fresh();
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "dev-resto-1");
+    let s = store(&conn);
+    let input = RegisterKdsDeviceInput {
+        name: "Expo Screen".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec!["station-grill".into(), "station-bar".into()],
+        pairing_token_hash: "hash-abc".into(),
+        pairing_expires_at: "2099-01-01T00:00:00.000Z".into(),
+    };
+    let device = s.register_kds_device(input).unwrap();
+    assert!(!device.id.is_empty());
+    assert_eq!(device.name, "Expo Screen");
+    assert_eq!(device.restaurant_pos_id, "resto-1");
+    assert_eq!(device.station_ids, vec!["station-grill", "station-bar"]);
+    assert!(device.is_active);
+    assert_eq!(device.connection_status, KdsConnectionStatus::Disconnected);
+
+    let loaded = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert_eq!(loaded.id, device.id);
+    assert_eq!(loaded.name, "Expo Screen");
+}
+
+#[test]
+fn get_kds_device_returns_none_for_missing() {
+    let conn = fresh();
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "dev-resto-1");
+    let s = store(&conn);
+    assert!(s.get_kds_device("nope").unwrap().is_none());
+}
+
+#[test]
+fn list_kds_devices_for_restaurant() {
+    let conn = fresh();
+    seed_terminal(&conn, "resto-1", "Restaurant POS A", "dev-1");
+    seed_terminal(&conn, "resto-2", "Restaurant POS B", "dev-2");
+    let s = store(&conn);
+    s.register_kds_device(RegisterKdsDeviceInput {
+        name: "Screen A".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec![],
+        pairing_token_hash: "h1".into(),
+        pairing_expires_at: "2099-01-01".into(),
+    })
+    .unwrap();
+    s.register_kds_device(RegisterKdsDeviceInput {
+        name: "Screen B".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec![],
+        pairing_token_hash: "h2".into(),
+        pairing_expires_at: "2099-01-01".into(),
+    })
+    .unwrap();
+    s.register_kds_device(RegisterKdsDeviceInput {
+        name: "Other Screen".into(),
+        restaurant_pos_id: "resto-2".into(),
+        station_ids: vec![],
+        pairing_token_hash: "h3".into(),
+        pairing_expires_at: "2099-01-01".into(),
+    })
+    .unwrap();
+
+    let devices = s.list_kds_devices_for_restaurant("resto-1").unwrap();
+    assert_eq!(devices.len(), 2);
+    assert!(devices.iter().all(|d| d.restaurant_pos_id == "resto-1"));
+}
+
+#[test]
+fn update_kds_device_status_connected() {
+    let conn = fresh();
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "dev-resto-1");
+    let s = store(&conn);
+    let device = s
+        .register_kds_device(RegisterKdsDeviceInput {
+            name: "Test".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "h".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        })
+        .unwrap();
+
+    s.update_kds_device_status(&device.id, KdsConnectionStatus::Connected)
+        .unwrap();
+    let loaded = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert_eq!(loaded.connection_status, KdsConnectionStatus::Connected);
+    assert!(loaded.last_seen_at.is_some());
+}
+
+#[test]
+fn update_kds_device_status_not_found() {
+    let conn = fresh();
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "dev-resto-1");
+    let s = store(&conn);
+    let err = s
+        .update_kds_device_status("bad-id", KdsConnectionStatus::Connected)
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        CoreError::NotFound {
+            entity: "kds_device",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn deactivate_kds_device() {
+    let conn = fresh();
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "dev-resto-1");
+    let s = store(&conn);
+    let device = s
+        .register_kds_device(RegisterKdsDeviceInput {
+            name: "Test".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "h".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        })
+        .unwrap();
+
+    s.deactivate_kds_device(&device.id).unwrap();
+    let loaded = s.get_kds_device(&device.id).unwrap().unwrap();
+    assert!(!loaded.is_active);
+}
+
+// ── Order Acknowledgment ───────────────────────────────────────
+
+#[test]
+fn ack_order_first_device_wins() {
+    let conn = fresh();
+    let s = store(&conn);
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("SKU-1"), 1, price(100)))
+        .unwrap();
+    let sale = Sale::from_cart_with_user(&cart, None).unwrap();
+    s.create_sale(&sale).unwrap();
+    let kds_order = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale.id.clone(),
+            store_id: None,
+            items_summary: "Item".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+    let result = s.ack_kds_order(&kds_order.id, "device-a").unwrap();
+    assert!(result, "first ack should succeed");
+}
+
+#[test]
+fn ack_order_second_device_loses() {
+    let conn = fresh();
+    let s = store(&conn);
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("SKU-1"), 1, price(100)))
+        .unwrap();
+    let sale = Sale::from_cart_with_user(&cart, None).unwrap();
+    s.create_sale(&sale).unwrap();
+    let kds_order = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale.id.clone(),
+            store_id: None,
+            items_summary: "Item".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+    let first = s.ack_kds_order(&kds_order.id, "device-a").unwrap();
+    assert!(first);
+
+    let second = s.ack_kds_order(&kds_order.id, "device-b").unwrap();
+    assert!(!second, "second ack should return false");
+}
+
+#[test]
+fn ack_order_already_ready_is_noop() {
+    let conn = fresh();
+    let s = store(&conn);
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("SKU-1"), 1, price(100)))
+        .unwrap();
+    let sale = Sale::from_cart_with_user(&cart, None).unwrap();
+    s.create_sale(&sale).unwrap();
+    let kds_order = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale.id.clone(),
+            store_id: None,
+            items_summary: "Item".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+    s.update_kds_status(&kds_order.id, "preparing").unwrap();
+
+    let result = s.ack_kds_order(&kds_order.id, "device-a").unwrap();
+    assert!(!result, "ack on non-pending order should return false");
 }

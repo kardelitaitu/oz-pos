@@ -135,3 +135,180 @@ fn kds_order_optional_timestamps() {
     assert_eq!(order.served_at.as_deref(), Some("2025-01-01T12:12:00.000Z"));
     assert!(order.display_number.is_none());
 }
+
+// ── KdsConnectionStatus ────────────────────────────────────────
+
+#[test]
+fn connection_status_as_str_all_variants() {
+    assert_eq!(KdsConnectionStatus::Connected.as_str(), "connected");
+    assert_eq!(KdsConnectionStatus::Disconnected.as_str(), "disconnected");
+    assert_eq!(KdsConnectionStatus::Stale.as_str(), "stale");
+}
+
+#[test]
+fn connection_status_from_str_all_variants() {
+    assert_eq!(
+        KdsConnectionStatus::from_str("connected"),
+        Some(KdsConnectionStatus::Connected)
+    );
+    assert_eq!(
+        KdsConnectionStatus::from_str("disconnected"),
+        Some(KdsConnectionStatus::Disconnected)
+    );
+    assert_eq!(
+        KdsConnectionStatus::from_str("stale"),
+        Some(KdsConnectionStatus::Stale)
+    );
+}
+
+#[test]
+fn connection_status_from_str_invalid() {
+    assert_eq!(KdsConnectionStatus::from_str("bogus"), None);
+    assert_eq!(KdsConnectionStatus::from_str(""), None);
+}
+
+// ── KdsDevice ──────────────────────────────────────────────────
+
+fn make_device(id: &str, station_ids: Vec<&str>) -> KdsDevice {
+    KdsDevice {
+        id: id.into(),
+        name: format!("Device {id}"),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: station_ids.into_iter().map(String::from).collect(),
+        is_active: true,
+        last_seen_at: None,
+        connection_status: KdsConnectionStatus::Disconnected,
+        created_at: "2025-01-01T00:00:00.000Z".into(),
+        updated_at: "2025-01-01T00:00:00.000Z".into(),
+    }
+}
+
+fn make_line_item(sku: &str) -> KdsLineItem {
+    KdsLineItem {
+        id: "li-1".into(),
+        kds_order_id: "order-1".into(),
+        sku: sku.into(),
+        display_name: format!("Product {sku}"),
+        qty: 1,
+        course: None,
+        modifiers: vec![],
+        line_position: 0,
+        item_status: "pending".into(),
+        started_at: None,
+        ready_at: None,
+        served_at: None,
+        created_at: "2025-01-01T00:00:00.000Z".into(),
+    }
+}
+
+// ── resolve_kds_targets ────────────────────────────────────────
+
+#[test]
+fn routing_single_device_receives_all_orders() {
+    let devices = vec![make_device("d-1", vec![])]; // empty = broadcast
+    let items = vec![make_line_item("SKU-1")];
+    let targets = resolve_kds_targets(&items, &devices, |_| None);
+    assert_eq!(targets, vec!["d-1"]);
+}
+
+#[test]
+fn routing_station_targeted_device_gets_matching_orders() {
+    let devices = vec![
+        make_device("d-grill", vec!["station-grill"]),
+        make_device("d-bar", vec!["station-bar"]),
+    ];
+    let items = vec![make_line_item("STEAK")];
+    let targets = resolve_kds_targets(&items, &devices, |sku| {
+        if sku == "STEAK" {
+            Some("station-grill".into())
+        } else {
+            None
+        }
+    });
+    assert!(targets.contains(&"d-grill".to_string()));
+    assert!(!targets.contains(&"d-bar".to_string()));
+}
+
+#[test]
+fn routing_untargeted_station_broadcasts_to_all() {
+    let devices = vec![
+        make_device("d-1", vec!["station-grill"]),
+        make_device("d-2", vec!["station-bar"]),
+    ];
+    let items = vec![make_line_item("UNKNOWN-SKU")];
+    // No device claims "unknown-station"
+    let targets = resolve_kds_targets(&items, &devices, |_| Some("unknown-station".into()));
+    // Both devices should receive it (broadcast fallback)
+    assert!(targets.contains(&"d-1".to_string()));
+    assert!(targets.contains(&"d-2".to_string()));
+}
+
+#[test]
+fn routing_inactive_device_excluded() {
+    let mut device = make_device("d-1", vec![]);
+    device.is_active = false;
+    let devices = vec![device];
+    let items = vec![make_line_item("SKU-1")];
+    let targets = resolve_kds_targets(&items, &devices, |_| None);
+    assert!(targets.is_empty());
+}
+
+#[test]
+fn routing_empty_station_ids_means_broadcast() {
+    let devices = vec![make_device("d-broadcast", vec![])];
+    let items = vec![make_line_item("SKU-1")];
+    let targets = resolve_kds_targets(&items, &devices, |_| None);
+    assert_eq!(targets, vec!["d-broadcast"]);
+}
+
+#[test]
+fn routing_deduplication_across_overlapping_stations() {
+    let devices = vec![make_device("d-both", vec!["s1", "s2"])];
+    let items = vec![make_line_item("A"), make_line_item("B")];
+    let targets = resolve_kds_targets(&items, &devices, |sku| {
+        if sku == "A" {
+            Some("s1".into())
+        } else {
+            Some("s2".into())
+        }
+    });
+    // d-both should appear only once
+    assert_eq!(targets.len(), 1);
+    assert_eq!(targets[0], "d-both");
+}
+
+#[test]
+fn routing_empty_line_items_no_targets() {
+    let devices = vec![make_device("d-1", vec!["station-grill"])];
+    let items: Vec<KdsLineItem> = vec![];
+    let targets = resolve_kds_targets(&items, &devices, |_| Some("station-grill".into()));
+    // No line items → no station lookups → no targets from phase 1
+    // No broadcast devices → no targets from phase 2
+    assert!(targets.is_empty());
+}
+
+#[test]
+fn routing_mixed_station_and_broadcast() {
+    let devices = vec![
+        make_device("d-grill", vec!["station-grill"]),
+        make_device("d-all", vec![]), // broadcast
+    ];
+    let items = vec![make_line_item("STEAK")];
+    let targets = resolve_kds_targets(&items, &devices, |sku| {
+        if sku == "STEAK" {
+            Some("station-grill".into())
+        } else {
+            None
+        }
+    });
+    // Both should receive: d-grill via station, d-all via broadcast
+    assert!(targets.contains(&"d-grill".to_string()));
+    assert!(targets.contains(&"d-all".to_string()));
+}
+
+#[test]
+fn routing_no_devices_returns_empty() {
+    let items = vec![make_line_item("SKU-1")];
+    let targets = resolve_kds_targets(&items, &[], |_| None);
+    assert!(targets.is_empty());
+}
