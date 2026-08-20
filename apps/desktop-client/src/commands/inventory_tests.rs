@@ -259,7 +259,7 @@ async fn owner_can_update_location_name_and_type() {
         "owner-token".into(),
         id.clone(),
         "Renamed".into(),
-        "shelf".into(),
+        "store".into(),
         "".into(),
         app.state(),
     )
@@ -271,7 +271,7 @@ async fn owner_can_update_location_name_and_type() {
         .unwrap();
     let loc = listed.iter().find(|l| l.id == id).unwrap();
     assert_eq!(loc.name, "Renamed");
-    assert_eq!(loc.location_type, "shelf");
+    assert_eq!(loc.location_type, "store");
 }
 
 #[tokio::test]
@@ -339,6 +339,30 @@ async fn owner_can_start_and_end_inventory_shift() {
         "role-owner",
         "store-owner",
     );
+    // Seed user, role, and terminal in the store DB.
+    // inventory_shifts has FKs to users(id) and terminals(id).
+    {
+        let store_arc = state.db_manager.open_store("store-owner").unwrap();
+        let db = store_arc.lock().unwrap();
+        let store = Store::new(&db);
+        store.seed_default_roles().unwrap();
+        db.execute(
+            "INSERT OR IGNORE INTO users \
+             (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) \
+             VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, \
+                     '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT OR IGNORE INTO terminals \
+             (id, name, device_id, is_active, created_at, updated_at) \
+             VALUES ('terminal-1', 'Test Terminal', 'dev-1', 1, \
+                     '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    }
     let app = tauri::test::mock_builder()
         .manage(state)
         .build(tauri::generate_context!())
