@@ -1,0 +1,323 @@
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
+import { useLocalization } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
+import {
+  registerKdsDeviceScoped,
+  type KdsDevice,
+  type RegisterKdsDeviceInput,
+} from '@/api/kds';
+import './KdsEnrollmentModal.css';
+
+/** Props for the KdsEnrollmentModal. */
+export interface KdsEnrollmentModalProps {
+  /** Session token for scoped API calls. */
+  sessionToken: string;
+  /** The Restaurant POS terminal ID this device is bound to. */
+  restaurantPosId: string;
+  /** Whether the modal is open. */
+  isOpen: boolean;
+  /** Called when a device is successfully enrolled. */
+  onEnrolled: (device: KdsDevice) => void;
+  /** Called when the modal is dismissed. */
+  onClose: () => void;
+}
+
+/** Step in the enrollment flow. */
+type EnrollmentStep = 'form' | 'generating' | 'qr' | 'error';
+
+/**
+ * KdsEnrollmentModal — handles new KDS device registration via QR-code
+ * pairing. The flow is:
+ * 1. User enters a display name and selects stations
+ * 2. System generates a time-limited pairing token
+ * 3. QR code is displayed for the KDS device to scan
+ * 4. KDS device connects with the token, completing enrollment
+ */
+export const KdsEnrollmentModal = memo(function KdsEnrollmentModal({
+  sessionToken,
+  restaurantPosId,
+  isOpen,
+  onEnrolled,
+  onClose,
+}: KdsEnrollmentModalProps) {
+  const { l10n } = useLocalization();
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, isOpen, onClose);
+
+  const [step, setStep] = useState<EnrollmentStep>('form');
+  const [name, setName] = useState('');
+  const [stationInput, setStationInput] = useState('');
+  const [stations, setStations] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [enrolledDevice, setEnrolledDevice] = useState<KdsDevice | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  // Reset state on open.
+  useEffect(() => {
+    if (!isOpen) return;
+    setStep('form');
+    setName('');
+    setStations([]);
+    setStationInput('');
+    setError(null);
+    setEnrolledDevice(null);
+    requestAnimationFrame(() => nameRef.current?.focus());
+  }, [isOpen]);
+
+  const addStation = useCallback(() => {
+    const trimmed = stationInput.trim();
+    if (trimmed && !stations.includes(trimmed)) {
+      setStations((prev) => [...prev, trimmed]);
+      setStationInput('');
+    }
+  }, [stationInput, stations]);
+
+  const removeStation = useCallback((station: string) => {
+    setStations((prev) => prev.filter((s) => s !== station));
+  }, []);
+
+  const handleStationKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        addStation();
+      }
+    },
+    [addStation],
+  );
+
+  const handleEnroll = useCallback(async () => {
+    if (!name.trim()) return;
+    setStep('generating');
+    setError(null);
+
+    try {
+      // Generate a random pairing token and hash it.
+      const tokenBytes = new Uint8Array(32);
+      crypto.getRandomValues(tokenBytes);
+      const token = Array.from(tokenBytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      // SHA-256 hash the token for storage.
+      const encoder = new TextEncoder();
+      const hashBuffer = await crypto.subtle.digest(
+        'SHA-256',
+        encoder.encode(token),
+      );
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const tokenHash = hashArray
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      // Token expires in 5 minutes.
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+      const input: RegisterKdsDeviceInput = {
+        name: name.trim(),
+        restaurant_pos_id: restaurantPosId,
+        station_ids: stations,
+        pairing_token_hash: tokenHash,
+        pairing_expires_at: expiresAt,
+      };
+
+      const device = await registerKdsDeviceScoped(sessionToken, input);
+      setEnrolledDevice(device);
+      setStep('qr');
+      onEnrolled(device);
+    } catch (e) {
+      setError(String(e));
+      setStep('error');
+    }
+  }, [name, stations, sessionToken, restaurantPosId, onEnrolled]);
+
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) onClose();
+    },
+    [onClose],
+  );
+
+  if (!isOpen) return null;
+
+  return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-nonactive-element-interactions
+    <div
+      className="kds-enrollment-overlay"
+      onClick={handleBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      aria-label={requiredLocalized(l10n, 'kds-enrollment-title')}
+    >
+      <div className="kds-enrollment-modal" ref={panelRef}>
+        {/* Header */}
+        <div className="kds-enrollment-header">
+          <h2 className="kds-enrollment-title">
+            {requiredLocalized(l10n, 'kds-enrollment-title')}
+          </h2>
+          <button
+            className="kds-enrollment-close"
+            onClick={onClose}
+            aria-label={requiredLocalized(l10n, 'kds-enrollment-close-aria')}
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Step: Device Form */}
+        {step === 'form' && (
+          <div className="kds-enrollment-body">
+            <div className="kds-enrollment-field">
+              <label
+                className="kds-enrollment-label"
+                htmlFor="kds-enrollment-name"
+              >
+                {requiredLocalized(l10n, 'kds-enrollment-name-label')}
+              </label>
+              <input
+                ref={nameRef}
+                id="kds-enrollment-name"
+                className="kds-enrollment-input"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={requiredLocalized(
+                  l10n,
+                  'kds-enrollment-name-placeholder',
+                )}
+                aria-label={requiredLocalized(
+                  l10n,
+                  'kds-enrollment-name-aria',
+                )}
+              />
+            </div>
+
+            <div className="kds-enrollment-field">
+              <label className="kds-enrollment-label">
+                {requiredLocalized(l10n, 'kds-enrollment-stations-label')}
+              </label>
+              <div className="kds-enrollment-station-input-wrap">
+                <input
+                  className="kds-enrollment-input"
+                  type="text"
+                  value={stationInput}
+                  onChange={(e) => setStationInput(e.target.value)}
+                  onKeyDown={handleStationKeyDown}
+                  onBlur={addStation}
+                  placeholder={requiredLocalized(
+                    l10n,
+                    'kds-enrollment-stations-placeholder',
+                  )}
+                  aria-label={requiredLocalized(
+                    l10n,
+                    'kds-enrollment-stations-aria',
+                  )}
+                />
+              </div>
+              {stations.length > 0 && (
+                <ul className="kds-enrollment-station-list">
+                  {stations.map((s) => (
+                    <li key={s} className="kds-enrollment-station-tag">
+                      <span>{s}</span>
+                      <button
+                        type="button"
+                        className="kds-enrollment-station-remove"
+                        onClick={() => removeStation(s)}
+                        aria-label={requiredLocalized(
+                          l10n,
+                          'kds-enrollment-station-remove-aria',
+                          { station: s },
+                        )}
+                      >
+                        &times;
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="kds-enrollment-station-hint">
+                {requiredLocalized(l10n, 'kds-enrollment-stations-hint')}
+              </p>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="kds-enrollment-error" role="alert">
+                <span>{error}</span>
+                <button
+                  type="button"
+                  className="kds-enrollment-retry"
+                  onClick={() => {
+                    setError(null);
+                    setStep('form');
+                  }}
+                >
+                  {requiredLocalized(l10n, 'retry')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step: Generating */}
+        {step === 'generating' && (
+          <div className="kds-enrollment-body kds-enrollment-generating">
+            <div className="kds-enrollment-spinner" />
+            <p>{requiredLocalized(l10n, 'kds-enrollment-generating')}</p>
+          </div>
+        )}
+
+        {/* Step: QR Display */}
+        {step === 'qr' && enrolledDevice && (
+          <div className="kds-enrollment-body kds-enrollment-qr-body">
+            <div className="kds-enrollment-success-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            </div>
+            <p className="kds-enrollment-device-name">
+              {enrolledDevice.name}
+            </p>
+            <p className="kds-enrollment-success-text">
+              {requiredLocalized(l10n, 'kds-enrollment-success')}
+            </p>
+            <p className="kds-enrollment-expiry-note">
+              {requiredLocalized(l10n, 'kds-enrollment-expiry-note')}
+            </p>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="kds-enrollment-footer">
+          {step === 'form' && (
+            <>
+              <button
+                className="kds-enrollment-cancel"
+                onClick={onClose}
+              >
+                {requiredLocalized(l10n, 'kds-enrollment-cancel')}
+              </button>
+              <button
+                className="kds-enrollment-confirm"
+                onClick={handleEnroll}
+                disabled={!name.trim()}
+              >
+                {requiredLocalized(l10n, 'kds-enrollment-create-btn')}
+              </button>
+            </>
+          )}
+          {(step === 'qr' || step === 'error') && (
+            <button
+              className="kds-enrollment-done"
+              onClick={onClose}
+            >
+              {requiredLocalized(l10n, 'kds-enrollment-done')}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});

@@ -126,7 +126,9 @@ pub use reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
 };
-pub use sales::{CartLineTaxInput, DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow};
+pub use sales::{
+    CartLineTaxInput, CartTaxResult, DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow,
+};
 pub use shifts::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 
 // ── Store ────────────────────────────────────────────────────────────

@@ -629,7 +629,11 @@ impl Store<'_> {
         }
     }
 
-    fn product_kitchen_zone_by_sku(&self, sku: &str) -> Result<Option<String>, CoreError> {
+    /// Look up the `kitchen_zone` for a product by SKU.
+    ///
+    /// Used by the multi-KDS routing engine to map line-item SKUs to
+    /// kitchen zones, which in turn map to device `station_ids`.
+    pub fn product_kitchen_zone_by_sku(&self, sku: &str) -> Result<Option<String>, CoreError> {
         let mut stmt = self
             .conn
             .prepare("SELECT kitchen_zone FROM products WHERE sku = ?1")?;

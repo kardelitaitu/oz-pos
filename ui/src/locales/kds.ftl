@@ -136,3 +136,29 @@ kds-shortcut-navigate = Navigate tickets
 kds-shortcut-deselect = Deselect / close
 kds-error-retry-aria = Retry
 kds-error-dismiss-aria = Dismiss
+
+# ── KDS Device Enrollment ──
+kds-enrollment-title = Enroll KDS Device
+kds-enrollment-close-aria = Close enrollment
+kds-enrollment-name-label = Device Name
+kds-enrollment-name-placeholder = e.g. Grill Display, Expo Screen
+kds-enrollment-name-aria = KDS device display name
+kds-enrollment-stations-label = Station Assignments (optional)
+kds-enrollment-stations-placeholder = Type station name and press Enter
+kds-enrollment-stations-aria = Add station assignment
+kds-enrollment-stations-hint = Enter topology station IDs this device should display. Leave empty for broadcast mode (all orders).
+kds-enrollment-station-remove-aria = Remove station { $station }
+kds-enrollment-generating = Generating enrollment token…
+kds-enrollment-success = Device registered successfully!
+kds-enrollment-expiry-note = The enrollment token expires in 5 minutes. Scan the QR code with the KDS device to complete setup.
+kds-enrollment-cancel = Cancel
+kds-enrollment-create-btn = Create Device
+kds-enrollment-done = Done
+kds-enrollment-error = Failed to register device
+
+# ── KDS Device Status ──
+kds-device-status-connected = Connected
+kds-device-status-disconnected = Disconnected
+kds-device-status-stale = Stale
+kds-device-status-aria = KDS devices: { $connected } of { $total } connected
+kds-device-list-aria = KDS device list

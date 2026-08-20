@@ -1888,3 +1888,282 @@ fn validate_pairing_token_returns_false_for_missing_device() {
         .unwrap();
     assert!(!result);
 }
+
+// ── Zone-based routing with real product data ─────────────────
+
+#[test]
+fn product_kitchen_zone_lookup() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    // Create products with kitchen zones.
+    s.create_product(
+        "STEAK",
+        "Ribeye Steak",
+        price(1500),
+        None,
+        None,
+        100,
+        Some("restaurant"),
+    )
+    .unwrap();
+    s.create_product(
+        "BEER",
+        "Craft Beer",
+        price(600),
+        None,
+        None,
+        100,
+        Some("restaurant"),
+    )
+    .unwrap();
+
+    // Set kitchen_zone on products.
+    conn.execute(
+        "UPDATE products SET kitchen_zone = 'grill' WHERE sku = 'STEAK'",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE products SET kitchen_zone = 'bar' WHERE sku = 'BEER'",
+        [],
+    )
+    .unwrap();
+
+    // Verify lookup.
+    assert_eq!(
+        s.product_kitchen_zone_by_sku("STEAK").unwrap(),
+        Some("grill".into())
+    );
+    assert_eq!(
+        s.product_kitchen_zone_by_sku("BEER").unwrap(),
+        Some("bar".into())
+    );
+    assert_eq!(s.product_kitchen_zone_by_sku("UNKNOWN").unwrap(), None);
+}
+
+#[test]
+fn zone_based_routing_with_product_lookup() {
+    use std::collections::HashMap;
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    // Create products with kitchen zones.
+    s.create_product(
+        "STEAK",
+        "Ribeye Steak",
+        price(1500),
+        None,
+        None,
+        100,
+        Some("restaurant"),
+    )
+    .unwrap();
+    s.create_product(
+        "BEER",
+        "Craft Beer",
+        price(600),
+        None,
+        None,
+        100,
+        Some("restaurant"),
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE products SET kitchen_zone = 'grill' WHERE sku = 'STEAK'",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE products SET kitchen_zone = 'bar' WHERE sku = 'BEER'",
+        [],
+    )
+    .unwrap();
+
+    // Register devices with zone-based station_ids.
+    s.register_kds_device(crate::kds::RegisterKdsDeviceInput {
+        name: "Grill Display".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec!["grill".into()],
+        pairing_token_hash: "h1".into(),
+        pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+    })
+    .unwrap();
+    s.register_kds_device(crate::kds::RegisterKdsDeviceInput {
+        name: "Bar Display".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec!["bar".into()],
+        pairing_token_hash: "h2".into(),
+        pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+    })
+    .unwrap();
+
+    let devices = s.list_kds_devices_for_restaurant("resto-1").unwrap();
+
+    // Build SKU → station map using the product lookup.
+    let skus = ["STEAK", "BEER"];
+    let mut sku_to_station: HashMap<String, Option<String>> = HashMap::new();
+    for sku in &skus {
+        let zone = s.product_kitchen_zone_by_sku(sku).unwrap();
+        sku_to_station.insert(sku.to_string(), zone);
+    }
+
+    // Line items: one steak, one beer.
+    let items = vec![
+        crate::kds::KdsLineItem {
+            id: "li-1".into(),
+            kds_order_id: "order-1".into(),
+            sku: "STEAK".into(),
+            display_name: "Ribeye Steak".into(),
+            qty: 1,
+            course: None,
+            modifiers: vec![],
+            line_position: 0,
+            item_status: "pending".into(),
+            started_at: None,
+            ready_at: None,
+            served_at: None,
+            created_at: "2025-01-01T00:00:00Z".into(),
+        },
+        crate::kds::KdsLineItem {
+            id: "li-2".into(),
+            kds_order_id: "order-1".into(),
+            sku: "BEER".into(),
+            display_name: "Craft Beer".into(),
+            qty: 1,
+            course: None,
+            modifiers: vec![],
+            line_position: 1,
+            item_status: "pending".into(),
+            started_at: None,
+            ready_at: None,
+            served_at: None,
+            created_at: "2025-01-01T00:00:00Z".into(),
+        },
+    ];
+
+    // Route with the real zone lookup.
+    let targets = crate::kds::resolve_kds_targets(&items, &devices, |sku| {
+        sku_to_station.get(sku).cloned().flatten()
+    });
+
+    // Both devices should receive the order (grill for steak, bar for beer).
+    assert_eq!(
+        targets.len(),
+        2,
+        "both grill and bar devices should be targets"
+    );
+
+    // Verify each device is in the targets.
+    let grill_id = devices
+        .iter()
+        .find(|d| d.name == "Grill Display")
+        .unwrap()
+        .id
+        .clone();
+    let bar_id = devices
+        .iter()
+        .find(|d| d.name == "Bar Display")
+        .unwrap()
+        .id
+        .clone();
+    assert!(targets.contains(&grill_id));
+    assert!(targets.contains(&bar_id));
+}
+
+#[test]
+fn zone_based_routing_only_matches_relevant_devices() {
+    use std::collections::HashMap;
+    let conn = fresh();
+    let s = store(&conn);
+    seed_terminal(&conn, "resto-1", "Restaurant POS", "pc-1");
+
+    // Product with only grill zone.
+    s.create_product(
+        "STEAK",
+        "Ribeye Steak",
+        price(1500),
+        None,
+        None,
+        100,
+        Some("restaurant"),
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE products SET kitchen_zone = 'grill' WHERE sku = 'STEAK'",
+        [],
+    )
+    .unwrap();
+
+    // Three devices: grill, bar, and broadcast.
+    s.register_kds_device(crate::kds::RegisterKdsDeviceInput {
+        name: "Grill".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec!["grill".into()],
+        pairing_token_hash: "h1".into(),
+        pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+    })
+    .unwrap();
+    s.register_kds_device(crate::kds::RegisterKdsDeviceInput {
+        name: "Bar".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec!["bar".into()],
+        pairing_token_hash: "h2".into(),
+        pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+    })
+    .unwrap();
+    s.register_kds_device(crate::kds::RegisterKdsDeviceInput {
+        name: "Broadcast".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec![], // broadcast mode
+        pairing_token_hash: "h3".into(),
+        pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+    })
+    .unwrap();
+
+    let devices = s.list_kds_devices_for_restaurant("resto-1").unwrap();
+
+    let mut sku_to_station: HashMap<String, Option<String>> = HashMap::new();
+    let zone = s.product_kitchen_zone_by_sku("STEAK").unwrap();
+    sku_to_station.insert("STEAK".into(), zone);
+
+    let items = vec![crate::kds::KdsLineItem {
+        id: "li-1".into(),
+        kds_order_id: "order-1".into(),
+        sku: "STEAK".into(),
+        display_name: "Ribeye Steak".into(),
+        qty: 1,
+        course: None,
+        modifiers: vec![],
+        line_position: 0,
+        item_status: "pending".into(),
+        started_at: None,
+        ready_at: None,
+        served_at: None,
+        created_at: "2025-01-01T00:00:00Z".into(),
+    }];
+
+    let targets = crate::kds::resolve_kds_targets(&items, &devices, |sku| {
+        sku_to_station.get(sku).cloned().flatten()
+    });
+
+    // Grill (station match) + Broadcast (empty station_ids) should be targets.
+    // Bar should NOT be a target (station mismatch and not broadcast).
+    let grill_id = devices
+        .iter()
+        .find(|d| d.name == "Grill")
+        .unwrap()
+        .id
+        .clone();
+    let bar_id = devices.iter().find(|d| d.name == "Bar").unwrap().id.clone();
+    let broadcast_id = devices
+        .iter()
+        .find(|d| d.name == "Broadcast")
+        .unwrap()
+        .id
+        .clone();
+    assert!(targets.contains(&grill_id));
+    assert!(targets.contains(&broadcast_id));
+    assert!(!targets.contains(&bar_id));
+}

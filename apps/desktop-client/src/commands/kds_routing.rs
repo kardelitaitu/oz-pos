@@ -53,11 +53,22 @@ pub async fn resolve_kds_targets_scoped(
     // Filter to active only.
     let active_devices: Vec<KdsDevice> = devices.into_iter().filter(|d| d.is_active).collect();
 
-    // Use the pure routing function. Since we don't have topology SKU→station
-    // mapping here, pass a no-op that returns None for every SKU (all stations
-    // untargeted → broadcast fallback). A future iteration can look up the
-    // topology runtime plan for real station assignments.
-    let targets = oz_core::kds::resolve_kds_targets(&line_items, &active_devices, |_| None);
+    // Build a SKU → kitchen_zone map from the product catalog.
+    // The product's `kitchen_zone` field serves as the "station" for routing.
+    // Devices declare which zones they handle via `station_ids`.
+    use std::collections::HashMap;
+    let mut sku_to_station: HashMap<String, Option<String>> = HashMap::new();
+    for item in &line_items {
+        if !sku_to_station.contains_key(&item.sku) {
+            let zone = store.product_kitchen_zone_by_sku(&item.sku)?;
+            sku_to_station.insert(item.sku.clone(), zone);
+        }
+    }
+
+    // Use the pure routing function with the real zone lookup.
+    let targets = oz_core::kds::resolve_kds_targets(&line_items, &active_devices, |sku| {
+        sku_to_station.get(sku).cloned().flatten()
+    });
 
     Ok(targets)
 }
