@@ -5421,3 +5421,51 @@ cart.rs) can now be migrated to Money-level comparisons in a follow-up slice
 — with the caveat that `Ord`-based APIs (`min`/`max`/`clamp`/sorting) still
 need an explicit same-currency guard, since `Money` is intentionally only
 `PartialOrd`. Property-based Money tests remain an open follow-up.
+
+## 2026-08-20 — TDD cycle: Money::min (Ord-free) + cart cap migration (foundation)
+
+**Problem:** The PartialOrd slice left the raw-i64 comparison call sites in
+place. `Money` deliberately has no `Ord`, so std `min`/`max` are unavailable
+and the cart code compensated by hand: `self.fixed_discount_minor.min(acc.minor_units)`
+then re-wrapping the capped i64 into `Money { currency: self.currency }`
+(foundation/src/cart.rs `total()` and `discount_amount()`). That pattern
+bypasses the currency dimension — the single-currency invariant held only
+by convention. (The promotions.rs sites are a separate, bigger problem:
+`Promotion` has no currency field at all, so `promo.value_minor` is a bare
+i64 compared against `sale.total.minor_units` — see follow-ups.)
+
+**Solution:** TDD Red→Green:
+- **Red:** 6 tests for `Money::min` — picks the lower of two same-currency
+  amounts (both argument orders), equal amounts return either, cross-currency
+  returns `None` (the `checked_add` domain-error rule), negatives order
+  correctly, zero vs positive picks zero, currency preserved. Red was a
+  compile error (`E0599` — the compiler suggests deriving `Ord`, exactly the
+  design we must not adopt), pinning that the Ord-free API is required.
+- **Green:** inherent `Money::min(self, other) -> Option<Money>` —
+  currencies differ → `None`, else compare `minor_units`. Cannot overflow,
+  so no `checked_` variant.
+- **Refactor:** migrated both cart.rs cap sites to
+  `fixed.min(acc)?` / `fixed.min(discounted)?`. Cart is single-currency by
+  construction (every `Money` in play is `self.currency`), so the `?` never
+  fires in practice — it type-checks the invariant instead of trusting
+  convention. Behavior is byte-identical; the existing cart tests
+  (`fixed_discount_*` family) are the safety net.
+
+**Verification:** `cargo test -p foundation` — 406 passed (was 400, +6) plus
+23 doctests; `cargo fmt -p foundation -- --check` clean; `cargo clippy -p foundation --all-targets -- -D warnings` clean.
+Note: sccache is the global `rustc-wrapper` but its daemon times out
+("remote service unreachable") — all cargo invocations need
+`--config 'build.rustc-wrapper=""'` until the cache service is back.
+Also note: `cargo fmt --all -- --check` currently flags
+`crates/oz-core/src/export/mod_tests.rs` (committed unformatted, not ours —
+left untouched for its owner).
+
+**Risks / follow-ups:** promotions.rs (both desktop:374 and tablet:185)
+still compares the currency-less `promo.value_minor` against
+`sale.total.minor_units` — closing that needs a currency on the `Promotion`
+model (data model + migrations + DTOs + UI), too big for one slice; it is
+the next money-area slice. `set_fixed_discount`'s `minor_units.max(0)` and
+the other `.max(0)` sites are scalar non-negativity clamps, not Money
+comparisons — intentionally not touched. `Money::max` (same-currency) was
+deliberately NOT added (strict TDD: no speculative API); add it only when a
+consumer exists. Property-based Money tests remain an open follow-up.

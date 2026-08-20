@@ -269,11 +269,14 @@ impl Cart {
             acc = self.discount_percent.complement_apply_to(acc)?;
         }
         if self.fixed_discount_minor > 0 {
-            let fixed = self.fixed_discount_minor.min(acc.minor_units);
-            acc = acc.checked_sub(Money {
-                minor_units: fixed,
+            // Cap the fixed discount at the payable total. Both amounts are
+            // in `self.currency`, so `Money::min` cannot return `None` here;
+            // the `?` propagates a mismatch the same way `checked_sub` does.
+            let fixed = Money {
+                minor_units: self.fixed_discount_minor,
                 currency: self.currency,
-            })?;
+            };
+            acc = acc.checked_sub(fixed.min(acc)?)?;
         }
         Some(acc)
     }
@@ -307,12 +310,12 @@ impl Cart {
         } else {
             subtotal
         };
-        let fixed = self.fixed_discount_minor.min(discounted.minor_units);
+        let fixed = Money {
+            minor_units: self.fixed_discount_minor,
+            currency: self.currency,
+        };
         discounted
-            .checked_sub(Money {
-                minor_units: fixed,
-                currency: self.currency,
-            })
+            .checked_sub(fixed.min(discounted)?)
             .and_then(|total| subtotal.checked_sub(total))
             .or(Some(Money::zero(self.currency)))
     }

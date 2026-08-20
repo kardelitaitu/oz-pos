@@ -175,6 +175,29 @@ impl Money {
             })
     }
 
+    /// Return the smaller of two amounts. Same currency.
+    ///
+    /// Returns `None` when the currencies differ — the same domain-error
+    /// rule as [`checked_add`](Self::checked_add), so capping a USD amount
+    /// at an EUR bound fails rather than silently comparing minor units.
+    ///
+    /// `Money` deliberately does not implement [`Ord`] (a total order
+    /// across currencies would let `USD 1 < EUR 0` hold), so `Ord::min`
+    /// is unavailable; this inherent method is the Ord-free,
+    /// same-currency replacement for the raw-i64 cap-and-rewrap pattern.
+    /// It cannot overflow, so it needs no `checked_` variant.
+    #[must_use]
+    pub fn min(self, other: Money) -> Option<Money> {
+        if self.currency != other.currency {
+            return None;
+        }
+        Some(if self.minor_units <= other.minor_units {
+            self
+        } else {
+            other
+        })
+    }
+
     /// Multiply the minor-units amount by an integer scalar. Keeps the
     /// same currency. Returns `None` on overflow.
     #[must_use]
@@ -964,6 +987,58 @@ mod tests {
         let low = Money::from_major(5, usd()).unwrap();
         let high = Money::from_major(7, usd()).unwrap();
         assert_eq!(assert_manual_min(low, high), low);
+    }
+
+    // ── min ────────────────────────────────────────────────────
+
+    #[test]
+    fn min_picks_lower_same_currency() {
+        let low = Money::from_major(5, usd()).unwrap();
+        let high = Money::from_major(7, usd()).unwrap();
+        assert_eq!(low.min(high).unwrap(), low);
+        assert_eq!(high.min(low).unwrap(), low);
+    }
+
+    #[test]
+    fn min_equal_amounts_returns_amount() {
+        let a = Money::from_major(5, usd()).unwrap();
+        let b = Money::from_major(5, usd()).unwrap();
+        assert_eq!(a.min(b).unwrap(), a);
+    }
+
+    #[test]
+    fn min_currency_mismatch_returns_none() {
+        // Same domain-error rule as checked_add: capping a USD amount at
+        // an EUR bound must fail, not silently compare minor units.
+        let usd_val = Money::from_major(1, usd()).unwrap();
+        let eur_val = Money::from_major(100, "EUR".parse().unwrap()).unwrap();
+        assert_eq!(usd_val.min(eur_val), None);
+        assert_eq!(eur_val.min(usd_val), None);
+    }
+
+    #[test]
+    fn min_negative_amount_orders() {
+        let neg = Money {
+            minor_units: -500,
+            currency: usd(),
+        };
+        let pos = Money::from_major(5, usd()).unwrap();
+        assert_eq!(neg.min(pos).unwrap(), neg);
+        assert_eq!(pos.min(neg).unwrap(), neg);
+    }
+
+    #[test]
+    fn min_zero_vs_positive_is_zero() {
+        let zero = Money::zero(usd());
+        let pos = Money::from_major(5, usd()).unwrap();
+        assert_eq!(zero.min(pos).unwrap(), zero);
+    }
+
+    #[test]
+    fn min_preserves_currency() {
+        let low = Money::from_major(2, usd()).unwrap();
+        let high = Money::from_major(3, usd()).unwrap();
+        assert_eq!(low.min(high).unwrap().currency, usd());
     }
 
     #[test]
