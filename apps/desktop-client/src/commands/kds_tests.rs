@@ -212,6 +212,11 @@ fn create_sale_in_store(state: &AppState, sale_id: &str) {
         subtotal: zero,
         tax_total: zero,
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
     };
     s.create_sale(&sale).unwrap();
@@ -668,4 +673,773 @@ async fn resolve_kds_targets_scoped_returns_empty_for_no_devices() {
     assert!(result.is_ok(), "should succeed with empty targets");
     let targets = result.unwrap();
     assert!(targets.is_empty(), "no KDS devices → no targets");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Integration: Full KDS enrollment flow
+// ══════════════════════════════════════════════════════════════════
+
+/// End-to-end enrollment flow through Tauri commands:
+/// register device → list devices → update status → ack order → stale detection.
+#[tokio::test]
+async fn integration_enrollment_full_lifecycle() {
+    let conn = oz_core::migrations::fresh_db();
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Step 1: Register a KDS device.
+    let device = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Grill Display".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec!["grill".into(), "fryer".into()],
+            pairing_token_hash: "hash-grill".into(),
+            pairing_expires_at: "2099-01-01T00:00:00Z".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert!(!device.id.is_empty());
+    assert_eq!(device.name, "Grill Display");
+    assert_eq!(device.station_ids, vec!["grill", "fryer"]);
+    assert!(device.is_active);
+    assert_eq!(
+        device.connection_status,
+        oz_core::kds::KdsConnectionStatus::Disconnected
+    );
+
+    // Step 2: List devices — should show the registered device.
+    let devices = crate::commands::kds_device::list_kds_devices_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0].id, device.id);
+
+    // Step 3: Get single device.
+    let fetched = crate::commands::kds_device::get_kds_device_scoped(
+        "tok".into(),
+        device.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert!(fetched.is_some());
+    assert_eq!(fetched.unwrap().id, device.id);
+
+    // Step 4: Device connects — update status to connected.
+    crate::commands::kds_device::update_kds_device_status_scoped(
+        "tok".into(),
+        device.id.clone(),
+        oz_core::kds::KdsConnectionStatus::Connected,
+        app.state(),
+    )
+    .await
+    .unwrap();
+    let fetched = crate::commands::kds_device::get_kds_device_scoped(
+        "tok".into(),
+        device.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        fetched.connection_status,
+        oz_core::kds::KdsConnectionStatus::Connected
+    );
+    assert!(fetched.last_seen_at.is_some());
+
+    // Step 5: Create a sale + KDS order, then ack it.
+    let order = create_kds_order_in_store(
+        &app.state::<AppState>(),
+        &KdsOrder {
+            id: "order-1".into(),
+            sale_id: "sale-1".into(),
+            store_id: Some("s1".into()),
+            target_instance_id: None,
+            status: "pending".into(),
+            items_summary: "Burger x2".into(),
+            item_count: 2,
+            display_number: None,
+            received_at: "2026-08-21T10:00:00.000Z".into(),
+            started_at: None,
+            ready_at: None,
+            served_at: None,
+            prep_time_seconds: 0,
+            kitchen_zone: Some("grill".into()),
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        },
+    );
+    assert_eq!(order.status, "pending");
+
+    let acked = crate::commands::kds_device::ack_kds_order_scoped(
+        "tok".into(),
+        order.id.clone(),
+        device.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert!(acked, "first ack should succeed");
+
+    // Step 6: Double-ack should fail.
+    let acked2 = crate::commands::kds_device::ack_kds_order_scoped(
+        "tok".into(),
+        order.id.clone(),
+        "other-device".into(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert!(!acked2, "second ack should return false");
+
+    // Step 7: Device goes stale — backdate last_seen_at.
+    {
+        let state_ref = app.state::<AppState>();
+        let db_ref = state_ref.db_manager.open_store("s1").unwrap();
+        let db = db_ref.lock().unwrap();
+        db.execute(
+            "UPDATE kds_devices SET last_seen_at = '2020-01-01T00:00:00.000Z', connection_status = 'connected' WHERE id = ?1",
+            rusqlite::params![device.id],
+        )
+        .unwrap();
+    }
+    // Run stale detection via the Store directly (simulates health daemon).
+    {
+        let state_ref = app.state::<AppState>();
+        let db_ref = state_ref.db_manager.open_store("s1").unwrap();
+        let db = db_ref.lock().unwrap();
+        let store = Store::new(&db);
+        let marked = store.mark_stale_kds_devices(30).unwrap();
+        assert_eq!(marked, 1, "should mark 1 device stale");
+    }
+    let fetched = crate::commands::kds_device::get_kds_device_scoped(
+        "tok".into(),
+        device.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        fetched.connection_status,
+        oz_core::kds::KdsConnectionStatus::Stale
+    );
+
+    // Step 8: Deactivate the device.
+    crate::commands::kds_device::deactivate_kds_device_scoped(
+        "tok".into(),
+        device.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    let fetched = crate::commands::kds_device::get_kds_device_scoped(
+        "tok".into(),
+        device.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(!fetched.is_active, "device should be deactivated");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Integration: Multi-device station-based routing
+// ══════════════════════════════════════════════════════════════════
+
+/// Two devices with different station assignments receive only the
+/// orders matching their stations.
+#[tokio::test]
+async fn integration_multi_device_station_routing() {
+    let conn = oz_core::migrations::fresh_db();
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Register two devices with different station assignments.
+    let grill_device = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Grill Display".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec!["grill".into()],
+            pairing_token_hash: "h-grill".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    let _bar_device = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Bar Display".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec!["bar".into()],
+            pairing_token_hash: "h-bar".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    // Create a KDS order for a grill item.
+    let order = create_kds_order_in_store(
+        &app.state::<AppState>(),
+        &KdsOrder {
+            id: "order-grill".into(),
+            sale_id: "sale-grill".into(),
+            store_id: Some("s1".into()),
+            target_instance_id: None,
+            status: "pending".into(),
+            items_summary: "Steak".into(),
+            item_count: 1,
+            display_number: None,
+            received_at: "2026-08-21T10:00:00.000Z".into(),
+            started_at: None,
+            ready_at: None,
+            served_at: None,
+            prep_time_seconds: 0,
+            kitchen_zone: Some("grill".into()),
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        },
+    );
+
+    // Resolve targets — should only include grill device.
+    let targets = crate::commands::kds_routing::resolve_kds_targets_scoped(
+        "tok".into(),
+        order.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        targets.len(),
+        1,
+        "only grill device should receive grill order"
+    );
+    assert_eq!(targets[0], grill_device.id);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Integration: Broadcast mode — empty station_ids gets all orders
+// ══════════════════════════════════════════════════════════════════
+
+/// A device with empty station_ids (broadcast mode) receives all orders
+/// regardless of kitchen zone.
+#[tokio::test]
+async fn integration_broadcast_device_receives_all_orders() {
+    let conn = oz_core::migrations::fresh_db();
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Register a broadcast device (empty station_ids).
+    let broadcast_device = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Expo Screen".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![], // broadcast
+            pairing_token_hash: "h-expo".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    // Create a KDS order.
+    let order = create_kds_order_in_store(
+        &app.state::<AppState>(),
+        &KdsOrder {
+            id: "order-any".into(),
+            sale_id: "sale-any".into(),
+            store_id: Some("s1".into()),
+            target_instance_id: None,
+            status: "pending".into(),
+            items_summary: "Mixed items".into(),
+            item_count: 3,
+            display_number: None,
+            received_at: "2026-08-21T10:00:00.000Z".into(),
+            started_at: None,
+            ready_at: None,
+            served_at: None,
+            prep_time_seconds: 0,
+            kitchen_zone: Some("grill".into()),
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        },
+    );
+
+    // Broadcast device should receive it.
+    let targets = crate::commands::kds_routing::resolve_kds_targets_scoped(
+        "tok".into(),
+        order.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        targets.len(),
+        1,
+        "broadcast device should receive the order"
+    );
+    assert_eq!(targets[0], broadcast_device.id);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Integration: Inactive device excluded from routing
+// ══════════════════════════════════════════════════════════════════
+
+/// Deactivated devices must not receive routed orders.
+#[tokio::test]
+async fn integration_inactive_device_excluded_from_routing() {
+    let conn = oz_core::migrations::fresh_db();
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Register a device then deactivate it.
+    let device = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Old Display".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "h-old".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    crate::commands::kds_device::deactivate_kds_device_scoped(
+        "tok".into(),
+        device.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    // Create a KDS order.
+    let order = create_kds_order_in_store(
+        &app.state::<AppState>(),
+        &KdsOrder {
+            id: "order-inactive".into(),
+            sale_id: "sale-inactive".into(),
+            store_id: Some("s1".into()),
+            target_instance_id: None,
+            status: "pending".into(),
+            items_summary: "Fries".into(),
+            item_count: 1,
+            display_number: None,
+            received_at: "2026-08-21T10:00:00.000Z".into(),
+            started_at: None,
+            ready_at: None,
+            served_at: None,
+            prep_time_seconds: 0,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        },
+    );
+
+    // Deactivated device should NOT receive the order.
+    let targets = crate::commands::kds_routing::resolve_kds_targets_scoped(
+        "tok".into(),
+        order.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert!(
+        targets.is_empty(),
+        "deactivated device should not receive orders"
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Integration: Duplicate name rejected per restaurant POS
+// ══════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn integration_duplicate_device_name_rejected() {
+    let conn = oz_core::migrations::fresh_db();
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let input = RegisterKdsDeviceInput {
+        name: "Grill Display".into(),
+        restaurant_pos_id: "resto-1".into(),
+        station_ids: vec![],
+        pairing_token_hash: "h1".into(),
+        pairing_expires_at: "2099-01-01".into(),
+    };
+
+    // First registration succeeds.
+    let result1 = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        input.clone(),
+        app.state(),
+    )
+    .await;
+    assert!(result1.is_ok(), "first registration should succeed");
+
+    // Second registration with same name fails.
+    let result2 =
+        crate::commands::kds_device::register_kds_device_scoped("tok".into(), input, app.state())
+            .await;
+    assert!(result2.is_err(), "duplicate name should be rejected");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Integration: Order already acked by another device
+// ══════════════════════════════════════════════════════════════════
+
+/// When two devices try to ack the same order, only the first wins.
+#[tokio::test]
+async fn integration_concurrent_ack_only_first_wins() {
+    let conn = oz_core::migrations::fresh_db();
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Register two devices.
+    let device_a = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Device A".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "ha".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    let device_b = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Device B".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hb".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    // Create a KDS order.
+    let order = create_kds_order_in_store(
+        &app.state::<AppState>(),
+        &KdsOrder {
+            id: "order-race".into(),
+            sale_id: "sale-race".into(),
+            store_id: Some("s1".into()),
+            target_instance_id: None,
+            status: "pending".into(),
+            items_summary: "Pizza".into(),
+            item_count: 1,
+            display_number: None,
+            received_at: "2026-08-21T10:00:00.000Z".into(),
+            started_at: None,
+            ready_at: None,
+            served_at: None,
+            prep_time_seconds: 0,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        },
+    );
+
+    // Device A acks first — should succeed.
+    let ack_a = crate::commands::kds_device::ack_kds_order_scoped(
+        "tok".into(),
+        order.id.clone(),
+        device_a.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert!(ack_a, "device A should win the ack race");
+
+    // Device B acks second — should fail.
+    let ack_b = crate::commands::kds_device::ack_kds_order_scoped(
+        "tok".into(),
+        order.id.clone(),
+        device_b.id.clone(),
+        app.state(),
+    )
+    .await
+    .unwrap();
+    assert!(!ack_b, "device B should lose the ack race");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Integration: Health monitoring daemon simulation
+// ══════════════════════════════════════════════════════════════════
+
+/// Simulates the health monitoring daemon cycle:
+/// mark stale → deactivate long-offline → cleanup old orders.
+#[tokio::test]
+async fn integration_health_monitoring_cycle() {
+    let conn = oz_core::migrations::fresh_db();
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-1', 'Restaurant POS', 'dev-resto', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Register two devices.
+    let device_good = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Good Display".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hg".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    let device_stale = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Stale Display".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "hs".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    // Connect both, then backdate stale device's last_seen_at.
+    crate::commands::kds_device::update_kds_device_status_scoped(
+        "tok".into(),
+        device_good.id.clone(),
+        oz_core::kds::KdsConnectionStatus::Connected,
+        app.state(),
+    )
+    .await
+    .unwrap();
+    crate::commands::kds_device::update_kds_device_status_scoped(
+        "tok".into(),
+        device_stale.id.clone(),
+        oz_core::kds::KdsConnectionStatus::Connected,
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    // Backdate stale device's last_seen_at to simulate disconnection.
+    {
+        let state_ref = app.state::<AppState>();
+        let db_ref = state_ref.db_manager.open_store("s1").unwrap();
+        let db = db_ref.lock().unwrap();
+        db.execute(
+            "UPDATE kds_devices SET last_seen_at = '2020-01-01T00:00:00.000Z' WHERE id = ?1",
+            rusqlite::params![device_stale.id],
+        )
+        .unwrap();
+    }
+
+    // Run health daemon cycle via Store directly.
+    {
+        let state_ref = app.state::<AppState>();
+        let db_ref = state_ref.db_manager.open_store("s1").unwrap();
+        let db = db_ref.lock().unwrap();
+        let store = Store::new(&db);
+
+        // 1. Mark stale (30s threshold).
+        let marked = store.mark_stale_kds_devices(30).unwrap();
+        assert_eq!(marked, 1, "should mark 1 device stale");
+
+        // 2. Good device should still be connected.
+        let good = store.get_kds_device(&device_good.id).unwrap().unwrap();
+        assert_eq!(
+            good.connection_status,
+            oz_core::kds::KdsConnectionStatus::Connected
+        );
+
+        // 3. Stale device should be marked stale.
+        let stale = store.get_kds_device(&device_stale.id).unwrap().unwrap();
+        assert_eq!(
+            stale.connection_status,
+            oz_core::kds::KdsConnectionStatus::Stale
+        );
+
+        // 4. Backdate stale device's updated_at to trigger auto-deactivation.
+        db.execute(
+            "UPDATE kds_devices SET updated_at = '2020-01-01T00:00:00.000Z' WHERE id = ?1",
+            rusqlite::params![device_stale.id],
+        )
+        .unwrap();
+
+        let deactivated = store.deactivate_stale_kds_devices(3600).unwrap();
+        assert_eq!(deactivated, 1, "should auto-deactivate 1 stale device");
+
+        // 5. Stale device should now be inactive.
+        let stale = store.get_kds_device(&device_stale.id).unwrap().unwrap();
+        assert!(!stale.is_active, "stale device should be deactivated");
+
+        // 6. Good device should still be active.
+        let good = store.get_kds_device(&device_good.id).unwrap().unwrap();
+        assert!(good.is_active, "good device should remain active");
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Integration: Device isolation between restaurants
+// ══════════════════════════════════════════════════════════════════
+
+/// Devices registered to different Restaurant POS instances are isolated.
+#[tokio::test]
+async fn integration_device_isolation_between_restaurants() {
+    let conn = oz_core::migrations::fresh_db();
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-1', 'Restaurant A', 'dev-a', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at)
+         VALUES ('resto-2', 'Restaurant B', 'dev-b', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+        [],
+    )
+    .unwrap();
+    seed_owner(&conn);
+    let state = scoped_state(conn, "tok", "user-owner", "role-owner", "s1", "resto-1");
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Register device under resto-1.
+    let device_a = crate::commands::kds_device::register_kds_device_scoped(
+        "tok".into(),
+        RegisterKdsDeviceInput {
+            name: "Display A".into(),
+            restaurant_pos_id: "resto-1".into(),
+            station_ids: vec![],
+            pairing_token_hash: "ha".into(),
+            pairing_expires_at: "2099-01-01".into(),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    // Register device under resto-2 (via Store directly since session is for resto-1).
+    {
+        let state_ref = app.state::<AppState>();
+        let db_ref = state_ref.db_manager.open_store("s1").unwrap();
+        let db = db_ref.lock().unwrap();
+        let store = Store::new(&db);
+        store
+            .register_kds_device(RegisterKdsDeviceInput {
+                name: "Display B".into(),
+                restaurant_pos_id: "resto-2".into(),
+                station_ids: vec![],
+                pairing_token_hash: "hb".into(),
+                pairing_expires_at: "2099-01-01".into(),
+            })
+            .unwrap();
+    }
+
+    // list_kds_devices_scoped only returns devices for the session's restaurant.
+    let devices = crate::commands::kds_device::list_kds_devices_scoped("tok".into(), app.state())
+        .await
+        .unwrap();
+    assert_eq!(devices.len(), 1, "should only see resto-1 devices");
+    assert_eq!(devices[0].id, device_a.id);
+    assert_eq!(devices[0].restaurant_pos_id, "resto-1");
 }

@@ -63,6 +63,10 @@ export interface PaymentModalProps {
   serialNumbers?: Record<string, string>;
   /** Custom quick tender preset amounts (in minor units). Defaults to standard Rp denominations. */
   tenderPresets?: number[];
+  /** Tip amount in minor units collected at checkout (default 0). Persisted on the sale. */
+  tipMinor?: number;
+  /** Service-charge amount in minor units collected at checkout (default 0). Persisted on the sale. */
+  serviceChargeMinor?: number;
 }
 
 /** Payment processing modal — method selection (cash, card, QRIS, open bill, credit), split tender, customer/loyalty, multi-currency, and change calculation. */
@@ -81,6 +85,8 @@ export default function PaymentModal({
   onClose,
   serialNumbers,
   tenderPresets,
+  tipMinor = 0,
+  serviceChargeMinor = 0,
 }: PaymentModalProps) {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
@@ -556,6 +562,19 @@ export default function PaymentModal({
               return { sku: String(line?.sku ?? lineId), serial };
             })
         : undefined;
+      // CUR-02: snapshot the base currency / total / rate for the QRIS
+      // settlement payload too. Tip/service always sent.
+      const qrisTenderMetadata = {
+        tipMinor,
+        serviceChargeMinor,
+        ...(cartCurrency !== total.currency && effectiveRateInfo
+          ? {
+              baseCurrency: total.currency,
+              baseTotalMinor: total.minor_units,
+              tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
+            }
+          : {}),
+      };
       const saleResult = sessionToken
         ? await completeSaleScoped(sessionToken, {
             cartId,
@@ -572,6 +591,7 @@ export default function PaymentModal({
                 gatewayResponse: 'QRIS payment confirmed',
               },
             ],
+            ...(qrisTenderMetadata ? qrisTenderMetadata : {}),
           } as CompleteSaleScopedArgs)
         : await completeSale({
             cartId,
@@ -589,6 +609,7 @@ export default function PaymentModal({
                 gatewayResponse: 'QRIS payment confirmed',
               },
             ],
+            ...(qrisTenderMetadata ? qrisTenderMetadata : {}),
           });
 
       try {
@@ -820,16 +841,34 @@ export default function PaymentModal({
               return { sku: String(line?.sku ?? lineId), serial };
             })
         : undefined;
+      // CUR-02: when multi-currency checkout converted the total, snapshot
+      // the original (base) currency, base total, and the fixed-point rate
+      // used so the backend can persist them atomically on the sale for
+      // audit/refund/reconciliation. Omitted entirely for single-currency
+      // sales (the common case). Tip and service charge are always sent so
+      // the backend records what the customer actually paid.
+      const tenderMetadata = {
+        tipMinor,
+        serviceChargeMinor,
+        ...(cartCurrency !== total.currency && effectiveRateInfo
+          ? {
+              baseCurrency: total.currency,
+              baseTotalMinor: total.minor_units,
+              tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
+            }
+          : {}),
+      };
+
       const saleResult = sessionToken
         ? await completeSaleScoped(sessionToken, {
             cartId,
             paymentMethod: methodLabel,
             tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
-            currency: cartCurrency,
             ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            ...(tenderMetadata ? tenderMetadata : {}),
           } as CompleteSaleScopedArgs)
         : await completeSale({
             cartId,
@@ -840,6 +879,7 @@ export default function PaymentModal({
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            ...(tenderMetadata ? tenderMetadata : {}),
           });
 
       // ADR-20: Finalize the pending sale (transitions 'pending' → 'completed')

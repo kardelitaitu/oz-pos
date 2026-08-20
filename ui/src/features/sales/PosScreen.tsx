@@ -1901,6 +1901,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
           discountPercent={discountPercent}
           discountLabel={discountLabel}
           userId={userId}
+          tipMinor={tipAmount?.minor_units ?? 0}
+          serviceChargeMinor={serviceChargeAmount?.minor_units ?? 0}
           {...(sessionToken ? { sessionToken } : {})}
           tableNumber={tableNumber}
           onComplete={handlePaymentComplete}

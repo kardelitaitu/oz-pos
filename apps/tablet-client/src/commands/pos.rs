@@ -637,6 +637,16 @@ pub struct CompleteSaleArgs {
     pub customer_name: Option<String>,
     /// Optional serial numbers captured at checkout for track_serial products.
     pub serial_numbers: Option<Vec<SerialNumberArg>>,
+    /// CUR-02: original sale currency when multi-currency checkout is used.
+    pub base_currency: Option<String>,
+    /// CUR-02: original sale total in `base_currency` minor units.
+    pub base_total_minor: Option<i64>,
+    /// CUR-02: fixed-point rate (millionths) `base_currency → sale currency`.
+    pub tender_rate_millionths: Option<i64>,
+    /// Tip amount in minor units collected at checkout (default 0).
+    pub tip_minor: Option<i64>,
+    /// Service-charge amount in minor units collected at checkout (default 0).
+    pub service_charge_minor: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -677,6 +687,13 @@ pub async fn complete_sale(
     sale.payment_method = Some(args.payment_method);
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
+    // CUR-02: record tender-currency metadata when multi-currency checkout
+    // was used. All three are None for single-currency sales.
+    sale.base_currency = args.base_currency.clone();
+    sale.base_total_minor = args.base_total_minor;
+    sale.tender_rate_millionths = args.tender_rate_millionths;
+    sale.tip_minor = args.tip_minor.unwrap_or(0);
+    sale.service_charge_minor = args.service_charge_minor.unwrap_or(0);
 
     let sale_id = sale.id.clone();
 
@@ -768,6 +785,16 @@ pub struct CompleteSaleScopedArgs {
     pub customer_name: Option<String>,
     /// Serial Numbers.
     pub serial_numbers: Option<Vec<SerialNumberArg>>,
+    /// CUR-02: original sale currency when multi-currency checkout is used.
+    pub base_currency: Option<String>,
+    /// CUR-02: original sale total in `base_currency` minor units.
+    pub base_total_minor: Option<i64>,
+    /// CUR-02: fixed-point rate (millionths) `base_currency → sale currency`.
+    pub tender_rate_millionths: Option<i64>,
+    /// Tip amount in minor units collected at checkout (default 0).
+    pub tip_minor: Option<i64>,
+    /// Service-charge amount in minor units collected at checkout (default 0).
+    pub service_charge_minor: Option<i64>,
 }
 
 /// Complete a sale within the session scope. ADR #7 / ADR-19 §6.
@@ -809,6 +836,13 @@ pub async fn complete_sale_scoped(
     sale.payment_method = Some(args.payment_method.clone());
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
+    // CUR-02: record tender-currency metadata when multi-currency checkout
+    // was used. All three are None for single-currency sales.
+    sale.base_currency = args.base_currency.clone();
+    sale.base_total_minor = args.base_total_minor;
+    sale.tender_rate_millionths = args.tender_rate_millionths;
+    sale.tip_minor = args.tip_minor.unwrap_or(0);
+    sale.service_charge_minor = args.service_charge_minor.unwrap_or(0);
 
     let sale_id = sale.id.clone();
 
@@ -966,6 +1000,16 @@ pub struct CompleteSaleWithResolvedShortfallsArgs {
     pub discount_label: Option<String>,
     /// Cashier-resolved shortfalls: per-SKU allocation to specific locations.
     pub resolutions: Vec<oz_core::sale_deduction::ResolvedShortfall>,
+    /// CUR-02: original sale currency when multi-currency checkout is used.
+    pub base_currency: Option<String>,
+    /// CUR-02: original sale total in `base_currency` minor units.
+    pub base_total_minor: Option<i64>,
+    /// CUR-02: fixed-point rate (millionths) `base_currency → sale currency`.
+    pub tender_rate_millionths: Option<i64>,
+    /// Tip amount in minor units collected at checkout (default 0).
+    pub tip_minor: Option<i64>,
+    /// Service-charge amount in minor units collected at checkout (default 0).
+    pub service_charge_minor: Option<i64>,
 }
 
 /// Complete a sale with cashier-resolved shortfalls (split fulfillment).
@@ -1016,6 +1060,13 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     sale.payment_method = Some(args.payment_method.clone());
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
+    // CUR-02: record tender-currency metadata when multi-currency checkout
+    // was used. All three are None for single-currency sales.
+    sale.base_currency = args.base_currency.clone();
+    sale.base_total_minor = args.base_total_minor;
+    sale.tender_rate_millionths = args.tender_rate_millionths;
+    sale.tip_minor = args.tip_minor.unwrap_or(0);
+    sale.service_charge_minor = args.service_charge_minor.unwrap_or(0);
 
     let sale_id = sale.id.clone();
 

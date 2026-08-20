@@ -281,6 +281,11 @@ async fn scoped_sale_deducts_from_topology_warehouse_not_pos_location() {
             payment_splits: None,
             customer_name: None,
             serial_numbers: None,
+            base_currency: None,
+            base_total_minor: None,
+            tender_rate_millionths: None,
+            tip_minor: None,
+            service_charge_minor: None,
         },
         app.state(),
     )

@@ -493,6 +493,8 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260814_tenant_uniqueness.sql".to_string(),
             "20260815_tenant_unique_indexes.sql".to_string(),
             "20260820_kds_devices.sql".to_string(),
+            "20260821_tender_currency.sql".to_string(),
+            "20260822_sale_charges.sql".to_string(),
         ]
     );
 

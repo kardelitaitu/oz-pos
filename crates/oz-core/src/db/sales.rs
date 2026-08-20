@@ -617,8 +617,11 @@ impl Store<'_> {
                                  tendered_minor, discount_percent, discount_label, user_id,
                                  created_at, updated_at, subtotal_minor, tax_total_minor,
                                  customer_id, deduction_locations, version,
-                                 pending_expires_at, tenant_id)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, 'default')",
+                                 pending_expires_at, tenant_id,
+                                 base_currency, base_total_minor, tender_rate_millionths,
+                                 tip_minor, service_charge_minor)
+             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, 'default',
+                     ?17, ?18, ?19, ?20, ?21)",
             rusqlite::params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 sale.payment_method, sale.tendered_minor,
@@ -626,6 +629,8 @@ impl Store<'_> {
                 sale.created_at, now,
                 sale.subtotal.minor_units, sale.tax_total.minor_units,
                 sale.customer_id, deduction_json, pending_expires_at,
+                sale.base_currency, sale.base_total_minor, sale.tender_rate_millionths,
+                sale.tip_minor, sale.service_charge_minor,
             ],
         )?;
 
@@ -977,8 +982,11 @@ impl Store<'_> {
                                  tendered_minor, discount_percent, discount_label, user_id,
                                  created_at, updated_at, subtotal_minor, tax_total_minor,
                                  customer_id, deduction_locations, version,
-                                 pending_expires_at, tenant_id)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, 'default')",
+                                 pending_expires_at, tenant_id,
+                                 base_currency, base_total_minor, tender_rate_millionths,
+                                 tip_minor, service_charge_minor)
+             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, 'default',
+                     ?17, ?18, ?19, ?20, ?21)",
             rusqlite::params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 sale.payment_method, sale.tendered_minor,
@@ -986,6 +994,8 @@ impl Store<'_> {
                 sale.created_at, now,
                 sale.subtotal.minor_units, sale.tax_total.minor_units,
                 sale.customer_id, deduction_json, pending_expires_at,
+                sale.base_currency, sale.base_total_minor, sale.tender_rate_millionths,
+                sale.tip_minor, sale.service_charge_minor,
             ],
         )?;
 
@@ -1279,8 +1289,11 @@ impl Store<'_> {
         tx.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                                 discount_percent, discount_label, user_id, created_at, updated_at,
-                                subtotal_minor, tax_total_minor, customer_id, version, tenant_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, 'default')",
+                                subtotal_minor, tax_total_minor, customer_id, version, tenant_id,
+                                base_currency, base_total_minor, tender_rate_millionths,
+                                tip_minor, service_charge_minor)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, 'default',
+                     ?16, ?17, ?18, ?19, ?20)",
             params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 status_str, sale.payment_method, sale.tendered_minor,
@@ -1288,6 +1301,8 @@ impl Store<'_> {
                 sale.created_at, sale.updated_at,
                 sale.subtotal.minor_units, sale.tax_total.minor_units,
                 sale.customer_id,
+                sale.base_currency, sale.base_total_minor, sale.tender_rate_millionths,
+                sale.tip_minor, sale.service_charge_minor,
             ],
         )?;
 
@@ -1331,7 +1346,9 @@ impl Store<'_> {
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor, customer_id, version
+                    subtotal_minor, tax_total_minor, customer_id, version,
+                    base_currency, base_total_minor, tender_rate_millionths,
+                    tip_minor, service_charge_minor
              {from_clause}"
         );
         let mut stmt = self.conn.prepare(&sql)?;
@@ -1373,6 +1390,11 @@ impl Store<'_> {
                     currency,
                 },
                 customer_id: row.get("customer_id")?,
+                base_currency: row.get("base_currency")?,
+                base_total_minor: row.get("base_total_minor")?,
+                tender_rate_millionths: row.get("tender_rate_millionths")?,
+                tip_minor: row.get("tip_minor")?,
+                service_charge_minor: row.get("service_charge_minor")?,
                 version: row.get("version").unwrap_or(1),
             })
         })?;
@@ -1392,7 +1414,9 @@ impl Store<'_> {
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor, customer_id, version
+                    subtotal_minor, tax_total_minor, customer_id, version,
+                    base_currency, base_total_minor, tender_rate_millionths,
+                    tip_minor, service_charge_minor
              FROM sales
              WHERE store_id IS NULL OR store_id = ?1
              ORDER BY created_at DESC",
@@ -1435,6 +1459,11 @@ impl Store<'_> {
                     currency,
                 },
                 customer_id: row.get("customer_id")?,
+                base_currency: row.get("base_currency")?,
+                base_total_minor: row.get("base_total_minor")?,
+                tender_rate_millionths: row.get("tender_rate_millionths")?,
+                tip_minor: row.get("tip_minor")?,
+                service_charge_minor: row.get("service_charge_minor")?,
                 version: row.get("version").unwrap_or(1),
             })
         })?;
@@ -1453,7 +1482,9 @@ impl Store<'_> {
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor, customer_id, version
+                    subtotal_minor, tax_total_minor, customer_id, version,
+                    base_currency, base_total_minor, tender_rate_millionths,
+                    tip_minor, service_charge_minor
              FROM sales
              WHERE user_id = ?1
              ORDER BY created_at DESC",
@@ -1492,6 +1523,11 @@ impl Store<'_> {
                     currency,
                 },
                 customer_id: row.get("customer_id")?,
+                base_currency: row.get("base_currency")?,
+                base_total_minor: row.get("base_total_minor")?,
+                tender_rate_millionths: row.get("tender_rate_millionths")?,
+                tip_minor: row.get("tip_minor")?,
+                service_charge_minor: row.get("service_charge_minor")?,
                 version: row.get("version")?,
                 lines: vec![],
             })
@@ -1521,7 +1557,9 @@ impl Store<'_> {
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor, customer_id, version
+                    subtotal_minor, tax_total_minor, customer_id, version,
+                    base_currency, base_total_minor, tender_rate_millionths,
+                    tip_minor, service_charge_minor
              FROM sales WHERE customer_id = ?1
              ORDER BY created_at DESC LIMIT ?2 OFFSET ?3",
         )?;
@@ -1563,6 +1601,11 @@ impl Store<'_> {
                     currency,
                 },
                 customer_id: row.get("customer_id")?,
+                base_currency: row.get("base_currency")?,
+                base_total_minor: row.get("base_total_minor")?,
+                tender_rate_millionths: row.get("tender_rate_millionths")?,
+                tip_minor: row.get("tip_minor")?,
+                service_charge_minor: row.get("service_charge_minor")?,
                 version: row.get("version").unwrap_or(1),
             })
         })?;
@@ -1578,7 +1621,9 @@ impl Store<'_> {
             "SELECT id, total_minor, currency, line_count, status,
                     payment_method, tendered_minor, discount_percent, discount_label,
                     user_id, created_at, updated_at,
-                    subtotal_minor, tax_total_minor, customer_id, version
+                    subtotal_minor, tax_total_minor, customer_id, version,
+                    base_currency, base_total_minor, tender_rate_millionths,
+                    tip_minor, service_charge_minor
              FROM sales WHERE id = ?1",
         )?;
 
@@ -1620,6 +1665,11 @@ impl Store<'_> {
                     currency,
                 },
                 customer_id: row.get("customer_id")?,
+                base_currency: row.get("base_currency")?,
+                base_total_minor: row.get("base_total_minor")?,
+                tender_rate_millionths: row.get("tender_rate_millionths")?,
+                tip_minor: row.get("tip_minor")?,
+                service_charge_minor: row.get("service_charge_minor")?,
                 version: row.get("version").unwrap_or(1),
             })
         });

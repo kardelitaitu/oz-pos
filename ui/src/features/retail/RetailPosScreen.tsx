@@ -128,6 +128,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const {
     lines, total, subtotal, discountPercent, discountLabel, discountAmount,
+    tipAmount, serviceChargeAmount,
     addProduct, removeLine, updateQty, updateLinePrice, assignCourse, setDiscount, resetCart,
   } = usePosState();
 
@@ -1380,6 +1381,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         discountPercent={discountPercent}
         discountLabel={discountLabel}
         userId={userId}
+        tipMinor={tipAmount?.minor_units ?? 0}
+        serviceChargeMinor={serviceChargeAmount?.minor_units ?? 0}
         {...(sessionToken ? { sessionToken } : {})}
         selectedCustomer={selectedCustomer}
         {...(isEnabled(FEATURES.SERIAL_TRACKING) ? { serialNumbers } : {})}

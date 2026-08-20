@@ -71,6 +71,11 @@ fn new_sale(id: &str, lines: Vec<SaleLine>, total_minor: i64) -> Sale {
         subtotal: price(total_minor),
         tax_total: price(0),
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
     }
 }
@@ -272,6 +277,11 @@ fn complete_sale_empty_lines_succeeds() {
         subtotal: price(0),
         tax_total: price(0),
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
     };
 

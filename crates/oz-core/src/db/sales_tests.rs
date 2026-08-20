@@ -59,6 +59,35 @@ fn create_sale_persists_header() {
     assert_eq!(tenant, "default");
 }
 
+// CUR-02: multi-currency tender metadata must round-trip atomically with
+// the sale. Single-currency sales persist NULLs; multi-currency sales
+// persist base currency / base total / rate.
+#[test]
+fn create_sale_persists_tender_currency_metadata() {
+    let conn = fresh();
+    let store = store(&conn);
+
+    // Multi-currency: base USD 700 charged in IDR at rate 16_000 (millionths).
+    let mut sale = Sale::from_cart(&make_cart()).unwrap();
+    sale.base_currency = Some("USD".into());
+    sale.base_total_minor = Some(700);
+    sale.tender_rate_millionths = Some(16_000_000_000);
+    store.create_sale(&sale).unwrap();
+
+    let loaded = store.get_sale(&sale.id).unwrap().unwrap();
+    assert_eq!(loaded.base_currency.as_deref(), Some("USD"));
+    assert_eq!(loaded.base_total_minor, Some(700));
+    assert_eq!(loaded.tender_rate_millionths, Some(16_000_000_000));
+
+    // Single-currency (default): all three must be None.
+    let plain = Sale::from_cart(&make_cart()).unwrap();
+    store.create_sale(&plain).unwrap();
+    let loaded_plain = store.get_sale(&plain.id).unwrap().unwrap();
+    assert_eq!(loaded_plain.base_currency, None);
+    assert_eq!(loaded_plain.base_total_minor, None);
+    assert_eq!(loaded_plain.tender_rate_millionths, None);
+}
+
 #[test]
 fn test_sales_history_cap_free_tier() {
     // C1.2: the Free tier caps history to the last 30 days; the list
@@ -839,6 +868,11 @@ fn make_single_line_sale(sku: &str, qty: i64, unit_minor: i64) -> Sale {
         subtotal: price(unit_minor * qty),
         tax_total: price(0),
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
         lines: vec![SaleLine {
             id: line_id,
@@ -1103,6 +1137,11 @@ fn compute_tax_multi_line() {
         subtotal: price(1150),
         tax_total: price(0),
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
         lines: vec![line1, line2],
     };
@@ -1157,6 +1196,11 @@ fn compute_tax_empty_sale_no_crash() {
         subtotal: price(0),
         tax_total: price(0),
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
         lines: vec![],
     };
@@ -3185,6 +3229,11 @@ fn list_sales_by_user_filters_correctly() {
                 currency: "USD".parse().unwrap(),
             },
             customer_id: None,
+            base_currency: None,
+            base_total_minor: None,
+            tender_rate_millionths: None,
+            tip_minor: 0,
+            service_charge_minor: 0,
             lines: vec![],
             version: 1,
         };
