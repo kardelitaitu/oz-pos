@@ -311,14 +311,10 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
       mockAuthError.mockReturnValue('Invalid PIN');
       await advanceToPin();
       await waitFor(() => {
-        const alerts = screen.getAllByRole('alert');
-        // Toast alert + inline error alert
-        const inlineError = alerts.find((el) =>
-          el.className.includes('staff-login-error'),
-        );
-        expect(inlineError).toBeInTheDocument();
-        expect(inlineError).toHaveAttribute('aria-live', 'polite');
-        expect(inlineError).toHaveTextContent('Invalid PIN');
+        // Error is now shown as a toast notification (bottom center)
+        const toastEl = document.querySelector('.toast--error');
+        expect(toastEl).toBeInTheDocument();
+        expect(toastEl).toHaveTextContent('Invalid PIN');
       });
     });
 
@@ -335,7 +331,9 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
       fireEvent.click(screen.getByLabelText('4'));
 
       await waitFor(() => {
-        expect(document.querySelector('.staff-login-error')).toHaveTextContent('Wrong PIN');
+        // Error is now shown as a toast notification (bottom center)
+        const toastEl = document.querySelector('.toast--error');
+        expect(toastEl).toHaveTextContent('Wrong PIN');
       });
 
       // ── 2nd attempt ──────────────────────────────────────────────
@@ -352,8 +350,12 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
       fireEvent.click(screen.getByLabelText('4'));
 
       await waitFor(() => {
-        const el = document.querySelector('.staff-login-error');
-        expect(el).toHaveTextContent(/attempts? remaining/i);
+        // Error is now shown as a toast notification (bottom center)
+        // Toast shows the raw error message; rate-limit info was inline-only
+        // Get the last toast since multiple may be visible
+        const toastEls = document.querySelectorAll('.toast--error');
+        const lastToast = toastEls[toastEls.length - 1];
+        expect(lastToast).toHaveTextContent('Wrong PIN again');
       });
     });
 
@@ -365,11 +367,11 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
       mockAuthError.mockReturnValue('Try again in 30s');
       fireEvent.click(screen.getByLabelText('1'));
 
-      // Use textContent to find error text that may be split across child elements.
+      // Error is now shown as a toast notification (bottom center)
       await waitFor(() => {
-        const errorEl = document.querySelector('.staff-login-error');
-        expect(errorEl).toBeInTheDocument();
-        expect(errorEl?.textContent).toMatch(/try again in/i);
+        const toastEl = document.querySelector('.toast--error');
+        expect(toastEl).toBeInTheDocument();
+        expect(toastEl?.textContent).toMatch(/try again in/i);
       });
 
       // The keypad buttons should be disabled during lockout.

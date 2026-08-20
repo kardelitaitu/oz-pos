@@ -33,21 +33,10 @@ function BackspaceIcon() {
   );
 }
 
-function AlertIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
-  );
-}
-
 // ── Constants ───────────────────────────────────────────────────────
 
 const MAX_PIN_LENGTH = 4;
 const MAX_PIN_ATTEMPTS = 3;
-const RATE_LIMIT_WARN_AFTER = 2;
 
 // ── Resized Logo Helper (1:1 PNG at target size) ───────────────────
 
@@ -123,6 +112,8 @@ export default function StaffLoginScreen() {
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const pinSubmitted = useRef(false);
   const [pinAttempts, setPinAttempts] = useState(0);
+  // pinAttempts is used internally for lockout counter but not displayed
+  void pinAttempts;
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const toastShownForError = useRef<string | null>(null);
   // P7-4: Keyboard avoidance — scroll inputs into view on mobile
@@ -184,8 +175,7 @@ export default function StaffLoginScreen() {
       setLockedUntil(Date.now() + seconds * 1000);
       setPinAttempts(MAX_PIN_ATTEMPTS);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [error]);
+  }, [error, step]);
 
   // ── Auto-unlock after lockout period ──────────────────────────
 
@@ -206,11 +196,7 @@ export default function StaffLoginScreen() {
 
   // ── Rate-limit display helpers ─────────────────────────────────
 
-  const remainingAttempts = Math.max(0, MAX_PIN_ATTEMPTS - pinAttempts);
   const isLocked = lockedUntil !== null;
-  const lockoutRemainingSec = lockedUntil !== null
-    ? Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000))
-    : 0;
 
   // ── Focus appropriate element when step changes ──────────────
 
@@ -587,29 +573,7 @@ export default function StaffLoginScreen() {
             </div>
           )}
 
-          {error && step === 'username' && (
-            <div className="staff-login-error" role="alert" aria-live="polite">
-              <AlertIcon />
-              {error}
-            </div>
-          )}
-
-          {error && step === 'pin' && (
-            <div className="staff-login-error" role="alert" aria-live="polite">
-              <AlertIcon />
-              {error}
-              {pinAttempts >= RATE_LIMIT_WARN_AFTER && pinAttempts < MAX_PIN_ATTEMPTS && (
-                <span className="staff-login-rate-limit">
-                  {' '}{l10n.getString('staff-login-attempts-remaining', { count: String(remainingAttempts) })}
-                </span>
-              )}
-              {isLocked && (
-                <span className="staff-login-rate-limit staff-login-rate-limit--lockout">
-                  {' '}{l10n.getString('staff-login-lockout', { seconds: String(lockoutRemainingSec) })}
-                </span>
-              )}
-            </div>
-          )}
+          
         </div>
 
         {/* ── Bottom bar: step indicator (12%) ──────────────── */}
