@@ -167,7 +167,7 @@ export const KdsEnrollmentModal = memo(function KdsEnrollmentModal({
   if (!isOpen) return null;
 
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-nonactive-element-interactions
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <div
       className="kds-enrollment-overlay"
       onClick={handleBackdropClick}
