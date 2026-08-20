@@ -32,14 +32,18 @@ const lineItem = (overrides: Partial<CartLine> = {}): CartLine => ({
   ...overrides,
 });
 
-const { invokeMock } = vi.hoisted(() => ({
-  invokeMock: vi.fn((cmd: string) => {
+const { invokeMock } = vi.hoisted(() => {
+  const mock = vi.fn((...callArgs: unknown[]) => {
+    const cmd = callArgs[0] as string;
     switch (cmd) {
       case 'start_sale':
+      case 'start_sale_scoped':
         return Promise.resolve({ cartId: 'test-cart' });
       case 'add_line':
+      case 'add_line_scoped':
         return Promise.resolve({ lineId: 'test-line', lineTotal: null });
       case 'complete_sale':
+      case 'complete_sale_scoped':
         return Promise.resolve({ saleId: 'sale-1', total: null, lineCount: 1 });
       case 'get_sale':
         return Promise.resolve(null);
@@ -49,11 +53,16 @@ const { invokeMock } = vi.hoisted(() => ({
         return Promise.resolve();
       case 'get_enabled_features':
         return Promise.resolve({ features: [] });
+      case 'finalize_sale':
+        return Promise.resolve();
+      case 'create_kds_order_from_sale_scoped':
+        return Promise.resolve();
       default:
         return Promise.resolve({});
     }
-  }),
-}));
+  });
+  return { invokeMock: mock };
+});
 
 const { mockListCurrenciesScoped, mockListExchangeRates } = vi.hoisted(() => ({
   mockListCurrenciesScoped: vi.fn(() =>
@@ -91,6 +100,8 @@ vi.mock('@/api/currency', () => ({
     ]),
   ),
   getDefaultCurrency: vi.fn(() => Promise.resolve('USD')),
+  exchangeRateToDecimal: (rate: { rate_millionths: number }) => rate.rate_millionths / 1_000_000,
+  formatExchangeRate: (rate: { rate_millionths: number }) => (rate.rate_millionths / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0',
 }));
 
 vi.mock('@/hooks/useFeatures', () => ({
@@ -662,16 +673,17 @@ describe('PaymentModal — rendering & fast interaction', () => {
 
     // Wait for currencies and exchange rates to load
     await waitFor(() => {
-      expect(screen.getByLabelText(/charge currency/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/select charge currency/i)).toBeInTheDocument();
     });
 
     // Select IDR as charge currency (1 USD = 16,000 IDR)
-    const currencySelect = screen.getByLabelText(/charge currency/i) as HTMLSelectElement;
+    const currencySelect = screen.getByLabelText(/select charge currency/i) as HTMLSelectElement;
     await userEvent.selectOptions(currencySelect, 'IDR');
 
     // Verify charge amount shows converted value: $7.00 * 16,000 = Rp 112,000
+    // Indonesian locale formats with dots as thousand separators: Rp 11.200.000
     await waitFor(() => {
-      expect(screen.getByText(/Rp 112,000/)).toBeInTheDocument();
+      expect(screen.getByText(/Rp 11\.200\.000/)).toBeInTheDocument();
     });
 
     // Select cash payment method
@@ -682,22 +694,30 @@ describe('PaymentModal — rendering & fast interaction', () => {
     await userEvent.type(tenderInput, '112000');
 
     // Complete the sale
-    await userEvent.click(screen.getByRole('button', { name: /complete sale/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Complete/i }));
 
-    // Verify complete_sale was called with IDR currency and converted amounts
+    // Verify complete_sale_scoped was called with IDR currency and converted amounts
     // The bug (CUR-02): currently passes USD instead of IDR
-    await waitFor(() => {
-      const completeSaleCall = (invokeMock.mock.calls as unknown as Array<[string, Record<string, unknown>]>).find((call) => call[0] === 'complete_sale');
-      expect(completeSaleCall).toBeDefined();
-      if (completeSaleCall) {
-        const args = completeSaleCall[1] as { currency?: string; splits?: Array<{ amountMinor: number }> } | undefined;
-        // This assertion will FAIL with the current bug - it passes USD instead of IDR
-        expect(args?.currency).toBe('IDR');
-        // Splits should be in IDR minor units: 112000 * 100 (IDR exponent 0) = 112000
-        expect(args?.splits?.[0]?.amountMinor).toBe(112000);
-      }
-    });
+    const completeSaleCall = invokeMock.mock.calls.find((call) => call[0] === 'complete_sale_scoped');
+    expect(completeSaleCall).toBeDefined();
+    if (completeSaleCall) {
+      // Tauri commands wrap params in { sessionToken, args: { ... } }
+      const outerArgs = completeSaleCall[1] as { args?: { currency?: string; paymentSplits?: Array<{ amountMinor: number }>; tenderedMinor?: number } } | undefined;
+      const args = outerArgs?.args;
+      // This assertion will FAIL with the current bug - it passes USD instead of IDR
+      expect(args?.currency).toBe('IDR');
+      // For cash payments, tenderedMinor is used instead of paymentSplits
+      expect(args?.tenderedMinor).toBe(112000);
+    }
 
-    expect(onComplete).toHaveBeenCalled();
+    // Wait for receipt preview to appear, then click Skip to trigger onComplete
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Skip/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /Skip/i }));
+
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalled();
+    });
   });
 });

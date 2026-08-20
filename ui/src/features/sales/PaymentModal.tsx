@@ -783,6 +783,7 @@ export default function PaymentModal({
             cartId,
             paymentMethod: methodLabel,
             tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
+            currency: cartCurrency,
             ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
