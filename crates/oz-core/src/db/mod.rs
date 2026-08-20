@@ -390,3 +390,7 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
         default_supplier_id: row.get("default_supplier_id").unwrap_or(None),
     })
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;
