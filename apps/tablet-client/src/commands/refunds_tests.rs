@@ -175,6 +175,80 @@ fn refund_with_valid_currency_succeeds_through_run_process_refund() {
 }
 
 #[test]
+fn refund_total_overflow_returns_error() {
+    let conn = fresh_conn();
+    let sale_id = seed_completed_sale(&conn);
+    seed_user_with_refund_permission(&conn, "user-overflow");
+
+    let lines = [
+        RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 1,
+            unit_price_minor: i64::MAX,
+            currency: "USD".into(),
+            line_total_minor: i64::MAX,
+        },
+        RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 1,
+            unit_price_minor: 1,
+            currency: "USD".into(),
+            line_total_minor: 1,
+        },
+    ];
+
+    let result = run_process_refund(&conn, "user-overflow", &sale_id, "test", None, &lines);
+    // The bug: the refund total was computed with a raw `sum()` over
+    // i64 minor units — panics in debug, silently wraps in release.
+    // The total must be folded with Money::checked_add so overflow
+    // surfaces as a domain error, not a panic or a wrapped amount.
+    assert!(
+        result.is_err(),
+        "refund total overflowing i64 must return Err, got Ok — \
+         raw i64 sum() overflowed silently (wrapped) or panicked"
+    );
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("overflow") || err.contains("currency"),
+        "error should mention overflow or currency, got: {err}"
+    );
+}
+
+#[test]
+fn refund_line_currency_mismatch_returns_error() {
+    let conn = fresh_conn();
+    let sale_id = seed_completed_sale(&conn); // sale is USD
+    seed_user_with_refund_permission(&conn, "user-mismatch");
+
+    let lines = [RefundLineArg {
+        sale_line_id: "sl-1".into(),
+        sku: "COFFEE".into(),
+        qty: 2,
+        unit_price_minor: 350,
+        currency: "EUR".into(), // line currency differs from the USD sale
+        line_total_minor: 700,
+    }];
+
+    let result = run_process_refund(&conn, "user-mismatch", &sale_id, "test", None, &lines);
+    // The bug: each line keeps its own parsed currency, but the total
+    // was relabeled with the sale's currency AFTER a raw minor-unit
+    // sum — cross-currency lines were silently added together.
+    // Money::checked_add must reject the mismatch as a domain error.
+    assert!(
+        result.is_err(),
+        "refund line in EUR against a USD sale must return Err, got Ok — \
+         cross-currency minor units were summed and relabeled as USD"
+    );
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("currency"),
+        "error should mention currency, got: {err}"
+    );
+}
+
+#[test]
 fn refund_line_arg_deserialize() {
     let json = r#"{"sale_line_id":"sl-1","sku":"CAKE","qty":1,"unit_price_minor":500,"currency":"USD","line_total_minor":500}"#;
     let arg: RefundLineArg = serde_json::from_str(json).unwrap();

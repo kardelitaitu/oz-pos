@@ -187,11 +187,18 @@ fn run_process_refund_unchecked(
         })
         .collect::<Result<Vec<_>, AppError>>()?;
 
-    let total_minor: i64 = refund_lines.iter().map(|l| l.line_total.minor_units).sum();
-    let total = Money {
-        minor_units: total_minor,
-        currency: sale.currency,
-    };
+    let total = refund_lines.iter().try_fold(
+        Money::zero(sale.currency),
+        |acc, line| {
+            acc.checked_add(line.line_total).ok_or_else(|| {
+                AppError::Invalid(format!(
+                    "refund total overflow or line/sale currency mismatch (line {} in {}, sale in {})",
+                    line.sku, line.line_total.currency, sale.currency
+                ))
+            })
+        },
+    )?;
+    let total_minor = total.minor_units;
 
     let refund = Refund::new(
         sale_id,

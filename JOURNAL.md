@@ -5469,3 +5469,58 @@ the other `.max(0)` sites are scalar non-negativity clamps, not Money
 comparisons — intentionally not touched. `Money::max` (same-currency) was
 deliberately NOT added (strict TDD: no speculative API); add it only when a
 consumer exists. Property-based Money tests remain an open follow-up.
+
+## 2026-08-20 — TDD cycle: refund total folded with Money::checked_add (desktop + tablet)
+
+**Problem:** `run_process_refund` in both clients computed the refund total
+with a raw `sum()` over `i64` minor units and then re-wrapped it with the
+sale's currency:
+
+```rust
+let total_minor: i64 = refund_lines.iter().map(|l| l.line_total.minor_units).sum();
+let total = Money { minor_units: total_minor, currency: sale.currency };
+```
+
+Two money-area defects, both from bypassing the `Money` type:
+1. **Unchecked overflow** — `sum()` panics in debug and silently wraps in
+   release when the lines exceed `i64`. (With overflow-checks off, the
+   overflow test produced negative money that only the DB `CHECK
+   total_minor >= 0` constraint caught downstream — the amount was already
+   corrupt before it reached the constraint.)
+2. **Currency dropped at the sum** — each line carries its own parsed
+   currency, but the total was relabeled with `sale.currency` *after* the
+   minor units were summed. A EUR line against a USD sale was silently
+   added and reported as USD — the single-currency invariant held only by
+   convention, exactly the pattern `Money::checked_add` exists to forbid.
+
+**Solution:** TDD Red→Green (mirrored in both apps):
+- **Red:** 2 tests per client in `refunds_tests.rs`:
+  `refund_total_overflow_returns_error` (two USD lines summing past
+  `i64::MAX`) and `refund_line_currency_mismatch_returns_error` (EUR line
+  against a USD sale). Both failed on the old code — overflow wrapped into
+  negative money (caught by the DB CHECK, wrong reason for a money
+  computation), mismatch silently returned `Ok`.
+- **Green:** replace the `sum()` + re-wrap with a `try_fold` from
+  `Money::zero(sale.currency)`, accumulating via `Money::checked_add` and
+  mapping `None` to `AppError::Invalid` naming the line/sale currencies.
+  Overflow and cross-currency now surface as the same domain error, before
+  any DB write; same-currency sums are byte-identical to before.
+
+**Verification:** `cargo test -p oz-pos-tablet refund` — 9 passed (was 7,
++2); `cargo test -p oz-pos-app refund` — 16 passed (was 14, +2); full
+`cargo test -p oz-pos-tablet` — 454 passed, 0 failed; full
+`cargo test -p oz-pos-app` — 1133 passed, 2 failed
+(`commands::inventory` `owner_can_start_and_end_inventory_shift` /
+`owner_can_update_location_name_and_type`, FOREIGN KEY constraint) — both
+**pre-existing**: re-run from a stashed baseline fails identically, and they
+touch inventory, not refunds. `cargo fmt -p oz-pos-tablet -p oz-pos-app -- --check`
+clean; `cargo clippy -p oz-pos-tablet -p oz-pos-app --lib -- -D warnings` clean.
+
+**Risks / follow-ups:** `history.rs` EOD revenue totals
+(`total_revenue: i64 = daily.iter().map(|r| r.total_minor).sum()`, desktop
+and tablet) and `crates/oz-core/src/db/reports.rs:703` /
+`apps/cloud-server/src/email_pg.rs:825` grand totals (`f64` over
+`total_minor`) are the same class of unchecked/currency-less money
+aggregation — not touched in this slice (reporting surfaces, separate
+slice). The `Promotion` currency model remains the biggest open money-area
+item (see previous entry).
