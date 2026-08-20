@@ -293,19 +293,19 @@ async fn handle_peer(
         .await
         {
             Ok(Ok(_)) => {
-                if let Ok(msg) = serde_json::from_str::<DiscoverMsg>(line.trim()) {
-                    if msg.op == "discover" {
-                        let response = format!("{payload}\n");
-                        if let Err(e) = stream.write_all(response.as_bytes()).await {
-                            tracing::debug!(
-                                peer = %peer_addr,
-                                error = %e,
-                                "failed to send discovery response"
-                            );
-                            return;
-                        }
-                        tracing::debug!(peer = %peer_addr, "KDS discovery response sent");
+                if let Ok(msg) = serde_json::from_str::<DiscoverMsg>(line.trim())
+                    && msg.op == "discover"
+                {
+                    let response = format!("{payload}\n");
+                    if let Err(e) = stream.write_all(response.as_bytes()).await {
+                        tracing::debug!(
+                            peer = %peer_addr,
+                            error = %e,
+                            "failed to send discovery response"
+                        );
+                        return;
                     }
+                    tracing::debug!(peer = %peer_addr, "KDS discovery response sent");
                 }
             }
             Ok(Err(e)) => {

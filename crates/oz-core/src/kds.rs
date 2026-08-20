@@ -254,7 +254,7 @@ impl KdsConnectionStatus {
     }
 
     /// Parse from a database string representation.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_db(s: &str) -> Option<Self> {
         match s {
             "connected" => Some(Self::Connected),
             "disconnected" => Some(Self::Disconnected),

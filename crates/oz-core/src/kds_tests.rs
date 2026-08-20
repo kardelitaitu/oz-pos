@@ -148,23 +148,23 @@ fn connection_status_as_str_all_variants() {
 #[test]
 fn connection_status_from_str_all_variants() {
     assert_eq!(
-        KdsConnectionStatus::from_str("connected"),
+        KdsConnectionStatus::parse_db("connected"),
         Some(KdsConnectionStatus::Connected)
     );
     assert_eq!(
-        KdsConnectionStatus::from_str("disconnected"),
+        KdsConnectionStatus::parse_db("disconnected"),
         Some(KdsConnectionStatus::Disconnected)
     );
     assert_eq!(
-        KdsConnectionStatus::from_str("stale"),
+        KdsConnectionStatus::parse_db("stale"),
         Some(KdsConnectionStatus::Stale)
     );
 }
 
 #[test]
 fn connection_status_from_str_invalid() {
-    assert_eq!(KdsConnectionStatus::from_str("bogus"), None);
-    assert_eq!(KdsConnectionStatus::from_str(""), None);
+    assert_eq!(KdsConnectionStatus::parse_db("bogus"), None);
+    assert_eq!(KdsConnectionStatus::parse_db(""), None);
 }
 
 // ── KdsDevice ──────────────────────────────────────────────────

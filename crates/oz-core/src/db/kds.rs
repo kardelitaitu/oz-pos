@@ -984,13 +984,13 @@ impl Store<'_> {
         }
 
         // Check expiry.
-        if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&expires_at) {
-            if chrono::Utc::now() > expires {
-                return Err(CoreError::Validation {
-                    field: "pairing_expires_at",
-                    message: "pairing token has expired".into(),
-                });
-            }
+        if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&expires_at)
+            && chrono::Utc::now() > expires
+        {
+            return Err(CoreError::Validation {
+                field: "pairing_expires_at",
+                message: "pairing token has expired".into(),
+            });
         }
 
         Ok(true)
@@ -1090,7 +1090,7 @@ impl Store<'_> {
             station_ids,
             is_active: row.get::<_, i64>("is_active")? != 0,
             last_seen_at: row.get("last_seen_at")?,
-            connection_status: KdsConnectionStatus::from_str(&status_str)
+            connection_status: KdsConnectionStatus::parse_db(&status_str)
                 .unwrap_or(KdsConnectionStatus::Disconnected),
             created_at: row.get("created_at")?,
             updated_at: row.get("updated_at")?,
@@ -1106,7 +1106,7 @@ impl Store<'_> {
             station_ids,
             is_active: row.is_active,
             last_seen_at: row.last_seen_at,
-            connection_status: KdsConnectionStatus::from_str(&row.connection_status)
+            connection_status: KdsConnectionStatus::parse_db(&row.connection_status)
                 .unwrap_or(KdsConnectionStatus::Disconnected),
             created_at: row.created_at,
             updated_at: row.updated_at,
