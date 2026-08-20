@@ -93,6 +93,11 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@/api/currency', () => ({
   listCurrenciesScoped: mockListCurrenciesScoped,
   listExchangeRates: mockListExchangeRates,
+  listExchangeRatesScoped: vi.fn(() =>
+    Promise.resolve([
+      { from_currency: 'USD', to_currency: 'IDR', rate_millionths: 16_000_000_000 },
+    ]),
+  ),
   listCurrencies: vi.fn(() =>
     Promise.resolve([
       { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
@@ -100,6 +105,17 @@ vi.mock('@/api/currency', () => ({
     ]),
   ),
   getDefaultCurrency: vi.fn(() => Promise.resolve('USD')),
+  getDefaultCurrencyScoped: vi.fn(() => Promise.resolve('USD')),
+  getLatestExchangeRateScoped: vi.fn(() =>
+    Promise.resolve({
+      id: 'rate-1',
+      from_currency: 'USD',
+      to_currency: 'IDR',
+      rate_millionths: 16_000_000_000,
+      source: 'manual',
+      effective_date: '2026-01-01',
+    }),
+  ),
   exchangeRateToDecimal: (rate: { rate_millionths: number }) => rate.rate_millionths / 1_000_000,
   formatExchangeRate: (rate: { rate_millionths: number }) => (rate.rate_millionths / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0',
 }));

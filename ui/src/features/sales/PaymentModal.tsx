@@ -13,8 +13,12 @@ import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/typ
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import {
   listCurrencies,
+  listCurrenciesScoped,
   listExchangeRates,
+  listExchangeRatesScoped,
   getDefaultCurrency,
+  getDefaultCurrencyScoped,
+  getLatestExchangeRateScoped,
   exchangeRateToDecimal,
   type CurrencyDto,
   type ExchangeRateDto,
@@ -206,11 +210,22 @@ export default function PaymentModal({
 
   useEffect(() => {
     if (open && multiCurrency) {
-      Promise.all([
-        listCurrencies(),
-        listExchangeRates(),
-        getDefaultCurrency(),
-      ])
+      const loads: [
+        Promise<CurrencyDto[]>,
+        Promise<ExchangeRateDto[]>,
+        Promise<string | null>,
+      ] = sessionToken
+        ? [
+            listCurrenciesScoped(sessionToken),
+            listExchangeRatesScoped(sessionToken),
+            getDefaultCurrencyScoped(sessionToken),
+          ]
+        : [
+            listCurrencies(),
+            listExchangeRates(),
+            getDefaultCurrency(),
+          ];
+      Promise.all(loads)
         .then(([currs, rates, base]) => {
           setCurrencies(currs);
           setExchangeRates(rates);
@@ -218,7 +233,7 @@ export default function PaymentModal({
         })
         .catch(() => addToast({ message: l10nRef.current.getString('payment-toast-currency-failed'), type: 'error' }));
     }
-  }, [open, multiCurrency, addToast]); // l10n via ref — stable dep chain
+  }, [open, multiCurrency, sessionToken, addToast]); // l10n via ref — stable dep chain
 
   const exchangeRateInfo = useMemo(() => {
     if (selectedCurrency === total.currency) return null;
@@ -241,6 +256,33 @@ export default function PaymentModal({
     }
     return null;
   }, [selectedCurrency, total.currency, exchangeRates]);
+
+  // CUR-04: when a session store is active, ask the backend for the latest
+  // rate effective today (or before) instead of relying on `find()` over the
+  // full history list — the list is not ordered by effective date, so a
+  // stale rate could be chosen. Falls back to the in-memory list only when
+  // there is no session (single-store legacy path).
+  const [latestRate, setLatestRate] = useState<ExchangeRateDto | null>(null);
+  useEffect(() => {
+    setLatestRate(null);
+    if (!open || !multiCurrency || !sessionToken || selectedCurrency === total.currency) {
+      return;
+    }
+    getLatestExchangeRateScoped(sessionToken, {
+      fromCurrency: total.currency,
+      toCurrency: selectedCurrency,
+    })
+      .then((r) => setLatestRate(r))
+      .catch(() => setLatestRate(null));
+  }, [open, multiCurrency, sessionToken, selectedCurrency, total.currency]);
+
+  const effectiveRateInfo = useMemo(() => {
+    if (!sessionToken || !latestRate) return exchangeRateInfo;
+    return {
+      ...latestRate,
+      rate: exchangeRateToDecimal(latestRate),
+    };
+  }, [sessionToken, latestRate, exchangeRateInfo]);
 
   useEffect(() => {
     if (open) {
@@ -385,7 +427,7 @@ export default function PaymentModal({
   // Convert base currency amount to selected charge currency using exchange rate
   const convertToChargeCurrency = useCallback(
     (minorUnits: number | bigint): number => {
-      if (selectedCurrency === total.currency || !exchangeRateInfo) {
+      if (selectedCurrency === total.currency || !effectiveRateInfo) {
         return typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
       }
       const baseMinor = typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
@@ -393,10 +435,10 @@ export default function PaymentModal({
       const chargeExponent = minorUnitExponent(selectedCurrency);
       // Convert: base major units * rate = charge major units, then to charge minor units
       const baseMajor = baseMinor / 10 ** baseExponent;
-      const chargeMajor = baseMajor * exchangeRateInfo.rate;
+      const chargeMajor = baseMajor * effectiveRateInfo.rate;
       return Math.round(chargeMajor * 10 ** chargeExponent);
     },
-    [selectedCurrency, total.currency, exchangeRateInfo],
+    [selectedCurrency, total.currency, effectiveRateInfo],
   );
 
   // Get the currency to use for the cart (charge currency if multi-currency, else base)
@@ -1133,7 +1175,7 @@ export default function PaymentModal({
               </div>
             )}
 
-            {selectedCurrency !== total.currency && exchangeRateInfo && (
+            {selectedCurrency !== total.currency && effectiveRateInfo && (
               <Localized id="payment-exchange-aria" attrs={{ 'aria-label': true }}>
               <div className="payment-exchange-notice">
                 <div className="payment-exchange-row">
@@ -1141,20 +1183,20 @@ export default function PaymentModal({
                     <span>Exchange rate</span>
                   </Localized>
                   <span>
-                    1 {exchangeRateInfo.from_currency} = {exchangeRateInfo.rate.toFixed(6)} {exchangeRateInfo.to_currency}
+                    1 {effectiveRateInfo.from_currency} = {effectiveRateInfo.rate.toFixed(6)} {effectiveRateInfo.to_currency}
                   </span>
                 </div>
                 <div className="payment-exchange-row">
                   <Localized id="payment-rate-source">
                     <span>Rate source</span>
                   </Localized>
-                  <span>{exchangeRateInfo.source || l10n.getString('payment-rate-source-manual')}</span>
+                  <span>{effectiveRateInfo.source || l10n.getString('payment-rate-source-manual')}</span>
                 </div>
                 <div className="payment-exchange-row">
                   <Localized id="payment-rate-timestamp">
                     <span>Rate timestamp</span>
                   </Localized>
-                  <span>{exchangeRateInfo.effective_date}</span>
+                  <span>{effectiveRateInfo.effective_date}</span>
                 </div>
               </div>
               </Localized>
