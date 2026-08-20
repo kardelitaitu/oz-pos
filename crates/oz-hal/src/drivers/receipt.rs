@@ -251,13 +251,23 @@ fn currency_symbol(currency: &oz_core::Currency) -> &'static str {
     }
 }
 
-/// Truncate a string to at most `max` characters, appending `…` if
-/// truncated.
+/// Truncate a string to at most `max` bytes, appending `…` if truncated.
+///
+/// The cut lands on a UTF-8 char boundary (floor-char-boundary logic via
+/// `char_indices`), so multibyte text (e.g. "café") never panics or renders
+/// a broken char.
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_owned()
     } else if max > 1 {
-        format!("{}…", &s[..max.saturating_sub(1)])
+        let cut = max.saturating_sub(1);
+        let end = s
+            .char_indices()
+            .map(|(i, _)| i)
+            .take_while(|&i| i <= cut)
+            .last()
+            .unwrap_or(0);
+        format!("{}…", &s[..end])
     } else {
         "…".to_owned()
     }

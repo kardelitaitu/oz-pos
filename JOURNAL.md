@@ -1,4 +1,29 @@
 
+## 2026-08-20 — TDD cycle: receipt `truncate` UTF-8 boundary panic (oz-hal)
+
+**Problem:** `truncate` (crates/oz-hal/src/drivers/receipt.rs) cut product names
+with byte slicing `&s[..max - 1]`. Any multibyte name ("café latte") whose cut
+landed inside a char panicked (`byte index 4 is not a char boundary; it is inside
+'é'`) — receipts with non-ASCII names could crash the print path. Existing tests
+only used ASCII.
+
+**Solution:** TDD Red→Green:
+- **Red:** `truncate_multibyte_does_not_panic` — reproduced the exact panic.
+- **Green:** replaced the raw slice with a floor-char-boundary scan
+  (`char_indices` + `take_while ≤ cut`, last index). Byte-max semantics preserved
+  (ASCII output byte-identical), multibyte cuts land on char boundaries.
+  Note: `str::floor_char_boundary` would be the idiomatic choice but stabilized
+  in Rust 1.91 > workspace MSRV 1.88 (clippy `incompatible_msrv`), so the manual
+  scan is required.
+
+**Verification:** `cargo test -p oz-hal --lib` — 238/238 pass (incl. new test);
+`cargo fmt --all -- --check` clean; `cargo clippy -p oz-hal -- -D warnings` clean.
+
+**Risks / follow-ups:** None for this slice. (Sweep of the money path found all
+percentage computations guarded against div-by-zero; `format_rate` remainder
+`.abs()` is overflow-safe; `Money::negate()/abs()` i64::MIN hazard is documented
+and currently only test-reachable.)
+
 ## 2026-08-20 — TDD cycle: format_minor(i64::MIN) overflow (foundation)
 
 **Problem:** `format_minor` (foundation/src/money.rs) computed the fractional part

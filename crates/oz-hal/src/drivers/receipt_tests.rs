@@ -196,6 +196,14 @@ fn truncate_long_string() {
 }
 
 #[test]
+fn truncate_multibyte_does_not_panic() {
+    // `&s[..n]` panics when n splits a UTF-8 char — "café" is c,a,f,é(2 bytes),
+    // so a byte cut at 4 lands inside é. Truncation is byte-max ("max" bytes of
+    // content + "…") but must land on a char boundary: 4 content bytes → "caf".
+    assert_eq!(truncate("café latte", 5), "caf…");
+}
+
+#[test]
 fn sales_receipt_contains_store_name() {
     let data = format_sales_receipt(&sample_receipt(), &default_config());
     let text = String::from_utf8_lossy(&data);
