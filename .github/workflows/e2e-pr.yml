@@ -88,7 +88,14 @@ jobs:
           cd ui
           node -e "try { require('esbuild'); console.log('esbuild OK'); } catch (e) { console.error('esbuild missing', e); process.exit(1); }"
 
+      - name: Cache Playwright browsers (${{ matrix.project }})
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ matrix.project }}-${{ hashFiles('ui/package-lock.json') }}
       - name: Install Playwright browser (${{ matrix.project }})
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         # Each shard only exercises ONE project, so install only the
         # browser it needs: desktop = Chromium (Desktop Chrome device),
         # tablet = WebKit (iPad Pro 11 emulation). This halves
@@ -96,6 +103,9 @@ jobs:
         # + nightly.yml only run --project=desktop, so Chromium alone
         # suffices there too.)
         run: cd ui && npx playwright install ${{ matrix.project == 'tablet' && 'webkit' || 'chromium' }} --with-deps
+      - name: Install Playwright system deps (${{ matrix.project }})
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: cd ui && npx playwright install-deps ${{ matrix.project == 'tablet' && 'webkit' || 'chromium' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
