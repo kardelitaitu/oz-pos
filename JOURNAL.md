@@ -1,4 +1,21 @@
 
+## 2026-08-20 — TDD cycle: AccessibleChartSummary direct unit tests + falsy-child fix (UI)
+
+**Problem:** The shared A11Y-09 primitive behind every canvas chart (`AccessibleChartSummary`) had no direct unit tests — only indirect coverage through the chart-level suites (`chartsA11y.test.tsx`). Its `hasItems` logic was also inconsistent: the array branch treated falsy-but-valid items correctly (`c !== null && c !== undefined`), but the single-child branch used `Boolean(children)`, which dropped valid ReactNodes like `0` or `''` from the accessibility tree.
+
+**Solution:** TDD Red→Green→Refactor cycle:
+- **Red phase:** Wrote `ui/src/__tests__/AccessibleChartSummary.test.tsx` with 7 tests pinning the contract: nothing renders with no summary+no children; nothing with all-null arrays; summary-only; list-only; both; arrays with null holes; and a falsy-but-valid single child (`0`). The last test failed against `Boolean(children)` — confirmed Red for the right reason.
+- **Green phase:** Changed `hasItems`' single-child branch to `children !== null && children !== undefined`, matching the array branch's semantics. Also relaxed the `children` prop from required to optional (`children?: ReactNode`) — the implementation and doc contract already support no-children ("nothing renders — the chart still carries its aria-label"), so the required type contradicted the designed behavior.
+- **Refactor phase:** Rewrote JSX to nest children (lint's `react/no-children-prop` forbids `children={...}` props).
+
+**Verification:**
+- `npm run test -- src/__tests__/AccessibleChartSummary.test.tsx` — 7/7 pass
+- Chart consumers (`chartsA11y`, `useCanvasChart`, `CategoryPieChartWidget`, `HourlyHeatmapWidget`, `RevenueLineChartWidget`) — 37/37 pass
+- `npm run lint` — 0 errors (5 pre-existing warnings)
+- `npm run typecheck` — clean
+
+**Risks / follow-ups:** Remaining untested components: `Canvas{Heatmap,LineChart,PieChart}` internals (drawing), `EmptyStateIllustrations`, `LazyBoundary`, `Localized` (re-export) — future coverage slices.
+
 ## 2026-08-20 — TDD cycle: StockAlertBell i18n + first test coverage (UI)
 
 **Problem:** The global-header stock alert bell (`ui/src/components/StockAlertBell.tsx`) hardcoded English in its accessible names — `'No stock alerts'` and `` `${count} active stock alert(s)` `` — violating the i18n golden rule (all user-visible strings via `@fluent/react`). Screen-reader users got English regardless of locale. The component also had zero test coverage for its polling, badge, and click behavior.

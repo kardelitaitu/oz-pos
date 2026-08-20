@@ -23,11 +23,16 @@ export function AccessibleChartSummary({
    * chart callers always pass their (possibly undefined) summary prop.
    */
   summary: string | undefined;
-  /** One `<li>` per data point, with the human-readable value. */
-  children: ReactNode;
+  /**
+   * One `<li>` per data point, with the human-readable value. Optional:
+   * the contract is "when `children` is empty (no data points), nothing
+   * renders — the chart still carries its accessible `aria-label`".
+   */
+  children?: ReactNode;
 }) {
-  const hasItems =
-    Array.isArray(children) ? children.some((c) => c !== null && c !== undefined) : Boolean(children);
+  const hasItems = Array.isArray(children)
+    ? children.some((c) => c !== null && c !== undefined)
+    : children !== null && children !== undefined;
 
   if (!summary && !hasItems) return null;
 
