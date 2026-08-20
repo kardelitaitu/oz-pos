@@ -25,14 +25,14 @@ describe('tax.ts API contract', () => {
 
   it('computeCartTax calls correct command', async () => {
     const lines = [{ sku: 'SKU-001', qty: 2, unit_price_minor: 1000 }];
-    mockInvoke.mockResolvedValue(200);
+    mockInvoke.mockResolvedValue({ taxMinor: 0, hasExclusive: false });
     const result = await computeCartTax(TOKEN, lines, 'IDR');
     expect(mockInvoke).toHaveBeenCalledWith('compute_cart_tax_scoped', {
       sessionToken: TOKEN,
       lines,
       currency: 'IDR',
     });
-    expect(result).toBe(200);
+    expect(result).toEqual({ taxMinor: 0, hasExclusive: false });
   });
 
   it('listTaxRatesScoped calls correct command', async () => {

@@ -891,6 +891,110 @@ fn compute_tax_default_rate_exclusive() {
     assert!(sale.lines[0].tax_rate_id.is_some());
 }
 
+// TAX-06: the sale total must include exclusive tax — the customer pays
+// the discounted subtotal PLUS the exclusive tax on top. Before this fix
+// `sale.total` stayed at the pre-tax cart total, so the recorded total and
+// the payment splits both understated the collectible amount by the tax.
+#[test]
+fn compute_tax_exclusive_adds_tax_to_sale_total() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
+
+    let mut sale = make_single_line_sale("COFFEE", 2, 350); // total = 700 (pre-tax)
+    assert_eq!(sale.total.minor_units, 700, "cart total starts pre-tax");
+    s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+        .unwrap();
+    // subtotal 700 + exclusive tax 70 = 770 collectible
+    assert_eq!(
+        sale.total.minor_units, 770,
+        "total must include exclusive tax"
+    );
+    assert_eq!(sale.subtotal.minor_units, 700);
+    assert_eq!(sale.tax_total.minor_units, 70);
+}
+
+#[test]
+fn compute_tax_inclusive_does_not_inflate_sale_total() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_tax_rate(&conn, "GST 10%", 1000, true, true);
+
+    let mut sale = make_single_line_sale("COFFEE", 2, 350); // total = 700
+    s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+        .unwrap();
+    // inclusive tax is embedded in the price — total stays 700, tax is
+    // extracted for reporting only (63).
+    assert_eq!(
+        sale.total.minor_units, 700,
+        "inclusive tax must not inflate total"
+    );
+    assert_eq!(sale.tax_total.minor_units, 63);
+}
+
+#[test]
+fn compute_tax_no_rates_keeps_total_unchanged() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    let mut sale = make_single_line_sale("COFFEE", 2, 350); // total = 700
+    s.compute_sale_tax(&mut sale, &[], RoundingMode::HalfUp)
+        .unwrap();
+    assert_eq!(sale.total.minor_units, 700, "no tax, no total change");
+    assert_eq!(sale.tax_total.minor_units, 0);
+}
+
+// TAX-06: compute_cart_tax must report whether any exclusive rate applied,
+// so the frontend knows whether to add the preview tax to the payable total.
+#[test]
+fn compute_cart_tax_reports_has_exclusive() {
+    let conn = fresh();
+    let s = store(&conn);
+    let lines = vec![CartLineTaxInput {
+        sku: "COFFEE".into(),
+        qty: 1,
+        unit_price_minor: 1000,
+    }];
+
+    // Exclusive rate (default) → has_exclusive = true.
+    seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
+    let r = s
+        .compute_cart_tax(&lines, usd(), RoundingMode::HalfUp)
+        .unwrap();
+    assert_eq!(r.tax_minor, 100);
+    assert!(r.has_exclusive, "exclusive rate must set has_exclusive");
+
+    // No rates → tax 0, has_exclusive false.
+    let conn2 = fresh();
+    let s2 = store(&conn2);
+    let r2 = s2
+        .compute_cart_tax(&lines, usd(), RoundingMode::HalfUp)
+        .unwrap();
+    assert_eq!(r2.tax_minor, 0);
+    assert!(!r2.has_exclusive, "no rates must not report exclusive");
+}
+
+#[test]
+fn compute_cart_tax_reports_has_exclusive_false_for_inclusive() {
+    let conn = fresh();
+    let s = store(&conn);
+    seed_tax_rate(&conn, "GST 10%", 1000, true, true);
+    let lines = vec![CartLineTaxInput {
+        sku: "COFFEE".into(),
+        qty: 1,
+        unit_price_minor: 1000,
+    }];
+    let r = s
+        .compute_cart_tax(&lines, usd(), RoundingMode::HalfUp)
+        .unwrap();
+    // inclusive: 1000 * 1000 / 11000 = 90.909 → HalfUp → 91
+    assert_eq!(r.tax_minor, 91);
+    assert!(
+        !r.has_exclusive,
+        "inclusive-only rates must not report exclusive"
+    );
+}
+
 #[test]
 fn compute_tax_default_rate_inclusive() {
     let conn = fresh();
@@ -1217,11 +1321,11 @@ fn compute_cart_tax_zero_decimal_currency_jpy() {
     let half_up = s
         .compute_cart_tax(&lines, jpy, RoundingMode::HalfUp)
         .unwrap();
-    assert_eq!(half_up.minor_units, 334);
+    assert_eq!(half_up.tax_minor, 334);
     let trunc = s
         .compute_cart_tax(&lines, jpy, RoundingMode::Truncate)
         .unwrap();
-    assert_eq!(trunc.minor_units, 333);
+    assert_eq!(trunc.tax_minor, 333);
 }
 
 // ── MONEY-01: unchecked qty × price overflow in compute_cart_tax ──

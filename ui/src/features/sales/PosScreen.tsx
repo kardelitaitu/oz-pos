@@ -797,10 +797,12 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
 
   // ── Live tax preview ─────────────────────────────────────────
   const [cartTax, setCartTax] = useState<number>(0);
+  const [cartTaxExclusive, setCartTaxExclusive] = useState(false);
 
   useEffect(() => {
     if (lines.length === 0 || !subtotal) {
       setCartTax(0);
+      setCartTaxExclusive(false);
       return;
     }
     const currency = subtotal.currency;
@@ -810,8 +812,14 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       unit_price_minor: l.unit_price.minor_units,
     }));
     computeCartTax(sessionToken, taxLines, currency)
-      .then(setCartTax)
-      .catch(() => setCartTax(0));
+      .then((r) => {
+        setCartTax(r.taxMinor);
+        setCartTaxExclusive(r.hasExclusive);
+      })
+      .catch(() => {
+        setCartTax(0);
+        setCartTaxExclusive(false);
+      });
   }, [lines, subtotal, sessionToken]);
 
   const handlePaymentComplete = useCallback(() => {
@@ -1887,7 +1895,9 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         <PaymentModal
           open={showPayment}
           lineItems={lines}
-          total={total}
+          total={total && cartTaxExclusive && cartTax > 0
+            ? { minor_units: total.minor_units + cartTax, currency: total.currency }
+            : total}
           discountPercent={discountPercent}
           discountLabel={discountLabel}
           userId={userId}

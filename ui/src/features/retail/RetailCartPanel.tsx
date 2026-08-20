@@ -9,12 +9,27 @@ import { clampRetailCartWidth } from './RetailCartPanel.constants';
 
 // ── Grouped prop interfaces ────────────────────────────────────────
 
+/**
+ * The amount the customer pays: the pre-tax cart total PLUS the tax when
+ * the applied tax is exclusive (added on top of prices). Inclusive tax is
+ * already embedded in the prices, so it is NOT added again.
+ */
+function grandTotal(totals: CartTotalsData): Money {
+  const base = totals.total!;
+  if (!totals.cartTaxExclusive || totals.cartTax <= 0) return base;
+  return { minor_units: base.minor_units + totals.cartTax, currency: base.currency };
+}
+
 export interface CartTotalsData {
   subtotal: Money | null;
   total: Money | null;
   discountPercent: number;
   discountAmount: Money | null;
   cartTax: number;
+  /** True when the applied tax is exclusive (added on top of prices).
+   *  The grand total must include `cartTax` only in this case — inclusive
+   *  tax is already embedded in the prices. */
+  cartTaxExclusive: boolean;
 }
 
 export interface CartLineActions {
@@ -354,7 +369,7 @@ export default function RetailCartPanel({
               )}
               <div className="retail-total-row retail-total-row--grand" aria-live="polite" aria-atomic="true">
                 <span>{l10n.getString('cart-total-label')}</span>
-                <span>{totals.total ? formatMoney(totals.total) : '—'}</span>
+                <span>{totals.total ? formatMoney(grandTotal(totals)) : '—'}</span>
               </div>
             </div>
             {selectedCustomer && (

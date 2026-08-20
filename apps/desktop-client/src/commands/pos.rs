@@ -1406,7 +1406,7 @@ pub async fn compute_cart_tax_scoped(
     lines: Vec<oz_core::db::CartLineTaxInput>,
     currency: String,
     state: State<'_, AppState>,
-) -> Result<i64, AppError> {
+) -> Result<oz_core::db::CartTaxResult, AppError> {
     let parsed: oz_core::Currency = currency
         .parse()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
@@ -1427,7 +1427,7 @@ pub async fn compute_cart_tax_scoped(
         oz_core::Settings::get_tax_rounding_mode(&db)?,
     )?;
     drop(db);
-    Ok(tax.minor_units)
+    Ok(tax)
 }
 
 // ── Hold Orders ──────────────────────────────────────────────────────

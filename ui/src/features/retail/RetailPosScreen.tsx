@@ -923,11 +923,13 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   // ── Live tax preview ────────────────────────────────────────
 
   const [cartTax, setCartTax] = useState<number>(0);
+  const [cartTaxExclusive, setCartTaxExclusive] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
     if (lines.length === 0 || !subtotal) {
       setCartTax(0);
+      setCartTaxExclusive(false);
       return () => { controller.abort(); };
     }
     const currency = subtotal.currency;
@@ -937,8 +939,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       unit_price_minor: l.unit_price.minor_units,
     }));
     computeCartTax(sessionToken, taxLines, currency)
-      .then((tax) => { if (!controller.signal.aborted) setCartTax(tax); })
-      .catch(() => { if (!controller.signal.aborted) setCartTax(0); });
+      .then((r) => { if (!controller.signal.aborted) { setCartTax(r.taxMinor); setCartTaxExclusive(r.hasExclusive); } })
+      .catch(() => { if (!controller.signal.aborted) { setCartTax(0); setCartTaxExclusive(false); } });
     return () => { controller.abort(); };
   }, [lines, subtotal, sessionToken]);
 
@@ -1372,7 +1374,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         lineItems={lines.map((l) => ({
           ...l, sku: l.sku, name: l.name ?? '', qty: l.qty, unit_price: l.unit_price,
         }))}
-        total={total}
+        total={total && cartTaxExclusive && cartTax > 0
+          ? { minor_units: total.minor_units + cartTax, currency: total.currency }
+          : total}
         discountPercent={discountPercent}
         discountLabel={discountLabel}
         userId={userId}
@@ -1519,6 +1523,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             discountPercent,
             discountAmount,
             cartTax,
+            cartTaxExclusive,
           }}
           retailCartWidth={retailCartWidth}
           serialNumbers={serialNumbers}

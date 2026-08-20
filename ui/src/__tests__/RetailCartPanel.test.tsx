@@ -53,6 +53,7 @@ function makeProps(overrides: Partial<RetailCartPanelProps> = {}): RetailCartPan
       discountPercent: 0,
       discountAmount: null,
       cartTax: 0,
+      cartTaxExclusive: false,
     },
     retailCartWidth: 360,
     serialNumbers: {},

@@ -22,6 +22,20 @@ pub struct CartLineTaxInput {
     pub unit_price_minor: i64,
 }
 
+/// Result of cart-level tax computation, including whether any EXCLUSIVE
+/// rate applied. The frontend must add `tax_minor` to the payable total
+/// ONLY when `has_exclusive` is true — inclusive tax is already embedded
+/// in the displayed price, so adding it again would double-charge.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CartTaxResult {
+    /// Total tax across all lines/rates, in minor units.
+    pub tax_minor: i64,
+    /// True when at least one applied rate is exclusive (tax added on top
+    /// of the price). When false, all rates were inclusive or none applied.
+    pub has_exclusive: bool,
+}
+
 // ── Export types ─────────────────────────────────────────────────────
 
 /// Row returned by [`Store::export_daily_summary`].
@@ -1959,6 +1973,11 @@ impl Store<'_> {
         let currency = sale.currency;
         let mut total_tax: Option<Money> = None;
         let mut subtotal: Option<Money> = None;
+        // TAX-06: exclusive-tax contributions tracked separately so the
+        // sale total reflects the true collectible amount. Inclusive tax
+        // is embedded in the displayed price (total already includes it);
+        // exclusive tax must be added to the total.
+        let mut exclusive_tax: Option<Money> = None;
 
         // MONEY-02 follow-up: reject negative line totals in a pre-pass so a
         // hand-built `Sale` cannot record negative tax on the ledger, and so
@@ -2006,6 +2025,16 @@ impl Store<'_> {
                         field: "tax",
                         message: "line tax overflow".into(),
                     })?;
+                // TAX-06: track exclusive tax for the total correction.
+                if !is_inclusive {
+                    exclusive_tax = Some(match exclusive_tax {
+                        None => tax,
+                        Some(acc) => acc.checked_add(tax).ok_or_else(|| CoreError::Validation {
+                            field: "tax",
+                            message: "exclusive tax accumulation overflow".into(),
+                        })?,
+                    });
+                }
                 // No DB tax_rate_id for override lines.
                 line.tax_rate_id = None;
                 line_breakdown.push(serde_json::json!({
@@ -2031,6 +2060,18 @@ impl Store<'_> {
                             field: "tax",
                             message: "line tax overflow".into(),
                         })?;
+                    // TAX-06: track exclusive tax for the total correction.
+                    if !rate.is_inclusive {
+                        exclusive_tax = Some(match exclusive_tax {
+                            None => tax,
+                            Some(acc) => {
+                                acc.checked_add(tax).ok_or_else(|| CoreError::Validation {
+                                    field: "tax",
+                                    message: "exclusive tax accumulation overflow".into(),
+                                })?
+                            }
+                        });
+                    }
                     line_breakdown.push(serde_json::json!({
                         "rate_id": rate.id,
                         "rate_bps": rate.rate_bps,
@@ -2085,13 +2126,31 @@ impl Store<'_> {
         // is propagated above instead of folded into `None`.
         sale.subtotal = subtotal.unwrap_or_else(|| Money::zero(currency));
         sale.tax_total = total_tax.unwrap_or_else(|| Money::zero(currency));
+
+        // TAX-06: when exclusive tax was computed, the sale total must
+        // include it. `Sale::from_cart` sets `total` from the cart total
+        // (post-discount, pre-tax); the customer pays the discounted
+        // subtotal PLUS the exclusive tax on top. Adding it here makes
+        // `sales.total_minor` the true collectible amount, matching the
+        // receipt's "grand total (subtotal + tax)" contract.
+        if let Some(et) = exclusive_tax {
+            sale.total = sale
+                .total
+                .checked_add(et)
+                .ok_or_else(|| CoreError::Validation {
+                    field: "total",
+                    message: "sale total overflow from exclusive tax".into(),
+                })?;
+        }
+
         Ok(())
     }
 
     /// Compute the total tax for a set of cart lines (live preview).
     ///
     /// For each cart line resolves ALL applicable tax rates and sums
-    /// their contributions. Returns the total tax amount.
+    /// their contributions. Returns the total tax amount plus whether any
+    /// EXCLUSIVE rate applied (see [`CartTaxResult`]).
     ///
     /// `mode` controls how fractional per-rate results are rounded
     /// (TAX-05): pass [`RoundingMode::HalfUp`] for new sales and
@@ -2101,8 +2160,9 @@ impl Store<'_> {
         lines: &[CartLineTaxInput],
         currency: Currency,
         mode: RoundingMode,
-    ) -> Result<Money, CoreError> {
+    ) -> Result<CartTaxResult, CoreError> {
         let mut total_tax: Option<Money> = None;
+        let mut has_exclusive = false;
 
         for line in lines {
             // MONEY-02: negative qty/price would produce a negative line total
@@ -2145,6 +2205,9 @@ impl Store<'_> {
                     currency,
                     mode,
                 )?;
+                if !rate.is_inclusive {
+                    has_exclusive = true;
+                }
                 total_tax = match total_tax {
                     None => Some(tax),
                     Some(acc) => {
@@ -2157,7 +2220,11 @@ impl Store<'_> {
             }
         }
 
-        Ok(total_tax.unwrap_or_else(|| Money::zero(currency)))
+        let tax = total_tax.unwrap_or_else(|| Money::zero(currency));
+        Ok(CartTaxResult {
+            tax_minor: tax.minor_units,
+            has_exclusive,
+        })
     }
 
     /// Resolve all applicable tax rates for a SKU using the chain:
