@@ -42,8 +42,8 @@ describe('useShiftTimer', () => {
   it('clears interval when shift becomes null', () => {
     const shift = { openedAt: new Date(Date.now() - 3600_000).toISOString() };
     const { result, rerender } = renderHook(
-      ({ shift }) => useShiftTimer(shift),
-      { initialProps: { shift } },
+      ({ shift }: { shift: { openedAt: string } | null }) => useShiftTimer(shift),
+      { initialProps: { shift: shift as { openedAt: string } | null } },
     );
 
     const duringShift = result.current;

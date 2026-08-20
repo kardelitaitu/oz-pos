@@ -108,8 +108,7 @@ describe('useCartWidth', () => {
   });
 
   it('re-clamps on window resize', () => {
-    const { result } = renderHook(() => useCartWidth(mockRef));
-    const initialWidth = result.current.cartWidth;
+    renderHook(() => useCartWidth(mockRef));
 
     act(() => {
       window.dispatchEvent(new Event('resize'));

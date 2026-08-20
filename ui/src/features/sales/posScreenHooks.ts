@@ -3,7 +3,7 @@
 // Extracted hooks from PosScreen.tsx for testability and reusability.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { LineId, CartLine } from '@/types/domain';
+import type { LineId, CartLine, Sku, Money } from '@/types/domain';
 
 // ── useShiftTimer ────────────────────────────────────────────────────────
 /**
@@ -125,7 +125,6 @@ export function useCartKeyboardNavigation(
   lines: CartLine[],
   total: { minor_units: number; currency: string } | null,
   handlers: CartKeyboardHandlers,
-  cartLineRefs: React.RefObject<Map<LineId, HTMLDivElement>>,
 ) {
   const {
     handlePay,
@@ -218,11 +217,11 @@ const LOCKED_CART_KEY = 'pos-locked-cart';
 
 interface LockedCartData {
   lines: Array<{
-    sku: string;
-    name?: string;
-    category?: string;
+    sku: Sku;
+    name: string | undefined;
+    category: string | undefined;
     qty: number;
-    unit_price: { minor_units: number; currency: string };
+    unit_price: Money;
   }>;
   discountPercent: number;
   discountLabel: string;
@@ -253,8 +252,8 @@ export function useLockedCartPersistence(
         const data: LockedCartData = {
           lines: lines.map((l) => ({
             sku: l.sku,
-            name: l.name,
-            category: l.category,
+            name: l.name ?? undefined,
+            category: l.category ?? undefined,
             qty: l.qty,
             unit_price: l.unit_price,
           })),
@@ -281,8 +280,8 @@ export function useLockedCartPersistence(
         setLines(data.lines.map((l) => ({
           id: `restored-${Date.now()}-${Math.random().toString(36).slice(2)}` as LineId,
           sku: l.sku as CartLine['sku'],
-          name: l.name,
-          category: l.category,
+          name: l.name ?? '',
+          category: l.category ?? '',
           qty: l.qty,
           unit_price: l.unit_price,
         })));

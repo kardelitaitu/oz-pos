@@ -117,10 +117,13 @@ describe('useLockedCartPersistence', () => {
     });
 
     expect(mockSetLines).toHaveBeenCalled();
-    const restoredLines = mockSetLines.mock.calls[0][0];
-    expect(restoredLines).toHaveLength(2);
-    expect(restoredLines[0].sku).toBe('COFFEE');
-    expect(restoredLines[1].sku).toBe('BAGEL');
+    const restoredLines = mockSetLines.mock.calls[0]?.[0];
+    expect(restoredLines).toBeDefined();
+    if (restoredLines) {
+      expect(restoredLines).toHaveLength(2);
+      expect(restoredLines[0].sku).toBe('COFFEE');
+      expect(restoredLines[1].sku).toBe('BAGEL');
+    }
 
     expect(mockSetDiscount).toHaveBeenCalledWith(10, '10% Off');
     expect(mockSetTipPercent).toHaveBeenCalledWith(15);
