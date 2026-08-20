@@ -89,7 +89,7 @@ vi.mock('recharts', () => ({
   PieChart: ({ children }: { children: React.ReactNode }) => <div data-testid="pie-chart">{children}</div>,
   Pie: ({ children }: { children: React.ReactNode }) => <div data-testid="pie">{children}</div>,
   Cell: () => <div data-testid="pie-cell" />,
-  Legend: () => <div data-testid="legend" />,
+  Legend: () => <div data-testid="legend" />
 }));
 
 // ── Mock API functions ────────────────────────────────────────────
@@ -136,8 +136,7 @@ vi.mock('@/components/Button', () => ({
 
 vi.mock('@/features/reports/SalesReportScreen.css', () => ({}));
 
-// ── Test helpers ──────────────────────────────────────────────────
-
+// ── Test helpers ──────────────────────────────────────────────
 function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
   const total_minor = overrides.total_minor ?? 150000;
   const cogs_minor = overrides.cogs_minor ?? 60000;
@@ -152,7 +151,7 @@ function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: numbe
   };
 }
 
-function buildWeeklyRevenue(overrides: Partial<{ week_start: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+function buildWeeklyRevenue(overrides: Partial<{ week_start: string; total_minor: number; currency: string; sale_count: number; cogs_mino: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
   const total_minor = overrides.total_minor ?? 500000;
   const cogs_minor = overrides.cogs_minor ?? 200000;
   return {
@@ -277,7 +276,6 @@ function buildTrendPoint(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 // ── Tests ────────────────────────────────────────────────────────
-
 describe('SalesReportScreen', () => {
   beforeEach(() => {
     // Default: never resolves (loading state)
@@ -371,7 +369,7 @@ describe('SalesReportScreen', () => {
   // ── Daily view data ──────────────────────────────────────────
   it('displays total revenue and total orders for daily data', async () => {
     mockGetDailyRevenue.mockResolvedValue([
-      buildDailyRevenue({ total_minor: 250000, sale_count: 5 }),
+      buildDailyRevenue({ total_minor: 250, sale_count: 5 }),
       buildDailyRevenue({ total_minor: 100000, sale_count: 3 }),
     ]);
     mockGetTopProducts.mockResolvedValue([]);
@@ -388,7 +386,7 @@ describe('SalesReportScreen', () => {
 
   it('shows gross profit total in daily view (HPP exposure)', async () => {
     mockGetDailyRevenue.mockResolvedValue([
-      buildDailyRevenue({ total_minor: 250000, cogs_minor: 100000, sale_count: 5 }),
+      buildDailyRevenue({ total_minor: 250, cogs_minor: 100000, sale_count: 5 }),
       buildDailyRevenue({ total_minor: 100000, cogs_minor: 40000, sale_count: 3 }),
     ]);
     mockGetTopProducts.mockResolvedValue([]);
@@ -411,24 +409,23 @@ describe('SalesReportScreen', () => {
     });
 
     // Weekly rows carry the same HPP fields now.
-    mockGetWeeklyRevenue.mockResolvedValue([
-      buildWeeklyRevenue({ total_minor: 500000, cogs_minor: 300000, sale_count: 45 }),
-    ]);
-    mockGetDailyRevenue.mockClear();
-    mockGetWeeklyRevenue.mockClear();
+    mockGetDailyRevenue.mockReset();
+      mockGetWeeklyRevenue.mockReset();
+      mockGetWeeklyRevenue.mockResolvedValue([
+        buildWeeklyRevenue({ total_minor: 500000, cogs_minor: 300000, sale_count: 45 }),
+      ]);
 
     await userEvent.setup().click(screen.getByRole('radio', { name: /weekly/i }));
 
     await waitFor(() => {
       // Gross profit = 500000 − 300000 = 200000 → $2,000.00
-      expect(screen.getByText(/\$2,000\.00/)).toBeTruthy();
       // Margin % = 200000 / 500000 = 40%
+      expect(screen.getByText(/\$2,000\.00/)).toBeTruthy();
       expect(screen.getByText(/\(40\.0%\)/)).toBeTruthy();
     });
   });
 
   // ── REP-02: multi-currency periods never collapse into one total ──
-
   it('shows per-currency totals when the period spans multiple currencies', async () => {
     // Backend groups by currency, so a two-currency period arrives as two
     // rows with DIFFERENT currency codes (audit REP-02: the UI must never
@@ -467,7 +464,7 @@ describe('SalesReportScreen', () => {
     await waitFor(() => {
       expect(screen.getByText(/IDR 500,000/)).toBeTruthy();
     });
-    // Turn period comparison on; the prev-period fetch uses the same mock.
+    // Turn period comparison on; the prev-period feed uses the same mock.
     fireEvent.click(screen.getByRole('button', { name: 'Compare to previous period' }));
     await waitFor(() => {
       // The totals are per-currency; no single % delta over mixed currencies.
@@ -591,7 +588,7 @@ describe('SalesReportScreen', () => {
       'revenue',
     );
 
-    mockGetTopProducts.mockClear();
+    mockGetTopProducts.mockReset();
     resolveDefaultData();
     await userEvent.click(screen.getByRole('radio', { name: 'Rank by gross profit' }));
 
@@ -629,7 +626,7 @@ describe('SalesReportScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('Category Popularity')).toBeTruthy();
       // Category row: name, count, catalog ratio, ranked top products
-      // ('Drinks' also appears in the Demand Forecast card; '3' is a
+      // ('Drinks' also appears in the Demand Forecard card; '3' is a
       // heatmap hour header — use getAllByText for both).
       expect(screen.getAllByText('Drinks').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
@@ -663,7 +660,6 @@ describe('SalesReportScreen', () => {
     mockGetTopProducts.mockResolvedValue([]);
     mockGetHourlyHeatmap.mockResolvedValue([]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
-    mockGetCategoryPopularity.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
       const noResultsElements = screen.getAllByText('No results');
@@ -698,7 +694,7 @@ describe('SalesReportScreen', () => {
       5,
     );
 
-    mockGetCategoryPopularityTrend.mockClear();
+    mockGetCategoryPopularityTrend.mockReset();
     resolveDefaultData();
     await userEvent.click(screen.getByRole('radio', { name: /weekly/i }));
 
@@ -735,7 +731,6 @@ describe('SalesReportScreen', () => {
     mockGetHourlyHeatmap.mockResolvedValue([]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
     mockGetCategoryPopularity.mockResolvedValue([]);
-    mockGetCategoryPopularityTrend.mockResolvedValue([]);
     mockGetCategoryForecast.mockResolvedValue([
       {
         category_id: 'cat-x',
@@ -814,10 +809,10 @@ describe('SalesReportScreen', () => {
       expect(screen.getByTestId('bar-chart')).toBeTruthy();
     });
 
-    mockGetWeeklyRevenue.mockResolvedValue([buildWeeklyRevenue()]);
     // Reset mocks for the new view fetch
-    mockGetDailyRevenue.mockClear();
-    mockGetWeeklyRevenue.mockClear();
+    mockGetDailyRevenue.mockReset();
+    mockGetWeeklyRevenue.mockReset();
+    mockGetWeeklyRevenue.mockResolvedValue([buildWeeklyRevenue()]);
 
     await userEvent.click(screen.getByRole('radio', { name: /weekly/i }));
 
@@ -834,9 +829,9 @@ describe('SalesReportScreen', () => {
       expect(screen.getByTestId('bar-chart')).toBeTruthy();
     });
 
-    mockGetMonthlyRevenue.mockResolvedValue([buildMonthlyRevenue()]);
-    mockGetDailyRevenue.mockClear();
-    mockGetMonthlyRevenue.mockClear();
+    mockGetDailyRevenue.mockReset();
+      mockGetMonthlyRevenue.mockReset();
+      mockGetMonthlyRevenue.mockResolvedValue([buildMonthlyRevenue()]);
 
     await userEvent.click(screen.getByRole('radio', { name: /monthly/i }));
 
@@ -846,7 +841,7 @@ describe('SalesReportScreen', () => {
     });
   });
 
-  // ── Date filter ──────────────────────────────────────────────
+  // ── Date filter ────────────────────……………………………………
   it('re-fetches data when start date changes', async () => {
     resolveDefaultData();
     renderScreen();
@@ -854,7 +849,7 @@ describe('SalesReportScreen', () => {
       expect(screen.getByTestId('bar-chart')).toBeTruthy();
     });
 
-    mockGetDailyRevenue.mockClear();
+    mockGetDailyRevenue.mockReset();
     resolveDefaultData();
 
     const startInput = screen.getByLabelText('Start date') as HTMLInputElement;
@@ -872,7 +867,7 @@ describe('SalesReportScreen', () => {
       expect(screen.getByTestId('bar-chart')).toBeTruthy();
     });
 
-    mockGetDailyRevenue.mockClear();
+    mockGetDailyRevenue.mockReset();
     resolveDefaultData();
 
     const endInput = screen.getByLabelText('End date') as HTMLInputElement;
@@ -902,7 +897,7 @@ describe('SalesReportScreen', () => {
     });
 
     mockGetDailyRevenue.mockResolvedValue([
-      buildDailyRevenue({ date: '2026-07-01', total_minor: 150000, sale_count: 12 }),
+      buildDailyRevenue({ date: '2026-07-01', total_minor: 150, sale_count: 12 }),
     ]);
     mockGetTopProducts.mockResolvedValue([]);
     mockGetHourlyHeatmap.mockResolvedValue([]);
@@ -918,6 +913,110 @@ describe('SalesReportScreen', () => {
     expect(capturedAnchor).toBeTruthy();
     expect(capturedAnchor!.download).toMatch(/sales-report-.*\.csv/);
 
+    // Restore originals
+    URL.createObjectURL = origCreateObjectURL;
+    URL.revokeObjectURL = origRevokeObjectURL;
+    clickSpy.mockRestore();
+    createElementSpy.mockRestore();
+  });
+
+  // ── CSV escaping ─────────────────────────────────────────────
+  it('properly escapes CSV values with commas, quotes, and newlines (REP-08)', async () => {
+    // jsdom doesn't provide URL.createObjectURL — stub it
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+    let capturedBlob: Blob | null = null;
+     URL.createObjectURL = vi.fn((blob) => {
+      capturedBlob = blob;
+      return 'blob:test';
+    });
+    URL.revokeObjectURL = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    // Capture the anchor element via createElement spy (it's never appended to DOM)
+    const origCreateElement = document.createElement.bind(document);
+    let capturedAnchor: HTMLAnchorElement | null = null;
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
+      const el = origCreateElement(tag, options);
+      if (tag === 'a') capturedAnchor = el as HTMLAnchorElement;
+      return el;
+    });
+
+    // Test data with problematic characters that should be escaped in CSV
+    const problematicRevenue = [
+      buildDailyRevenue({ 
+        date: '2026-07-01', 
+        total_minor: 150, 
+        sale_count: 12,
+        currency: 'USD'
+      }), // Normal row
+      buildDailyRevenue({ 
+        date: '2026-07-02', 
+        total_minor: 200, 
+        sale_count: 8,
+        currency: 'USD, EUR' // Contains comma
+      }),
+      buildDailyRevenue({ 
+        date: '2026-07-03', 
+        total_minor: 250, 
+        sale_count: 15,
+        currency: 'USD "Special""' // Contains quotes
+      }),
+      buildDailyRevenue({ 
+        date: '2026-07-04\nNew Line', 
+        total_minor: 300, 
+        sale_count: 20,
+        currency: 'USD' // Contains newline in date
+      }),
+    ];
+    mockGetDailyRevenue.mockResolvedValue(problematicRevenue);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('bar-chart')).toBeTruthy();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(capturedAnchor).toBeTruthy();
+    expect(capturedAnchor!.download).toMatch(/sales-report-.*\.csv/);
+    
+    // Validate CSV content
+    expect(capturedBlob).toBeTruthy();
+    const blob = capturedBlob!;
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+    
+    // Parse CSV lines
+    const lines = text.trim().split('\n');
+    const headerLine = lines[0];
+    const dataLines = lines.slice(1);
+    
+    // Header should be: Period,Revenue,Currency,Orders
+    expect(headerLine).toBe('Period,Revenue,Currency,Orders');
+    
+    // First row (normal): 2026-07-01,1.50,USD,12
+    expect(dataLines[0]).toBe('2026-07-01,1.50,USD,12');
+    
+    // Second row (comma in currency): 2026-07-02,2.00,"USD, EUR",8
+    expect(dataLines[1]).toBe('2026-07-02,2.00,"USD, EUR",8');
+    
+    // Third row (quotes in currency): 2026-07-03,2.50,"USD ""Special""""",15
+    expect(dataLines[2]).toBe('2026-07-03,2.50,"USD ""Special""""",15');
+    
+    // Fourth row (newline in date): field is quoted and contains literal newline
+    // CSV split by \n will produce two lines for this row
+    expect(dataLines[3]).toBe('"2026-07-04');
+    expect(dataLines[4]).toBe('New Line",3.00,USD,20');
+    
     // Restore originals
     URL.createObjectURL = origCreateObjectURL;
     URL.revokeObjectURL = origRevokeObjectURL;
@@ -942,7 +1041,8 @@ describe('SalesReportScreen', () => {
 
     await waitFor(() => {
       expect(mockPrintSalesReceipt).toHaveBeenCalledTimes(1);
-      const callArgs = mockPrintSalesReceipt.mock.calls[0]![0] as Record<string, unknown>;          expect(callArgs['receiptNumber']).toEqual(expect.stringMatching(/^RPT-/));
+      const callArgs = mockPrintSalesReceipt.mock.calls[0]![0] as Record<string, unknown>;
+      expect(callArgs['receiptNumber']).toEqual(expect.stringMatching(/^RPT-/));
       expect(callArgs['items']).toBeTruthy();
     });
   });
@@ -1014,23 +1114,23 @@ describe('SalesReportScreen', () => {
   // ── REP-06: Race condition guard ────────────────────────────────
   it('ignores stale responses when filters change rapidly (race condition)', async () => {
     // This test exposes the REP-06 bug: when a user changes filters while a
-    // fetch is in flight, the stale response from the earlier fetch can
+    // fetch is in flight, the stale response from the earlier feed can
     // overwrite the current data if there's no request-generation guard.
     //
     // Scenario:
-    // 1. Initial fetch for date A completes (UI shows $1,000.00)
-    // 2. User changes start date to date B -> second fetch starts (loading=true)
-    // 3. FIRST fetch (for date A) resolves AFTER second fetch started
-    //    -> without guard, this stale response would overwrite the UI
-    // 4. Second fetch (for date B) resolves -> should win
+    // 1. Initial feed for date A completes (UI shows $1,000.00)
+    // 2. User changes start date to date B -> second feed starts (loading=true)
+    // 3. FIRST feed (for date A) resolves AFTER second feed started
+    //    -> without guard, this stale feed would overwrite the UI
+    // 4. Second feed (for date B) resolves -> should win
 
-    // Deferred promise for the SECOND fetch
-    let resolveSecondFetch: (value: DailyRevenueRow[]) => void;
-    const secondFetchPromise = new Promise<DailyRevenueRow[]>((resolve) => {
-      resolveSecondFetch = resolve;
+    // Deferred promise for the SECOND feed
+    let resolveSecondFeed: (value: DailyRevenueRow[]) => void;
+    const secondFeedPromise = new Promise<DailyRevenueRow[]>((resolve) => {
+      resolveSecondFeed = resolve;
     });
 
-    // STEP 1: Initial fetch for date A (Jan 1) - use mockResolvedValue
+    // STEP 1: Initial feed for date A (Jan 1) - use mockResolvedValue
     // Returns $1,000.00 (100000 minor units)
     mockGetDailyRevenue.mockResolvedValue([
       buildDailyRevenue({ total_minor: 100000, sale_count: 5 }),
@@ -1041,14 +1141,14 @@ describe('SalesReportScreen', () => {
 
     renderScreen();
 
-    // Wait for initial data to load (UI shows $1,000.00)
+    // Wait for initial feed to load (UI shows $1,000.00)
     await waitFor(() => {
       expect(screen.getByText(/\$1,000\.00/)).toBeTruthy();
     });
 
     // STEP 2: User QUICKLY changes start date to date B (Feb 1)
-    // This triggers a SECOND fetch for date B (deferred)
-    mockGetDailyRevenue.mockImplementationOnce(() => secondFetchPromise);
+    // This triggers a SECOND feed for date B (deferred)
+    mockGetDailyRevenue.mockImplementationOnce(() => resolveSecondFeed);
     mockGetTopProducts.mockResolvedValue([]);
     mockGetHourlyHeatmap.mockResolvedValue([]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
@@ -1057,20 +1157,20 @@ describe('SalesReportScreen', () => {
     expect(startInput).toBeTruthy();
     fireEvent.change(startInput, { target: { value: '2026-02-01' } });
 
-    // STEP 3: FIRST fetch (stale, for date A) resolves NOW
+    // STEP 3: FIRST feed (stale, for date A) resolves NOW
     // It returns $1,500.00 (different from the initial $1,000.00 to detect overwrite)
-    // This simulates the case where the first request takes longer than expected
+    // This simulates the case where the first feed takes longer than expected
     mockGetDailyRevenue.mockResolvedValue([
-      buildDailyRevenue({ total_minor: 150000, sale_count: 8 }),
+      buildDailyRevenue({ total_minor: 150, sale_count: 8 }),
     ]);
 
-    // STEP 4: Second fetch (current, for date B) resolves
+    // STEP 4: Second feed (current, for date B) resolves
     // Returns $2,000.00
-    resolveSecondFetch!([
-      buildDailyRevenue({ total_minor: 200000, sale_count: 10 }),
+    resolveSecondFeed!([
+      buildDailyRevenue({ total_minor: 200, sale_count: 10 }),
     ]);
 
-    // The UI should show the SECOND fetch's data ($2,000.00), not the stale first ($1,500.00)
+    // The UI should show the SECOND feed's data ($2,000.00), not the stale first ($1,500.00)
     await waitFor(() => {
       expect(screen.getByText(/\$2,000\.00/)).toBeTruthy();
       expect(screen.queryByText(/\$1,500\.00/)).toBeNull();

@@ -54,6 +54,7 @@ sales-report-category-popularity-top = Penjual Teratas
 sales-report-category-popularity-uncategorized = Tanpa Kategori
 sales-report-popularity-trend = Tren Popularitas
 sales-report-demand-forecast = Perkiraan Permintaan
+sales-report-category-forecast = Perkiraan Kategori
 sales-report-demand-forecast-category = Kategori
 sales-report-demand-forecast-avg = Rata-rata / periode
 sales-report-demand-forecast-trend = Tren
