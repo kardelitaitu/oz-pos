@@ -33,7 +33,6 @@ test.describe('Critical Path: Settings Persistence', () => {
   test('change receipt paper width, navigate away, return, verify persisted', async ({ page }) => {
     // ── Step 1: Navigate to Settings → Receipt section ──────────────
     await page.evaluate(() => { window.location.hash = '#/settings'; });
-    await page.waitForTimeout(2_000);
 
     // Wait for settings sidebar.
     const sidebar = page.locator('[data-testid="settings-sidebar"]');
@@ -47,13 +46,11 @@ test.describe('Critical Path: Settings Persistence', () => {
       const opsExpanded = await opsCategory.getAttribute('aria-expanded');
       if (opsExpanded === 'false') {
         await opsCategory.click();
-        await page.waitForTimeout(300);
       }
     }
     const receiptNav = page.locator('.settings-nav-item').filter({ hasText: 'Receipt' });
     await expect(receiptNav).toBeVisible({ timeout: 3_000 });
     await receiptNav.click();
-    await page.waitForTimeout(1_000);
 
     // Verify Receipt section heading.
     const receiptHeading = page.locator('.settings-section-title').filter({ hasText: /Receipt|Receipt Settings/i });
@@ -81,14 +78,12 @@ test.describe('Critical Path: Settings Persistence', () => {
       }
 
       expect(changedValue).toBeTruthy();
-      await page.waitForTimeout(300);
     } else {
       // ── Step 2b: Alternative — change card size in Appearance ──────
       // If no paper width select, try Appearance card size instead.
       const appearanceNav = page.locator('.settings-nav-item').filter({ hasText: 'Appearance' });
       await expect(appearanceNav).toBeVisible({ timeout: 3_000 });
       await appearanceNav.click();
-      await page.waitForTimeout(1_000);
 
       await expect(page.locator('.settings-section-title').first()).toBeVisible({ timeout: 5_000 });
 
@@ -97,7 +92,6 @@ test.describe('Critical Path: Settings Persistence', () => {
       if (await increaseBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
         await increaseBtn.click();
         changedValue = 'increased';
-        await page.waitForTimeout(300);
       }
 
       expect(changedValue).toBeTruthy();
@@ -107,7 +101,6 @@ test.describe('Critical Path: Settings Persistence', () => {
     const generalNav = page.locator('.settings-nav-item').filter({ hasText: 'General' });
     await expect(generalNav).toBeVisible({ timeout: 3_000 });
     await generalNav.click();
-    await page.waitForTimeout(1_000);
 
     // Verify General section loaded.
     const generalHeading = page.locator('.settings-section-title').filter({ hasText: /General|Store/i });
@@ -117,7 +110,6 @@ test.describe('Critical Path: Settings Persistence', () => {
     if (selectExists) {
         // Return to Receipt (Operations category already expanded).
       await page.locator('.settings-nav-item').filter({ hasText: 'Receipt' }).click();
-      await page.waitForTimeout(1_000);
 
       // Verify the select still shows the changed value.
       const paperSelectAfter = page.locator('.receipt-paper-width-select, select[name="paperWidth"]').first();
@@ -127,7 +119,6 @@ test.describe('Critical Path: Settings Persistence', () => {
     } else {
       // Return to Appearance.
       await page.locator('.settings-nav-item').filter({ hasText: 'Appearance' }).click();
-      await page.waitForTimeout(1_000);
 
       // Verify the card size value persisted (mock dev-mock returns same state).
       await expect(page.locator('.settings-section-title').first()).toBeVisible({ timeout: 5_000 });
@@ -142,8 +133,7 @@ test.describe('Critical Path: Settings Persistence', () => {
 
   test('change store name in General section survives navigation', async ({ page }) => {
     // ── Step 1: Navigate to Settings ────────────────────────────────
-    await page.evaluate(() => { window.location.hash = '#/settings'; });
-    await page.waitForTimeout(2_000);
+    await page.evaluate(() => { window.location.hash = '#/settings' });
 
     await expect(page.locator('[data-testid="settings-sidebar"]')).toBeVisible({ timeout: 10_000 });
 
@@ -162,7 +152,6 @@ test.describe('Critical Path: Settings Persistence', () => {
     const newName = `E2E Test Store ${Date.now()}`;
     await storeNameInput.clear();
     await storeNameInput.fill(newName);
-    await page.waitForTimeout(300);
 
     const enteredValue = await storeNameInput.inputValue();
     expect(enteredValue).toBe(newName);
@@ -174,17 +163,14 @@ test.describe('Critical Path: Settings Persistence', () => {
       const opsExpanded = await opsCategory.getAttribute('aria-expanded');
       if (opsExpanded === 'false') {
         await opsCategory.click();
-        await page.waitForTimeout(300);
       }
     }
     const receiptNav = page.locator('.settings-nav-item').filter({ hasText: 'Receipt' });
     await expect(receiptNav).toBeVisible({ timeout: 3_000 });
     await receiptNav.click();
-    await page.waitForTimeout(1_000);
 
     // ── Step 4: Navigate back ──────────────────────────────────────
     await page.locator('.settings-nav-item').filter({ hasText: 'General' }).click();
-    await page.waitForTimeout(1_000);
 
     // ── Step 5: Verify store name persisted (dirty state kept the value) ──
     const storeInputAfter = page.locator('#settings-field-store-name');
@@ -195,7 +181,6 @@ test.describe('Critical Path: Settings Persistence', () => {
     // ── Step 6: Restore original value ──────────────────────────────
     await storeInputAfter.clear();
     await storeInputAfter.fill(originalValue);
-    await page.waitForTimeout(200);
 
     // Verify no crash.
     await expect(page.locator('[class*="error-boundary"]')).toHaveCount(0, { timeout: 3_000 });

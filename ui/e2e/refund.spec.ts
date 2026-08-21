@@ -36,7 +36,6 @@ test.describe('Refund Flow', () => {
     // Add a product to the cart.
     const firstProduct = page.locator('.retail-product-btn').first();
     await firstProduct.click();
-    await page.waitForTimeout(500);
 
     // The cart panel should show at least one line item. The panel
     // container is .retail-cart (no data-testid="cart-panel" exists).
@@ -46,7 +45,6 @@ test.describe('Refund Flow', () => {
     const payBtn = page.locator('.retail-cart-action-btn--pay').first();
     await expect(payBtn).toBeVisible({ timeout: 5_000 });
     await payBtn.click();
-    await page.waitForTimeout(500);
 
     // Payment modal must appear.
     await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
@@ -59,13 +57,11 @@ test.describe('Refund Flow', () => {
     await expect(tenderInput).toBeVisible({ timeout: 5_000 });
     await tenderInput.click();
     await tenderInput.pressSequentially('9999999', { delay: 30 });
-    await page.waitForTimeout(300);
 
     // Find and click settle/confirm button.
     const settleBtn = page.locator('[data-testid="settle-button"], button:has-text("Settle"), button:has-text("Confirm")').first();
     await expect(settleBtn).toBeVisible({ timeout: 5_000 });
     await settleBtn.click();
-    await page.waitForTimeout(1_000);
 
     // After sale completes, the cart should reset (product grid remains).
     await expect(page.locator('.retail-product-btn').first()).toBeVisible({ timeout: TIMEOUT });
@@ -74,7 +70,6 @@ test.describe('Refund Flow', () => {
 
     // In store-pos workspace, sales history is a sub-view opened via F6.
     await page.keyboard.press('F6');
-    await page.waitForTimeout(1_000);
 
     // Sales history container must render.
     await expect(page.locator('.sales-history')).toBeVisible({ timeout: TIMEOUT });
@@ -90,7 +85,6 @@ test.describe('Refund Flow', () => {
     const viewBtn = page.locator('.sales-history-action-btn').first();
     await expect(viewBtn).toBeVisible({ timeout: 5_000 });
     await viewBtn.click();
-    await page.waitForTimeout(500);
 
     // Detail modal must open.
     await expect(page.locator('.sales-history-modal')).toBeVisible({ timeout: 5_000 });
@@ -103,7 +97,6 @@ test.describe('Refund Flow', () => {
     // ── Step 4: Open Refund Modal ─────────────────────────────
 
     await refundBtn.click();
-    await page.waitForTimeout(500);
 
     // Refund modal must be visible.
     await expect(page.locator('.refund-overlay')).toBeVisible({ timeout: 5_000 });
@@ -118,7 +111,6 @@ test.describe('Refund Flow', () => {
     const firstLineCheckbox = page.locator('.refund-line-label input[type="checkbox"]').first();
     await expect(firstLineCheckbox).toBeVisible({ timeout: 5_000 });
     await firstLineCheckbox.click();
-    await page.waitForTimeout(300);
 
     // After checking, the line should have the "selected" class.
     await expect(page.locator('.refund-line-selected')).toBeVisible({ timeout: 3_000 });
@@ -128,14 +120,12 @@ test.describe('Refund Flow', () => {
     const reasonInput = page.locator('.refund-input').first();
     await expect(reasonInput).toBeVisible({ timeout: 3_000 });
     await reasonInput.fill('Customer returned item — wrong size');
-    await page.waitForTimeout(200);
 
     // ── Step 7: Click Process Refund ──────────────────────────
 
     const processBtn = page.locator('.refund-actions button:has-text("Process Refund"), .refund-actions button:has-text("Proses")').first();
     await expect(processBtn).toBeEnabled({ timeout: 3_000 });
     await processBtn.click();
-    await page.waitForTimeout(1_000);
 
     // ── Step 8: Verify refund processed state ─────────────────
 

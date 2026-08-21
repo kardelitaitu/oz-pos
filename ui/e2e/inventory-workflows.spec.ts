@@ -99,7 +99,6 @@ test.describe('Inventory Workflows — Full', () => {
 
     // Type a search query to find products.
     await searchInput.fill('latte');
-    await page.waitForTimeout(1_000);
 
     // Product results must appear (mock returns filtered products).
     const productItem = page.locator('.inv-adjust-product-item').first();
@@ -107,7 +106,6 @@ test.describe('Inventory Workflows — Full', () => {
 
     // Click a product to select it.
     await productItem.click();
-    await page.waitForTimeout(500);
 
     // Selected product section must appear with name and SKU.
     await expect(page.locator('.inv-adjust-selected-product')).toBeVisible({ timeout: 5_000 });
@@ -125,14 +123,12 @@ test.describe('Inventory Workflows — Full', () => {
     const qtyInput = page.locator('#inv-field-qty');
     await expect(qtyInput).toBeVisible({ timeout: 3_000 });
     await qtyInput.fill('5');
-    await page.waitForTimeout(200);
     expect(await qtyInput.inputValue()).toBe('5');
 
     // Reason dropdown must be visible.
     const reasonSelect = page.locator('#inv-field-reason');
     await expect(reasonSelect).toBeVisible({ timeout: 3_000 });
     await reasonSelect.selectOption({ index: 1 });
-    await page.waitForTimeout(200);
 
     // Action buttons (Cancel / Apply) must be present.
     const actions = page.locator('.inv-adjust-actions');
@@ -142,7 +138,6 @@ test.describe('Inventory Workflows — Full', () => {
     const applyBtn = actions.locator('button:has-text("Apply"), button:has-text("Terapkan")').first();
     await expect(applyBtn).toBeVisible({ timeout: 3_000 });
     await applyBtn.click();
-    await page.waitForTimeout(1_000);
 
     // After successful adjustment, the selected product should clear
     // or the screen should remain visible (no crash).
@@ -165,7 +160,6 @@ test.describe('Inventory Workflows — Full', () => {
     const newPoBtn = page.locator('button:has-text("New Purchase Order"), button:has-text("Pesanan")').first();
     await expect(newPoBtn).toBeVisible({ timeout: 5_000 });
     await newPoBtn.click();
-    await page.waitForTimeout(500);
 
     // PO form modal must open.
     await expect(page.locator('.po-form-overlay')).toBeVisible({ timeout: 5_000 });
@@ -176,13 +170,11 @@ test.describe('Inventory Workflows — Full', () => {
     const poNumberInput = poInputs.first();
     await expect(poNumberInput).toBeVisible({ timeout: 3_000 });
     await poNumberInput.fill('PO-E2E-001');
-    await page.waitForTimeout(200);
 
     // Supplier dropdown must be present.
     const supplierSelect = page.locator('.po-form-select').first();
     await expect(supplierSelect).toBeVisible({ timeout: 3_000 });
     await supplierSelect.selectOption({ index: 1 });
-    await page.waitForTimeout(200);
 
     // Line items table must be present.
     await expect(page.locator('.po-form-lines-table')).toBeVisible({ timeout: 3_000 });
@@ -191,14 +183,12 @@ test.describe('Inventory Workflows — Full', () => {
     const skuInputs = page.locator('.po-form-lines-table').locator('.po-form-input').first();
     await expect(skuInputs).toBeVisible({ timeout: 3_000 });
     await skuInputs.fill('TEST-SKU');
-    await page.waitForTimeout(200);
 
     // Fill Qty in first line (third .po-form-input in the row: sku, name, qty, cost).
     const lineInputs = page.locator('.po-form-lines-table').locator('.po-form-input');
     const qtyInput = lineInputs.nth(2);
     await expect(qtyInput).toBeVisible({ timeout: 3_000 });
     await qtyInput.fill('10');
-    await page.waitForTimeout(200);
 
     // "+ Add Line" button must be visible.
     const addLineBtn = page.locator('button:has-text("+ Add Line"), button:has-text("+ Tambah")');
@@ -206,7 +196,6 @@ test.describe('Inventory Workflows — Full', () => {
 
     // Add a second line.
     await addLineBtn.click();
-    await page.waitForTimeout(300);
 
     // Action buttons (Cancel / Create PO) must be present.
     const actions = page.locator('.po-form-actions');
@@ -216,7 +205,6 @@ test.describe('Inventory Workflows — Full', () => {
     const createBtn = actions.locator('button:has-text("Create"), button:has-text("Buat")').first();
     await expect(createBtn).toBeVisible({ timeout: 3_000 });
     await createBtn.click();
-    await page.waitForTimeout(1_000);
 
     // After submission, form should close (or show validation error).
     // Verify the PO table is still visible.
@@ -248,7 +236,6 @@ test.describe('Inventory Workflows — Full', () => {
     const newTransferBtn = page.locator('button:has-text("New Transfer"), button:has-text("Transfer Baru")');
     await expect(newTransferBtn).toBeVisible({ timeout: 5_000 });
     await newTransferBtn.click();
-    await page.waitForTimeout(500);
 
     // Create transfer modal must open.
     const overlay = page.locator('.stock-transfers-overlay');
@@ -258,25 +245,21 @@ test.describe('Inventory Workflows — Full', () => {
     const sourceInput = page.locator('#st-source-location');
     await expect(sourceInput).toBeVisible({ timeout: 3_000 });
     await sourceInput.fill('Warehouse A');
-    await page.waitForTimeout(200);
 
     // Destination location input must be present.
     const destInput = page.locator('#st-dest-location');
     await expect(destInput).toBeVisible({ timeout: 3_000 });
     await destInput.fill('Store B');
-    await page.waitForTimeout(200);
 
     // SKU input in line items table must be present.
     const lineSkuInput = page.locator('.stock-transfers-line-sku').first();
     await expect(lineSkuInput).toBeVisible({ timeout: 3_000 });
     await lineSkuInput.fill('SKU-001');
-    await page.waitForTimeout(200);
 
     // Qty input in line items must be present.
     const lineQtyInput = page.locator('.stock-transfers-line-qty').first();
     await expect(lineQtyInput).toBeVisible({ timeout: 3_000 });
     await lineQtyInput.fill('3');
-    await page.waitForTimeout(200);
 
     // "Create Transfer" button must be present.
     const createBtn = page.locator('button:has-text("Create Transfer"), button:has-text("Buat")').first();
@@ -284,7 +267,6 @@ test.describe('Inventory Workflows — Full', () => {
 
     // Click Create Transfer to submit.
     await createBtn.click();
-    await page.waitForTimeout(1_000);
 
     // After submission, modal should close and table should remain visible.
     await expect(page.locator('.stock-transfers')).toBeVisible({ timeout: 5_000 });
