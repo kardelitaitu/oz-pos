@@ -71,6 +71,7 @@ for (const p of all) {
 const isExternal = (h) => /^(?:[a-z]+:)?\/\//i.test(h) || /^(?:mailto:|tel:|data:|javascript:)/i.test(h);
 const isTemplateLiteral = (h) => h.includes('${');
 const isGeneratedPortalAsset = (abs) => abs.startsWith(PORTAL + '/assets/');
+
 const isRustdocIdentifierLink = (abs) =>
   abs.startsWith(PORTAL + '/api/rust/') && !abs.endsWith('/') && !/\.[^/]*$/.test(abs);
 const isPortalLink = (abs) => abs === PORTAL || abs.startsWith(PORTAL + '/');
@@ -94,6 +95,9 @@ for (const p of pages) {
     // Portal links are only checkable when the portal is in this build.
     if (isPortalLink(abs) && !portalPresent) continue;
     if (!ok.has(abs) && !ok.has(abs.replace(/\/$/, ''))) {
+      // mdBook's print.html flattens all pages to portal root; relative
+      // links from subpages resolve incorrectly from print.html. Skip.
+      if (pageUrl.endsWith('/docs-portal/print.html')) continue;
       broken.push(`${pageUrl} -> ${m[1]} (resolved ${abs})`);
     }
   }
