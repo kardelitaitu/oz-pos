@@ -526,7 +526,8 @@ mod tests {
         // the CREATE TABLE IF NOT EXISTS statement. If PG is running
         // locally, the empty list produces an empty outcomes vec; if not,
         // we get a transport error. Either outcome is acceptable.
-        let result = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        // Use short timeout (500ms) since connection to missing PG should fail fast.
+        let result = tokio::time::timeout(std::time::Duration::from_millis(500), async {
             let transport = PgTransport::new("localhost", 5432, "nonexistent", "u", "p")?;
             transport.push_items(&[]).await
         })
@@ -716,12 +717,11 @@ mod tests {
         let transport = PgTransport::new("localhost", 5432, "nonexistent", "u", "p")
             .expect("pool creation should succeed");
 
+        // Use short timeout (500ms) since connection to missing PG should fail fast.
+        const SHORT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+
         // pull_updates with since = None, cursor = None
-        let result1 = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            transport.pull_updates(None, None),
-        )
-        .await;
+        let result1 = tokio::time::timeout(SHORT_TIMEOUT, transport.pull_updates(None, None)).await;
         match result1 {
             Ok(Ok(_resp)) => {} // PG running locally
             Ok(Err(e)) => {
@@ -734,7 +734,7 @@ mod tests {
 
         // pull_updates with since = Some, cursor = None
         let result2 = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
+            SHORT_TIMEOUT,
             transport.pull_updates(Some("2026-01-01T00:00:00Z"), None),
         )
         .await;
@@ -750,7 +750,7 @@ mod tests {
 
         // pull_updates with since = Some, cursor = Some
         let result3 = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
+            SHORT_TIMEOUT,
             transport.pull_updates(
                 Some("2026-01-01T00:00:00Z"),
                 Some("2026-01-02T00:00:00Z|item-42"),

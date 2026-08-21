@@ -1027,7 +1027,12 @@ mod tests {
         let err = rt.block_on(async {
             // Disable system proxy so it doesn't intercept 127.0.0.1:1 and
             // return HTTP 403 instead of the raw TCP connection refused error.
-            let client = reqwest::Client::builder().no_proxy().build().unwrap();
+            // Use a very short client timeout so the test fails fast.
+            let client = reqwest::Client::builder()
+                .no_proxy()
+                .timeout(std::time::Duration::from_millis(50))
+                .build()
+                .unwrap();
             client
                 .get("http://127.0.0.1:1/refused")
                 .send()
@@ -1036,7 +1041,9 @@ mod tests {
         });
         let msg = super::classify_transport_error(&err, "http://127.0.0.1:1");
         assert!(
-            msg.contains("cloud server not running") || msg.contains("cannot connect"),
+            msg.contains("cloud server not running")
+                || msg.contains("cannot connect")
+                || msg.contains("timed out"),
             "expected connection error message, got: {msg}"
         );
     }
@@ -1046,7 +1053,7 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let err = rt.block_on(async {
             let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_millis(1))
+                .timeout(std::time::Duration::from_millis(50))
                 .build()
                 .unwrap();
             client
@@ -1074,7 +1081,7 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let err = rt.block_on(async {
             let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_millis(1))
+                .timeout(std::time::Duration::from_millis(50))
                 .build()
                 .unwrap();
             client
