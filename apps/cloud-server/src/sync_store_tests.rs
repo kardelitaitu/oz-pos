@@ -65,9 +65,10 @@ async fn sqlite_backend_push_pull_plan_snapshot_roundtrip() {
     assert_eq!(store.distinct_tenant_count().await, 1);
 
     // Snapshot is empty but well-formed for a tenant with no products.
-    assert_eq!(store.snapshot_products("tenant-a").await.unwrap().len(), 0);
-    assert_eq!(store.snapshot_tax_rates("tenant-a").await.unwrap().len(), 0);
-    assert_eq!(store.snapshot_users("tenant-a").await.unwrap().len(), 0);
+    let (products, tax_rates, users) = store.snapshot_all("tenant-a").await.unwrap();
+    assert_eq!(products.len(), 0);
+    assert_eq!(tax_rates.len(), 0);
+    assert_eq!(users.len(), 0);
 }
 
 /// Duplicate-id detection for the Postgres path keys on SQLSTATE 23505,
@@ -191,19 +192,17 @@ async fn pg_integration_push_pull_plan_snapshot_roundtrip() {
     }
 
     // Products: track_serial=1 → true, is_active=1 → true.
-    let products = store.snapshot_products(&tenant).await.unwrap();
+    let (products, tax_rates, users) = store.snapshot_all(&tenant).await.unwrap();
     assert_eq!(products.len(), 1);
     assert_eq!(products[0]["track_serial"], true);
     assert_eq!(products[0]["is_active"], true);
 
     // Tax rates: is_default=1 → true, is_inclusive=0 → false.
-    let tax_rates = store.snapshot_tax_rates(&tenant).await.unwrap();
     assert_eq!(tax_rates.len(), 1);
     assert_eq!(tax_rates[0]["is_default"], true);
     assert_eq!(tax_rates[0]["is_inclusive"], false);
 
     // Users: is_active=0 → false, and pin_hash must not leak (SYNC-06).
-    let users = store.snapshot_users(&tenant).await.unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0]["is_active"], false);
     assert!(users[0].get("pin_hash").is_none());
