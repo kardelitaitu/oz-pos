@@ -90,10 +90,18 @@ if [ -n "$paddle_block" ]; then
 fi
 
 # ── 4: cloud server /health ───────────────────────────────────────────
-sync_health="$(wget -qO- http://localhost:3099/health 2>/dev/null)" || {
-    echo "unified healthcheck: sync (cloud server) /health failed" >&2
+# Retry up to 3 times with 2s delay — the Rust server may still be
+# starting (schema migration on first PostgreSQL boot).
+sync_health=""
+for i in 1 2 3; do
+    sync_health="$(wget -qO- http://localhost:3099/health 2>/dev/null)" && break
+    echo "unified healthcheck: sync attempt $i/3 failed, retrying..." >&2
+    sleep 2
+done
+if [ -z "$sync_health" ]; then
+    echo "unified healthcheck: sync (cloud server) /health failed after 3 retries" >&2
     exit 1
-}
+fi
 
 case "$sync_health" in
     *'"status":"ok"'*) ;;

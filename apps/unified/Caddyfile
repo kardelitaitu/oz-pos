@@ -82,7 +82,11 @@
 	}
 	handle /api/health {
 		import security_headers
-		reverse_proxy localhost:3099
+		reverse_proxy localhost:3099 {
+			health_uri /health
+			health_interval 5s
+			health_timeout 3s
+		}
 	}
 	handle /metrics {
 		import security_headers
