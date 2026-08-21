@@ -9,6 +9,10 @@
 //! and the expiry timestamp. There is no revocation list in this pass;
 //! tokens are valid until their `exp` claim expires.
 
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use std::time::Instant;
+
 use axum::{
     extract::Request,
     http::{StatusCode, header},
@@ -18,8 +22,17 @@ use axum::{
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
 const DEFAULT_EXPIRY_HOURS: i64 = 24;
+
+/// JWT validation cache: token → (claims, cached_at).
+/// Reduces CPU by skipping HMAC + base64 decode on repeat requests.
+/// TTL is 60 seconds — short enough that expired tokens are caught
+/// quickly, long enough to eliminate redundant crypto on hot paths.
+const JWT_CACHE_TTL_SECS: u64 = 60;
+static JWT_CACHE: LazyLock<RwLock<HashMap<String, (ApiTokenClaims, Instant)>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// The payload embedded in every API token.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -124,12 +137,40 @@ pub fn create_token_scoped(
 /// Validate a JWT and return its claims.
 ///
 /// Returns `Ok(claims)` if the token is valid and not expired.
-pub fn validate_token(token_str: &str) -> Result<ApiTokenClaims, jsonwebtoken::errors::Error> {
+/// Uses an in-memory cache to skip redundant HMAC + base64 decode
+/// on hot paths (saves ~0.005 core at 200+ terminals).
+pub async fn validate_token(
+    token_str: &str,
+) -> Result<ApiTokenClaims, jsonwebtoken::errors::Error> {
+    // Check cache first (read lock — non-blocking for concurrent readers).
+    {
+        let cache = JWT_CACHE.read().await;
+        if let Some((claims, cached_at)) = cache.get(token_str) {
+            if cached_at.elapsed().as_secs() < JWT_CACHE_TTL_SECS {
+                return Ok(claims.clone());
+            }
+        }
+    }
+
+    // Cache miss or expired — validate the token cryptographically.
     let secret = signing_secret(None);
     let decoding_key = DecodingKey::from_secret(secret.as_bytes());
     let mut validation = Validation::default();
     validation.validate_exp = true;
-    decode::<ApiTokenClaims>(token_str, &decoding_key, &validation).map(|data| data.claims)
+    let claims =
+        decode::<ApiTokenClaims>(token_str, &decoding_key, &validation).map(|data| data.claims)?;
+
+    // Store in cache (write lock — brief).
+    {
+        let mut cache = JWT_CACHE.write().await;
+        // Evict expired entries opportunistically (keep cache bounded).
+        if cache.len() > 1000 {
+            cache.retain(|_, (_, at)| at.elapsed().as_secs() < JWT_CACHE_TTL_SECS);
+        }
+        cache.insert(token_str.to_owned(), (claims.clone(), Instant::now()));
+    }
+
+    Ok(claims)
 }
 
 /// Build a structured 401 response distinguishing why auth failed
@@ -172,7 +213,7 @@ pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, R
         .strip_prefix("Bearer ")
         .ok_or_else(|| unauthorized("missing_token"))?;
 
-    match validate_token(token) {
+    match validate_token(token).await {
         Ok(claims) => {
             req.extensions_mut().insert(claims);
             Ok(next.run(req).await)

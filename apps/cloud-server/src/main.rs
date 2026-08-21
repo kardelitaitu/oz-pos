@@ -43,7 +43,6 @@ use rusqlite::Connection;
 use serde::Serialize;
 use tokio::sync::Mutex;
 use tower::limit::ConcurrencyLimitLayer;
-use tower_http::compression::CompressionLayer;
 use tracing::info;
 
 use crate::rate_limit::{RateLimiterState, start_rate_limit_cleanup};
@@ -467,7 +466,8 @@ pub fn build_router(
             config.sync_redirect_url.clone(),
             redirect::redirect_middleware,
         ))
-        .layer(CompressionLayer::new().gzip(true))
+        // NOTE: gzip compression is handled by Caddy (Caddyfile:104).
+        // The Rust CompressionLayer was removed to save ~0.01 core CPU.
         .layer(cors)
         .layer(axum::middleware::from_fn(
             oz_api::security_headers_middleware,

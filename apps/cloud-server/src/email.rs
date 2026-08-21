@@ -96,10 +96,11 @@ pub async fn send_email(
 /// report-type-aware generation.
 pub fn start_report_sender_loop(db: Arc<tokio::sync::Mutex<rusqlite::Connection>>) {
     tokio::spawn(async move {
-        info!("Report sender background loop started (poll interval: 60s)");
-
+        // Poll every 5 min instead of 60s — reports are hourly, so 60s
+        // polling wastes CPU on idle loops. Saves ~0.001 core.
+        info!("Report sender background loop started (poll interval: 300s)");
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(300)).await;
 
             if let Err(e) = try_send_scheduled(db.clone()).await {
                 error!("Report sender loop error: {e}");

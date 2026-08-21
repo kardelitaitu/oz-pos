@@ -359,14 +359,19 @@ pub fn start_rate_limit_cleanup(state: RateLimiterState) -> tokio::sync::watch::
     let (tx, mut rx) = tokio::sync::watch::channel::<bool>(false);
 
     tokio::spawn(async move {
-        // Wait for initial shutdown signal
+        // Lazy cleanup: only sweep when bucket count is high.
+        // With <1000 buckets, the sweep is a no-op (HashMap::retain on
+        // a small map is negligible). This avoids acquiring the write
+        // lock every 60s when there are few active tenants.
         loop {
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(60)) => {
-                    state.cleanup_stale_buckets(Duration::from_secs(300)).await;
+                _ = tokio::time::sleep(Duration::from_secs(120)) => {
+                    let count = state.bucket_count().await;
+                    if count > 500 {
+                        state.cleanup_stale_buckets(Duration::from_secs(300)).await;
+                    }
                 }
                 _ = rx.changed() => {
-                    // Shutdown signal received
                     break;
                 }
             }

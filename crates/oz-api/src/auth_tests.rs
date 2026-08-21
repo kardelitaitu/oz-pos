@@ -1,52 +1,52 @@
 use super::*;
 
-#[test]
-fn create_and_validate() {
+#[tokio::test]
+async fn create_and_validate() {
     let resp = create_token("test-script", Some(1), None, None).unwrap();
-    let claims = validate_token(&resp.token).unwrap();
+    let claims = validate_token(&resp.token).await.unwrap();
     assert_eq!(claims.sub, "test-script");
     assert_eq!(claims.jti, resp.token_id);
 }
 
-#[test]
-fn bad_token_is_rejected() {
-    assert!(validate_token("not.a.jwt").is_err());
+#[tokio::test]
+async fn bad_token_is_rejected() {
+    assert!(validate_token("not.a.jwt").await.is_err());
 }
 
-#[test]
-fn tampered_token_is_rejected() {
+#[tokio::test]
+async fn tampered_token_is_rejected() {
     let resp = create_token("tamper", Some(24), None, None).unwrap();
     // Append junk to invalidate the signature.
     let bad = format!("{}x", resp.token);
-    assert!(validate_token(&bad).is_err());
+    assert!(validate_token(&bad).await.is_err());
 }
 
-#[test]
-fn expired_token_is_rejected() {
+#[tokio::test]
+async fn expired_token_is_rejected() {
     // Create a token that was already expired 1 hour ago.
     let resp = create_token("expired", Some(-1), None, None).unwrap();
-    let result = validate_token(&resp.token);
+    let result = validate_token(&resp.token).await;
     assert!(result.is_err(), "expired token should be rejected");
 }
 
-#[test]
-fn empty_token_is_rejected() {
-    assert!(validate_token("").is_err());
+#[tokio::test]
+async fn empty_token_is_rejected() {
+    assert!(validate_token("").await.is_err());
 }
 
-#[test]
-fn whitespace_only_token_is_rejected() {
-    assert!(validate_token("   ").is_err());
+#[tokio::test]
+async fn whitespace_only_token_is_rejected() {
+    assert!(validate_token("   ").await.is_err());
 }
 
-#[test]
-fn create_token_default_expiry_works() {
+#[tokio::test]
+async fn create_token_default_expiry_works() {
     // None expiry should default to 24 hours and produce a valid token.
     let resp = create_token("default-exp", None, None, None).unwrap();
     assert!(!resp.token.is_empty());
     assert!(!resp.expires_at.is_empty());
     assert!(!resp.token_id.is_empty());
-    let claims = validate_token(&resp.token).unwrap();
+    let claims = validate_token(&resp.token).await.unwrap();
     assert_eq!(claims.sub, "default-exp");
 }
 
@@ -82,20 +82,20 @@ fn expires_at_is_valid_rfc3339() {
     );
 }
 
-#[test]
-fn claims_have_non_empty_fields() {
+#[tokio::test]
+async fn claims_have_non_empty_fields() {
     let resp = create_token("fields", Some(1), None, None).unwrap();
-    let claims = validate_token(&resp.token).unwrap();
+    let claims = validate_token(&resp.token).await.unwrap();
     assert!(!claims.sub.is_empty());
     assert!(!claims.jti.is_empty());
     assert!(claims.exp > 0);
     assert!(claims.iat > 0);
 }
 
-#[test]
-fn claims_exp_is_after_iat() {
+#[tokio::test]
+async fn claims_exp_is_after_iat() {
     let resp = create_token("time-order", Some(1), None, None).unwrap();
-    let claims = validate_token(&resp.token).unwrap();
+    let claims = validate_token(&resp.token).await.unwrap();
     assert!(claims.exp > claims.iat, "exp should be after iat");
 }
 

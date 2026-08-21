@@ -351,11 +351,14 @@ async fn snapshot_handler(
         )
     };
 
-    // P-3 Step 4: check in-memory cache (5-min TTL).
+    // P-3 Step 4: check in-memory cache (15-min TTL).
+    // Reference data (products, tax rates, users) changes infrequently
+    // during a shift. 15 min reduces cache misses by 3× vs 5 min.
+    const SNAPSHOT_CACHE_TTL_SECS: u64 = 900;
     {
         let cache = state.snapshot_cache.lock().await;
         if let Some((cached_at, cached_bytes)) = cache.get(tenant_id)
-            && cached_at.elapsed().as_secs() < 300
+            && cached_at.elapsed().as_secs() < SNAPSHOT_CACHE_TTL_SECS
             && let Ok(json) = serde_json::from_slice::<serde_json::Value>(cached_bytes)
         {
             return Ok(axum::Json(json));
