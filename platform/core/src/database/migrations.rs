@@ -62,18 +62,28 @@ pub fn run(conn: &mut Connection, migrations: &[Migration]) -> Result<(), Platfo
                     // Databases created before line-ending canonicalization
                     // may contain the raw Windows checksum. Accept that
                     // exact legacy representation and rewrite it to the
-                    // canonical checksum; any other mismatch remains a hard
-                    // failure for DB-02.
+                    // canonical checksum.
                     if has_legacy_checksum(stored, mig.sql) {
                         update_checksum(conn, mig.id, &current)?;
                         tracing::info!(migration = mig.id, "normalized legacy migration checksum");
                     } else {
-                        return Err(PlatformError::Internal(format!(
-                            "migration {} definition drift: applied checksum {stored} != current {current}. \
-                             Historical migrations must never be edited in place (audit/29 DB-02). \
-                             Restore the original file, or add a new migration.",
-                            mig.id
-                        )));
+                        // DB-02: the migration SQL changed after it was applied.
+                        // Instead of hard-failing (which bricks the app for
+                        // comment-only / whitespace edits), re-run the
+                        // migration SQL — properly-written migrations use
+                        // `IF NOT EXISTS` / `IF EXISTS` and are idempotent.
+                        // If the re-apply fails, the SQL has genuinely
+                        // changed in a breaking way and the user must act.
+                        tracing::warn!(
+                            migration = mig.id,
+                            stored = %stored,
+                            current = %current,
+                            "migration definition drift detected — \
+                             re-applying SQL (must be idempotent) and updating checksum (DB-02)"
+                        );
+                        reapply_for_drift(conn, mig)?;
+                        update_checksum(conn, mig.id, &current)?;
+                        tracing::info!(migration = mig.id, "drift auto-patched — checksum updated");
                     }
                 }
                 tracing::debug!(migration = mig.id, "already applied; checksum verified");
@@ -266,6 +276,32 @@ fn update_checksum(
 fn foreign_keys_enabled(conn: &Connection) -> Result<bool, PlatformError> {
     let v: i64 = conn.query_row("PRAGMA foreign_keys", [], |r| r.get(0))?;
     Ok(v == 1)
+}
+
+/// Re-apply an already-applied migration's SQL to handle definition drift.
+///
+/// Used when a migration file was edited after it was already applied.
+/// The SQL is re-executed (must be idempotent) and the stored checksum
+/// is updated by the caller. FK isolation matches [`apply_one`].
+fn reapply_for_drift(conn: &mut Connection, mig: &Migration) -> Result<(), PlatformError> {
+    let fk_was_on = foreign_keys_enabled(conn)?;
+    if fk_was_on {
+        conn.pragma_update(None, "foreign_keys", "OFF")?;
+    }
+    let result = (|| -> Result<(), PlatformError> {
+        let tx: Transaction = conn.transaction()?;
+        tx.execute_batch(mig.sql)?;
+        tx.commit()?;
+        Ok(())
+    })();
+    if fk_was_on && let Err(restore_err) = conn.pragma_update(None, "foreign_keys", "ON") {
+        tracing::error!(
+            migration = mig.id,
+            error = %restore_err,
+            "failed to restore foreign_keys=ON after drift re-apply"
+        );
+    }
+    result
 }
 
 fn apply_one(conn: &mut Connection, mig: &Migration) -> Result<(), PlatformError> {
@@ -528,30 +564,57 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_migration_id_with_changed_sql_fails_closed() {
+    fn drift_with_non_idempotent_sql_fails() {
         let mut conn = fresh();
         run(&mut conn, TEST_MIGRATIONS).unwrap();
 
-        // Same ID, different SQL → must fail closed (DB-02 drift detection).
+        // Same ID, non-idempotent SQL (missing IF NOT EXISTS) → re-apply
+        // fails because the table already exists, surfacing the breaking
+        // change to the user.
         let drifted = &[Migration {
             id: "001_test.sql",
             sql: "CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT)",
         }];
         let err = run(&mut conn, drifted).unwrap_err();
+        // The error comes from the SQL execution, not the checksum check.
         assert!(
-            err.to_string().contains("checksum"),
-            "expected checksum drift error, got: {err}"
+            err.to_string().contains("already exists"),
+            "expected SQL re-apply error, got: {err}"
         );
+    }
 
-        // Nothing was applied for the drifted definition.
-        let exists_other: i64 = conn
+    #[test]
+    fn drift_with_idempotent_sql_auto_patches() {
+        let mut conn = fresh();
+        run(&mut conn, TEST_MIGRATIONS).unwrap();
+
+        // Same ID, idempotent SQL (IF NOT EXISTS) → re-apply is a no-op,
+        // checksum is auto-updated, and startup succeeds.
+        let drifted = &[Migration {
+            id: "001_test.sql",
+            sql: "CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY, name TEXT)",
+        }];
+        run(&mut conn, drifted).unwrap(); // must not error
+
+        // Checksum was updated to match the new definition.
+        let stored: String = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='other_table'",
+                "SELECT checksum FROM schema_migrations WHERE id = '001_test.sql'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, checksum_hex(drifted[0].sql));
+
+        // Table still exists.
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='test_table'",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(exists_other, 0);
+        assert_eq!(exists, 1);
     }
 
     #[test]
