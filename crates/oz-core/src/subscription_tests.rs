@@ -62,7 +62,7 @@ fn tier_max_stores() {
     assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
     assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
     assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
-    assert_eq!(SubscriptionTier::Premium.max_stores(), Some(10));
+    assert_eq!(SubscriptionTier::Premium.max_stores(), Some(5));
     assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
 }
 
@@ -576,7 +576,7 @@ fn max_stores_per_tier() {
     assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
     assert_eq!(SubscriptionTier::Plus.max_stores(), Some(1));
     assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
-    assert_eq!(SubscriptionTier::Premium.max_stores(), Some(10));
+    assert_eq!(SubscriptionTier::Premium.max_stores(), Some(5));
     assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
 }
 
@@ -710,10 +710,10 @@ fn test_pro_quota_limits() {
 
 #[test]
 fn test_free_history_limit() {
-    assert_eq!(SubscriptionTier::Free.sales_history_days(), Some(30));
-    // All paid tiers are unlimited.
-    assert_eq!(SubscriptionTier::Plus.sales_history_days(), None);
-    assert_eq!(SubscriptionTier::Pro.sales_history_days(), None);
+    // Free: 3 months, Plus: 1 year, Pro: 5 years, Premium+: unlimited.
+    assert_eq!(SubscriptionTier::Free.sales_history_days(), Some(90));
+    assert_eq!(SubscriptionTier::Plus.sales_history_days(), Some(365));
+    assert_eq!(SubscriptionTier::Pro.sales_history_days(), Some(5 * 365));
     assert_eq!(SubscriptionTier::Premium.sales_history_days(), None);
     assert_eq!(SubscriptionTier::Enterprise.sales_history_days(), None);
 }
@@ -737,7 +737,7 @@ fn test_staff_limits_per_tier() {
     assert_eq!(SubscriptionTier::Free.max_staff_users(), Some(1));
     assert_eq!(SubscriptionTier::Plus.max_staff_users(), Some(5));
     assert_eq!(SubscriptionTier::Pro.max_staff_users(), Some(20));
-    assert_eq!(SubscriptionTier::Premium.max_staff_users(), None);
+    assert_eq!(SubscriptionTier::Premium.max_staff_users(), Some(50));
     assert_eq!(SubscriptionTier::Enterprise.max_staff_users(), None);
 }
 

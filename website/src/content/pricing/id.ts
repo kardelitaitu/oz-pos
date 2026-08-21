@@ -32,7 +32,7 @@ export const pricing: PricingTier[] = [
       { label: '1 toko', included: true },
       { label: '1 register', included: true },
       { label: '1 gudang', included: true },
-      { label: 'Riwayat penjualan 30 hari', included: true },
+      { label: 'Riwayat penjualan 3 bulan', included: true },
       { label: 'Pembayaran QRIS', included: false },
       { label: 'Sinkron cloud', included: false },
     ],
@@ -48,19 +48,6 @@ export const pricing: PricingTier[] = [
       monthly: { price: 'Rp 49.000', period: '/bulan', priceId: 'pri_placeholder_plus_monthly_usd' },
       yearly: { price: 'Rp 500.000', period: '/tahun', priceId: 'pri_placeholder_plus_yearly_usd' },
     },
-    // Paket Restaurant Starter (C3.2, subscription-tiers.md §5): Plus +
-    // KDS dengan diskon 10% dari harga à la carte. HARGA SEMENTARA (Plus
-    // dasar + add-on KDS, diskon 10%) — ganti dengan angka katalog saat
-    // harga riil tersedia; id placeholder menurun ke fallback mailto.
-    bundle: {
-      id: 'restaurant_starter',
-      label: 'Paket Restaurant Starter',
-      note: 'Plus + Layar Dapur (KDS) — diskon 10% dari à la carte',
-      prices: {
-        monthly: { price: 'Rp 74.000', period: '/bulan', priceId: 'pri_placeholder_plus_bundle_monthly' },
-        yearly: { price: 'Rp 750.000', period: '/tahun', priceId: 'pri_placeholder_plus_bundle_yearly' },
-      },
-    },
     features: [
       { label: '1 toko', included: true },
       { label: '2 register', included: true },
@@ -75,7 +62,7 @@ export const pricing: PricingTier[] = [
     tierKey: 'pro',
     name: 'Pro',
     currency: 'IDR',
-    description: 'Untuk bisnis berkembang — analitik, KDS, dan multi-terminal.',
+    description: 'Untuk bisnis berkembang — analitik, Display Dapur, dan multi-terminal.',
     cta: 'Pilih Pro',
     highlight: true,
     prices: {
@@ -91,7 +78,7 @@ export const pricing: PricingTier[] = [
     features: [
       { label: '2 toko', included: true },
       { label: '5 register per toko', included: true },
-      { label: 'Layar dapur (KDS)', included: true },
+      { label: 'Display Dapur', included: true },
       { label: 'Laporan & analitik', included: true },
       { label: 'Kartu Stripe', included: true },
       { label: 'Sinkron cloud', included: true },
@@ -105,11 +92,11 @@ export const pricing: PricingTier[] = [
     description: 'Untuk jaringan multi-toko — loyalitas dan otomatisasi.',
     cta: 'Pilih Premium',
     prices: {
-      monthly: { price: 'Rp 199.000', period: '/bulan', priceId: 'pri_placeholder_premium_monthly_usd' },
-      yearly: { price: 'Rp 2.000.000', period: '/tahun', priceId: 'pri_placeholder_premium_yearly_usd' },
+      monthly: { price: 'Rp 399.000', period: '/bulan', priceId: 'pri_placeholder_premium_monthly_usd' },
+      yearly: { price: 'Rp 3.999.000', period: '/tahun', priceId: 'pri_placeholder_premium_yearly_usd' },
     },
     features: [
-      { label: 'Toko tanpa batas', included: true },
+      { label: '5 toko', included: true },
       { label: 'Register tanpa batas', included: true },
       { label: 'Program loyalitas', included: true },
       { label: 'Email laporan terjadwal', included: true },
@@ -141,12 +128,12 @@ export const pricing: PricingTier[] = [
 
 // Mirrors the quota & feature matrix in subscription-tiers.md §3.
 export const featureRows: FeatureRow[] = [
-  { label: 'Toko', values: { free: 1, plus: 1, pro: 2, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
+  { label: 'Toko', values: { free: 1, plus: 1, pro: 2, premium: 5, enterprise: 'Tanpa batas' } },
   { label: 'Terminal (register) per toko', values: { free: 1, plus: 2, pro: 5, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
   { label: 'Gudang', values: { free: 1, plus: 2, pro: 3, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
-  { label: 'Layar KDS', values: { free: 0, plus: 0, pro: '1 per toko', premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
-  { label: 'Staf pengguna', values: { free: 1, plus: 5, pro: 20, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
-  { label: 'Riwayat penjualan', values: { free: '30 hari', plus: 'Tanpa batas', pro: 'Tanpa batas', premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
+  { label: 'Layar Display Dapur', values: { free: 0, plus: 0, pro: '1 per toko', premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
+  { label: 'Staf pengguna', values: { free: 1, plus: 5, pro: 20, premium: 50, enterprise: 'Tanpa batas' } },
+  { label: 'Riwayat penjualan', values: { free: '3 bulan', plus: '1 tahun', pro: '5 tahun', premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
   { label: 'Pembayaran QRIS', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Kartu Stripe', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },
   { label: 'Sinkron cloud', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },

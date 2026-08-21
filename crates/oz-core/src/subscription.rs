@@ -132,7 +132,7 @@ impl SubscriptionTier {
         match self {
             Self::Free | Self::OneTime | Self::Plus => Some(1),
             Self::Pro => Some(2),
-            Self::Premium => Some(10),
+            Self::Premium => Some(5),
             Self::Enterprise => None,
         }
     }
@@ -167,17 +167,20 @@ impl SubscriptionTier {
             Self::Free | Self::OneTime => Some(1),
             Self::Plus => Some(5),
             Self::Pro => Some(20),
-            Self::Premium | Self::Enterprise => None,
+            Self::Premium => Some(50),
+            Self::Enterprise => None,
         }
     }
 
     /// How far back (in days) sales history can be viewed/exported.
-    /// Returns `None` for unlimited (Plus and above). Free is capped at
-    /// 30 days — the primary Free → Plus upgrade trigger (§3, §9 item 2).
+    /// Returns `None` for unlimited (Premium/Enterprise). Free/Plus/Pro
+    /// have capped history as a tier differentiator.
     pub fn sales_history_days(&self) -> Option<i64> {
         match self {
-            Self::Free | Self::OneTime => Some(30),
-            Self::Plus | Self::Pro | Self::Premium | Self::Enterprise => None,
+            Self::Free | Self::OneTime => Some(90),   // 3 months
+            Self::Plus => Some(365),                  // 1 year
+            Self::Pro => Some(5 * 365),               // 5 years
+            Self::Premium | Self::Enterprise => None, // Unlimited
         }
     }
 

@@ -26,15 +26,10 @@ interface Props {
 
 export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
-  // Vertical landing pages deep-link `pricing?bundle=restaurant_starter#plus`
-  // (C3.2): pre-enable the Plus card's bundle toggle from the URL. SSR-safe:
-  // window only exists after hydration (the grid mounts with client:load).
-  const [bundleOn, setBundleOn] = useState(false);
   // C4.1: A/B test — ?ab=pro_price activates the $7.99 variant for Pro monthly
   const [abVariant, setAbVariant] = useState<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('bundle') === 'restaurant_starter') setBundleOn(true);
     const ab = params.get('ab');
     if (ab) setAbVariant(ab);
   }, []);
@@ -84,12 +79,7 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
         {tiers.map((tier) => {
           const isFree = tier.tierKey === 'free';
           const isEnterprise = tier.tierKey === 'enterprise';
-          // The bundle toggle (C3.2) swaps the Plus card's price + checkout
-          // to the Restaurant Starter bundle: the checkout then carries
-          // bundle='restaurant_starter' and the webhook mints the
-          // bundle-widened quota block (kds at Plus).
-          const bundleActive = Boolean(tier.bundle && bundleOn);
-          let price = bundleActive && tier.bundle ? tier.bundle.prices[billing] : tier.prices[billing];
+          let price = tier.prices[billing];
           // C4.1: A/B test override — when ?ab=pro_price is set and this tier
           // has a variantPriceId, swap the price + priceId for the variant.
           let abActive = false;
@@ -103,7 +93,6 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
             cta: tier.cta,
             period: billing,
             priceId: price.priceId,
-            bundle: bundleActive && tier.bundle ? tier.bundle.id : undefined,
             abVariant: abActive && abVariant ? abVariant : undefined,
           };
           return (
@@ -111,12 +100,12 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
               key={tier.id}
               id={tier.id}
               className={[
-                'flex scroll-mt-24 flex-col rounded-xl border p-6',
+                'relative flex scroll-mt-24 flex-col rounded-xl border p-6',
                 tier.highlight ? 'border-accent bg-surface' : 'border-ink/10 bg-surface/40',
               ].join(' ')}
             >
               {tier.highlight && (
-                <span className="mb-3 inline-flex w-fit items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-black">
+                <span className="absolute -top-3 right-4 z-10 inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-black shadow-md">
                   {t(locale, 'pricingPage.mostPopular')}
                 </span>
               )}
@@ -130,21 +119,19 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
               )}
               <p className="mt-2 text-sm text-muted">{tier.description}</p>
 
-              {tier.bundle && (
-                <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-md border border-ink/10 bg-surface/40 p-3 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={bundleOn}
-                    onChange={(e) => setBundleOn(e.target.checked)}
-                    className="mt-0.5 accent-accent"
-                  />
-                  <span>
-                    <span className="font-semibold text-ink">{tier.bundle.label}</span>
-                    <span className="mt-0.5 block text-muted">{tier.bundle.note}</span>
-                  </span>
-                </label>
-              )}
+              {/* Features list — grows to fill space, pushing button to bottom */}
+              <ul className="mt-6 flex-1 space-y-2 text-sm">
+                {tier.features.map((f) => (
+                  <li key={f.label} className={['flex items-center gap-2', f.included ? '' : 'text-muted'].join(' ')}>
+                    <span aria-hidden="true" className={f.included ? 'text-link' : 'text-muted/50'}>
+                      {f.included ? '✓' : '✗'}
+                    </span>
+                    {f.label}
+                  </li>
+                ))}
+              </ul>
 
+              {/* Button pinned to bottom */}
               <div className="mt-6">
                 {isFree ? (
                   <a
@@ -157,17 +144,6 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
                   <CheckoutButton tier={checkoutTier} locale={locale} />
                 )}
               </div>
-
-              <ul className="mt-6 space-y-2 text-sm">
-                {tier.features.map((f) => (
-                  <li key={f.label} className={['flex items-center gap-2', f.included ? '' : 'text-muted'].join(' ')}>
-                    <span aria-hidden="true" className={f.included ? 'text-link' : 'text-muted/50'}>
-                      {f.included ? '✓' : '✗'}
-                    </span>
-                    {f.label}
-                  </li>
-                ))}
-              </ul>
             </article>
           );
         })}

@@ -24,7 +24,7 @@ fn capabilities_reflect_free_tier_and_zero_usage() {
     assert_eq!(dto.tier, "free");
     assert_eq!(dto.max_stores, Some(1));
     assert_eq!(dto.max_staff_users, Some(1));
-    assert_eq!(dto.sales_history_days, Some(30));
+    assert_eq!(dto.sales_history_days, Some(90)); // 3 months for Free tier
     assert!(!dto.supports_qris);
     assert!(!dto.supports_analytics);
     assert!(!dto.supports_loyalty);
@@ -63,8 +63,8 @@ fn capabilities_reflect_premium_tier() {
     seed_tier(&conn, "premium");
     let dto = caps(&conn);
     assert_eq!(dto.tier, "premium");
-    // C4.2: Premium allows up to 10 stores self-serve
-    assert_eq!(dto.max_stores, Some(10));
+    // C4.2: Premium allows up to 5 stores self-serve
+    assert_eq!(dto.max_stores, Some(5));
     assert_eq!(dto.max_pos_instances, None);
     assert_eq!(dto.max_staff_users, None);
     assert_eq!(dto.sales_history_days, None);
