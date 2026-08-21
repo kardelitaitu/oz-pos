@@ -183,9 +183,9 @@ impl DbPool {
 
         let pool = deadpool_postgres::Pool::builder(manager)
             .max_size(pool_size)
-            // The 5s wait timeout needs a runtime to sleep on. deadpool's
-            // default `rt_tokio_1` feature provides TokioRuntime; binding it
-            // here makes `wait_timeout` actually enforceable.
+            // The timeouts need a runtime to sleep on. deadpool's default
+            // `rt_tokio_1` feature provides TokioRuntime; binding it here
+            // makes the timeout options actually enforceable.
             .runtime(deadpool_postgres::Runtime::Tokio1)
             // Bound the wait for a pool slot: deadpool defaults to an
             // UNBOUNDED wait, so a stalled DB (slow query holding all
@@ -194,6 +194,15 @@ impl DbPool {
             // restart. Fail fast after 5s instead (the doc's §7.2 "5-20ms
             // typical wait" becomes an upper bound, not a hope).
             .wait_timeout(Some(std::time::Duration::from_secs(5)))
+            // Bound connection establishment: a flaky addon must not let a
+            // new-connection attempt hang the requesting handler forever.
+            .create_timeout(Some(std::time::Duration::from_secs(10)))
+            // Bound the recycle (is_closed) check so a wedged pooled
+            // connection can't stall checkout. Note: deadpool 0.12 has no
+            // max_lifetime/idle_timeout (added in 0.13+); stale connections
+            // closed by the PG addon are already caught reactively by
+            // RecyclingMethod::Fast's per-checkout is_closed() probe.
+            .recycle_timeout(Some(std::time::Duration::from_secs(5)))
             .build()
             .map_err(|e| DbError::Pool(e.to_string()))?;
 
