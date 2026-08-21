@@ -62,6 +62,14 @@ struct SettingsUpdatePayload {
     terminal_id: String,
 }
 
+/// Payload for the `finalize_sale` sync action — the cloud webhook path
+/// enqueues `{"sale_id": …}` after payment capture so the pending sale
+/// completes on the terminal.
+#[derive(Deserialize)]
+struct FinalizeSalePayload {
+    sale_id: String,
+}
+
 /// Outcome of applying a remote item atomically (SYNC-10).
 ///
 /// [`SyncQueue::apply_remote_atomic`] returns only `applied` for legacy
@@ -410,6 +418,17 @@ impl SyncQueue {
                     );
                 }
             }
+            // A sale completed on the CLOUD (payment captured via the
+            // Stripe/Square webhook) — finalize the pending sale locally.
+            // The webhook enqueues `{"sale_id": …}`; without this arm the
+            // item dead-lettered as "unsupported" and the sale stayed
+            // pending forever. `finalize_sale` is idempotent (only
+            // transitions status='pending' → 'completed').
+            "finalize_sale" => {
+                let payload: FinalizeSalePayload = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid finalize payload: {e}")))?;
+                Store::finalize_sale_in_tx(tx, &payload.sale_id)?;
+            }
             _ => {
                 return Err(CoreError::Internal(format!(
                     "unsupported remote sync action: {}",
@@ -554,6 +573,15 @@ impl SyncQueue {
                         "sync settings delta write failed (non-fatal)"
                     );
                 }
+                Ok(())
+            }
+            // A sale completed on the CLOUD (payment captured via the
+            // Stripe/Square webhook) — finalize the pending sale locally.
+            // Idempotent: only transitions status='pending' → 'completed'.
+            "finalize_sale" => {
+                let payload: FinalizeSalePayload = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid finalize payload: {e}")))?;
+                store.finalize_sale(&payload.sale_id)?;
                 Ok(())
             }
             // Unsupported action — log and skip.
@@ -1150,6 +1178,86 @@ mod tests {
         let remote = OfflineQueueItem::new("unknown.action", r#"{\"data\":\"test\"}"#);
         assert!(queue.apply_remote_atomic(&store, &remote).is_err());
         assert!(!store.is_remote_item_applied(&remote.id).unwrap());
+    }
+
+    // ── finalize_sale (cloud webhook → terminal) ─────────────────
+
+    /// The cloud server's webhook path enqueues a `finalize_sale` item
+    /// (`{"sale_id": …}`) into offline_queue so the pending sale completes
+    /// on the terminal after payment capture. The dispatcher MUST apply
+    /// it: transition the sale to completed.
+    #[test]
+    fn apply_remote_atomic_finalizes_pending_sale() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        // Seed a pending sale the way the terminal's complete flow leaves it.
+        let sale_id = "sale-finalize-1";
+        store
+            .conn()
+            .execute(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method,
+                                    tendered_minor, discount_percent, discount_label, user_id,
+                                    created_at, updated_at, subtotal_minor, tax_total_minor,
+                                    deduction_locations, version)
+                 VALUES (?1, 1000, 'USD', 1, 'pending', 'CARD', 1000, 0, NULL, 'user-1',
+                         '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 1000, 0, '[]', 1)",
+                [sale_id],
+            )
+            .unwrap();
+
+        // The webhook's exact payload shape.
+        let remote =
+            OfflineQueueItem::new("finalize_sale", &format!(r#"{{"sale_id":"{sale_id}"}}"#));
+        let outcome = queue
+            .apply_remote_atomic_full(&store, &remote)
+            .expect("finalize_sale must apply, not dead-letter as unsupported");
+        assert!(outcome.applied, "finalize_sale must be marked applied");
+
+        // The pending sale must now be completed.
+        let status: String = store
+            .conn()
+            .query_row("SELECT status FROM sales WHERE id = ?1", [sale_id], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            status, "completed",
+            "sale must be finalized by the remote item"
+        );
+    }
+
+    #[test]
+    fn apply_remote_legacy_finalizes_pending_sale() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let sale_id = "sale-finalize-legacy";
+        store
+            .conn()
+            .execute(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method,
+                                    tendered_minor, discount_percent, discount_label, user_id,
+                                    created_at, updated_at, subtotal_minor, tax_total_minor,
+                                    deduction_locations, version)
+                 VALUES (?1, 1000, 'USD', 1, 'pending', 'CARD', 1000, 0, NULL, 'user-1',
+                         '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 1000, 0, '[]', 1)",
+                [sale_id],
+            )
+            .unwrap();
+
+        let remote =
+            OfflineQueueItem::new("finalize_sale", &format!(r#"{{"sale_id":"{sale_id}"}}"#));
+        queue
+            .apply_remote(&store, &remote)
+            .expect("legacy apply_remote must accept finalize_sale");
+        let status: String = store
+            .conn()
+            .query_row("SELECT status FROM sales WHERE id = ?1", [sale_id], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(status, "completed");
     }
 
     // ── SYNC-10: remote settings application + reactivity ────────

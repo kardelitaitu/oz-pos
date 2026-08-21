@@ -687,6 +687,25 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Same as [`Store::finalize_sale`] but inside a caller-owned transaction
+    /// (used by the sync daemon's atomic remote-apply path — a nested
+    /// `unchecked_transaction` there would fail with "cannot start a
+    /// transaction within a transaction").
+    pub fn finalize_sale_in_tx(
+        tx: &rusqlite::Transaction<'_>,
+        sale_id: &str,
+    ) -> Result<(), CoreError> {
+        tx.execute(
+            "UPDATE sales SET status = 'completed', updated_at = ?1, version = version + 1 \
+             WHERE id = ?2 AND status = 'pending'",
+            rusqlite::params![
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                sale_id
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Complete a sale with cashier-resolved shortfalls (ADR-19 §6b).
     ///
     /// This is the second command in the two-command shortfall resolution flow.

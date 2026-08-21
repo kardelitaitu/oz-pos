@@ -5807,3 +5807,37 @@ still pass; fmt + clippy -D warnings clean.
 cutover-compatible (discovery + analytics + claim/release). The two
 BYPASSRLS roles are NOLOGIN and reachable only via membership, so the
 exposure is bounded to the email/webhook code paths.
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 7 (webhook finalize_sale never applied)
+
+**Problem:** The cloud webhook path enqueues inalize_sale ({"sale_id":
+…}) into offline_queue after payment capture — but the sync client's
+apply_remote dispatchers had NO inalize_sale arm. The atomic path
+(apply_remote_in_tx) fell to the _ arm and returned
+"unsupported remote sync action: finalize_sale" → record_remote_failure →
+dead-lettered after 3 retries; the legacy path silently skipped. A sale
+completed by a cloud payment (Stripe/Square webhook) stayed PENDING on
+the terminal forever unless a cashier manually ran the finalize_sale
+Tauri command. The webhook feature (7e627e2e) was never wired to the
+client dispatcher.
+
+**Solution:** TDD Red->Green (note: a concurrent agent clobbered the first
+uncommitted edit batch mid-cycle; re-applied).
+- RED: apply_remote_atomic_finalizes_pending_sale + apply_remote_legacy_
+  finalizes_pending_sale — seed a pending sale, apply the webhook-shaped
+  item, assert status becomes 'completed'. Failed with "unsupported" /
+  "cannot start a transaction within a transaction".
+- GREEN: FinalizeSalePayload struct + a "finalize_sale" arm in BOTH
+  dispatchers. The atomic arm needs an in-tx variant (nested
+  unchecked_transaction fails), so oz-core gained
+  Store::finalize_sale_in_tx mirroring the standalone method.
+
+**Verification:** platform-sync 278/278; oz-core 2016 + 16 + 21; fmt +
+clippy -D warnings clean.
+
+**Risks / follow-ups:** the webhook TOCTOU race (check-then-act dedup)
+remains — two concurrent deliveries of the same event can both enqueue a
+finalize_sale. The client-side finalize is idempotent (WHERE
+status='pending'), so double-apply is harmless; the offline_queue gets a
+duplicate row. Cleanup is a follow-up (event-id-keyed enqueue or atomic
+claim), not a correctness bug today.
