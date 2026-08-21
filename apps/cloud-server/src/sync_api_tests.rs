@@ -366,6 +366,296 @@ async fn snapshot_cache_hit_returns_200() {
     assert_eq!(json1, json2, "cache hit must serve the identical JSON");
 }
 
+/// A cache hit must serve the stored bytes with ZERO database access —
+/// the whole point of the raw-bytes cache (SOTA finding C). Warm the
+/// cache, then DELETE every product from the DB: a hit that touched the
+/// DB would return the now-empty set, but the cache must return the
+/// original snapshot.
+#[tokio::test]
+async fn snapshot_cache_hit_serves_without_db_access() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Seed a product for tenant-a so the snapshot has content.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-cache', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-cache', 'SKU-CACHE', 'Cached', 100, 'USD', 'tenant-a')",
+            [],
+        )
+        .unwrap();
+    }
+
+    // First request warms the cache with the product present.
+    let req1 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(resp1.status(), StatusCode::OK);
+    let body1 = resp1.into_body().collect().await.unwrap().to_bytes();
+    let json1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
+    assert_eq!(
+        json1["products"].as_array().unwrap().len(),
+        1,
+        "warm snapshot must include the product"
+    );
+
+    // DELETE every product — the cache hit must NOT see this.
+    {
+        let conn = state.db.lock().await;
+        conn.execute("DELETE FROM products", []).unwrap();
+    }
+
+    // Second request is a cache hit: must still return the product.
+    let req2 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(resp2.status(), StatusCode::OK);
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(
+        json2["products"].as_array().unwrap().len(),
+        1,
+        "cache hit must serve bytes with zero DB access"
+    );
+    assert_eq!(json1, json2);
+}
+
+/// When the snapshot cache TTL expires, the next request must re-query
+/// the DB and serve FRESH data. The cache entry's timestamp is
+/// backdated directly (child module can reach the cache map) so no real
+/// 15-minute wait is needed.
+#[tokio::test]
+async fn snapshot_cache_refetches_after_expiry() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Warm the cache (empty snapshot).
+    let req1 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(resp1.status(), StatusCode::OK);
+    let body1 = resp1.into_body().collect().await.unwrap().to_bytes();
+    let json1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
+    assert_eq!(json1["products"].as_array().unwrap().len(), 0);
+
+    // Add a product to the DB, then backdate the cached entry beyond the
+    // 900s TTL so the next request must treat it as stale.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-expiry', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-expiry', 'SKU-EXPIRY', 'Fresh', 100, 'USD', 'tenant-a')",
+            [],
+        )
+        .unwrap();
+    }
+    {
+        let mut cache = state.snapshot_cache.lock().await;
+        let entry = cache
+            .get_mut("tenant-a")
+            .expect("cache must be warm after the first request");
+        entry.0 = std::time::Instant::now() - std::time::Duration::from_secs(1800);
+    }
+
+    // The expired cache must be replaced by a fresh DB read.
+    let req2 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(resp2.status(), StatusCode::OK);
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(
+        json2["products"].as_array().unwrap().len(),
+        1,
+        "expired cache must re-query and see the fresh product"
+    );
+}
+
+/// Snapshot caching must be per-tenant: after tenant A warms its cache,
+/// a request from tenant B must NOT receive A's data.
+#[tokio::test]
+async fn snapshot_cache_tenant_isolation() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Seed data for tenant-a only.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-iso', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-iso', 'SKU-ISO', 'Isolated', 100, 'USD', 'tenant-a')",
+            [],
+        )
+        .unwrap();
+    }
+
+    // Tenant A warms the cache with its product.
+    let req_a = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp_a = app.clone().oneshot(req_a).await.unwrap();
+    let body_a = resp_a.into_body().collect().await.unwrap().to_bytes();
+    let json_a: serde_json::Value = serde_json::from_slice(&body_a).unwrap();
+    assert_eq!(json_a["products"].as_array().unwrap().len(), 1);
+
+    // Tenant B (cache populated for A) must see an EMPTY snapshot.
+    let req_b = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-b"),
+    );
+    let resp_b = app.oneshot(req_b).await.unwrap();
+    assert_eq!(resp_b.status(), StatusCode::OK);
+    let body_b = resp_b.into_body().collect().await.unwrap().to_bytes();
+    let json_b: serde_json::Value = serde_json::from_slice(&body_b).unwrap();
+    assert_eq!(
+        json_b["products"].as_array().unwrap().len(),
+        0,
+        "tenant B must not receive tenant A's cached snapshot"
+    );
+}
+
+/// The raw-bytes snapshot cache must behave identically against live
+/// PostgreSQL: first request queries + caches, second request is a hit
+/// serving identical JSON with the same content-type.
+#[tokio::test]
+async fn pg_integration_snapshot_cache_roundtrip() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG snapshot-cache integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-snap-{}", uuid::Uuid::now_v7());
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: Some(pool.clone()),
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Seed one product for the tenant so the snapshot has content.
+    {
+        let client = pool.get().await.unwrap();
+        let role_id = format!("role-{tenant}");
+        client
+            .execute(
+                "INSERT INTO roles (id, name, permissions) VALUES ($1, $2, '[]')",
+                &[&role_id, &role_id],
+            )
+            .await
+            .unwrap();
+        client
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, track_serial, is_active, tenant_id)
+                 VALUES ($1, $2, 'Widget', 100, 'USD', 1, 1, $3)",
+                &[&format!("prod-{tenant}"), &format!("SKU-{tenant}"), &tenant],
+            )
+            .await
+            .unwrap();
+    }
+
+    // Request 1 (cache miss) and request 2 (cache hit) must be identical.
+    let mut bodies = Vec::new();
+    for _ in 0..2 {
+        let req = authed(axum::http::Method::GET, "/api/sync/snapshot", Some(&tenant));
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers()
+                .get("content-type")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "application/json"
+        );
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json["products"].as_array().unwrap().len(),
+            1,
+            "PG snapshot must include the product"
+        );
+        bodies.push(json);
+    }
+    assert_eq!(
+        bodies[0], bodies[1],
+        "cache hit on PG must serve the identical snapshot"
+    );
+
+    // Cleanup.
+    let client = pool.get().await.unwrap();
+    client
+        .execute("DELETE FROM products WHERE tenant_id = $1", &[&tenant])
+        .await
+        .unwrap();
+    client
+        .execute(
+            "DELETE FROM roles WHERE id = $1",
+            &[&format!("role-{tenant}")],
+        )
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn pull_returns_500_on_malformed_row() {
     // SYNC-10: a row that fails to decode must fail the whole pull
