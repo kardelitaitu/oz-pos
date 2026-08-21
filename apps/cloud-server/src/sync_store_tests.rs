@@ -137,6 +137,18 @@ async fn sqlite_push_batch_matches_per_item_semantics() {
     );
 }
 
+/// An empty batch must return an empty outcome list without error on both
+/// backends — no pointless transaction is opened or committed.
+#[tokio::test]
+async fn store_push_batch_empty_returns_empty() {
+    let conn = fresh_db();
+    let store = SyncStore::sqlite(conn.clone());
+
+    let outcomes = store.push_batch(&[], "tenant-empty").await.unwrap();
+    assert!(outcomes.is_empty(), "empty batch → no outcomes");
+    assert_eq!(store.pending_count("tenant-empty").await, 0);
+}
+
 /// Integration test against a live Postgres instance (the same Docker
 /// service `db.rs` uses, port 15432). Skips when unreachable, so the
 /// suite stays green on machines without a running Postgres.
@@ -286,4 +298,122 @@ async fn pg_integration_push_pull_plan_snapshot_roundtrip() {
             .await
             .unwrap();
     }
+}
+
+/// The critical batch regression test: a duplicate id in the MIDDLE of a
+/// batch must NOT poison the transaction on PostgreSQL.
+///
+/// `push_batch` uses `INSERT … ON CONFLICT (id) DO NOTHING RETURNING id`
+/// so a duplicate reports `Rejected` without aborting the transaction —
+/// a naive plain `INSERT` would abort the whole batch on the first
+/// UNIQUE violation, and every subsequent item would fail with "current
+/// transaction is aborted".
+#[tokio::test]
+async fn pg_integration_push_batch_duplicate_in_middle_survives() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG push-batch integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-batch-{}", uuid::Uuid::now_v7());
+    let store = SyncStore::postgres(pool.clone());
+
+    // Seed an existing row that the batch will duplicate.
+    let existing = sample_item(&format!("pg-batch-dup-{}", uuid::Uuid::now_v7()));
+    assert!(matches!(
+        store.push_item(&existing, &tenant).await.unwrap(),
+        PushOutcome::Accepted
+    ));
+
+    // Batch: [new-A, duplicate-of-existing, new-B].
+    let new_a = sample_item(&format!("pg-batch-a-{}", uuid::Uuid::now_v7()));
+    let new_b = sample_item(&format!("pg-batch-b-{}", uuid::Uuid::now_v7()));
+    let mut dup = existing.clone();
+    dup.id = existing.id.clone(); // same id → UNIQUE conflict
+    let batch = vec![new_a.clone(), dup, new_b.clone()];
+
+    let outcomes = store.push_batch(&batch, &tenant).await.unwrap();
+    assert_eq!(outcomes.len(), 3);
+    assert!(
+        matches!(outcomes[0], PushOutcome::Accepted),
+        "first (new) item must be Accepted, got: {:?}",
+        outcomes[0]
+    );
+    match &outcomes[1] {
+        PushOutcome::Rejected { reason } => {
+            assert!(
+                reason.contains("duplicate id:"),
+                "middle item must be Rejected as duplicate, got: {reason}"
+            );
+        }
+        other => panic!("expected Rejected for duplicate, got: {other:?}"),
+    }
+    assert!(
+        matches!(outcomes[2], PushOutcome::Accepted),
+        "third (new) item must STILL be Accepted — the duplicate must not abort the batch, got: {:?}",
+        outcomes[2]
+    );
+
+    // Cleanup.
+    pool.get()
+        .await
+        .unwrap()
+        .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
+        .await
+        .unwrap();
+}
+
+/// A committed batch must be durable and visible to a FRESH connection —
+/// a `drop(tx)` (rollback) regression would pass within the batch's own
+/// transaction but fail here.
+#[tokio::test]
+async fn pg_integration_push_batch_commit_visible_to_new_connection() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG push-batch integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-batch-commit-{}", uuid::Uuid::now_v7());
+    let store = SyncStore::postgres(pool.clone());
+
+    let items = vec![
+        sample_item(&format!("pg-commit-1-{}", uuid::Uuid::now_v7())),
+        sample_item(&format!("pg-commit-2-{}", uuid::Uuid::now_v7())),
+        sample_item(&format!("pg-commit-3-{}", uuid::Uuid::now_v7())),
+    ];
+    let outcomes = store.push_batch(&items, &tenant).await.unwrap();
+    assert_eq!(outcomes.len(), 3);
+    assert!(outcomes.iter().all(|o| matches!(o, PushOutcome::Accepted)));
+
+    // A brand-new pool connection (fresh checkout) must see all 3 rows —
+    // proving the batch COMMIT was durable.
+    let client = pool.get().await.unwrap();
+    let count: i64 = client
+        .query_one(
+            "SELECT COUNT(*) FROM offline_queue WHERE tenant_id = $1",
+            &[&tenant],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        count, 3,
+        "committed batch must be visible on a fresh connection"
+    );
+
+    // Cleanup.
+    client
+        .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
+        .await
+        .unwrap();
 }

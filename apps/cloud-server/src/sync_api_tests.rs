@@ -667,6 +667,138 @@ async fn push_rejects_invalid_non_uuid_id() {
     assert_eq!(hacked, 0, "injected CREATE TABLE executed!");
 }
 
+/// The two-phase handler logic (UUID validation → single batch INSERT)
+/// must report the right per-item outcome for a MIXED batch: an invalid
+/// id, a fresh item, and a duplicate of an existing row. The duplicate
+/// must not abort the valid insert — the batch survives it.
+#[tokio::test]
+async fn handler_mixed_batch_invalid_uuid_valid_duplicate() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Seed an existing row that the batch will duplicate.
+    let dup_id = uuid::Uuid::now_v7().to_string();
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+             VALUES (?1, 'test', '{}', 'pending', '2026-01-01T00:00:00Z', 'default')",
+            [&dup_id],
+        )
+        .unwrap();
+    }
+
+    let hostile = "not-a-uuid";
+    let fresh = uuid::Uuid::now_v7().to_string();
+    let body = format!(
+        r#"[
+            {{"id":"{hostile}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+            {{"id":"{fresh}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+            {{"id":"{dup_id}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}
+        ]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let push_resp: PushResponse = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(push_resp.results.len(), 3);
+    match &push_resp.results[0] {
+        PushOutcome::Rejected { reason } => {
+            assert!(reason.contains("invalid id"), "got: {reason}");
+        }
+        other => panic!("expected invalid-id Rejected, got: {other:?}"),
+    }
+    assert!(
+        matches!(push_resp.results[1], PushOutcome::Accepted),
+        "fresh item must be Accepted: {:?}",
+        push_resp.results[1]
+    );
+    match &push_resp.results[2] {
+        PushOutcome::Rejected { reason } => {
+            assert!(
+                reason.contains("duplicate id"),
+                "duplicate must be Rejected, got: {reason}"
+            );
+        }
+        other => panic!("expected duplicate Rejected, got: {other:?}"),
+    }
+
+    // Exactly the fresh item was persisted; the duplicate and hostile id
+    // were not double-inserted.
+    let conn = state.db.lock().await;
+    let fresh_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM offline_queue WHERE id = ?1",
+            [&fresh],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(fresh_count, 1, "fresh item must be persisted once");
+    let dup_total: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM offline_queue WHERE id = ?1",
+            [&dup_id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(dup_total, 1, "duplicate id must not be double-inserted");
+}
+
+/// With `OZ_SKIP_PUSH_VALIDATION=1` (trusted server-to-server), a
+/// non-UUID id must pass through the handler and be inserted — the
+/// validation gate is the only thing stopping it.
+#[tokio::test]
+async fn push_batch_skip_validation_flag_accepts_non_uuid() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: true,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    let non_uuid = "server-generated-key-123";
+    let body = format!(
+        r#"[{{"id":"{non_uuid}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let push_resp: PushResponse = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(push_resp.results.len(), 1);
+    assert!(
+        matches!(push_resp.results[0], PushOutcome::Accepted),
+        "skip_push_validation must accept the non-UUID id: {:?}",
+        push_resp.results[0]
+    );
+
+    let conn = state.db.lock().await;
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM offline_queue WHERE id = ?1",
+            [non_uuid],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        count, 1,
+        "non-UUID id must be persisted when validation is skipped"
+    );
+}
+
 #[tokio::test]
 async fn pull_returns_items_for_tenant() {
     let state = SyncState {
