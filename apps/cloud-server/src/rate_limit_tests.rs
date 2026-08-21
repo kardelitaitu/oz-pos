@@ -224,6 +224,71 @@ async fn rate_limiter_cleanup_preserves_recent() {
     assert_eq!(limiter.bucket_count().await, 1);
 }
 
+/// Sharding (SOTA finding E): concurrent requests across many tenants
+/// must not corrupt buckets or deadlock, and each tenant keeps its own
+/// limit even under parallel load. This exercises the per-shard locks —
+/// a single shared `RwLock` would serialize but still pass; the point is
+/// the sharded structure stays correct under contention.
+#[tokio::test]
+async fn rate_limiter_sharded_concurrent_tenants_stay_isolated() {
+    let limiter = RateLimiterState::new();
+
+    // 64 tenants × 100 concurrent pushes each (limit 100/min) — all must
+    // be allowed; the 101st from any tenant must be rejected.
+    let mut handles = Vec::new();
+    for t in 0..64 {
+        let limiter = limiter.clone();
+        handles.push(tokio::spawn(async move {
+            let tenant = format!("shard-tenant-{t}");
+            for i in 0..100 {
+                let result = limiter.check_rate_limit(&tenant, "/api/sync/push").await;
+                assert!(
+                    result.is_ok(),
+                    "tenant {tenant} request {i} should be allowed"
+                );
+            }
+            let result = limiter.check_rate_limit(&tenant, "/api/sync/push").await;
+            assert!(
+                result.is_err(),
+                "tenant {tenant} 101st request should be rate-limited"
+            );
+        }));
+    }
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    // 64 tenants × 1 endpoint bucket each.
+    assert_eq!(limiter.bucket_count().await, 64);
+}
+
+/// Two concurrent requests for the SAME bucket must not double-consume:
+/// exactly 100 of 101 parallel attempts succeed for a 100-token bucket.
+#[tokio::test]
+async fn rate_limiter_sharded_same_bucket_parallel_consumption() {
+    let limiter = RateLimiterState::new();
+
+    let mut handles = Vec::new();
+    for _ in 0..101 {
+        let limiter = limiter.clone();
+        handles.push(tokio::spawn(async move {
+            limiter
+                .check_rate_limit("single-tenant", "/api/sync/push")
+                .await
+                .is_ok()
+        }));
+    }
+    let results: Vec<bool> = {
+        let mut acc = Vec::with_capacity(handles.len());
+        for handle in handles {
+            acc.push(handle.await.unwrap());
+        }
+        acc
+    };
+    let allowed = results.iter().filter(|ok| **ok).count();
+    assert_eq!(allowed, 100, "exactly 100 of 101 parallel attempts allowed");
+}
+
 #[tokio::test]
 async fn rate_limiter_retry_after_header_value() {
     let limiter = RateLimiterState::new();
