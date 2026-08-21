@@ -21,7 +21,7 @@ import { loginAs } from './helpers';
  *   .staff-login-pad        — PIN keypad (visible after username step)
  *   .staff-login-pad-key    — individual digit buttons
  *   .staff-login-pin-dot--filled — filled PIN dot
- *   .staff-login-error      — error message alert
+ *   .toast--error           — error toast (replaces inline error alert)
  *   .staff-login-lockout    — lockout countdown (rate-limit)
  *   .workspace-home         — workspace picker (post-login success)
  *   .ws-header-greeting     — display name in workspace header
@@ -77,10 +77,10 @@ test.describe('Staff Login', () => {
     // Enter wrong PIN.
     await enterPin(page, WRONG_PIN);
 
-    // Error must appear with exact dev-mock error text.
-    const errorAlert = page.locator('.staff-login-error');
-    await expect(errorAlert).toBeVisible({ timeout: 8_000 });
-    await expect(errorAlert).toContainText('Invalid credentials');
+    // Error must appear as a toast with exact dev-mock error text.
+    const errorToast = page.locator('.toast--error');
+    await expect(errorToast).toBeVisible({ timeout: 8_000 });
+    await expect(errorToast).toContainText('Invalid credentials');
 
     // Must stay on login screen.
     await expect(page.locator('.staff-login-screen')).toBeVisible();
@@ -100,10 +100,10 @@ test.describe('Staff Login', () => {
     // Entering a PIN for an unknown account fails with the uniform error.
     await enterPin(page, '1234');
 
-    // Wait for the async login to complete and set the error state.
-    const errorAlert = page.locator('.staff-login-error');
-    await expect(errorAlert).toBeVisible({ timeout: 8_000 });
-    await expect(errorAlert).toContainText('Invalid credentials');
+    // Wait for the async login to complete and the error toast to appear.
+    const errorToast = page.locator('.toast--error');
+    await expect(errorToast).toBeVisible({ timeout: 8_000 });
+    await expect(errorToast).toContainText('Invalid credentials');
 
     // Must stay on login screen.
     await expect(page.locator('.staff-login-screen')).toBeVisible();
@@ -120,9 +120,9 @@ test.describe('Staff Login', () => {
     for (let attempt = 0; attempt < 5; attempt++) {
       await enterPin(page, WRONG_PIN);
 
-      // Wait for error to appear, then clear.
-      const errorAlert = page.locator('.staff-login-error');
-      await errorAlert.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+      // Wait for error toast to appear, then continue.
+      const errorToast = page.locator('.toast--error');
+      await errorToast.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
 
       // If we're locked out, stop.
       const lockoutVisible = await page
@@ -173,8 +173,8 @@ test.describe('Staff Login', () => {
 
     await enterPin(page, WRONG_PIN);
 
-    // Error should appear.
-    await expect(page.locator('.staff-login-error')).toBeVisible({ timeout: 8_000 });
+    // Error toast should appear.
+    await expect(page.locator('.toast--error')).toBeVisible({ timeout: 8_000 });
 
     // PIN dots must be cleared (no filled dots).
     await expect(page.locator('.staff-login-pin-dot--filled')).toHaveCount(0);
