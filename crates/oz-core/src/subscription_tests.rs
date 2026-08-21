@@ -696,7 +696,7 @@ fn test_plus_quota_limits() {
     assert_eq!(SubscriptionTier::Plus.max_pos_instances(), Some(2));
     assert_eq!(SubscriptionTier::Plus.max_warehouses(), Some(2));
     assert_eq!(SubscriptionTier::Plus.max_staff_users(), Some(5));
-    assert_eq!(SubscriptionTier::Plus.sales_history_days(), None);
+    assert_eq!(SubscriptionTier::Plus.sales_history_days(), Some(365));
 }
 
 #[test]
@@ -705,7 +705,7 @@ fn test_pro_quota_limits() {
     assert_eq!(SubscriptionTier::Pro.max_pos_instances(), Some(5));
     assert_eq!(SubscriptionTier::Pro.max_warehouses(), Some(3));
     assert_eq!(SubscriptionTier::Pro.max_staff_users(), Some(20));
-    assert_eq!(SubscriptionTier::Pro.sales_history_days(), None);
+    assert_eq!(SubscriptionTier::Pro.sales_history_days(), Some(5 * 365));
 }
 
 #[test]

@@ -65,9 +65,9 @@ Comparisons are only meaningful if the measurement is reproducible. Follow this 
 
 Each area = **one measurable command**. Commands with shared compile artifacts (Rust crates) are still measured separately; the median-of-3 protocol absorbs the shared-build effect as long as the phase is recorded.
 
-### 4.1 Rust — unit tests (per crate)
+### 4.1 Rust — unit + integration tests (per crate, nextest)
 
-Run from repo root: `cargo test -p <crate> [--features slow-tests]`. The `slow-tests` feature gate exists in `oz-core` and friends to keep the *default* suite fast while integration-heavy tests remain runnable on demand.
+Run from repo root: `cargo nextest run -p <crate> [--all-features]`. **nextest is the canonical runner** (per 2026-08-22 decision): it is what `check.sh` / CI use, runs each test in its own process, and parallelizes across cores. Doctests are NOT covered by nextest — they live in A26. The `slow-tests` feature gate exists in `oz-core` and friends to keep the *default* suite fast while integration-heavy tests remain runnable on demand.
 
 | Area | Command | Unit-test files |
 |------|---------|-----------------|
@@ -148,7 +148,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | Area | Baseline (s) | 1st improvement | 2nd improvement | 3rd improvement | Techniques used |
 |------|-------------|-----------------|-----------------|-----------------|-----------------|
 | A01 foundation | 1.3 (cold 6.9) | 1.29 (cold 4.25) | | | `codegen-units=256` test-profile override (cold −38%, warm flat) |
-| A02 oz-core | | | | | |
+| A02 oz-core | 58.5 (cold 58.2) | 31.7 | | | nextest runner (cold −41%); backup chunk 5→512 pgs (warm −46%) |
 | A03 oz-security | | | | | |
 | A04 oz-reporting | | | | | |
 | A05 oz-plugin | | | | | |
@@ -233,7 +233,10 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · attempt 2 · commit `e0e401f0`+Cargo.toml · technique: `[profile.test.package.foundation] codegen-units = 256` → **ACCEPTED (cold)** — hypothesis: test profile's `codegen-units = 16` (binary-size tuning) slows codegen; A01's 0.1 s runtime makes a larger, faster-to-compile binary quality-neutral. Measurement (settled after rebuild): cold **6.9 → 4.25 s (−38%)**, warm **1.3 → 1.29 s (flat)**. A transient 1.86 s warm reading during the measurement window was machine noise from concurrent other-agent load (`opencode` ~124k CPU-s) and rustdoc harness relink (~0.43 s per invocation); re-measured 1.29/0.99/1.30 s → median 1.29 s after the noise cleared. Doctest rustdoc rebuild is cargo-internal and not quality-reducible. Area plateaued for warm; cold compile win accepted.
 
 ### A02 oz-core
-- [ ] baseline pending
+- **2026-08-22 · baseline (cargo test) · commit `e0e401f0` · cold 98.9 s** — `cargo test -p oz-core`; **3 pre-existing failures** found: `test_plus_quota_limits`, `test_pro_quota_limits` (`subscription_tests.rs`) and `enforce_store_quota_premium_allows_nine` (`store_profiles_tests.rs`) — stale assertions from pricing commit `668f8078` (Plus=1yr / Pro=5yr history, Premium=5 stores) that the code already implements. Repaired all 3 (assertions aligned with implementation + sibling `test_free_history_limit`; stale "up to 10 stores" doc comment in `subscription.rs` updated to 5). After repair: lib 2016 passed, full `cargo test` green.
+- **2026-08-22 · runner switch · cargo test → cargo nextest · cold 58.2 s / warm 58.5 s (2525 tests, all pass)** — per user directive, A02 canonical runner is now **nextest** (also the check.sh / CI runner; per-test process isolation + full parallelism). −41% cold vs cargo test. Doctests move to A26.
+- **2026-08-22 · attempt 1 · `Store::backup()` chunk size · warm 58.5 → 31.7 s (−46%)** — root cause: `run_to_completion(5, 250 ms)` copied 5 pages/chunk with a 250 ms pause; a ~1.4 MB fresh DB (~355 pages) incurred ~71 sleeps ≈ 18 s per backup test. Changed to `run_to_completion(512, 10 ms)` — one chunk, ~2 MB granularity, still yields to concurrent writers (online-backup contract preserved). **Production bug too** (`desktop-client data.rs:154`, `sync.rs:647`, `oz-cli commands.rs:190` — a real 1.4 MB backup took ~18 s). Backup tests: 18 s → 0.07 s. All 2525 tests pass.
+- **2026-08-22 · plateau check** — new slow tail: 6.13 s `same_store_racing_writers_serialize_exactly_one_wins` (genuine SQLite busy-race handshake, documented ~5 s platform behavior — not a fixed sleep), 4.27 s `verify_tampered_payload_fails` (argon2 KDF, deliberately slow — security-sensitive, do not touch), 2.6 s sync tests. Remaining costs are inherent; further gains belong to A18 (integration) / A27 (workspace sweep).
 
 ### A03 oz-security
 - [ ] baseline pending

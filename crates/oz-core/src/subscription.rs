@@ -126,7 +126,7 @@ impl SubscriptionTier {
     }
 
     /// Maximum number of stores allowed for this tier.
-    /// C4.2: Premium allows up to 10 stores self-serve; >10 requires
+    /// C4.2: Premium allows up to 5 stores self-serve; more requires
     /// Enterprise contract. Enterprise is unlimited.
     pub fn max_stores(&self) -> Option<i64> {
         match self {

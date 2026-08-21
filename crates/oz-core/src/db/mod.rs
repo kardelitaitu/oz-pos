@@ -224,15 +224,17 @@ impl Store<'_> {
             ))
         })?;
         // rusqlite 0.31: `Backup::new` takes the two distinct connections;
-        // `run_to_completion` copies the whole source database in 5-page
-        // chunks with a 250 ms pause between chunks.
+        // `run_to_completion` copies the whole source database in chunks.
+        // 512 pages (~2 MB) per chunk with a 10 ms pause yields to concurrent
+        // writers between chunks (the online-backup contract) without the
+        // ~250 ms × chunks sleep that made small backups take ~18 s.
         let backup = rusqlite::backup::Backup::new(self.conn, &mut dst).map_err(|e| {
             CoreError::Internal(format!(
                 "failed to start online backup to '{output_path}': {e}"
             ))
         })?;
         backup
-            .run_to_completion(5, std::time::Duration::from_millis(250), None)
+            .run_to_completion(512, std::time::Duration::from_millis(10), None)
             .map_err(|e| {
                 CoreError::Internal(format!("online backup to '{output_path}' failed: {e}"))
             })?;
