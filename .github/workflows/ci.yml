@@ -58,26 +58,6 @@ jobs:
           fi
       - name: Run go vet
         run: cd apps/license-server && go vet ./...
-      - name: Dockerfile.unified Go COPY audit
-        run: |
-          # Every non-test, non-healthcheck .go file must be explicitly
-          # listed in the COPY instruction — Docker has no glob support.
-          ACTUAL=$(ls apps/license-server/*.go \
-            | xargs -I{} basename {} \
-            | grep -v '_test.go$' \
-            | grep -v 'healthcheck.go$' \
-            | sort)
-          COPIED=$(grep -o 'license-server/[a-z_]*\.go' Dockerfile.unified \
-            | sed 's|license-server/||' \
-            | sort -u)
-          DIFF=$(diff <(echo "$ACTUAL") <(echo "$COPIED"))
-          if [ -n "$DIFF" ]; then
-            echo "::error::Dockerfile.unified Go COPY list is out of sync with apps/license-server/"
-            echo "$DIFF"
-            exit 1
-          fi
-          echo "✔ Dockerfile.unified COPY list matches $(echo "$ACTUAL" | wc -l) source files"
-
   # Unified image healthcheck script test — exercises the SMTP sender-identity
   # gate counter logic in apps/unified/healthcheck.sh against a fake-wget
   # harness (apps/unified/test-healthcheck.sh). Pure POSIX sh, no toolchain.

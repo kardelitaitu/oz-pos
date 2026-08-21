@@ -46,3 +46,18 @@ oz-pos-updater.key.pub
 *.log
 *.tmp
 Cargo.lock.bak
+
+# Go license-server: test files, healthcheck (//go:build ignore), and
+# build artifacts are excluded so COPY apps/license-server/ ./ pulls
+# only production sources into the unified gobuilder stage.
+apps/license-server/*_test.go
+apps/license-server/healthcheck.go
+apps/license-server/*.exe
+apps/license-server/*.test
+apps/license-server/*.out
+apps/license-server/coverage.html
+apps/license-server/coverage.out
+apps/license-server/pb_data/
+apps/license-server/winres/
+apps/license-server/app.manifest
+apps/license-server/*.syso
