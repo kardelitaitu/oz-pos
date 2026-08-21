@@ -139,6 +139,7 @@ Do not put integration tests inside src/.
 - Inside the sibling test file (`*_tests.rs`), use `use super::*;` and write unit tests.
 - HAL drivers must have a mock implementation in `crates/oz-hal/src/drivers/mock.rs` for testing.
 - Front-end components must have a corresponding test in `ui/src/__tests__/`.
+- **Dev PostgreSQL drift:** the shared dev PG container (`oz-pg-test-15432`, port 15432) can drift from the committed `PG_INIT` schema when agents land schema-changing migrations or RLS cutover scripts without re-migrating their live database. Symptom: PG integration tests (`crates/oz-api/src/pg_tests.rs`, `apps/cloud-server/src/db_tests.rs`) fail or flake with the terse `Db("db error")` (tokio_postgres hides the real message). **After any PG schema change lands, run `bash scripts/reset-dev-pg.sh`** (drops + recreates the public schema from `20260813_init.pg.sql`) and re-run the affected tests — do not edit the tests to "fix" a drifted DB.
 
 ### Git & Branch Policy
 - Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`, `test/<name>`, `refactor/<name>`.
