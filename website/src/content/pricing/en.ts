@@ -133,7 +133,7 @@ export const featureRows: FeatureRow[] = [
   { label: 'Terminals (registers) per store', values: { free: 1, plus: 2, pro: 5, premium: 'Unlimited', enterprise: 'Unlimited' } },
   { label: 'Warehouses', values: { free: 1, plus: 2, pro: 3, premium: 'Unlimited', enterprise: 'Unlimited' } },
   { label: 'Kitchen Display screens', values: { free: 0, plus: 0, pro: '1 per store', premium: 'Unlimited', enterprise: 'Unlimited' } },
-  { label: 'Staff users', values: { free: 1, plus: 5, pro: 20, premium: 'Unlimited', enterprise: 'Unlimited' } },
+  { label: 'Staff users', values: { free: 1, plus: 5, pro: 20, premium: 50, enterprise: 'Unlimited' } },
   { label: 'Sales history', values: { free: '3 months', plus: '1 year', pro: '5 years', premium: 'Unlimited', enterprise: 'Unlimited' } },
   { label: 'QRIS payments', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Stripe cards', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },

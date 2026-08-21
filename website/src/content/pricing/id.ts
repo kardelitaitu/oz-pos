@@ -132,7 +132,7 @@ export const featureRows: FeatureRow[] = [
   { label: 'Terminal (register) per toko', values: { free: 1, plus: 2, pro: 5, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
   { label: 'Gudang', values: { free: 1, plus: 2, pro: 3, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
   { label: 'Layar Display Dapur', values: { free: 0, plus: 0, pro: '1 per toko', premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
-  { label: 'Staf pengguna', values: { free: 1, plus: 5, pro: 20, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
+  { label: 'Staf pengguna', values: { free: 1, plus: 5, pro: 20, premium: 50, enterprise: 'Tanpa batas' } },
   { label: 'Riwayat penjualan', values: { free: '3 bulan', plus: '1 tahun', pro: '5 tahun', premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
   { label: 'Pembayaran QRIS', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Kartu Stripe', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },

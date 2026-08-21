@@ -737,7 +737,7 @@ fn test_staff_limits_per_tier() {
     assert_eq!(SubscriptionTier::Free.max_staff_users(), Some(1));
     assert_eq!(SubscriptionTier::Plus.max_staff_users(), Some(5));
     assert_eq!(SubscriptionTier::Pro.max_staff_users(), Some(20));
-    assert_eq!(SubscriptionTier::Premium.max_staff_users(), None);
+    assert_eq!(SubscriptionTier::Premium.max_staff_users(), Some(50));
     assert_eq!(SubscriptionTier::Enterprise.max_staff_users(), None);
 }
 

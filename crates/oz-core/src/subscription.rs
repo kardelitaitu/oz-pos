@@ -167,7 +167,8 @@ impl SubscriptionTier {
             Self::Free | Self::OneTime => Some(1),
             Self::Plus => Some(5),
             Self::Pro => Some(20),
-            Self::Premium | Self::Enterprise => None,
+            Self::Premium => Some(50),
+            Self::Enterprise => None,
         }
     }
 
