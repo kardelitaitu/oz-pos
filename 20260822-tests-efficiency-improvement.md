@@ -163,7 +163,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A08 oz-logging | 2.46 (cold 5.0) | — (plateaued) | | | none — spawn floor, no delays |
 | A09 oz-notification | ~2.5–3.0 (reconstructed) | 2.58 | | | 10× sleep(50ms)→poll-with-deadline (robustness, per-test 50ms→1ms) |
 | A10 oz-lua | 2.18 (cold 11.8) | — (plateaued) | | | none — spawn floor, no delays |
-| A11 oz-hal | | | | | |
+| A11 oz-hal | ~3.5–5.0 (cold 27.9) | — (plateaued) | | | none — spawn floor; tcp_reconnect sleeps are kernel-necessary |
 | A12 oz-api | | | | | |
 | A13 cloud-server | | | | | |
 | A14 desktop-client | | | | | |
@@ -283,7 +283,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · baseline · commit `6963ddea` · cold 11.8 s / warm median 2.18 s (runs 2.18/2.07/8.65; 8.65 = other-agent load)** — `cargo nextest run -p oz-lua`; 63 tests, all pass (~0.7 s real work). No sleeps/waits. **Area plateaued** — spawn-overhead floor.
 
 ### A11 oz-hal
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `636538e3` · cold 27.9 s / warm ~3.5–5 s (260 tests, ~9.1 s real work)** — `cargo nextest run -p oz-hal`; 260 tests, all pass. Slow tail is all ~1.5 s spawn floor. The only real sleeps are in `tests/tcp_reconnect.rs` (200/150/50/10 ms) — **kernel-timing-necessary** for a deterministic TCP RST/reconnect test (RST processing, listener startup); the playbook's "minimum sleep when the platform genuinely needs it" exception applies. Reducing them risks flakiness. **Area plateaued.**
 
 ### A12 oz-api
 - [ ] baseline pending
