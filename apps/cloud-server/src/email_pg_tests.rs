@@ -709,3 +709,111 @@ async fn pg_integration_advisory_lock_guard_detaches_on_drop_without_release() {
         guard.release().await;
     }
 }
+
+/// Defect A (round-3): `release()` must NOT return a lock-holding
+/// connection to the pool when the unlock query FAILS. The current code
+/// does `let _ = unlock` — on failure the connection goes back to the
+/// pool still holding the session-level lock, and Drop cannot detach it
+/// (conn already taken). Simulate: acquire the lock, kill the backend,
+/// then release() — the unlock fails, and the connection must be
+/// detached (pool size drops), not returned holding a lock.
+#[tokio::test]
+async fn pg_integration_advisory_lock_release_detaches_on_unlock_failure() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 2, false).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG advisory-lock release integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-adv-release-{}", uuid::Uuid::now_v7());
+
+    // Acquire the lock and find the guard connection's backend PID.
+    let mut guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+    assert!(guard.acquired);
+    let pid: i32 = guard
+        .conn
+        .as_ref()
+        .unwrap()
+        .query_one("SELECT pg_backend_pid()", &[])
+        .await
+        .unwrap()
+        .get(0);
+
+    // Kill the backend from a second connection — the unlock query in
+    // release() will now fail.
+    let killer = pool.get().await.unwrap();
+    killer
+        .execute("SELECT pg_terminate_backend($1)", &[&pid])
+        .await
+        .unwrap();
+    drop(killer);
+
+    let size_before = pool.status().size;
+    guard.release().await;
+    let size_after = pool.status().size;
+
+    // The failed unlock must DETACH the dead connection (size drops),
+    // not return it to the pool. A returned connection holding (or
+    // about to leak) the lock is the exact bug we are guarding against.
+    assert!(
+        size_after < size_before || size_after == 0,
+        "failed unlock must detach the connection (size {size_before} -> {size_after}), not return it to the pool"
+    );
+}
+/// Defect B (round-3): when `pg_try_advisory_lock` returns false (another
+/// instance holds the tenant's lock), the guard must return its
+/// connection to the pool NORMALLY — NOT detach/destroy it. The current
+/// `Drop` detaches unconditionally, so every lock-contention round
+/// destroys a pool connection (deadpool `size` drops; the next get()
+/// must create a brand-new session — connection churn).
+///
+/// Observable: with max_size(2), holder takes 1 (size → 1). The
+/// non-acquired guard takes the 2nd (size → 2). After it drops:
+///   correct:   connection returned → size stays 2
+///   buggy:     detached/destroyed → size drops to 1
+#[tokio::test]
+async fn pg_integration_advisory_lock_not_acquired_returns_connection() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 2, false).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG advisory-lock contention integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-adv-contend-{}", uuid::Uuid::now_v7());
+
+    // Instance 1 holds the lock → size grows to 1.
+    let mut holder = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+    assert!(holder.acquired);
+    assert_eq!(pool.status().size, 1, "holder must use 1 connection");
+
+    // Instance 2 tries the same tenant — takes the 2nd connection,
+    // does NOT acquire the lock.
+    {
+        let guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            !guard.acquired,
+            "second instance must not acquire the held lock"
+        );
+        assert_eq!(
+            pool.status().size,
+            2,
+            "contender must use the 2nd connection"
+        );
+    } // guard dropped here
+
+    assert_eq!(
+        pool.status().size,
+        2,
+        "a non-acquired guard must return its connection to the pool, not detach it (churn)"
+    );
+
+    holder.release().await;
+}

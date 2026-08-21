@@ -166,23 +166,33 @@ impl AdvisoryLockGuard {
             return; // already released or taken
         };
         // `pg_advisory_unlock` with the same key as the lock.
-        // If the unlock fails (dead connection), the guard's Drop will
-        // detach and close the connection — the lock dies with the session.
-        let _ = conn
+        // If the unlock fails (dead connection, transient error), the
+        // connection must NOT return to the pool still holding the lock.
+        // Detach it instead — the session (and the lock) dies with the
+        // closed socket.
+        match conn
             .execute("SELECT pg_advisory_unlock(hashtext($1))", &[&self.tenant])
-            .await;
-        // Connection returned to pool normally (not taken) — no lock held.
+            .await
+        {
+            Ok(_) => { /* returned to pool normally — no lock held */ }
+            Err(_) => {
+                // Unlock failed — cannot trust the connection's lock state.
+                let _ = deadpool_postgres::Client::take(conn);
+            }
+        }
     }
 }
 
 impl Drop for AdvisoryLockGuard {
     fn drop(&mut self) {
-        if let Some(conn) = self.conn.take() {
-            // Panic or early return: the lock was never released. Detach
-            // the connection from the pool so the socket is closed and
-            // the session (and advisory lock) dies with it.
+        if let Some(conn) = self.conn.take()
+            && self.acquired
+        {
+            // Lock was never released — detach so the session dies
+            // and the advisory lock is released with it.
             let _ = deadpool_postgres::Client::take(conn);
         }
+        // Not acquired → connection holds no lock → returns to pool normally.
     }
 }
 /// The un-serialized per-tenant send cycle: scoped settings → due check →

@@ -5677,3 +5677,34 @@ rusqlite's full error string (no as_db_error equivalent needed).
 5s builder wait_timeout remains for normal request paths where failing fast is
 correct — only health got the shorter bound. Session advisory locks on other
 sites should be audited for the same pooled-connection leak pattern.
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 3 (advisory-lock guard defects)
+
+**Problem:** Re-auditing round-2's AdvisoryLockGuard found two real defects:
+A. release() did let _ = unlock — if the unlock query FAILED (dead conn,
+   transient error), the connection returned to the pool still holding the
+   session-level lock; Drop couldn't detach it (conn already taken). The
+   comment claimed "no lock held" but that was only true on success.
+B. When pg_try_advisory_lock returned false (another instance holds the
+   tenant's lock), the !acquired early-return dropped the guard → Drop
+   called take() unconditionally → a pool connection was DESTROYED on every
+   lock-contention round (deadpool size dropped; next get() must create a
+   brand-new session — connection churn).
+
+**Solution:** TDD Red→Green:
+- RED: pg_integration_advisory_lock_release_detaches_on_unlock_failure
+  (kill backend, release() → size must drop, not return the dead conn).
+  GREEN: release() matches the unlock result; on Err it take()s the
+  connection so the session + lock die.
+- RED: pg_integration_advisory_lock_not_acquired_returns_connection
+  (max_size(2), holder+contender, drop → size must stay 2). GREEN: Drop
+  only detaches when acquired; a not-acquired guard returns its conn.
+- Also verified the earlier round-2 tests still pass.
+
+**Verification:** cargo test -p oz-cloud-server — 206 unit + 5 integration +
+2 startup, all green; fmt + clippy -D warnings clean.
+
+**Risks / follow-ups:** the round-2 journal note is now resolved — the
+advisory-lock pooled-connection pattern is fully guarded (success, error,
+panic, contention paths). Other session-level resources on pooled
+connections (none found) would need the same RAII treatment.
