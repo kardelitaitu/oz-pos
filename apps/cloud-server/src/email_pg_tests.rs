@@ -817,3 +817,145 @@ async fn pg_integration_advisory_lock_not_acquired_returns_connection() {
 
     holder.release().await;
 }
+
+/// RED (TDD): the email report path must be RLS-cutover compatible.
+///
+/// After `scripts/rls-cutover.sql` (FORCE ROW LEVEL SECURITY), every
+/// query touching a tenant table must run with `SET LOCAL oz.tenant_id`
+/// in a transaction. The webhook path was made oz_app-compatible; the
+/// email analytics path was NOT — `daily_revenue_pg` (and the
+/// sent_reports claim) run bare queries with no transaction and no GUC.
+/// As the restricted role, the seeded sale is invisible → the report is
+/// silently empty (bug), and the sent_reports INSERT violates WITH
+/// CHECK.
+#[tokio::test]
+async fn pg_integration_email_analytics_visible_as_restricted_role() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG email-RLS integration test skipped: {e}");
+            return;
+        }
+    };
+    let mut admin = pool.get().await.unwrap();
+    let ns = format!("pg-email-rls-{}", std::process::id());
+    let tenant = format!("{ns}-tenant");
+    let role = "oz_email_rls_probe";
+
+    // Set up the restricted role with FORCEd RLS on the tables the email
+    // path touches (mirrors scripts/rls-cutover.sql). sale_lines is a
+    // non-RLS child table (no tenant_id) — same as the real cutover.
+    admin
+        .batch_execute(&format!(
+            "DO $$ BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') THEN
+                    EXECUTE 'DROP OWNED BY {role}';
+                    EXECUTE 'DROP ROLE {role}';
+                END IF;
+             END $$;
+             CREATE ROLE {role} LOGIN PASSWORD 'oz_email_rls_probe_pw';
+             GRANT USAGE ON SCHEMA public TO {role};
+             GRANT SELECT, INSERT, UPDATE, DELETE ON sales, sale_lines, sent_reports, products TO {role};
+             ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE sent_reports ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE sales FORCE ROW LEVEL SECURITY;
+             ALTER TABLE sent_reports FORCE ROW LEVEL SECURITY;
+             DROP POLICY IF EXISTS tenant_isolation ON sales;
+             CREATE POLICY tenant_isolation ON sales
+                 USING (tenant_id = current_setting('oz.tenant_id', true));
+             DROP POLICY IF EXISTS tenant_isolation ON sent_reports;
+             CREATE POLICY tenant_isolation ON sent_reports
+                 USING (tenant_id = current_setting('oz.tenant_id', true));"
+        ))
+        .await
+        .expect("email-RLS probe role setup should succeed");
+
+    // Seed as owner — FORCE applies to the owner too, so scope the seed
+    // transaction to the tenant GUC (same as the webhook cutover test).
+    let mut seed_tx = admin.transaction().await.unwrap();
+    seed_tx
+        .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .unwrap();
+    seed_tx
+        .execute(
+            "INSERT INTO sales (id, tenant_id, status, total_minor, currency, created_at, line_count)
+             VALUES ($1, $2, 'completed', 100, 'USD', '2026-01-15T09:00:00.000Z', 1)",
+            &[&format!("{ns}-sale"), &tenant],
+        )
+        .await
+        .unwrap();
+    seed_tx
+        .execute(
+            "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position)
+             VALUES ($1, $2, $3, 1, 100, 100, 'USD', 0)",
+            &[&format!("{ns}-line"), &format!("{ns}-sale"), &format!("{ns}-sku")],
+        )
+        .await
+        .unwrap();
+    seed_tx.commit().await.unwrap();
+    drop(admin);
+
+    // The app pool: connects AS the restricted role (same pattern as the
+    // webhook cutover test).
+    let scheme_end = url.find("://").expect("URL has a scheme") + 3;
+    let at = url.find('@').expect("URL has credentials");
+    let app_url = format!(
+        "{}oz_email_rls_probe:oz_email_rls_probe_pw@{}",
+        &url[..scheme_end],
+        &url[at + 1..]
+    );
+    let app_pool = {
+        use deadpool_postgres::Manager;
+        use std::str::FromStr;
+        let config = tokio_postgres::Config::from_str(&app_url).expect("valid app URL");
+        let manager = Manager::new(config, tokio_postgres::NoTls);
+        deadpool_postgres::Pool::builder(manager)
+            .max_size(2)
+            .build()
+            .expect("app pool build")
+    };
+
+    // The actual email analytics function, run AS the restricted role.
+    // Today it runs a bare query with no GUC → the seeded sale is
+    // invisible → the report is empty. The fix must make it visible by
+    // setting the tenant GUC in a transaction.
+    let rows = daily_revenue_pg(&app_pool, "2026-01-01", "2026-01-31", &tenant).await;
+    let rows = match rows {
+        Ok(r) => r,
+        Err(e) => panic!("daily_revenue_pg failed as restricted role: {e}"),
+    };
+    assert!(
+        !rows.is_empty(),
+        "the seeded sale must be visible to the restricted role — \
+         daily_revenue_pg must set the tenant GUC (RLS cutover compat)"
+    );
+
+    // The sent_reports claim must also work as the restricted role.
+    let claimed = claim_period_pg(&app_pool, &tenant, "2026-01", "rpt-1").await;
+    assert!(
+        claimed.is_ok() && claimed.unwrap(),
+        "the sent_reports claim must succeed as the restricted role (WITH CHECK needs the GUC)"
+    );
+
+    // Cleanup.
+    let admin = pool.get().await.unwrap();
+    admin
+        .batch_execute(&format!(
+            "ALTER TABLE sales NO FORCE ROW LEVEL SECURITY;
+             ALTER TABLE sent_reports NO FORCE ROW LEVEL SECURITY;
+             ALTER TABLE sales DISABLE ROW LEVEL SECURITY;
+             ALTER TABLE sent_reports DISABLE ROW LEVEL SECURITY;
+             DROP POLICY IF EXISTS tenant_isolation ON sales;
+             DROP POLICY IF EXISTS tenant_isolation ON sent_reports;
+             DELETE FROM sale_lines WHERE id = '{ns}-line';
+             DELETE FROM sales WHERE id = '{ns}-sale';
+             DROP OWNED BY {role};
+             DROP ROLE IF EXISTS {role};"
+        ))
+        .await
+        .expect("email-RLS probe cleanup should succeed");
+}

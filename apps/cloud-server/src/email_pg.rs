@@ -335,8 +335,12 @@ async fn claim_period_pg(
     period: &str,
     report_id: &str,
 ) -> Result<bool, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    let n = client
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
+    let n = tx
         .execute(
             "INSERT INTO sent_reports (tenant_id, period, report_id)
              VALUES ($1, $2, $3)
@@ -345,6 +349,7 @@ async fn claim_period_pg(
         )
         .await
         .map_err(|e| format!("DB error: {e}"))?;
+    tx.commit().await.map_err(|e| e.to_string())?;
     Ok(n > 0)
 }
 
@@ -353,14 +358,18 @@ async fn claim_period_pg(
 /// whose SMTP response was lost is the unavoidable at-least-once boundary
 /// of email delivery.
 async fn release_period_pg(pool: &Pool, tenant: &str, period: &str) -> Result<(), String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    client
-        .execute(
-            "DELETE FROM sent_reports WHERE tenant_id = $1 AND period = $2",
-            &[&tenant, &period],
-        )
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
         .await
-        .map_err(|e| format!("DB error: {e}"))?;
+        .map_err(|e| e.to_string())?;
+    tx.execute(
+        "DELETE FROM sent_reports WHERE tenant_id = $1 AND period = $2",
+        &[&tenant, &period],
+    )
+    .await
+    .map_err(|e| format!("DB error: {e}"))?;
+    tx.commit().await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -604,10 +613,14 @@ async fn daily_revenue_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<DailyRevenueRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT d.date, d.total_minor, d.currency, d.sale_count,
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
@@ -659,10 +672,14 @@ async fn weekly_revenue_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<WeeklyRevenueRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT d.week_start, d.total_minor, d.currency, d.sale_count,
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
@@ -713,10 +730,14 @@ async fn monthly_revenue_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<MonthlyRevenueRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT d.month, d.total_minor, d.currency, d.sale_count,
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
@@ -774,7 +795,11 @@ async fn top_products_pg(
     } else {
         "total_minor DESC"
     };
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
     let sql = format!(
@@ -793,7 +818,7 @@ async fn top_products_pg(
          ORDER BY {order_clause}, p.sku
          LIMIT $3"
     );
-    let rows = client
+    let rows = tx
         .query(&sql, &[&start, &end, &limit, &tenant])
         .await
         .map_err(|e| format!("DB error: {e}"))?;
@@ -828,10 +853,14 @@ async fn hourly_heatmap_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<HourlyHeatmapRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT EXTRACT(DOW FROM created_at::timestamp)::bigint AS day_of_week,
                     EXTRACT(HOUR FROM created_at::timestamp)::bigint AS hour,
@@ -867,10 +896,14 @@ async fn category_breakdown_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<CategoryBreakdownRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT p.category_id, COALESCE(c.name, 'Uncategorised') AS category_name,
                     SUM(sl.line_minor)::bigint AS total_minor,
@@ -917,8 +950,12 @@ async fn low_stock_alerts_at_location_pg(
     default_threshold: i64,
     tenant: &str,
 ) -> Result<Vec<LowStockAlert>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    let rows = client
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
+    let rows = tx
         .query(
             "SELECT p.id AS product_id, p.sku, p.name, p.currency,
                     p.price_minor, p.cost_minor,
@@ -973,8 +1010,12 @@ async fn active_stock_alerts_pg(
     location_id: &str,
     tenant: &str,
 ) -> Result<Vec<StockAlertEvent>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    let rows = client
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
+    let rows = tx
         .query(
             "SELECT sae.id, sae.threshold_id, sae.product_id, sae.location_id,
                     sae.current_qty, sae.threshold, sae.status,

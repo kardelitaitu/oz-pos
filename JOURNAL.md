@@ -5738,3 +5738,41 @@ both crates.
 **Risks / follow-ups:** the health COUNT(status='pending') query is
 covered by idx_offline_queue_status; the global MAX(created_at) in
 oldest_created_at remains a min-scan per pull (bounded by anchor check).
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 5 (email path RLS cutover compat)
+
+**Problem:** After scripts/rls-cutover.sql FORCEs ROW LEVEL SECURITY, every
+query touching a tenant table must run with SET LOCAL oz.tenant_id in a
+transaction. The webhook path was deliberately made oz_app-compatible; the
+email report path was NOT — daily_revenue_pg/weekly/monthly,
+	op_products_pg, hourly_heatmap_pg, category_breakdown_pg,
+low_stock_alerts_at_location_pg, ctive_stock_alerts_pg,
+category_popularity_pg, claim_period_pg, elease_period_pg all ran
+BARE queries with no transaction and no GUC. Post-cutover:
+- analytics reads → current_setting returns NULL → policy filters every
+  row → reports silently empty
+- sent_reports INSERT (claim) → WITH CHECK violation → at-most-once
+  dedup breaks
+
+**Solution:** TDD Red→Green.
+- RED: pg_integration_email_analytics_visible_as_restricted_role — real
+  cutover setup (restricted role + FORCE RLS on sales/sent_reports),
+  drives the ACTUAL daily_revenue_pg + claim_period_pg through a
+  restricted-role pool; asserts the seeded sale is visible. Failed before
+  the fix (empty rows).
+- GREEN: every tenant-scoped analytics/write function now opens a
+  transaction + SET LOCAL oz.tenant_id (matching sync_store.rs); tx
+  drops → GUC auto-resets on the pooled connection.
+
+**Also noted:** active_tenants_pg (tenant discovery) queries RLS tables
+with no GUC — post-cutover it returns 0 tenants and the email loop
+silently stops. Same class as distinct_tenant_count's documented
+post-cutover 0; needs a decision (BYPASSRLS discovery role or non-RLS
+registry) — follow-up.
+
+**Verification:** cargo test -p oz-cloud-server — 208 unit + 5 integration
++ 2 startup, all green; fmt + clippy -D warnings clean.
+
+**Risks / follow-ups:** active_tenants_pg discovery (above); the settings
+helpers are correctly left bare (settings is not RLS'd — key-prefix
+scoping).
