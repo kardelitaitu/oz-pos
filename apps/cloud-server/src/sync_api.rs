@@ -185,17 +185,16 @@ async fn push_handler(
     let batch_bytes = serde_json::to_vec(&items).map(|v| v.len()).unwrap_or(0) as f64;
     metrics::SYNC_BATCH_SIZE_BYTES.observe(batch_bytes);
 
-    // Phase 1.2: the per-item INSERT goes through the sync store, so the
-    // SQLite and Postgres backends share one code path. `db_start` now
-    // measures backend access for the batch (mutex lock / pool acquisition).
+    // Phase 1.2: INSERT goes through the sync store in a single transaction
+    // (previously one transaction per item). `db_start` measures backend
+    // access for the whole batch (mutex lock / pool acquisition).
     let store = state.store();
     let db_start = std::time::Instant::now();
     let mut results = Vec::with_capacity(items.len());
 
+    // Phase 1: separate valid items from rejected UUIDs (cheap, no DB).
+    let mut valid_items: Vec<oz_core::offline::OfflineQueueItem> = Vec::with_capacity(items.len());
     for item in &items {
-        // Defense-in-depth (round 119): ids are client-supplied strings that
-        // end up in the prune DELETE path. When skip_push_validation is set
-        // (trusted server-to-server), skip UUID parsing to save ~0.02 core CPU.
         if !state.skip_push_validation && uuid::Uuid::parse_str(&item.id).is_err() {
             metrics::SYNC_PUSHES_TOTAL
                 .with_label_values(&["rejected"])
@@ -203,39 +202,34 @@ async fn push_handler(
             results.push(PushOutcome::Rejected {
                 reason: format!("invalid id: {}", item.id),
             });
-            continue;
+        } else {
+            valid_items.push(item.clone());
         }
-        match store.push_item(item, tenant_id).await {
-            Ok(PushOutcome::Accepted) => {
-                metrics::SYNC_PUSHES_TOTAL
-                    .with_label_values(&["accepted"])
-                    .inc();
-                results.push(PushOutcome::Accepted);
-            }
-            Ok(PushOutcome::Rejected { reason }) => {
-                let label = if reason.starts_with("duplicate id:") {
-                    "conflict"
-                } else {
-                    "rejected"
-                };
-                metrics::SYNC_PUSHES_TOTAL.with_label_values(&[label]).inc();
-                results.push(PushOutcome::Rejected { reason });
-            }
-            Ok(PushOutcome::Conflict(conflict_item)) => {
-                // The store never resolves conflicts, but the match must be
-                // exhaustive over the wire type.
-                metrics::SYNC_PUSHES_TOTAL
-                    .with_label_values(&["conflict"])
-                    .inc();
-                results.push(PushOutcome::Conflict(conflict_item));
-            }
-            Err(e) => {
+    }
+
+    // Phase 2: single-transaction batch insert for the valid items.
+    let batch_results = if valid_items.is_empty() {
+        Vec::new()
+    } else {
+        store
+            .push_batch(&valid_items, tenant_id)
+            .await
+            .map_err(|e| {
                 metrics::SYNC_PUSHES_TOTAL
                     .with_label_values(&["rejected"])
                     .inc();
-                return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, e));
-            }
-        }
+                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e)
+            })?
+    };
+    for outcome in batch_results {
+        let label = match &outcome {
+            PushOutcome::Accepted => "accepted",
+            PushOutcome::Rejected { reason } if reason.starts_with("duplicate id:") => "conflict",
+            PushOutcome::Rejected { .. } => "rejected",
+            PushOutcome::Conflict(..) => "conflict",
+        };
+        metrics::SYNC_PUSHES_TOTAL.with_label_values(&[label]).inc();
+        results.push(outcome);
     }
 
     metrics::DB_CONTENTION_SECONDS

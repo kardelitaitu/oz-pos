@@ -87,6 +87,56 @@ async fn sqlite_duplicate_rejection_uses_unique_substring() {
     }
 }
 
+/// `push_batch` must persist every item in one lock acquisition (SQLite)
+/// and return one outcome per item, in order, matching `push_item` on the
+/// same inputs — proving the batched path is a drop-in for the loop.
+#[tokio::test]
+async fn sqlite_push_batch_matches_per_item_semantics() {
+    let conn = fresh_db();
+    let store = SyncStore::sqlite(conn.clone());
+
+    let items = vec![
+        sample_item("batch-1"),
+        sample_item("batch-2"),
+        sample_item("batch-3"),
+    ];
+    let outcomes = store.push_batch(&items, "tenant-b").await.unwrap();
+    assert_eq!(outcomes.len(), 3);
+    assert!(matches!(outcomes[0], PushOutcome::Accepted));
+    assert!(matches!(outcomes[1], PushOutcome::Accepted));
+    assert!(matches!(outcomes[2], PushOutcome::Accepted));
+
+    // Duplicate within the same batch: second copy is Rejected, the
+    // remaining items still Accepted (no batch-wide rollback).
+    let dup_batch = vec![
+        sample_item("batch-4"),
+        sample_item("batch-4"),
+        sample_item("batch-5"),
+    ];
+    let outcomes = store.push_batch(&dup_batch, "tenant-b").await.unwrap();
+    assert_eq!(outcomes.len(), 3);
+    assert!(matches!(outcomes[0], PushOutcome::Accepted));
+    match &outcomes[1] {
+        PushOutcome::Rejected { reason } => {
+            assert!(reason.contains("duplicate id: batch-4"), "got: {reason}");
+        }
+        other => panic!("expected Rejected for dup, got: {other:?}"),
+    }
+    assert!(matches!(outcomes[2], PushOutcome::Accepted));
+
+    // Pull confirms exactly the accepted rows landed.
+    let pulled = store
+        .pull_items("tenant-b", Some("2026-01-01T00:00:00Z"), None, 501)
+        .await
+        .unwrap();
+    let mut ids: Vec<_> = pulled.iter().map(|i| i.id.as_str()).collect();
+    ids.sort_unstable();
+    assert_eq!(
+        ids,
+        vec!["batch-1", "batch-2", "batch-3", "batch-4", "batch-5"]
+    );
+}
+
 /// Integration test against a live Postgres instance (the same Docker
 /// service `db.rs` uses, port 15432). Skips when unreachable, so the
 /// suite stays green on machines without a running Postgres.
