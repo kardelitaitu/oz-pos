@@ -327,14 +327,43 @@ async fn snapshot_serves_store_id_when_present() {
 #[tokio::test]
 async fn snapshot_cache_hit_returns_200() {
     // After a successful snapshot, a second request within the TTL
-    // must still return 200 (the cache path must return Ok).
+    // must still return 200 (the cache path must return Ok), serve
+    // application/json, and round-trip as the same JSON body — proving
+    // the raw-bytes cache-hit path (SOTA finding C) is wire-compatible
+    // with the original axum::Json response.
     let app = test_router();
     let req1 = authed(axum::http::Method::GET, "/api/sync/snapshot", None);
     let resp1 = app.clone().oneshot(req1).await.unwrap();
     assert_eq!(resp1.status(), StatusCode::OK);
+    assert_eq!(
+        resp1
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "application/json"
+    );
+    let body1 = resp1.into_body().collect().await.unwrap().to_bytes();
+    let json1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
+
+    // Second request hits the cache: same status, same content-type,
+    // same JSON.
     let req2 = authed(axum::http::Method::GET, "/api/sync/snapshot", None);
     let resp2 = app.oneshot(req2).await.unwrap();
     assert_eq!(resp2.status(), StatusCode::OK);
+    assert_eq!(
+        resp2
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "application/json"
+    );
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(json1, json2, "cache hit must serve the identical JSON");
 }
 
 #[tokio::test]

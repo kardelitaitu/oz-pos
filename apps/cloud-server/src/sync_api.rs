@@ -12,6 +12,7 @@ use axum::{
     Router,
     extract::{Extension, Request, State},
     middleware,
+    response::IntoResponse,
     routing::{get, post},
 };
 use rusqlite::Connection;
@@ -369,12 +370,27 @@ async fn pull_handler(
     Ok(axum::Json(PullResponse { items, next_cursor }))
 }
 
+/// Build a JSON response from pre-serialized bytes.
+///
+/// Serves the snapshot cache hit path without a
+/// `serde_json::from_slice` → `axum::Json` re-serialize round trip
+/// (SOTA finding C): the cache stores `Vec<u8>` precisely to avoid
+/// JSON work on hits, so the hit path now returns the bytes as-is.
+fn json_bytes_response(bytes: Vec<u8>) -> axum::response::Response {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        bytes,
+    )
+        .into_response()
+}
+
 /// `GET /api/sync/snapshot` — return reference data baseline for a tenant (P-3).
 ///
 /// Called by clients whose sync anchor has expired. Returns all products,
 /// tax rates, and users for the requesting tenant (scoped by `tenant_id`
 /// from JWT claims). Responses are cached in-memory per-tenant with a
-/// 5-min TTL.
+/// 15-min TTL; cache hits serve the stored bytes directly with zero JSON
+/// processing.
 ///
 /// Both `POST /api/v1/tax-rates` and `POST /api/v1/users` now stamp
 /// `tenant_id` from JWT claims (same pattern as `create_product` in
@@ -384,8 +400,7 @@ async fn pull_handler(
 async fn snapshot_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
-) -> Result<axum::Json<serde_json::Value>, (axum::http::StatusCode, axum::Json<serde_json::Value>)>
-{
+) -> Result<axum::response::Response, (axum::http::StatusCode, axum::Json<serde_json::Value>)> {
     let start = std::time::Instant::now();
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
@@ -408,9 +423,10 @@ async fn snapshot_handler(
         let cache = state.snapshot_cache.lock().await;
         if let Some((cached_at, cached_bytes)) = cache.get(tenant_id)
             && cached_at.elapsed().as_secs() < SNAPSHOT_CACHE_TTL_SECS
-            && let Ok(json) = serde_json::from_slice::<serde_json::Value>(cached_bytes)
         {
-            return Ok(axum::Json(json));
+            // Cache hit: serve the stored bytes directly. No JSON
+            // deserialize → re-serialize (SOTA finding C).
+            return Ok(json_bytes_response(cached_bytes.clone()));
         }
     }
 
@@ -436,17 +452,22 @@ async fn snapshot_handler(
         "users": users,
     });
 
+    // Serialize once: the bytes are both cached and served as the
+    // response body (SOTA finding C — no second JSON pass).
+    let bytes = match serde_json::to_vec(&snapshot) {
+        Ok(bytes) => bytes,
+        Err(e) => return Err(error_json(&e.to_string())),
+    };
+
     // Cache the result.
-    if let Ok(cached_bytes) = serde_json::to_vec(&snapshot) {
-        let mut cache = state.snapshot_cache.lock().await;
-        cache.insert(
-            tenant_id.to_owned(),
-            (std::time::Instant::now(), cached_bytes),
-        );
-    }
+    let mut cache = state.snapshot_cache.lock().await;
+    cache.insert(
+        tenant_id.to_owned(),
+        (std::time::Instant::now(), bytes.clone()),
+    );
 
     metrics::SYNC_PULL_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
-    Ok(axum::Json(snapshot))
+    Ok(json_bytes_response(bytes))
 }
 
 /// `GET /api/sync/status` — return server health, version, and pending queue depth.
