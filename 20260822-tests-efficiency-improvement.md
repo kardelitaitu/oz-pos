@@ -171,13 +171,13 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A16 modules | ~12.0 (cold 21.6) | — (plateaued) | | | none — 325 tests, no delays, spawn floor |
 | A17 platform | 26.5 (warm) | 12.5 (warm) | | | cut timeouts: 5s→500ms (pg_transport push/pull edge cases); 50ms client + 500ms outer (transport classify tests) |
 | A18 oz-core integration | 14.0 | — (plateaued) | | | none — backup tests already fixed in A02; no delays remain |
-| A19 oz-payment integration | | | | | |
-| A20 desktop-client integration | | | | | |
-| A21 oz-hal integration | | | | | |
-| A22 platform/sync integration | | | | | |
-| A23 oz-cli integration | | | | | |
-| A24 cloud-server integration | | | | | |
-| A25 tax integration | | | | | |
+| A19 oz-payment integration | 11.1 | — (plateaued) | | | none beyond A06 poll fix; env 2s connect delay |
+| A20 desktop-client integration | — (load-blocked) | | | | blocked: crate too large under other agent's compile |
+| A21 oz-hal integration | 2.0 | — (plateaued) | | | none — kernel-necessary reconnect sleeps |
+| A22 platform/sync integration | 15.9 (compile-dom.) | — (plateaued) | | | none — tiny 2–10ms async sleeps |
+| A23 oz-cli integration | 6.1 (compile-dom.) | — (plateaued) | | | none — no sleeps |
+| A24 cloud-server integration | — (blocked) | | | | blocked: other agent's email_pg.rs borrow error |
+| A25 tax integration | 1.5 | — (plateaued) | | | none — no sleeps |
 | A26 doctests | | | | | |
 | A27 nextest workspace sweep | | | | | |
 | A28 cargo fallback sweep | | | | | |
@@ -309,25 +309,25 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · baseline · commit `9cc0ee4b` · warm 14 s (509 tests, ~11.8 s real work, all pass)** — `cargo nextest run -p oz-core --test '*'`. The former 18–36 s backup/restore tests were already fixed by the A02 `Store::backup()` chunk-size change (now ~1.1 s). No actual delays found: all `sleep`/`retry` matches are `retry_count` DB fields or `yield_now()` in the concurrency handshake (30 s deadline, no fixed sleep). **Area plateaued** — the 6 s concurrency race test is genuine SQLite busy-window behavior.
 
 ### A19 oz-payment integration
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `a02a18d3` · warm 11.1 s (85 tests pass, ~3.2 s real work)** — `cargo nextest run -p oz-payment --test '*'`. Includes wiremock tests (fast) and the network-error tests (2.5 s each, environmental 2 s connect delay — see A06). Already clean: no delays to cut beyond the A06 poll fix. **Area plateaued.**
 
 ### A20 desktop-client integration
-- [ ] baseline pending
+- **2026-08-22 · LOAD-BLOCKED** — crate too large to time under other agent's concurrent compile. Kernel lifecycle tests have 10–200 ms timing sleeps (mutex-contention duration, genuine timing assertions). Re-measure when quiet.
 
 ### A21 oz-hal integration
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `a02a18d3` · warm 2.0 s (22 tests pass, ~0.5 s real work)** — `cargo nextest run -p oz-hal --test '*'`. Only `tcp_reconnect.rs` has sleeps (kernel-timing-necessary, documented in A11). **Area plateaued.**
 
 ### A22 platform/sync integration
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `a02a18d3` · warm 15.9 s (compile-dominated; 0 integration tests found)** — `cargo nextest run -p platform-sync --test '*'`. The `integration_test.rs` file has 2–10 ms sleeps (async event timing, tiny). **Area plateaued.**
 
 ### A23 oz-cli integration
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `a02a18d3` · warm 6.1 s (2 tests pass, ~0.02 s real work, compile-dominated)** — `cargo nextest run -p oz-cli --test '*'`. No sleeps. **Area plateaued.**
 
 ### A24 cloud-server integration
-- [ ] baseline pending
+- **2026-08-22 · BLOCKED BY OTHER AGENT** — same as A13 (email_pg.rs borrow error breaks compile).
 
 ### A25 tax integration
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `a02a18d3` · warm 1.5 s (11 tests pass, ~0.1 s real work)** — `cargo nextest run -p modules-tax --test '*'`. No sleeps. **Area plateaued.**
 
 ### A26 doctests
 - [ ] baseline pending
