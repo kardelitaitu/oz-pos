@@ -31,9 +31,19 @@ RUN go mod download
 # Non-test sources only (healthcheck.go is //go:build ignore; *_test.go
 # files are excluded by `go build`). modernc.org/sqlite is pure Go, so a
 # CGO_ENABLED=0 static binary runs on the glibc runtime image below.
-# NOTE: every non-test, non-healthcheck .go file must be listed here —
-# Docker COPY is explicit (no glob), so missing files cause undefined
-# symbol errors at build time.
+#
+# IMPORTANT: every non-test, non-healthcheck .go file must be listed
+# in the COPY below — Docker COPY is explicit (no glob), so missing
+# files cause undefined symbol errors at build time. Keep this list in
+# sync with `ls apps/license-server/*.go | grep -v _test.go | grep -v healthcheck.go`.
+#
+# Checklist (23 files as of 0.0.28 — bump count here when adding files):
+#   activate.go  addon_admin.go  api_key.go  contact.go
+#   enterprise_admin.go  enterprise_trial.go  expiry.go  health.go
+#   helpers.go  main.go  midtrans_checkout.go  midtrans_webhook.go
+#   paddle_webhook.go  pause.go  ratelimit.go  renew.go  resume.go
+#   smtp_mail.go  status.go  trial.go  trial_emails.go
+#   web_otp.go  web_password.go
 COPY apps/license-server/main.go apps/license-server/activate.go \
      apps/license-server/renew.go apps/license-server/status.go \
      apps/license-server/helpers.go apps/license-server/expiry.go \
