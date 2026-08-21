@@ -46,7 +46,6 @@ test.describe('Complete Sale Flow', () => {
 
     // Click first product.
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Cart must contain at least 1 line item.
     const cartLines = page.locator('[data-testid="cart-panel-line-item"]');
@@ -66,9 +65,7 @@ test.describe('Complete Sale Flow', () => {
 
     // Click the same product twice.
     await productCards.first().click();
-    await page.waitForTimeout(300);
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Cart must have exactly 1 line (stacked quantity).
     const cartLines = page.locator('[data-testid="cart-panel-line-item"]');
@@ -93,7 +90,6 @@ test.describe('Complete Sale Flow', () => {
 
     // Add product.
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Click pay button.
     const payBtn = page.locator('.retail-cart-action-btn--pay');
@@ -121,7 +117,6 @@ test.describe('Complete Sale Flow', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Open payment modal.
     await page.locator('.retail-cart-action-btn--pay').click();
@@ -135,7 +130,6 @@ test.describe('Complete Sale Flow', () => {
     await expect(tenderInput).toBeVisible({ timeout: 3_000 });
     await tenderInput.click();
     await tenderInput.pressSequentially('9999999', { delay: 30 });
-    await page.waitForTimeout(200);
 
     // Find and click confirm / settle button.
     const confirmBtn = page.locator(
@@ -144,7 +138,6 @@ test.describe('Complete Sale Flow', () => {
     const confirmCount = await confirmBtn.count();
     if (confirmCount > 0) {
       await confirmBtn.click();
-      await page.waitForTimeout(1_000);
     }
 
     // After completing, receipt preview must appear OR payment modal closes.
@@ -161,7 +154,6 @@ test.describe('Complete Sale Flow', () => {
       } else if (await printBtn.isVisible().catch(() => false)) {
         await printBtn.click();
       }
-      await page.waitForTimeout(500);
     }
 
     // Cart must be empty after completing sale — the action bar (incl.
@@ -178,7 +170,6 @@ test.describe('Complete Sale Flow', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Open payment modal.
     await page.locator('.retail-cart-action-btn--pay').click();
@@ -191,7 +182,6 @@ test.describe('Complete Sale Flow', () => {
 
     if (inputVisible) {
       await tenderInput.fill('1000'); // $10.00 in minor units or as string
-      await page.waitForTimeout(300);
     }
 
     // Look for change display.
@@ -236,7 +226,6 @@ test.describe('Complete Sale Flow', () => {
 
     // Add a product.
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // The hold button (F4 fn-key) should exist and be enabled.
     const holdBtn = page.locator('.retail-fn-btn').filter({ hasText: 'F4' });
@@ -251,7 +240,6 @@ test.describe('Complete Sale Flow', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Verify cart has 1 line.
     const cartLines = page.locator('[data-testid="cart-panel-line-item"]');
@@ -262,7 +250,6 @@ test.describe('Complete Sale Flow', () => {
     // .retail-cart-remove-btn — no line-item-remove-button testid).
     const removeBtn = page.locator('.retail-cart-remove-btn').first();
     await removeBtn.click();
-    await page.waitForTimeout(500);
 
     // Cart must be empty.
     await expect(cartLines).toHaveCount(0);
@@ -307,7 +294,6 @@ test.describe('Payment Methods', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Verify cart has 1 line.
     await expect(
@@ -324,7 +310,6 @@ test.describe('Payment Methods', () => {
     const discountBtn = page.locator('.retail-cart-action-btn--discount');
     await expect(discountBtn).toBeVisible({ timeout: 3_000 });
     await discountBtn.click();
-    await page.waitForTimeout(500);
 
     // Discount modal must open.
     const overlay = page.locator('.retail-discount-overlay');
@@ -338,13 +323,11 @@ test.describe('Payment Methods', () => {
     const pctInput = page.locator('#discount-pct');
     await expect(pctInput).toBeVisible({ timeout: 3_000 });
     await pctInput.fill('10');
-    await page.waitForTimeout(200);
 
     // Click Apply.
     const applyBtn = page.locator('.retail-discount-actions').locator('button').last();
     await expect(applyBtn).toBeVisible({ timeout: 3_000 });
     await applyBtn.click();
-    await page.waitForTimeout(500);
 
     // Discount modal must close after apply.
     await expect(overlay).not.toBeVisible({ timeout: 5_000 });
@@ -377,7 +360,6 @@ test.describe('Payment Methods', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Open payment modal.
     await page.locator('.retail-cart-action-btn--pay').click();
@@ -388,7 +370,6 @@ test.describe('Payment Methods', () => {
     const qrisRadio = page.locator('input[value="qris"]');
     await expect(qrisRadio).toBeAttached({ timeout: 5_000 });
     await qrisRadio.check({ force: true });
-    await page.waitForTimeout(500);
 
     // QRIS section must render with description.
     await expect(page.locator('.payment-qris-section')).toBeVisible({ timeout: 5_000 });
@@ -401,7 +382,6 @@ test.describe('Payment Methods', () => {
 
     // Click to generate the QR.
     await payQrBtn.click();
-    await page.waitForTimeout(1_000);
 
     // QrisQrDisplay component renders an overlay above payment modal
     // with QR code content. Verify QR-specific element appeared.
@@ -422,7 +402,6 @@ test.describe('Payment Methods', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Open payment modal.
     await page.locator('.retail-cart-action-btn--pay').click();
@@ -473,9 +452,7 @@ test.describe('Payment Methods', () => {
     const row0Input = amountInputs.nth(0);
     const row1Input = amountInputs.nth(1);
     await row0Input.fill(cashAmount);
-    await page.waitForTimeout(200);
     await row1Input.fill(cardAmount);
-    await page.waitForTimeout(300);
 
     // Both inputs must have non-empty values after entry.
     const val0 = await row0Input.inputValue();
