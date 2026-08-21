@@ -25,7 +25,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -143,12 +143,11 @@ function buildFixture({ docs = DOCS } = {}) {
 /** Run the copied verifier inside a fixture dir; return { code, output }. */
 function runVerifier(dir) {
   try {
-    const out = execSync('python3 scripts/verify-ci-docs-drift.py', {
-      cwd: dir,
-      encoding: 'utf8',
-      stdio: 'pipe',
-      timeout: 30_000,
-    });
+    const out = execFileSync(
+      process.platform === 'win32' ? 'python' : 'python3',
+      ['scripts/verify-ci-docs-drift.py'],
+      { cwd: dir, encoding: 'utf8', stdio: 'pipe', timeout: 30_000 },
+    );
     return { code: 0, output: out };
   } catch (err) {
     return {

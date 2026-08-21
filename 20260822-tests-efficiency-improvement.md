@@ -188,7 +188,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A33 e2e api | | | | | |
 | A34 e2e perf-smoke | | | | | |
 | A35 e2e remaining | | | | | |
-| A36 script tests | | | | | |
+| A36 script tests | 3.34 | 3.34 (46/46 pass) | | | fixed 3 failing tests: cross-platform python resolution |
 | A37 check.sh aggregate | | | | | |
 | A38 check:all aggregate | | | | | |
 
@@ -360,7 +360,8 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - [ ] baseline pending
 
 ### A36 script tests
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `e808be2c` · warm median 3.34 s (runs 3.21/3.34/5.80)** — `npm run test:scripts` (from `ui/`); 4 test files, 46 tests. **3 pre-existing failures** found in `verify-ci-docs-drift.test.mjs`: hardcoded `python3` in `execSync` — Windows has `python`/`py`, not `python3`. Fixed: switched to `execFileSync` with `process.platform === 'win32' ? 'python' : 'python3'` (same pattern as the sibling architecture-boundaries test). After fix: 46/46 pass.
+- **2026-08-22 · attempt 1 · technique: cross-platform python resolution → **ACCEPTED** — 3 failing tests now pass. No measurable performance change (3.34 s median, spawn-overhead floor). **Area plateaued.**
 
 ### A37 check.sh aggregate
 - [ ] baseline pending
