@@ -1061,6 +1061,187 @@ async fn tenant_count_cache_serves_stale_value_within_ttl() {
     );
 }
 
+/// When the cache TTL expires, the next read must RESCAN and return the
+/// updated tenant count. The cache's internal timestamp is backdated
+/// directly (the test module can reach `TenantCountCache.0`) so no real
+/// 60s wait is needed.
+#[tokio::test]
+async fn tenant_count_cache_refreshes_after_expiry() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('r1', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-a')",
+        )
+        .unwrap();
+    }
+    assert_eq!(state.cached_tenant_count().await, 1);
+
+    // A second tenant appears AFTER the warm read.
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('r2', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-b')",
+        )
+        .unwrap();
+    }
+
+    // Backdate the cached entry beyond the 60s TTL so the next read must
+    // treat it as expired and rescan → 2.
+    {
+        let mut guard = state.tenant_count_cache.0.lock().await;
+        let (_, count) = guard.as_ref().expect("cache must be warm");
+        *guard = Some((
+            std::time::Instant::now() - std::time::Duration::from_secs(120),
+            *count,
+        ));
+    }
+
+    assert_eq!(
+        state.cached_tenant_count().await,
+        2,
+        "expired cache must rescan and see the new tenant"
+    );
+}
+
+/// The cache must behave identically on the real PostgreSQL backend:
+/// warm at N, serve stale within TTL, rescan after expiry.
+#[tokio::test]
+async fn pg_integration_tenant_count_cache() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG tenant-count cache integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-cache-{}", uuid::Uuid::now_v7());
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: Some(pool.clone()),
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    // Seed two tenants directly in PG.
+    {
+        let client = pool.get().await.unwrap();
+        for i in 0..2 {
+            client
+                .execute(
+                    "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+                     VALUES ($1, 'act', '{}', 'pending', '2026-01-01T00:00:00Z', $2)",
+                    &[&format!("{tenant}-item-{i}"), &format!("{tenant}-t{i}")],
+                )
+                .await
+                .unwrap();
+        }
+    }
+
+    // Warm: 2 distinct tenants.
+    assert_eq!(state.cached_tenant_count().await, 2);
+
+    // Add a third tenant; within TTL the cache still serves 2.
+    {
+        let client = pool.get().await.unwrap();
+        client
+            .execute(
+                "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+                 VALUES ($1, 'act', '{}', 'pending', '2026-01-01T00:00:00Z', $2)",
+                &[&format!("{tenant}-item-3"), &format!("{tenant}-t3")],
+            )
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        state.cached_tenant_count().await,
+        2,
+        "cache must serve stale count within TTL on PG"
+    );
+
+    // Expire the cache → rescan sees 3.
+    {
+        let mut guard = state.tenant_count_cache.0.lock().await;
+        let (_, count) = guard.as_ref().expect("cache must be warm");
+        *guard = Some((
+            std::time::Instant::now() - std::time::Duration::from_secs(120),
+            *count,
+        ));
+    }
+    assert_eq!(
+        state.cached_tenant_count().await,
+        3,
+        "expired PG cache must rescan"
+    );
+
+    // Cleanup.
+    pool.get()
+        .await
+        .unwrap()
+        .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
+        .await
+        .unwrap();
+}
+
+/// Concurrent cold reads must all agree on the same count and leave the
+/// cache populated — no double-count, no panic under parallel warm-up.
+#[tokio::test]
+async fn tenant_count_cache_concurrent_first_reads() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('c1', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-a'),
+             ('c2', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-b'),
+             ('c3', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-c')",
+        )
+        .unwrap();
+    }
+
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let state = state.clone();
+        handles.push(tokio::spawn(
+            async move { state.cached_tenant_count().await },
+        ));
+    }
+    let mut counts = Vec::with_capacity(handles.len());
+    for handle in handles {
+        counts.push(handle.await.unwrap());
+    }
+    assert!(
+        counts.iter().all(|c| *c == 3),
+        "all concurrent reads must agree on 3, got: {counts:?}"
+    );
+
+    // Cache is now warm — a subsequent read is served without rescanning.
+    assert_eq!(state.cached_tenant_count().await, 3);
+}
+
 // ── Plan enforcement (ADR sync-plan-gating) ─────────────────────
 
 #[tokio::test]
