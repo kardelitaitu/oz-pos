@@ -164,7 +164,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A09 oz-notification | ~2.5–3.0 (reconstructed) | 2.58 | | | 10× sleep(50ms)→poll-with-deadline (robustness, per-test 50ms→1ms) |
 | A10 oz-lua | 2.18 (cold 11.8) | — (plateaued) | | | none — spawn floor, no delays |
 | A11 oz-hal | ~3.5–5.0 (cold 27.9) | — (plateaued) | | | none — spawn floor; tcp_reconnect sleeps are kernel-necessary |
-| A12 oz-api | | | | | |
+| A12 oz-api | 4.44 (non-PG; cold 36.6) | — (plateaued, PG blocked) | | | none — 5 live-PG tests blocked by other agent's migrations |
 | A13 cloud-server | | | | | |
 | A14 desktop-client | | | | | |
 | A15 tablet-client | | | | | |
@@ -286,7 +286,8 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · baseline · commit `636538e3` · cold 27.9 s / warm ~3.5–5 s (260 tests, ~9.1 s real work)** — `cargo nextest run -p oz-hal`; 260 tests, all pass. Slow tail is all ~1.5 s spawn floor. The only real sleeps are in `tests/tcp_reconnect.rs` (200/150/50/10 ms) — **kernel-timing-necessary** for a deterministic TCP RST/reconnect test (RST processing, listener startup); the playbook's "minimum sleep when the platform genuinely needs it" exception applies. Reducing them risks flakiness. **Area plateaued.**
 
 ### A12 oz-api
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `f7bd0feb` · cold 36.6 s / warm 31.3 s (flaky)** — `cargo nextest run -p oz-api`; 164 tests. **Interference:** the 5 live-PG integration tests (`pg::tests::pg_integration_*`) hit Docker Postgres at `localhost:15432` and are **failing mid-flight with `create_sale ... Db("db error")`** because the OTHER agent's in-flight migrations (tender-currency/sale-charges, altering the `sales` table) are mid-change on that DB. File's own comments document concurrent PG_INIT DDL as a flake source. These tests are other-agent territory — not touched, not measured.
+- **2026-08-22 · clean measurement (non-PG) · commit `f7bd0feb` · warm median 4.44 s (runs 5.03/4.44/3.96)** — `cargo nextest run -p oz-api -E 'not test(pg_integration_)'`; **158 tests, all pass** in ~2.5–3.5 s real work. No sleeps/waits in non-PG tests. **Area plateaued (non-PG)**; the 5 PG tests need the other agent's schema work to land before they can be re-measured.
 
 ### A13 cloud-server
 - [ ] baseline pending
