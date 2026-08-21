@@ -158,7 +158,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A03 oz-security | 1.78 (cold 19.9) | 1.9 (noise, plateaued) | | | sleep→bounded poll (quality-neutral, crate at floor) |
 | A04 oz-reporting | 2.01 (cold 3.4) | — (plateaued) | | | none — pure computation, no delays; codegen override tested & reverted (no gain) |
 | A05 oz-plugin | 5.51 (cold 23.2) | 4.47 | | | payload loop 1→8 bytes/iter (−54% isolated, −19% full) |
-| A06 oz-payment | | | | | |
+| A06 oz-payment | 6.07 (cold 32.3) | ~4.1* | | | QRIS poll: check-first instead of 2s pre-sleep (capture tests −98%); *full-suite delta masked by other-agent load |
 | A07 oz-cli | | | | | |
 | A08 oz-logging | | | | | |
 | A09 oz-notification | | | | | |
@@ -265,7 +265,9 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · attempt 1 · commit +`package_tests.rs` · technique: cut loop iterations (playbook #1) → **ACCEPTED** — `archive_with_oversized_compressed_entry_is_rejected` built a 10 MiB incompressible payload pushing **1 byte per xorshift64 iteration** (10M iterations in the unoptimized test profile). Changed to write 8 bytes/iteration (`to_le_bytes`) → 1.25M iterations. **Identical payload, identical assertion.** Isolated: 1.84 → 0.84 s (−54%). Full suite: median 5.51 → 4.47 s (−19%; baseline's 8.93 s outlier was other-agent load). All 173 tests pass.
 
 ### A06 oz-payment
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `bb7d0cf8` · cold 32.3 s / warm median 6.07 s (runs 6.35/6.07/5.94)** — `cargo nextest run -p oz-payment`; 209 tests (113 unit + 96 integration), all pass. Slow tail: 6 wiremock tests at 2.3–2.6 s.
+- **2026-08-22 · attempt 1 · commit +`qris.rs` · technique: cut polling delay (playbook #1) → **ACCEPTED** — `poll_status` slept **2000 ms BEFORE the first status check**, so every QRIS capture waited a full poll interval even when the payment had already settled/denied. Reordered to **check first, sleep between polls**. Same polling logic, same terminal-state handling, same assertions. Capture tests: 2.56 → 0.05 s each (−98%). **Production bug too** — a real capture of an already-settled QRIS payment now returns instantly instead of after 2 s.
+- **2026-08-22 · attempt 2 · technique: network-error test port → **NOT REDUCIBLE (environmental)** — the 3 `authorize_network_error` tests (qris/square/stripe, ~2.5 s each) connect to `127.0.0.1:1` expecting fast connection-refused. On this dev box **every** localhost port takes ~2 s to refuse (security software; raw .NET connect measured 2.05 s on ports 1/80/443/65535 alike) — machine-specific, not a test-design flaw, instant on Linux CI. Left unchanged (port choice irrelevant). Full-suite wall remains load-inflated by concurrent other-agent runs; capture fix verified in isolation.
 
 ### A07 oz-cli
 - [ ] baseline pending
