@@ -156,7 +156,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A01 foundation | 1.3 (cold 6.9) | 1.29 (cold 4.25) | | | `codegen-units=256` test-profile override (cold −38%, warm flat); cargo test kept (nextest 8.65 s — Windows spawn overhead, see §4.1) |
 | A02 oz-core | 58.5 (cold 58.2) | 31.7 | | | nextest runner (cold −41%); backup chunk 5→512 pgs (warm −46%) |
 | A03 oz-security | 1.78 (cold 19.9) | 1.9 (noise, plateaued) | | | sleep→bounded poll (quality-neutral, crate at floor) |
-| A04 oz-reporting | | | | | |
+| A04 oz-reporting | 2.01 (cold 3.4) | — (plateaued) | | | none — pure computation, no delays; codegen override tested & reverted (no gain) |
 | A05 oz-plugin | | | | | |
 | A06 oz-payment | | | | | |
 | A07 oz-cli | | | | | |
@@ -257,7 +257,8 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · attempt 1 · commit +`lib_tests.rs` · technique: sleep → bounded poll (playbook #1) → **ACCEPTED (robustness; time-neutral)** — the crate's only fixed delay was a 25 ms `thread::sleep` in `in_memory_rotation_timestamps_advance` (waiting for the clock to advance past sub-ms resolution). Replaced with a 1 ms poll loop + 5 s deadline: same assertion (distinct timestamps), faster typical case (0.012 s for the test), and a broken clock now fails fast instead of hanging. Full-suite median 1.9 s vs baseline 1.78 s — **within noise** (2.22 s outlier run = other-agent load), so no measurable gain; the crate is at its floor (0.8 s real work + nextest spawn/compile). Area effectively plateaued.
 
 ### A04 oz-reporting
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `e53749b5` · cold 3.4 s / warm median 2.01 s (runs 2.07/1.72/2.01)** — `cargo nextest run -p oz-reporting`; 74 tests, all pass (~0.8 s real work). Pure-computation crate (daily_summary, margin, menu_engineering, metrics, error, lib): **zero sleeps/waits/loops/retries/proptests** — nothing for the #1 strategy.
+- **2026-08-22 · attempt 1 · technique: `[profile.test.package.oz-reporting] codegen-units = 256` → **REJECTED (no gain)** — same quality-neutral override that won −38% cold on A01, but at this crate's small scale it was flat: cold 3.5 s (vs 3.4), warm median 1.79 s (vs 2.01, within noise — one 2.71 s outlier from other-agent load). Not a measurable improvement → override reverted, no dead config left. Area **plateaued**: 74 tests × ~0.8 s work + nextest spawn/compile is the floor.
 
 ### A05 oz-plugin
 - [ ] baseline pending
