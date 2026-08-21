@@ -12,7 +12,13 @@ const { rows, columns } = Astro.props;
 const locale = Astro.currentLocale ?? 'en';
 
 function cell(value: boolean | string | number): string {
-  return value === true ? '✓' : value === false ? '✗' : String(value);
+  return String(value);
+}
+
+function cellHtml(value: boolean | string | number): string {
+  if (value === true) return '<span class="text-green-400 font-bold">✓</span>';
+  if (value === false) return '<span class="text-red-400 font-bold">✗</span>';
+  return String(value);
 }
 ---
 
@@ -39,7 +45,7 @@ function cell(value: boolean | string | number): string {
               {row.label}
             </th>
             {columns.map((c) => (
-              <td class="px-4 py-3">{cell(row.values[c.tierKey])}</td>
+              <td class="px-4 py-3" set:html={cellHtml(row.values[c.tierKey])} />
             ))}
           </tr>
         ))

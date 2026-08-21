@@ -32,7 +32,7 @@ export const pricing: PricingTier[] = [
       { label: '1 store', included: true },
       { label: '1 register', included: true },
       { label: '1 warehouse', included: true },
-      { label: '30-day sales history', included: true },
+      { label: '3-month sales history', included: true },
       { label: 'QRIS payments', included: false },
       { label: 'Cloud sync', included: false },
     ],
@@ -48,20 +48,7 @@ export const pricing: PricingTier[] = [
       monthly: { price: '$4.99', period: '/month', priceId: 'pri_placeholder_plus_monthly_usd' },
       yearly: { price: '$49.99', period: '/year', priceId: 'pri_placeholder_plus_yearly_usd' },
     },
-    // Restaurant Starter bundle (C3.2, subscription-tiers.md §5): Plus +
-    // KDS at 10% off à la carte. PLACEHOLDER prices (base Plus + KDS
-    // add-on, 10% off) — swap for the catalog figures when the six real
-    // prices land; the ids are placeholders that degrade to the mailto
-    // fallback until then.
-    bundle: {
-      id: 'restaurant_starter',
-      label: 'Restaurant Starter bundle',
-      note: 'Plus + Kitchen Display (KDS) — 10% off à la carte',
-      prices: {
-        monthly: { price: '$7.49', period: '/month', priceId: 'pri_placeholder_plus_bundle_monthly' },
-        yearly: { price: '$74.99', period: '/year', priceId: 'pri_placeholder_plus_bundle_yearly' },
-      },
-    },
+
     features: [
       { label: '1 store', included: true },
       { label: '2 registers', included: true },
@@ -76,7 +63,7 @@ export const pricing: PricingTier[] = [
     tierKey: 'pro',
     name: 'Pro',
     currency: 'USD',
-    description: 'For growing businesses — analytics, KDS, and multi-terminal.',
+    description: 'For growing businesses — analytics, Kitchen Display, and multi-terminal.',
     cta: 'Choose Pro',
     highlight: true,
     prices: {
@@ -92,7 +79,7 @@ export const pricing: PricingTier[] = [
     features: [
       { label: '2 stores', included: true },
       { label: '5 registers per store', included: true },
-      { label: 'Kitchen display (KDS)', included: true },
+      { label: 'Kitchen Display', included: true },
       { label: 'Reports & analytics', included: true },
       { label: 'Stripe cards', included: true },
       { label: 'Cloud sync', included: true },
@@ -106,11 +93,11 @@ export const pricing: PricingTier[] = [
     description: 'For multi-store chains — loyalty and automation.',
     cta: 'Choose Premium',
     prices: {
-      monthly: { price: '$19.99', period: '/month', priceId: 'pri_placeholder_premium_monthly_usd' },
-      yearly: { price: '$199.99', period: '/year', priceId: 'pri_placeholder_premium_yearly_usd' },
+      monthly: { price: '$39.99', period: '/month', priceId: 'pri_placeholder_premium_monthly_usd' },
+      yearly: { price: '$399.99', period: '/year', priceId: 'pri_placeholder_premium_yearly_usd' },
     },
     features: [
-      { label: 'Unlimited stores', included: true },
+      { label: '5 stores', included: true },
       { label: 'Unlimited registers', included: true },
       { label: 'Loyalty program', included: true },
       { label: 'Scheduled report emails', included: true },
@@ -142,12 +129,12 @@ export const pricing: PricingTier[] = [
 
 // Mirrors the quota & feature matrix in subscription-tiers.md §3.
 export const featureRows: FeatureRow[] = [
-  { label: 'Stores', values: { free: 1, plus: 1, pro: 2, premium: 'Unlimited', enterprise: 'Unlimited' } },
+  { label: 'Stores', values: { free: 1, plus: 1, pro: 2, premium: 5, enterprise: 'Unlimited' } },
   { label: 'Terminals (registers) per store', values: { free: 1, plus: 2, pro: 5, premium: 'Unlimited', enterprise: 'Unlimited' } },
   { label: 'Warehouses', values: { free: 1, plus: 2, pro: 3, premium: 'Unlimited', enterprise: 'Unlimited' } },
-  { label: 'KDS screens', values: { free: 0, plus: 0, pro: '1 per store', premium: 'Unlimited', enterprise: 'Unlimited' } },
+  { label: 'Kitchen Display screens', values: { free: 0, plus: 0, pro: '1 per store', premium: 'Unlimited', enterprise: 'Unlimited' } },
   { label: 'Staff users', values: { free: 1, plus: 5, pro: 20, premium: 'Unlimited', enterprise: 'Unlimited' } },
-  { label: 'Sales history', values: { free: '30 days', plus: 'Unlimited', pro: 'Unlimited', premium: 'Unlimited', enterprise: 'Unlimited' } },
+  { label: 'Sales history', values: { free: '3 months', plus: '1 year', pro: '5 years', premium: 'Unlimited', enterprise: 'Unlimited' } },
   { label: 'QRIS payments', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Stripe cards', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },
   { label: 'Cloud sync', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
