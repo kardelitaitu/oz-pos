@@ -5708,3 +5708,33 @@ B. When pg_try_advisory_lock returned false (another instance holds the
 advisory-lock pooled-connection pattern is fully guarded (success, error,
 panic, contention paths). Other session-level resources on pooled
 connections (none found) would need the same RAII treatment.
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 4 (health MAX(synced_at) full scan)
+
+**Problem:** The health endpoint's SELECT MAX(synced_at) FROM offline_queue
+WHERE synced_at IS NOT NULL runs on EVERY Docker healthcheck (every 15s).
+No index on synced_at meant a full table scan over the 90-day retention
+queue — constant O(n) cost on the free-tier 0.2-core budget, the same
+class of waste the SOTA pass eliminated elsewhere (tenant-count scan,
+snapshot cache). Verified via EXPLAIN: Seq Scan before, Index Only Scan
+after.
+
+**Solution:** TDD Red→Green:
+- RED: pg_integration_health_last_sync_query_is_indexed — asserts the
+  index exists in PG_INIT and EXPLAIN uses an index scan (not Seq Scan)
+  on a 2000-row table.
+- GREEN: added idx_offline_queue_synced_at to BOTH 20260813_init.pg.sql
+  and 20260813_init.sql (parity), bumped the hardcoded index-surface
+  count 129→130 in migrations_tests.rs.
+
+**Also verified:** all PG integration tests run against a freshly reset
+dev DB; the earlier drift (KDS restaurant_pos_id) stays fixed via the
+round-2 reset script.
+
+**Verification:** oz-core migrations 19/19; oz-cloud-server 207 unit + 5
+integration + 2 startup, all green; fmt + clippy -D warnings clean on
+both crates.
+
+**Risks / follow-ups:** the health COUNT(status='pending') query is
+covered by idx_offline_queue_status; the global MAX(created_at) in
+oldest_created_at remains a min-scan per pull (bounded by anchor check).

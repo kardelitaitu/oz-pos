@@ -385,7 +385,7 @@ fn init_sql_creates_complete_schema_surface() {
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
         ),
-        129,
+        130,
         "index surface drifted"
     );
     assert_eq!(

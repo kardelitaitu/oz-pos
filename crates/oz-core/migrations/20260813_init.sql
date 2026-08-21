@@ -1188,6 +1188,11 @@ CREATE INDEX IF NOT EXISTS idx_offline_queue_status ON offline_queue(status);
 
 CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_status ON offline_queue(tenant_id, status);
 
+-- Serves the health endpoint's `MAX(synced_at)` query (runs every 15s on
+-- the Docker healthcheck). Without this, that query is a full table scan
+-- over the whole 90-day retention queue on every health poll.
+CREATE INDEX IF NOT EXISTS idx_offline_queue_synced_at ON offline_queue(synced_at);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_idempotency_key ON payments(idempotency_key);
 
 CREATE INDEX IF NOT EXISTS idx_payments_sale_id ON payments(sale_id);
