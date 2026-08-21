@@ -198,7 +198,7 @@ pub use inventory_transaction::{
 };
 pub use kds::{
     CreateKdsLineItemInput, CreateKdsOrderInput, KdsLineItem, KdsModifier, KdsOrder, KdsStatus,
-    UpdateKdsOrderItemsInput,
+    RegisterKdsDeviceInput, UpdateKdsOrderItemsInput,
 };
 pub use location_resolver::{
     get_default_location_id, resolve_all_locations, resolve_location_chain_for_sku,

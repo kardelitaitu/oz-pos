@@ -10,7 +10,8 @@ use oz_core::crypto::{decrypt_api_key, encrypt_api_key};
 use oz_core::license_verification::{
     ActivateLicenseRequest, RenewLicenseRequest, SignedSubscriptionPayload,
     activate_license as core_activate_license, check_license_status as core_check_license_status,
-    renew_license as core_renew_license, store_subscription, verify_license_signature,
+    pause_subscription as core_pause_subscription, renew_license as core_renew_license,
+    resume_subscription as core_resume_subscription, store_subscription, verify_license_signature,
 };
 use oz_core::subscription::TenantSubscription;
 
@@ -56,13 +57,32 @@ pub struct LicenseStatusDto {
 }
 
 /// Activates a license key for the given email, phone, and machine ID.
+///
+/// `trial_vertical` is the optional segmented-trial vertical (C2.1): the
+/// server only reads it for trial keys and mints a 14-day Plus / 14-day
+/// Pro / 30-day Pro license per subscription-tiers.md §4. Paid keys ignore
+/// it entirely, so omitting it is always safe.
+///
+/// `bundle_id` is the optional vertical-bundle id (C3.2): "restaurant_starter"
+/// unlocks the kds workspace type at the Plus tier. The server honors it for
+/// trial keys only, so omitting it is always safe.
+///
+/// `hardware_fingerprint` is the device-level fingerprint (SPEC-2026-TRIAL-
+/// LOCK) — the "hw_" + SHA-256 of the hardware anchor, stable across
+/// reinstalls. The server's one-trial-per-device lock keys on it; it falls
+/// back to machine_id when omitted and never gates paid keys, so sending it
+/// is always safe.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn activate_license(
     state: State<'_, AppState>,
     key: String,
     email: String,
     machine_id: String,
     phone: String,
+    trial_vertical: Option<String>,
+    bundle_id: Option<String>,
+    hardware_fingerprint: Option<String>,
 ) -> Result<bool, AppError> {
     // H1 audit fix: read the previously-stored (now encrypted) api_key
     // so the server can authenticate the caller as the legitimate tenant
@@ -97,6 +117,9 @@ pub async fn activate_license(
         email,
         machine_id,
         phone,
+        trial_vertical,
+        bundle_id,
+        hardware_fingerprint,
         api_key: stored_api_key,
     };
 
@@ -164,6 +187,32 @@ pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppErr
     let id = generate_machine_id();
     Settings::set_batch(&conn, &[("machine_id".to_string(), id.clone())])?;
     Ok(id)
+}
+
+/// Retrieves the device-level hardware fingerprint (SPEC-2026-TRIAL-LOCK).
+///
+/// The fingerprint is `hw_` + the full SHA-256 hex of the hardware anchor
+/// (`get_system_uuid`), stable across app reinstalls — unlike `machine_id`
+/// (the same digest truncated to 15 chars), the fingerprint is recomputed
+/// from the anchor rather than read from a persisted per-installation
+/// setting, so a wiped Settings table still yields the same value on the
+/// same physical device. The license server's one-trial-per-device lock
+/// keys on it: a reinstall under a fresh email cannot reset the trial clock.
+/// The value is cached in Settings so the underlying process spawns
+/// (wmic/reg) happen once per installation.
+#[tauri::command]
+pub async fn get_hardware_fingerprint(state: State<'_, AppState>) -> Result<String, AppError> {
+    let conn = state.db.lock().await;
+    // Return the persisted fingerprint if one already exists.
+    if let Some(existing) = Settings::get(&conn, "hardware_fingerprint")?
+        && !existing.is_empty()
+    {
+        return Ok(existing);
+    }
+    // Generate a new one and persist it.
+    let fp = generate_hardware_fingerprint();
+    Settings::set_batch(&conn, &[("hardware_fingerprint".to_string(), fp.clone())])?;
+    Ok(fp)
 }
 
 /// Renews an existing license subscription with a new license key.
@@ -341,6 +390,27 @@ fn generate_machine_id() -> String {
     let hash = hasher.finalize();
     let hex_str = hex::encode(&hash[..16]);
     hex_str[..MACHINE_ID_LEN].to_string()
+}
+
+/// Compute the canonical `hw_<64hex>` hardware fingerprint from the same
+/// hardware anchor `machine_id` derives from (SPEC-2026-TRIAL-LOCK). The
+/// FULL SHA-256 digest (64 hex chars) is used — the machine_id only takes
+/// the first 15 chars — so the fingerprint is both more collision-resistant
+/// and self-describing ("hw_" prefix) in the license server's
+/// trial_registrations collection. The random-UUID fallback is shared with
+/// `generate_machine_id` so a host with no queryable hardware anchor gets
+/// a stable-in-process value rather than a fresh one per call.
+fn generate_hardware_fingerprint() -> String {
+    let raw_id = get_system_uuid().unwrap_or_else(|| {
+        FALLBACK_MACHINE_ID
+            .get_or_init(|| uuid::Uuid::new_v4().to_string())
+            .clone()
+    });
+
+    let mut hasher = Sha256::new();
+    hasher.update(raw_id.as_bytes());
+    let hash = hasher.finalize();
+    format!("hw_{}", hex::encode(hash))
 }
 
 /// Data transfer object for server-authoritative license status.
@@ -575,224 +645,96 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use oz_core::error::CoreError;
-    use oz_core::subscription::TenantSubscription;
-
-    #[test]
-    fn clock_tampered_serializes_camel_case() {
-        let status = LicenseVerificationStatus::ClockTampered;
-        let json = serde_json::to_string(&status).unwrap();
-        assert_eq!(json, "\"clockTampered\"");
-    }
-
-    #[test]
-    fn all_variants_round_trip() {
-        let variants = [
-            LicenseVerificationStatus::Valid,
-            LicenseVerificationStatus::Expired,
-            LicenseVerificationStatus::GracePeriod,
-            LicenseVerificationStatus::InvalidSignature,
-            LicenseVerificationStatus::ClockTampered,
-            LicenseVerificationStatus::Missing,
-        ];
-        for v in &variants {
-            let json = serde_json::to_string(v).unwrap();
-            let back: LicenseVerificationStatus = serde_json::from_str(&json).unwrap();
-            assert_eq!(v, &back, "round-trip failed for {json}");
+/// Pause the current subscription for 1–3 months.
+///
+/// Reads the stored API key, calls the license server's pause endpoint,
+/// and returns the new paused status.
+#[tauri::command]
+pub async fn pause_subscription(
+    state: State<'_, AppState>,
+    pause_months: u8,
+) -> Result<PauseResumeDto, AppError> {
+    let api_key = {
+        let conn = state.db.lock().await;
+        let api_key_enc = Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty());
+        let mid = Settings::get(&conn, "machine_id")?.unwrap_or_default();
+        match api_key_enc {
+            Some(ref v) => decrypt_api_key(v, &mid).unwrap_or_else(|e| {
+                tracing::warn!(
+                    "license.api_key decryption failed, treating as legacy plaintext: {e}"
+                );
+                v.clone()
+            }),
+            None => {
+                return Err(AppError::Invalid(
+                    "No license activated. Activate first.".into(),
+                ));
+            }
         }
-    }
+    };
 
-    #[test]
-    fn clock_tampered_dto_is_inactive() {
-        let dto = LicenseStatusDto {
-            is_active: false,
-            status: LicenseVerificationStatus::ClockTampered,
-            tier: None,
-            payload: None,
-            message: Some("Clock tampering detected: test".into()),
-        };
-        let json = serde_json::to_string(&dto).unwrap();
-        assert!(json.contains("\"clockTampered\""));
-        assert!(json.contains("\"isActive\":false"));
-        assert!(json.contains("Clock tampering detected"));
-    }
+    let resp = core_pause_subscription(&api_key, pause_months)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    #[test]
-    fn generate_machine_id_returns_15_chars() {
-        let id = generate_machine_id();
-        assert_eq!(id.len(), 15, "machine ID must be 15 chars, got {id}");
-        assert!(
-            id.chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
-            "machine ID must be lowercase alphanumeric, got {id}"
-        );
-    }
-
-    #[test]
-    fn generate_machine_id_is_deterministic() {
-        // The machine ID is derived from the system UUID (or a random
-        // fallback), hashed via SHA-256.  On the same machine it must
-        // always return the same value — the first 15 hex chars of the
-        // hash are stable.
-        let id1 = generate_machine_id();
-        for _ in 0..10 {
-            assert_eq!(
-                generate_machine_id(),
-                id1,
-                "machine ID changed between calls"
-            );
-        }
-    }
-
-    #[test]
-    fn machine_id_is_persisted_in_settings() {
-        use oz_core::migrations;
-        let conn = migrations::fresh_db();
-        let id1 = generate_machine_id();
-        // Simulate what get_machine_id does: persist to Settings.
-        Settings::set_batch(&conn, &[("machine_id".to_string(), id1.clone())]).unwrap();
-        let id2 = Settings::get(&conn, "machine_id").unwrap().unwrap();
-        assert_eq!(
-            id1, id2,
-            "machine ID should survive round-trip through Settings"
-        );
-    }
-
-    #[test]
-    fn clock_tamper_detected_on_future_ledger_timestamps() {
-        use oz_core::migrations;
-        let conn = migrations::fresh_db();
-
-        // Insert a sale with a timestamp far in the future
-        // (simulates OS clock being rolled back).
-        conn.execute(
-            "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
-             VALUES ('sale-clocktest', 'completed', 1000, 'USD', 1,
-                     '2099-01-01T00:00:00.000Z', '2099-01-01T00:00:00.000Z')",
-            [],
-        )
-        .unwrap();
-
-        let result = TenantSubscription::validate_clock_rollback(&conn);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(
-            matches!(err, CoreError::SystemClockTampered(_)),
-            "should be SystemClockTampered, got: {err:?}"
-        );
-        assert!(err.to_string().contains("system clock tampered"));
-    }
-
-    // ── ServerLicenseStatusDto tests ────────────────────────────
-
-    #[test]
-    fn server_license_status_dto_camel_case() {
-        let dto = ServerLicenseStatusDto {
-            tenant_id: "test-tenant".into(),
-            status: "active".into(),
-            tier: "pro".into(),
-            active: true,
-            expires_at: Some("2027-01-01T00:00:00Z".into()),
-            grace_until: Some("2027-01-15T00:00:00Z".into()),
-            max_stores: 2,
-        };
-        let json = serde_json::to_string(&dto).unwrap();
-        assert!(json.contains("\"tenantId\""));
-        assert!(json.contains("\"expiresAt\""));
-        assert!(json.contains("\"graceUntil\""));
-        assert!(json.contains("\"maxStores\""));
-        assert!(json.contains("\"active\":true"));
-    }
-
-    #[test]
-    fn server_license_status_dto_null_optionals() {
-        let dto = ServerLicenseStatusDto {
-            tenant_id: "t1".into(),
-            status: "canceled".into(),
-            tier: "free".into(),
-            active: false,
-            expires_at: None,
-            grace_until: None,
-            max_stores: 1,
-        };
-        let json = serde_json::to_string(&dto).unwrap();
-        assert!(json.contains("\"expiresAt\":null"));
-        assert!(json.contains("\"graceUntil\":null"));
-    }
-
-    // ── store_subscription → TenantSubscription round-trip ───────
-
-    #[test]
-    fn store_subscription_updates_tenant_subscription_default() {
-        use oz_core::migrations;
-        let conn = migrations::fresh_db();
-
-        // Verify bootstrap Free tier is seeded
-        let sub = TenantSubscription::load(&conn, "default")
-            .expect("load")
-            .expect("bootstrap row should exist");
-        assert_eq!(sub.tier, oz_core::SubscriptionTier::Free);
-
-        // Simulate a Pro activation — store_subscription should
-        // replace the bootstrap row with the activated tier.
-        let payload = r#"{
-            "tenant_id": "default",
-            "tier_key": "pro",
-            "status": "active",
-            "max_stores": 2,
-            "max_pos_instances": 3,
-            "allowed_types": ["restaurant-pos", "store-pos", "admin"],
-            "starts_at": "2026-07-12T00:00:00Z",
-            "expires_at": "2027-07-12T00:00:00Z",
-            "grace_until": "2027-07-26T00:00:00Z",
-            "issued_at": "2026-07-12T00:00:00Z"
-        }"#;
-
-        store_subscription(&conn, "default", payload, "SIG_PRO", "oz_apikey_pro")
-            .expect("store_subscription should succeed");
-
-        let updated = TenantSubscription::load(&conn, "default")
-            .expect("load")
-            .expect("row should exist after update");
-        assert_eq!(updated.tier, oz_core::SubscriptionTier::Pro);
-        assert_eq!(updated.max_stores, 2);
-        assert_eq!(updated.max_pos_instances, 3);
-        assert_eq!(updated.signature, "SIG_PRO");
-        assert_eq!(updated.api_key, "oz_apikey_pro");
-        assert_eq!(updated.signed_payload, payload);
-    }
-
-    // ── RenewLicenseRequest serialization ────────────────────────
-
-    #[test]
-    fn renew_license_request_serializes_snake_case() {
-        let req = RenewLicenseRequest {
-            tenant_id: "test-tenant".into(),
-            api_key: "oz_test_key".into(),
-            key: "OZ-PRO-NEW-KEY".into(),
-        };
-        let json = serde_json::to_string(&req).unwrap();
-        assert!(json.contains("\"tenant_id\""));
-        assert!(json.contains("\"key\""));
-        assert!(json.contains("test-tenant"));
-        assert!(json.contains("OZ-PRO-NEW-KEY"));
-        // The api_key must NOT be serialized into the body — it travels in
-        // the Authorization: Bearer header so access logs never capture it.
-        assert!(
-            !json.contains("api_key"),
-            "api_key must stay out of the request body, got: {json}"
-        );
-    }
-
-    #[test]
-    fn renew_license_request_deserializes() {
-        let json = r#"{"tenant_id":"t1","api_key":"k1","key":"OZ-KEY"}"#;
-        let req: RenewLicenseRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(req.tenant_id, "t1");
-        assert_eq!(req.api_key, "k1");
-        assert_eq!(req.key, "OZ-KEY");
-    }
+    Ok(PauseResumeDto {
+        status: resp.status,
+        tier_key: resp.tier_key,
+        paused_at: resp.paused_at,
+        paused_until: resp.paused_until,
+    })
 }
+
+/// Resume a paused subscription.
+///
+/// Reads the stored API key and calls the license server's resume endpoint.
+#[tauri::command]
+pub async fn resume_subscription(state: State<'_, AppState>) -> Result<PauseResumeDto, AppError> {
+    let api_key = {
+        let conn = state.db.lock().await;
+        let api_key_enc = Settings::get(&conn, "license.api_key")?.filter(|s| !s.is_empty());
+        let mid = Settings::get(&conn, "machine_id")?.unwrap_or_default();
+        match api_key_enc {
+            Some(ref v) => decrypt_api_key(v, &mid).unwrap_or_else(|e| {
+                tracing::warn!(
+                    "license.api_key decryption failed, treating as legacy plaintext: {e}"
+                );
+                v.clone()
+            }),
+            None => {
+                return Err(AppError::Invalid(
+                    "No license activated. Activate first.".into(),
+                ));
+            }
+        }
+    };
+
+    let resp = core_resume_subscription(&api_key)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(PauseResumeDto {
+        status: resp.status,
+        tier_key: resp.tier_key,
+        paused_at: resp.paused_at,
+        paused_until: resp.paused_until,
+    })
+}
+
+/// DTO for pause/resume subscription response.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PauseResumeDto {
+    /// New subscription status ("paused" or "active").
+    pub status: String,
+    /// Tier key that was paused/resumed.
+    pub tier_key: String,
+    /// When the subscription was paused (only on pause response).
+    pub paused_at: Option<String>,
+    /// When the pause expires (only on pause response).
+    pub paused_until: Option<String>,
+}
+
+#[cfg(test)]
+#[path = "license_tests.rs"]
+mod tests;

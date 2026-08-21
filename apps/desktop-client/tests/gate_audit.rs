@@ -44,7 +44,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
         1,
         &["PRODUCTS_CREATE", "PRODUCTS_DELETE", "PRODUCTS_UPDATE"],
     ),
-    ("currencies", 0, &[]),
+    ("currencies", 2, &["SETTINGS_EDIT", "SETTINGS_READ"]),
     (
         "customers",
         4,
@@ -57,7 +57,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
     ),
     ("data", 0, &[]),
     ("email", 0, &[]),
-    ("exchange_rates", 0, &[]),
+    ("exchange_rates", 4, &["SETTINGS_EDIT", "SETTINGS_READ"]),
     ("features", 0, &[]),
     ("gift_cards", 0, &[]),
     ("hardware", 0, &[]),
@@ -74,6 +74,8 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
     ),
     ("inventory_counts", 1, &["INVENTORY_COUNT"]),
     ("kds", 15, &["KDS_UPDATE", "KDS_VIEW"]),
+    ("kds_device", 6, &["KDS_UPDATE", "KDS_VIEW"]),
+    ("kds_routing", 1, &["KDS_VIEW"]),
     ("license", 0, &[]),
     (
         "loyalty",
@@ -99,7 +101,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
     // permission memberships live inside mod tests, which the strip keeps).
     (
         "products",
-        11,
+        8,
         &[
             "PRODUCTS_CREATE",
             "PRODUCTS_DELETE",
@@ -138,6 +140,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
     ("stock_transfers", 1, &["INVENTORY_TRANSFER"]),
     ("store_profiles", 0, &[]),
     ("sync", 0, &[]),
+    ("subscription", 0, &[]),
     (
         "tables",
         12,
@@ -178,7 +181,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
         1,
         &["PRODUCTS_CREATE", "PRODUCTS_DELETE", "PRODUCTS_UPDATE"],
     ),
-    ("currencies", 0, &[]),
+    ("currencies", 3, &["SETTINGS_EDIT", "SETTINGS_READ"]),
     (
         "customers",
         4,
@@ -189,7 +192,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
             "CUSTOMERS_VIEW",
         ],
     ),
-    ("exchange_rates", 0, &[]),
+    ("exchange_rates", 4, &["SETTINGS_EDIT", "SETTINGS_READ"]),
     ("features", 0, &[]),
     ("gift_cards", 0, &[]),
     ("hardware", 0, &[]),
@@ -255,6 +258,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ),
     ("stock_transfers", 1, &["INVENTORY_TRANSFER"]),
     ("sync", 0, &[]),
+    ("subscription", 0, &[]),
     (
         "tables",
         6,
@@ -440,7 +444,8 @@ fn census_dir(dir: &Path) -> BTreeMap<String, (usize, Vec<String>)> {
         if path.extension().and_then(|e| e.to_str()) != Some("rs") {
             continue;
         }
-        if stem == "authz" || stem == "mod" {
+        // Skip split test files and excluded modules.
+        if stem == "authz" || stem == "mod" || stem.ends_with("_tests") {
             continue;
         }
         let (file_calls, file_keys) = census_file(&path);

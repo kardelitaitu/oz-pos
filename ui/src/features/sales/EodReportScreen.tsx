@@ -6,6 +6,7 @@ import {
 import { listShiftsScoped, type ShiftDto } from '@/api/shifts';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { formatMoney } from '@/types/domain';
+import { buildCsv, downloadCsv } from '../reports/csv';
 import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
 import { Localized } from '@/components/Localized';
@@ -377,15 +378,8 @@ export default function EodReportScreen() {
         rows.push([`Hour ${String(h.hour).padStart(2, '0')}:00`, money(h.total_minor)]);
       }
 
-      const bom = '\uFEFF';
-      const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
-      const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `end-of-day-${lastRefresh.toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const csv = buildCsv(headers, rows);
+      downloadCsv(csv, `end-of-day-${lastRefresh.toISOString().slice(0, 10)}.csv`);
     } finally {
       setCsvExporting(false);
     }

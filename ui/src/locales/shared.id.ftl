@@ -54,7 +54,7 @@ staff-login-license-inactive = Lisensi tidak aktif
 statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Status aplikasi
-statusbar-version = OZ-POS Enterprise v0.0.27
+statusbar-version = OZ-POS Enterprise v0.0.28
 statusbar-sync-name = Sinkronisasi
 statusbar-gateway-name = Stripe
 statusbar-license = Lisensi Proprietary
@@ -313,6 +313,8 @@ auth-activating = Mengaktifkan...
 auth-activation-success = Lisensi berhasil diaktifkan!
 auth-activation-failed = Gagal mengaktifkan lisensi.
 auth-activation-error = Terjadi kesalahan saat aktivasi.
+auth-trial-hint-pro = Anda datang dari halaman kafe/restoran — kunci trial Anda membuka trial Pro 14 hari.
+auth-trial-hint-enterprise = Kunci trial referensi Anda membuka trial Pro 30 hari.
 auth-validation-required = Kunci lisensi dan Email wajib diisi.
 auth-validation-invalid-email = Format email tidak valid.
 auth-validation-phone-required = Nomor telepon wajib diisi.
@@ -405,6 +407,13 @@ reset-colour-aria = Kembalikan warna ke awal
 pick-logo-aria = Pilih file logo
 reset-appearance-aria = Kembalikan semua pengaturan tampilan
 save-appearance-aria = Simpan tampilan
+
+# Stock alert bell (global header)
+stock-alert-bell-empty-aria = Tidak ada peringatan stok
+stock-alert-bell-count-aria = { $count ->
+    [one] { $count } peringatan stok aktif
+   *[other] { $count } peringatan stok aktif
+}
 
 # Workspace home — Insights section (owner/admin only)
 workspace-home-insights-section = Wawasan

@@ -548,12 +548,15 @@ export interface CustomReportRequest {
   columns: string[];
   start_date: string | null;
   end_date: string | null;
+  limit?: number | null;
+  offset?: number | null;
 }
 
 /** Response from the custom report builder — generic grid for table/CSV. */
 export interface CustomReportResponse {
   columns: string[];
   rows: string[][];
+  truncated: boolean;
 }
 
 /** Build a custom report for the active store. */

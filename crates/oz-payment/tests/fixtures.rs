@@ -149,7 +149,6 @@ mod tests {
         let first = &scenario.exchanges[0];
         let url = format!("{}{}", mock_server.uri(), first.path);
 
-        // Use the correct HTTP method from the fixture
         let resp = match first.method.to_uppercase().as_str() {
             "GET" => client.get(&url).send().await.unwrap(),
             _ => client.post(&url).send().await.unwrap(),

@@ -184,6 +184,9 @@ sales-history-loading = Loading sales…
 sales-history-error-load = Failed to load sales history
 sales-history-empty = No sales recorded yet
 sales-history-empty-filtered = No sales match your filters
+# C1.2: the Free tier's 30-day history window was applied — upgrade teaser.
+sales-history-cap-teaser = See more than 30 days of sales history — upgrade to Plus
+sales-history-cap-upgrade-cta = Upgrade
 sales-history-count = { $count } sale{ $count ->
   [one] 
   *[other] s
@@ -937,4 +940,29 @@ gift-cards-txn-balance = Balance
 gift-cards-txn-notes = Notes
 gift-cards-txn-date = Date
 
+# C2.2: QRIS is a Plus+ feature — upgrade prompt on the payment modal.
+payment-qris-upgrade-required = QRIS payments are a Plus feature. Upgrade to Plus to accept QRIS.
+payment-qris-upgrade-cta = Upgrade to Plus
+
+# ── Receipt Preview ──
+receipt-preview-aria = Receipt Preview
+receipt-preview-store-name = OZ-POS Store
+receipt-preview-col-item = Item
+receipt-preview-col-qty = Qty
+receipt-preview-col-price = Price
+receipt-preview-col-total = Total
+receipt-preview-subtotal = SUBTOTAL:
+receipt-preview-tax = TAX:
+receipt-preview-total = TOTAL:
+receipt-preview-change = CHANGE:
+receipt-preview-qr-label = Scan to pay
+receipt-preview-qr-aria = Payment QR code
+receipt-preview-thanks = Thank you for your purchase!
+receipt-preview-skip = Skip
+receipt-preview-print = Print Receipt
+
 # Dashboard
+# Daily Sales Dashboard — Free tier lock (C2.2, §6)
+daily-dashboard-locked-title = Daily Sales Dashboard
+daily-dashboard-locked-message = See your daily revenue, sales count, and item breakdown at a glance. This feature is available on Plus and above.
+daily-dashboard-locked-cta = Upgrade to Plus

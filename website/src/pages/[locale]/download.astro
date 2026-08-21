@@ -21,6 +21,10 @@ const platforms: { name: string; os: string; platform: Platform; ready: boolean 
   { name: 'iOS', os: 'Tablets & phones', platform: 'ios', ready: false },
 ];
 const reqList = (dict(locale).download as { requirements: string[] }).requirements;
+// Segmented-trial callout copy (C2.1): revealed client-side when the URL
+// carries a vertical (?v=kafe / ?v=restoran / ?v=enterprise_referral).
+const trialProText = t(locale, 'download.trialCallout');
+const trialEnterpriseText = t(locale, 'download.trialCalloutEnterprise');
 ---
 
 <Base title={pageTitle} description={t(locale, 'pageDesc.download')}>
@@ -28,6 +32,30 @@ const reqList = (dict(locale).download as { requirements: string[] }).requiremen
     <div class="text-center">
       <h1 class="text-4xl font-bold">{t(locale, 'download.title')}</h1>
       <p class="mt-3 text-muted">{t(locale, 'download.subtitle')}</p>
+      <!-- Segmented-trial callout (C2.1): hidden until the client-side
+           script sees a vertical landing-page param (?v=...). The localized
+           copy rides in data-* attributes so the inline script needs no
+           Astro expression interpolation. -->
+      <p
+        id="trial-callout"
+        data-pro={trialProText}
+        data-enterprise={trialEnterpriseText}
+        class="mx-auto mt-6 hidden max-w-2xl rounded-xl border border-accent/40 bg-surface/60 p-4 text-sm"
+        role="status"
+      ></p>
+      <script is:inline>
+        (() => {
+          const el = document.getElementById('trial-callout');
+          if (!el) return;
+          const v = new URLSearchParams(window.location.search).get('v') ?? '';
+          const key = v.trim().toLowerCase();
+          const pro = ['kafe', 'restoran', 'restaurant', 'cafe'].includes(key);
+          const enterprise = key === 'enterprise_referral';
+          if (!pro && !enterprise) return;
+          el.textContent = pro ? (el.dataset.pro ?? '') : (el.dataset.enterprise ?? '');
+          el.classList.remove('hidden');
+        })();
+      </script>
     </div>
 
     <h2 class="mt-14 text-lg font-semibold">{t(locale, 'download.platformsTitle')}</h2>

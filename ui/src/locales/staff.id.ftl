@@ -81,6 +81,9 @@ staff-error-display-name-required = Nama tampilan wajib diisi
 staff-error-role-required = Silakan pilih peran
 staff-error-pin-length = PIN minimal 4 karakter
 staff-error-save-failed = Gagal menyimpan anggota staf
+# C1.1: batas jumlah staf per paket berlangganan tercapai (Free 1 / Plus 5 / Pro 20).
+staff-error-quota-limit = Paket Anda hanya mengizinkan sejumlah staf tertentu. Tingkatkan paket untuk menambah anggota tim.
+staff-upgrade-cta = Tingkatkan paket
 staff-error-workspaces-failed = Gagal memuat pengaturan ruang kerja
 staff-table-aria = Anggota staf
 staff-field-username-aria = Nama Pengguna
@@ -211,3 +214,7 @@ staff-error-phone-invalid = Telepon harus dalam format +kode negara nomor.
 staff-error-national-id-invalid = Nomor identitas harus 9 digit (SSN) atau 16 digit (NIK).
 staff-error-pay-invalid = Masukkan jumlah positif.
 staff-error-dob-invalid = Gunakan format YYYY-MM-DD.
+
+# C2.2: Pro→Premium approaching-limit banner (16+ staf, batas 20).
+staff-limit-approaching-premium = Anda hampir mencapai batas 20 staf paket Pro. Tingkatkan ke Premium untuk staf tanpa batas.
+staff-limit-approaching-premium-cta = Tingkatkan ke Premium

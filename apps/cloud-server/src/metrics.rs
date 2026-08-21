@@ -215,7 +215,13 @@ fn ensure_registered() {
     let _ = &*HEALTH_CHECKS_TOTAL;
     let _ = &*HEALTH_CHECK_FAILURES_TOTAL;
     let _ = &*HEALTH_DB_LATENCY_MICROS;
-    let _ = &*DB_CONTENTION_SECONDS;
+    // HistogramVec needs its label values pre-created to render — same as
+    // the CounterVecs above. Without this, db_connection_contention_seconds
+    // registers but never appears in the text output.
+    let _ = DB_CONTENTION_SECONDS.with_label_values(&["push"]);
+    let _ = DB_CONTENTION_SECONDS.with_label_values(&["pull"]);
+    let _ = DB_CONTENTION_SECONDS.with_label_values(&["snapshot"]);
+    let _ = DB_CONTENTION_SECONDS.with_label_values(&["status"]);
     let _ = &*PRUNE_QUEUE_DELETED_TOTAL;
     let _ = &*PRUNE_SENT_REPORTS_DELETED_TOTAL;
     let _ = RATE_LIMIT_429_TOTAL.with_label_values(&["sync"]);
@@ -231,3 +237,7 @@ pub fn render_metrics() -> String {
         .encode_to_string(&REGISTRY.gather())
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+#[path = "metrics_tests.rs"]
+mod tests;

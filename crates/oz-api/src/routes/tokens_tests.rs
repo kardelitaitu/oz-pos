@@ -1,0 +1,238 @@
+use super::*;
+use crate::DEFAULT_CORS_ORIGINS;
+use axum::body::to_bytes;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+fn state_with_admin_key(key: Option<&str>) -> AppState {
+    AppState {
+        db: Arc::new(Mutex::new(oz_core::migrations::fresh_db())),
+        pg: None,
+        admin_key: key.map(|s| s.to_owned()),
+        api_secret: String::new(),
+        db_path: ":memory:".into(),
+        port: 3099,
+        cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+    }
+}
+
+fn request_body() -> CreateTokenRequest {
+    CreateTokenRequest {
+        label: "test-client".into(),
+        expiry_hours: Some(24),
+        tenant_id: None,
+        client_id: None,
+        client_secret: None,
+    }
+}
+
+fn register_terminal(conn: &rusqlite::Connection, id: &str, secret: &str) {
+    conn.execute(
+        "INSERT INTO sync_terminals (terminal_id, secret_hash, label)
+         VALUES (?1, ?2, 'front')
+         ON CONFLICT(terminal_id) DO UPDATE SET secret_hash = excluded.secret_hash",
+        rusqlite::params![id, crate::routes::terminals::hash_secret(secret)],
+    )
+    .unwrap();
+}
+
+fn body_with_credentials(label: &str, client_id: &str, client_secret: &str) -> CreateTokenRequest {
+    CreateTokenRequest {
+        label: label.into(),
+        expiry_hours: Some(24),
+        tenant_id: None,
+        client_id: Some(client_id.into()),
+        client_secret: Some(client_secret.into()),
+    }
+}
+
+fn request_with_header(key: Option<&str>) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    if let Some(k) = key {
+        headers.insert(
+            header::HeaderName::from_static(ADMIN_KEY_HEADER),
+            k.parse().unwrap(),
+        );
+    }
+    headers
+}
+
+#[tokio::test]
+async fn token_minting_is_open_when_no_admin_key_configured() {
+    let response = create_token_handler(
+        State(state_with_admin_key(None)),
+        HeaderMap::new(),
+        Json(request_body()),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(json["token"]["token"].as_str().unwrap().len() > 20);
+}
+
+#[tokio::test]
+async fn token_minting_rejects_missing_admin_key_when_configured() {
+    let response = create_token_handler(
+        State(state_with_admin_key(Some("sekret"))),
+        HeaderMap::new(),
+        Json(request_body()),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn token_minting_rejects_wrong_admin_key() {
+    let response = create_token_handler(
+        State(state_with_admin_key(Some("sekret"))),
+        request_with_header(Some("wrong-key")),
+        Json(request_body()),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn token_minting_allows_matching_admin_key() {
+    let response = create_token_handler(
+        State(state_with_admin_key(Some("sekret"))),
+        request_with_header(Some("sekret")),
+        Json(request_body()),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn create_token_returns_200_with_jwt() {
+    let response = create_token_handler(
+        State(state_with_admin_key(None)),
+        HeaderMap::new(),
+        Json(request_body()),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(json["token"]["token"].as_str().unwrap().len() > 20);
+    assert_eq!(json["token"]["token_id"].as_str().unwrap().len(), 36); // UUID
+}
+
+#[tokio::test]
+async fn terminal_credentials_mint_token_without_admin_key() {
+    // ADR sync-auth-hardening P3: a registered terminal mints its own
+    // scoped token with client credentials — even when the server is
+    // gated with an admin key and none is presented.
+    let state = state_with_admin_key(Some("sekret"));
+    {
+        let conn = state.db.lock().await;
+        register_terminal(&conn, "term-1", "device-secret-abc");
+    }
+
+    let response = create_token_handler(
+        State(state),
+        HeaderMap::new(), // no admin key
+        Json(body_with_credentials(
+            "pos-terminal",
+            "term-1",
+            "device-secret-abc",
+        )),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(json["token"]["token"].as_str().unwrap().len() > 20);
+}
+
+#[tokio::test]
+async fn terminal_credentials_rejected_when_secret_wrong() {
+    let state = state_with_admin_key(None);
+    {
+        let conn = state.db.lock().await;
+        register_terminal(&conn, "term-1", "device-secret-abc");
+    }
+
+    let response = create_token_handler(
+        State(state),
+        HeaderMap::new(),
+        Json(body_with_credentials(
+            "pos-terminal",
+            "term-1",
+            "wrong-secret",
+        )),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn terminal_credentials_rejected_for_unknown_terminal() {
+    let response = create_token_handler(
+        State(state_with_admin_key(None)),
+        HeaderMap::new(),
+        Json(body_with_credentials("pos-terminal", "ghost", "any-secret")),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn create_token_defaults_expiry() {
+    let body = CreateTokenRequest {
+        label: "default-expiry".into(),
+        expiry_hours: None,
+        tenant_id: None,
+        client_id: None,
+        client_secret: None,
+    };
+    let response = create_token_handler(
+        State(state_with_admin_key(None)),
+        HeaderMap::new(),
+        Json(body),
+    )
+    .await
+    .into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    // expires_at should be present and non-empty
+    assert!(!json["token"]["expires_at"].as_str().unwrap().is_empty());
+}
+
+#[test]
+fn create_token_request_deserialization() {
+    let json = r#"{"label":"my-token","expiry_hours":12}"#;
+    let req: CreateTokenRequest = serde_json::from_str(json).unwrap();
+    assert_eq!(req.label, "my-token");
+    assert_eq!(req.expiry_hours, Some(12));
+    assert_eq!(req.tenant_id, None);
+}
+
+#[test]
+fn create_token_response_is_serializable() {
+    let resp = CreateTokenResponse {
+        token: TokenResponse {
+            token: "fake.jwt.token".into(),
+            expires_at: "2026-07-07T00:00:00Z".into(),
+            token_id: "abc-123".into(),
+        },
+    };
+    let json = serde_json::to_string(&resp).unwrap();
+    assert!(json.contains("fake.jwt.token"));
+}

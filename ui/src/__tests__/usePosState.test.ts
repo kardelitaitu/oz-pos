@@ -143,14 +143,19 @@ describe('usePosState', () => {
       expect(result.current.subtotal).toEqual({ minor_units: 2000, currency: 'IDR' });
     });
 
-    it('uses first line currency even when subsequent lines differ', () => {
+    it('rejects products whose currency differs from the cart currency', () => {
       const { result } = renderHook(() => usePosState());
 
       act(() => { result.current.addProduct(makeProduct({ price: { minor_units: 1000, currency: 'USD' } })); });
-      act(() => { result.current.addProduct(makeProduct({ sku: 'BAGEL' as Product['sku'], name: 'Bagel', price: { minor_units: 500, currency: 'EUR' } })); });
+      let accepted = false;
+      act(() => { accepted = result.current.addProduct(makeProduct({ sku: 'BAGEL' as Product['sku'], name: 'Bagel', price: { minor_units: 500, currency: 'EUR' } })); });
 
-      // First line's currency (USD) wins; amounts are summed without conversion
-      expect(result.current.subtotal).toEqual({ minor_units: 1500, currency: 'USD' });
+      // MONEY-AUDIT-F1: a cross-currency product must be refused, not
+      // silently summed under the first line's currency. The backend
+      // `Cart::add_line` enforces the same single-currency rule.
+      expect(accepted).toBe(false);
+      expect(result.current.lines).toHaveLength(1);
+      expect(result.current.subtotal).toEqual({ minor_units: 1000, currency: 'USD' });
     });
 
     it('computes discount amount as percentage of subtotal', () => {

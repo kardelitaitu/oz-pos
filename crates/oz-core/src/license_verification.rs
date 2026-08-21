@@ -126,6 +126,32 @@ pub struct ActivateLicenseRequest {
     pub email: String,
     /// The contact phone number for the licensee.
     pub phone: String,
+    /// The segmented-trial vertical (C2.1, subscription-tiers.md §4). Only
+    /// read by the server for trial keys: `None`/blank → 14-day Plus trial,
+    /// `"restaurant"`/`"cafe"` → 14-day Pro trial, `"enterprise_referral"`
+    /// → 30-day Pro trial. Paid keys ignore it — a client-supplied value
+    /// never shortens or downgrades a paid license. Omitted from the body
+    /// when unset so generic activations stay byte-identical.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub trial_vertical: Option<String>,
+    /// The vertical-bundle id (C3.2, subscription-tiers.md §3).
+    /// "restaurant_starter" unlocks the kds workspace type at the Plus
+    /// tier. Mirrors `trial_vertical`'s trust boundary: the server only
+    /// honors it for trial keys — a client-supplied bundle never widens a
+    /// paid license. Omitted from the body when unset.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bundle_id: Option<String>,
+    /// The device-level hardware fingerprint (SPEC-2026-TRIAL-LOCK): the
+    /// "hw_" + SHA-256 hex of the same hardware anchor `machine_id`
+    /// derives from, stable across reinstalls. Unlike `machine_id` (the
+    /// same digest truncated to 15 chars and persisted per-installation),
+    /// the fingerprint is the full digest in the spec's canonical form, so
+    /// the server's one-trial-per-device lock can key on it even after a
+    /// wiped Settings table. The server falls back to `machine_id` when
+    /// omitted and never gates PAID keys with the trial lock — sending it
+    /// is always safe. Omitted from the body when unset.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub hardware_fingerprint: Option<String>,
     /// The api_key of an existing tenant, required when re-activating
     /// an installation whose tenant was previously activated (H1 audit
     /// fix). New tenants omit this on the first activation; the server
@@ -222,6 +248,11 @@ pub struct SignedSubscriptionPayload {
     /// List of workspace types allowed.
     #[serde(default)]
     pub allowed_types: Vec<String>,
+    /// C4.3: Add-on identifiers purchased with this license.
+    /// Add-ons extend tier capabilities (e.g. "advanced_analytics",
+    /// "priority_support"). The list is additive to the base tier quotas.
+    #[serde(default)]
+    pub addons: Vec<String>,
     /// When the subscription becomes active.
     pub starts_at: String,
     /// When the subscription expires.
@@ -478,280 +509,97 @@ pub fn store_subscription(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rsa::RsaPrivateKey;
-    use rsa::pkcs8::{DecodePublicKey, EncodePublicKey};
-    use rsa::signature::SignatureEncoding;
-
-    /// Generate a test RSA key pair and return (private, public_pem).
-    fn generate_test_keypair() -> (RsaPrivateKey, String) {
-        let mut rng = rand::thread_rng();
-        let private_key =
-            RsaPrivateKey::new(&mut rng, 2048).expect("failed to generate test RSA key");
-        let public_pem = private_key
-            .to_public_key()
-            .to_public_key_pem(rsa::pkcs8::LineEnding::LF)
-            .expect("failed to export public key PEM");
-        (private_key, public_pem)
-    }
-
-    /// Sign a payload using a test RSA key (matching the license server Go code).
-    fn sign_test_payload(key: &RsaPrivateKey, payload: &str) -> String {
-        use rsa::pkcs1v15::SigningKey;
-        use rsa::signature::Signer;
-
-        let signing_key = SigningKey::<Sha256>::new(key.clone());
-        let sig = signing_key.sign(payload.as_bytes());
-        base64::engine::general_purpose::STANDARD.encode(sig.to_bytes())
-    }
-
-    #[test]
-    fn verify_valid_signature() {
-        let (private_key, public_pem) = generate_test_keypair();
-        let payload = r#"{"tenant_id":"test","tier_key":"pro"}"#;
-        let sig = sign_test_payload(&private_key, payload);
-
-        // Temporarily override the embedded key for testing.
-        // In a real build, LICENSE_PUBLIC_KEY_PEM is embedded at compile time.
-        // We test the core verification logic directly.
-        let public_key = RsaPublicKey::from_public_key_pem(&public_pem).expect("parse public key");
-        let sig_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&sig)
-            .unwrap();
-        let signature = rsa::pkcs1v15::Signature::try_from(sig_bytes.as_slice()).unwrap();
-
-        let verifying_key = VerifyingKey::<Sha256>::new(public_key);
-        let result = verifying_key.verify(payload.as_bytes(), &signature);
-        assert!(result.is_ok(), "valid signature should verify: {result:?}");
-    }
-
-    #[test]
-    fn verify_tampered_payload_fails() {
-        let (private_key, public_pem) = generate_test_keypair();
-        let payload = r#"{"tenant_id":"test","tier_key":"pro"}"#;
-        let sig = sign_test_payload(&private_key, payload);
-
-        let public_key = RsaPublicKey::from_public_key_pem(&public_pem).expect("parse public key");
-        let sig_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&sig)
-            .unwrap();
-        let signature = rsa::pkcs1v15::Signature::try_from(sig_bytes.as_slice()).unwrap();
-
-        // Tamper with the payload
-        let tampered = r#"{"tenant_id":"test","tier_key":"enterprise"}"#;
-        let verifying_key = VerifyingKey::<Sha256>::new(public_key);
-        let result = verifying_key.verify(tampered.as_bytes(), &signature);
-        assert!(result.is_err(), "tampered payload should fail verification");
-    }
-
-    #[test]
-    fn verify_bootstrap_free_bypasses_rsa_in_debug() {
-        // The BOOTSTRAP_FREE sentinel should pass without a real key
-        // in debug/dev/test builds (where #[cfg(debug_assertions)] applies).
-        // This test is always compiled in test mode (which is debug).
-        let result = verify_license_signature("anything", "BOOTSTRAP_FREE");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn verify_rejects_garbage_signatures() {
-        // Non-BOOTSTRAP_FREE garbage signatures (random strings, empty)
-        // should always fail verification, regardless of build mode.
-        let payload = r#"{"tenant_id":"test","tier_key":"free"}"#;
-
-        let result = verify_license_signature(payload, "TAMPERED_SIGNATURE");
-        assert!(
-            result.is_err(),
-            "tampered signature should fail: {result:?}"
-        );
-
-        let result = verify_license_signature(payload, "");
-        assert!(result.is_err(), "empty signature should fail: {result:?}");
-    }
-
-    /// NOTE: There is intentionally no test that BOOTSTRAP_FREE is *rejected*
-    /// in release builds, because `cargo test` always runs with
-    /// `debug_assertions` enabled. The `#[cfg(debug_assertions)]` guard is
-    /// validated by inspection and by running `cargo build --release` and
-    /// confirming the symbol is absent.
-
-    #[test]
-    fn embedded_public_key_is_loadable() {
-        // The embedded public key must be parseable at startup.
-        // A corrupt or missing key file would cause this to panic.
-        use rsa::traits::PublicKeyParts;
-
-        let key = RsaPublicKey::from_public_key_pem(LICENSE_PUBLIC_KEY_PEM);
-        assert!(key.is_ok(), "embedded public key should load: {key:?}");
-        let key = key.unwrap();
-        // Verify it's a 2048-bit key (the expected size).
-        let bits = key.size() * 8;
-        assert_eq!(bits, 2048, "embedded key should be 2048-bit RSA");
-    }
-
-    #[test]
-    fn license_server_url_default() {
-        // Test the default URL without env var overrides (avoid unsafe on set_var).
-        let url = license_server_url();
-        assert_eq!(url, LICENSE_SERVER_URL);
-        assert!(url.starts_with("https://"));
-    }
-
-    #[test]
-    fn ping_license_server_hits_api_health_path() {
-        // The reachability probe must target the unauthenticated
-        // /api/health endpoint (not the cloud server's /health) and return
-        // a structured result. A live HTTP call is not made here — the
-        // default URL is a real deployment, so assert the URL construction
-        // contract instead and keep the network call out of unit tests.
-        let url = license_server_url();
-        assert!(url.starts_with("https://"));
-        let health = format!("{}/api/health", url.trim_end_matches('/'));
-        assert!(health.ends_with("/api/health"));
-        // The struct serializes camelCase like the sync PingResult so the
-        // UI can render both connection pills uniformly.
-        let json = serde_json::to_value(LicensePingResult {
-            ok: true,
-            status: "Connected (1ms)".into(),
-            latency_ms: Some(1),
-        })
-        .unwrap();
-        assert_eq!(json["ok"], true);
-        assert_eq!(json["latencyMs"], 1);
-    }
-
-    #[test]
-    fn store_subscription_inserts_row() {
-        use crate::migrations;
-
-        let conn = migrations::fresh_db();
-
-        let payload = r#"{
-            "tenant_id": "test-tenant",
-            "tier_key": "pro",
-            "status": "active",
-            "max_stores": 2,
-            "max_pos_instances": 3,
-            "allowed_types": ["restaurant-pos", "store-pos"],
-            "starts_at": "2026-01-01T00:00:00Z",
-            "expires_at": "2027-01-01T00:00:00Z",
-            "grace_until": "2027-01-15T00:00:00Z",
-            "issued_at": "2026-01-01T00:00:00Z"
-        }"#;
-
-        let result = store_subscription(
-            &conn,
-            "test-tenant",
-            payload,
-            "TESTSIG",
-            "oz_test_api_key_123",
-        );
-        assert!(result.is_ok(), "store_subscription failed: {result:?}");
-
-        // Verify the row was inserted
-        let stored = TenantSubscription::load(&conn, "test-tenant")
-            .expect("load")
-            .expect("should exist");
-        assert_eq!(stored.tenant_id, "test-tenant");
-        assert_eq!(stored.tier, crate::subscription::SubscriptionTier::Pro);
-        assert_eq!(stored.max_stores, 2);
-        assert_eq!(stored.max_pos_instances, 3);
-        assert_eq!(stored.signature, "TESTSIG");
-        assert_eq!(stored.signed_payload, payload);
-        assert_eq!(stored.api_key, "oz_test_api_key_123");
-    }
-
-    #[test]
-    fn store_subscription_handles_all_tier_keys() {
-        use crate::migrations;
-        use crate::subscription::SubscriptionTier;
-
-        let conn = migrations::fresh_db();
-
-        let tiers = vec![
-            ("free", SubscriptionTier::Free, 1, 1),
-            ("one_time", SubscriptionTier::OneTime, 1, 1),
-            ("standard", SubscriptionTier::Standard, 1, 2),
-            ("pro", SubscriptionTier::Pro, 0, 0),
-            ("enterprise", SubscriptionTier::Enterprise, 0, 0),
-        ];
-
-        for (key, expected_tier, stores, pos) in tiers {
-            let payload = format!(
-                r#"{{
-                "tenant_id": "tenant-{key}",
-                "tier_key": "{key}",
-                "status": "active",
-                "max_stores": {stores},
-                "max_pos_instances": {pos},
-                "allowed_types": ["store-pos"],
-                "starts_at": "2026-01-01T00:00:00Z",
-                "expires_at": "2027-01-01T00:00:00Z",
-                "grace_until": "2027-01-15T00:00:00Z",
-                "issued_at": "2026-01-01T00:00:00Z"
-            }}"#
-            );
-
-            let result = store_subscription(
-                &conn,
-                &format!("tenant-{key}"),
-                &payload,
-                "TESTSIG",
-                "api_key_test",
-            );
-            assert!(
-                result.is_ok(),
-                "store_subscription for {key} failed: {result:?}"
-            );
-
-            let stored = TenantSubscription::load(&conn, &format!("tenant-{key}"))
-                .unwrap()
-                .unwrap();
-            assert_eq!(stored.tier, expected_tier);
-            assert_eq!(stored.max_stores, stores);
-            assert_eq!(stored.max_pos_instances, pos);
-        }
-    }
-
-    // We need to import TenantSubscription for the test above.
-    use crate::subscription::TenantSubscription;
-
-    // ── extract_server_error tests ────────────────────────────────
-
-    #[test]
-    fn extract_error_from_json_body() {
-        let body = r#"{"error":"Wrong email or phone number"}"#;
-        let msg = super::extract_server_error(body);
-        assert_eq!(msg, "Wrong email or phone number");
-    }
-
-    #[test]
-    fn extract_error_escaped_json() {
-        let body = r#"{"error":"invalid or already used license key"}"#;
-        let msg = super::extract_server_error(body);
-        assert_eq!(msg, "invalid or already used license key");
-    }
-
-    #[test]
-    fn extract_error_falls_back_to_raw_body() {
-        // Non-JSON body should be returned as-is.
-        let body = "Internal Server Error";
-        let msg = super::extract_server_error(body);
-        assert_eq!(msg, "Internal Server Error");
-    }
-
-    #[test]
-    fn extract_error_empty_json() {
-        let body = "{}";
-        let msg = super::extract_server_error(body);
-        assert_eq!(msg, "{}");
-    }
-
-    #[test]
-    fn extract_error_empty_string() {
-        let msg = super::extract_server_error("");
-        assert_eq!(msg, "");
-    }
+/// Response from the pause/resume subscription endpoint.
+#[derive(Debug, Deserialize)]
+pub struct PauseResumeResponse {
+    /// New subscription status ("paused" or "active").
+    pub status: String,
+    /// Tier key that was paused/resumed.
+    pub tier_key: String,
+    /// When the subscription was paused (only present on pause response).
+    pub paused_at: Option<String>,
+    /// When the pause expires (only present on pause response).
+    pub paused_until: Option<String>,
 }
+
+/// Pause a subscription for 1–3 months.
+///
+/// Calls `POST /api/v1/license/pause` with `pause_months` in the body.
+/// The subscription transitions to `paused` status with `paused_at` and
+/// `paused_until` timestamps.
+pub async fn pause_subscription(
+    api_key: &str,
+    pause_months: u8,
+) -> Result<PauseResumeResponse, CoreError> {
+    let url = format!("{}/api/v1/license/pause", license_server_url());
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({ "pause_months": pause_months });
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(api_key)
+        .timeout(std::time::Duration::from_secs(15))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("pause: {msg}");
+            CoreError::Internal(msg)
+        })?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let msg = extract_server_error(&body);
+        let err = format!("pause failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
+    }
+
+    resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse pause response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })
+}
+
+/// Resume a paused subscription.
+///
+/// Calls `POST /api/v1/license/resume`. The subscription transitions
+/// back to `active` and the pause fields are cleared.
+pub async fn resume_subscription(api_key: &str) -> Result<PauseResumeResponse, CoreError> {
+    let url = format!("{}/api/v1/license/resume", license_server_url());
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(api_key)
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| {
+            let msg = format!("license server unreachable: {e}");
+            tracing::warn!("resume: {msg}");
+            CoreError::Internal(msg)
+        })?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let msg = extract_server_error(&body);
+        let err = format!("resume failed ({status}): {msg}");
+        tracing::warn!("{err}");
+        return Err(CoreError::Internal(err));
+    }
+
+    resp.json().await.map_err(|e| {
+        let msg = format!("failed to parse resume response: {e}");
+        tracing::warn!("{msg}");
+        CoreError::Internal(msg)
+    })
+}
+
+#[cfg(test)]
+#[path = "license_verification_tests.rs"]
+mod tests;

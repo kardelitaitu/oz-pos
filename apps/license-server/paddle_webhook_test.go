@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -39,10 +40,12 @@ func stubReceiptEmail(t *testing.T, captured *string) func() {
 }
 
 // setPaddleEnv configures the webhook env vars shared by most tests.
+// The plus entry mirrors the production six-price PADDLE_PRICE_TIERS
+// (Plus/Pro/Premium × monthly/yearly); tests pass the monthly test ids.
 func setPaddleEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("PADDLE_WEBHOOK_SECRET", "test-webhook-secret")
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro,pri_test_premium:premium")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus:year,pri_test_pro:pro:year,pri_test_premium:premium:year")
 }
 
 // paddleCreatedBody renders a subscription.created payload. email "" omits
@@ -1072,7 +1075,7 @@ func TestPaddleWebhook_CancelUnknownSubscription_Acknowledged(t *testing.T) {
 
 func TestVerifyPaddleConfig_SecretMissing_Fails(t *testing.T) {
 	t.Setenv("PADDLE_WEBHOOK_SECRET", "")
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro:year")
 	err := verifyPaddleConfig()
 	if err == nil {
 		t.Fatal("missing PADDLE_WEBHOOK_SECRET must fail boot")
@@ -1106,21 +1109,362 @@ func TestVerifyPaddleConfig_MalformedPriceTiers_Fails(t *testing.T) {
 
 func TestVerifyPaddleConfig_ValidPasses(t *testing.T) {
 	t.Setenv("PADDLE_WEBHOOK_SECRET", "test-webhook-secret")
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro,pri_test_premium:premium")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro:year,pri_test_premium:premium:year")
 	if err := verifyPaddleConfig(); err != nil {
 		t.Fatalf("valid config should pass the gate: %v", err)
 	}
 }
 
 func TestPaddleTierForPrice_StillWorksViaParser(t *testing.T) {
-	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro,pri_test_premium:premium")
-	if tier, ok := paddleTierForPrice("pri_test_premium"); !ok || tier != "premium" {
-		t.Errorf("pri_test_premium → (%q, %v), want (premium, true)", tier, ok)
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro:year,pri_test_premium:premium:year")
+	if tier, period, bundle, ok := paddleTierForPrice("pri_test_premium"); !ok || tier != "premium" || bundle != "" {
+		t.Errorf("pri_test_premium → (%q, %q, %q, %v), want (premium, year, %q, true)", tier, period, bundle, ok, "")
 	}
-	if _, ok := paddleTierForPrice("pri_unknown"); ok {
+	if _, _, _, ok := paddleTierForPrice("pri_unknown"); ok {
 		t.Error("unmapped price must return ok=false")
 	}
-	if _, ok := paddleTierForPrice(""); ok {
+	if _, _, _, ok := paddleTierForPrice(""); ok {
 		t.Error("empty price must return ok=false")
+	}
+}
+
+func TestPaddlePriceTiers_BundleSegment(t *testing.T) {
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus:year,pri_test_bundle:plus:month:restaurant_starter")
+	m, err := paddlePriceTiers()
+	if err != nil {
+		t.Fatalf("bundle entry should parse: %v", err)
+	}
+	if entry, ok := m["pri_test_bundle"]; !ok || entry != "plus:month:restaurant_starter" {
+		t.Errorf("pri_test_bundle → %q, want plus:month:restaurant_starter", entry)
+	}
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_bad:plus:year:fancy_bundle")
+	if _, err := paddlePriceTiers(); err == nil {
+		t.Error("unknown bundle_id must fail parsing loudly")
+	}
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_malformed")
+	if _, err := paddlePriceTiers(); err == nil {
+		t.Error("malformed entry (single segment) must fail parsing")
+	}
+}
+
+func TestPaddlePriceTiers_PeriodSegment(t *testing.T) {
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_monthly:plus:month,pri_test_yearly:pro:year")
+	m, err := paddlePriceTiers()
+	if err != nil {
+		t.Fatalf("period entries should parse: %v", err)
+	}
+	if entry, ok := m["pri_test_monthly"]; !ok || entry != "plus:month:" {
+		t.Errorf("pri_test_monthly → %q, want plus:month:", entry)
+	}
+	if entry, ok := m["pri_test_yearly"]; !ok || entry != "pro:year:" {
+		t.Errorf("pri_test_yearly → %q, want pro:year:", entry)
+	}
+	// Backward compat: 2-part entry defaults period to year.
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_legacy:premium")
+	m2, err := paddlePriceTiers()
+	if err != nil {
+		t.Fatalf("legacy 2-part entry should parse: %v", err)
+	}
+	if entry, ok := m2["pri_test_legacy"]; !ok || entry != "premium:year:" {
+		t.Errorf("pri_test_legacy → %q, want premium:year:", entry)
+	}
+}
+
+// ── Plus tier end-to-end (PADDLE_PRICE_TIERS → activate → renew) ──────
+
+// servePost routes one HTTP request through the app mux.
+func servePost(t *testing.T, se *core.ServeEvent, path, auth string, headers map[string]string, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+// signedPayloadFrom extracts the RSA-signed payload from a JSON response.
+func signedPayloadFrom(t *testing.T, body []byte) SubscriptionPayload {
+	t.Helper()
+	var resp map[string]any
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	payloadStr, ok := resp["signed_payload"].(string)
+	if !ok || payloadStr == "" {
+		t.Fatal("expected signed_payload in response")
+	}
+	var sp SubscriptionPayload
+	if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+		t.Fatalf("failed to parse signed_payload: %v", err)
+	}
+	return sp
+}
+
+// assertPlusQuotaBlock checks the plus-tier quota contract (1 store / 2
+// registers / no kds) on a payload or record's allowed_types JSON.
+func assertPlusQuotaBlock(t *testing.T, tier string, maxStores, maxPOS int, allowed []string) {
+	t.Helper()
+	if tier != "plus" {
+		t.Errorf("expected tier_key plus, got %q", tier)
+	}
+	if maxStores != 1 {
+		t.Errorf("expected max_stores=1, got %d", maxStores)
+	}
+	if maxPOS != 2 {
+		t.Errorf("expected max_pos_instances=2, got %d", maxPOS)
+	}
+	hasKDS := false
+	for _, w := range allowed {
+		if w == "kds" {
+			hasKDS = true
+		}
+	}
+	if hasKDS {
+		t.Errorf("plus must not allow kds (Pro+), got %v", allowed)
+	}
+	if !slices.Contains(allowed, "restaurant-pos") || !slices.Contains(allowed, "store-pos") ||
+		!slices.Contains(allowed, "inventory") || !slices.Contains(allowed, "warehouse") {
+		t.Errorf("plus allowed_types missing core workspace types, got %v", allowed)
+	}
+}
+
+// TestPaddlePlus_WebhookToRenew_EndToEnd drives the full plus-tier lifecycle
+// over HTTP: the PADDLE_PRICE_TIERS plus entry provisions a 1-store/
+// 2-register license on subscription.created, activation issues the tenant
+// api_key, a second purchase mints a renewal key, and the renew endpoint
+// appends +1 year while keeping the plus quota block intact.
+func TestPaddlePlus_WebhookToRenew_EndToEnd(t *testing.T) {
+	resetPaddleDedup()
+	resetRateLimiters()
+	setPaddleEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	var emailedKey string
+	restore := stubReceiptEmail(t, &emailedKey)
+	defer restore()
+
+	// ── 1. First purchase: subscription.created @ the plus price ──
+	body := paddleCreatedBody("evt_plus_e2e_001", "sub_plus_e2e_001", "cus_plus_e2e_001", "plusbuyer@example.com", "pri_test_plus")
+	rec := servePost(t, se, paddleWebhookPath, "", map[string]string{
+		paddleSignatureHeader: signPaddle("test-webhook-secret", body, time.Now().Unix()),
+	}, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from plus webhook, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Minted license: OZ-PLUS- prefix + plus quota block, no kds.
+	keyRec, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_plus_e2e_001")
+	if err != nil {
+		t.Fatalf("plus license key not minted: %v", err)
+	}
+	keyA := keyRec.GetString("key")
+	if !strings.HasPrefix(keyA, "OZ-PLUS-") {
+		t.Errorf("expected OZ-PLUS- key prefix, got %q", keyA)
+	}
+	if emailedKey != keyA {
+		t.Errorf("expected receipt email with key %q, got %q", keyA, emailedKey)
+	}
+	var keyATypes []string
+	if err := json.Unmarshal([]byte(keyRec.GetString("allowed_types")), &keyATypes); err != nil {
+		t.Fatalf("parse key allowed_types: %v", err)
+	}
+	assertPlusQuotaBlock(t, keyRec.GetString("tier_key"), keyRec.GetInt("max_stores"), keyRec.GetInt("max_pos_instances"), keyATypes)
+
+	// The signed subscription is persisted with the plus quota block and a
+	// ~+1y expiry (the billing period in paddleCreatedBody).
+	subRec1, err := app.FindFirstRecordByData("subscriptions", "paddle_sub_id", "sub_plus_e2e_001")
+	if err != nil {
+		t.Fatalf("plus subscription not persisted: %v", err)
+	}
+	if subRec1.GetString("status") != "active" {
+		t.Errorf("expected sub status active, got %q", subRec1.GetString("status"))
+	}
+	if !strings.Contains(subRec1.GetString("signed_payload"), `"tier_key":"plus"`) {
+		t.Errorf("expected signed payload tier_key plus, got: %s", subRec1.GetString("signed_payload"))
+	}
+	mintExpiry := subRec1.GetDateTime("expires_at").Time()
+	if diff := mintExpiry.Sub(time.Now().UTC().AddDate(1, 0, 0)); diff > 5*time.Minute || diff < -5*time.Minute {
+		t.Errorf("minted plus subscription should expire ~+1y, got %v (diff %v)", mintExpiry, diff)
+	}
+
+	// ── 2. Activate the minted key → tenant api_key issued ─────────
+	actBody := fmt.Sprintf(`{"key":%q,"email":"plusbuyer@example.com","machine_id":"e2emachine00001"}`, keyA)
+	actRec := servePost(t, se, "/api/v1/license/activate", "", nil, actBody)
+	if actRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from activate, got %d: %s", actRec.Code, actRec.Body.String())
+	}
+	var actResp map[string]any
+	if err := json.Unmarshal(actRec.Body.Bytes(), &actResp); err != nil {
+		t.Fatalf("failed to parse activate response: %v", err)
+	}
+	apiKey, _ := actResp["api_key"].(string)
+	if apiKey == "" {
+		t.Fatal("expected api_key in activate response")
+	}
+	actPayload := signedPayloadFrom(t, actRec.Body.Bytes())
+	assertPlusQuotaBlock(t, actPayload.TierKey, actPayload.MaxStores, actPayload.MaxPOSInstances, actPayload.AllowedTypes)
+
+	keyAfterActivate, err := app.FindFirstRecordByData("license_keys", "key", keyA)
+	if err != nil || keyAfterActivate.GetString("status") != "activated" {
+		t.Fatalf("expected key %q activated, got status %q (err %v)", keyA, keyAfterActivate.GetString("status"), err)
+	}
+
+	// ── 3. Second purchase mints a distinct renewal key for the tenant ──
+	body2 := paddleCreatedBody("evt_plus_e2e_002", "sub_plus_e2e_002", "cus_plus_e2e_002", "plusbuyer@example.com", "pri_test_plus")
+	rec2 := servePost(t, se, paddleWebhookPath, "", map[string]string{
+		paddleSignatureHeader: signPaddle("test-webhook-secret", body2, time.Now().Unix()),
+	}, body2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 from second plus webhook, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+	keyBRec, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_plus_e2e_002")
+	if err != nil {
+		t.Fatalf("renewal key not minted: %v", err)
+	}
+	keyB := keyBRec.GetString("key")
+	if keyB == keyA || !strings.HasPrefix(keyB, "OZ-PLUS-") {
+		t.Fatalf("expected a distinct OZ-PLUS- renewal key, got %q (first %q)", keyB, keyA)
+	}
+
+	// ── 4. Renew with the tenant api_key + the new key → +1 year ──
+	tenant, err := app.FindFirstRecordByData("tenants", "email", "plusbuyer@example.com")
+	if err != nil {
+		t.Fatalf("tenant not found: %v", err)
+	}
+	renewBody := fmt.Sprintf(`{"tenant_id":%q,"key":%q}`, tenant.Id, keyB)
+	renewRec := servePost(t, se, "/api/v1/license/renew", "Bearer "+apiKey, nil, renewBody)
+	if renewRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from renew, got %d: %s", renewRec.Code, renewRec.Body.String())
+	}
+
+	// Renewed payload keeps the plus quota block and appends +1y onto the
+	// second webhook subscription (already +1y) → ~2 years from now.
+	renPayload := signedPayloadFrom(t, renewRec.Body.Bytes())
+	assertPlusQuotaBlock(t, renPayload.TierKey, renPayload.MaxStores, renPayload.MaxPOSInstances, renPayload.AllowedTypes)
+	renExpiry, err := time.Parse(time.RFC3339, renPayload.ExpiresAt)
+	if err != nil {
+		t.Fatalf("failed to parse renewed expires_at: %v", err)
+	}
+	if diff := renExpiry.Sub(time.Now().UTC().AddDate(2, 0, 0)); diff > time.Hour || diff < -time.Hour {
+		t.Errorf("plus renewal should extend to ~+2y from now, got %v (diff %v)", renExpiry, diff)
+	}
+
+	// The renewed subscription record persists the plus quota block too.
+	newSubs, err := app.FindRecordsByFilter(
+		"subscriptions",
+		"tenant_id = {:tenant_id} && status = 'active'",
+		"-starts_at", 1, 0,
+		map[string]any{"tenant_id": tenant.Id},
+	)
+	if err != nil || len(newSubs) == 0 {
+		t.Fatal("expected an active subscription after renewal")
+	}
+	newSub := newSubs[0]
+	assertPlusQuotaBlock(t, newSub.GetString("tier_key"), newSub.GetInt("max_stores"), newSub.GetInt("max_pos_instances"), mustParseAllowedTypes(t, newSub.GetString("allowed_types")))
+}
+
+// mustParseAllowedTypes decodes the persisted allowed_types JSON column.
+func mustParseAllowedTypes(t *testing.T, raw string) []string {
+	t.Helper()
+	var out []string
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatalf("parse allowed_types %q: %v", raw, err)
+	}
+	return out
+}
+
+// ── Vertical-bundle minting (C3.2) ───────────────────────────────────
+
+// paddleCreatedBodyBundle is paddleCreatedBody plus a bundle entry inside
+// custom_data (what the checkout's openPaddleCheckout embeds).
+func paddleCreatedBodyBundle(eventID, subID, customerID, email, priceID, bundle string) string {
+	body := paddleCreatedBody(eventID, subID, customerID, email, priceID)
+	if bundle == "" {
+		return body
+	}
+	needle := fmt.Sprintf(`"custom_data": {"email": %q}`, email)
+	replacement := fmt.Sprintf(`"custom_data": {"email": %q, "bundle": %q}`, email, bundle)
+	return strings.Replace(body, needle, replacement, 1)
+}
+
+// TestPaddleWebhook_BundleMint drives a bundle purchase over HTTP: a
+// subscription.created at the bundle price (custom_data.bundle labels it)
+// mints a plus key whose quota block includes kds and persists bundle_id on
+// the key + subscription.
+func TestPaddleWebhook_BundleMint(t *testing.T) {
+	resetPaddleDedup()
+	resetRateLimiters()
+	setPaddleEnv(t)
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus:year,pri_test_pro:pro:year,pri_test_premium:premium:year,pri_test_bundle:plus:year:restaurant_starter")
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	restore := stubReceiptEmail(t, new(string))
+	defer restore()
+
+	body := paddleCreatedBodyBundle("evt_bundle_001", "sub_bundle_001", "cus_bundle_001",
+		"bundlebuyer@example.com", "pri_test_bundle", "restaurant_starter")
+	rec := servePost(t, se, paddleWebhookPath, "", map[string]string{
+		paddleSignatureHeader: signPaddle("test-webhook-secret", body, time.Now().Unix()),
+	}, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from bundle webhook, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	keyRec, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_bundle_001")
+	if err != nil {
+		t.Fatalf("bundle license key not minted: %v", err)
+	}
+	if keyRec.GetString("bundle_id") != "restaurant_starter" {
+		t.Errorf("expected bundle_id=restaurant_starter on key, got %q", keyRec.GetString("bundle_id"))
+	}
+	if !hasKDS(mustParseAllowedTypes(t, keyRec.GetString("allowed_types"))) {
+		t.Errorf("bundle mint must include kds in allowed_types, got %q", keyRec.GetString("allowed_types"))
+	}
+
+	subRec, err := app.FindFirstRecordByData("subscriptions", "paddle_sub_id", "sub_bundle_001")
+	if err != nil {
+		t.Fatalf("bundle subscription not persisted: %v", err)
+	}
+	if subRec.GetString("bundle_id") != "restaurant_starter" {
+		t.Errorf("expected sub bundle_id=restaurant_starter, got %q", subRec.GetString("bundle_id"))
+	}
+	if !strings.Contains(subRec.GetString("signed_payload"), "kds") {
+		t.Errorf("signed payload must carry kds in allowed_types, got: %s", subRec.GetString("signed_payload"))
+	}
+}
+
+// TestPaddleWebhook_BundleTamperRejected buys the PLAIN plus price but
+// claims a bundle in custom_data — the price's bundle segment is
+// authoritative, so the event is rejected and no key is minted.
+func TestPaddleWebhook_BundleTamperRejected(t *testing.T) {
+	resetPaddleDedup()
+	resetRateLimiters()
+	setPaddleEnv(t)
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_plus:plus:year,pri_test_pro:pro:year,pri_test_premium:premium:year,pri_test_bundle:plus:year:restaurant_starter")
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	body := paddleCreatedBodyBundle("evt_bundle_tamper", "sub_bundle_tamper", "cus_bundle_tamper",
+		"tamper@example.com", "pri_test_plus", "restaurant_starter")
+	rec := servePost(t, se, paddleWebhookPath, "", map[string]string{
+		paddleSignatureHeader: signPaddle("test-webhook-secret", body, time.Now().Unix()),
+	}, body)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 from bundle mismatch, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_bundle_tamper"); err == nil {
+		t.Fatal("expected NO license key minted for a bundle-claim tamper")
 	}
 }

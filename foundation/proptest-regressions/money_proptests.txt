@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e5851dd96fe8bcdce5c0bbca818bb08e2a5560fc15d2e33e93b1892e5a5f6e5a # shrinks to a = 1603149009292134369, b = -4599873314512174845, cc = -4623498722342600964, c = Currency([85, 83, 68])

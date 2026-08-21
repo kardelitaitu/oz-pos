@@ -20,12 +20,160 @@ type ActivateRequest struct {
 	// Phone is the contact phone number for the licensee.
 	// Stored as-is on the tenant record; falls back to "-" if empty.
 	Phone string `json:"phone"`
+	// TrialVertical is the segmented-trial vertical (subscription-tiers.md §4).
+	// Only read for trial keys (license_keys.is_trial = true): "" / unset →
+	// 14-day Plus trial, "restaurant" / "cafe" → 14-day Pro trial,
+	// "enterprise_referral" → 30-day Pro trial. Paid keys ignore it entirely
+	// — a client-supplied parameter must never shorten a paying customer's
+	// license.
+	TrialVertical string `json:"trial_vertical"`
+	// BundleID is the optional vertical-bundle id (subscription-tiers.md §3,
+	// C3.2 shipped). "restaurant_starter" unlocks the kds workspace type at
+	// the Plus tier. Mirrors trial_vertical's trust boundary: only honored
+	// for trial keys — a client-supplied bundle must never widen a PAYING
+	// license beyond what was purchased (paid bundles are issued by the
+	// webhook at checkout via the price map's bundle segment, cross-checked
+	// against custom_data.bundle / custom_field4). Unknown values are
+	// ignored.
+	BundleID string `json:"bundle_id"`
+	// HardwareFingerprint is the device-level fingerprint (SPEC-2026-TRIAL-
+	// LOCK): the client's "hw_<hex>" hash of the same hardware anchor the
+	// machine_id derives from. Unlike machine_id (per-installation, bound
+	// to a tenant's tenant_machines row), the fingerprint is stable across
+	// reinstalls, so the trial lock keys on it — a device that claimed a
+	// trial under a DIFFERENT email answers 403 at mint time even before
+	// the machine-registration checks. Optional: clients that don't send
+	// it fall back to the machine_id, and legacy/non-fingerprint values
+	// skip the lock rather than bricking activation.
+	HardwareFingerprint string `json:"hardware_fingerprint"`
 	// APIKey is the tenant API key for authenticating re-activations.
 	// On first activation the server issues a new api_key in the response,
 	// which the POS persists and re-sends on subsequent calls.
 	// When a license key is already activated by the same email's tenant,
 	// the api_key is NOT required — the email + key pair is sufficient proof.
 	APIKey string `json:"api_key,omitempty"`
+}
+
+// trialSegmentation maps an activation request's trial_vertical to the
+// (tier, duration-in-days) a trial key should mint (subscription-tiers.md
+// §4). Blank/unset and unknown verticals fall back to the general 14-day
+// Plus trial; restaurant/cafe signups get the 14-day Pro trial; enterprise
+// referrals get the 30-day Pro trial. Matching is case-insensitive and
+// whitespace-tolerant.
+func trialSegmentation(vertical string) (tier string, days int) {
+	switch strings.ToLower(strings.TrimSpace(vertical)) {
+	case "restaurant", "cafe":
+		return "pro", 14
+	case "enterprise_referral":
+		return "pro", 30
+	case "enterprise_self_serve":
+		return "enterprise", 30
+	default:
+		return "plus", 14
+	}
+}
+
+// trialLockDenied is the typed error enforceTrialLock returns for the
+// reset-abuse case (a different tenant claiming a trial on an already-
+// claimed device). handleActivate renders it as the same 403 JSON the
+// /trial claim endpoint emits, so both gates answer
+// {"code":"TRIAL_ALREADY_CLAIMED",...} — the code the client keys on.
+// (apis.NewForbiddenError's errData arg is field-level validation data,
+// not free-form details, so a flat details map would be mangled into
+// validation_invalid_value noise — hence the typed error.)
+type trialLockDenied struct {
+	code        string
+	message     string
+	expiredAt   string
+	fingerprint string
+}
+
+func (e *trialLockDenied) Error() string { return e.message }
+
+// enforceTrialLock is the activation-time half of the hardware-fingerprint
+// trial lock (SPEC-2026-TRIAL-LOCK; the claim endpoint is /api/v1/license
+// /trial). For a trial-key activation it ensures the machine has not
+// already claimed a trial:
+//
+//   - no registration yet → create one for this tenant (the device's
+//     first claim), allow the trial;
+//   - registration owned by the SAME tenant → re-install re-activation,
+//     allow;
+//   - registration owned by a DIFFERENT tenant → 403 TRIAL_ALREADY_CLAIMED
+//     — the reset-abuse case (same hardware, fresh email).
+//
+// The gate fires at mint time regardless of whether the client called the
+// /trial endpoint first, so skipping the endpoint cannot bypass the lock.
+// Returns a *trialLockDenied (rendered by the handler as the 403 JSON) or
+// nil when the trial may proceed.
+func enforceTrialLock(app core.App, hardwareFingerprint, machineID, tenantID string, trialDays int) error {
+	// Prefer the device-level fingerprint (stable across reinstalls); fall
+	// back to the machine_id for clients that only send that. Either way
+	// the value must be a real fingerprint form, else the lock is skipped
+	// rather than bricking activation.
+	fp := normalizeHardwareFingerprint(hardwareFingerprint)
+	if fp == "" {
+		fp = normalizeHardwareFingerprint(machineID)
+	}
+	if fp == "" {
+		// A non-fingerprint value (legacy client) skips the lock — the
+		// /trial endpoint and clients that send a real fingerprint are
+		// still protected.
+		return nil
+	}
+	existing, err := app.FindFirstRecordByData("trial_registrations", "hardware_fingerprint", fp)
+	if err != nil {
+		// No claim yet — this activation is the device's first trial.
+		coll, collErr := app.FindCollectionByNameOrId("trial_registrations")
+		if collErr != nil {
+			return fmt.Errorf("trial_registrations collection not found: %w", collErr)
+		}
+		rec := core.NewRecord(coll)
+		rec.Set("hardware_fingerprint", fp)
+		rec.Set("first_seen_at", time.Now().UTC())
+		rec.Set("trial_expires_at", time.Now().UTC().AddDate(0, 0, trialDays))
+		rec.Set("tenant_id", []string{tenantID})
+		rec.Set("platform", "unknown")
+		rec.Set("app_version", "unknown")
+		if saveErr := app.Save(rec); saveErr != nil {
+			log.Printf("trial lock: failed to register fingerprint %q for tenant %q: %v", fp, tenantID, saveErr)
+			return nil // non-fatal: the trial still mints, the lock just degrades
+		}
+		log.Printf("trial lock: registered fingerprint %q for tenant %q (first claim)", fp, tenantID)
+		return nil
+	}
+
+	// A claim exists. Resolve its owning tenant (relation stored as a JSON
+	// array in PB). Same tenant → re-activation, allow. Different tenant →
+	// the exact abuse the lock exists to prevent.
+	owner := existing.GetString("tenant_id")
+	if strings.HasPrefix(owner, "[") {
+		if sl := existing.GetStringSlice("tenant_id"); len(sl) > 0 {
+			owner = sl[0]
+		}
+	}
+	if owner != "" && owner != tenantID {
+		return &trialLockDenied{
+			code:        "TRIAL_ALREADY_CLAIMED",
+			message:     "A trial has already been claimed for this device. Purchase a license to continue.",
+			expiredAt:   existing.GetDateTime("trial_expires_at").Time().UTC().Format(time.RFC3339),
+			fingerprint: fp,
+		}
+	}
+	// Same tenant (or a legacy claim without an owner): allow — the
+	// tenant's own re-installations are legitimate.
+	return nil
+}
+
+// normalizeBundleID canonicalizes an activation request's bundle_id.
+// Only "restaurant_starter" is recognized today (TODO C3.2); anything else
+// (blank, unknown, malformed) normalizes to "" — a no-op bundle.
+func normalizeBundleID(bundle string) string {
+	b := strings.ToLower(strings.TrimSpace(bundle))
+	if b == "restaurant_starter" {
+		return b
+	}
+	return ""
 }
 
 func handleActivate(app core.App) func(e *core.RequestEvent) error {
@@ -381,18 +529,19 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// ── New activation for existing tenant: api_key required ──
 			// The caller must prove they are the registered tenant admin
 			// by presenting the api_key that was issued on first activation.
-			// EXCEPTION: webhook-issued keys (paddle_sub_id set) are bound
-			// to this tenant's email at purchase, so email + key is sufficient
-			// proof (the same model as re-activation). The tenant's api_key is
-			// minted NOW and returned in the response so /status and /renew
-			// work for the POS — the webhook only stored a placeholder hash.
+			// EXCEPTION: webhook-issued keys (paddle_sub_id / midtrans_sub_id
+			// set) are bound to this tenant's email at purchase, so email +
+			// key is sufficient proof (the same model as re-activation). The
+			// tenant's api_key is minted NOW and returned in the response so
+			// /status and /renew work for the POS — the webhook only stored a
+			// placeholder hash (both providers upsert the tenant the same way).
 			if keyStatus == "unused" || keyStatus == "" {
-				paddleIssued := keyRecord.GetString("paddle_sub_id") != ""
-				if paddleIssued {
+				providerIssued := keyRecord.GetString("paddle_sub_id") != "" || keyRecord.GetString("midtrans_sub_id") != ""
+				if providerIssued {
 					newAPIKey := generateAPIKey()
 					apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
 					if hashErr != nil {
-						log.Printf("Paddle-key activation api_key mint failed for tenant %q: %v", tenant.Id, hashErr)
+						log.Printf("webhook-key activation api_key mint failed for tenant %q: %v", tenant.Id, hashErr)
 						return e.JSON(http.StatusInternalServerError, map[string]any{
 							"error": "failed to create api_key",
 						})
@@ -400,7 +549,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 					tenant.Set("api_key", apiKeyHash)
 					tenant.Set("api_key_lookup", apiKeyLookup)
 					if saveErr := app.Save(tenant); saveErr != nil {
-						log.Printf("Paddle-key activation api_key save failed for tenant %q: %v", tenant.Id, saveErr)
+						log.Printf("webhook-key activation api_key save failed for tenant %q: %v", tenant.Id, saveErr)
 						return e.JSON(http.StatusInternalServerError, map[string]any{
 							"error": "failed to create api_key",
 						})
@@ -432,6 +581,43 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Segmented trial resolution (C2.1) ─────────────────
+		// Trial keys (license_keys.is_trial) mint a short-duration license
+		// whose tier and length come from the request's trial_vertical (§4):
+		// general signups get 14 days of Plus, restaurant/cafe signups get
+		// 14 days of Pro, and enterprise referrals get 30 days of Pro.
+		// Paid keys (is_trial = false) never enter this branch — their tier,
+		// expiry, and quota block come solely from the key record, so a
+		// forged trial_vertical can never downgrade or shorten a paid key.
+		isTrialKey := keyRecord.GetBool("is_trial")
+		var trialTier string
+		var trialDays int
+		if isTrialKey {
+			trialTier, trialDays = trialSegmentation(req.TrialVertical)
+		}
+
+		// ── Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK) ──
+		// One trial per physical device. Fires BEFORE the machine-count and
+		// tenant_machines registration checks so a claimed device answers
+		// 403 TRIAL_ALREADY_CLAIMED (the reset-abuse case) instead of a
+		// misleading machine-conflict 409. The fingerprint is the client's
+		// hardware-derived "hw_<hex>" (stable across reinstalls), falling
+		// back to the machine_id for clients that don't send one; a claim
+		// by the SAME tenant is a re-install re-activation and passes.
+		if isTrialKey {
+			if err := enforceTrialLock(app, req.HardwareFingerprint, req.MachineID, tenantID, trialDays); err != nil {
+				if denied, ok := err.(*trialLockDenied); ok {
+					return e.JSON(http.StatusForbidden, map[string]any{
+						"code":                 denied.code,
+						"message":              denied.message,
+						"expired_at":           denied.expiredAt,
+						"hardware_fingerprint": denied.fingerprint,
+					})
+				}
+				return err
+			}
+		}
+
 		// ── Machine count enforcement (H1 audit gap fix) ─────
 		// Before registering, check that the tenant hasn't exceeded
 		// their tier-based machine limit. Machine record IDs are
@@ -442,6 +628,11 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		//   Premium:    10 machines
 		//   Enterprise: unlimited
 		tierForLimit := keyRecord.GetString("tier_key")
+		// Trial keys are limited by the SEGMENTED tier (e.g. a restaurant
+		// trial minted as Pro gets Pro's 3 machines), not the key's default.
+		if isTrialKey {
+			tierForLimit = trialTier
+		}
 		maxMachines := maxMachinesForTier(tierForLimit)
 		if maxMachines > 0 {
 			machines, _ := app.FindRecordsByFilter(
@@ -531,18 +722,31 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		// ── Build and sign subscription ───────────────────────────
 		tierKey := keyRecord.GetString("tier_key")
 		expiresAt := calculateExpiry(tierKey)
+		maxStores := keyRecord.GetInt("max_stores")
+		maxPOSInstances := keyRecord.GetInt("max_pos_instances")
 
 		var allowedTypes []string
 		if err := json.Unmarshal([]byte(keyRecord.GetString("allowed_types")), &allowedTypes); err != nil {
 			allowedTypes = []string{}
 		}
 
+		// Trial keys: override the tier, expiry, and quota block with the
+		// vertical segmentation (§4) plus the request's bundle (C3.2). The
+		// key record's own values serve as the default for blank/unknown
+		// verticals (trialSegmentation). tierQuotas applies the bundle: a
+		// recognized bundle unlocks kds at the Plus tier.
+		if isTrialKey {
+			tierKey = trialTier
+			expiresAt = time.Now().UTC().AddDate(0, 0, trialDays)
+			maxStores, maxPOSInstances, allowedTypes = tierQuotas(trialTier, normalizeBundleID(req.BundleID))
+		}
+
 		sub := SubscriptionPayload{
 			TenantID:        tenantID,
 			TierKey:         tierKey,
 			Status:          "active",
-			MaxStores:       keyRecord.GetInt("max_stores"),
-			MaxPOSInstances: keyRecord.GetInt("max_pos_instances"),
+			MaxStores:       maxStores,
+			MaxPOSInstances: maxPOSInstances,
 			AllowedTypes:    allowedTypes,
 			StartsAt:        time.Now().UTC().Format(time.RFC3339),
 			ExpiresAt:       expiresAt.Format(time.RFC3339),
@@ -602,11 +806,31 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		// by the brute-force cooldown from earlier typos.
 		keyFailTracker.clearKey(req.Key)
 
+		// ── Lightweight repeat-email detector (NOT the trial-lock gate) ──
+		// Every successful TRIAL activation records the (email, device)
+		// fingerprint; a second claim by the same email on the same device
+		// (the same-tenant reinstall case the full SPEC-2026-TRIAL-LOCK
+		// gate allows by design) bumps the count and is surfaced as
+		// repeat_claim so the client can warn without blocking. Paid keys
+		// are never recorded — the detector watches trial claims only.
+		var repeatClaim any
+		if isTrialKey {
+			if count, firstAt := recordTrialClaim(app, req.Email, req.MachineID, tenantID, req.Key); count > 1 {
+				repeatClaim = map[string]any{
+					"count":            count,
+					"first_claimed_at": firstAt,
+				}
+			}
+		}
+
 		// ── Return signed subscription to POS ─────────────────────
 		resp := map[string]any{
 			"signed_payload": payloadStr,
 			"signature":      signature,
 			"tenant_id":      tenantID,
+		}
+		if repeatClaim != nil {
+			resp["repeat_claim"] = repeatClaim
 		}
 		// api_key is included only for newly created tenants (so the POS can
 		// persist it). The stored value is a bcrypt hash, so the plaintext

@@ -21,7 +21,8 @@ package main
 //
 //	PADDLE_WEBHOOK_SECRET  (required) — HMAC secret for signature verification
 //	PADDLE_PRICE_TIERS     (required for provisioning) — comma-separated
-//	                       "price_id:tier_key" pairs, e.g. "pri_01h7...:pro"
+//	                       "price_id:tier_key[:bundle_id]" pairs, e.g.
+//	                       "pri_01h7...:pro" or "pri_01h7...:plus:restaurant_starter"
 //	PADDLE_API_URL         (default https://api.paddle.com) — customer fetch
 //	PADDLE_API_KEY         (optional) — server-side API key used to resolve
 //	                       the customer email when it isn't in custom_data
@@ -118,6 +119,21 @@ type paddleEvent struct {
 
 // paddleSubscription is the subset of the Paddle Billing subscription
 // entity the provisioning logic needs. All times are RFC 3339 strings.
+//
+// custom_data echoes back what the website's checkout (paddle.ts
+// Paddle.Checkout.open) embedded at purchase — the register-first account
+// email plus the optional C3.2 vertical bundle:
+//
+//	custom_data.email  = buyer email (register-first, the webhook upserts
+//	                     the tenant by it — same as Midtrans's
+//	                     custom_field2)
+//	custom_data.bundle = bundle_id (C3.2 vertical bundles — cross-checked
+//	                     against the price map, never trusted alone)
+//
+// The signup vertical is NOT carried here (trial segmentation is a
+// desktop-activation concern — see trial_vertical in activate.go), and
+// custom_data.phone may be present when the Paddle checkout collects it
+// (backfilled onto the tenant when non-empty).
 type paddleSubscription struct {
 	ID         string            `json:"id"`
 	Status     string            `json:"status"`
@@ -298,42 +314,75 @@ func resolvePaddleEmail(sub *paddleSubscription) string {
 
 // ── Tier mapping ─────────────────────────────────────────────────────
 
-// paddlePriceTiers parses PADDLE_PRICE_TIERS ("pri_x:pro,pri_y:premium")
-// into a price→tier map. Returns an error for an unset or malformed value
-// so the boot gate (verifyPaddleConfig) fails fast instead of letting
-// every subscription event 500 during provisioning.
+// paddlePriceTiers parses PADDLE_PRICE_TIERS
+// ("pri_x:pro:year,pri_y:premium:month[:bundle_id]") into a
+// price→"tier:period:bundle" map. The period ("month" or "year") is the
+// billing cycle the price represents — the webhook cross-checks it
+// against the subscription's billing_cycle.interval so a tampered
+// interval can't drift the expiry cadence (mirroring the Midtrans
+// custom_field3 period cross-check). The optional bundle_id (C3.2)
+// marks a vertical-bundle price: the buyer pays for the tier PLUS the
+// bundle, so the webhook mints with tierQuotas(tier, bundle).
+//
+// Backward compatibility: entries with only 2 parts (price_id:tier_key)
+// default period to "year" — the legacy format before the period
+// cross-check shipped.
+//
+// Returns an error for an unset or malformed value so the boot gate
+// (verifyPaddleConfig) fails fast instead of letting every subscription
+// event 500 during provisioning.
 func paddlePriceTiers() (map[string]string, error) {
 	v := strings.TrimSpace(os.Getenv("PADDLE_PRICE_TIERS"))
 	if v == "" {
-		return nil, fmt.Errorf("PADDLE_PRICE_TIERS is required — without it every subscription webhook fails provisioning with 500; set it to comma-separated price_id:tier_key pairs, e.g. pri_01h7abc123:pro,pri_01h7def456:premium")
+		return nil, fmt.Errorf("PADDLE_PRICE_TIERS is required — without it every subscription webhook fails provisioning with 500; set it to comma-separated price_id:tier_key:period[:bundle_id] pairs, e.g. pri_01h7abc123:pro:year or pri_01h7xyz789:plus:month:restaurant_starter")
 	}
 	m := make(map[string]string)
 	for _, pair := range strings.Split(v, ",") {
-		k, tier, ok := strings.Cut(strings.TrimSpace(pair), ":")
-		k = strings.TrimSpace(k)
-		tier = strings.TrimSpace(tier)
-		if !ok || k == "" || tier == "" {
-			return nil, fmt.Errorf("PADDLE_PRICE_TIERS has a malformed entry %q — expected price_id:tier_key pairs, e.g. pri_01h7abc123:pro", strings.TrimSpace(pair))
+		parts := strings.Split(strings.TrimSpace(pair), ":")
+		if len(parts) < 2 || len(parts) > 4 {
+			return nil, fmt.Errorf("PADDLE_PRICE_TIERS has a malformed entry %q — expected price_id:tier_key:period[:bundle_id] pairs, e.g. pri_01h7abc123:pro:year", strings.TrimSpace(pair))
 		}
-		m[k] = tier
+		k := strings.TrimSpace(parts[0])
+		tier := strings.TrimSpace(parts[1])
+		if k == "" || tier == "" {
+			return nil, fmt.Errorf("PADDLE_PRICE_TIERS has a malformed entry %q — expected price_id:tier_key:period[:bundle_id] pairs", strings.TrimSpace(pair))
+		}
+		// Period defaults to "year" for backward-compatible 2-part entries.
+		period := "year"
+		if len(parts) >= 3 && strings.TrimSpace(parts[2]) != "" {
+			period = strings.TrimSpace(parts[2])
+		}
+		bundle := ""
+		if len(parts) == 4 {
+			bundle = normalizeBundleID(parts[3])
+			if bundle == "" {
+				return nil, fmt.Errorf("PADDLE_PRICE_TIERS entry %q has an unknown bundle_id %q — recognized bundles: restaurant_starter", strings.TrimSpace(pair), strings.TrimSpace(parts[3]))
+			}
+		}
+		m[k] = tier + ":" + period + ":" + bundle
 	}
 	return m, nil
 }
 
-// paddleTierForPrice maps a Paddle price id to a tier_key via
-// PADDLE_PRICE_TIERS. Returns ("", false) when the price is not in the
-// map — the handler then answers 500 so Paddle retries until the operator
-// fixes the map. Env is re-read per call so a redeploy can fix it.
-func paddleTierForPrice(priceID string) (string, bool) {
+// paddleTierForPrice maps a Paddle price id to (tier, period, bundle) via
+// PADDLE_PRICE_TIERS. Returns ("", "", "", false) when the price is not in
+// the map — the handler then answers 500 so Paddle retries until the
+// operator fixes the map. Env is re-read per call so a redeploy can fix it.
+func paddleTierForPrice(priceID string) (string, string, string, bool) {
 	if priceID == "" {
-		return "", false
+		return "", "", "", false
 	}
 	m, err := paddlePriceTiers()
 	if err != nil {
-		return "", false
+		return "", "", "", false
 	}
-	tier, ok := m[priceID]
-	return tier, ok
+	entry, ok := m[priceID]
+	if !ok {
+		return "", "", "", false
+	}
+	tier, rest, _ := strings.Cut(entry, ":")
+	period, bundle, _ := strings.Cut(rest, ":")
+	return tier, period, bundle, true
 }
 
 // verifyPaddleConfig is the boot-time webhook gate (called from main
@@ -362,11 +411,31 @@ func verifyPaddleConfig() error {
 
 // tierQuotas returns the subscription quota block for a tier, mirroring
 // the plan's product table and maxMachinesForTier semantics. 0 = unlimited.
-func tierQuotas(tier string) (maxStores, maxPOSInstances int, allowedTypes []string) {
+// bundle is an optional vertical-bundle id (subscription-tiers.md §3,
+// C3.2): "restaurant_starter" unlocks the kds workspace type at the Plus
+// tier (bundles are Plus+ per §3 — Pro+ already includes kds, so a bundle
+// only ever widens Plus). Webhook minting passes the bundle from the
+// checkout when the website leg ships; activation passes the request's
+// normalized bundle_id.
+func tierQuotas(tier, bundle string) (maxStores, maxPOSInstances int, allowedTypes []string) {
 	all := []string{"restaurant-pos", "store-pos", "inventory", "warehouse", "admin", "kds"}
 	switch tier {
-	case "pro", "premium", "enterprise":
+	case "enterprise":
 		return 0, 0, all // unlimited stores/instances, all workspace types
+	case "pro":
+		return 2, 5, all
+	case "premium":
+		// C4.2: Premium allows up to 10 stores self-serve; >10 requires
+		// Enterprise contract. Unlimited instances and all workspace types.
+		return 10, 0, all
+	case "plus":
+		// 1 store, 2 registers/store, no kds (§3 Workspace Types — kds is Pro+).
+		// maxWarehouses is enforced client-side via SubscriptionTier::max_warehouses().
+		types := []string{"restaurant-pos", "store-pos", "admin", "inventory", "warehouse"}
+		if bundle == "restaurant_starter" {
+			types = append(types, "kds")
+		}
+		return 1, 2, types
 	case "free":
 		return 1, 1, []string{"restaurant-pos", "store-pos", "admin"}
 	default:
@@ -645,14 +714,32 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		return err
 	}
 
-	// Resolve tier from the first item's price id.
+	// Resolve tier (+ period + bundle) from the first item's price id.
+	// The price is authoritative: custom_data.bundle (C3.2) only labels
+	// what the price paid for — a buyer claiming a bundle on a plain price
+	// is rejected. The billing_cycle.interval is cross-checked against the
+	// price-map period so a tampered interval can't drift the expiry
+	// cadence (mirroring the Midtrans custom_field3 cross-check).
 	if len(sub.Items) == 0 || sub.Items[0].Price.ID == "" {
 		return fmt.Errorf("subscription %s has no priced items", sub.ID)
 	}
 	priceID := sub.Items[0].Price.ID
-	tier, ok := paddleTierForPrice(priceID)
+	tier, period, bundle, ok := paddleTierForPrice(priceID)
 	if !ok {
 		return fmt.Errorf("price %q is not mapped in PADDLE_PRICE_TIERS", priceID)
+	}
+	if cf := strings.TrimSpace(sub.CustomData["bundle"]); cf != "" && cf != bundle {
+		return fmt.Errorf("custom_data.bundle %q disagrees with price-mapped bundle %q for price %q — rejecting", cf, bundle, priceID)
+	}
+	// Cross-check the billing cycle interval against the price-map period.
+	// A tampered interval (e.g. "year" on a monthly price) would let the
+	// subscriptionTimes fallback extend the wrong cadence.
+	if sub.BillingCycle != nil && sub.BillingCycle.Interval != "" {
+		interval := strings.ToLower(strings.TrimSpace(sub.BillingCycle.Interval))
+		// Normalize: Paddle uses "month"/"year" which matches the price map.
+		if interval != period {
+			return fmt.Errorf("billing_cycle.interval %q disagrees with price-mapped period %q for price %q — rejecting", interval, period, priceID)
+		}
 	}
 
 	// Resolve the customer email (custom_data → embedded customer → API).
@@ -661,50 +748,10 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		return fmt.Errorf("cannot resolve customer email for subscription %s (set custom_data.email or PADDLE_API_KEY)", sub.ID)
 	}
 
-	// ── Upsert tenant by email ────────────────────────────────
-	tenant, err := app.FindFirstRecordByData("tenants", "email", email)
+	// ── Upsert tenant by email (shared with the Midtrans webhook) ──
+	tenant, err := upsertTenantByEmail(app, email, strings.TrimSpace(sub.CustomData["phone"]), "paddle")
 	if err != nil {
-		tenantColl, collErr := app.FindCollectionByNameOrId("tenants")
-		if collErr != nil {
-			return fmt.Errorf("tenants collection not found: %w", collErr)
-		}
-		tenant = core.NewRecord(tenantColl)
-		tenant.Set("email", email)
-		// Paddle customers may not provide a phone (custom_data.phone if
-		// they did) — the field is optional now.
-		if p := strings.TrimSpace(sub.CustomData["phone"]); p != "" {
-			tenant.Set("phone", p)
-		} else {
-			tenant.Set("phone", "-")
-		}
-		// Placeholder api_key (never revealed): the customer's real api_key
-		// is minted at first activation (see activate.go), which is when the
-		// POS learns it. The bcrypt hash keeps the unique index satisfied.
-		placeholder := generateAPIKey()
-		hash, lookup, hashErr := hashAPIKey(placeholder)
-		if hashErr != nil {
-			return fmt.Errorf("failed to hash placeholder api_key: %w", hashErr)
-		}
-		tenant.Set("api_key", hash)
-		tenant.Set("api_key_lookup", lookup)
-		tenant.Set("status", "active")
-		// Purchase-created tenants have not completed OTP verification
-		// (register-first means buyers usually have, but the flag's meaning
-		// is "proved inbox ownership via verify-otp" — they can do that
-		// anytime via request-otp).
-		tenant.Set("email_verified", false)
-		if saveErr := app.Save(tenant); saveErr != nil {
-			return fmt.Errorf("failed to save tenant %q: %w", email, saveErr)
-		}
-		log.Printf("paddle webhook: created tenant %q (id=%s) for subscription %s", email, tenant.Id, sub.ID)
-	} else if tenant.GetString("phone") == "" || tenant.GetString("phone") == "-" {
-		// Backfill a phone provided later at checkout, if any.
-		if p := strings.TrimSpace(sub.CustomData["phone"]); p != "" {
-			tenant.Set("phone", p)
-			if saveErr := app.Save(tenant); saveErr != nil {
-				log.Printf("paddle webhook: failed to backfill phone for tenant %q: %v", email, saveErr)
-			}
-		}
+		return err
 	}
 
 	startsAt, expiresAt := subscriptionTimes(sub, tier)
@@ -727,17 +774,19 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		keyRecord.Set("tier_key", tier)
 		keyRecord.Set("status", "unused")
 		keyRecord.Set("expires_at", expiresAt)
-		maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+		maxStores, maxPOS, allowedTypes := tierQuotas(tier, bundle)
 		keyRecord.Set("max_stores", maxStores)
 		keyRecord.Set("max_pos_instances", maxPOS)
 		if b, err := json.Marshal(allowedTypes); err == nil {
 			keyRecord.Set("allowed_types", string(b))
 		}
+		keyRecord.Set("bundle_id", bundle)
 		keyRecord.Set("paddle_sub_id", sub.ID)
+		keyRecord.Set("payment_provider", "paddle")
 		if saveErr := app.Save(keyRecord); saveErr != nil {
 			return fmt.Errorf("failed to save license key for subscription %s: %w", sub.ID, saveErr)
 		}
-		log.Printf("paddle webhook: minted key %q (tier=%s) for subscription %s", key, tier, sub.ID)
+		log.Printf("paddle webhook: minted key %q (tier=%s, bundle=%s) for subscription %s", key, tier, bundle, sub.ID)
 		if sendReceipt {
 			// Non-fatal: a failed receipt must not fail provisioning.
 			if mailErr := sendReceiptEmail(email, key, tier, expiresAt); mailErr != nil {
@@ -746,6 +795,13 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		}
 	} else {
 		// Refresh tier/expiry on the existing key (renewal / re-delivery).
+		// Paddle renewals echo custom_data, but fall back to the persisted
+		// bundle_id anyway: a bundle the customer is still paying for must
+		// survive renewals. When the price map resolves a bundle for the
+		// charged price it wins (plan change).
+		if bundle == "" {
+			bundle = keyRecord.GetString("bundle_id")
+		}
 		keyRecord.Set("tier_key", tier)
 		keyRecord.Set("expires_at", expiresAt)
 		if saveErr := app.Save(keyRecord); saveErr != nil {
@@ -754,7 +810,10 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 	}
 
 	// ── Upsert the RSA-signed subscription ────────────────────
-	maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+	// The signed payload carries the bundle-widened allowed types, so the
+	// POS trusts the same payload shape regardless of how the bundle got
+	// there (checkout webhook or trial activation).
+	maxStores, maxPOS, allowedTypes := tierQuotas(tier, bundle)
 	status := "active"
 	graceUntil := calculateGraceUntil(mustParseTime(expiresAt)).Format(time.RFC3339)
 	payload := SubscriptionPayload{
@@ -783,6 +842,8 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 		subRecord = core.NewRecord(subColl)
 		subRecord.Set("paddle_sub_id", sub.ID)
 	}
+	subRecord.Set("payment_provider", "paddle")
+	subRecord.Set("bundle_id", bundle)
 	subRecord.Set("tenant_id", []string{tenant.Id})
 	subRecord.Set("tier_key", tier)
 	subRecord.Set("status", status)
@@ -816,6 +877,61 @@ func mustParseTime(s string) time.Time {
 	return t
 }
 
+// upsertTenantByEmail finds or creates the tenants record for a webhook
+// purchase, shared by the Paddle and Midtrans webhooks so both billing
+// paths mint identical tenant records. The phone is backfilled when
+// non-empty (Paddle checkout may collect it; Midtrans notifications do not
+// carry one). New tenants get a placeholder api_key — the real key is
+// minted at first activation (see activate.go), which is when the POS
+// learns it — and have not completed OTP verification (register-first means
+// buyers usually have, but the flag's meaning is "proved inbox ownership via
+// verify-otp").
+func upsertTenantByEmail(app core.App, email, phone, provider string) (*core.Record, error) {
+	tenant, err := app.FindFirstRecordByData("tenants", "email", email)
+	if err == nil {
+		if phone != "" && (tenant.GetString("phone") == "" || tenant.GetString("phone") == "-") {
+			tenant.Set("phone", phone)
+			if saveErr := app.Save(tenant); saveErr != nil {
+				log.Printf("%s webhook: failed to backfill phone for tenant %q: %v", provider, email, saveErr)
+			}
+		}
+		return tenant, nil
+	}
+
+	tenantColl, collErr := app.FindCollectionByNameOrId("tenants")
+	if collErr != nil {
+		return nil, fmt.Errorf("tenants collection not found: %w", collErr)
+	}
+	tenant = core.NewRecord(tenantColl)
+	tenant.Set("email", email)
+	if phone != "" {
+		tenant.Set("phone", phone)
+	} else {
+		tenant.Set("phone", "-")
+	}
+	// Placeholder api_key (never revealed): the customer's real api_key is
+	// minted at first activation (see activate.go), which is when the POS
+	// learns it. The bcrypt hash keeps the unique index satisfied.
+	placeholder := generateAPIKey()
+	hash, lookup, hashErr := hashAPIKey(placeholder)
+	if hashErr != nil {
+		return nil, fmt.Errorf("failed to hash placeholder api_key: %w", hashErr)
+	}
+	tenant.Set("api_key", hash)
+	tenant.Set("api_key_lookup", lookup)
+	tenant.Set("status", "active")
+	// Purchase-created tenants have not completed OTP verification
+	// (register-first means buyers usually have, but the flag's meaning is
+	// "proved inbox ownership via verify-otp" — they can do that anytime
+	// via request-otp).
+	tenant.Set("email_verified", false)
+	if saveErr := app.Save(tenant); saveErr != nil {
+		return nil, fmt.Errorf("failed to save tenant %q: %w", email, saveErr)
+	}
+	log.Printf("%s webhook: created tenant %q (id=%s)", provider, email, tenant.Id)
+	return tenant, nil
+}
+
 // paddleUpdate handles subscription.updated: refresh tier/status/expiry on
 // the subscriptions record and keep the license key's tier/expiry in sync
 // (so activation's expiry gate and machine limits match the Paddle truth).
@@ -837,11 +953,18 @@ func paddleUpdate(app core.App, ev paddleEvent) error {
 		priceID = sub.Items[0].Price.ID
 	}
 	if priceID != "" {
-		if tier, ok := paddleTierForPrice(priceID); ok {
+		if tier, _, bundle, ok := paddleTierForPrice(priceID); ok {
 			subRecord.Set("tier_key", tier)
+			// A plan-change price may carry no bundle segment; keep the
+			// persisted bundle so an update event never strips kds from a
+			// key that's still paying for it.
+			if bundle == "" {
+				bundle = subRecord.GetString("bundle_id")
+			}
+			subRecord.Set("bundle_id", bundle)
 			// Refresh the tier's quota block so the re-sign below reads the new
 			// tier's limits, not the ones captured at provisioning time.
-			maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+			maxStores, maxPOS, allowedTypes := tierQuotas(tier, bundle)
 			subRecord.Set("max_stores", maxStores)
 			subRecord.Set("max_pos_instances", maxPOS)
 			if b, err := json.Marshal(allowedTypes); err == nil {
@@ -849,6 +972,7 @@ func paddleUpdate(app core.App, ev paddleEvent) error {
 			}
 			if keyRecord, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", sub.ID); err == nil {
 				keyRecord.Set("tier_key", tier)
+				keyRecord.Set("bundle_id", bundle)
 				keyRecord.Set("max_stores", maxStores)
 				keyRecord.Set("max_pos_instances", maxPOS)
 				if b, err := json.Marshal(allowedTypes); err == nil {

@@ -43,3 +43,8 @@ loyalty-tier-multiplier-aria =
     .aria-label = Earn multiplier
 loyalty-tier-colour-aria =
     .aria-label = Tier colour
+
+# C2.2: Loyalty is a Premium+ feature — locked screen for lower tiers.
+loyalty-upgrade-required = Loyalty is a Premium feature
+loyalty-upgrade-message = Build repeat customers with points, tiers, and rewards. Upgrade to Premium to activate your loyalty program.
+loyalty-upgrade-cta = Upgrade to Premium

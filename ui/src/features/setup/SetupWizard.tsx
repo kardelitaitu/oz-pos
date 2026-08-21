@@ -1,10 +1,13 @@
 /* eslint-disable jsx-a11y/label-has-associated-control -- <Localized> blocks static analysis */
-import { useState, useCallback } from 'react';
+import { useContext, useState, useCallback } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Localized } from '@/frontend/shared/Localized';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { LocaleContext } from '@/i18n/LocaleContext';
+import { openUpgradePricing } from '@/utils/upgrade';
 import { detectDefaultCurrency } from '@/utils/currency';
 import LiveSetupPreview from './components/LiveSetupPreview';
 import './SetupWizard.css';
@@ -483,6 +486,15 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
               />
             )}
 
+            {/* Step 2 — QRIS setup gate (C1 Free→Plus trigger): QRIS is a
+                Plus+ feature. The checkout path is gated in PaymentModal;
+                this row gates the onboarding surface — on tiers without
+                supports_qris() it renders the upgrade prompt instead of
+                setup UI. It never writes a persisted feature toggle (the
+                wizard feature keys map to the Rust Feature enum, and QRIS
+                is not one of them — the gate is purely tier-driven). */}
+            {step === 1 && <QrisSetupRow />}
+
             {step === 7 && (
               <StepReview
                 preset={preset}
@@ -665,6 +677,50 @@ function StepFeatures({
             );
           })}          </div>
     </>
+  );
+}
+
+// ── Step 2 (Payments): QRIS setup row ──────────────────────────────
+//
+// Gates QRIS setup in onboarding per `supports_qris()` (subscription-tiers.md
+// §3): a Free-tier merchant sees the upgrade prompt instead of QRIS setup UI
+// (Fluent key `setup-qris-upgrade-required`), while Plus+ tiers see QRIS as
+// an included payment method. `caps === null` while loading / on IPC failure
+// renders the available state — gates degrade open rather than blocking
+// onboarding (C2.2 convention).
+function QrisSetupRow() {
+  const { l10n } = useLocalization();
+  const locale = useContext(LocaleContext)?.locale ?? 'en';
+  const { caps } = useSubscription();
+  const locked = !!caps && !caps.supportsQris;
+
+  return (
+    <div
+      className={`setup-feature-row setup-qris-row${locked ? ' setup-qris-row--locked' : ''}`}
+      data-testid="setup-qris-row"
+    >
+      <div className="setup-feature-info">
+        <div className="setup-feature-name">{l10n.getString('setup-qris-label')}</div>
+        <div className="setup-feature-desc">
+          {locked
+            ? l10n.getString('setup-qris-upgrade-required')
+            : l10n.getString('setup-qris-available')}
+        </div>
+      </div>
+      {locked ? (
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => openUpgradePricing(locale, 'plus')}
+        >
+          {l10n.getString('setup-qris-upgrade-cta')}
+        </Button>
+      ) : (
+        <span className="setup-qris-badge" role="status">
+          {l10n.getString('setup-qris-included')}
+        </span>
+      )}
+    </div>
   );
 }
 

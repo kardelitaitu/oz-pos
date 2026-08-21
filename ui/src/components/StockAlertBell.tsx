@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocalization } from '@fluent/react';
 import { getActiveStockAlerts } from '@/api/inventory';
 import './StockAlertBell.css';
 
@@ -24,6 +25,7 @@ export default function StockAlertBell({
   locationId = 'default',
   onClick,
 }: StockAlertBellProps) {
+  const { l10n } = useLocalization();
   const [count, setCount] = useState(0);
 
   const fetchCount = useCallback(async () => {
@@ -49,8 +51,8 @@ export default function StockAlertBell({
       onClick={onClick}
       aria-label={
         count > 0
-          ? `${count} active stock alert${count !== 1 ? 's' : ''}`
-          : 'No stock alerts'
+          ? l10n.getString('stock-alert-bell-count-aria', { count })
+          : l10n.getString('stock-alert-bell-empty-aria')
       }
     >
       <svg

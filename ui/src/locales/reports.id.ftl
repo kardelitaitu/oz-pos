@@ -54,6 +54,7 @@ sales-report-category-popularity-top = Penjual Teratas
 sales-report-category-popularity-uncategorized = Tanpa Kategori
 sales-report-popularity-trend = Tren Popularitas
 sales-report-demand-forecast = Perkiraan Permintaan
+sales-report-category-forecast = Perkiraan Kategori
 sales-report-demand-forecast-category = Kategori
 sales-report-demand-forecast-avg = Rata-rata / periode
 sales-report-demand-forecast-trend = Tren
@@ -63,6 +64,7 @@ heatmap-title = Jam Tersibuk
 heatmap-hour = Jam
 heatmap-sales = Penjualan
 heatmap-no-data = Tidak ada data penjualan
+sales-report-hourly-heatmap-aria = Heatmap Per Jam
 day-sunday = Min
 day-monday = Sen
 day-tuesday = Sel
@@ -153,6 +155,15 @@ custom-report-run-aria = Jalankan laporan
 custom-report-region-aria = Pembuat Laporan Kustom
 custom-report-export-aria = Ekspor CSV
 custom-report-columns-selected = { $selected } / { $total } dipilih
+
+# Custom Report — Pagination (REP-07)
+custom-report-truncated = Hasil dibatasi hingga { $limit } baris. Gunakan paginasi untuk melihat lebih banyak.
+custom-report-pagination-aria = Paginasi hasil
+custom-report-prev-page = Sebelumnya
+custom-report-prev-page-aria = Halaman sebelumnya
+custom-report-next-page = Selanjutnya
+custom-report-next-page-aria = Halaman selanjutnya
+custom-report-page-of = Halaman { $page }
 
 # Export
 dashboard-export-csv = CSV

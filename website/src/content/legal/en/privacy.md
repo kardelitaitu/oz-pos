@@ -133,8 +133,8 @@ Questions, requests, or complaints about this policy or your data:
 - **Subject line:** "Privacy request"
 
 We aim to respond to every privacy request within 30 days.
-
-
+
+
 ## Version history
 
 | Version | Effective date | Summary of changes |

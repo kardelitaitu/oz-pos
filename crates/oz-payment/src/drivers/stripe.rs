@@ -194,16 +194,21 @@ impl StripePaymentProcessor {
     }
 
     /// Convert a Stripe currency code (lowercase) to a [`foundation::Currency`].
-    fn to_currency(code: &str) -> Currency {
-        code.to_uppercase().parse().unwrap_or(Currency(*b"USD"))
+    ///
+    /// PA-02: unknown codes are a hard error, not a silent USD fallback —
+    /// a malformed gateway currency would otherwise mislabel the recorded
+    /// amount.
+    fn to_currency(code: &str) -> Result<Currency, PaymentError> {
+        code.parse::<Currency>()
+            .map_err(|_| PaymentError::Network(format!("unknown gateway currency code: {code}")))
     }
 
     /// Convert Stripe amount + currency code to [`Money`].
-    fn to_money(minor_units: i64, currency: &str) -> Money {
-        Money {
+    fn to_money(minor_units: i64, currency: &str) -> Result<Money, PaymentError> {
+        Ok(Money {
             minor_units,
-            currency: Self::to_currency(currency),
-        }
+            currency: Self::to_currency(currency)?,
+        })
     }
 
     /// Perform an HTTP POST to the Stripe API and return (status, body).
@@ -308,13 +313,13 @@ impl StripePaymentProcessor {
     }
 
     /// Extract success status and amount from an intent response.
-    fn intent_result(intent: &PaymentIntentResponse) -> (bool, Money) {
+    fn intent_result(intent: &PaymentIntentResponse) -> Result<(bool, Money), PaymentError> {
         let success = intent.status == "succeeded" || intent.status == "requires_capture";
         let amount = Self::to_money(
             intent.amount_received.unwrap_or(intent.amount),
             &intent.currency,
-        );
-        (success, amount)
+        )?;
+        Ok((success, amount))
     }
 }
 
@@ -322,9 +327,10 @@ impl StripePaymentProcessor {
 impl PaymentProcessor for StripePaymentProcessor {
     async fn authorize(&self, request: &PaymentRequest) -> Result<PaymentResult, PaymentError> {
         let amount_str = Self::to_stripe_amount(&request.amount).to_string();
+        let currency_str = String::from_utf8_lossy(&request.amount.currency.0).into_owned();
         let mut form = vec![
             ("amount", amount_str.as_str()),
-            ("currency", "usd"),
+            ("currency", currency_str.as_str()),
             ("payment_method_types[]", self.pm_type()),
             ("capture_method", "manual"),
         ];
@@ -338,7 +344,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let intent = Self::parse_intent(&body)?;
-        let (success, amount) = Self::intent_result(&intent);
+        let (success, amount) = Self::intent_result(&intent)?;
 
         Ok(PaymentResult {
             success,
@@ -361,7 +367,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let intent = Self::parse_intent(&body)?;
-        let (success, amount) = Self::intent_result(&intent);
+        let (success, amount) = Self::intent_result(&intent)?;
 
         Ok(PaymentResult {
             success,
@@ -384,7 +390,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let refund = Self::parse_refund(&body)?;
-        let amount = Self::to_money(refund.amount, &refund.currency);
+        let amount = Self::to_money(refund.amount, &refund.currency)?;
 
         Ok(PaymentResult {
             success: refund.status == "succeeded",
@@ -407,7 +413,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let intent = Self::parse_intent(&body)?;
-        let (success, amount) = Self::intent_result(&intent);
+        let (success, amount) = Self::intent_result(&intent)?;
 
         Ok(PaymentResult {
             success,
@@ -427,7 +433,7 @@ impl PaymentProcessor for StripePaymentProcessor {
         }
 
         let intent = Self::parse_intent(&body)?;
-        let (_, amount) = Self::intent_result(&intent);
+        let (_, amount) = Self::intent_result(&intent)?;
 
         Ok(PaymentReceipt {
             transaction_id: intent.id,
@@ -444,204 +450,5 @@ impl PaymentProcessor for StripePaymentProcessor {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::str;
-
-    fn test_key() -> String {
-        "sk_test_dummy_key_1234567890".to_string()
-    }
-
-    fn currency_code(c: &Currency) -> &str {
-        str::from_utf8(&c.0).unwrap_or("???")
-    }
-
-    #[test]
-    fn stripe_constructs() {
-        let proc = StripePaymentProcessor::new(&test_key(), false);
-        let info = proc.device_info();
-        assert_eq!(info.vendor, "Stripe");
-        assert_eq!(info.model, "REST API");
-    }
-
-    #[test]
-    fn stripe_pm_type_card() {
-        let proc = StripePaymentProcessor::new(&test_key(), false);
-        assert_eq!(proc.pm_type(), "card");
-    }
-
-    #[test]
-    fn stripe_pm_type_card_present() {
-        let proc = StripePaymentProcessor::new(&test_key(), true);
-        assert_eq!(proc.pm_type(), "card_present");
-    }
-
-    #[test]
-    fn stripe_to_stripe_amount() {
-        let usd: Currency = "USD".parse().unwrap();
-        let amount = Money::from_major(10, usd).unwrap();
-        assert_eq!(StripePaymentProcessor::to_stripe_amount(&amount), 1000);
-    }
-
-    #[test]
-    fn stripe_to_currency_usd() {
-        let c = StripePaymentProcessor::to_currency("usd");
-        assert_eq!(currency_code(&c), "USD");
-    }
-
-    #[test]
-    fn stripe_to_currency_eur() {
-        let c = StripePaymentProcessor::to_currency("eur");
-        assert_eq!(currency_code(&c), "EUR");
-    }
-
-    #[test]
-    fn stripe_to_money_constructs() {
-        let m = StripePaymentProcessor::to_money(1000, "usd");
-        assert_eq!(m.minor_units, 1000);
-        assert_eq!(currency_code(&m.currency), "USD");
-    }
-
-    #[test]
-    fn stripe_parse_intent_success() {
-        let json = r#"{"id":"pi_test_123","amount":1000,"amount_received":1000,"currency":"usd","status":"succeeded"}"#;
-        let intent = StripePaymentProcessor::parse_intent(json).unwrap();
-        assert_eq!(intent.id, "pi_test_123");
-        assert_eq!(intent.amount, 1000);
-        assert_eq!(intent.amount_received, Some(1000));
-        assert_eq!(intent.currency, "usd");
-        assert_eq!(intent.status, "succeeded");
-    }
-
-    #[test]
-    fn stripe_parse_intent_no_amount_received() {
-        let json =
-            r#"{"id":"pi_test_456","amount":2000,"currency":"usd","status":"requires_capture"}"#;
-        let intent = StripePaymentProcessor::parse_intent(json).unwrap();
-        assert_eq!(intent.amount, 2000);
-        assert_eq!(intent.amount_received, None);
-    }
-
-    #[test]
-    fn stripe_parse_refund_success() {
-        let json = r#"{"id":"re_test_789","amount":500,"currency":"usd","status":"succeeded"}"#;
-        let refund = StripePaymentProcessor::parse_refund(json).unwrap();
-        assert_eq!(refund.id, "re_test_789");
-        assert_eq!(refund.amount, 500);
-        assert_eq!(refund.status, "succeeded");
-    }
-
-    #[test]
-    fn stripe_parse_error_body() {
-        let json = r#"{"error":{"type":"card_error","message":"Your card was declined.","code":"card_declined"}}"#;
-        let body: StripeErrorBody = serde_json::from_str(json).unwrap();
-        assert_eq!(body.error.error_type, "card_error");
-        assert_eq!(body.error.message.unwrap(), "Your card was declined.");
-    }
-
-    #[test]
-    fn stripe_parse_error_no_message() {
-        let json = r#"{"error":{"type":"api_error"}}"#;
-        let body: StripeErrorBody = serde_json::from_str(json).unwrap();
-        assert_eq!(body.error.error_type, "api_error");
-        assert!(body.error.message.is_none());
-    }
-
-    #[test]
-    fn stripe_secret_key_from_env_error_check() {
-        let result = StripePaymentProcessor::from_env();
-        match std::env::var("STRIPE_SECRET_KEY") {
-            Ok(_) => assert!(result.is_ok()),
-            Err(_) => {
-                assert!(result.is_err());
-                let msg = result.unwrap_err().to_string();
-                assert!(msg.contains("not set"), "error: {}", msg);
-            }
-        }
-    }
-
-    #[test]
-    fn stripe_intent_result_succeeded() {
-        let intent = PaymentIntentResponse {
-            id: "pi_1".into(),
-            amount: 1000,
-            amount_received: Some(1000),
-            currency: "usd".into(),
-            status: "succeeded".into(),
-        };
-        let (success, money) = StripePaymentProcessor::intent_result(&intent);
-        assert!(success);
-        assert_eq!(money.minor_units, 1000);
-    }
-
-    #[test]
-    fn stripe_intent_result_requires_capture() {
-        let intent = PaymentIntentResponse {
-            id: "pi_2".into(),
-            amount: 2000,
-            amount_received: None,
-            currency: "usd".into(),
-            status: "requires_capture".into(),
-        };
-        let (success, money) = StripePaymentProcessor::intent_result(&intent);
-        assert!(success);
-        assert_eq!(money.minor_units, 2000);
-    }
-
-    #[test]
-    fn stripe_intent_result_canceled() {
-        let intent = PaymentIntentResponse {
-            id: "pi_3".into(),
-            amount: 500,
-            amount_received: None,
-            currency: "usd".into(),
-            status: "canceled".into(),
-        };
-        let (success, _) = StripePaymentProcessor::intent_result(&intent);
-        assert!(!success);
-    }
-
-    #[test]
-    fn stripe_parse_error_formats() {
-        let err = StripePaymentProcessor::parse_error(
-            402,
-            r#"{"error":{"type":"card_error","message":"declined"}}"#,
-        );
-        let msg = err.to_string();
-        assert!(msg.contains("declined"));
-    }
-
-    #[test]
-    fn stripe_parse_error_non_json() {
-        let err = StripePaymentProcessor::parse_error(500, "Internal Server Error");
-        let msg = err.to_string();
-        assert!(msg.contains("500"));
-        assert!(msg.contains("Internal Server Error"));
-    }
-
-    #[test]
-    fn stripe_debug_masks_key() {
-        let proc = StripePaymentProcessor::new(&test_key(), false);
-        let debug = format!("{:?}", proc);
-        assert!(!debug.contains("sk_test"));
-        assert!(!debug.contains("dummy_key"));
-        assert!(debug.contains("***"));
-    }
-
-    #[test]
-    fn stripe_clone_preserves_config() {
-        let proc = StripePaymentProcessor::new(&test_key(), true);
-        let cloned = proc.clone();
-        assert_eq!(cloned.pm_type(), "card_present");
-        let info = cloned.device_info();
-        assert_eq!(info.vendor, "Stripe");
-    }
-
-    #[test]
-    fn stripe_new_with_endpoint_uses_custom_base() {
-        let proc =
-            StripePaymentProcessor::new_with_endpoint("sk_test", "http://localhost:9999", false);
-        let debug = format!("{:?}", proc);
-        assert!(debug.contains("localhost:9999"));
-    }
-}
+#[path = "stripe_tests.rs"]
+mod tests;

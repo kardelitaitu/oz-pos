@@ -1,0 +1,176 @@
+---
+export function getStaticPaths() {
+  return [{ params: { locale: 'en' } }, { params: { locale: 'id' } }];
+}
+import Base from '../../layouts/Base.astro';
+import { t } from '../../i18n';
+
+const locale = Astro.currentLocale ?? 'en';
+const pageTitle = `OZ-POS — ${t(locale, 'enterpriseTrial.title')}`;
+const apiBase = 'https://license.oz-pos.adikaradwiatmaja.workers.dev';
+---
+
+<Base title={pageTitle} description={t(locale, 'enterpriseTrial.metaDesc')}>
+  <section class="mx-auto max-w-2xl px-4 py-16">
+    <div class="text-center">
+      <h1 class="text-4xl font-bold">{t(locale, 'enterpriseTrial.title')}</h1>
+      <p class="mt-3 text-muted">{t(locale, 'enterpriseTrial.subtitle')}</p>
+    </div>
+
+    <!-- Enterprise trial request form -->
+    <div class="mx-auto mt-10 max-w-md">
+      <form id="enterprise-trial-form" class="flex flex-col gap-4" novalidate>
+        <div>
+          <label for="approval-code" class="block text-sm font-medium mb-1">
+            {t(locale, 'enterpriseTrial.codeLabel')}
+          </label>
+          <input
+            type="text"
+            id="approval-code"
+            name="approval_code"
+            required
+            minlength="8"
+            placeholder={t(locale, 'enterpriseTrial.codePlaceholder')}
+            class="w-full rounded-lg border border-border px-4 py-2.5 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            autocomplete="off"
+          />
+        </div>
+
+        <div>
+          <label for="email" class="block text-sm font-medium mb-1">
+            {t(locale, 'enterpriseTrial.emailLabel')}
+          </label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            placeholder={t(locale, 'enterpriseTrial.emailPlaceholder')}
+            class="w-full rounded-lg border border-border px-4 py-2.5 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            autocomplete="email"
+          />
+        </div>
+
+        <button
+          type="submit"
+          id="submit-btn"
+          class="mt-2 w-full rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {t(locale, 'enterpriseTrial.submitButton')}
+        </button>
+
+        <p id="form-error" class="hidden text-sm text-red-600 mt-1" role="alert"></p>
+      </form>
+
+      <!-- Success state (hidden by default) -->
+      <div id="success-panel" class="hidden mt-8 rounded-xl border border-green-300 bg-green-50 p-6">
+        <h2 class="text-lg font-semibold text-green-800">
+          {t(locale, 'enterpriseTrial.successTitle')}
+        </h2>
+        <p class="mt-2 text-sm text-green-700">
+          {t(locale, 'enterpriseTrial.successMessage')}
+        </p>
+        <div class="mt-4 rounded-lg bg-white border border-green-200 p-4">
+          <label class="block text-xs font-medium text-muted mb-1">
+            {t(locale, 'enterpriseTrial.yourKeyLabel')}
+          </label>
+          <div class="flex items-center gap-2">
+            <code id="license-key-display" class="flex-1 break-all font-mono text-sm bg-gray-50 rounded px-3 py-2 border border-gray-200"></code>
+            <button
+              type="button"
+              id="copy-key-btn"
+              class="shrink-0 rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-gray-50 transition"
+            >
+              {t(locale, 'enterpriseTrial.copyButton')}
+            </button>
+          </div>
+        </div>
+        <p class="mt-4 text-xs text-muted">
+          {t(locale, 'enterpriseTrial.nextSteps')}
+        </p>
+        <a
+          href={`/${locale}/download`}
+          class="mt-4 inline-block rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-accent/90"
+        >
+          {t(locale, 'enterpriseTrial.downloadButton')}
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <script is:inline define:vars={{ apiBase }}>
+    (() => {
+      const form = document.getElementById('enterprise-trial-form');
+      const errorEl = document.getElementById('form-error');
+      const submitBtn = document.getElementById('submit-btn');
+      const successPanel = document.getElementById('success-panel');
+      const keyDisplay = document.getElementById('license-key-display');
+      const copyBtn = document.getElementById('copy-key-btn');
+
+      if (!form) return;
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorEl.classList.add('hidden');
+        errorEl.textContent = '';
+
+        const code = document.getElementById('approval-code').value.trim();
+        const email = document.getElementById('email').value.trim();
+
+        if (!code || code.length < 8) {
+          errorEl.textContent = 'Please enter a valid approval code (at least 8 characters).';
+          errorEl.classList.remove('hidden');
+          return;
+        }
+        if (!email || !email.includes('@')) {
+          errorEl.textContent = 'Please enter a valid email address.';
+          errorEl.classList.remove('hidden');
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Processing…';
+
+        try {
+          const res = await fetch(`${apiBase}/api/v1/license/enterprise-trial`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approval_code: code, email }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(data.error || 'Failed to request enterprise trial');
+          }
+
+          // Show success
+          form.classList.add('hidden');
+          successPanel.classList.remove('hidden');
+          keyDisplay.textContent = data.license_key;
+
+          // Copy button
+          copyBtn.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(data.license_key);
+              copyBtn.textContent = 'Copied!';
+              setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+            } catch {
+              // Fallback: select text
+              keyDisplay.select();
+            }
+          });
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.classList.remove('hidden');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = submitBtn.dataset.originalText || 'Request Trial';
+        }
+      });
+
+      // Preserve original button text
+      submitBtn.dataset.originalText = submitBtn.textContent;
+    })();
+  </script>
+</Base>

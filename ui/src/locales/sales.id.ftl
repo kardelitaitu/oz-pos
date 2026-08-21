@@ -229,6 +229,9 @@ sales-history-loading = Memuat penjualan…
 sales-history-error-load = Gagal memuat riwayat penjualan
 sales-history-empty = Belum ada penjualan tercatat
 sales-history-empty-filtered = Tidak ada penjualan yang cocok dengan filter Anda
+# C1.2: jendela riwayat 30 hari paket Free diterapkan — ajakan tingkatkan paket.
+sales-history-cap-teaser = Lihat riwayat penjualan lebih dari 30 hari — tingkatkan ke Plus
+sales-history-cap-upgrade-cta = Tingkatkan
 sales-history-count = { $count } penjualan
 sales-history-page-info = Halaman { $current } dari { $total }
 sales-history-col-id = ID Penjualan
@@ -902,6 +905,27 @@ gift-cards-txn-balance = Saldo
 gift-cards-txn-notes = Catatan
 gift-cards-txn-date = Tanggal
 
+# C2.2: QRIS adalah fitur Plus+ — ajakan tingkatkan paket di modal pembayaran.
+payment-qris-upgrade-required = Pembayaran QRIS adalah fitur Plus. Tingkatkan ke Plus untuk menerima QRIS.
+payment-qris-upgrade-cta = Tingkatkan ke Plus
+
+# ── Receipt Preview ──
+receipt-preview-aria = Pratinjau Struk
+receipt-preview-store-name = Toko OZ-POS
+receipt-preview-col-item = Item
+receipt-preview-col-qty = Jum
+receipt-preview-col-price = Harga
+receipt-preview-col-total = Total
+receipt-preview-subtotal = SUBTOTAL:
+receipt-preview-tax = PAJAK:
+receipt-preview-total = TOTAL:
+receipt-preview-change = KEMBALIAN:
+receipt-preview-qr-label = Scan untuk bayar
+receipt-preview-qr-aria = Kode QR pembayaran
+receipt-preview-thanks = Terima kasih atas pembelian Anda!
+receipt-preview-skip = Lewati
+receipt-preview-print = Cetak Struk
+
 # ── Sales History ARIA (remaining) ──
 sales-history-search-placeholder =
     .placeholder = Cari ID penjualan, pembayaran, kasir…
@@ -947,4 +971,9 @@ sales-history-refund-lines-aria =
 # ── Payment (remaining) ──
 payment-customer-name-aria =
     .aria-label = Nama pelanggan untuk tagihan terbuka
+
+# Daily Sales Dashboard — Free tier lock (C2.2, §6)
+daily-dashboard-locked-title = Dasbor Penjualan Harian
+daily-dashboard-locked-message = Lihat total pendapatan harian, jumlah penjualan, dan rincian item dalam sekilas. Fitur ini tersedia di Plus ke atas.
+daily-dashboard-locked-cta = Upgrade ke Plus
 

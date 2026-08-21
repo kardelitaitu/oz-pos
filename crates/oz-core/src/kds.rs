@@ -202,143 +202,141 @@ pub struct UpdateKdsOrderItemsInput {
     pub line_items: Option<Vec<CreateKdsLineItemInput>>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// A registered KDS display device bound to one Restaurant POS.
+///
+/// Each device is enrolled via QR-code pairing and tracked through
+/// the `kds_devices` table. The `station_ids` field determines which
+/// topology stations this device is responsible for — an empty vec
+/// means the device receives all orders (broadcast mode).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KdsDevice {
+    /// Unique device identifier (UUID v7).
+    pub id: String,
+    /// Human-readable display name (e.g. "Expo Screen").
+    pub name: String,
+    /// FK to the parent Restaurant POS terminal.
+    pub restaurant_pos_id: String,
+    /// Topology station IDs this device is responsible for.
+    /// Empty vec = receives all orders (broadcast mode).
+    pub station_ids: Vec<String>,
+    /// Whether this device is currently active/enrolled.
+    pub is_active: bool,
+    /// ISO-8601 timestamp of last communication, `None` if never connected.
+    pub last_seen_at: Option<String>,
+    /// Current connection status.
+    pub connection_status: KdsConnectionStatus,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+    /// ISO-8601 last-update timestamp.
+    pub updated_at: String,
+}
 
-    // ── KdsStatus as_str ───────────────────────────────────────────
+/// Connection status of a KDS device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KdsConnectionStatus {
+    /// Device is actively connected and receiving events.
+    Connected,
+    /// Device is not currently connected.
+    Disconnected,
+    /// Device was connected but has not communicated recently.
+    Stale,
+}
 
-    #[test]
-    fn status_as_str_all_variants() {
-        assert_eq!(KdsStatus::Pending.as_str(), "pending");
-        assert_eq!(KdsStatus::Preparing.as_str(), "preparing");
-        assert_eq!(KdsStatus::Ready.as_str(), "ready");
-        assert_eq!(KdsStatus::Served.as_str(), "served");
-        assert_eq!(KdsStatus::Cancelled.as_str(), "cancelled");
-    }
-
-    // ── KdsStatus from_str ─────────────────────────────────────────
-
-    #[test]
-    fn status_from_str_all_variants() {
-        assert_eq!(KdsStatus::from_str("pending"), Some(KdsStatus::Pending));
-        assert_eq!(KdsStatus::from_str("preparing"), Some(KdsStatus::Preparing));
-        assert_eq!(KdsStatus::from_str("ready"), Some(KdsStatus::Ready));
-        assert_eq!(KdsStatus::from_str("served"), Some(KdsStatus::Served));
-        assert_eq!(KdsStatus::from_str("cancelled"), Some(KdsStatus::Cancelled));
-    }
-
-    #[test]
-    fn status_from_str_invalid() {
-        assert_eq!(KdsStatus::from_str("bogus"), None);
-        assert_eq!(KdsStatus::from_str(""), None);
-        assert_eq!(KdsStatus::from_str("PENDING"), None);
-    }
-
-    #[test]
-    fn status_from_str_roundtrip() {
-        for s in &[
-            KdsStatus::Pending,
-            KdsStatus::Preparing,
-            KdsStatus::Ready,
-            KdsStatus::Served,
-            KdsStatus::Cancelled,
-        ] {
-            assert_eq!(KdsStatus::from_str(s.as_str()), Some(s.clone()));
+impl KdsConnectionStatus {
+    /// Serialize to the database string representation.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Connected => "connected",
+            Self::Disconnected => "disconnected",
+            Self::Stale => "stale",
         }
     }
 
-    // ── Serde roundtrips ───────────────────────────────────────────
-
-    #[test]
-    fn kds_status_serde_roundtrip() {
-        let status = KdsStatus::Ready;
-        let json = serde_json::to_string(&status).unwrap();
-        let back: KdsStatus = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, KdsStatus::Ready);
-    }
-
-    #[test]
-    fn kds_order_serde_roundtrip() {
-        let order = KdsOrder {
-            id: "o-1".into(),
-            sale_id: "s-1".into(),
-            store_id: Some("store-default".into()),
-            target_instance_id: Some("kds-main".into()),
-            status: "pending".into(),
-            items_summary: "Coffee x2, Bagel".into(),
-            item_count: 3,
-            display_number: Some(1),
-            received_at: "2025-01-01T12:00:00.000Z".into(),
-            started_at: None,
-            ready_at: None,
-            served_at: None,
-            prep_time_seconds: 300,
-            kitchen_zone: Some("front".into()),
-            notes: "No onions".into(),
-            table_number: None,
-            priority: true,
-        };
-        let json = serde_json::to_string(&order).unwrap();
-        let back: KdsOrder = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.id, order.id);
-        assert_eq!(back.sale_id, order.sale_id);
-        assert_eq!(back.status, order.status);
-        assert_eq!(back.items_summary, order.items_summary);
-        assert_eq!(back.item_count, order.item_count);
-        assert_eq!(back.prep_time_seconds, order.prep_time_seconds);
-        assert_eq!(back.kitchen_zone, Some("front".into()));
-        assert_eq!(back.notes, order.notes);
-    }
-
-    #[test]
-    fn create_kds_order_input_serde_roundtrip() {
-        let input = CreateKdsOrderInput {
-            sale_id: "s-1".into(),
-            store_id: None,
-            items_summary: "Tea".into(),
-            item_count: 1,
-            kitchen_zone: None,
-            notes: String::new(),
-            table_number: None,
-            priority: true,
-        };
-        let json = serde_json::to_string(&input).unwrap();
-        let back: CreateKdsOrderInput = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.sale_id, "s-1");
-        assert_eq!(back.items_summary, "Tea");
-        assert_eq!(back.item_count, 1);
-        assert_eq!(back.notes, "");
-        assert!(back.priority);
-    }
-
-    #[test]
-    fn kds_order_optional_timestamps() {
-        let order = KdsOrder {
-            id: "o-2".into(),
-            sale_id: "s-2".into(),
-            store_id: None,
-            target_instance_id: None,
-            status: "served".into(),
-            items_summary: "Done".into(),
-            item_count: 1,
-            display_number: None,
-            received_at: "2025-01-01T12:00:00.000Z".into(),
-            started_at: Some("2025-01-01T12:05:00.000Z".into()),
-            ready_at: Some("2025-01-01T12:10:00.000Z".into()),
-            served_at: Some("2025-01-01T12:12:00.000Z".into()),
-            prep_time_seconds: 720,
-            kitchen_zone: None,
-            notes: String::new(),
-            table_number: None,
-            priority: false,
-        };
-        assert_eq!(
-            order.started_at.as_deref(),
-            Some("2025-01-01T12:05:00.000Z")
-        );
-        assert_eq!(order.ready_at.as_deref(), Some("2025-01-01T12:10:00.000Z"));
-        assert_eq!(order.served_at.as_deref(), Some("2025-01-01T12:12:00.000Z"));
-        assert!(order.display_number.is_none());
+    /// Parse from a database string representation.
+    pub fn parse_db(s: &str) -> Option<Self> {
+        match s {
+            "connected" => Some(Self::Connected),
+            "disconnected" => Some(Self::Disconnected),
+            "stale" => Some(Self::Stale),
+            _ => None,
+        }
     }
 }
+
+/// Input for registering a new KDS device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterKdsDeviceInput {
+    /// Display name for the device.
+    pub name: String,
+    /// The Restaurant POS terminal ID this device is bound to.
+    pub restaurant_pos_id: String,
+    /// Topology station IDs this device is responsible for.
+    pub station_ids: Vec<String>,
+    /// SHA-256 hash of the enrollment token.
+    pub pairing_token_hash: String,
+    /// ISO-8601 expiry timestamp for the enrollment token.
+    pub pairing_expires_at: String,
+}
+
+/// Resolve which KDS devices should receive an order based on its line items.
+///
+/// 1. For each line item, look up its product's topology station assignment.
+/// 2. Match station → KDS devices via `kds_devices.station_ids`.
+/// 3. If a device has an empty `station_ids` (broadcast mode), it receives all orders.
+/// 4. If no device claims a station, the order broadcasts to all devices (safe fallback).
+/// 5. Deduplicate — a device never receives the same order twice.
+///
+/// `station_for_sku` is a callback that maps a SKU to its topology station ID.
+/// Return `None` if the SKU has no station assignment.
+pub fn resolve_kds_targets<F>(
+    line_items: &[KdsLineItem],
+    devices: &[KdsDevice],
+    station_for_sku: F,
+) -> Vec<String>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    use std::collections::HashSet;
+
+    let mut targeted_devices: HashSet<String> = HashSet::new();
+    let mut untargeted_stations: HashSet<String> = HashSet::new();
+
+    // Phase 1: Station-based targeting
+    for item in line_items {
+        if let Some(station) = station_for_sku(&item.sku) {
+            let mut any_device_claimed = false;
+            for device in devices {
+                if device.is_active && device.station_ids.contains(&station) {
+                    targeted_devices.insert(device.id.clone());
+                    any_device_claimed = true;
+                }
+            }
+            if !any_device_claimed {
+                untargeted_stations.insert(station);
+            }
+        }
+    }
+
+    // Phase 2: Broadcast fallback — empty station_ids means "show everything"
+    for device in devices {
+        if device.is_active && device.station_ids.is_empty() {
+            targeted_devices.insert(device.id.clone());
+        }
+    }
+
+    // Phase 3: If any station has no claiming device, broadcast to all
+    if !untargeted_stations.is_empty() {
+        for device in devices {
+            if device.is_active {
+                targeted_devices.insert(device.id.clone());
+            }
+        }
+    }
+
+    targeted_devices.into_iter().collect()
+}
+
+#[cfg(test)]
+#[path = "kds_tests.rs"]
+mod tests;

@@ -1,5 +1,8 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, useContext } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
+import { LocaleContext } from '@/i18n/LocaleContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { openUpgradePricing } from '@/utils/upgrade';
 import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
@@ -10,8 +13,12 @@ import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/typ
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import {
   listCurrencies,
+  listCurrenciesScoped,
   listExchangeRates,
+  listExchangeRatesScoped,
   getDefaultCurrency,
+  getDefaultCurrencyScoped,
+  getLatestExchangeRateScoped,
   exchangeRateToDecimal,
   type CurrencyDto,
   type ExchangeRateDto,
@@ -56,6 +63,10 @@ export interface PaymentModalProps {
   serialNumbers?: Record<string, string>;
   /** Custom quick tender preset amounts (in minor units). Defaults to standard Rp denominations. */
   tenderPresets?: number[];
+  /** Tip amount in minor units collected at checkout (default 0). Persisted on the sale. */
+  tipMinor?: number;
+  /** Service-charge amount in minor units collected at checkout (default 0). Persisted on the sale. */
+  serviceChargeMinor?: number;
 }
 
 /** Payment processing modal — method selection (cash, card, QRIS, open bill, credit), split tender, customer/loyalty, multi-currency, and change calculation. */
@@ -74,10 +85,15 @@ export default function PaymentModal({
   onClose,
   serialNumbers,
   tenderPresets,
+  tipMinor = 0,
+  serviceChargeMinor = 0,
 }: PaymentModalProps) {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // C2.2: QRIS is a Plus+ feature — caps arrive from the subscription context.
+  const { caps } = useSubscription();
+  const locale = useContext(LocaleContext)?.locale ?? 'en';
   const { addToast } = useToast();
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [otherLabel, setOtherLabel] = useState('');
@@ -200,11 +216,22 @@ export default function PaymentModal({
 
   useEffect(() => {
     if (open && multiCurrency) {
-      Promise.all([
-        listCurrencies(),
-        listExchangeRates(),
-        getDefaultCurrency(),
-      ])
+      const loads: [
+        Promise<CurrencyDto[]>,
+        Promise<ExchangeRateDto[]>,
+        Promise<string | null>,
+      ] = sessionToken
+        ? [
+            listCurrenciesScoped(sessionToken),
+            listExchangeRatesScoped(sessionToken),
+            getDefaultCurrencyScoped(sessionToken),
+          ]
+        : [
+            listCurrencies(),
+            listExchangeRates(),
+            getDefaultCurrency(),
+          ];
+      Promise.all(loads)
         .then(([currs, rates, base]) => {
           setCurrencies(currs);
           setExchangeRates(rates);
@@ -212,7 +239,7 @@ export default function PaymentModal({
         })
         .catch(() => addToast({ message: l10nRef.current.getString('payment-toast-currency-failed'), type: 'error' }));
     }
-  }, [open, multiCurrency, addToast]); // l10n via ref — stable dep chain
+  }, [open, multiCurrency, sessionToken, addToast]); // l10n via ref — stable dep chain
 
   const exchangeRateInfo = useMemo(() => {
     if (selectedCurrency === total.currency) return null;
@@ -235,6 +262,33 @@ export default function PaymentModal({
     }
     return null;
   }, [selectedCurrency, total.currency, exchangeRates]);
+
+  // CUR-04: when a session store is active, ask the backend for the latest
+  // rate effective today (or before) instead of relying on `find()` over the
+  // full history list — the list is not ordered by effective date, so a
+  // stale rate could be chosen. Falls back to the in-memory list only when
+  // there is no session (single-store legacy path).
+  const [latestRate, setLatestRate] = useState<ExchangeRateDto | null>(null);
+  useEffect(() => {
+    setLatestRate(null);
+    if (!open || !multiCurrency || !sessionToken || selectedCurrency === total.currency) {
+      return;
+    }
+    getLatestExchangeRateScoped(sessionToken, {
+      fromCurrency: total.currency,
+      toCurrency: selectedCurrency,
+    })
+      .then((r) => setLatestRate(r))
+      .catch(() => setLatestRate(null));
+  }, [open, multiCurrency, sessionToken, selectedCurrency, total.currency]);
+
+  const effectiveRateInfo = useMemo(() => {
+    if (!sessionToken || !latestRate) return exchangeRateInfo;
+    return {
+      ...latestRate,
+      rate: exchangeRateToDecimal(latestRate),
+    };
+  }, [sessionToken, latestRate, exchangeRateInfo]);
 
   useEffect(() => {
     if (open) {
@@ -376,6 +430,89 @@ export default function PaymentModal({
     return BigInt(Math.round(num * 10 ** exp));
   }, [tendered, total.currency]);
 
+  // Convert base currency amount to selected charge currency using exchange rate
+  const convertToChargeCurrency = useCallback(
+    (minorUnits: number | bigint): number => {
+      if (selectedCurrency === total.currency || !effectiveRateInfo) {
+        return typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
+      }
+      const baseMinor = typeof minorUnits === 'bigint' ? Number(minorUnits) : minorUnits;
+      const baseExponent = minorUnitExponent(total.currency);
+      const chargeExponent = minorUnitExponent(selectedCurrency);
+      // Convert: base major units * rate = charge major units, then to charge minor units
+      const baseMajor = baseMinor / 10 ** baseExponent;
+      const chargeMajor = baseMajor * effectiveRateInfo.rate;
+      return Math.round(chargeMajor * 10 ** chargeExponent);
+    },
+    [selectedCurrency, total.currency, effectiveRateInfo],
+  );
+
+  // Get the currency to use for the cart (charge currency if multi-currency, else base)
+  const cartCurrency = multiCurrency && selectedCurrency !== total.currency ? selectedCurrency : total.currency;
+
+  // Get the effective total in the cart currency
+  const effectiveTotalInCartCurrency = useMemo(() => {
+    if (cartCurrency === total.currency) return Number(effectiveTotal);
+    return convertToChargeCurrency(effectiveTotal);
+  }, [effectiveTotal, cartCurrency, total.currency, convertToChargeCurrency]);
+
+  // Convert line item unit prices to cart currency
+  const lineItemsInCartCurrency = useMemo(() => {
+    if (cartCurrency === total.currency) return lineItems;
+    return lineItems.map((line) => ({
+      ...line,
+      unit_price: {
+        minor_units: convertToChargeCurrency(line.unit_price.minor_units),
+        currency: cartCurrency,
+      },
+    }));
+  }, [lineItems, cartCurrency, total.currency, convertToChargeCurrency]);
+
+  // Convert tendered amount to cart currency
+  const tenderedMinorInCartCurrency = useMemo(() => {
+    if (cartCurrency === total.currency) return Number(tenderedMinor);
+    const num = parseFloat(tendered);
+    if (Number.isNaN(num) || num < 0) return 0;
+    const chargeExponent = minorUnitExponent(cartCurrency);
+    return Math.round(num * 10 ** chargeExponent);
+  }, [tendered, cartCurrency, tenderedMinor, total.currency]);
+
+  const { sufficient, change } = useMemo(() => {
+    if (method !== 'cash') return { sufficient: true, change: null };
+    if (tenderedMinorInCartCurrency < effectiveTotalInCartCurrency) return { sufficient: false, change: null };
+    const diff = tenderedMinorInCartCurrency - effectiveTotalInCartCurrency;
+    return {
+      sufficient: true,
+      change: { minor_units: diff, currency: cartCurrency } as Money,
+    };
+  }, [method, tenderedMinorInCartCurrency, effectiveTotalInCartCurrency, cartCurrency]);
+
+  // Parse split amounts using cart currency exponent
+  const parseSplitMinor = useCallback((val: string): bigint => {
+    const num = parseFloat(val);
+    if (Number.isNaN(num) || num < 0) return 0n;
+    const exp = minorUnitExponent(cartCurrency);
+    return BigInt(Math.round(num * 10 ** exp));
+  }, [cartCurrency]);
+
+  const splitTotals = useMemo(() => {
+    let splitSum = 0n;
+    for (const s of splits) {
+      splitSum += parseSplitMinor(s.amountMinor);
+    }
+    return { splitSum, remaining: BigInt(effectiveTotalInCartCurrency) - splitSum };
+  }, [splits, parseSplitMinor, effectiveTotalInCartCurrency]);
+
+  const splitComplete = useMemo(() => {
+    if (splitTotals.remaining !== 0n) return false;
+    // Zero-amount sale: empty splits are acceptable
+    if (effectiveTotalInCartCurrency === 0) return true;
+    return splits.every((s) => {
+      if (s.method === 'other' && !s.otherLabel.trim()) return false;
+      return parseSplitMinor(s.amountMinor) > 0n;
+    });
+  }, [splits, splitTotals, parseSplitMinor, effectiveTotalInCartCurrency]);
+
   const handleQrPay = useCallback(() => {
     const ref = `QR-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     setQrReference(ref);
@@ -388,8 +525,8 @@ export default function PaymentModal({
 
     try {
       const { cartId } = sessionToken
-        ? await startSaleScoped(sessionToken, { currency: total.currency })
-        : await startSale({ currency: total.currency });
+        ? await startSaleScoped(sessionToken, { currency: cartCurrency })
+        : await startSale({ currency: cartCurrency });
 
       if (discountPercent > 0) {
         if (sessionToken) {
@@ -403,7 +540,7 @@ export default function PaymentModal({
         }
       }
 
-      for (const line of lineItems) {
+      for (const line of lineItemsInCartCurrency) {
         const lineArgs = {
           cartId,
           sku: line.sku,
@@ -425,6 +562,19 @@ export default function PaymentModal({
               return { sku: String(line?.sku ?? lineId), serial };
             })
         : undefined;
+      // CUR-02: snapshot the base currency / total / rate for the QRIS
+      // settlement payload too. Tip/service always sent.
+      const qrisTenderMetadata = {
+        tipMinor,
+        serviceChargeMinor,
+        ...(cartCurrency !== total.currency && effectiveRateInfo
+          ? {
+              baseCurrency: total.currency,
+              baseTotalMinor: total.minor_units,
+              tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
+            }
+          : {}),
+      };
       const saleResult = sessionToken
         ? await completeSaleScoped(sessionToken, {
             cartId,
@@ -435,12 +585,13 @@ export default function PaymentModal({
             paymentSplits: [
               {
                 method: 'QRIS',
-                amountMinor: Number(effectiveTotal),
+                amountMinor: effectiveTotalInCartCurrency,
                 gatewayReference: qrReference,
                 gatewayStatus: 'completed',
                 gatewayResponse: 'QRIS payment confirmed',
               },
             ],
+            ...(qrisTenderMetadata ? qrisTenderMetadata : {}),
           } as CompleteSaleScopedArgs)
         : await completeSale({
             cartId,
@@ -452,12 +603,13 @@ export default function PaymentModal({
             paymentSplits: [
               {
                 method: 'QRIS',
-                amountMinor: Number(effectiveTotal),
+                amountMinor: effectiveTotalInCartCurrency,
                 gatewayReference: qrReference,
                 gatewayStatus: 'completed',
                 gatewayResponse: 'QRIS payment confirmed',
               },
             ],
+            ...(qrisTenderMetadata ? qrisTenderMetadata : {}),
           });
 
       try {
@@ -468,7 +620,7 @@ export default function PaymentModal({
             year: 'numeric', month: 'short', day: 'numeric',
           }),
           receiptNumber: `SALE-${saleResult.saleId}`,
-          items: lineItems.map((line, i) => {
+          items: lineItemsInCartCurrency.map((line, i) => {
             const computedLine = completedSale?.lines?.[i];
             const tax = computedLine?.tax_amount
               ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
@@ -485,16 +637,16 @@ export default function PaymentModal({
             };
           }),
           subtotal: completedSale
-            ? { minorUnits: completedSale.subtotal.minor_units, currency: total.currency }
-            : { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+            ? { minorUnits: completedSale.subtotal.minor_units, currency: cartCurrency }
+            : { minorUnits: saleResult.total?.minor_units ?? effectiveTotalInCartCurrency, currency: cartCurrency },
           ...(completedSale && completedSale.taxTotal && completedSale.taxTotal.minor_units > 0
-            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency } }
+            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: cartCurrency } }
             : {}),
-          total: { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+          total: { minorUnits: saleResult.total?.minor_units ?? effectiveTotalInCartCurrency, currency: cartCurrency },
           payments: [
             {
               method: 'QRIS',
-              amount: { minorUnits: total.minor_units, currency: total.currency },
+              amount: { minorUnits: effectiveTotalInCartCurrency, currency: cartCurrency },
               change: null,
             },
           ],
@@ -553,42 +705,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, total, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError, addToast]);
-
-  const { sufficient, change } = useMemo(() => {
-    if (method !== 'cash') return { sufficient: true, change: null };
-    if (tenderedMinor < effectiveTotal) return { sufficient: false, change: null };
-    const diff = Number(tenderedMinor - effectiveTotal);
-    return {
-      sufficient: true,
-      change: { minor_units: diff, currency: total.currency } as Money,
-    };
-  }, [method, total, tenderedMinor, effectiveTotal]);
-
-  const parseSplitMinor = useCallback((val: string): bigint => {
-    const num = parseFloat(val);
-    if (Number.isNaN(num) || num < 0) return 0n;
-    const exp = minorUnitExponent(total.currency);
-    return BigInt(Math.round(num * 10 ** exp));
-  }, [total.currency]);
-
-  const splitTotals = useMemo(() => {
-    let splitSum = 0n;
-    for (const s of splits) {
-      splitSum += parseSplitMinor(s.amountMinor);
-    }
-    return { splitSum, remaining: effectiveTotal - splitSum };
-  }, [splits, parseSplitMinor, effectiveTotal]);
-
-  const splitComplete = useMemo(() => {
-    if (splitTotals.remaining !== 0n) return false;
-    // Zero-amount sale: empty splits are acceptable
-    if (effectiveTotal === 0n) return true;
-    return splits.every((s) => {
-      if (s.method === 'other' && !s.otherLabel.trim()) return false;
-      return parseSplitMinor(s.amountMinor) > 0n;
-    });
-  }, [splits, splitTotals, parseSplitMinor, effectiveTotal]);
+  }, [lineItems, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError, addToast, cartCurrency, lineItemsInCartCurrency, effectiveTotalInCartCurrency]);
 
   const addSplit = useCallback(() => {
     setSplits((prev) => [
@@ -611,13 +728,13 @@ export default function PaymentModal({
   const autoSplitEvenly = useCallback(() => {
     const count = splits.length;
     if (count === 0) return;
-    const exp = minorUnitExponent(total.currency);
+    const exp = minorUnitExponent(cartCurrency);
     // Integer floor division in minor units: every row gets baseMinor, and the
     // exact remainder lands on the last row — avoids float `toFixed` rounding
     // that used to over-split non-divisible totals (e.g. 4,450,001 by 2 became
     // 2,225,001 + 2,225,002 = 4,450,003).
-    const baseMinor = Number(totalMinor / BigInt(count));
-    const remainderMinor = Number(totalMinor % BigInt(count));
+    const baseMinor = Math.floor(effectiveTotalInCartCurrency / count);
+    const remainderMinor = effectiveTotalInCartCurrency % count;
     const fmt = (minor: number) => (minor / 10 ** exp).toFixed(exp);
     setSplits((prev) =>
       prev.map((s, i) => ({
@@ -627,7 +744,7 @@ export default function PaymentModal({
           : fmt(baseMinor),
       })),
     );
-  }, [splits.length, totalMinor, total.currency]);
+  }, [splits.length, effectiveTotalInCartCurrency, cartCurrency]);
 
   const canComplete = useMemo(() => {
     if (splitMode) return splitComplete;
@@ -671,8 +788,8 @@ export default function PaymentModal({
 
 
       const { cartId } = sessionToken
-        ? await startSaleScoped(sessionToken, { currency: total.currency })
-        : await startSale({ currency: total.currency });
+        ? await startSaleScoped(sessionToken, { currency: cartCurrency })
+        : await startSale({ currency: cartCurrency });
 
       if (discountPercent > 0) {
         if (sessionToken) {
@@ -686,7 +803,7 @@ export default function PaymentModal({
         }
       }
 
-      for (const line of lineItems) {
+      for (const line of lineItemsInCartCurrency) {
         const lineArgs = {
           cartId,
           sku: line.sku,
@@ -703,7 +820,7 @@ export default function PaymentModal({
       let paymentSplits: PaymentSplitArg[] | undefined;
 
       if (splitMode) {
-        const exp = minorUnitExponent(total.currency);
+        const exp = minorUnitExponent(cartCurrency);
         paymentSplits = splits.map((s) => ({
           method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
           amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
@@ -724,25 +841,45 @@ export default function PaymentModal({
               return { sku: String(line?.sku ?? lineId), serial };
             })
         : undefined;
+      // CUR-02: when multi-currency checkout converted the total, snapshot
+      // the original (base) currency, base total, and the fixed-point rate
+      // used so the backend can persist them atomically on the sale for
+      // audit/refund/reconciliation. Omitted entirely for single-currency
+      // sales (the common case). Tip and service charge are always sent so
+      // the backend records what the customer actually paid.
+      const tenderMetadata = {
+        tipMinor,
+        serviceChargeMinor,
+        ...(cartCurrency !== total.currency && effectiveRateInfo
+          ? {
+              baseCurrency: total.currency,
+              baseTotalMinor: total.minor_units,
+              tenderRateMillionths: Math.round(effectiveRateInfo.rate * 1_000_000),
+            }
+          : {}),
+      };
+
       const saleResult = sessionToken
         ? await completeSaleScoped(sessionToken, {
             cartId,
             paymentMethod: methodLabel,
-            tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
+            tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
             ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            ...(tenderMetadata ? tenderMetadata : {}),
           } as CompleteSaleScopedArgs)
         : await completeSale({
             cartId,
             paymentMethod: methodLabel,
-            tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
+            tenderedMinor: method === 'cash' && !splitMode ? tenderedMinorInCartCurrency : null,
             userId,
             ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
             ...(paymentSplits ? { paymentSplits } : {}),
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            ...(tenderMetadata ? tenderMetadata : {}),
           });
 
       // ADR-20: Finalize the pending sale (transitions 'pending' → 'completed')
@@ -772,7 +909,7 @@ export default function PaymentModal({
             year: 'numeric', month: 'short', day: 'numeric',
           }),
           receiptNumber: `SALE-${saleResult.saleId}`,
-          items: lineItems.map((line, i) => {
+          items: lineItemsInCartCurrency.map((line, i) => {
             const computedLine = completedSale?.lines?.[i];
             const tax = computedLine?.tax_amount
               ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
@@ -789,22 +926,22 @@ export default function PaymentModal({
             };
           }),
           subtotal: completedSale
-            ? { minorUnits: completedSale.subtotal.minor_units, currency: total.currency }
-            : { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+            ? { minorUnits: completedSale.subtotal.minor_units, currency: cartCurrency }
+            : { minorUnits: saleResult.total?.minor_units ?? effectiveTotalInCartCurrency, currency: cartCurrency },
           ...(completedSale && completedSale.taxTotal && completedSale.taxTotal.minor_units > 0
-            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency } }
+            ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: cartCurrency } }
             : {}),
-          total: { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
+          total: { minorUnits: saleResult.total?.minor_units ?? effectiveTotalInCartCurrency, currency: cartCurrency },
           payments: paymentSplits
             ? paymentSplits.map((ps) => ({
                 method: ps.method,
-                amount: { minorUnits: ps.amountMinor, currency: total.currency },
+                amount: { minorUnits: ps.amountMinor, currency: cartCurrency },
                 change: null,
               }))
             : [
                 {
                   method: methodLabel,
-                  amount: { minorUnits: total.minor_units, currency: total.currency },
+                  amount: { minorUnits: effectiveTotalInCartCurrency, currency: cartCurrency },
                   change: change
                     ? { minorUnits: change.minor_units, currency: change.currency }
                     : null,
@@ -861,7 +998,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError]);
+  }, [method, customerName, lineItems, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError, cartCurrency, effectiveTotalInCartCurrency, lineItemsInCartCurrency, tenderedMinorInCartCurrency, total.currency, total.minor_units]);
 
   useEffect(() => {
     if (!done) return;
@@ -1078,7 +1215,7 @@ export default function PaymentModal({
               </div>
             )}
 
-            {selectedCurrency !== total.currency && exchangeRateInfo && (
+            {selectedCurrency !== total.currency && effectiveRateInfo && (
               <Localized id="payment-exchange-aria" attrs={{ 'aria-label': true }}>
               <div className="payment-exchange-notice">
                 <div className="payment-exchange-row">
@@ -1086,20 +1223,20 @@ export default function PaymentModal({
                     <span>Exchange rate</span>
                   </Localized>
                   <span>
-                    1 {exchangeRateInfo.from_currency} = {exchangeRateInfo.rate.toFixed(6)} {exchangeRateInfo.to_currency}
+                    1 {effectiveRateInfo.from_currency} = {effectiveRateInfo.rate.toFixed(6)} {effectiveRateInfo.to_currency}
                   </span>
                 </div>
                 <div className="payment-exchange-row">
                   <Localized id="payment-rate-source">
                     <span>Rate source</span>
                   </Localized>
-                  <span>{exchangeRateInfo.source || l10n.getString('payment-rate-source-manual')}</span>
+                  <span>{effectiveRateInfo.source || l10n.getString('payment-rate-source-manual')}</span>
                 </div>
                 <div className="payment-exchange-row">
                   <Localized id="payment-rate-timestamp">
                     <span>Rate timestamp</span>
                   </Localized>
-                  <span>{exchangeRateInfo.effective_date}</span>
+                  <span>{effectiveRateInfo.effective_date}</span>
                 </div>
               </div>
               </Localized>
@@ -1132,7 +1269,7 @@ export default function PaymentModal({
                   </Localized>
                   <span>
                     {formatMoney({
-                      minor_units: Math.round(total.minor_units * (exchangeRateInfo?.rate ?? 1)),
+                      minor_units: convertToChargeCurrency(total.minor_units),
                       currency: selectedCurrency,
                     } as Money)}
                   </span>
@@ -1296,7 +1433,21 @@ export default function PaymentModal({
                   </div>
                 )}
 
-                {method === 'qris' && (
+                {method === 'qris' &&
+                  (caps && !caps.supportsQris ? (
+                    // C2.2: QRIS setup gate (Free→Plus trigger) — show the
+                    // upgrade prompt instead of the QR generation UI.
+                    <div className="payment-qris-upgrade" role="note">
+                      <p>{l10n.getString('payment-qris-upgrade-required')}</p>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => openUpgradePricing(locale, 'plus')}
+                      >
+                        {l10n.getString('payment-qris-upgrade-cta')}
+                      </Button>
+                    </div>
+                  ) : (
                   <div className="payment-qris-section">
                     <Localized id="payment-qris-description">
                       <p className="payment-qris-description">
@@ -1315,7 +1466,7 @@ export default function PaymentModal({
                       </Localized>
                     </button>
                   </div>
-                )}
+                  ))}
               </>
             )}
 

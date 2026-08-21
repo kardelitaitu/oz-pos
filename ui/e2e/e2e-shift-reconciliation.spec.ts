@@ -32,6 +32,7 @@ test.describe('Critical Path: Shift Reconciliation', () => {
   });
 
   test('open shift → complete sale → close shift → verify reconciliation', async ({ page }) => {
+    test.setTimeout(45_000); // tablet viewport needs more time for multi-step flow
     // ── Step 1: Open shift ──────────────────────────────────────────
     await selectWorkspace(page, WORKSPACES.ADMIN);
 

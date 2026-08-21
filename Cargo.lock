@@ -130,7 +130,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -141,7 +141,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1512,7 +1512,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1746,7 +1746,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1929,9 +1929,10 @@ dependencies = [
 
 [[package]]
 name = "foundation"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
+ "proptest",
  "regex",
  "serde",
  "serde_json",
@@ -2367,9 +2368,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.15"
+version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cb093c84e8bd9b188d4c4a8cb6579fc016968d14c99882163cd3ff402a4f155"
+checksum = "839c0e8a181239723652be9062bb56ca5bf5f64011f73b623f6f4fc59086a228"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -2627,7 +2628,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -2903,7 +2904,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3510,7 +3511,7 @@ dependencies = [
 
 [[package]]
 name = "modules-crm"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3527,7 +3528,7 @@ dependencies = [
 
 [[package]]
 name = "modules-currency"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3543,7 +3544,7 @@ dependencies = [
 
 [[package]]
 name = "modules-inventory"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3560,7 +3561,7 @@ dependencies = [
 
 [[package]]
 name = "modules-loyalty"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3577,7 +3578,7 @@ dependencies = [
 
 [[package]]
 name = "modules-reporting"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3594,7 +3595,7 @@ dependencies = [
 
 [[package]]
 name = "modules-sales"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3611,7 +3612,7 @@ dependencies = [
 
 [[package]]
 name = "modules-settings"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3628,7 +3629,7 @@ dependencies = [
 
 [[package]]
 name = "modules-staff"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3646,7 +3647,7 @@ dependencies = [
 
 [[package]]
 name = "modules-tax"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3663,7 +3664,7 @@ dependencies = [
 
 [[package]]
 name = "modules-terminal"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3706,7 +3707,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3803,7 +3804,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4181,7 +4182,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -4200,7 +4201,7 @@ dependencies = [
 
 [[package]]
 name = "oz-api"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -4225,7 +4226,7 @@ dependencies = [
 
 [[package]]
 name = "oz-cli"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4252,7 +4253,7 @@ dependencies = [
 
 [[package]]
 name = "oz-cloud-server"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "axum 0.8.9",
  "bytes",
@@ -4289,7 +4290,7 @@ dependencies = [
 
 [[package]]
 name = "oz-core"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "aead",
  "aes-gcm",
@@ -4331,7 +4332,7 @@ dependencies = [
 
 [[package]]
 name = "oz-hal"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "async-trait",
  "oz-core",
@@ -4345,7 +4346,7 @@ dependencies = [
 
 [[package]]
 name = "oz-logging"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "chrono",
  "filetime",
@@ -4360,7 +4361,7 @@ dependencies = [
 
 [[package]]
 name = "oz-lua"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "mlua",
  "oz-core",
@@ -4373,7 +4374,7 @@ dependencies = [
 
 [[package]]
 name = "oz-notification"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "async-trait",
  "foundation",
@@ -4393,7 +4394,7 @@ dependencies = [
 
 [[package]]
 name = "oz-payment"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4414,7 +4415,7 @@ dependencies = [
 
 [[package]]
 name = "oz-plugin"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "chrono",
  "mlua",
@@ -4435,7 +4436,7 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-app"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4485,7 +4486,7 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-tablet"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4528,7 +4529,7 @@ dependencies = [
 
 [[package]]
 name = "oz-reporting"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "chrono",
  "oz-core",
@@ -4541,7 +4542,7 @@ dependencies = [
 
 [[package]]
 name = "oz-security"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "chrono",
  "hex",
@@ -4786,7 +4787,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "platform-core"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "argon2",
  "chrono",
@@ -4802,7 +4803,7 @@ dependencies = [
 
 [[package]]
 name = "platform-kernel"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "foundation",
@@ -4815,7 +4816,7 @@ dependencies = [
 
 [[package]]
 name = "platform-startup"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4846,7 +4847,7 @@ dependencies = [
 
 [[package]]
 name = "platform-sync"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -5248,7 +5249,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -5285,7 +5286,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.4",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -5715,7 +5716,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5773,7 +5774,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6312,7 +6313,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6940,7 +6941,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7535,7 +7536,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.18",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7575,7 +7576,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -8164,7 +8165,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

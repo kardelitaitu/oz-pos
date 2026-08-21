@@ -7,6 +7,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MultiStoreDashboardScreen from '@/features/stores/MultiStoreDashboardScreen';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
 
 // ── Mocks ──────────────────────────────────────────────────────────
 
@@ -161,5 +163,32 @@ describe('MultiStoreDashboardScreen', () => {
 
     expect(screen.getByText('Primary')).toBeInTheDocument();
     expect(screen.getByText('Downtown')).toBeInTheDocument();
+  });
+
+  // ── C2.2: Pro→Premium store-cap nudge ────────────────────────
+
+  it('shows the 3rd-store upgrade banner when Pro is at its 2-store cap (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'pro', storeCount: 2 }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    render(<MultiStoreDashboardScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('store-limit-upgrade-premium')).toBeInTheDocument();
+    }, { timeout: 3000 });
+  });
+
+  it('hides the store-cap banner on Premium (unlimited stores) (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'premium', storeCount: 2 }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    render(<MultiStoreDashboardScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Main Street')).toBeInTheDocument();
+    }, { timeout: 3000 });
+    expect(screen.queryByText('store-limit-upgrade-premium')).not.toBeInTheDocument();
   });
 });

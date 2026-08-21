@@ -1,7 +1,7 @@
 # Uptime Monitoring — license server gate statuses
 
-<!-- Audit stamp: 2026-08-16 · Buffy · status: ACCURATE · payload fields verified
-     against health.go (smtp.verified, paddle.*, rsa.*, discord.*); keyword
+<!-- Audit stamp: 2026-08-18 · Buffy · status: ACCURATE · payload fields verified
+     against health.go (smtp.verified, paddle.*, midtrans.*, rsa.*, discord.*); keyword
      `"verified":false` matches Go's json.Marshal output (no space after colon);
      v2 API params per https://uptimerobot.com/api/legacy/ (type=2 keyword,
      keyword_type 1=exists / 2=not-exists, interval in minutes, free-plan min 5) -->
@@ -68,6 +68,27 @@ OZ_SMTP_HOST=127.0.0.1 OZ_SMTP_PORT=9 OZ_SMTP_FROM=verified@example.com ./licens
 curl -s http://127.0.0.1:8090/api/health   # smtp.verified:false — this is the state that pages you
 ```
 
+### 3. Midtrans gate — keyword monitor (C3.1)
+
+| Setting | Value |
+|---|---|
+| Monitor type | **Keyword** |
+| URL | `https://<license-host>/api/health` |
+| Keyword | `"server_key_configured":false` **or** `"price_tiers_configured":false` |
+| Alert when | **Keyword exists** |
+| Interval | 5 min |
+| Alert contact | your email / Discord / Slack |
+
+**Why this works**
+
+- The payload's `midtrans` block is `{"server_key_configured":true,"price_tiers_configured":true,"price_tiers_mappings":6,"error":""}`
+  when the C3.1 billing switch is live — so either `false` string appears only
+  when the gate is broken.
+- A rotated/missing `MIDTRANS_SERVER_KEY` flips `server_key_configured`; a
+  dropped/malformed `MIDTRANS_PRICE_TIERS` flips `price_tiers_configured` and
+  puts the parse error in `error`. Both are status, not liveness — the HTTP
+  check stays 200, so this keyword monitor is what pages you.
+
 ## Create via the dashboard (no code)
 
 1. UptimeRobot → **Add New Monitor**.
@@ -109,7 +130,9 @@ Notes:
 ## Other gate fields worth watching (optional)
 
 The same endpoint also exposes `paddle.secret_configured`, `paddle.price_tiers_configured`,
-`rsa.configured`, and `discord.configured`. Only `smtp.verified` needs a keyword
-monitor in practice — the rest are enforced at boot (the deploy fails fast if
-they're missing) — but a keyword monitor on `"secret_configured":false` pages
-you if the Paddle secret is ever rotated out from under the running service.
+`midtrans.server_key_configured`, `midtrans.price_tiers_configured`, `rsa.configured`,
+and `discord.configured`. Only `smtp.verified` needs a keyword monitor in
+practice — the rest are enforced at boot (the deploy fails fast if they're
+missing) — but keyword monitors on `"server_key_configured":false` (Midtrans)
+and `"secret_configured":false` (Paddle) page you if a billing secret is ever
+rotated out from under the running service.

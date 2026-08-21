@@ -50,6 +50,7 @@ func handleHealth(app core.App) func(e *core.RequestEvent) error {
 			"db_error":     dbErr,
 			"smtp":         smtpHealthSnapshot(),
 			"paddle":       paddleHealthStatus(),
+			"midtrans":     midtransHealthStatus(),
 			"rsa":          rsaHealthStatus(),
 			"discord":      discordHealthStatus(),
 			"uptime_secs":  int(uptime),
@@ -65,7 +66,7 @@ func handleHealth(app core.App) func(e *core.RequestEvent) error {
 // by re-registering the route) and serves the extended handleHealth payload
 // instead. All other requests pass through to their normal handlers.
 //
-// The gate blocks (paddle, rsa, discord, smtp) are STATUS, not liveness:
+// The gate blocks (paddle, midtrans, rsa, discord, smtp) are STATUS, not liveness:
 // none of them fail the HTTP check (only a DB outage does), so a broken
 // relay or missing optional webhook shows up for monitors without making
 // the container flap.
@@ -82,6 +83,28 @@ func paddleHealthStatus() map[string]any {
 		"error":                  "",
 	}
 	m, err := paddlePriceTiers()
+	if err != nil {
+		status["error"] = err.Error()
+	} else {
+		status["price_tiers_configured"] = true
+		status["price_tiers_mappings"] = len(m)
+	}
+	return status
+}
+
+// midtransHealthStatus mirrors the boot-time Midtrans gate
+// (verifyMidtransConfig) as a read-only status: per-component booleans so
+// monitors can see WHICH piece is missing (server key vs. the price map),
+// the mapping count when the tier map parses, and the parse error when it
+// doesn't (DEPLOY.md §12 — the runbook's monitoring step alerts on this).
+func midtransHealthStatus() map[string]any {
+	status := map[string]any{
+		"server_key_configured":  midtransServerKey() != "",
+		"price_tiers_configured": false,
+		"price_tiers_mappings":   0,
+		"error":                  "",
+	}
+	m, err := midtransPriceTiers()
 	if err != nil {
 		status["error"] = err.Error()
 	} else {

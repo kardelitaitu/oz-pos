@@ -29,6 +29,7 @@ import (
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 // pbSchemaJSON is the PocketBase collections schema embedded at build time.
@@ -49,6 +50,9 @@ var requiredCollections = []string{
 	"tenants",
 	"subscriptions",
 	"tenant_machines",
+	"trial_registrations",
+	"trial_claims",
+	"trial_email_log",
 }
 
 // privateKey is the RSA-2048 private key loaded from the
@@ -95,11 +99,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// ── Bootstrap: Paddle webhook config ─────────────────────────
-	// Fail fast when the webhook would answer 503/500 on every event
+	// ── Bootstrap: webhook config ────────────────────────────────
+	// Fail fast when a webhook would answer 503/500 on every event
 	// (missing secret or price→tier map): purchases would provision
-	// nothing and Paddle would retry forever (see verifyPaddleConfig).
+	// nothing and the provider would retry forever (see verifyPaddleConfig
+	// / verifyMidtransConfig).
 	if err := verifyPaddleConfig(); err != nil {
+		log.Fatal(err)
+	}
+	if err := verifyMidtransConfig(); err != nil {
 		log.Fatal(err)
 	}
 
@@ -144,6 +152,66 @@ func main() {
 		if err := ensurePasswordResetAtField(app); err != nil {
 			return err
 		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// segmented-trial flag (C2.1): fresh boots get it from the embedded
+		// pb_schema.json; existing pb_data volumes get it added without
+		// reimporting the schema. Existing keys keep is_trial=false — the
+		// correct semantics (only trial keys minted going forward flip it).
+		if err := ensureIsTrialField(app); err != nil {
+			return err
+		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// Midtrans webhook (C3.1): fresh boots get the midtrans_sub_id /
+		// midtrans_order_id fields from the embedded pb_schema.json; existing
+		// pb_data volumes get them added without reimporting the schema.
+		// Existing records keep empty values — they were Paddle-minted.
+		if err := ensureMidtransFields(app); err != nil {
+			return err
+		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// payment_provider discriminator (C3.1): fresh boots get it from the
+		// embedded pb_schema.json; existing pb_data volumes get it added and
+		// their records backfilled to "paddle" (everything pre-Midtrans was
+		// Paddle-minted). Webhooks set it explicitly going forward.
+		if err := ensurePaymentProviderField(app); err != nil {
+			return err
+		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// vertical-bundle checkout (C3.2 website leg): fresh boots get the
+		// license_keys.bundle_id field from the embedded pb_schema.json;
+		// existing pb_data volumes get it added without reimporting the
+		// schema. Existing records keep empty values — nothing before the
+		// bundle checkout shipped had a bundle.
+		if err := ensureBundleIDField(app); err != nil {
+			return err
+		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK): fresh
+		// boots get the trial_registrations collection from the embedded
+		// pb_schema.json; existing pb_data volumes get it created here
+		// without reimporting the whole schema.
+		if err := ensureTrialRegistrations(app); err != nil {
+			return err
+		}
+		// Idempotent in-place upgrade for deployments that predate the
+		// lightweight repeat-email detector: same pattern — fresh boots
+		// get trial_claims from pb_schema.json, existing pb_data volumes
+		// get it created here.
+		if err := ensureTrialClaims(app); err != nil {
+			return err
+		}
+		// C3.3: pause subscription fields
+		if err := ensurePauseFields(app); err != nil {
+			return err
+		}
+		// C4.2: enterprise self-serve trial approval codes
+		if err := ensureEnterpriseApprovals(app); err != nil {
+			return err
+		}
+		// C4.3: add-on marketplace field on license_keys
+		if err := ensureAddonsField(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -155,10 +223,25 @@ func main() {
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
+		// Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK): claims a
+		// device's one trial; answers 403 TRIAL_ALREADY_CLAIMED on reuse.
+		se.Router.POST(trialPath, handleTrial(app))
 		// /status uses POST + Authorization: Bearer <api_key> to keep the
 		// credential out of URLs (which would otherwise leak it to webserver
 		// access logs, CDN logs, browser history, and Referer headers).
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
+		// C3.3: Pause/resume subscription endpoints
+		se.Router.POST("/api/v1/license/pause", handlePause(app))
+		se.Router.POST("/api/v1/license/resume", handleResume(app))
+		// C4.2: Enterprise self-serve trial (gated by approval code)
+		se.Router.POST("/api/v1/license/enterprise-trial", handleEnterpriseTrial(app))
+		// C4.2: Admin endpoints for enterprise approval code management
+		se.Router.POST("/api/v1/admin/enterprise-codes", handleGenerateEnterpriseCode(app))
+		se.Router.GET("/api/v1/admin/enterprise-codes", handleListEnterpriseCodes(app))
+		// C4.3: Add-on marketplace admin endpoints
+		se.Router.POST("/api/v1/admin/license-addons", handleAddLicenseAddon(app))
+		se.Router.DELETE("/api/v1/admin/license-addons", handleRemoveLicenseAddon(app))
+		se.Router.GET("/api/v1/admin/license-addons", handleListLicenseAddons(app))
 		// Public website support form → Discord channel (see contact.go).
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		// Website tenant-email OTP auth + account dashboard (see web_otp.go).
@@ -183,16 +266,35 @@ func main() {
 		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		// Midtrans Snap checkout (see midtrans_checkout.go) — session-authed
+		// web endpoint like /api/v1/web/*: the id-locale pricing button
+		// requests a snap token for a tier + period, which Snap.js opens.
+		se.Router.POST(midtransSnapPath, handleMidtransSnap(app))
 		// Paddle Billing webhook — signature-verified, server-to-server (see
 		// paddle_webhook.go). NOT behind the web CORS allowlist: Paddle sends
 		// no Origin, and the Paddle-Signature header is the gate.
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
+		// Midtrans payment-notification webhook — signature-verified,
+		// server-to-server (see midtrans_webhook.go). NOT behind the web CORS
+		// allowlist: Midtrans sends no Origin, and the signature_key is the
+		// gate.
+		se.Router.POST(midtransWebhookPath, handleMidtransWebhook(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
 		// /api/health: PocketBase's built-in endpoint registers before this
 		// hook, so it can't be replaced by re-registering the route; a root
 		// middleware short-circuits it with our extended payload (health.go).
 		bindHealthOverride(app, se)
+
+		// ── Trial-to-paid email scheduler (C2.2, §4) ───────────────
+		// Runs daily at 08:00 UTC to scan active trial subscriptions and
+		// send milestone emails (day 7 weekly summary, day 14 last-day
+		// warning). Idempotent: trial_email_log prevents double-sends.
+		if err := ensureTrialEmailLogCollection(app); err != nil {
+			log.Printf("warning: failed to create trial_email_log collection: %v", err)
+		}
+		go startTrialEmailScheduler(app)
+
 		return se.Next()
 	})
 
@@ -320,6 +422,310 @@ func ensurePasswordResetAtField(app core.App) error {
 		return fmt.Errorf("failed to add password_reset_at field: %w", err)
 	}
 	log.Println("migrated tenants collection: added password_reset_at field")
+	return nil
+}
+
+// ensureIsTrialField adds the license_keys.is_trial bool to existing
+// deployments that predate segmented trials (fresh boots get it from the
+// embedded pb_schema.json). Idempotent: no-op once the field exists.
+// Existing records default to false — the correct semantics, since only
+// trial keys minted going forward are marked (paid keys never are).
+func ensureIsTrialField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("license_keys")
+	if err != nil {
+		return fmt.Errorf("license_keys collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("is_trial") != nil {
+		return nil
+	}
+	collection.Fields.Add(&core.BoolField{
+		Name: "is_trial",
+		Help: "True for segmented-trial keys (C2.1): activation mints a short Plus/Pro license from the request's trial_vertical instead of the key's own tier/expiry/quota. Paid keys leave this unset.",
+	})
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add is_trial field: %w", err)
+	}
+	log.Println("migrated license_keys collection: added is_trial field")
+	return nil
+}
+
+// ensureMidtransFields adds the midtrans_sub_id / midtrans_order_id text
+// fields to license_keys and subscriptions for existing deployments that
+// predate the Midtrans webhook (fresh boots get them from the embedded
+// pb_schema.json). Idempotent: no-op once both fields exist. Existing
+// records keep empty values — they were minted by the Paddle webhook.
+func ensureMidtransFields(app core.App) error {
+	for _, name := range []string{"license_keys", "subscriptions"} {
+		collection, err := app.FindCollectionByNameOrId(name)
+		if err != nil {
+			return fmt.Errorf("%s collection not found: %w", name, err)
+		}
+		if collection.Fields.GetByName("midtrans_sub_id") != nil && collection.Fields.GetByName("midtrans_order_id") != nil {
+			continue
+		}
+		if collection.Fields.GetByName("midtrans_sub_id") == nil {
+			collection.Fields.Add(&core.TextField{
+				Name: "midtrans_sub_id",
+				Max:  100,
+				Help: "Midtrans Subscription API subscription id this record mirrors — the lookup key for recurring-charge refreshes.",
+			})
+		}
+		if collection.Fields.GetByName("midtrans_order_id") == nil {
+			collection.Fields.Add(&core.TextField{
+				Name: "midtrans_order_id",
+				Max:  100,
+				Help: "Midtrans order_id of the most recent charge that provisioned/refreshed this record.",
+			})
+		}
+		if err := app.Save(collection); err != nil {
+			return fmt.Errorf("failed to add midtrans fields to %s: %w", name, err)
+		}
+		log.Printf("migrated %s collection: added midtrans_sub_id / midtrans_order_id fields", name)
+	}
+	return nil
+}
+
+// ensurePaymentProviderField adds the payment_provider select field
+// ("paddle" | "midtrans") to license_keys and subscriptions for existing
+// deployments that predate the Midtrans webhook (fresh boots get it from the
+// embedded pb_schema.json). Idempotent: no-op once the field exists. Existing
+// records backfill to "paddle" — everything before Midtrans was Paddle-minted;
+// the webhooks set the value explicitly going forward.
+func ensurePaymentProviderField(app core.App) error {
+	for _, name := range []string{"license_keys", "subscriptions"} {
+		collection, err := app.FindCollectionByNameOrId(name)
+		if err != nil {
+			return fmt.Errorf("%s collection not found: %w", name, err)
+		}
+		if collection.Fields.GetByName("payment_provider") == nil {
+			collection.Fields.Add(&core.SelectField{
+				Name:      "payment_provider",
+				Values:    []string{"paddle", "midtrans"},
+				MaxSelect: 1,
+				Help:      "Billing provider that issued this record: \"paddle\" (global, USD cards) or \"midtrans\" (Indonesian QRIS/VA/e-wallet, fixed IDR). Backfilled to paddle for pre-Midtrans records.",
+			})
+			if err := app.Save(collection); err != nil {
+				return fmt.Errorf("failed to add payment_provider to %s: %w", name, err)
+			}
+			log.Printf("migrated %s collection: added payment_provider field", name)
+		}
+
+		// Backfill existing records (a deployment that already had the field
+		// never needs this — webhooks always set it).
+		records, err := app.FindAllRecords(name)
+		if err != nil {
+			return fmt.Errorf("failed to list %s for payment_provider backfill: %w", name, err)
+		}
+		for _, rec := range records {
+			if rec.GetString("payment_provider") == "" {
+				rec.Set("payment_provider", "paddle")
+				if err := app.Save(rec); err != nil {
+					return fmt.Errorf("failed to backfill payment_provider for %s %q: %w", name, rec.Id, err)
+				}
+			}
+		}
+		if len(records) > 0 {
+			log.Printf("migrated %s collection: backfilled payment_provider=paddle on %d record(s)", name, len(records))
+		}
+	}
+	return nil
+}
+
+// ensureBundleIDField adds the license_keys / subscriptions bundle_id text
+// field for existing deployments that predate the vertical-bundle checkout
+// (fresh boots get it from the embedded pb_schema.json). Idempotent: no-op
+// once the field exists. Existing records keep empty values — the webhook
+// sets it at mint for bundle purchases and refresh falls back to it on
+// renewals.
+func ensureBundleIDField(app core.App) error {
+	for _, name := range []string{"license_keys", "subscriptions"} {
+		collection, err := app.FindCollectionByNameOrId(name)
+		if err != nil {
+			return fmt.Errorf("%s collection not found: %w", name, err)
+		}
+		if collection.Fields.GetByName("bundle_id") != nil {
+			continue
+		}
+		collection.Fields.Add(&core.TextField{
+			Name: "bundle_id",
+			Max:  64,
+			Help: "Vertical-bundle id (subscription-tiers.md §3, C3.2) this license was purchased with — \"restaurant_starter\" widens the Plus quota block with the kds workspace type. Set at webhook mint; renewals fall back to it when the charge notification carries no bundle.",
+		})
+		if err := app.Save(collection); err != nil {
+			return fmt.Errorf("failed to add bundle_id to %s: %w", name, err)
+		}
+		log.Printf("migrated %s collection: added bundle_id field", name)
+	}
+	return nil
+}
+
+// ensureTrialRegistrations creates the trial_registrations collection for
+// deployments that predate the hardware-fingerprint trial lock
+// (SPEC-2026-TRIAL-LOCK). Fresh boots get it from the embedded
+// pb_schema.json; this is the idempotent in-place upgrade for already-
+// provisioned pb_data volumes so POST /api/v1/license/trial and the
+// activation-time trial gate always find their collection.
+func ensureTrialRegistrations(app core.App) error {
+	if _, err := app.FindCollectionByNameOrId("trial_registrations"); err == nil {
+		return nil // already exists
+	}
+	coll := core.NewBaseCollection("trial_registrations")
+	coll.Fields.Add(&core.TextField{Name: "hardware_fingerprint", Required: true, Max: 128})
+	coll.Fields.Add(&core.DateField{Name: "first_seen_at", Required: true})
+	coll.Fields.Add(&core.DateField{Name: "trial_expires_at", Required: true})
+	coll.Fields.Add(&core.SelectField{Name: "platform", Required: true, Values: []string{"windows", "android", "linux", "macos", "unknown"}, MaxSelect: 1})
+	coll.Fields.Add(&core.TextField{Name: "app_version", Required: true, Max: 32})
+	coll.Fields.Add(&core.RelationField{Name: "tenant_id", CollectionId: "tenants", MaxSelect: 1})
+	coll.Fields.Add(&core.TextField{Name: "ip_address", Max: 64})
+	coll.Indexes = append(coll.Indexes,
+		"CREATE UNIQUE INDEX idx_trial_registrations_hw ON trial_registrations (hardware_fingerprint) WHERE hardware_fingerprint IS NOT NULL AND hardware_fingerprint != ''")
+	coll.CreateRule = types.Pointer("")
+	coll.ListRule = types.Pointer("")
+	coll.ViewRule = types.Pointer("")
+	coll.UpdateRule = types.Pointer("")
+	if err := app.Save(coll); err != nil {
+		return fmt.Errorf("failed to create trial_registrations collection: %w", err)
+	}
+	log.Println("migrated: created trial_registrations collection (hardware-fingerprint trial lock)")
+	return nil
+}
+
+// ensureTrialClaims creates the trial_claims collection for deployments
+// that predate the lightweight repeat-email detector (hash of email +
+// device id, recorded per successful trial claim — see recordTrialClaim in
+// trial.go). Fresh boots get it from the embedded pb_schema.json; this is
+// the idempotent in-place upgrade for already-provisioned pb_data volumes.
+// ensureAddonsField adds the addons JSON array field to license_keys
+// (C4.3 add-on marketplace). Idempotent — skips if the field already exists.
+func ensureAddonsField(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("license_keys")
+	if err != nil {
+		return fmt.Errorf("license_keys collection not found: %w", err)
+	}
+	if collection.Fields.GetByName("addons") != nil {
+		return nil // already exists
+	}
+	collection.Fields.Add(&core.TextField{
+		Name: "addons",
+		Max:  1024,
+		Help: "C4.3: JSON array of add-on identifiers purchased with this license.",
+	})
+	if err := app.Save(collection); err != nil {
+		return fmt.Errorf("failed to add addons to license_keys: %w", err)
+	}
+	log.Println("migrated license_keys collection: added addons field")
+	return nil
+}
+
+// ensureEnterpriseApprovals creates the enterprise_approvals collection for
+// storing approval codes used by the enterprise self-serve trial (C4.2, §19).
+// Codes are generated by the admin endpoint and redeemed by prospects.
+func ensureEnterpriseApprovals(app core.App) error {
+	if _, err := app.FindCollectionByNameOrId("enterprise_approvals"); err == nil {
+		return nil // already exists
+	}
+	coll := core.NewBaseCollection("enterprise_approvals")
+	coll.Fields.Add(&core.TextField{Name: "code", Required: true, Max: 64, Min: 8})
+	coll.Fields.Add(&core.TextField{Name: "email", Max: 254})
+	coll.Fields.Add(&core.TextField{Name: "prospect_name", Max: 256})
+	coll.Fields.Add(&core.SelectField{Name: "status", Required: true, Values: []string{"unused", "redeemed", "expired"}, MaxSelect: 1})
+	coll.Fields.Add(&core.TextField{Name: "created_by", Max: 256})
+	coll.ListRule = types.Pointer("")
+	coll.ViewRule = types.Pointer("")
+	coll.CreateRule = nil // only server-side
+	coll.UpdateRule = nil
+	coll.DeleteRule = nil
+	coll.Indexes = append(coll.Indexes,
+		"CREATE UNIQUE INDEX idx_enterprise_approvals_code ON enterprise_approvals (code)",
+		"CREATE INDEX idx_enterprise_approvals_status ON enterprise_approvals (status)")
+	if err := app.Save(coll); err != nil {
+		return fmt.Errorf("failed to create enterprise_approvals collection: %w", err)
+	}
+	log.Println("migrated: created enterprise_approvals collection (enterprise self-serve trial)")
+	return nil
+}
+
+func ensureTrialClaims(app core.App) error {
+	if _, err := app.FindCollectionByNameOrId("trial_claims"); err == nil {
+		return nil // already exists
+	}
+	coll := core.NewBaseCollection("trial_claims")
+	coll.Fields.Add(&core.TextField{Name: "claim_hash", Required: true, Pattern: "^[a-f0-9]{64}$", Min: 64, Max: 64})
+	coll.Fields.Add(&core.TextField{Name: "email", Required: true, Max: 320})
+	coll.Fields.Add(&core.TextField{Name: "device_id", Required: true, Max: 128})
+	coll.Fields.Add(&core.RelationField{Name: "tenant_id", CollectionId: "tenants", MaxSelect: 1})
+	coll.Fields.Add(&core.NumberField{Name: "claim_count", Required: true, Min: types.Pointer(1.0), OnlyInt: true})
+	coll.Fields.Add(&core.DateField{Name: "first_claimed_at", Required: true})
+	coll.Fields.Add(&core.DateField{Name: "last_claimed_at", Required: true})
+	coll.Fields.Add(&core.TextField{Name: "trial_keys", Max: 2048})
+	coll.Indexes = append(coll.Indexes,
+		"CREATE UNIQUE INDEX idx_trial_claims_hash ON trial_claims (claim_hash) WHERE claim_hash IS NOT NULL AND claim_hash != ''")
+	coll.CreateRule = types.Pointer("")
+	coll.ListRule = types.Pointer("")
+	coll.ViewRule = types.Pointer("")
+	coll.UpdateRule = types.Pointer("")
+	if err := app.Save(coll); err != nil {
+		return fmt.Errorf("failed to create trial_claims collection: %w", err)
+	}
+	log.Println("migrated: created trial_claims collection (lightweight repeat-email detector)")
+	return nil
+}
+
+// ensurePauseFields adds the paused status value and paused_at/paused_until
+// date fields to the subscriptions collection for existing deployments that
+// predate the pause-subscription feature (C3.3). Fresh boots get these from
+// the embedded pb_schema.json.
+func ensurePauseFields(app core.App) error {
+	collection, err := app.FindCollectionByNameOrId("subscriptions")
+	if err != nil {
+		return fmt.Errorf("subscriptions collection not found: %w", err)
+	}
+
+	// Add "paused" to the status select if not present
+	statusField, ok := collection.Fields.GetByName("status").(*core.SelectField)
+	if ok {
+		hasPaused := false
+		for _, v := range statusField.Values {
+			if v == "paused" {
+				hasPaused = true
+				break
+			}
+		}
+		if !hasPaused {
+			statusField.Values = append(statusField.Values, "paused")
+			if err := app.Save(collection); err != nil {
+				return fmt.Errorf("failed to add paused status to subscriptions: %w", err)
+			}
+			log.Println("migrated: added paused status to subscriptions.status select")
+		}
+	}
+
+	// Add paused_at field if not present
+	if collection.Fields.GetByName("paused_at") == nil {
+		collection.Fields.Add(&core.DateField{
+			Name:     "paused_at",
+			Required: false,
+			Help:     "When the subscription was paused (C3.3).",
+		})
+		if err := app.Save(collection); err != nil {
+			return fmt.Errorf("failed to add paused_at to subscriptions: %w", err)
+		}
+		log.Println("migrated: added paused_at field to subscriptions")
+	}
+
+	// Add paused_until field if not present
+	if collection.Fields.GetByName("paused_until") == nil {
+		collection.Fields.Add(&core.DateField{
+			Name:     "paused_until",
+			Required: false,
+			Help:     "When the pause expires and billing resumes (C3.3).",
+		})
+		if err := app.Save(collection); err != nil {
+			return fmt.Errorf("failed to add paused_until to subscriptions: %w", err)
+		}
+		log.Println("migrated: added paused_until field to subscriptions")
+	}
+
 	return nil
 }
 

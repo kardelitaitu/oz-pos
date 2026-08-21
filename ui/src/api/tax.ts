@@ -57,15 +57,27 @@ export interface CartLineTaxInput {
   unit_price_minor: number;
 }
 
+/** Result of a cart-level tax preview. */
+export interface CartTaxResult {
+  /** Total tax across all lines/rates, in minor units. */
+  taxMinor: number;
+  /** True when at least one applied rate is exclusive (tax added on top
+   *  of the price). When false, all rates were inclusive or none applied.
+   *  The frontend must add `taxMinor` to the payable total ONLY when
+   *  `hasExclusive` is true — inclusive tax is already embedded in the
+   *  displayed price, so adding it again would double-charge. */
+  hasExclusive: boolean;
+}
+
 /** Compute total tax for a set of cart lines (live preview) using the scoped variant (ADR #7). */
 export const computeCartTax = (
   sessionToken: string | null,
   lines: CartLineTaxInput[],
   currency: string,
-): Promise<number> =>
+): Promise<CartTaxResult> =>
   sessionToken
-    ? loggedInvoke<number>('compute_cart_tax_scoped', { sessionToken, lines, currency })
-    : Promise.resolve(0);
+    ? loggedInvoke<CartTaxResult>('compute_cart_tax_scoped', { sessionToken, lines, currency })
+    : Promise.resolve({ taxMinor: 0, hasExclusive: false });
 
 /** List all tax rates for the store resolved from a session token. ADR #7. */
 export const listTaxRatesScoped = (sessionToken: string): Promise<TaxRateDto[]> =>

@@ -100,6 +100,10 @@ export function createRetailCurrencyApiMock() {
     listCurrencies: vi.fn(() => Promise.resolve([])),
     listExchangeRates: vi.fn(() => Promise.resolve([])),
     getDefaultCurrency: vi.fn(() => Promise.resolve({ code: 'IDR', name: 'Indonesian Rupiah', symbol: 'Rp', decimalPlaces: 2, isDefault: true })),
+    // Scoped versions (ADR #7) — used by PaymentModal when sessionToken is present
+    listCurrenciesScoped: vi.fn(() => Promise.resolve([])),
+    listExchangeRatesScoped: vi.fn(() => Promise.resolve([])),
+    getDefaultCurrencyScoped: vi.fn(() => Promise.resolve('IDR')),
   };
 }
 

@@ -3,6 +3,8 @@ import { Localized, useLocalization } from '@fluent/react';
 import { EmptyState, requiredLocalized } from '@/frontend/shared';
 import { NoLoyaltyIcon } from '@/components/EmptyStateIllustrations';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import TierLockedFeature from '@/components/TierLockedFeature';
 import {
   listLoyaltyAccounts,
   listLoyaltyTiers,
@@ -37,6 +39,9 @@ interface TierFormData {
 export default function LoyaltyManagementScreen() {
   const { l10n } = useLocalization();
   const { sessionToken } = useWorkspace();
+  // C2.2: Loyalty is a Premium+ feature — caps arrive from the subscription
+  // context and gate the screen below.
+  const { caps } = useSubscription();
   // Numbers/dates follow the active Fluent locale (not the browser default).
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const [accounts, setAccounts] = useState<LoyaltyAccountWithDetails[]>([]);
@@ -145,6 +150,28 @@ export default function LoyaltyManagementScreen() {
       setSavingTier(false);
     }
   }, [editingTier, tierForm, tiers, l10n, sessionToken]);
+
+  // C2.2: Loyalty module teaser (Pro→Premium trigger) — render a locked
+  // screen with an animated preview + upgrade CTA instead of the live UI.
+  if (caps && !caps.supportsLoyalty) {
+    return (
+      <div className="loyalty-mgmt">
+        <TierLockedFeature
+          titleKey="loyalty-upgrade-required"
+          messageKey="loyalty-upgrade-message"
+          ctaKey="loyalty-upgrade-cta"
+          target="premium"
+        >
+          <div className="loyalty-locked-preview" aria-hidden="true">
+            <span className="loyalty-locked-badge">★</span>
+            <span className="loyalty-locked-bar" />
+            <span className="loyalty-locked-bar" />
+            <span className="loyalty-locked-bar" />
+          </div>
+        </TierLockedFeature>
+      </div>
+    );
+  }
 
   return (
     <div className="loyalty-mgmt">

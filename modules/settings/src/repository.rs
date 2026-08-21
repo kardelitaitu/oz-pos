@@ -38,3 +38,7 @@ impl<'a> SettingsRepository<'a> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "repository_tests.rs"]
+mod tests;

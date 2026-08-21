@@ -60,7 +60,7 @@ const sampleDetail = {
 
 describe('VoidOrdersScreen', () => {
   it('renders the list view with title', async () => {
-    mockListSales.mockResolvedValue([]);
+    mockListSales.mockResolvedValue({ sales: [], salesHistoryCapped: false });
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     expect(screen.getByText('Orders')).toBeInTheDocument();
   });
@@ -74,7 +74,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('renders empty state when no orders', async () => {
-    mockListSales.mockResolvedValue([]);
+    mockListSales.mockResolvedValue({ sales: [], salesHistoryCapped: false });
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/No orders recorded yet/i)).toBeInTheDocument();
@@ -82,7 +82,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('renders orders in the list', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('renders the status filter chips', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('All')).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('filters orders by status', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('opens detail view when View is clicked', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
@@ -135,7 +135,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('shows void section for Active orders in detail view', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
@@ -151,7 +151,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('renders the void reason select', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
@@ -167,7 +167,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('disables Confirm Void button until a reason is selected', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     await renderWithFluent(<VoidOrdersScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
@@ -184,7 +184,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('calls voidSale when Confirm Void is clicked with a reason', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     mockVoidSale.mockResolvedValue({});
     const user = userEvent.setup();
@@ -218,7 +218,7 @@ describe('VoidOrdersScreen', () => {
   });
 
   it('shows error when void fails', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     mockVoidSale.mockRejectedValue(new Error('Network error'));
     const user = userEvent.setup();

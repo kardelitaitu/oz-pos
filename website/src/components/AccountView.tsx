@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
-import { getSessionEmail, isPaddleConfigured, openPaddleCheckout } from './paddle';
+import { clearSession, getSessionEmail, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout } from './paddle';
+import { openMidtransCheckout } from './midtrans';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -15,6 +16,24 @@ import { licenseApiUrl } from '../lib/runtime-config';
  * Paddle checkout prefilled with the account email (register-first flow —
  * the account must exist before payment). Graceful in every failure mode:
  * no token, API unset, server error.
+ *
+ * ## Register-first custom_data contract (ADR #23 Deviation 2)
+ *
+ * Both the subscribe section and the bundle upgrade card open the Paddle
+ * checkout via `openPaddleCheckout(priceId, email, onClosed, bundle?)`.
+ * The checkout embeds `custom_data` so the webhook can attach the
+ * subscription to the correct tenant:
+ *
+ * - `custom_data.email` — the buyer's account email. **Required.** The
+ *   webhook upserts the tenant by this value (`resolvePaddleEmail`).
+ * - `custom_data.bundle` — optional C3.2 vertical bundle id
+ *   (e.g. `"restaurant_starter"`). Cross-checked against the price map;
+ *   never trusted alone.
+ * - `custom_data.phone` — may ride along when Paddle collects it;
+ *   backfilled onto the tenant when non-empty.
+ *
+ * The signup vertical is **not** carried — trial segmentation is a
+ * desktop-activation concern, not a billing one.
  */
 const API = licenseApiUrl();
 
@@ -36,6 +55,8 @@ interface MeResponse {
     startsAt?: string;
     expiresAt?: string;
     graceUntil?: string;
+    /** Vertical-bundle id (C3.2) this subscription was purchased with. */
+    bundleId?: string;
   };
 }
 
@@ -89,8 +110,9 @@ export default function AccountView({ locale }: Props) {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {
-      // Expired/revoked session — clear the stored token; caller shows anon.
-      sessionStorage.removeItem('oz_session');
+      // Expired/revoked session — clear the stored token AND the cached
+      // email; caller shows anon.
+      clearSession();
       return null;
     }
     if (!res.ok) throw new Error('me failed');
@@ -153,43 +175,69 @@ export default function AccountView({ locale }: Props) {
     }
   };
 
-  const subscribe = async (priceId: string, tierKey: string) => {
+  /**
+   * Open the checkout overlay for the given tier/bundle.
+   *
+   * Register-first custom_data contract (ADR #23 Deviation 2):
+   * - `custom_data.email` — buyer's account email (required; webhook upserts
+   *   the tenant by it)
+   * - `custom_data.bundle` — optional C3.2 bundle id (cross-checked against
+   *   the price map; never trusted alone)
+   * - `custom_data.phone` — may ride along; backfilled onto tenant
+   *
+   * For Midtrans (id-locale), the equivalent fields are custom_field1–4
+   * in the Snap request (see midtrans.ts).
+   */
+  const subscribe = async (priceId: string, tierKey: string, bundle?: string) => {
     setSubscribing(tierKey);
     setSubscribeError(false);
+    // Indonesian market bills through Midtrans Snap (ADR #39 D1); every
+    // other locale through Paddle.
+    const useMidtrans = locale === 'id';
     try {
+      if (useMidtrans) {
+        // The bundle (C3.2) rides the snap request (custom_field4) so the
+        // webhook mints the bundle-widened quota block.
+        await openMidtransCheckout(tierKey, 'yearly', (completed) => pollAfterCheckout(completed), bundle);
+        return;
+      }
       const email = await getSessionEmail();
       if (!email) throw new Error('no session email');
       // After the overlay closes, refresh /me so a completed purchase shows
       // the subscription without a manual reload. The webhook provisions
       // asynchronously, so poll for it (up to ~20s) instead of a single fetch.
-      await openPaddleCheckout(priceId, email, (completed) => {
-        if (!completed) return;
-        if (!mountedRef.current) return;
-        setRefreshState('checking');
-        void (async () => {
-          let found = false;
-          for (let i = 0; i < 8 && !found; i++) {
-            await new Promise((r) => setTimeout(r, 2500));
-            if (!mountedRef.current) return;
-            try {
-              const data = await fetchMe();
-              if (data) {
-                setMe(data);
-                setState('ready');
-                found = Boolean(data.subscription);
-              }
-            } catch {
-              // Transient network error — keep polling.
-            }
-          }
-          if (mountedRef.current) setRefreshState(found ? 'idle' : 'pending');
-        })();
-      });
-    } catch {
+      await openPaddleCheckout(priceId, email, (completed) => pollAfterCheckout(completed), bundle);
+    } catch (err) {
+      console.error('checkout open failed', err);
       setSubscribeError(true);
     } finally {
       setSubscribing(null);
     }
+  };
+
+  /** Poll /me after a completed checkout until the webhook provisions. */
+  const pollAfterCheckout = (completed: boolean) => {
+    if (!completed) return;
+    if (!mountedRef.current) return;
+    setRefreshState('checking');
+    void (async () => {
+      let found = false;
+      for (let i = 0; i < 8 && !found; i++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        if (!mountedRef.current) return;
+        try {
+          const data = await fetchMe();
+          if (data) {
+            setMe(data);
+            setState('ready');
+            found = Boolean(data.subscription);
+          }
+        } catch {
+          // Transient network error — keep polling.
+        }
+      }
+      if (mountedRef.current) setRefreshState(found ? 'idle' : 'pending');
+    })();
   };
 
   if (state === 'loading') return <p className="text-muted">{t(locale, 'account.loading')}</p>;
@@ -217,11 +265,38 @@ export default function AccountView({ locale }: Props) {
   }
 
   const { tenant, license, subscription } = me ?? {};
-  // Subscribe options from the locale's pricing content (pro + premium
-  // have real Paddle price ids; trial/enterprise do not).
+  // Subscribe options from the locale's pricing content: the three paid tiers
+  // (plus/pro/premium), billed at the yearly (default) rate. Tiers whose
+  // Paddle price id is still a placeholder (subscription-tiers.md — six real
+  // prices not yet catalogued) are excluded so the button never opens a
+  // dead checkout; free/enterprise have no price id at all.
+  // The id market bills through Midtrans (fixed Rp from the server's
+  // MIDTRANS_PRICE_TIERS map), so Paddle price ids don't gate it; other
+  // locales need a real, non-placeholder Paddle price.
+  const useMidtrans = locale === 'id';
   const subscribable = (pricingFor(locale) ?? [])
-    .filter((tier) => tier.priceId && (tier.tierKey === 'pro' || tier.tierKey === 'premium'))
-    .map((tier) => ({ tierKey: tier.tierKey, name: tier.name, price: tier.price, period: tier.period, priceId: tier.priceId! }));
+    .filter((tier) => tier.tierKey === 'plus' || tier.tierKey === 'pro' || tier.tierKey === 'premium')
+    .map((tier) => {
+      const yearly = tier.prices.yearly;
+      return { tierKey: tier.tierKey, name: tier.name, price: yearly.price, period: yearly.period, priceId: yearly.priceId ?? '' };
+    })
+    .filter((plan) => (useMidtrans ? true : plan.priceId && !isPlaceholderPriceId(plan.priceId)));
+
+  // Restaurant Starter bundle (C3.2, subscription-tiers.md §5): the Plus
+  // add-on, offered as an in-app upgrade to existing Plus subscribers who
+  // don't own it yet. Gated on the same checkout availability as the
+  // subscribe section — Midtrans needs the license API (the server's
+  // MIDTRANS_PRICE_TIERS carries the bundle amount); Paddle needs a real,
+  // non-placeholder bundle price id plus the client token. Until the real
+  // catalog lands the placeholder ids keep the card hidden, exactly like
+  // the subscribe section hides placeholder plans.
+  const plusBundle = (pricingFor(locale) ?? []).find((tier) => tier.tierKey === 'plus')?.bundle;
+  const bundleYearly = plusBundle?.prices.yearly;
+  const bundleCheckoutAvailable =
+    Boolean(plusBundle) &&
+    (useMidtrans
+      ? Boolean(licenseApiUrl())
+      : Boolean(bundleYearly?.priceId) && !isPlaceholderPriceId(bundleYearly?.priceId) && isPaddleConfigured());
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -342,12 +417,38 @@ export default function AccountView({ locale }: Props) {
               </a>
             </p>
           )}
+          {/* In-app bundle upgrade (C3.2): existing Plus subscribers without
+              the bundle get the Restaurant Starter add-on right here. The
+              checkout carries bundle=restaurant_starter so the webhook
+              mints the kds-widened quota block (Midtrans custom_field4 /
+              Paddle custom_data.bundle). Hidden once bundleId is set. */}
+          {subscription.tierKey === 'plus' && !subscription.bundleId && plusBundle && bundleCheckoutAvailable && (
+            <div className="mt-5 rounded-lg border border-accent/40 p-4" data-testid="account-bundle-upgrade">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="font-semibold">{plusBundle.label}</p>
+                <p className="text-sm text-muted">
+                  {bundleYearly?.price}
+                  {bundleYearly?.period && <span> {bundleYearly.period}</span>}
+                </p>
+              </div>
+              <p className="mt-1 text-sm text-muted">{plusBundle.note}</p>
+              <p className="mt-2 text-sm text-muted">{t(locale, 'account.bundleUpgradeHint')}</p>
+              <button
+                type="button"
+                onClick={() => void subscribe(bundleYearly?.priceId ?? '', 'plus', plusBundle.id)}
+                disabled={subscribing !== null}
+                className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+              >
+                {subscribing === 'plus' ? '…' : t(locale, 'account.bundleUpgrade')}
+              </button>
+            </div>
+          )}
         </section>
       ) : (
         <section className="rounded-xl border border-accent/40 bg-surface/40 p-6" aria-label={t(locale, 'account.subscribe')}>
           <h2 className="text-lg font-semibold">{t(locale, 'account.subscribe')}</h2>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.noSubscription')}</p>
-          {isPaddleConfigured() ? (
+          {(useMidtrans ? Boolean(licenseApiUrl()) : isPaddleConfigured()) && subscribable.length > 0 ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {subscribable.map((plan) => (
                 <div key={plan.tierKey} className="rounded-lg border border-ink/10 p-4">
@@ -374,22 +475,25 @@ export default function AccountView({ locale }: Props) {
               {t(locale, 'account.checkoutUnavailable')}
             </p>
           )}
-          {subscribeError && (
-            <p className="mt-3 text-sm text-link" role="alert">
-              {t(locale, 'checkout.error')}
-            </p>
-          )}
-          {refreshState === 'checking' && (
-            <p className="mt-3 text-sm text-muted" role="status">
-              {t(locale, 'account.checkingSubscription')}
-            </p>
-          )}
-          {refreshState === 'pending' && (
-            <p className="mt-3 text-sm text-muted" role="status">
-              {t(locale, 'account.subscriptionPending')}
-            </p>
-          )}
         </section>
+      )}
+
+      {/* Checkout feedback shared by the subscribe section AND the bundle
+          upgrade card (a Plus subscriber's bundle purchase also polls /me). */}
+      {subscribeError && (
+        <p className="text-sm text-link" role="alert">
+          {t(locale, 'checkout.error')}
+        </p>
+      )}
+      {refreshState === 'checking' && (
+        <p className="text-sm text-muted" role="status">
+          {t(locale, 'account.checkingSubscription')}
+        </p>
+      )}
+      {refreshState === 'pending' && (
+        <p className="text-sm text-muted" role="status">
+          {t(locale, 'account.subscriptionPending')}
+        </p>
       )}
 
       <button
@@ -409,7 +513,7 @@ export default function AccountView({ locale }: Props) {
               // Ignore network errors — logout is idempotent server-side.
             }
           }
-          sessionStorage.removeItem('oz_session');
+          clearSession();
           window.location.href = `/${locale}`;
         }}
         className="text-sm text-muted transition hover:text-ink"

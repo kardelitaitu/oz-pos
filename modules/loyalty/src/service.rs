@@ -27,3 +27,7 @@ impl LoyaltyService {
         repo.get_gift_card_by_number(card_number)
     }
 }
+
+#[cfg(test)]
+#[path = "service_tests.rs"]
+mod tests;

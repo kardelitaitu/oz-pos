@@ -61,6 +61,106 @@ impl<'a> CurrencyRepository<'a> {
         Ok(out)
     }
 
+    /// List exchange rates for a specific currency pair, ordered by
+    /// effective date descending (most recent first).
+    ///
+    /// CUR-08: the checkout path must not load the full rate history; this
+    /// bounds the query to the pair the payment modal actually needs.
+    pub fn list_exchange_rates_for_pair(
+        &self,
+        from_currency: &str,
+        to_currency: &str,
+    ) -> Result<Vec<ExchangeRateRow>, CurrencyError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at
+             FROM exchange_rates
+             WHERE from_currency = ?1 AND to_currency = ?2
+             ORDER BY effective_date DESC, created_at DESC",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![from_currency, to_currency], |row| {
+            Ok(ExchangeRateRow {
+                id: row.get(0)?,
+                from_currency: row.get(1)?,
+                to_currency: row.get(2)?,
+                rate_millionths: row.get(3)?,
+                source: row.get(4)?,
+                effective_date: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
+    /// Return the exchange rate for a pair that is effective **on or
+    /// before** `as_of_date`, preferring the most recent effective date
+    /// (CUR-04). When no rate is effective on or before the date, returns
+    /// the earliest rate *after* the date as a forward-looking fallback
+    /// (a rate with a future effective date is still better than none when
+    /// the store just added it). Returns `None` when the pair has no rate
+    /// at all.
+    pub fn get_latest_exchange_rate(
+        &self,
+        from_currency: &str,
+        to_currency: &str,
+        as_of_date: &str,
+    ) -> Result<Option<ExchangeRateRow>, CurrencyError> {
+        // 1. Most recent rate effective on or before the requested date.
+        let on_or_before = self.conn.query_row(
+            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at
+             FROM exchange_rates
+             WHERE from_currency = ?1 AND to_currency = ?2 AND effective_date <= ?3
+             ORDER BY effective_date DESC, created_at DESC
+             LIMIT 1",
+            rusqlite::params![from_currency, to_currency, as_of_date],
+            |row| {
+                Ok(ExchangeRateRow {
+                    id: row.get(0)?,
+                    from_currency: row.get(1)?,
+                    to_currency: row.get(2)?,
+                    rate_millionths: row.get(3)?,
+                    source: row.get(4)?,
+                    effective_date: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            },
+        );
+        match on_or_before {
+            Ok(row) => return Ok(Some(row)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {}
+            Err(e) => return Err(e.into()),
+        }
+
+        // 2. Earliest forward-looking rate (rate added with a future date).
+        let forward = self.conn.query_row(
+            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at
+             FROM exchange_rates
+             WHERE from_currency = ?1 AND to_currency = ?2 AND effective_date > ?3
+             ORDER BY effective_date ASC, created_at ASC
+             LIMIT 1",
+            rusqlite::params![from_currency, to_currency, as_of_date],
+            |row| {
+                Ok(ExchangeRateRow {
+                    id: row.get(0)?,
+                    from_currency: row.get(1)?,
+                    to_currency: row.get(2)?,
+                    rate_millionths: row.get(3)?,
+                    source: row.get(4)?,
+                    effective_date: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            },
+        );
+        match forward {
+            Ok(row) => Ok(Some(row)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Create a new exchange rate entry.
     ///
     /// `rate_millionths` is the fixed-point exchange rate at a 6-decimal
@@ -427,6 +527,78 @@ mod tests {
         assert_eq!(rates[3].from_currency, "USD");
         assert_eq!(rates[2].to_currency, "EUR");
         assert_eq!(rates[3].to_currency, "GBP");
+    }
+
+    // ── CUR-04: latest-effective-rate selection ─────────────────────────
+
+    #[test]
+    fn get_latest_exchange_rate_prefers_most_recent_on_or_before() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "IDR", "360", "Rupiah", 0, "Rp");
+        let repo = CurrencyRepository::new(&conn);
+
+        // Two historical rates plus one future rate.
+        repo.create_exchange_rate("USD", "IDR", 15_000_000_000, "manual", "2026-06-01")
+            .unwrap();
+        repo.create_exchange_rate("USD", "IDR", 16_000_000_000, "manual", "2026-07-01")
+            .unwrap();
+        repo.create_exchange_rate("USD", "IDR", 17_000_000_000, "manual", "2026-08-01")
+            .unwrap();
+
+        // As of 2026-07-15 → the 2026-07-01 rate wins.
+        let r = repo
+            .get_latest_exchange_rate("USD", "IDR", "2026-07-15")
+            .unwrap()
+            .expect("rate must exist");
+        assert_eq!(r.rate_millionths, 16_000_000_000);
+        assert_eq!(r.effective_date, "2026-07-01");
+
+        // Exactly on the rate's date → that rate wins (inclusive bound).
+        let r = repo
+            .get_latest_exchange_rate("USD", "IDR", "2026-07-01")
+            .unwrap()
+            .expect("rate must exist");
+        assert_eq!(r.rate_millionths, 16_000_000_000);
+
+        // Before the oldest rate → forward-looking fallback to the earliest.
+        let r = repo
+            .get_latest_exchange_rate("USD", "IDR", "2026-05-01")
+            .unwrap()
+            .expect("forward fallback must exist");
+        assert_eq!(r.rate_millionths, 15_000_000_000);
+
+        // No rate for the pair → None.
+        assert!(
+            repo.get_latest_exchange_rate("USD", "EUR", "2026-07-15")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn list_exchange_rates_for_pair_bounds_to_pair_and_orders_recent_first() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "IDR", "360", "Rupiah", 0, "Rp");
+        seed_currency(&conn, "JPY", "392", "Yen", 0, "\u{a5}");
+        let repo = CurrencyRepository::new(&conn);
+
+        repo.create_exchange_rate("USD", "IDR", 15_000_000_000, "manual", "2026-06-01")
+            .unwrap();
+        repo.create_exchange_rate("USD", "IDR", 16_000_000_000, "manual", "2026-07-01")
+            .unwrap();
+        repo.create_exchange_rate("USD", "JPY", 149_000_000, "manual", "2026-07-01")
+            .unwrap();
+
+        let usd_idr = repo.list_exchange_rates_for_pair("USD", "IDR").unwrap();
+        assert_eq!(usd_idr.len(), 2, "only the USD→IDR pair rows");
+        assert_eq!(usd_idr[0].effective_date, "2026-07-01", "most recent first");
+        assert_eq!(usd_idr[1].effective_date, "2026-06-01", "older second");
+        assert!(
+            usd_idr.iter().all(|r| r.to_currency == "IDR"),
+            "pair-bounded query must not leak other pairs"
+        );
     }
 
     #[test]

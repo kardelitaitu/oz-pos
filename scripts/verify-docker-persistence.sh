@@ -123,6 +123,8 @@ MSYS_NO_PATHCONV=1 docker run -d --name "$LICENSE_CONTAINER" \
     -e "OZ_LICENSE_PRIVATE_KEY=$OZ_LICENSE_PRIVATE_KEY" \
     -e PADDLE_WEBHOOK_SECRET=dummy \
     -e PADDLE_PRICE_TIERS=pri_dummy:pro \
+    -e MIDTRANS_SERVER_KEY=dummy-server-key \
+    -e MIDTRANS_PRICE_TIERS=99000:free:month,149000:plus:month \
     -p "$LICENSE_PORT:8080" \
     "$LICENSE_IMG" >/dev/null
 
@@ -164,6 +166,8 @@ MSYS_NO_PATHCONV=1 docker run -d --name "$LICENSE_CONTAINER" \
     -e "OZ_LICENSE_PRIVATE_KEY=$OZ_LICENSE_PRIVATE_KEY" \
     -e PADDLE_WEBHOOK_SECRET=dummy \
     -e PADDLE_PRICE_TIERS=pri_dummy:pro \
+    -e MIDTRANS_SERVER_KEY=dummy-server-key \
+    -e MIDTRANS_PRICE_TIERS=99000:free:month,149000:plus:month \
     -p "$LICENSE_PORT:8080" \
     "$LICENSE_IMG" >/dev/null
 for i in $(seq 1 30); do

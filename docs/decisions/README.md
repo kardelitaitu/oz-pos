@@ -47,6 +47,8 @@ implementation-status walkthrough.
 | 36 | [Retail POS Product Attributes — Cost, Brand, Rack, Notes + Configurable Columns](./2026-08-11-adr36-retail-product-attributes.md) | Implemented (2026-08-12) |
 | 37 | [Product Popularity Index — Weighted Activity Score for Retail Sorting](./2026-08-11-adr37-product-popularity-index.md) | Implemented (2026-08-12) |
 | 38 | [Retail POS Row Context Menu — View Product Images in Browser](./2026-08-11-adr38-retail-row-context-menu-browser-images.md) | Implemented (2026-08-12) |
+| 39 | [Midtrans QRIS Subscription Payments (Phase 2)](./2026-08-18-adr39-midtrans-subscription-payments.md) | Approved — see TODO.md C3.1 |
+| 40 | [Multi-Terminal Peer Model](./2026-08-20-adr40-multi-terminal-peer-model.md) | Implemented (2026-08-20) |
 
 ## Research notes
 
@@ -75,6 +77,23 @@ implementation-status walkthrough.
   [Phase 8 KDS fan-out](./2026-08-09-topology-phase8-kds-fanout.md),
   [Phase 9 stock routing](./2026-08-09-topology-phase9-stock-routing.md),
   [Phase 10 multi-warehouse allocation](./2026-08-09-topology-phase10-multi-warehouse-allocation.md)
+
+## Trial & Billing Path — Cross-Reference
+
+The trial lifecycle, license activation, and payment webhooks span four ADRs.
+This table summarizes each ADR's implementation status and deviations from
+the original design, so a reader can trace the shipped behavior back to the
+authoritative record.
+
+| ADR | Title | Status | Deviations from Original Design |
+|-----|-------|--------|--------------------------------|
+| [#5](./2026-07-10-subscription-tier-entitlement.md) | Subscription Tier & Entitlement Architecture | Superseded for tier lineup/quotas by `subscription-tiers.md`; mechanism still valid | Tier lineup updated to Free · Plus · Pro · Premium · Enterprise (ADR #5 had Free / Pro / Premium / Enterprise). Quota values migrated in `subscription.rs` (C0.1). |
+| [#9](./2026-07-10-license-server.md) | License Server Architecture (PocketBase on Northflank) | Implemented (2026-07-15) | **Dev 1:** `/status` changed from `GET /{tenant_id}` to `POST` with `Authorization: Bearer` auth (avoids leaking api_key in URLs). **Dev 2:** `trial_registrations` schema updated with `tenant_id` relation and `macos`/`unknown` platform values. |
+| [#23](./2026-07-20-free-trial-lifecycle-and-license-activation-workflow.md) | Free Trial Lifecycle & License Activation Workflow | Re-scoped by `subscription-tiers.md` §4 | **Dev 1:** Segmented trials shipped (14-day Plus general / 14-day Pro restaurant-cafe / 30-day Pro enterprise-referral). **Dev 2:** Paddle `custom_data` contract documented (`email` + `bundle` + `phone`; vertical not carried). **Dev 3:** Hardware-fingerprint trial lock shipped end-to-end (`trial_registrations` + `POST /license/trial` + `enforceTrialLock` + client `get_hardware_fingerprint`). |
+| [#39](./2026-08-18-adr39-midtrans-subscription-payments.md) | Midtrans QRIS Subscription Payments (Phase 2) | Implemented (2026-08-18) | **Dev 1:** Signature is plain SHA-512 (not HMAC-SHA512). **Dev 2:** Midtrans custom-field contract documented (`custom_field1` tier, `custom_field2` email, `custom_field3` period, `custom_field4` bundle). **Dev 3:** `custom_field3` period cross-checked against price map. **Dev 4:** Amount-authoritative tier resolution (amount → map lookup is primary; custom_field1 cross-checked). **Dev 5:** Failed-payment grace via `calculateGraceUntil`. **Dev 6:** Dedup by `transaction_id` only. **Dev 7:** Subscription-notification canonical string not implemented (falls through default branch). **Dev 8:** Webhook-minted key activation fast-path in `activate.go`. |
+
+> The `subscription-tiers.md` source-of-truth spec (§4 trial strategy, §3
+> quota matrix) and `TODO.md` Phase C track the implementation details.
 
 ## Conventions
 

@@ -99,6 +99,7 @@ pub(crate) fn topology_setting_key(branch_id: Option<&str>) -> Result<String, Ap
     Ok(format!("{TOPOLOGY_SETTING_KEY}/{branch_id}"))
 }
 
+/// Test convenience wrapper: save a topology envelope under an explicit key.
 #[cfg(test)]
 pub(crate) fn save_topology_json_at_key(
     conn: &Connection,
@@ -109,6 +110,14 @@ pub(crate) fn save_topology_json_at_key(
     save_topology_json_at_key_with_revision(conn, nodes, wires, setting_key, &[], None, None)
 }
 
+/// Save a versioned topology envelope under a settings key.
+///
+/// Runs the semantic-ownership and diagram-payload gates, then writes the
+/// diagram and its compiled runtime plan in one IMMEDIATE transaction,
+/// bumping the revision. With `expected_revision`, a concurrent writer that
+/// committed first aborts this save with a `topology-revision-conflict`.
+/// When `request` is given, the request ledger is persisted and the Apply
+/// recovery journal is cleared in the same transaction.
 pub(crate) fn save_topology_json_at_key_with_revision(
     conn: &Connection,
     nodes: Vec<Value>,
@@ -237,6 +246,7 @@ pub(crate) fn restore_topology_setting(
     Ok(())
 }
 
+/// Persist the Apply compensation journal for crash-recovery replay.
 pub(crate) fn persist_topology_recovery(
     conn: &Connection,
     recovery: &TopologyApplyRecovery,
@@ -249,6 +259,7 @@ pub(crate) fn persist_topology_recovery(
     Ok(())
 }
 
+/// Remove the Apply compensation journal once both databases are settled.
 pub(crate) fn clear_topology_recovery(conn: &Connection) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
     oz_core::Settings::remove(&tx, TOPOLOGY_APPLY_RECOVERY_KEY)?;
@@ -274,6 +285,10 @@ pub async fn recover_pending_topology_apply_at_startup(state: &AppState) -> Resu
     recover_pending_topology_apply(state, &expected_store_id).await
 }
 
+/// Replay or compensate a pending cross-database Apply for one store.
+///
+/// Shared by the startup recovery daemon and the tests; verifies the journal
+/// belongs to the expected store before touching either database.
 pub(crate) async fn recover_pending_topology_apply(
     state: &AppState,
     expected_store_id: &str,
@@ -467,6 +482,7 @@ pub(crate) fn validate_apply_gate(
     validate_diagram_payloads(nodes, wires)
 }
 
+/// Enforce the subscription-tier warehouse count quota for a topology save.
 pub(crate) fn validate_warehouse_quota(
     nodes: &[Value],
     tier: &oz_core::subscription::SubscriptionTier,
@@ -655,18 +671,28 @@ pub(crate) fn validate_topology_structure(
     Ok(())
 }
 
-/// Serialise and persist topology data to the settings store.
+/// Test-only legacy compat: serialise typed topology payloads to the
+/// settings store under the unscoped `oz-pos/topology` key.
 ///
 /// Writes the nodes + wires payloads as JSON under the
 /// `oz-pos/topology` key. Any previous topology is overwritten.
 /// The write is wrapped in a transaction to satisfy the project
 /// rule that all database writes must occur inside a transaction.
 ///
+/// Kept under `cfg(test)`: production topology persistence is exclusively
+/// `apply_topology_diff` (revision-guarded, semantic-gated, journaled).
+/// This helper round-trips the legacy typed payloads for the unit tests
+/// without exposing a second production write path.
+///
 /// # Validation
 ///
-/// - Wire IDs must be unique within the topology.
-/// - Wire `from_node_id` and `to_node_id` must reference existing nodes.
-pub fn save_topology_data(
+/// Structural validation is delegated to [`validate_topology_structure`]
+/// after the null-port normalization, so the validator sees the exact
+/// values that will be stored: node and wire IDs must be unique, node
+/// types/directions/ports must be known, and wire endpoints must
+/// reference existing nodes.
+#[cfg(test)]
+pub(crate) fn save_topology_data(
     conn: &Connection,
     nodes: Vec<TopologyNodePayload>,
     wires: Vec<TopologyWirePayload>,
@@ -688,81 +714,16 @@ pub fn save_topology_data(
         })
         .collect();
 
-    // Validate wire IDs are unique.
-    let mut seen_wire_ids = std::collections::HashSet::new();
-    for wire in &wires {
-        if !seen_wire_ids.insert(&wire.id) {
-            return Err(AppError::Internal(format!(
-                "duplicate wire id: {}",
-                wire.id
-            )));
-        }
-    }
-
-    // Validate node IDs are unique.
-    //
-    // Without this, the `node_ids` HashSet built below would silently
-    // collapse duplicate node ids, making wire endpoint resolution
-    // ambiguous (a wire pointing at "n1" could resolve to either
-    // duplicate). This mirrors the wire-id uniqueness check.
-    let mut seen_node_ids = std::collections::HashSet::new();
-    for node in &nodes {
-        if !seen_node_ids.insert(&node.id) {
-            return Err(AppError::Internal(format!(
-                "duplicate node id: {}",
-                node.id
-            )));
-        }
-    }
-
-    // Validate node types are known (reject #[serde(other)]).
-    for node in &nodes {
-        if node.node_type == NodeType::Unknown {
-            return Err(AppError::Internal(format!(
-                "node {} has unknown type",
-                node.id
-            )));
-        }
-    }
-
-    // Validate wire directions and ports are known.
-    for wire in &wires {
-        if wire.direction == WireDirection::Unknown {
-            return Err(AppError::Internal(format!(
-                "wire {} has unknown direction",
-                wire.id
-            )));
-        }
-        if wire.from_port == Some(PortName::Unknown) {
-            return Err(AppError::Internal(format!(
-                "wire {} has unknown from_port",
-                wire.id
-            )));
-        }
-        if wire.to_port == Some(PortName::Unknown) {
-            return Err(AppError::Internal(format!(
-                "wire {} has unknown to_port",
-                wire.id
-            )));
-        }
-    }
-
-    // Validate wire endpoints reference existing nodes.
-    let node_ids: std::collections::HashSet<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
-    for wire in &wires {
-        if !node_ids.contains(wire.from_node_id.as_str()) {
-            return Err(AppError::Internal(format!(
-                "wire {} references unknown from_node_id: {}",
-                wire.id, wire.from_node_id
-            )));
-        }
-        if !node_ids.contains(wire.to_node_id.as_str()) {
-            return Err(AppError::Internal(format!(
-                "wire {} references unknown to_node_id: {}",
-                wire.id, wire.to_node_id
-            )));
-        }
-    }
+    // Reuse the shared structural validator (duplicate ids, unknown node
+    // types/directions/ports, ghost endpoints) instead of maintaining a
+    // second inline copy whose error text drifted from
+    // validate_topology_structure. The node-id uniqueness check matters
+    // beyond the duplicate-id error itself: without it the validator's
+    // `node_ids` set would silently collapse duplicate node ids, making
+    // wire endpoint resolution ambiguous (a wire pointing at "n1" could
+    // resolve to either duplicate). The null-port normalization above ran
+    // first, so these checks see the exact values that will be stored.
+    validate_topology_structure(&nodes, &wires)?;
 
     let data = TopologyData { nodes, wires };
     let json = serde_json::to_string(&serde_json::json!({
@@ -777,11 +738,13 @@ pub fn save_topology_data(
     Ok(())
 }
 
-/// Load and deserialise persisted topology data.
+/// Test-only legacy compat: load and deserialise persisted topology data.
 ///
 /// Returns `None` when no topology has been saved yet.
 ///
-/// Returns `None` when no topology has been saved yet.
+/// Kept under `cfg(test)` with [`save_topology_data`]: production loads go
+/// through the `load_topology` command, which serves the raw JSON so the
+/// frontend's documented load-time healing can run.
 ///
 /// # Why ports stay raw on the load side
 ///
@@ -793,7 +756,8 @@ pub fn save_topology_data(
 /// 'left'`) at every consumption point anyway. A load -> save cycle heals a
 /// legacy row via the save-side normalization; the load boundary stays raw.
 /// Pinned by the `..._preserves_raw_legacy_null_ports` test below.
-pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, AppError> {
+#[cfg(test)]
+pub(crate) fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, AppError> {
     let raw = oz_core::Settings::get(conn, TOPOLOGY_SETTING_KEY)?;
     match raw {
         Some(json) => {
@@ -818,258 +782,5 @@ pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, App
 
 // ── Unit tests for pure validation functions ─────────────────────
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::commands::topology::model::TOPOLOGY_RUNTIME_SETTING_KEY;
-    use crate::commands::topology::model::TOPOLOGY_SETTING_KEY;
-
-    // ── topology_setting_key ────────────────────────────────────
-
-    #[test]
-    fn topology_setting_key_none_returns_base() {
-        let key = topology_setting_key(None).unwrap();
-        assert_eq!(key, TOPOLOGY_SETTING_KEY);
-    }
-
-    #[test]
-    fn topology_setting_key_with_branch() {
-        let key = topology_setting_key(Some("main")).unwrap();
-        assert_eq!(key, format!("{TOPOLOGY_SETTING_KEY}/main"));
-    }
-
-    #[test]
-    fn topology_setting_key_empty_branch_rejected() {
-        assert!(topology_setting_key(Some("")).is_err());
-        assert!(topology_setting_key(Some("  ")).is_err());
-    }
-
-    #[test]
-    fn topology_setting_key_slash_rejected() {
-        assert!(topology_setting_key(Some("a/b")).is_err());
-    }
-
-    #[test]
-    fn topology_setting_key_control_chars_rejected() {
-        assert!(topology_setting_key(Some("branch test")).is_err());
-        assert!(topology_setting_key(Some("branchtest")).is_err());
-    }
-
-    #[test]
-    fn topology_setting_key_too_long_rejected() {
-        let long = "a".repeat(201);
-        assert!(topology_setting_key(Some(&long)).is_err());
-    }
-
-    #[test]
-    fn topology_setting_key_max_length_ok() {
-        let ok = "a".repeat(200);
-        assert!(topology_setting_key(Some(&ok)).is_ok());
-    }
-
-    // ── topology_runtime_setting_key ────────────────────────────
-
-    #[test]
-    fn topology_runtime_setting_key_base_returns_runtime_base() {
-        let key = topology_runtime_setting_key(TOPOLOGY_SETTING_KEY).unwrap();
-        assert_eq!(key, TOPOLOGY_RUNTIME_SETTING_KEY);
-    }
-
-    #[test]
-    fn topology_runtime_setting_key_branch_returns_runtime_branch() {
-        let branch_key = format!("{TOPOLOGY_SETTING_KEY}/west");
-        let key = topology_runtime_setting_key(&branch_key).unwrap();
-        assert_eq!(key, format!("{TOPOLOGY_RUNTIME_SETTING_KEY}/west"));
-    }
-
-    #[test]
-    fn topology_runtime_setting_key_invalid_prefix_rejected() {
-        assert!(topology_runtime_setting_key("wrong-prefix").is_err());
-    }
-
-    // ── validate_topology_structure ─────────────────────────────
-
-    fn make_node(id: &str, node_type: &str) -> TopologyNodePayload {
-        TopologyNodePayload {
-            id: id.into(),
-            node_type: node_type.into(),
-            name: format!("Name {id}"),
-            subtitle: None,
-            x: 0.0,
-            y: 0.0,
-            tier_requirement: None,
-            telemetry_badge: None,
-            telemetry_status: None,
-            metadata: None,
-        }
-    }
-
-    fn make_wire(id: &str, from: &str, to: &str) -> TopologyWirePayload {
-        TopologyWirePayload {
-            id: id.into(),
-            from_node_id: from.into(),
-            to_node_id: to.into(),
-            direction: WireDirection::OneWay,
-            label: None,
-            from_port: None,
-            to_port: None,
-        }
-    }
-
-    #[test]
-    fn validate_topology_empty_is_ok() {
-        assert!(validate_topology_structure(&[], &[]).is_ok());
-    }
-
-    #[test]
-    fn validate_topology_single_node_no_wires() {
-        let nodes = vec![make_node("n1", "store")];
-        assert!(validate_topology_structure(&nodes, &[]).is_ok());
-    }
-
-    #[test]
-    fn validate_topology_valid_wire() {
-        let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
-        let wires = vec![make_wire("w1", "n1", "n2")];
-        assert!(validate_topology_structure(&nodes, &wires).is_ok());
-    }
-
-    #[test]
-    fn validate_topology_duplicate_node_id_rejected() {
-        let nodes = vec![make_node("n1", "store"), make_node("n1", "workspace")];
-        let err = validate_topology_structure(&nodes, &[]).unwrap_err();
-        assert!(format!("{err}").contains("duplicate node id"));
-    }
-
-    #[test]
-    fn validate_topology_unknown_node_type_rejected() {
-        let nodes = vec![make_node("n1", "teleporter")];
-        let err = validate_topology_structure(&nodes, &[]).unwrap_err();
-        assert!(format!("{err}").contains("unknown type"));
-    }
-
-    #[test]
-    fn validate_topology_duplicate_wire_id_rejected() {
-        let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
-        let wires = vec![make_wire("w1", "n1", "n2"), make_wire("w1", "n2", "n1")];
-        let err = validate_topology_structure(&nodes, &wires).unwrap_err();
-        assert!(format!("{err}").contains("duplicate wire id"));
-    }
-
-    #[test]
-    fn validate_topology_unknown_wire_direction_rejected() {
-        let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
-        let mut wire = make_wire("w1", "n1", "n2");
-        wire.direction = WireDirection::Unknown;
-        let err = validate_topology_structure(&nodes, &[wire]).unwrap_err();
-        assert!(format!("{err}").contains("unknown direction"));
-    }
-
-    #[test]
-    fn validate_topology_unknown_port_rejected() {
-        let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
-        let mut wire = make_wire("w1", "n1", "n2");
-        wire.from_port = Some(PortName::Unknown);
-        let err = validate_topology_structure(&nodes, &[wire]).unwrap_err();
-        assert!(format!("{err}").contains("unknown port"));
-    }
-
-    #[test]
-    fn validate_topology_wire_references_unknown_node() {
-        let nodes = vec![make_node("n1", "store")];
-        let wires = vec![make_wire("w1", "n1", "nonexistent")];
-        let err = validate_topology_structure(&nodes, &wires).unwrap_err();
-        assert!(
-            format!("{err}").contains("unknown from_node_id")
-                || format!("{err}").contains("unknown to_node_id")
-        );
-    }
-
-    #[test]
-    fn validate_topology_valid_wire_with_ports() {
-        let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
-        let mut wire = make_wire("w1", "n1", "n2");
-        wire.from_port = Some(PortName::Right);
-        wire.to_port = Some(PortName::Left);
-        wire.direction = WireDirection::TwoWay;
-        assert!(validate_topology_structure(&nodes, &[wire]).is_ok());
-    }
-
-    // ── validate_warehouse_quota ────────────────────────────────
-
-    fn wh_node(id: &str) -> Value {
-        serde_json::json!({"id": id, "type": "warehouse", "name": "WH", "x": 0, "y": 0})
-    }
-
-    fn store_node_val(id: &str) -> Value {
-        serde_json::json!({"id": id, "type": "store", "name": "Store", "x": 0, "y": 0})
-    }
-
-    #[test]
-    fn validate_warehouse_quota_no_warehouses_always_ok() {
-        use oz_core::subscription::SubscriptionTier;
-        let nodes = vec![store_node_val("n1")];
-        assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Free).is_ok());
-        assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Pro).is_ok());
-    }
-
-    #[test]
-    fn validate_warehouse_quota_free_tier_one_warehouse() {
-        use oz_core::subscription::SubscriptionTier;
-        let nodes = vec![wh_node("n1")];
-        assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Free).is_ok());
-    }
-
-    #[test]
-    fn validate_warehouse_quota_free_tier_two_warehouses_rejected() {
-        use oz_core::subscription::SubscriptionTier;
-        let nodes = vec![wh_node("n1"), wh_node("n2")];
-        let err = validate_warehouse_quota(&nodes, &SubscriptionTier::Free).unwrap_err();
-        assert!(format!("{err}").contains("quota exceeded"));
-    }
-
-    #[test]
-    fn validate_warehouse_quota_no_limit_for_tier_without_cap() {
-        use oz_core::subscription::SubscriptionTier;
-        let nodes: Vec<Value> = (0..100).map(|i| wh_node(&format!("w{i}"))).collect();
-        assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Pro).is_ok());
-    }
-
-    // ── validate_diagram_payloads ───────────────────────────────
-
-    #[test]
-    fn validate_diagram_payloads_empty_is_ok() {
-        assert!(validate_diagram_payloads(&[], &[]).is_ok());
-    }
-
-    #[test]
-    fn validate_diagram_payloads_valid_node_wire() {
-        let nodes = vec![serde_json::json!({"id":"n1","type":"store","name":"S","x":0,"y":0})];
-        let wires = vec![];
-        assert!(validate_diagram_payloads(&nodes, &wires).is_ok());
-    }
-
-    #[test]
-    fn validate_diagram_payloads_invalid_node_type_rejected() {
-        let nodes = vec![serde_json::json!({"id":"n1","type":"teleporter","name":"S","x":0,"y":0})];
-        let err = validate_diagram_payloads(&nodes, &[]).unwrap_err();
-        assert!(
-            format!("{err}").contains("unknown type")
-                || format!("{err}").contains("invalid topology")
-        );
-    }
-
-    #[test]
-    fn validate_diagram_payloads_branch_location_mapped_to_store() {
-        // "branch-location" should be silently mapped to "store"
-        let nodes =
-            vec![serde_json::json!({"id":"n1","type":"branch-location","name":"S","x":0,"y":0})];
-        assert!(validate_diagram_payloads(&nodes, &[]).is_ok());
-    }
-
-    #[test]
-    fn validate_diagram_payloads_invalid_json_rejected() {
-        let nodes = vec![serde_json::json!({"missing_fields": true})];
-        let err = validate_diagram_payloads(&nodes, &[]).unwrap_err();
-        assert!(format!("{err}").contains("invalid topology nodes"));
-    }
-}
+#[path = "persistence_tests.rs"]
+mod tests;

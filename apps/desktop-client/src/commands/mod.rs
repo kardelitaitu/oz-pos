@@ -47,6 +47,10 @@ pub mod inventory;
 pub mod inventory_counts;
 /// Kitchen Display System commands.
 pub mod kds;
+/// KDS device management commands (register, list, status, ack).
+pub mod kds_device;
+/// KDS order routing resolution.
+pub mod kds_routing;
 /// License commands.
 pub mod license;
 /// Loyalty / rewards commands.
@@ -87,6 +91,8 @@ pub mod staff;
 pub mod stock_transfers;
 /// Store-profile commands.
 pub mod store_profiles;
+/// Subscription capability commands (C2.2 tier gates).
+pub mod subscription;
 /// Sync commands.
 pub mod sync;
 /// Table management commands.

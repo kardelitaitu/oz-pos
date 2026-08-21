@@ -1,12 +1,84 @@
 # ADR #23: Free Trial Lifecycle & License Activation Workflow
 
-- **Status**: Approved
+- **Status**: Approved — ⚠️ **RE-SCOPED by `subscription-tiers.md` §4 (FINAL, approved 2026-08-17)**
 - **Date**: 2026-07-20
 - **Author**: Technical Architecture & Security Team
 - **Related Documents**:
   - `docs/decisions/2026-07-10-license-server.md` (ADR #9: License Server Architecture)
-  - `docs/decisions/2026-07-10-subscription-tier-entitlement.md` (ADR #18: Tier Entitlements)
+  - `docs/decisions/2026-07-10-subscription-tier-entitlement.md` (ADR #5: Tier Entitlements)
   - `docs/specs/hardware-fingerprint-trial-lock.md` (`SPEC-2026-TRIAL-LOCK`: Anti-Abuse Trial Lock)
+  - `subscription-tiers.md` §4 (trial & conversion strategy — the replacement)
+
+> **Re-scope note:** the flat **90-day full-product trial** described below is
+> superseded by [`subscription-tiers.md`](../guides/subscription-tiers.md) §4: the
+> Free tier is **free forever** (1 store / 1 register / 1 warehouse / 30-day
+> sales history), and paid trials are **segmented by signup vertical** —
+> 14-day Plus trial for general signups, 14-day Pro trial for
+> restaurant/cafe signups, 30-day Pro trial for enterprise referrals.
+> `TODO.md` C2.1 tracked the implementation (license-server `trial_vertical`
+> field + segmented minting, shipped 2026-08-18).
+>
+> **Deviation 1 (shipped 2026-08-18, then SUPERSEDED):** an earlier version
+> of this note recorded the hardware-fingerprint trial lock (§3.1,
+> `SPEC-2026-TRIAL-LOCK`) as unimplemented. That deviation is now closed —
+> see Deviation 3 below, which documents what actually shipped.
+>
+> **Deviation 2 (shipped, verified against the code):** the Paddle webhook's
+> `custom_data` contract mirrors the Midtrans custom-field contract (ADR #39
+> note 2) — the register-first checkout embeds **`email`** (the account email
+> the webhook upserts the tenant by, `paddle_webhook.go`
+> `resolvePaddleEmail`) and, from C3.2, **`bundle`** (cross-checked against
+> the price map's bundle segment, never trusted alone); `phone` may ride
+> along when the Paddle checkout collects it. The signup **vertical is not
+> carried** on Paddle purchases — trial segmentation is a desktop-activation
+> concern (`trial_vertical`, see the segmented-minting note above), the same
+> decision ADR #39 made for Midtrans.
+>
+> **Deviation 3 (shipped 2026-08-18, verified against the code):** the
+> hardware-fingerprint trial lock now ships end-to-end:
+>
+> - **Server** — the `trial_registrations` collection (pb_schema.json,
+>   keyed by `hardware_fingerprint` with a unique index, plus the
+>   idempotent `ensureTrialRegistrations` migration for existing
+>   deployments); `POST /api/v1/license/trial` (`trial.go`) registers a
+>   device's first claim and answers **403 `TRIAL_ALREADY_CLAIMED`** on
+>   every later attempt, permanently; and the activation-time gate
+>   `enforceTrialLock` (`activate.go`) fires **before** the machine-count
+>   checks at mint time for trial keys, so a client that skips the endpoint
+>   is still locked. Same-tenant re-activations (re-install) pass; a
+>   different tenant on the same hardware is the reset-abuse case and gets
+>   the 403.
+> - **Client** — the desktop app computes the device-level fingerprint
+>   `hw_` + SHA-256 of the same hardware anchor `machine_id` derives from
+>   (Windows MachineGuid / motherboard UUID via wmic, `/etc/machine-id` on
+>   Linux/macOS) via `get_hardware_fingerprint()` (`license.rs`) and sends
+>   it on `/api/v1/license/activate` (`hardware_fingerprint` field,
+>   `ActivateLicenseRequest`). Unlike `machine_id` (truncated to 15 chars,
+>   persisted per-installation), the fingerprint is the full digest in the
+>   spec's canonical form, so a wiped Settings table still yields the same
+>   value on the same device.
+> - **Trust boundary preserved** — the lock fires only for **trial keys**;
+>   paid keys are never gated (a paying customer is never locked out by the
+>   trial gate). The server also accepts the 15-char `machine_id` form when
+>   no `hw_` fingerprint is sent, so legacy clients degrade to the old
+>   per-installation identifier rather than bricking activation.
+> - **Remaining gaps (accepted):** a host with no queryable hardware anchor
+>   (e.g. a minimal container) falls back to a random UUID that is stable
+>   only within a process; and the claim is permanent by design — even an
+>   expired trial keeps the device claimed, which is the intended anti-reset
+>   property but means a device can never be re-trialled (the spec's
+>   `trial_registrations` collection matches this). The earlier "nothing
+>   stops one device from re-trialling under a fresh email" gap is closed
+>   for devices with a stable hardware anchor.
+>
+> **Deviation 4 (shipped 2026-08-18, verified against the code):** the
+> Paddle webhook's `PADDLE_PRICE_TIERS` format was extended from
+> `price_id:tier_key[:bundle_id]` to `price_id:tier_key:period[:bundle_id]`
+> (period = "month" or "year") to mirror the Midtrans
+> `custom_field3` period cross-check (ADR #39 Deviation 3). The webhook
+> now cross-checks `billing_cycle.interval` against the price-map period
+> so a tampered interval can't drift the expiry cadence. Backward
+> compatibility: 2-part entries without a period default to "year".
 
 ---
 
@@ -89,7 +161,7 @@ When a merchant enters a purchased license key:
 1. **Request**: POS sends `POST /api/v1/license/activate` with `{ key, email, phone, machine_id, api_key }`.
 2. **Server Validation**:
    - PocketBase validates key validity, status (`unused`), and tenant ownership.
-   - Upgrades tenant tier from `Free` to `OneTime`, `Standard`, `Pro`, or `Enterprise`.
+   - Upgrades tenant tier from `Free` to `Plus`, `Pro`, `Premium`, or `Enterprise` (the `OneTime` / `Standard` legacy names are superseded — see the re-scope note above).
    - Issues a new signed RSA payload with updated quotas (`max_stores`, `max_pos_instances`).
 3. **Instant In-Memory & Local Database Update**:
    - `oz-core` validates the RSA public key signature.

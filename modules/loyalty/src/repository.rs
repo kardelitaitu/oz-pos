@@ -74,3 +74,7 @@ impl<'a> LoyaltyRepository<'a> {
         }))
     }
 }
+
+#[cfg(test)]
+#[path = "repository_tests.rs"]
+mod tests;

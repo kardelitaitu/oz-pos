@@ -6,6 +6,7 @@
 
 - Maintain documentation integrity. Preserve all existing comments and docstrings unless explicitly modified.
 - Never switch local branches unless explicitly asked by the user.
+- Never create new branches unless explicitly asked by the user.
 - **Use codebase-memory-mcp for code exploration.** Before reading files or grepping for symbols, query the knowledge graph via `codebase_memory_mcp` (search_graph, trace_path, get_code_snippet). This saves tokens by avoiding full-file reads and provides structural context that grep cannot.
 
 
@@ -81,7 +82,7 @@ npm ci --no-audit --no-fund
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at the current release (`0.0.27`).** Never change the version number
+- **Version is locked at the current release (`0.0.28`).** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 

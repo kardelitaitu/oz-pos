@@ -1,0 +1,15 @@
+---
+export function getStaticPaths() {
+  return [{ params: { locale: 'en' } }, { params: { locale: 'id' } }];
+}
+import Base from '../../layouts/Base.astro';
+import VerticalLanding from '../../components/VerticalLanding.astro';
+import { t } from '../../i18n';
+
+const locale = Astro.currentLocale ?? 'en';
+const pageTitle = `OZ-POS — ${t(locale, 'vertical.minimarket.title')}`;
+---
+
+<Base title={pageTitle} description={t(locale, 'vertical.minimarket.tagline')}>
+  <VerticalLanding vertical="minimarket" />
+</Base>

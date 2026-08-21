@@ -208,6 +208,97 @@ func TestHealth_PaddleStatus_Missing(t *testing.T) {
 	}
 }
 
+// ── Midtrans gate status (C3.1, DEPLOY.md §12) ───────────────────────
+
+func TestHealth_MidtransStatus_Configured(t *testing.T) {
+	t.Setenv("MIDTRANS_SERVER_KEY", "Mid-server-test-key")
+	t.Setenv("MIDTRANS_PRICE_TIERS", "49000:plus:month,500000:plus:year")
+
+	rec := getHealth(t, "/api/health")
+	var body struct {
+		Midtrans struct {
+			ServerKeyConfigured  bool   `json:"server_key_configured"`
+			PriceTiersConfigured bool   `json:"price_tiers_configured"`
+			PriceTiersMappings   int    `json:"price_tiers_mappings"`
+			Error                string `json:"error"`
+		} `json:"midtrans"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v; body: %s", err, rec.Body.String())
+	}
+	if !body.Midtrans.ServerKeyConfigured {
+		t.Error("expected midtrans.server_key_configured=true")
+	}
+	if !body.Midtrans.PriceTiersConfigured {
+		t.Error("expected midtrans.price_tiers_configured=true")
+	}
+	if body.Midtrans.PriceTiersMappings != 2 {
+		t.Errorf("expected 2 amount→tier mappings, got %d", body.Midtrans.PriceTiersMappings)
+	}
+	if body.Midtrans.Error != "" {
+		t.Errorf("expected no midtrans error, got %q", body.Midtrans.Error)
+	}
+}
+
+func TestHealth_MidtransStatus_Missing(t *testing.T) {
+	t.Setenv("MIDTRANS_SERVER_KEY", "")
+	t.Setenv("MIDTRANS_PRICE_TIERS", "")
+
+	rec := getHealth(t, "/api/health")
+	var body struct {
+		Midtrans struct {
+			ServerKeyConfigured  bool   `json:"server_key_configured"`
+			PriceTiersConfigured bool   `json:"price_tiers_configured"`
+			PriceTiersMappings   int    `json:"price_tiers_mappings"`
+			Error                string `json:"error"`
+		} `json:"midtrans"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v; body: %s", err, rec.Body.String())
+	}
+	if body.Midtrans.ServerKeyConfigured {
+		t.Error("expected midtrans.server_key_configured=false when the server key is unset")
+	}
+	if body.Midtrans.PriceTiersConfigured {
+		t.Error("expected midtrans.price_tiers_configured=false when tiers are unset")
+	}
+	if body.Midtrans.PriceTiersMappings != 0 {
+		t.Errorf("expected 0 mappings when tiers are unset, got %d", body.Midtrans.PriceTiersMappings)
+	}
+	if !strings.Contains(body.Midtrans.Error, "MIDTRANS_PRICE_TIERS") {
+		t.Errorf("expected the tiers error to surface, got %q", body.Midtrans.Error)
+	}
+}
+
+func TestHealth_MidtransStatus_ServerKeyOnly(t *testing.T) {
+	// The alert scenario the runbook cares about: the server key is present
+	// but the price map was dropped/rotated — the gate must flag the tiers
+	// piece without hiding that the key is fine.
+	t.Setenv("MIDTRANS_SERVER_KEY", "Mid-server-test-key")
+	t.Setenv("MIDTRANS_PRICE_TIERS", "")
+
+	rec := getHealth(t, "/api/health")
+	var body struct {
+		Midtrans struct {
+			ServerKeyConfigured  bool   `json:"server_key_configured"`
+			PriceTiersConfigured bool   `json:"price_tiers_configured"`
+			Error                string `json:"error"`
+		} `json:"midtrans"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v; body: %s", err, rec.Body.String())
+	}
+	if !body.Midtrans.ServerKeyConfigured {
+		t.Error("expected midtrans.server_key_configured=true with the server key set")
+	}
+	if body.Midtrans.PriceTiersConfigured {
+		t.Error("expected midtrans.price_tiers_configured=false when tiers are unset")
+	}
+	if !strings.Contains(body.Midtrans.Error, "MIDTRANS_PRICE_TIERS") {
+		t.Errorf("expected the tiers error to surface, got %q", body.Midtrans.Error)
+	}
+}
+
 func TestHealth_RSAStatus(t *testing.T) {
 	// setupDirectApp calls initPrivateKey, so the key is loaded.
 	rec := getHealth(t, "/api/health")

@@ -47,6 +47,9 @@ staff-error-display-name-required = Display name is required
 staff-error-role-required = Please select a role
 staff-error-pin-length = PIN must be at least 4 characters
 staff-error-save-failed = Failed to save staff member
+# C1.1: subscription tier staff-user limit reached (Free 1 / Plus 5 / Pro 20).
+staff-error-quota-limit = Your plan allows a limited number of staff. Upgrade to add more team members.
+staff-upgrade-cta = Upgrade plan
 staff-error-workspaces-failed = Failed to load workspace settings
 staff-table-aria = Staff members
 staff-field-username-aria = Username
@@ -182,3 +185,7 @@ staff-error-phone-invalid = Phone must be in +country number format.
 staff-error-national-id-invalid = National ID must be 9 digits (SSN) or 16 digits (NIK).
 staff-error-pay-invalid = Enter a positive amount.
 staff-error-dob-invalid = Use YYYY-MM-DD format.
+
+# C2.2: Pro→Premium approaching-limit banner (16+ staff, Pro caps at 20).
+staff-limit-approaching-premium = You are nearing the Pro plan's 20-staff limit. Upgrade to Premium for unlimited staff.
+staff-limit-approaching-premium-cta = Upgrade to Premium

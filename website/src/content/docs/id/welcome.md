@@ -3,7 +3,7 @@ title: Selamat Datang di OZ-POS
 description: Apa itu OZ-POS dan bagaimana dokumentasi ini disusun.
 category: gettingStarted
 order: 1
-updated: "2026-08-16"
+updated: "2026-08-17"
 ---
 
 ## Apa itu OZ-POS?
@@ -21,9 +21,8 @@ perjalanan, dan langsung mendukung bahasa Inggris dan Bahasa Indonesia.
 - **Offline-first** — koneksi yang hilang tidak pernah memblokir transaksi.
   Tetap bekerja tanpa koneksi sama sekali, dan semuanya menyusul saat Anda
   kembali online.
-- **Tunai hari ini, QRIS dan kartu segera hadir** — terima tunai sekarang,
-  dengan QRIS, kartu, dan e-wallet dalam perjalanan, disesuaikan untuk
-  pasar Indonesia.
+- **Native QRIS** — terima pembayaran QR Indonesia secara native, dengan
+  kartu dan e-wallet dalam perjalanan, disesuaikan untuk pasar Indonesia.
 - **Ruang Kerja** — satu aplikasi, banyak peran: kasir untuk ritel atau
   layanan meja, layar dapur, inventaris, dan admin dalam satu instalasi.
 - **Sinkron cloud** — semua register melihat produk, harga, dan stok yang
@@ -31,14 +30,15 @@ perjalanan, dan langsung mendukung bahasa Inggris dan Bahasa Indonesia.
 
 ## Yang bisa Anda lakukan
 
-- **Menjual** — transaksi ritel atau layanan meja, terima tunai hari ini, dengan QRIS dan
-  kartu segera hadir, dan bagi hari menjadi shift kasir dengan jejak audit lengkap.
+- **Menjual** — transaksi ritel atau layanan meja, terima tunai dan
+  pembayaran QRIS, dan bagi hari menjadi shift kasir dengan jejak audit
+  lengkap.
 - **Mengelola stok** — inventaris dengan gudang, transfer, stok opname, dan
   pesanan pembelian.
 - **Menjalankan tim** — peran staf dari pemilik hingga auditor, rekonsiliasi
   shift, dan log audit.
-- **Memutuskan dengan data** — dasbor laporan, laporan penjualan, menu
-  engineering, dan analitik.
+- **Memutuskan dengan data** — dasbor penjualan harian, laporan penjualan,
+  menu engineering, dan analitik.
 - **Berkembang** — loyalitas, kartu hadiah, promosi, kiosk layanan mandiri,
   dan topologi multi-toko.
 
@@ -50,21 +50,21 @@ dikelola sebagai terminal — daftarkan, ikat ke toko dan ruang kerja, lalu
 sesuaikan fitur per perangkat. Lihat [Terminal](../terminals/) dan
 [Toko & Topologi](../stores/).
 
-## Masa uji coba & paket
+## Paket & harga
 
-Masa uji coba 90 hari membuka seluruh produk. Paket berbayar menambahkan
-lebih banyak toko, register, dan gudang, plus sinkron cloud dan otomasi.
-Lihat [Lisensi & Paket](../licensing/).
+OZ-POS **gratis selamanya** untuk memulai — satu toko, satu register, satu
+gudang, dan riwayat penjualan 30 hari. Paket berbayar menambahkan lebih
+banyak toko, register, dan gudang, plus pembayaran QRIS, sinkron cloud, dan
+otomasi. Lihat [Lisensi & Paket](../licensing/).
 
 ## Mulai dari sini
 
-1. [Pasang OZ-POS](../installation/) di Windows — masa uji coba gratis
-   90 hari dimulai saat peluncuran pertama, tanpa perlu akun. Platform lain
-   segera hadir.
+1. [Pasang OZ-POS](../installation/) di Windows — paket gratis dimulai saat
+   peluncuran pertama, tanpa perlu akun. Platform lain segera hadir.
 2. Selesaikan wizard pengaturan — nama usaha dan mata uang bawaan.
 3. [Transaksi pertama Anda](../first-sale/) — bahkan tanpa internet.
-4. [Aktifkan kunci lisensi](../activation/) saat siap berpindah dari masa
-   uji coba.
+4. [Aktifkan kunci lisensi](../activation/) saat siap membuka lebih banyak
+   toko, pembayaran QRIS, dan sinkron cloud.
 
 ## Cara dokumentasi disusun
 

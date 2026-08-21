@@ -99,7 +99,7 @@ describe('SalesHistoryScreen', () => {
   // ── Rendering ─────────────────────────────────────────────────
 
   it('renders the title', async () => {
-    mockListSales.mockResolvedValue([]);
+    mockListSales.mockResolvedValue({ sales: [], salesHistoryCapped: false });
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Sales History')).toBeInTheDocument();
@@ -115,17 +115,37 @@ describe('SalesHistoryScreen', () => {
   });
 
   it('shows empty state when no sales exist', async () => {
-    mockListSales.mockResolvedValue([]);
+    mockListSales.mockResolvedValue({ sales: [], salesHistoryCapped: false });
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('No sales recorded yet')).toBeInTheDocument();
     });
   });
 
+  // ── C1.2 history-cap teaser ──────────────────────────────────
+
+  it('shows the 30-day history cap teaser with an upgrade CTA (C1.2)', async () => {
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: true });
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText(/more than 30 days of sales history/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /upgrade/i })).toBeInTheDocument();
+  });
+
+  it('hides the history cap teaser when the tier is unlimited (C1.2)', async () => {
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Alice').length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.queryByText(/more than 30 days of sales history/i)).not.toBeInTheDocument();
+  });
+
   // ── Table rendering ──────────────────────────────────────────
 
   it('displays sales in the table with cashier names', async () => {
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       // Cashier names appear in table cells AND the cashier filter dropdown.
@@ -138,7 +158,7 @@ describe('SalesHistoryScreen', () => {
   });
 
   it('shows status filter chips', async () => {
-    mockListSales.mockResolvedValue([]);
+    mockListSales.mockResolvedValue({ sales: [], salesHistoryCapped: false });
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('All')).toBeInTheDocument();
@@ -151,7 +171,7 @@ describe('SalesHistoryScreen', () => {
 
   it('filters sales by status when a filter chip is clicked', async () => {
     const user = userEvent.setup();
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
 
     await waitFor(() => {
@@ -173,7 +193,7 @@ describe('SalesHistoryScreen', () => {
   });
 
   it('shows search input and cashier dropdown', async () => {
-    mockListSales.mockResolvedValue([]);
+    mockListSales.mockResolvedValue({ sales: [], salesHistoryCapped: false });
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toBeInTheDocument();
@@ -183,7 +203,7 @@ describe('SalesHistoryScreen', () => {
   });
 
   it('shows export CSV button', async () => {
-    mockListSales.mockResolvedValue([]);
+    mockListSales.mockResolvedValue({ sales: [], salesHistoryCapped: false });
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Export CSV')).toBeInTheDocument();
@@ -192,7 +212,7 @@ describe('SalesHistoryScreen', () => {
 
   it('exports per-line cost and margin columns to CSV', async () => {
     const user = userEvent.setup();
-    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockListSales.mockResolvedValue({ sales: [sampleSales[0]!], salesHistoryCapped: false });
     mockGetSaleLineMargins.mockResolvedValue([
       {
         sale_line_id: 'line-1', sku: 'SKU-001', name: 'Widget', qty: 2,
@@ -233,7 +253,7 @@ describe('SalesHistoryScreen', () => {
 
   it('opens detail modal when View is clicked', async () => {
     const user = userEvent.setup();
-    mockListSales.mockResolvedValue(sampleSales);
+    mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
@@ -253,7 +273,7 @@ describe('SalesHistoryScreen', () => {
 
   it('shows line items in detail modal', async () => {
     const user = userEvent.setup();
-    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockListSales.mockResolvedValue({ sales: [sampleSales[0]!], salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
     mockGetSaleLineMargins.mockResolvedValue([]);
@@ -273,7 +293,7 @@ describe('SalesHistoryScreen', () => {
 
   it('shows cost and margin columns when the margin report loads', async () => {
     const user = userEvent.setup();
-    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockListSales.mockResolvedValue({ sales: [sampleSales[0]!], salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
     mockGetSaleLineMargins.mockResolvedValue([
@@ -301,7 +321,7 @@ describe('SalesHistoryScreen', () => {
 
   it('shows a negative margin in red for loss-leader lines', async () => {
     const user = userEvent.setup();
-    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockListSales.mockResolvedValue({ sales: [sampleSales[0]!], salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
     mockGetSaleLineMargins.mockResolvedValue([
@@ -327,7 +347,7 @@ describe('SalesHistoryScreen', () => {
 
   it('shows Reprint Receipt and Refund buttons in detail', async () => {
     const user = userEvent.setup();
-    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockListSales.mockResolvedValue({ sales: [sampleSales[0]!], salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
@@ -348,7 +368,7 @@ describe('SalesHistoryScreen', () => {
 
   it('opens refund modal when Refund is clicked in detail', async () => {
     const user = userEvent.setup();
-    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockListSales.mockResolvedValue({ sales: [sampleSales[0]!], salesHistoryCapped: false });
     mockGetSale.mockResolvedValue(sampleDetail);
     mockListRefunds.mockResolvedValue([]);
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);

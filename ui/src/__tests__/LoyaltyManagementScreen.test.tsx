@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
@@ -16,6 +16,8 @@ vi.mock('@/api/customers', () => ({
 }));
 
 import LoyaltyManagementScreen from '@/features/loyalty/LoyaltyManagementScreen';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
 import { listLoyaltyAccounts, listLoyaltyTiers, updateLoyaltyTier } from '@/api/loyalty';
 import { listCustomersScoped } from '@/api/customers';
 
@@ -413,5 +415,41 @@ describe('LoyaltyManagementScreen', () => {
       expect(screen.getByText('Please fill in all fields correctly')).toBeInTheDocument();
     });
     expect(mockUpdateTier).not.toHaveBeenCalled();
+  });
+});
+
+describe('C2.2 loyalty module teaser (Pro → Premium)', () => {
+  afterEach(() => {
+    vi.mocked(useSubscription).mockImplementation(() => ({
+      caps: null,
+      loading: false,
+      refresh: vi.fn(),
+    }));
+  });
+
+  it('locks the screen with an animated preview + upgrade CTA below Premium', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'pro', supportsLoyalty: false }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Loyalty is a Premium feature')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Upgrade to Premium')).toBeInTheDocument();
+    expect(screen.queryByText('Accounts')).not.toBeInTheDocument();
+  });
+
+  it('renders the live UI when the tier supports loyalty', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'premium', supportsLoyalty: true }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.queryByText('Loyalty is a Premium feature')).not.toBeInTheDocument();
+    });
   });
 });

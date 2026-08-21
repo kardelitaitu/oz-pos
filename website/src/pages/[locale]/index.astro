@@ -4,7 +4,7 @@ export function getStaticPaths() {
 }
 import Base from '../../layouts/Base.astro';
 import Hero from '../../components/Hero.astro';
-import PricingCard from '../../components/PricingCard.astro';
+import PricingPreviewCard from '../../components/PricingPreviewCard.astro';
 import { t, dict } from '../../i18n';
 import { pricingFor } from '../../content/pricing';
 import { getRelativeLocaleUrl } from 'astro:i18n';
@@ -12,13 +12,33 @@ import { getRelativeLocaleUrl } from 'astro:i18n';
 const locale = Astro.currentLocale ?? 'en';
 const pageTitle = `OZ-POS — ${t(locale, 'hero.title')}`;
 const features = (dict(locale).features as { items: { title: string; description: string }[] }).items;
-const pricing = pricingFor(locale).slice(0, 3); // trial, pro, premium
+const pricing = pricingFor(locale).slice(0, 3); // free, plus, pro
 const download = getRelativeLocaleUrl(locale, 'download');
 const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
+// Vertical entry points (subscription-tiers.md §5) — customers identify as
+// cafe owners / minimarket operators / warung owners, not tier names.
+const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
+const verticals = dict(locale).vertical as Record<(typeof verticalKeys)[number], { label: string }>;
 ---
 
 <Base title={pageTitle}>
   <Hero />
+
+  <!-- For your business (vertical entry points) -->
+  <section class="mx-auto max-w-6xl px-4 pb-4" aria-label={t(locale, 'vertical.otherTitle')}>
+    <div class="flex flex-wrap items-center justify-center gap-3">
+      {
+        verticalKeys.map((key) => (
+          <a
+            href={getRelativeLocaleUrl(locale, `untuk-${key}`)}
+            class="rounded-full border border-ink/10 px-4 py-2 text-sm text-muted transition hover:border-accent hover:text-ink"
+          >
+            {verticals[key].label}
+          </a>
+        ))
+      }
+    </div>
+  </section>
 
   <!-- Features -->
   <section class="mx-auto max-w-6xl px-4 py-16" aria-label={t(locale, 'features.title')}>
@@ -121,7 +141,7 @@ const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
       <p class="mt-2 text-muted">{t(locale, 'pricingPreview.subtitle')}</p>
     </div>
     <div class="mt-10 grid gap-6 md:grid-cols-3">
-      {pricing.map((tier) => <PricingCard tier={tier} />)}
+      {pricing.map((tier) => <PricingPreviewCard tier={tier} locale={locale} />)}
     </div>
     <div class="mt-8 text-center">
       <a href={pricingHref} class="text-sm font-semibold text-link hover:underline">

@@ -235,6 +235,11 @@ fn backup_restore_preserves_sales() {
             subtotal: price(450),
             tax_total: price(0),
             customer_id: None,
+            base_currency: None,
+            base_total_minor: None,
+            tender_rate_millionths: None,
+            tip_minor: 0,
+            service_charge_minor: 0,
             version: 1,
         };
 

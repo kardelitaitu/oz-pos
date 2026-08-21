@@ -3,7 +3,7 @@ title: Installation
 description: Install OZ-POS on Windows, macOS, or Linux.
 category: gettingStarted
 order: 2
-updated: "2026-08-16"
+updated: "2026-08-17"
 ---
 
 ## System requirements
@@ -38,8 +38,8 @@ the Start menu.
 ## First launch
 
 The setup wizard asks for your business name and default currency — both can
-be changed later in settings. The 90-day free trial starts on first launch;
-everything is unlocked from day one.
+be changed later in settings. The free plan starts on first launch; you can
+upgrade any time from Settings → License.
 
 ## Updates
 
@@ -52,4 +52,4 @@ reinstalled manually from the releases page.
 ## Next steps
 
 [Ring up your first sale](../first-sale/), or see [activation](../activation/)
-when you're ready to move past the trial.
+when you're ready to unlock more stores, QRIS payments, and cloud sync.

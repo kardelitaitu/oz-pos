@@ -1,3 +1,13 @@
+/*
+last audited 13-08-26 by RSA-Agent
+crate: foundation (percentage.rs) | status: SAFE | lint: CLEAN
+findings: MONEY-AUDIT-2 — apply_to/complement_apply_to use the x = 100q + r
+  decomposition, eliminating the spurious overflow of the intermediate product.
+  100% of i64::MAX now correctly returns i64::MAX. The arithmetic is total
+  (never returns None) for any i64 amount and any pct 0..=100. Option return
+  type retained for API stability.
+next: Phase 2 | perf: two extra mul/add; no branch.
+*/
 //! Percentage value object — a bounded 0–100 integer type.
 //!
 //! Use this instead of raw `i64`/`u8` wherever a percentage discount,
@@ -70,10 +80,29 @@ impl Percentage {
     /// E.g. `Percentage::new(10).apply_to(Money::from_major(20, …))`
     /// returns `200` (10% of 2000¢ = 200¢).
     ///
-    /// Returns `None` if the intermediate multiplication overflows `i64`.
+    /// Computed as `(x * p) / 100` **without a full-width product**, using
+    /// the identity `x = 100q + r  ⇒  (x*p)/100 = q*p + (r*p)/100`. This is
+    /// exact under Rust's truncating division and never overflows for any
+    /// `i64` amount and any percentage `0..=100` (both terms are bounded by
+    /// `|x|` and 9900 respectively). The previous `checked_mul(p)`
+    /// implementation spuriously returned `None` for amounts where the
+    /// *product* overflowed but the *result* fit — e.g. 100% of `i64::MAX`
+    /// (the largest representable discount) failed instead of returning
+    /// `i64::MAX`.
+    ///
+    /// `Option` is retained for API stability; the arithmetic is total.
     #[must_use]
     pub fn apply_to(self, money: Money) -> Option<Money> {
-        money.checked_mul(self.0 as i64)?.checked_div(100)
+        let x = money.minor_units;
+        let p = i64::from(self.0);
+        let q = x / 100;
+        let r = x % 100;
+        let hi = q.checked_mul(p)?; // |hi| ≤ |x| — cannot overflow
+        let lo = r.checked_mul(p)?; // |lo| ≤ 9900 — cannot overflow
+        Some(Money {
+            minor_units: hi.checked_add(lo / 100)?,
+            currency: money.currency,
+        })
     }
 
     /// Apply the **complement** of this percentage (i.e. `100% - self`)
@@ -82,11 +111,20 @@ impl Percentage {
     /// E.g. with a 10% discount, `complement_apply_to` returns 90% of the
     /// amount. This is a single combined operation: `amount × (100 - pct) / 100`.
     ///
-    /// Returns `None` on overflow.
+    /// Same overflow-free decomposition as [`apply_to`](Self::apply_to);
+    /// never fails for any `i64` amount and any percentage `0..=100`.
     #[must_use]
     pub fn complement_apply_to(self, money: Money) -> Option<Money> {
-        let multiplier = 100 - self.0;
-        money.checked_mul(multiplier as i64)?.checked_div(100)
+        let x = money.minor_units;
+        let p = i64::from(100 - self.0);
+        let q = x / 100;
+        let r = x % 100;
+        let hi = q.checked_mul(p)?; // |hi| ≤ |x| — cannot overflow
+        let lo = r.checked_mul(p)?; // |lo| ≤ 9900 — cannot overflow
+        Some(Money {
+            minor_units: hi.checked_add(lo / 100)?,
+            currency: money.currency,
+        })
     }
 
     /// Shorthand for `Percentage::new(0).unwrap()`.
@@ -190,13 +228,17 @@ mod tests {
     }
 
     #[test]
-    fn apply_to_overflow_returns_none() {
+    fn apply_to_100_pct_of_i64_max_returns_max() {
+        // Overflow-free decomposition: 100% of i64::MAX is i64::MAX.
+        // The old checked_mul(100) implementation spuriously returned None
+        // because the intermediate product overflowed even though the
+        // result fits.
         let m = Money {
             minor_units: i64::MAX,
             currency: usd(),
         };
-        // 100% of i64::MAX would need i64::MAX * 100 which overflows
-        assert!(Percentage::new(100).unwrap().apply_to(m).is_none());
+        let result = Percentage::new(100).unwrap().apply_to(m).unwrap();
+        assert_eq!(result.minor_units, i64::MAX);
     }
 
     #[test]
@@ -258,13 +300,21 @@ mod tests {
     }
 
     #[test]
-    fn complement_apply_to_overflow_returns_none() {
+    fn complement_apply_to_100_pct_of_i64_max_is_zero() {
+        // 0% complement = 100% of i64::MAX = i64::MAX, then 100% of that
+        // must be zero. The old checked_mul(100) implementation would have
+        // failed on the intermediate product; the decomposition handles it.
         let m = Money {
             minor_units: i64::MAX,
             currency: usd(),
         };
-        // 0% complement = 100% of i64::MAX * 100 → overflow
-        assert!(Percentage::new(0).unwrap().complement_apply_to(m).is_none());
+        let result = Percentage::new(0).unwrap().complement_apply_to(m).unwrap();
+        assert_eq!(result.minor_units, i64::MAX);
+        let zero = Percentage::new(100)
+            .unwrap()
+            .complement_apply_to(result)
+            .unwrap();
+        assert_eq!(zero.minor_units, 0);
     }
 
     #[test]

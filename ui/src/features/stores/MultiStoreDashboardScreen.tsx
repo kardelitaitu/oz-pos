@@ -3,6 +3,10 @@ import { Localized, useLocalization } from '@fluent/react';
 import { listStores, setPrimaryStore, deleteStore, type StoreProfile } from '@/api/stores';
 import { listTerminalsScoped, type TerminalDto } from '@/api/terminals';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { LocaleContext } from '@/i18n/LocaleContext';
+import { useContext } from 'react';
+import { openUpgradePricing } from '@/utils/upgrade';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
@@ -20,6 +24,11 @@ function isOnline(lastSeenAt: string | null): boolean {
 export default function MultiStoreDashboardScreen() {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
+  // C2.2: Pro→Premium trigger — when the Pro tier is at its 2-store cap,
+  // nudge the owner toward Premium.
+  const { caps } = useSubscription();
+  const locale = useContext(LocaleContext)?.locale ?? 'en';
+  const atProStoreCap = caps?.tier === 'pro' && (caps.storeCount ?? 0) >= 2;
   const sessionToken = rawToken || '';
   const [stores, setStores] = useState<StoreProfile[]>([]);
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
@@ -84,6 +93,16 @@ export default function MultiStoreDashboardScreen() {
           <h1 className="multi-store-dashboard-title">Multi-Store Dashboard</h1>
         </Localized>
       </div>
+
+      {/* C2.2: Pro tier at its 2-store cap — "Buka toko ke-3? Upgrade ke Premium". */}
+      {atProStoreCap && (
+        <div className="multi-store-limit-banner" role="note">
+          <span>{l10n.getString('store-limit-upgrade-premium')}</span>
+          <Button variant="primary" size="sm" onClick={() => openUpgradePricing(locale, 'premium')}>
+            {l10n.getString('store-limit-upgrade-premium-cta')}
+          </Button>
+        </div>
+      )}
 
       {loading ? (
         <div className="multi-store-dashboard-loading-skeleton">

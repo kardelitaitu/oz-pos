@@ -33,12 +33,14 @@ sales-report-category-popularity-top = Top Sellers
 sales-report-category-popularity-uncategorized = Uncategorized
 sales-report-popularity-trend = Popularity Trend
 sales-report-demand-forecast = Demand Forecast
+sales-report-category-forecast = Category Forecast
 sales-report-demand-forecast-category = Category
 sales-report-demand-forecast-avg = Avg / period
 sales-report-demand-forecast-trend = Trend
 sales-report-demand-forecast-next = Next period
 heatmap-title = Busiest Hours
 heatmap-no-data = No data
+sales-report-hourly-heatmap-aria = Hourly heatmap
 day-sunday = Sun
 day-monday = Mon
 day-tuesday = Tue
@@ -165,6 +167,15 @@ custom-report-run-aria = Run report
 custom-report-region-aria = Custom Report Builder
 custom-report-export-aria = Export CSV
 custom-report-columns-selected = { $selected } / { $total } selected
+
+# Custom Report — Pagination (REP-07)
+custom-report-truncated = Results limited to { $limit } rows. Use pagination to view more.
+custom-report-pagination-aria = Results pagination
+custom-report-prev-page = Previous
+custom-report-prev-page-aria = Previous page
+custom-report-next-page = Next
+custom-report-next-page-aria = Next page
+custom-report-page-of = Page { $page }
 
 # Export
 dashboard-export-csv = CSV

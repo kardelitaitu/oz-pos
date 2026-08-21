@@ -3,18 +3,19 @@ title: Aktivasi Lisensi
 description: Dapatkan kunci lisensi, aktifkan di aplikasi, dan kelola perangkat Anda.
 category: gettingStarted
 order: 4
-updated: "2026-08-16"
+updated: "2026-08-17"
 ---
 
 ## Dapatkan kunci lisensi
 
 Paket berbayar dibeli di situs web: buka [halaman harga](../../pricing/),
-pilih paket, masukkan email tujuan lisensi, lalu bayar lewat checkout Paddle.
-Kunci lisensi dan tanda terima dikirim otomatis ke email Anda — login situs
-web tidak diperlukan untuk membayar.
+pilih paket, lalu bayar lewat checkout Paddle. Pembayaran bersifat
+register-first — checkout meminta Anda masuk dengan email (kode sekali pakai
+atau kata sandi), sehingga langganan terhubung ke akun Anda. Kunci lisensi
+dan tanda terima dikirim otomatis ke email Anda.
 
-Masa uji coba 90 hari tidak memerlukan kunci; dimulai saat peluncuran
-pertama. Aktivasi untuk berpindah ke paket berbayar.
+Paket Gratis tidak memerlukan kunci; dimulai saat peluncuran pertama.
+Aktivasi untuk berpindah ke paket berbayar.
 
 ## Masukkan kunci di aplikasi
 
@@ -31,7 +32,7 @@ dapat mencabut perangkat dari jarak jauh.
 ## Akun Anda di situs web
 
 Masuk di [halaman login](../../login/) situs web dengan email dan kode
-sekali pakai — tanpa kata sandi. Halaman akun menampilkan kunci lisensi,
+sekali pakai atau kata sandi Anda. Halaman akun menampilkan kunci lisensi,
 paket, dan tanggal kedaluwarsa, dan merupakan tempat Anda mengelola
 perangkat.
 

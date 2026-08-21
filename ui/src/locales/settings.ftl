@@ -40,6 +40,14 @@ setup-features-toggle-aria =
     .aria-label = Toggle { $label }
 
 setup-features-section-payments = Payment Methods
+
+# QRIS setup gate (C1 Free→Plus trigger — onboarding)
+setup-qris-label = QRIS (Midtrans)
+setup-qris-available = Accept QRIS payments — included with your plan.
+setup-qris-included = Included
+setup-qris-upgrade-required = QRIS payments are a Plus feature. Upgrade to Plus to accept QRIS.
+setup-qris-upgrade-cta = Upgrade to Plus
+
 setup-features-section-products = Products & Inventory
 setup-features-section-staff = Staff Management
 setup-features-section-hardware = Hardware & Peripherals
@@ -406,6 +414,17 @@ settings-license-refresh = Refresh
 settings-license-refresh-aria = Refresh license status
 settings-license-poll-offline = Server unreachable
 settings-license-load-failed = Failed to load license info
+# C3.3: Pause/resume subscription
+settings-license-subscription-actions = Subscription
+settings-license-pause-subscription = Pause subscription
+settings-license-pause-aria = Pause subscription for 1 month
+settings-license-pause-success = Subscription paused. Resume anytime.
+settings-license-pause-failed = Failed to pause subscription
+settings-license-paused-until = Paused until
+settings-license-resume-subscription = Resume subscription
+settings-license-resume-aria = Resume paused subscription
+settings-license-resume-success = Subscription resumed!
+settings-license-resume-failed = Failed to resume subscription
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. All rights reserved.
 
 # Appearance / Brand settings
@@ -814,3 +833,31 @@ terminal-feature-group-inventory-products = Inventory & Products
 terminal-feature-group-hardware = Hardware
 terminal-feature-group-staff-security = Staff & Security
 terminal-feature-group-system = System
+
+# Exit survey (§7 churn prevention)
+exit-survey-title = Before you pause...
+exit-survey-message = Help us improve — what's the main reason you're pausing?
+exit-survey-reason-price = Too expensive
+exit-survey-reason-features = Not enough features
+exit-survey-reason-competitor = Switching to a competitor
+exit-survey-reason-closed = Business closed
+exit-survey-reason-break = Taking a temporary break
+exit-survey-reason-other = Other
+exit-survey-other-placeholder = Please tell us more...
+exit-survey-cancel = Go back
+exit-survey-submit = Pause subscription
+
+# ── Add-on Marketplace (C4.3) ─────────────────────────────────────
+addon-marketplace-title = Add-ons
+addon-marketplace-subtitle = Extend your plan with additional features
+addon-marketplace-empty = No add-ons available for your current plan.
+addon-purchase-button = Add
+addon-owned-badge = Active
+addon-analytics-name = Advanced Analytics
+addon-analytics-desc = Unlock detailed sales reports, trend analysis, and custom date ranges on the Plus plan.
+addon-support-name = Priority Support
+addon-support-desc = Get faster response times and dedicated support from the OZ-POS team.
+addon-storage-name = Extra Cloud Storage
+addon-storage-desc = Increase your cloud sync storage quota for larger product catalogs and longer history.
+addon-hal-name = Custom HAL Drivers
+addon-hal-desc = Load and use custom hardware abstraction layer drivers for specialized POS peripherals.

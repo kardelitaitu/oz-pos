@@ -60,6 +60,16 @@ export interface CompleteSaleArgs {
   paymentSplits?: PaymentSplitArg[];
   /** Optional serial numbers captured at checkout for track_serial products. */
   serialNumbers?: SerialNumberArg[];
+  /** CUR-02: original sale currency when multi-currency checkout is used. */
+  baseCurrency?: string;
+  /** CUR-02: original sale total in baseCurrency minor units. */
+  baseTotalMinor?: number;
+  /** CUR-02: fixed-point rate (millionths) baseCurrency → sale currency. */
+  tenderRateMillionths?: number;
+  /** Tip amount in minor units collected at checkout (default 0). */
+  tipMinor?: number;
+  /** Service-charge amount in minor units collected at checkout (default 0). */
+  serviceChargeMinor?: number;
 }
 
 /** Result of completing a sale. */
@@ -118,6 +128,16 @@ export interface CompleteSaleScopedArgs {
   paymentSplits?: PaymentSplitArg[];
   customerName?: string;
   serialNumbers?: SerialNumberArg[];
+  /** CUR-02: original sale currency when multi-currency checkout is used. */
+  baseCurrency?: string;
+  /** CUR-02: original sale total in baseCurrency minor units. */
+  baseTotalMinor?: number;
+  /** CUR-02: fixed-point rate (millionths) baseCurrency → sale currency. */
+  tenderRateMillionths?: number;
+  /** Tip amount in minor units collected at checkout (default 0). */
+  tipMinor?: number;
+  /** Service-charge amount in minor units collected at checkout (default 0). */
+  serviceChargeMinor?: number;
 }
 
 export const completeSaleScoped = (sessionToken: string, args: CompleteSaleScopedArgs): Promise<CompleteSaleResult> =>
@@ -305,15 +325,32 @@ export interface SaleDetail {
   userId: string | null;
   createdAt: string;
   lines: SaleLineDto[];
+  /** CUR-02: original sale currency when multi-currency checkout was used. */
+  baseCurrency?: string | null;
+  /** CUR-02: original sale total in baseCurrency minor units. */
+  baseTotalMinor?: number | null;
+  /** CUR-02: fixed-point rate (millionths) used for the conversion. */
+  tenderRateMillionths?: number | null;
+}
+
+/**
+ * C1.2: response for the sale-list commands — the sales (already capped to
+ * the tier's history window) plus the cap flag so the UI can show the
+ * upgrade teaser.
+ */
+export interface SaleListResponse {
+  sales: SaleListItem[];
+  /** True when the tier's history window (Free = 30 days) was applied. */
+  salesHistoryCapped: boolean;
 }
 
 /** List all completed sales. */
-export const listSales = (): Promise<SaleListItem[]> =>
-  loggedInvoke<SaleListItem[]>('list_sales');
+export const listSales = (): Promise<SaleListResponse> =>
+  loggedInvoke<SaleListResponse>('list_sales');
 
 /** ADR #7: List sales scoped to the store resolved from a session token. */
-export const listSalesScoped = (sessionToken: string): Promise<SaleListItem[]> =>
-  loggedInvoke<SaleListItem[]>('list_sales_scoped', { sessionToken });
+export const listSalesScoped = (sessionToken: string): Promise<SaleListResponse> =>
+  loggedInvoke<SaleListResponse>('list_sales_scoped', { sessionToken });
 
 /** Fetch a single sale by its identifier. */
 export const getSale = (id: string): Promise<SaleDetail | null> =>

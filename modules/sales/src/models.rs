@@ -122,6 +122,32 @@ pub struct Sale {
     #[serde(default)]
     pub customer_id: Option<String>,
 
+    /// CUR-02: original sale currency before multi-currency conversion.
+    /// `None` for single-currency sales (the common case). When set, the
+    /// sale was charged in a different tender currency and these fields
+    /// record the base amount and the rate used, so refunds/reconciliation
+    /// can reconstruct the original amount.
+    #[serde(default)]
+    pub base_currency: Option<String>,
+    /// Original sale total in `base_currency` minor units (before
+    /// conversion). `None` for single-currency sales.
+    #[serde(default)]
+    pub base_total_minor: Option<i64>,
+    /// Fixed-point exchange rate (millionths) used for the conversion,
+    /// in the direction `base_currency → sale.currency`. `None` for
+    /// single-currency sales.
+    #[serde(default)]
+    pub tender_rate_millionths: Option<i64>,
+
+    /// Tip amount in minor units collected at checkout (default 0).
+    /// Persisted so the recorded total reflects what the customer paid.
+    #[serde(default)]
+    pub tip_minor: i64,
+    /// Service-charge amount in minor units collected at checkout
+    /// (default 0).
+    #[serde(default)]
+    pub service_charge_minor: i64,
+
     /// Optimistic concurrency version.
     #[serde(default = "default_version")]
     pub version: i64,
@@ -175,6 +201,11 @@ impl Sale {
             tendered_minor: None,
             user_id,
             customer_id: None,
+            base_currency: None,
+            base_total_minor: None,
+            tender_rate_millionths: None,
+            tip_minor: 0,
+            service_charge_minor: 0,
             created_at: now.clone(),
             updated_at: now,
             lines,

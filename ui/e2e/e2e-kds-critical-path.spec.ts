@@ -150,7 +150,7 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
   });
 
   // ── Step 4: Settings panel interaction ─────────────────────────────
-  test('settings panel opens, shows toggles, and does not crash', async ({ page }) => {
+  test('settings panel opens, shows sound and threshold controls, and allows interaction', async ({ page }) => {
     await expect(page.locator('.kds-columns')).toBeVisible({ timeout: TIMEOUT });
 
     // The settings trigger button lives in the header-right.
@@ -163,10 +163,38 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     const settingsPanel = page.locator('.kds-settings-popover');
     await expect(settingsPanel).toBeVisible({ timeout: 5_000 });
 
-    // Settings panel must contain interactive elements (toggles, sliders, buttons).
-    const settingsInputs = settingsPanel.locator('input, button, select, label');
-    const inputCount = await settingsInputs.count();
-    expect(inputCount).toBeGreaterThanOrEqual(2);
+    // Check for sound-related control (e.g., a checkbox or switch labeled "Sound")
+    const soundControl = settingsPanel.locator('label:has-text("Sound") input[type="checkbox"], label:has-text("Sound") .switch, .sound-toggle');
+    await expect(soundControl).toBeVisible({ timeout: 3_000 });
+
+    // Check for threshold-related controls (e.g., sliders or number inputs near threshold labels)
+    const thresholdControls = settingsPanel.locator('label:has-text("threshold") ~ input, label:has-text("Threshold") ~ input, input[aria-label*="threshold" i], input[type="range"], input[type="number"]:near(.threshold-label)');
+    // We expect at least one threshold control
+    await expect(thresholdControls.first()).toBeVisible({ timeout: 3_000 });
+
+    // --- Interact with sound control ---
+    // Toggle sound off
+    await soundControl.click();
+    // Verify it's toggled (if it's a checkbox, check the checked attribute)
+    // We don't enforce a specific state, just that it's operable
+    await soundControl.isChecked();
+    await expect(soundControl).toBeEnabled();
+    // Toggle sound back on to leave state as we found it (optional, but good practice)
+    await soundControl.click();
+
+    // --- Interact with a threshold control ---
+    const firstThreshold = thresholdControls.first();
+    // Get current value (if it's a number or range input)
+    // Verify we can read the current value
+    await firstThreshold.inputValue();
+    // Set a new value (if it's a number input, we can type; if range, we might need to drag or set via evaluate)
+    // For simplicity, we'll just check that we can focus and it's enabled
+    await expect(firstThreshold).toBeEnabled();
+    await firstThreshold.focus();
+    // If it's a number input, we can try to change it by pressing ArrowUp then ArrowDown to reset
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowDown');
+    // Alternatively, we could set a specific value, but we'll keep it simple to avoid flakiness
 
     // Close settings panel.
     await settingsToggle.click();

@@ -1450,9 +1450,20 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'check_license_status': () => ({ tenantId: 'tenant-1', status: 'active', tier: 'Pro', active: true, expiresAt: null, graceUntil: null, maxStores: 5 }),
   'test_auth_connection': () => ({ ok: true, status: 'Connected (12ms)', latencyMs: 12 }),
   'get_machine_id': () => 'mock-machine-id-001',
+  'get_hardware_fingerprint': () => 'hw_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   'get_device_id': () => 'mock-device-id-001',
   'activate_license': () => true,
   'renew_license': () => true,
+  'pause_subscription': () => ({
+    status: 'paused',
+    tierKey: 'plus',
+    pausedAt: new Date().toISOString(),
+    pausedUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  }),
+  'resume_subscription': () => ({
+    status: 'active',
+    tierKey: 'plus',
+  }),
 
   // ═══════════════════════════════════════════════════════════════
   // STORES
@@ -2014,8 +2025,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     return null;
   },
 
-  'list_sales': () => [...completedSales],
-  'list_sales_scoped': () => [...completedSales],
+  'list_sales': () => ({ sales: [...completedSales], salesHistoryCapped: false }),
+  'list_sales_scoped': () => ({ sales: [...completedSales], salesHistoryCapped: false }),
   'void_sale': () => ({ id: 'voided-sale', status: 'voided', total: { minor_units: 0, currency: 'IDR' }, line_count: 0, created_at: new Date().toISOString() }),
   'void_sale_scoped': () => ({ id: 'voided-sale', status: 'voided', total: { minor_units: 0, currency: 'IDR' }, line_count: 0, created_at: new Date().toISOString() }),
 
@@ -2059,11 +2070,19 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'list_currencies_scoped': () => MOCK_CURRENCIES,
   'get_default_currency': () => 'IDR',
   'set_default_currency': () => null,
+  'get_default_currency_scoped': () => 'IDR',
+  'set_default_currency_scoped': () => null,
   'list_exchange_rates': () => [
     { id: 'rate-1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 1_6000000, source: 'manual', effective_date: '2026-08-01', created_at: new Date().toISOString() },
   ],
+  'list_exchange_rates_scoped': () => [
+    { id: 'rate-1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 1_6000000, source: 'manual', effective_date: '2026-08-01', created_at: new Date().toISOString() },
+  ],
   'create_exchange_rate': () => null,
+  'create_exchange_rate_scoped': () => null,
   'delete_exchange_rate': () => null,
+  'delete_exchange_rate_scoped': () => null,
+  'get_latest_exchange_rate_scoped': () => ({ id: 'rate-1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 1_6000000, source: 'manual', effective_date: '2026-08-01', created_at: new Date().toISOString() }),
 
   // ═══════════════════════════════════════════════════════════════
   // CUSTOMERS
@@ -2257,9 +2276,36 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_kds_orders': () => mockKdsOrders,
-  'list_kds_orders_scoped': () => mockKdsOrders,
-  'get_kds_queue': () => mockKdsOrders,
-  'get_kds_queue_scoped': () => mockKdsOrders,
+  'list_kds_orders_scoped': (args: unknown) => {
+    let status: string | undefined;
+    if (Array.isArray(args)) {
+      [, status] = args as [string, string | undefined];
+    } else {
+      const obj = (args ?? {}) as Record<string, unknown>;
+      status = obj['status'] as string | undefined;
+    }
+    return mockKdsOrders.filter(order => !status || order['status'] === status);
+  },
+  'get_kds_queue': (args: unknown) => {
+    let kdsZone: string | undefined;
+    if (Array.isArray(args)) {
+      [, kdsZone] = args as [string, string | undefined];
+    } else {
+      const obj = (args ?? {}) as Record<string, unknown>;
+      kdsZone = obj['kdsZone'] as string | undefined;
+    }
+    return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone);
+  },
+  'get_kds_queue_scoped': (args: unknown) => {
+    let kdsZone: string | undefined;
+    if (Array.isArray(args)) {
+      [, kdsZone] = args as [string, string | undefined];
+    } else {
+      const obj = (args ?? {}) as Record<string, unknown>;
+      kdsZone = obj['kdsZone'] as string | undefined;
+    }
+    return mockKdsOrders.filter(order => !kdsZone || order['kitchen_zone'] === kdsZone);
+  },
   'update_kds_status': (args) => {
     const { id, status } = (args as { id?: string; status?: string }) ?? {};
     const order = mockKdsOrders.find((o) => o['id'] === id);
@@ -2312,6 +2358,36 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     }
     return item ?? null;
   },
+
+  // ═══════════════════════════════════════════════════════════════
+  // KDS DEVICE MANAGEMENT
+  // ═══════════════════════════════════════════════════════════════
+
+  'list_kds_devices_scoped': () => [] as unknown[],
+  'register_kds_device_scoped': (args: unknown) => {
+    const input = (args as { input?: Record<string, unknown> })?.input ?? {};
+    return {
+      id: `kds-device-mock-${Date.now()}`,
+      name: input['name'] ?? 'Mock KDS Device',
+      restaurant_pos_id: input['restaurant_pos_id'] ?? 'resto-1',
+      station_ids: input['station_ids'] ?? [],
+      is_active: true,
+      last_seen_at: new Date().toISOString(),
+      connection_status: 'connected',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  },
+  'get_kds_device_scoped': () => null,
+  'update_kds_device_status_scoped': () => {},
+  'deactivate_kds_device_scoped': () => {},
+  'ack_kds_order_scoped': () => true,
+  'resolve_kds_targets_scoped': () => [] as string[],
+  'generate_kds_pairing_token_scoped': () => ({
+    token: `mock-pairing-token-${Date.now()}`,
+    expires_at: new Date(Date.now() + 300_000).toISOString(),
+  }),
+  'print_kds_chit_scoped': () => true,
 
   // ═══════════════════════════════════════════════════════════════
   // PROMOTIONS
@@ -2653,7 +2729,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // TAX
   // ═══════════════════════════════════════════════════════════════
 
-  'compute_cart_tax_scoped': () => 0,
+  'compute_cart_tax_scoped': () => ({ taxMinor: 0, hasExclusive: false }),
   'list_tax_rates_scoped': () => [],
   'create_tax_rate_scoped': () => null,
   'update_tax_rate_scoped': () => null,

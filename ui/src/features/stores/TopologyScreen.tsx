@@ -13,10 +13,14 @@ import {
   type TopologyApplyResult,
 } from '@/api/topology';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { LocaleContext } from '@/i18n/LocaleContext';
+import { useContext } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { checkLicenseStatus } from '@/api/license';
 import { plainErrorMessage } from '@/utils/app-error';
+import { openUpgradePricing } from '@/utils/upgrade';
 import SettingsSelect from '@/features/settings/SettingsSelect';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -342,9 +346,17 @@ export default function TopologyScreen() {
     [workspaceInstances, selectedBranchId],
   );
 
+  // C2.2: second-store gate (Plus→Pro trigger) — the tier's `max_stores()`
+  // quota caps how many store profiles can exist.
+  const { caps } = useSubscription();
+  const locale = useContext(LocaleContext)?.locale ?? 'en';
+  const atStoreLimit =
+    caps !== null && caps.maxStores !== null && caps.storeCount >= caps.maxStores;
+
   const handleAddBranch = async () => {
     const name = newBranchName.trim();
     if (!name) return;
+    if (atStoreLimit) return; // the inline banner explains why
     try {
       const created = await createStore({ id: `store-${crypto.randomUUID()}`, name });
       setStores((prev) => [...prev, created]);
@@ -679,6 +691,14 @@ export default function TopologyScreen() {
                 disabled={deletingBranch}
               />
             </div>
+            {addingBranch && atStoreLimit && (
+              <div className="topology-store-limit-banner" role="note">
+                <span>{l10n.getString('store-limit-upgrade-pro', { max: caps?.maxStores ?? 0 })}</span>
+                <Button variant="primary" size="sm" onClick={() => openUpgradePricing(locale, 'pro')}>
+                  {l10n.getString('store-limit-upgrade-cta')}
+                </Button>
+              </div>
+            )}
             {deletingBranch ? null : addingBranch ? (
               <div className="topology-branch-add-form">
                 <input

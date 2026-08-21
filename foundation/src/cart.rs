@@ -1,3 +1,14 @@
+/*
+last audited 13-08-26 by RSA-Agent
+crate: foundation (cart.rs) | status: SAFE | lint: CLEAN
+findings: MONEY-AUDIT-3 fixed — CartLine::total() fails closed on qty <= 0
+  (serde bypass of the new() assert previously allowed free/negative lines);
+  Cart::discount_amount no longer masks errors with .or(Some(zero)) and now
+  validates lines before the no-discount early return; both propagations match
+  the documented "None on overflow/mismatch/corrupt line" contract.
+next: Phase 2 (frontend money arithmetic) | perf: discount_amount folds lines
+  once even in the no-discount case (bounded by line count).
+*/
 //! Cart and CartLine — the in-memory sale pipeline.
 //!
 //! A `Cart` is created with a [`Currency`], lines are added via
@@ -76,9 +87,19 @@ impl CartLine {
     /// does not match `unit_price.currency`. This guards against direct field
     /// mutation bypassing [`set_overridden_price`](Self::set_overridden_price).
     ///
-    /// Returns `None` on `i64` overflow.
+    /// # Errors
+    ///
+    /// Returns `None` on `i64` overflow **or** when `qty <= 0`. `qty <= 0`
+    /// cannot occur through [`CartLine::new`] (which asserts `qty > 0`), but
+    /// it CAN occur through `serde` deserialization of a persisted cart (the
+    /// fields are public and `Deserialize` does not run the constructor
+    /// assert). Returning `None` makes a corrupt persisted line fail closed
+    /// instead of silently computing a zero or negative total.
     #[must_use]
     pub fn total(&self) -> Option<Money> {
+        if self.qty <= 0 {
+            return None;
+        }
         let price = self.overridden_price.unwrap_or(self.unit_price);
         debug_assert!(
             price.currency == self.unit_price.currency,
@@ -269,11 +290,14 @@ impl Cart {
             acc = self.discount_percent.complement_apply_to(acc)?;
         }
         if self.fixed_discount_minor > 0 {
-            let fixed = self.fixed_discount_minor.min(acc.minor_units);
-            acc = acc.checked_sub(Money {
-                minor_units: fixed,
+            // Cap the fixed discount at the payable total. Both amounts are
+            // in `self.currency`, so `Money::min` cannot return `None` here;
+            // the `?` propagates a mismatch the same way `checked_sub` does.
+            let fixed = Money {
+                minor_units: self.fixed_discount_minor,
                 currency: self.currency,
-            })?;
+            };
+            acc = acc.checked_sub(fixed.min(acc)?)?;
         }
         Some(acc)
     }
@@ -285,12 +309,11 @@ impl Cart {
     /// In debug builds, panics if any line's effective currency does not
     /// match the cart's currency.
     ///
-    /// Returns `None` on overflow or currency mismatch.
+    /// Returns `None` on overflow, currency mismatch, or a corrupt line
+    /// (`qty <= 0` deserialized from a persisted cart) — the same
+    /// fail-closed contract as [`Cart::total`](Self::total).
     #[must_use]
     pub fn discount_amount(&self) -> Option<Money> {
-        if self.discount_percent.get() == 0 && self.fixed_discount_minor == 0 {
-            return Some(Money::zero(self.currency));
-        }
         let mut subtotal = Money::zero(self.currency);
         for line in &self.lines {
             debug_assert!(
@@ -302,19 +325,26 @@ impl Cart {
             let t = line.total()?;
             subtotal = subtotal.checked_add(t)?;
         }
+        if self.discount_percent.get() == 0 && self.fixed_discount_minor == 0 {
+            return Some(Money::zero(self.currency));
+        }
         let discounted = if self.discount_percent.get() > 0 {
             self.discount_percent.complement_apply_to(subtotal)?
         } else {
             subtotal
         };
-        let fixed = self.fixed_discount_minor.min(discounted.minor_units);
-        discounted
-            .checked_sub(Money {
-                minor_units: fixed,
-                currency: self.currency,
-            })
-            .and_then(|total| subtotal.checked_sub(total))
-            .or(Some(Money::zero(self.currency)))
+        let fixed = Money {
+            minor_units: self.fixed_discount_minor,
+            currency: self.currency,
+        };
+        // Both subtractions are on amounts capped by `fixed.min(discounted)`
+        // (which cannot fail here: both operands are in `self.currency`), so
+        // they cannot underflow. `?` propagates any overflow as `None` — we
+        // deliberately do NOT fall back to a zero discount here, because a
+        // failure means the discount amount is unknown, not zero.
+        let capped = fixed.min(discounted)?;
+        let total_after_discount = discounted.checked_sub(capped)?;
+        subtotal.checked_sub(total_after_discount)
     }
 }
 
@@ -578,10 +608,22 @@ mod tests {
             },
         ))
         .unwrap();
-        // Setting a discount on an overflowing subtotal should propagate the overflow
+        cart.add_line(CartLine::new(
+            Sku::new("HUGE"),
+            1,
+            Money {
+                minor_units: i64::MAX,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        // Subtotal = i64::MAX + i64::MAX overflows → total and discount_amount
+        // must be None. (A single line with 50% discount succeeds now — the
+        // overflow-free Percentage decomposition computes i64::MAX * 50 / 100
+        // = i64::MAX/2 without overflowing the intermediate product.)
         cart.set_discount(Percentage::new(50).unwrap(), None);
-        assert!(cart.discount_amount().is_none());
         assert!(cart.total().is_none());
+        assert!(cart.discount_amount().is_none());
     }
 
     #[test]
@@ -650,6 +692,43 @@ mod tests {
             },
         );
         assert!(line.total().is_none());
+    }
+
+    /// MONEY-AUDIT-3: `CartLine::total()` must return `None` (fail closed)
+    /// when `qty <= 0` arrives via serde deserialization — `CartLine::new`
+    /// asserts `qty > 0`, but the public fields + `Deserialize` bypass the
+    /// constructor, so a corrupt persisted cart could otherwise silently
+    /// compute a zero or negative line total.
+    #[test]
+    fn cart_line_total_fails_closed_on_zero_or_negative_qty_from_serde() {
+        // The JSON payloads below hard-code the unit price, so no local
+        // `unit_price` binding is needed (the MONEY-AUDIT-3 invariant is
+        // about qty, not price).
+        // qty = 0 via JSON (would be free money without the guard).
+        let json_zero = r#"{"id":"00000000-0000-0000-0000-000000000001","sku":"TEA","qty":0,"unit_price":{"minor_units":500,"currency":"USD"},"overridden_price":null}"#;
+        let line: CartLine = serde_json::from_str(json_zero).unwrap();
+        assert_eq!(line.qty, 0);
+        assert!(line.total().is_none(), "qty=0 must fail closed");
+
+        // qty = -2 via JSON (would be a negative total / money creation).
+        let json_neg = r#"{"id":"00000000-0000-0000-0000-000000000002","sku":"TEA","qty":-2,"unit_price":{"minor_units":500,"currency":"USD"},"overridden_price":null}"#;
+        let line: CartLine = serde_json::from_str(json_neg).unwrap();
+        assert_eq!(line.qty, -2);
+        assert!(line.total().is_none(), "qty<0 must fail closed");
+    }
+
+    /// MONEY-AUDIT-3b: `Cart::total()` propagates the fail-closed `None`
+    /// from a corrupted line (qty=0 via serde) instead of summing a free
+    /// item into the cart total.
+    #[test]
+    fn cart_total_fails_closed_when_serde_line_has_zero_qty() {
+        let json = r#"{"id":"00000000-0000-0000-0000-000000000003","currency":"USD","lines":[{"id":"00000000-0000-0000-0000-000000000004","sku":"TEA","qty":0,"unit_price":{"minor_units":500,"currency":"USD"},"overridden_price":null}],"discount_percent":0,"discount_label":null,"fixed_discount_minor":0}"#;
+        let cart: Cart = serde_json::from_str(json).unwrap();
+        assert!(cart.total().is_none(), "corrupt line must fail closed");
+        assert!(
+            cart.discount_amount().is_none(),
+            "corrupt line must fail closed in discount_amount too"
+        );
     }
 
     #[test]

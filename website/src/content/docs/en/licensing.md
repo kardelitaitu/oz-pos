@@ -1,40 +1,45 @@
 ---
 title: Licensing & Plans
-description: Tiers, trial, expiry, and the grace period.
+description: Plans, the free-forever tier, expiry, and the grace period.
 category: reference
 order: 1
-updated: "2026-08-16"
+updated: "2026-08-17"
 ---
 
 ## Plans
 
-OZ-POS has four tiers: `trial`, `pro`, `premium`, and `enterprise`. What
-each plan unlocks — stores, registers, warehouses, QRIS payments, cloud
+OZ-POS has five tiers: `free`, `plus`, `pro`, `premium`, and `enterprise`.
+What each plan unlocks — stores, registers, warehouses, QRIS payments, cloud
 sync, and scripting — is shown on the [pricing page](../../pricing/).
 
-| Capability   | Free              | Pro               | Premium           | Enterprise        |
-| ------------ | ----------------- | ----------------- | ----------------- | ----------------- |
-| Stores       | 1                 | 1                 | Unlimited         | Unlimited         |
-| Registers    | 1                 | 2                 | Unlimited         | Unlimited         |
-| Warehouses   | 1                 | 1                 | Unlimited         | Unlimited         |
-| QRIS payments| No                | ✓                 | ✓                 | ✓                 |
-| Cloud sync   | No                | ✓                 | ✓                 | ✓                 |
-| Scripting    | No                | No                | ✓                 | ✓                 |
+| Capability      | Free | Plus | Pro | Premium | Enterprise |
+| --------------- | ---- | ---- | --- | ------- | ---------- |
+| Stores          | 1    | 1    | 2   | Unlimited | Unlimited |
+| Registers / store | 1  | 2    | 5   | Unlimited | Unlimited |
+| Warehouses      | 1    | 2    | 3   | Unlimited | Unlimited |
+| Sales history   | 30 days | Unlimited | Unlimited | Unlimited | Unlimited |
+| QRIS payments   | No   | ✓    | ✓   | ✓       | ✓         |
+| Cloud sync      | No   | ✓    | ✓   | ✓       | ✓         |
+| Scripting (Lua) | No   | No   | No  | ✓       | ✓         |
 
-## The 90-day trial
+Yearly plans = 2 months free (pay 10 months, get 12).
 
-The trial unlocks the **full product** for 90 days — every workspace,
-feature, and limit is at the top tier. No license key is needed to start:
-the trial begins at first launch, and you can buy and upgrade at any point
-without reinstalling.
+## The Free plan
+
+The Free plan is **free forever** — one store, one register, one warehouse,
+and 30 days of sales history. No license key is needed to start: the Free
+plan begins at first launch, and you can upgrade at any point without
+reinstalling. After 30 days of history, older transactions are hidden behind
+an upgrade prompt — nothing is deleted.
 
 ## Buying and activating
 
-Paid plans are bought on the website checkout with just your email — no
-account required. The license key and receipt arrive by email, and you paste
-the key into **Settings → License** to activate. See
-[License Activation](../activation/) for the full journey, and the
-[pricing page](../../pricing/) for current prices.
+Paid plans are bought on the website checkout. Payment is register-first:
+the checkout asks you to sign in with your email (a one-time code or your
+password) so the subscription attaches to your account. The license key and
+receipt arrive by email, and you paste the key into **Settings → License** to
+activate. See [License Activation](../activation/) for the full journey, and
+the [pricing page](../../pricing/) for current prices.
 
 ## Expiry and grace
 

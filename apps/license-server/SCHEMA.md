@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · pb_schema.json verified to contain all 4 collections (license_keys, tenants, subscriptions, tenant_machines) + the listed fields (key, tier_key, status, expires_at, email, api_key, api_key_lookup, signed_payload, signature, grace_until, first_seen_at, last_seen_at); the "simplified authenticator" framing is consistent with the field subset vs ADR #9's fuller schema · NOTE (2026-08-14): tenants.api_key is now a bcrypt hash + tenants.api_key_lookup is the indexed SHA-256 lookup (see §2) · NOTE (2026-08-16): subscriptions now carries the tier quota block (max_stores, max_pos_instances, allowed_types) mirrored from license_keys (see §3) -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · pb_schema.json verified to contain all 4 collections (license_keys, tenants, subscriptions, tenant_machines) + the listed fields (key, tier_key, status, expires_at, email, api_key, api_key_lookup, signed_payload, signature, grace_until, first_seen_at, last_seen_at); the "simplified authenticator" framing is consistent with the field subset vs ADR #9's fuller schema · NOTE (2026-08-14): tenants.api_key is now a bcrypt hash + tenants.api_key_lookup is the indexed SHA-256 lookup (see §2) · NOTE (2026-08-16): subscriptions now carries the tier quota block (max_stores, max_pos_instances, allowed_types) mirrored from license_keys (see §3) · NOTE (2026-08-17): tier_key select values still lack `plus` — the approved lineup is Free/Plus/Pro/Premium/Enterprise (subscription-tiers.md); tracked by TODO.md C0.2, add `plus` to both tier_key selects here when it lands -->
 
 # License Server Schema Documentation
 
@@ -23,6 +23,11 @@ Stores the license keys generated for customers. You create these manually in th
 | `max_pos_instances` | Number | *Optional* | Tier quota (0 = unlimited). Populated by the Paddle webhook. |
 | `allowed_types` | JSON | *Optional* | JSON array of allowed workspace types for the tier. |
 | `paddle_sub_id` | Text | *Optional* | Paddle Billing `sub_...` id that issued the key. Set ⇒ webhook-issued (enables email+key activation and expiry sync on `subscription.updated`). Uniquely indexed (partial). |
+| `midtrans_sub_id` | Text | *Optional* | Midtrans Subscription API subscription id this key belongs to (recurring charges share it). Set ⇒ Midtrans webhook-issued; enables expiry refresh on later charges. Uniquely indexed (partial). |
+| `midtrans_order_id` | Text | *Optional* | Midtrans `order_id` of the most recent charge that minted/refreshed this key. Lookup key for charges that arrive before a `subscription_id` exists. |
+| `payment_provider` | Select | `paddle` | Billing provider that issued the key: `paddle` (global, USD cards) or `midtrans` (Indonesian QRIS/VA/e-wallet, fixed IDR). Set by the issuing webhook; backfilled to `paddle` for pre-Midtrans keys. |
+| `is_trial` | Bool | *Optional* | True for segmented-trial keys (C2.1). Activation mints a short Plus/Pro license from the request's `trial_vertical` (14-day Plus general, 14-day Pro restaurant/cafe, 30-day Pro enterprise referral) instead of the key's own tier/expiry/quota. Paid keys leave it unset. |
+| `bundle_id` | Text | *Optional* | Vertical-bundle id (C3.2) this license was purchased with — `restaurant_starter` widens the Plus quota block with the `kds` workspace type. Set at webhook mint; renewals fall back to it when the charge notification carries no bundle. |
 
 ---
 
@@ -62,6 +67,9 @@ Stores the cryptographically signed subscription payload. This record is automat
 | `signature` | Text | **Mandatory** | The base64 cryptographic signature verified by the POS client. |
 | `grace_until` | Date | *Optional* | Secondary date allowing limited offline usage buffering if the POS cannot connect. |
 | `paddle_sub_id` | Text | *Optional* | Paddle Billing `sub_...` id this record mirrors — the lookup key for `subscription.updated` / `canceled` events. Uniquely indexed (partial). |
+| `midtrans_sub_id` | Text | *Optional* | Midtrans Subscription API subscription id this record mirrors — the lookup key for recurring-charge refreshes. Uniquely indexed (partial). |
+| `midtrans_order_id` | Text | *Optional* | Midtrans `order_id` of the most recent charge that provisioned/refreshed this record. |
+| `payment_provider` | Select | `paddle` | Billing provider that issued the record: `paddle` (global, USD cards) or `midtrans` (Indonesian QRIS/VA/e-wallet, fixed IDR). Set by the issuing webhook; backfilled to `paddle` for pre-Midtrans records. |
 | `max_stores` | Number | *Optional* | Tier quota (0 = unlimited). Persisted whenever a subscription record is created (Paddle provisioning, manual activation, renew) and refreshed on Paddle tier change; read back for `/status` and webhook re-signs. |
 | `max_pos_instances` | Number | *Optional* | Tier quota (0 = unlimited). Persisted with the subscription record (Paddle provisioning, manual activation, renew) and refreshed on Paddle tier change. |
 | `allowed_types` | JSON | *Optional* | JSON array of allowed workspace types for the tier. Persisted with the subscription record (Paddle provisioning, manual activation, renew) and refreshed on Paddle tier change. |

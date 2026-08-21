@@ -292,6 +292,11 @@ topology-purpose-kitchen-hot-line = Kitchen hot line
 topology-purpose-stock-control = Stock control
 topology-purpose-receiving = Receiving
 
+# ── Peer group (multi-POS Phase 2) ──
+topology-workspace-peer-group-label = Peer group
+topology-workspace-peer-group-placeholder = e.g. Front Counter
+topology-peer-group-badge = Peer group: { $group }
+
 # ── Toast messages ──
 topology-toast-save-error = Failed to save topology
 topology-toast-revision-conflict = The topology changed elsewhere — loaded the latest version. Re-apply your changes.
@@ -332,3 +337,9 @@ topology-hud-wires = { $count } { $count ->
 topology-wire-label-connected = Connected
 topology-wire-label-stock-deduct = Stock Deduct (P{ $priority })
 topology-wire-label-fallback = Fallback (P{ $priority })
+
+# C2.2: second-store gate (Plus→Pro) + Pro 2-store cap nudge (Pro→Premium).
+store-limit-upgrade-pro = Your plan allows { $max } store(s). Upgrade to Pro to add more stores.
+store-limit-upgrade-cta = Upgrade to Pro
+store-limit-upgrade-premium = Opening a 3rd store? Upgrade to Premium for unlimited stores.
+store-limit-upgrade-premium-cta = Upgrade to Premium

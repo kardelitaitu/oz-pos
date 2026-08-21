@@ -26,6 +26,11 @@ loyalty-tier-multiplier-aria =
     .aria-label = Pengali perolehan
 loyalty-tier-colour-aria =
     .aria-label = Warna tingkatan
+
+# C2.2: Loyalty adalah fitur Premium+ — layar terkunci untuk paket di bawahnya.
+loyalty-upgrade-required = Loyalty adalah fitur Premium
+loyalty-upgrade-message = Bangun pelanggan setia dengan poin, tingkatan, dan hadiah. Tingkatkan ke Premium untuk mengaktifkan program loyalitas Anda.
+loyalty-upgrade-cta = Tingkatkan ke Premium
 loyalty-save-tier-error = Gagal menyimpan tingkatan
 loyalty-load-error = Gagal memuat data loyalitas
 

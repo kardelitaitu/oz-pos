@@ -9,7 +9,9 @@ use tauri::command;
 
 use modules_currency::commands::CurrencyDto;
 use modules_currency::repository::CurrencyRepository;
+use oz_core::db::Store;
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -42,6 +44,31 @@ pub async fn list_currencies(state: State<'_, AppState>) -> Result<Vec<CurrencyD
     Ok(repo.list_currencies()?)
 }
 
+#[command]
+/// List currencies resolved from a session token. ADR #7.
+pub async fn list_currencies_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CurrencyDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    require_permission_for_user(
+        &Store::new(&db),
+        &session.user_id,
+        oz_core::permissions::SETTINGS_READ,
+    )?;
+    let repo = CurrencyRepository::new(&db);
+    let out = repo.list_currencies()?;
+    drop(db);
+    Ok(out)
+}
+
 #[derive(Debug, Deserialize)]
 /// Setdefaultcurrencyargs.
 pub struct SetDefaultCurrencyArgs {
@@ -69,85 +96,74 @@ pub async fn set_default_currency(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// ── Scoped variants (CUR-03) ─────────────────────────────────────────
+//
+// The default-currency commands above operate on the global database and
+// are kept only as compatibility wrappers for single-store deployments.
+// Scoped variants resolve the store from the session token and enforce
+// `SETTINGS_READ` / `SETTINGS_EDIT` on the backend.
 
-    #[tokio::test]
-    async fn usd_has_exponent_2() {
-        let info = currency_info("USD".into()).await.unwrap();
-        assert_eq!(info.exponent, 2);
-    }
-
-    #[tokio::test]
-    async fn jpy_has_exponent_0() {
-        let info = currency_info("JPY".into()).await.unwrap();
-        assert_eq!(info.exponent, 0);
-    }
-
-    #[tokio::test]
-    async fn invalid_code_is_error() {
-        assert!(currency_info("XX".into()).await.is_err());
-    }
-
-    #[test]
-    fn currency_info_debug_output() {
-        let info = CurrencyInfo {
-            code: "USD".into(),
-            exponent: 2,
-        };
-        let d = format!("{info:?}");
-        assert!(d.contains("USD"));
-        assert!(d.contains("2"));
-    }
-
-    #[test]
-    fn currency_info_serialize() {
-        let info = CurrencyInfo {
-            code: "IDR".into(),
-            exponent: 0,
-        };
-        let json = serde_json::to_value(&info).unwrap();
-        assert_eq!(json["code"], "IDR");
-        assert_eq!(json["exponent"], 0);
-    }
-
-    #[test]
-    fn currency_dto_debug() {
-        let dto = CurrencyDto {
-            code: "EUR".into(),
-            name: "Euro".into(),
-            minor_exponent: 2,
-            symbol: "€".into(),
-        };
-        let d = format!("{dto:?}");
-        assert!(d.contains("Euro"));
-    }
-
-    #[test]
-    fn currency_dto_serialize() {
-        let dto = CurrencyDto {
-            code: "JPY".into(),
-            name: "Yen".into(),
-            minor_exponent: 0,
-            symbol: "¥".into(),
-        };
-        let json = serde_json::to_value(&dto).unwrap();
-        assert_eq!(json["code"], "JPY");
-        assert_eq!(json["minor_exponent"], 0);
-    }
-
-    #[test]
-    fn set_default_currency_args_deserialize() {
-        let json = r#"{"code":"USD"}"#;
-        let args: SetDefaultCurrencyArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.code, "USD");
-    }
-
-    #[test]
-    fn set_default_currency_args_debug() {
-        let args = SetDefaultCurrencyArgs { code: "IDR".into() };
-        let d = format!("{args:?}");
-        assert!(d.contains("IDR"));
-    }
+/// Get the default currency in the store resolved from a session token. ADR #7.
+///
+/// CUR-03: resolves the store from the session and enforces
+/// `SETTINGS_READ` on the backend.
+#[command]
+pub async fn get_default_currency_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    require_permission_for_user(
+        &Store::new(&db),
+        &session.user_id,
+        oz_core::permissions::SETTINGS_READ,
+    )?;
+    let repo = CurrencyRepository::new(&db);
+    let out = repo.get_default_currency()?;
+    drop(db);
+    Ok(out)
 }
+
+/// Set the default currency in the store resolved from a session token. ADR #7.
+///
+/// CUR-03: resolves the store from the session and enforces
+/// `SETTINGS_EDIT` on the backend. Validates the code is a well-formed
+/// ISO-4217 code before persisting.
+#[command]
+pub async fn set_default_currency_scoped(
+    session_token: String,
+    args: SetDefaultCurrencyArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    args.code
+        .parse::<oz_core::Currency>()
+        .map_err(|_| AppError::Invalid(format!("invalid currency code: {}", args.code)))?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    require_permission_for_user(
+        &Store::new(&db),
+        &session.user_id,
+        oz_core::permissions::SETTINGS_EDIT,
+    )?;
+    let repo = CurrencyRepository::new(&db);
+    repo.set_default_currency(&args.code)?;
+    drop(db);
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "currencies_tests.rs"]
+mod tests;

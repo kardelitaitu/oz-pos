@@ -90,6 +90,14 @@ setup-features-group-aria = { $title }
 setup-features-toggle-aria =
     .aria-label = Aktifkan/nonaktifkan { $label }
 setup-features-section-payments = Metode Pembayaran
+
+# Gerbang setup QRIS (pemicu Free→Plus C1 — onboarding)
+setup-qris-label = QRIS (Midtrans)
+setup-qris-available = Terima pembayaran QRIS — sudah termasuk paket Anda.
+setup-qris-included = Termasuk
+setup-qris-upgrade-required = Pembayaran QRIS adalah fitur Plus. Tingkatkan ke Plus untuk menerima QRIS.
+setup-qris-upgrade-cta = Tingkatkan ke Plus
+
 setup-features-section-products = Produk & Stok
 setup-features-section-staff = Manajemen Staf
 setup-features-section-hardware = Perangkat Keras & Peripheral
@@ -634,6 +642,17 @@ settings-license-refresh = Muat Ulang
 settings-license-refresh-aria = Muat ulang status lisensi
 settings-license-poll-offline = Server tidak dapat dijangkau
 settings-license-load-failed = Gagal memuat info lisensi
+# C3.3: Pause/resume subscription
+settings-license-subscription-actions = Langganan
+settings-license-pause-subscription = Jeda langganan
+settings-license-pause-aria = Jeda langganan selama 1 bulan
+settings-license-pause-success = Langganan dijeda. Resume kapan saja.
+settings-license-pause-failed = Gagal menjeda langganan
+settings-license-paused-until = Dijeda hingga
+settings-license-resume-subscription = Lanjutkan langganan
+settings-license-resume-aria = Lanjutkan langganan yang dijeda
+settings-license-resume-success = Langganan dilanjutkan!
+settings-license-resume-failed = Gagal melanjutkan langganan
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. Seluruh hak cipta dilindungi.
 
 # ── Toast messages ──
@@ -800,3 +819,31 @@ terminal-feature-group-inventory-products = Inventaris & Produk
 terminal-feature-group-hardware = Perangkat Keras
 terminal-feature-group-staff-security = Staf & Keamanan
 terminal-feature-group-system = Sistem
+
+# Exit survey (§7 churn prevention)
+exit-survey-title = Sebelum Anda jeda...
+exit-survey-message = Bantu kami berkembang — apa alasan utama Anda menjeda langganan?
+exit-survey-reason-price = Terlalu mahal
+exit-survey-reason-features = Fitur tidak cukup
+exit-survey-reason-competitor = Beralih ke kompetitor
+exit-survey-reason-closed = Usaha ditutup
+exit-survey-reason-break = Istirahat sementara
+exit-survey-reason-other = Lainnya
+exit-survey-other-placeholder = Ceritakan lebih lanjut...
+exit-survey-cancel = Kembali
+exit-survey-submit = Jeda langganan
+
+# ── Add-on Marketplace (C4.3) ─────────────────────────────────────
+addon-marketplace-title = Tambahan
+addon-marketplace-subtitle = Perluas paket Anda dengan fitur tambahan
+addon-marketplace-empty = Tidak ada tambahan yang tersedia untuk paket Anda saat ini.
+addon-purchase-button = Tambah
+addon-owned-badge = Aktif
+addon-analytics-name = Analitik Lanjutan
+addon-analytics-desc = Buka laporan penjualan detail, analisis tren, dan rentang tanggal kustom di paket Plus.
+addon-support-name = Dukungan Prioritas
+addon-support-desc = Dapatkan waktu respons lebih cepat dan dukungan khusus dari tim OZ-POS.
+addon-storage-name = Penyimpanan Cloud Tambahan
+addon-storage-desc = Tingkatkan kuota penyimpanan cloud sync untuk katalog produk yang lebih besar dan riwayat lebih panjang.
+addon-hal-name = Driver HAL Kustom
+addon-hal-desc = Muat dan gunakan driver abstraction layer hardware kustom untuk perangkat POS khusus.

@@ -71,6 +71,8 @@ pub mod setup;
 pub mod staff;
 /// Stock transfer commands.
 pub mod stock_transfers;
+/// Subscription capability commands (C2.2 tier gates).
+pub mod subscription;
 /// Sync commands.
 pub mod sync;
 /// Table management commands.

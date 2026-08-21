@@ -3,7 +3,7 @@ title: Instalasi
 description: Pasang OZ-POS di Windows, macOS, atau Linux.
 category: gettingStarted
 order: 2
-updated: "2026-08-16"
+updated: "2026-08-17"
 ---
 
 ## Persyaratan sistem
@@ -38,8 +38,8 @@ menu Mulai.
 ## Peluncuran pertama
 
 Wizard pengaturan menanyakan nama usaha dan mata uang bawaan Anda — keduanya
-dapat diubah kapan saja di pengaturan. Uji coba gratis 90 hari dimulai pada
-peluncuran pertama; semua fitur terbuka sejak hari pertama.
+dapat diubah kapan saja di pengaturan. Paket gratis dimulai pada peluncuran
+pertama; Anda dapat naik paket kapan saja dari Pengaturan → Lisensi.
 
 ## Pembaruan
 
@@ -52,4 +52,4 @@ sebelumnya dapat dipasang ulang secara manual dari halaman rilis.
 ## Langkah berikutnya
 
 [Transaksi pertama Anda](../first-sale/), atau lihat [aktivasi](../activation/)
-saat siap berpindah dari masa uji coba.
+saat siap membuka lebih banyak toko, pembayaran QRIS, dan sinkron cloud.

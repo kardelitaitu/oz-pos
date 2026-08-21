@@ -18,3 +18,7 @@ impl ReportingService {
         repo.generate_daily_report(date)
     }
 }
+
+#[cfg(test)]
+#[path = "service_tests.rs"]
+mod tests;

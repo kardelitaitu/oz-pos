@@ -85,3 +85,7 @@ terminal-overrides-count = { $count ->
     [one] { $count } override
    *[other] { $count } overrides
 }
+
+# C2.2: terminal-limit banner (Plus→Pro trigger).
+terminal-limit-reached = You have reached the { $limit }-register limit for your plan. Upgrade to Pro for up to 5 registers per store.
+terminal-limit-upgrade-cta = Upgrade to Pro

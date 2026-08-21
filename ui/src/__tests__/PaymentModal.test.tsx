@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
 import { withFluent, withFluentLocale } from '@/locales/test-utils';
@@ -7,6 +7,8 @@ import { ToastProvider } from '@/frontend/shared/Toast';
 import salesFtl from '@/locales/sales.ftl?raw';
 import salesIdFtl from '@/locales/sales.id.ftl?raw';
 import PaymentModal from '@/features/sales/PaymentModal';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { makeSubscriptionCaps } from '@/__tests__/test-utils/mocks/subscriptionCaps';
 import type { Money, CartLine, Sku, LineId } from '@/types/domain';
 
 async function renderWithFluent(ui: React.ReactElement) {
@@ -30,14 +32,18 @@ const lineItem = (overrides: Partial<CartLine> = {}): CartLine => ({
   ...overrides,
 });
 
-const { invokeMock } = vi.hoisted(() => ({
-  invokeMock: vi.fn((cmd: string) => {
+const { invokeMock } = vi.hoisted(() => {
+  const mock = vi.fn((...callArgs: unknown[]) => {
+    const cmd = callArgs[0] as string;
     switch (cmd) {
       case 'start_sale':
+      case 'start_sale_scoped':
         return Promise.resolve({ cartId: 'test-cart' });
       case 'add_line':
+      case 'add_line_scoped':
         return Promise.resolve({ lineId: 'test-line', lineTotal: null });
       case 'complete_sale':
+      case 'complete_sale_scoped':
         return Promise.resolve({ saleId: 'sale-1', total: null, lineCount: 1 });
       case 'get_sale':
         return Promise.resolve(null);
@@ -47,18 +53,91 @@ const { invokeMock } = vi.hoisted(() => ({
         return Promise.resolve();
       case 'get_enabled_features':
         return Promise.resolve({ features: [] });
+      case 'finalize_sale':
+        return Promise.resolve();
+      case 'create_kds_order_from_sale_scoped':
+        return Promise.resolve();
       default:
         return Promise.resolve({});
     }
-  }),
+  });
+  return { invokeMock: mock };
+});
+
+const { mockListCurrenciesScoped, mockListExchangeRates } = vi.hoisted(() => ({
+  mockListCurrenciesScoped: vi.fn(() =>
+    Promise.resolve([
+      { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
+      { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 0, symbol: 'Rp' },
+    ]),
+  ),
+  mockListExchangeRates: vi.fn(() =>
+    Promise.resolve([
+      {
+        id: 'rate-1',
+        from_currency: 'USD',
+        to_currency: 'IDR',
+        rate_millionths: 16_000_000_000, // 1 USD = 16,000 IDR
+        source: 'manual',
+        effective_date: '2026-07-31',
+        created_at: '2026-07-31T00:00:00.000Z',
+      },
+    ]),
+  ),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
 
+vi.mock('@/api/currency', () => ({
+  listCurrenciesScoped: mockListCurrenciesScoped,
+  listExchangeRates: mockListExchangeRates,
+  listExchangeRatesScoped: vi.fn(() =>
+    Promise.resolve([
+      { from_currency: 'USD', to_currency: 'IDR', rate_millionths: 16_000_000_000 },
+    ]),
+  ),
+  listCurrencies: vi.fn(() =>
+    Promise.resolve([
+      { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
+      { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 0, symbol: 'Rp' },
+    ]),
+  ),
+  getDefaultCurrency: vi.fn(() => Promise.resolve('USD')),
+  getDefaultCurrencyScoped: vi.fn(() => Promise.resolve('USD')),
+  getLatestExchangeRateScoped: vi.fn(() =>
+    Promise.resolve({
+      id: 'rate-1',
+      from_currency: 'USD',
+      to_currency: 'IDR',
+      rate_millionths: 16_000_000_000,
+      source: 'manual',
+      effective_date: '2026-01-01',
+    }),
+  ),
+  exchangeRateToDecimal: (rate: { rate_millionths: number }) => rate.rate_millionths / 1_000_000,
+  formatExchangeRate: (rate: { rate_millionths: number }) => (rate.rate_millionths / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0',
+}));
+
+vi.mock('@/hooks/useFeatures', () => ({
+  useFeatures: () => ({
+    enabled: new Set(['multi-currency']),
+    loading: false,
+    isEnabled: (key: string) => key === 'multi-currency',
+    filterRoutes: (routes: string[]) => routes,
+    error: null,
+    loaded: true,
+  }),
+  FEATURES: {
+    MULTI_CURRENCY: 'multi-currency',
+  },
+}));
+
 beforeEach(() => {
   invokeMock.mockClear();
+  mockListCurrenciesScoped.mockClear();
+  mockListExchangeRates.mockClear();
 });
 
 describe('PaymentModal — rendering & fast interaction', () => {
@@ -79,6 +158,48 @@ describe('PaymentModal — rendering & fast interaction', () => {
     expect(screen.getByText('$ 7,00')).toBeInTheDocument();
     expect(screen.getByLabelText(/Cash/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Card/)).toBeInTheDocument();
+  });
+
+  it('shows the QRIS upgrade prompt when the tier does not support QRIS (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'free', supportsQris: false }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(/QRIS/));
+    expect(screen.getByText(/QRIS payments are a Plus feature/)).toBeInTheDocument();
+    expect(screen.getByText('Upgrade to Plus')).toBeInTheDocument();
+  });
+
+  it('shows the QRIS generation UI when the tier supports QRIS (C2.2)', async () => {
+    vi.mocked(useSubscription).mockReturnValue({
+      caps: makeSubscriptionCaps({ tier: 'plus', supportsQris: true }),
+      loading: false,
+      refresh: vi.fn(),
+    });
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(/QRIS/));
+    expect(screen.queryByText(/QRIS payments are a Plus feature/)).not.toBeInTheDocument();
+    expect(screen.getByText('Pay with QR')).toBeInTheDocument();
   });
 
   it('does not render when closed', async () => {
@@ -548,5 +669,73 @@ describe('PaymentModal — rendering & fast interaction', () => {
 
     const tenderInput = screen.getByLabelText(/amount tendered/i) as unknown as HTMLInputElement;
     expect(tenderInput.value).toBe('7.00');
+  });
+
+  // ── Multi-currency settlement (CUR-02) ──
+
+  it('completes sale in selected charge currency with converted amounts (multi-currency)', async () => {
+    const onComplete = vi.fn();
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem({ unit_price: usd(350), qty: 2 })]} // 2 * $3.50 = $7.00
+        total={usd(700)} // $7.00 USD
+        userId="test-user-id"
+        sessionToken="test-session-token"
+        onComplete={onComplete}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Wait for currencies and exchange rates to load
+    await waitFor(() => {
+      expect(screen.getByLabelText(/select charge currency/i)).toBeInTheDocument();
+    });
+
+    // Select IDR as charge currency (1 USD = 16,000 IDR)
+    const currencySelect = screen.getByLabelText(/select charge currency/i) as HTMLSelectElement;
+    await userEvent.selectOptions(currencySelect, 'IDR');
+
+    // Verify charge amount shows converted value: $7.00 * 16,000 = Rp 112,000
+    // Indonesian locale formats with dots as thousand separators: Rp 112.000
+    await waitFor(() => {
+      expect(screen.getByText(/Rp 112\.000/)).toBeInTheDocument();
+    });
+
+    // Select cash payment method
+    await userEvent.click(screen.getByLabelText(/Cash/));
+
+    // Enter exact tender in IDR (Rp 112,000)
+    const tenderInput = screen.getByLabelText(/amount tendered/i) as HTMLInputElement;
+    await userEvent.type(tenderInput, '112000');
+
+    // Complete the sale
+    await userEvent.click(screen.getByRole('button', { name: /Complete/i }));
+
+    // Verify complete_sale_scoped was called with correct multi-currency metadata
+    // The API uses baseCurrency (original cart currency) + tenderRateMillionths for conversion
+    const completeSaleCall = invokeMock.mock.calls.find((call) => call[0] === 'complete_sale_scoped');
+    expect(completeSaleCall).toBeDefined();
+    if (completeSaleCall) {
+      // Tauri commands wrap params in { sessionToken, args: { ... } }
+      const outerArgs = completeSaleCall[1] as { args?: { baseCurrency?: string; tenderRateMillionths?: number; tenderedMinor?: number } } | undefined;
+      const args = outerArgs?.args;
+      // baseCurrency should be the original cart currency (USD)
+      expect(args?.baseCurrency).toBe('USD');
+      // tenderRateMillionths should be set (16,000 IDR per USD = 16,000,000,000 millionths)
+      expect(args?.tenderRateMillionths).toBe(16_000_000_000);
+      // For cash payments, tenderedMinor is used instead of paymentSplits (in charge currency minor units)
+      expect(args?.tenderedMinor).toBe(112000);
+    }
+
+    // Wait for receipt preview to appear, then click Skip to trigger onComplete
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Skip/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /Skip/i }));
+
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalled();
+    });
   });
 });

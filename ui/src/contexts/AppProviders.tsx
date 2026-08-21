@@ -9,6 +9,7 @@ import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
+import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import { ZoomProvider } from '@/contexts/ZoomContext';
 import { HardwareAccelProvider } from '@/contexts/HardwareAccelContext';
 
@@ -37,8 +38,9 @@ const ERROR_AUTO_REFRESH_MS = 30_000;
  * 6. AuthProvider (User session state)
  * 7. ToastProvider (Notification alerts)
  * 8. WorkspaceProvider (Store workspace context)
- * 9. ZoomProvider (Root font scaling)
- * 10. HardwareAccelProvider (CSS GPU acceleration flags)
+ * 9. SubscriptionProvider (Tier capabilities for C2.2 upgrade gates)
+ * 10. ZoomProvider (Root font scaling)
+ * 11. HardwareAccelProvider (CSS GPU acceleration flags)
  */
 export function AppProviders({ children }: AppProvidersProps) {
   return (
@@ -58,11 +60,13 @@ export function AppProviders({ children }: AppProvidersProps) {
                   can surface a recoverable notification. */}
               <GlobalErrorReporter />
               <WorkspaceProvider>
-                <ZoomProvider>
-                  <HardwareAccelProvider>
-                    {children}
-                  </HardwareAccelProvider>
-                </ZoomProvider>
+                <SubscriptionProvider>
+                  <ZoomProvider>
+                    <HardwareAccelProvider>
+                      {children}
+                    </HardwareAccelProvider>
+                  </ZoomProvider>
+                </SubscriptionProvider>
               </WorkspaceProvider>
             </ToastProvider>
               </AuthProvider>

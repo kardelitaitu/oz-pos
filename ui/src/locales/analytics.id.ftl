@@ -241,3 +241,8 @@ analytics-card-desc-tables = Perputaran meja dan tamu yang dilayani.
 analytics-card-desc-occupancy = Utilisasi meja sepanjang waktu.
 analytics-card-desc-waitstaff = Pelayan dengan performa terbaik berdasarkan jumlah meja yang ditangani.
 analytics-card-desc-voids = Item yang di-void atau dihapus dari pesanan.
+
+# C2.2: Analytics adalah fitur Pro+ — layar terkunci untuk paket di bawahnya.
+analytics-upgrade-required = Analytics adalah fitur Pro
+analytics-upgrade-message = Buka laporan pendapatan, kategori, dan per jam di semua toko Anda. Tingkatkan ke Pro untuk melihat dasbor analytics lengkap.
+analytics-upgrade-cta = Tingkatkan ke Pro

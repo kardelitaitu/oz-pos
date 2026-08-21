@@ -903,5 +903,9 @@ func subscriptionSummary(app core.App, tenantID string) any {
 		"startsAt":   s.GetString("starts_at"),
 		"expiresAt":  s.GetString("expires_at"),
 		"graceUntil": s.GetString("grace_until"),
+		// Vertical-bundle id (C3.2) the subscription was purchased with — the
+		// account dashboard uses it to hide the bundle upgrade card once the
+		// subscriber already owns the bundle (restaurant_starter).
+		"bundleId": s.GetString("bundle_id"),
 	}
 }

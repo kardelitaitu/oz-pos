@@ -1,0 +1,261 @@
+//! Unit tests for topology persistence: settings-key validation
+//! (`topology_setting_key`, `topology_runtime_setting_key`) and the
+//! diagram-payload validation gate.
+//!
+//! Loaded as the `tests` module of `persistence.rs` via `#[path]`; the
+//! flat namespace resolves through `use super::*`.
+
+use super::*;
+use crate::commands::topology::model::TOPOLOGY_RUNTIME_SETTING_KEY;
+use crate::commands::topology::model::TOPOLOGY_SETTING_KEY;
+
+// ── topology_setting_key ────────────────────────────────────
+
+#[test]
+fn topology_setting_key_none_returns_base() {
+    let key = topology_setting_key(None).unwrap();
+    assert_eq!(key, TOPOLOGY_SETTING_KEY);
+}
+
+#[test]
+fn topology_setting_key_with_branch() {
+    let key = topology_setting_key(Some("main")).unwrap();
+    assert_eq!(key, format!("{TOPOLOGY_SETTING_KEY}/main"));
+}
+
+#[test]
+fn topology_setting_key_empty_branch_rejected() {
+    assert!(topology_setting_key(Some("")).is_err());
+    assert!(topology_setting_key(Some("  ")).is_err());
+}
+
+#[test]
+fn topology_setting_key_slash_rejected() {
+    assert!(topology_setting_key(Some("a/b")).is_err());
+}
+
+#[test]
+fn topology_setting_key_control_chars_rejected() {
+    assert!(topology_setting_key(Some("branch\u{0}test")).is_err());
+    assert!(topology_setting_key(Some("branch\u{1}test")).is_err());
+}
+
+#[test]
+fn topology_setting_key_too_long_rejected() {
+    let long = "a".repeat(201);
+    assert!(topology_setting_key(Some(&long)).is_err());
+}
+
+#[test]
+fn topology_setting_key_max_length_ok() {
+    let ok = "a".repeat(200);
+    assert!(topology_setting_key(Some(&ok)).is_ok());
+}
+
+// ── topology_runtime_setting_key ────────────────────────────
+
+#[test]
+fn topology_runtime_setting_key_base_returns_runtime_base() {
+    let key = topology_runtime_setting_key(TOPOLOGY_SETTING_KEY).unwrap();
+    assert_eq!(key, TOPOLOGY_RUNTIME_SETTING_KEY);
+}
+
+#[test]
+fn topology_runtime_setting_key_branch_returns_runtime_branch() {
+    let branch_key = format!("{TOPOLOGY_SETTING_KEY}/west");
+    let key = topology_runtime_setting_key(&branch_key).unwrap();
+    assert_eq!(key, format!("{TOPOLOGY_RUNTIME_SETTING_KEY}/west"));
+}
+
+#[test]
+fn topology_runtime_setting_key_invalid_prefix_rejected() {
+    assert!(topology_runtime_setting_key("wrong-prefix").is_err());
+}
+
+// ── validate_topology_structure ─────────────────────────────
+
+fn make_node(id: &str, node_type: &str) -> TopologyNodePayload {
+    TopologyNodePayload {
+        id: id.into(),
+        node_type: node_type.into(),
+        name: format!("Name {id}"),
+        subtitle: None,
+        x: 0.0,
+        y: 0.0,
+        tier_requirement: None,
+        telemetry_badge: None,
+        telemetry_status: None,
+        metadata: None,
+    }
+}
+
+fn make_wire(id: &str, from: &str, to: &str) -> TopologyWirePayload {
+    TopologyWirePayload {
+        id: id.into(),
+        from_node_id: from.into(),
+        to_node_id: to.into(),
+        direction: WireDirection::OneWay,
+        label: None,
+        from_port: None,
+        to_port: None,
+    }
+}
+
+#[test]
+fn validate_topology_empty_is_ok() {
+    assert!(validate_topology_structure(&[], &[]).is_ok());
+}
+
+#[test]
+fn validate_topology_single_node_no_wires() {
+    let nodes = vec![make_node("n1", "store")];
+    assert!(validate_topology_structure(&nodes, &[]).is_ok());
+}
+
+#[test]
+fn validate_topology_valid_wire() {
+    let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
+    let wires = vec![make_wire("w1", "n1", "n2")];
+    assert!(validate_topology_structure(&nodes, &wires).is_ok());
+}
+
+#[test]
+fn validate_topology_duplicate_node_id_rejected() {
+    let nodes = vec![make_node("n1", "store"), make_node("n1", "workspace")];
+    let err = validate_topology_structure(&nodes, &[]).unwrap_err();
+    assert!(format!("{err}").contains("duplicate node id"));
+}
+
+#[test]
+fn validate_topology_unknown_node_type_rejected() {
+    let nodes = vec![make_node("n1", "teleporter")];
+    let err = validate_topology_structure(&nodes, &[]).unwrap_err();
+    assert!(format!("{err}").contains("unknown type"));
+}
+
+#[test]
+fn validate_topology_duplicate_wire_id_rejected() {
+    let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
+    let wires = vec![make_wire("w1", "n1", "n2"), make_wire("w1", "n2", "n1")];
+    let err = validate_topology_structure(&nodes, &wires).unwrap_err();
+    assert!(format!("{err}").contains("duplicate wire id"));
+}
+
+#[test]
+fn validate_topology_unknown_wire_direction_rejected() {
+    let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
+    let mut wire = make_wire("w1", "n1", "n2");
+    wire.direction = WireDirection::Unknown;
+    let err = validate_topology_structure(&nodes, &[wire]).unwrap_err();
+    assert!(format!("{err}").contains("unknown direction"));
+}
+
+#[test]
+fn validate_topology_unknown_port_rejected() {
+    let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
+    let mut wire = make_wire("w1", "n1", "n2");
+    wire.from_port = Some(PortName::Unknown);
+    let err = validate_topology_structure(&nodes, &[wire]).unwrap_err();
+    assert!(format!("{err}").contains("unknown port"));
+}
+
+#[test]
+fn validate_topology_wire_references_unknown_node() {
+    let nodes = vec![make_node("n1", "store")];
+    let wires = vec![make_wire("w1", "n1", "nonexistent")];
+    let err = validate_topology_structure(&nodes, &wires).unwrap_err();
+    assert!(
+        format!("{err}").contains("unknown from_node_id")
+            || format!("{err}").contains("unknown to_node_id")
+    );
+}
+
+#[test]
+fn validate_topology_valid_wire_with_ports() {
+    let nodes = vec![make_node("n1", "store"), make_node("n2", "workspace")];
+    let mut wire = make_wire("w1", "n1", "n2");
+    wire.from_port = Some(PortName::Right);
+    wire.to_port = Some(PortName::Left);
+    wire.direction = WireDirection::TwoWay;
+    assert!(validate_topology_structure(&nodes, &[wire]).is_ok());
+}
+
+// ── validate_warehouse_quota ────────────────────────────────
+
+fn wh_node(id: &str) -> Value {
+    serde_json::json!({"id": id, "type": "warehouse", "name": "WH", "x": 0, "y": 0})
+}
+
+fn store_node_val(id: &str) -> Value {
+    serde_json::json!({"id": id, "type": "store", "name": "Store", "x": 0, "y": 0})
+}
+
+#[test]
+fn validate_warehouse_quota_no_warehouses_always_ok() {
+    use oz_core::subscription::SubscriptionTier;
+    let nodes = vec![store_node_val("n1")];
+    assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Free).is_ok());
+    assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Pro).is_ok());
+}
+
+#[test]
+fn validate_warehouse_quota_free_tier_one_warehouse() {
+    use oz_core::subscription::SubscriptionTier;
+    let nodes = vec![wh_node("n1")];
+    assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Free).is_ok());
+}
+
+#[test]
+fn validate_warehouse_quota_free_tier_two_warehouses_rejected() {
+    use oz_core::subscription::SubscriptionTier;
+    let nodes = vec![wh_node("n1"), wh_node("n2")];
+    let err = validate_warehouse_quota(&nodes, &SubscriptionTier::Free).unwrap_err();
+    assert!(format!("{err}").contains("quota exceeded"));
+}
+
+#[test]
+fn validate_warehouse_quota_no_limit_for_tier_without_cap() {
+    use oz_core::subscription::SubscriptionTier;
+    let nodes: Vec<Value> = (0..100).map(|i| wh_node(&format!("w{i}"))).collect();
+    // Premium/Enterprise have no warehouse cap (§3).
+    assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Premium).is_ok());
+    assert!(validate_warehouse_quota(&nodes, &SubscriptionTier::Enterprise).is_ok());
+}
+
+// ── validate_diagram_payloads ───────────────────────────────
+
+#[test]
+fn validate_diagram_payloads_empty_is_ok() {
+    assert!(validate_diagram_payloads(&[], &[]).is_ok());
+}
+
+#[test]
+fn validate_diagram_payloads_valid_node_wire() {
+    let nodes = vec![serde_json::json!({"id":"n1","type":"store","name":"S","x":0,"y":0})];
+    let wires = vec![];
+    assert!(validate_diagram_payloads(&nodes, &wires).is_ok());
+}
+
+#[test]
+fn validate_diagram_payloads_invalid_node_type_rejected() {
+    let nodes = vec![serde_json::json!({"id":"n1","type":"teleporter","name":"S","x":0,"y":0})];
+    let err = validate_diagram_payloads(&nodes, &[]).unwrap_err();
+    assert!(
+        format!("{err}").contains("unknown type") || format!("{err}").contains("invalid topology")
+    );
+}
+
+#[test]
+fn validate_diagram_payloads_branch_location_mapped_to_store() {
+    // "branch-location" should be silently mapped to "store"
+    let nodes =
+        vec![serde_json::json!({"id":"n1","type":"branch-location","name":"S","x":0,"y":0})];
+    assert!(validate_diagram_payloads(&nodes, &[]).is_ok());
+}
+
+#[test]
+fn validate_diagram_payloads_invalid_json_rejected() {
+    let nodes = vec![serde_json::json!({"missing_fields": true})];
+    let err = validate_diagram_payloads(&nodes, &[]).unwrap_err();
+    assert!(format!("{err}").contains("invalid topology nodes"));
+}

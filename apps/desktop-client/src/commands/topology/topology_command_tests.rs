@@ -448,7 +448,7 @@ fn save_rejects_unknown_from_port_variant() {
     );
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
-    assert!(err.contains("unknown from_port"), "got: {err}");
+    assert!(err.contains("unknown port"), "got: {err}");
     assert!(load_topology_data(&conn).unwrap().is_none());
 }
 
@@ -464,7 +464,7 @@ fn save_rejects_unknown_to_port_variant() {
     );
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
-    assert!(err.contains("unknown to_port"), "got: {err}");
+    assert!(err.contains("unknown port"), "got: {err}");
     assert!(load_topology_data(&conn).unwrap().is_none());
 }
 
@@ -1565,13 +1565,24 @@ fn request_fingerprint_binds_store_branch_revision_and_graph_payload() {
 }
 
 #[test]
-fn backend_warehouse_quota_rejects_multiple_standard_warehouses() {
+fn backend_warehouse_quota_allows_two_plus_warehouses() {
+    // Plus allows 2 warehouses (§3) — two nodes must pass.
     let nodes = vec![
         serde_json::json!({ "id": "wh-1", "type": "warehouse" }),
         serde_json::json!({ "id": "wh-2", "type": "warehouse" }),
     ];
-    let result =
-        validate_warehouse_quota(&nodes, &oz_core::subscription::SubscriptionTier::Standard);
+    let result = validate_warehouse_quota(&nodes, &oz_core::subscription::SubscriptionTier::Plus);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn backend_warehouse_quota_rejects_multiple_free_warehouses() {
+    // Free allows 1 warehouse (§3) — two nodes must be rejected.
+    let nodes = vec![
+        serde_json::json!({ "id": "wh-1", "type": "warehouse" }),
+        serde_json::json!({ "id": "wh-2", "type": "warehouse" }),
+    ];
+    let result = validate_warehouse_quota(&nodes, &oz_core::subscription::SubscriptionTier::Free);
     assert!(
         matches!(result, Err(AppError::PermissionDenied(message)) if message.contains("limit 1"))
     );

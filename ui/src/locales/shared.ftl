@@ -292,7 +292,7 @@ staff-login-license-inactive = License inactive
 statusbar-conflict-count = { $count } sync conflict(s) resolved
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Application status
-statusbar-version = OZ-POS Enterprise v0.0.27
+statusbar-version = OZ-POS Enterprise v0.0.28
 statusbar-sync-name = Sync
 statusbar-gateway-name = Stripe
 statusbar-license = Proprietary License
@@ -341,6 +341,8 @@ auth-activating = Activating...
 auth-activation-success = License activated successfully!
 auth-activation-failed = Failed to activate license.
 auth-activation-error = An error occurred during activation.
+auth-trial-hint-pro = You came from a restaurant/cafe page — your trial key unlocks a 14-day Pro trial.
+auth-trial-hint-enterprise = Your referral trial key unlocks a 30-day Pro trial.
 auth-validation-required = License key and Email are required.
 auth-validation-invalid-email = Invalid email format.
 auth-validation-phone-required = Phone number is required.
@@ -408,6 +410,13 @@ reset-colour-aria = Reset colour to default
 pick-logo-aria = Pick logo file
 reset-appearance-aria = Reset all appearance settings
 save-appearance-aria = Save appearance
+
+# Stock alert bell (global header)
+stock-alert-bell-empty-aria = No stock alerts
+stock-alert-bell-count-aria = { $count ->
+    [one] { $count } active stock alert
+   *[other] { $count } active stock alerts
+}
 
 # Workspace home — Insights section (owner/admin only)
 workspace-home-insights-section = Insights

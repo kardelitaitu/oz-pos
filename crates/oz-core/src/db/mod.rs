@@ -126,7 +126,9 @@ pub use reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
 };
-pub use sales::{CartLineTaxInput, DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow};
+pub use sales::{
+    CartLineTaxInput, CartTaxResult, DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow,
+};
 pub use shifts::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 
 // ── Store ────────────────────────────────────────────────────────────
@@ -388,3 +390,7 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
         default_supplier_id: row.get("default_supplier_id").unwrap_or(None),
     })
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;

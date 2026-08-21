@@ -4,6 +4,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { printSalesReceipt } from '@/api/sales';
 import { getLowStockAlerts, type LowStockAlert } from '@/api/reports';
 import { formatMoney } from '@/types/domain';
+import { buildCsv, downloadCsv } from './csv';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -46,25 +47,18 @@ export default function InventoryReportScreen() {
         : '0.0%';
       return [
         i.sku,
-        `"${i.name}"`,
-        i.current_qty,
-        i.threshold,
-        `"${formatMoney(money)}"`,
-        `"${formatMoney({ minor_units: i.cost_minor, currency: i.currency })}"`,
-        `"${formatMoney({ minor_units: unitMargin, currency: i.currency })}"`,
-        `"${marginPct}"`,
-        `"${formatMoney({ minor_units: i.cost_minor * i.current_qty, currency: i.currency })}"`,
-      ].join(',');
+        i.name,
+        String(i.current_qty),
+        String(i.threshold),
+        formatMoney(money),
+        formatMoney({ minor_units: i.cost_minor, currency: i.currency }),
+        formatMoney({ minor_units: unitMargin, currency: i.currency }),
+        marginPct,
+        formatMoney({ minor_units: i.cost_minor * i.current_qty, currency: i.currency }),
+      ];
     });
-    const bom = '\uFEFF';
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `inventory-report-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const csv = buildCsv(headers, rows);
+    downloadCsv(csv, `inventory-report-${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   const printReport = async () => {

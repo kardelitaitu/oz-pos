@@ -25,6 +25,10 @@ import {
 import { FEATURES } from '@/hooks/useFeatures';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { LocaleContext } from '@/i18n/LocaleContext';
+import { useContext } from 'react';
+import { openUpgradePricing } from '@/utils/upgrade';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -152,6 +156,12 @@ function formatDate(iso: string, locale: string): string {
 /** Terminal management screen — register, configure, and manage POS terminals, feature overrides, and device bindings for multi-store deployments. */
 export default function TerminalManagementScreen() {
   const { l10n } = useLocalization();
+  // C2.2: terminal-limit warning (Plus→Pro trigger) — `max_pos_instances()`
+  // caps how many registers the tier may register.
+  const { caps } = useSubscription();
+  const locale = useContext(LocaleContext)?.locale ?? 'en';
+  const atTerminalLimit =
+    caps !== null && caps.maxPosInstances !== null && caps.terminalCount >= caps.maxPosInstances;
   const { session } = useAuth();
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
@@ -471,6 +481,15 @@ export default function TerminalManagementScreen() {
 
   return (
     <div className="terminal-mgmt">
+      {/* C2.2: non-blocking banner when the tier's register limit is reached. */}
+      {atTerminalLimit && (
+        <div className="terminal-limit-banner" role="note">
+          <span>{l10n.getString('terminal-limit-reached', { limit: caps?.maxPosInstances ?? 0 })}</span>
+          <Button variant="primary" size="sm" onClick={() => openUpgradePricing(locale, 'pro')}>
+            {l10n.getString('terminal-limit-upgrade-cta')}
+          </Button>
+        </div>
+      )}
       <div className="terminal-mgmt-header">
         <Localized id="terminal-management-title">
           <h1 className="terminal-mgmt-title">Terminal Management</h1>

@@ -61,18 +61,5 @@ pub async fn write_all(stream: &mut TcpStream, data: &[u8]) -> Result<(), HalErr
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn raw_port_is_9100() {
-        assert_eq!(RAW_PORT, 9100);
-    }
-
-    #[test]
-    fn connect_timeout_is_reasonable() {
-        const {
-            assert!(CONNECT_TIMEOUT_SECS > 0 && CONNECT_TIMEOUT_SECS <= 30);
-        }
-    }
-}
+#[path = "tcp_tests.rs"]
+mod tests;

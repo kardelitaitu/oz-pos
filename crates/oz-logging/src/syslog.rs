@@ -28,6 +28,36 @@ use tracing_subscriber::util::SubscriberInitExt;
 use crate::LoggingError;
 use crate::visitor::MessageVisitor;
 
+/// Resolve a syslog facility name to its libc constant.
+///
+/// Pure and side-effect free so the mapping is unit-testable without
+/// touching the FFI. Returns `None` for unknown facility names.
+fn facility_code(facility: &str) -> Option<i32> {
+    Some(match facility {
+        "auth" => libc::LOG_AUTH,
+        "authpriv" => libc::LOG_AUTHPRIV,
+        "cron" => libc::LOG_CRON,
+        "daemon" => libc::LOG_DAEMON,
+        "ftp" => libc::LOG_FTP,
+        "kern" => libc::LOG_KERN,
+        "local0" => libc::LOG_LOCAL0,
+        "local1" => libc::LOG_LOCAL1,
+        "local2" => libc::LOG_LOCAL2,
+        "local3" => libc::LOG_LOCAL3,
+        "local4" => libc::LOG_LOCAL4,
+        "local5" => libc::LOG_LOCAL5,
+        "local6" => libc::LOG_LOCAL6,
+        "local7" => libc::LOG_LOCAL7,
+        "lpr" => libc::LOG_LPR,
+        "mail" => libc::LOG_MAIL,
+        "news" => libc::LOG_NEWS,
+        "syslog" => libc::LOG_SYSLOG,
+        "user" => libc::LOG_USER,
+        "uucp" => libc::LOG_UUCP,
+        _ => return None,
+    })
+}
+
 /// Initialise syslog logging for Linux systems.
 ///
 /// Opens a connection to the syslog daemon and registers a combined
@@ -49,32 +79,10 @@ use crate::visitor::MessageVisitor;
 ///
 /// Panics if the global subscriber has already been set.
 pub fn init_syslog(ident: &str, facility: &str) -> Result<(), LoggingError> {
-    let facility_code = match facility {
-        "auth" => libc::LOG_AUTH,
-        "authpriv" => libc::LOG_AUTHPRIV,
-        "cron" => libc::LOG_CRON,
-        "daemon" => libc::LOG_DAEMON,
-        "ftp" => libc::LOG_FTP,
-        "kern" => libc::LOG_KERN,
-        "local0" => libc::LOG_LOCAL0,
-        "local1" => libc::LOG_LOCAL1,
-        "local2" => libc::LOG_LOCAL2,
-        "local3" => libc::LOG_LOCAL3,
-        "local4" => libc::LOG_LOCAL4,
-        "local5" => libc::LOG_LOCAL5,
-        "local6" => libc::LOG_LOCAL6,
-        "local7" => libc::LOG_LOCAL7,
-        "lpr" => libc::LOG_LPR,
-        "mail" => libc::LOG_MAIL,
-        "news" => libc::LOG_NEWS,
-        "syslog" => libc::LOG_SYSLOG,
-        "user" => libc::LOG_USER,
-        "uucp" => libc::LOG_UUCP,
-        _ => {
-            return Err(LoggingError::InvalidLevel(format!(
-                "unknown syslog facility: {facility}"
-            )));
-        }
+    let Some(facility_code) = facility_code(facility) else {
+        return Err(LoggingError::InvalidLevel(format!(
+            "unknown syslog facility: {facility}"
+        )));
     };
 
     let c_ident = std::ffi::CString::new(ident)
@@ -132,3 +140,7 @@ impl<S: tracing::Subscriber> Layer<S> for SyslogLayer {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "syslog_tests.rs"]
+mod tests;

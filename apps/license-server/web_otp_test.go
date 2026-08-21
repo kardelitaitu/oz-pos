@@ -534,6 +534,63 @@ func TestMe_ShowsUnusedKeyViaSubscription(t *testing.T) {
 	}
 }
 
+// TestMe_ExposesSubscriptionBundleId verifies the account dashboard can
+// tell a Plus subscriber already owns the Restaurant Starter bundle: /me
+// exposes subscription.bundle_id, empty before the upgrade and
+// restaurant_starter after it (the page hides the upgrade card once set).
+func TestMe_ExposesSubscriptionBundleId(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	const tenantID = "webotpmebundl01"
+	seedTenant(t, app, tenantID, "webotpmebundl01", "active")
+	seedSubscription(t, app, tenantID, "plus", "active")
+
+	token := "me-bundle-session-0001"
+	webOtpStore.createSession(hashWebToken(token), tenantID)
+
+	meBundle := func() string {
+		t.Helper()
+		rec := webRequest(t, se, http.MethodGet, "/api/v1/web/me", "",
+			"http://localhost:4321", "Bearer "+token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected /me 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Sub map[string]any `json:"subscription"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse /me: %v", err)
+		}
+		v, ok := resp.Sub["bundleId"]
+		if !ok {
+			t.Fatal("expected subscription.bundleId in the /me payload")
+		}
+		s, _ := v.(string)
+		return s
+	}
+
+	// Plain Plus subscription: no bundle yet → empty (card is shown).
+	if got := meBundle(); got != "" {
+		t.Errorf("expected empty bundleId for a plain plus subscription, got %q", got)
+	}
+
+	// The subscriber purchased the bundle (webhook wrote bundle_id) → the
+	// dashboard sees it and hides the upgrade card.
+	subs, err := app.FindRecordsByFilter("subscriptions", "tenant_id = {:t}", "", 1, 0, map[string]any{"t": tenantID})
+	if err != nil || len(subs) == 0 {
+		t.Fatalf("seeded subscription not found: %v", err)
+	}
+	subs[0].Set("bundle_id", "restaurant_starter")
+	if err := app.Save(subs[0]); err != nil {
+		t.Fatalf("failed to set bundle_id: %v", err)
+	}
+	if got := meBundle(); got != "restaurant_starter" {
+		t.Errorf("expected bundleId=restaurant_starter after upgrade, got %q", got)
+	}
+}
+
 // TestMe_ShowsGracePeriodSubscription covers the cancel/pause state: the
 // webhook moved the subscription to grace_period (paddleSetGrace), and
 // /me must still surface both the subscription card and the minted key

@@ -10,6 +10,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -68,7 +69,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	licenseKeys := core.NewBaseCollection("license_keys")
 	licenseKeys.Fields.Add(
 		&core.TextField{Name: "key", Required: true},
-		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 		&core.NumberField{Name: "max_stores"},
 		&core.NumberField{Name: "max_pos_instances"},
 		&core.JSONField{Name: "allowed_types"},
@@ -96,14 +97,16 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	subscriptions := core.NewBaseCollection("subscriptions")
 	subscriptions.Fields.Add(
 		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
-		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 		&core.NumberField{Name: "max_stores"},
 		&core.NumberField{Name: "max_pos_instances"},
 		&core.JSONField{Name: "allowed_types"},
-		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
+		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked", "paused"}},
 		&core.DateField{Name: "starts_at", Required: true},
 		&core.DateField{Name: "expires_at", Required: true},
 		&core.DateField{Name: "grace_until"},
+		&core.DateField{Name: "paused_at"},
+		&core.DateField{Name: "paused_until"},
 		&core.TextField{Name: "signed_payload", Required: true},
 		&core.TextField{Name: "signature", Required: true},
 		&core.TextField{Name: "paddle_sub_id"},
@@ -130,6 +133,49 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	if err := app.Save(tenantMachines); err != nil {
 		t.Fatalf("failed to create tenant_machines collection: %v", err)
 	}
+
+	// Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK): one trial
+	// per physical device. Mirrors the production pb_schema.json so
+	// /api/v1/license/trial and the activation-time gate find it.
+	trialRegs := core.NewBaseCollection("trial_registrations")
+	trialRegs.Fields.Add(&core.TextField{Name: "hardware_fingerprint", Required: true, Max: 128})
+	trialRegs.Fields.Add(&core.DateField{Name: "first_seen_at", Required: true})
+	trialRegs.Fields.Add(&core.DateField{Name: "trial_expires_at", Required: true})
+	trialRegs.Fields.Add(&core.SelectField{Name: "platform", Required: true, Values: []string{"windows", "android", "linux", "macos", "unknown"}, MaxSelect: 1})
+	trialRegs.Fields.Add(&core.TextField{Name: "app_version", Required: true, Max: 32})
+	trialRegs.Fields.Add(&core.RelationField{Name: "tenant_id", CollectionId: tenants.Id, MaxSelect: 1})
+	trialRegs.Fields.Add(&core.TextField{Name: "ip_address", Max: 64})
+	trialRegs.Indexes = append(trialRegs.Indexes,
+		"CREATE UNIQUE INDEX idx_trial_registrations_hw ON trial_registrations (hardware_fingerprint) WHERE hardware_fingerprint IS NOT NULL AND hardware_fingerprint != ''")
+	trialRegs.CreateRule = types.Pointer("")
+	trialRegs.ListRule = types.Pointer("")
+	trialRegs.ViewRule = types.Pointer("")
+	trialRegs.UpdateRule = types.Pointer("")
+	if err := app.Save(trialRegs); err != nil {
+		t.Fatalf("failed to create trial_registrations collection: %v", err)
+	}
+
+	// Lightweight repeat-email detector: hash of (email, device id) with a
+	// claim counter. Mirrors the production pb_schema.json so the detector
+	// (recordTrialClaim in trial.go) finds its table in tests.
+	trialClaims := core.NewBaseCollection("trial_claims")
+	trialClaims.Fields.Add(&core.TextField{Name: "claim_hash", Required: true, Pattern: "^[a-f0-9]{64}$", Min: 64, Max: 64})
+	trialClaims.Fields.Add(&core.TextField{Name: "email", Required: true, Max: 320})
+	trialClaims.Fields.Add(&core.TextField{Name: "device_id", Required: true, Max: 128})
+	trialClaims.Fields.Add(&core.RelationField{Name: "tenant_id", CollectionId: tenants.Id, MaxSelect: 1})
+	trialClaims.Fields.Add(&core.NumberField{Name: "claim_count", Required: true, Min: types.Pointer(1.0), OnlyInt: true})
+	trialClaims.Fields.Add(&core.DateField{Name: "first_claimed_at", Required: true})
+	trialClaims.Fields.Add(&core.DateField{Name: "last_claimed_at", Required: true})
+	trialClaims.Fields.Add(&core.TextField{Name: "trial_keys", Max: 2048})
+	trialClaims.Indexes = append(trialClaims.Indexes,
+		"CREATE UNIQUE INDEX idx_trial_claims_hash ON trial_claims (claim_hash) WHERE claim_hash IS NOT NULL AND claim_hash != ''")
+	trialClaims.CreateRule = types.Pointer("")
+	trialClaims.ListRule = types.Pointer("")
+	trialClaims.ViewRule = types.Pointer("")
+	trialClaims.UpdateRule = types.Pointer("")
+	if err := app.Save(trialClaims); err != nil {
+		t.Fatalf("failed to create trial_claims collection: %v", err)
+	}
 }
 
 func registerTestRoutes(t *testing.T, app *tests.TestApp) {
@@ -153,9 +199,51 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		if err := ensurePasswordResetAtField(app); err != nil {
 			return err
 		}
+		// Mirror production boot: add the license_keys.is_trial bool
+		// (segmented trials, C2.1) via the same idempotent migration path
+		// the deployed server uses.
+		if err := ensureIsTrialField(app); err != nil {
+			return err
+		}
+		// Mirror production boot: add the midtrans_sub_id / midtrans_order_id
+		// fields and the payment_provider discriminator (C3.1) via the same
+		// idempotent migration paths the deployed server uses.
+		if err := ensureMidtransFields(app); err != nil {
+			return err
+		}
+		if err := ensurePaymentProviderField(app); err != nil {
+			return err
+		}
+		// Mirror production boot: add the bundle_id field (vertical-bundle
+		// checkout, C3.2) via the same idempotent migration path the
+		// deployed server uses.
+		if err := ensureBundleIDField(app); err != nil {
+			return err
+		}
+		// Mirror production boot: ensure the trial_registrations collection
+		// (hardware-fingerprint trial lock, SPEC-2026-TRIAL-LOCK) exists.
+		if err := ensureTrialRegistrations(app); err != nil {
+			return err
+		}
+		// Mirror production boot: ensure the trial_claims collection
+		// (lightweight repeat-email detector) exists.
+		if err := ensureTrialClaims(app); err != nil {
+			return err
+		}
+		// C4.2: enterprise self-serve trial approval codes
+		if err := ensureEnterpriseApprovals(app); err != nil {
+			return err
+		}
+		// C4.3: add-on marketplace field on license_keys
+		if err := ensureAddonsField(app); err != nil {
+			return err
+		}
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
+		// Hardware-fingerprint trial lock (SPEC-2026-TRIAL-LOCK) — mirror
+		// production boot.
+		se.Router.POST(trialPath, handleTrial(app))
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
@@ -168,6 +256,20 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
+		// Midtrans webhook + Snap checkout (C3.1) — mirror production boot.
+		se.Router.POST(midtransWebhookPath, handleMidtransWebhook(app))
+		se.Router.POST(midtransSnapPath, handleMidtransSnap(app))
+		// C3.3: Pause/resume subscription endpoints.
+		se.Router.POST("/api/v1/license/pause", handlePause(app))
+		se.Router.POST("/api/v1/license/resume", handleResume(app))
+		// C4.2: Enterprise self-serve trial + admin endpoints.
+		se.Router.POST("/api/v1/license/enterprise-trial", handleEnterpriseTrial(app))
+		se.Router.POST("/api/v1/admin/enterprise-codes", handleGenerateEnterpriseCode(app))
+		se.Router.GET("/api/v1/admin/enterprise-codes", handleListEnterpriseCodes(app))
+		// C4.3: Add-on marketplace admin endpoints
+		se.Router.POST("/api/v1/admin/license-addons", handleAddLicenseAddon(app))
+		se.Router.DELETE("/api/v1/admin/license-addons", handleRemoveLicenseAddon(app))
+		se.Router.GET("/api/v1/admin/license-addons", handleListLicenseAddons(app))
 		return se.Next()
 	})
 }
@@ -282,7 +384,7 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 	licenseKeys := core.NewBaseCollection("license_keys")
 	licenseKeys.Fields.Add(
 		&core.TextField{Name: "key", Required: true},
-		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 		&core.NumberField{Name: "max_stores"},
 		&core.NumberField{Name: "max_pos_instances"},
 		&core.JSONField{Name: "allowed_types"},
@@ -330,7 +432,7 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 		subscriptions := core.NewBaseCollection("subscriptions")
 		subscriptions.Fields.Add(
 			&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenantsID, MaxSelect: 1},
-			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
+			&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "plus", "pro", "premium", "enterprise"}},
 			&core.NumberField{Name: "max_stores"},
 			&core.NumberField{Name: "max_pos_instances"},
 			&core.JSONField{Name: "allowed_types"},
@@ -507,6 +609,22 @@ func seedLicenseKeyWithLimits(t *testing.T, app *tests.TestApp, key, tierKey, st
 	rec.Set("expires_at", expiresAt)
 	if err := app.Save(rec); err != nil {
 		t.Fatalf("failed to seed license key %q: %v", key, err)
+	}
+}
+
+// seedTrialKey seeds a segmented-trial license key (license_keys.is_trial =
+// true). Trial activation mints a short Plus/Pro license from the request's
+// trial_vertical, ignoring the key's own tier/quota defaults (C2.1).
+func seedTrialKey(t *testing.T, app *tests.TestApp, key, tierKey, status, expiresAt string) {
+	t.Helper()
+	seedLicenseKey(t, app, key, tierKey, status, expiresAt)
+	rec, err := app.FindFirstRecordByData("license_keys", "key", key)
+	if err != nil {
+		t.Fatalf("seeded trial key %q not found: %v", key, err)
+	}
+	rec.Set("is_trial", true)
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to mark trial key %q: %v", key, err)
 	}
 }
 
@@ -1026,6 +1144,67 @@ func TestRenewHandler_WithSubscription(t *testing.T) {
 	}
 }
 
+func TestRenewHandler_PlusTier(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	// Seed tenant + active plus subscription, then a valid unused plus key
+	// carrying the plus quota block (1 store / 2 registers, no kds).
+	seedTenant(t, app, "rnwplus00000001", "rnwpluskey00001", "active")
+	seedSubscription(t, app, "rnwplus00000001", "plus", "active")
+	seedLicenseKeyWithLimits(t, app, "rnwpluskey00001-key", "plus", "unused",
+		"2099-12-31 23:59:59.000Z", 1, 2, `["restaurant-pos", "store-pos", "admin", "inventory", "warehouse"]`)
+
+	body := strings.NewReader(`{"tenant_id":"rnwplus00000001","key":"rnwpluskey00001-key"}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/renew", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer rnwpluskey00001")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	payloadStr, ok := resp["signed_payload"].(string)
+	if !ok {
+		t.Fatal("expected signed_payload in response")
+	}
+
+	var sp SubscriptionPayload
+	if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+		t.Fatalf("failed to parse signed_payload: %v", err)
+	}
+	if sp.TierKey != "plus" {
+		t.Errorf("expected tier_key=plus in renewal payload, got %q", sp.TierKey)
+	}
+	if sp.MaxStores != 1 {
+		t.Errorf("expected max_stores=1 in renewal payload, got %d", sp.MaxStores)
+	}
+	if sp.MaxPOSInstances != 2 {
+		t.Errorf("expected max_pos_instances=2 in renewal payload, got %d", sp.MaxPOSInstances)
+	}
+	// Plus renews for +1 year (same as pro/premium). The seeded active
+	// subscription already expires +1y out, so renewal appends another year.
+	expiresAt, err := time.Parse(time.RFC3339, sp.ExpiresAt)
+	if err != nil {
+		t.Fatalf("failed to parse expires_at: %v", err)
+	}
+	diff := expiresAt.Sub(time.Now().UTC().AddDate(2, 0, 0))
+	if diff > time.Hour || diff < -time.Hour {
+		t.Errorf("plus renewal expiry should be ~2 years from now, got diff %v", diff)
+	}
+}
+
 // TestRenewHandler_TierChange_UsesNewKeyLimits verifies the M5-audit fix:
 // when a customer churns to a different tier via renewal, the renewed
 // subscription's quota fields (max_stores, max_pos_instances, allowed_types)
@@ -1418,6 +1597,186 @@ func TestActivateHandler_Success(t *testing.T) {
 	)
 	if err != nil || len(machines) == 0 {
 		t.Fatal("machine should have been registered")
+	}
+}
+
+// TestTrialVerticalSegmentation verifies C2.1: trial keys
+// (license_keys.is_trial) mint segmented short-duration licenses from the
+// request's trial_vertical — blank/unset → 14-day Plus, restaurant/cafe →
+// 14-day Pro, enterprise_referral → 30-day Pro — with the tier's quota
+// block and a 14-day offline grace (subscription-tiers.md §4).
+func TestTrialVerticalSegmentation(t *testing.T) {
+	cases := []struct {
+		name     string
+		vertical string
+		tier     string
+		days     int
+	}{
+		{"blank_vertical_mints_plus_14d", "", "plus", 14},
+		{"restaurant_vertical_mints_pro_14d", "restaurant", "pro", 14},
+		{"cafe_vertical_mints_pro_14d", "cafe", "pro", 14},
+		{"enterprise_referral_mints_pro_30d", "enterprise_referral", "pro", 30},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resetRateLimiters()
+			app, se := setupDirectApp(t)
+			defer app.Cleanup()
+
+			key := fmt.Sprintf("OZ-TRIAL-%04d", i)
+			// The key record's own tier is the DEFAULT for blank verticals;
+			// a vertical re-segments the minted license regardless of it.
+			seedTrialKey(t, app, key, "plus", "unused", "2099-12-31 23:59:59.000Z")
+
+			body := strings.NewReader(fmt.Sprintf(`{
+				"key": %q,
+				"email": "trialseg%04d@example.com",
+				"machine_id": "trialmachin0001",
+				"trial_vertical": %q
+			}`, key, i, tc.vertical))
+			req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			mux, err := se.Router.BuildMux()
+			if err != nil {
+				t.Fatalf("BuildMux failed: %v", err)
+			}
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+
+			var resp map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("failed to parse response: %v", err)
+			}
+			payloadStr, ok := resp["signed_payload"].(string)
+			if !ok {
+				t.Fatal("expected signed_payload in response")
+			}
+
+			var sp SubscriptionPayload
+			if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+				t.Fatalf("failed to parse signed_payload: %v", err)
+			}
+			if sp.TierKey != tc.tier {
+				t.Errorf("vertical %q: expected tier_key=%s, got %q", tc.vertical, tc.tier, sp.TierKey)
+			}
+
+			// Quota block must come from the segmented tier, not the key's
+			// default (plus = 1 store / 2 registers, pro = unlimited + kds).
+			expectedStores, expectedPOS, expectedTypes := tierQuotas(tc.tier, "")
+			if sp.MaxStores != expectedStores {
+				t.Errorf("vertical %q: expected max_stores=%d, got %d", tc.vertical, expectedStores, sp.MaxStores)
+			}
+			if sp.MaxPOSInstances != expectedPOS {
+				t.Errorf("vertical %q: expected max_pos_instances=%d, got %d", tc.vertical, expectedPOS, sp.MaxPOSInstances)
+			}
+			if !slices.Equal(sp.AllowedTypes, expectedTypes) {
+				t.Errorf("vertical %q: expected allowed_types=%v, got %v", tc.vertical, expectedTypes, sp.AllowedTypes)
+			}
+
+			// Expiry is now + days; grace is expiry + 14 days.
+			expiresAt, err := time.Parse(time.RFC3339, sp.ExpiresAt)
+			if err != nil {
+				t.Fatalf("failed to parse expires_at: %v", err)
+			}
+			expDiff := expiresAt.Sub(time.Now().UTC().AddDate(0, 0, tc.days))
+			if expDiff > time.Hour || expDiff < -time.Hour {
+				t.Errorf("vertical %q: expected expiry ~%d days from now, got %v (diff %v)", tc.vertical, tc.days, expiresAt, expDiff)
+			}
+			graceUntil, err := time.Parse(time.RFC3339, sp.GraceUntil)
+			if err != nil {
+				t.Fatalf("failed to parse grace_until: %v", err)
+			}
+			graceDiff := graceUntil.Sub(expiresAt.AddDate(0, 0, 14))
+			if graceDiff > time.Minute || graceDiff < -time.Minute {
+				t.Errorf("vertical %q: expected grace_until = expiry + 14d, got diff %v", tc.vertical, graceDiff)
+			}
+
+			// The key is consumed and the subscription persisted with the
+			// segmented tier.
+			keyRec, err := app.FindFirstRecordByData("license_keys", "key", key)
+			if err != nil {
+				t.Fatalf("trial key not found: %v", err)
+			}
+			if keyRec.GetString("status") != "activated" {
+				t.Errorf("expected key status activated, got %q", keyRec.GetString("status"))
+			}
+			subs, err := app.FindRecordsByFilter(
+				"subscriptions",
+				"tier_key = {:tier}",
+				"", 1, 0,
+				map[string]any{"tier": tc.tier},
+			)
+			if err != nil || len(subs) == 0 {
+				t.Fatalf("expected a persisted %s subscription, err=%v", tc.tier, err)
+			}
+		})
+	}
+}
+
+// TestTrialVerticalSegmentation_PaidKeyIgnored verifies the C2.1 security
+// gate: trial_vertical is read ONLY for trial keys. A paid key activated
+// with trial_vertical="restaurant" must keep its own tier, quota block,
+// and +1y expiry — a client-supplied parameter must never shorten or
+// downgrade a paying customer's license.
+func TestTrialVerticalSegmentation_PaidKeyIgnored(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedLicenseKeyWithLimits(t, app, "OZ-PAID-TRIAL-001", "pro", "unused",
+		"2099-12-31 23:59:59.000Z", 5, 3, `["restaurant-pos","store-pos"]`)
+
+	body := strings.NewReader(`{
+		"key": "OZ-PAID-TRIAL-001",
+		"email": "paidtrial0001@example.com",
+		"machine_id": "trialmachin0001",
+		"trial_vertical": "restaurant"
+	}`)
+	req := httptest.NewRequest("POST", "/api/v1/license/activate", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	payloadStr, _ := resp["signed_payload"].(string)
+	var sp SubscriptionPayload
+	if err := json.Unmarshal([]byte(payloadStr), &sp); err != nil {
+		t.Fatalf("failed to parse signed_payload: %v", err)
+	}
+
+	// The key's own tier/quota/expiry win — the forged vertical is ignored.
+	if sp.TierKey != "pro" {
+		t.Errorf("paid key must keep tier pro, got %q", sp.TierKey)
+	}
+	if sp.MaxStores != 5 {
+		t.Errorf("paid key must keep max_stores=5, got %d", sp.MaxStores)
+	}
+	if sp.MaxPOSInstances != 3 {
+		t.Errorf("paid key must keep max_pos_instances=3, got %d", sp.MaxPOSInstances)
+	}
+	expiresAt, err := time.Parse(time.RFC3339, sp.ExpiresAt)
+	if err != nil {
+		t.Fatalf("failed to parse expires_at: %v", err)
+	}
+	expDiff := expiresAt.Sub(time.Now().UTC().AddDate(1, 0, 0))
+	if expDiff > time.Hour || expDiff < -time.Hour {
+		t.Errorf("paid key must keep +1y expiry (calculateExpiry(pro)), got diff %v", expDiff)
 	}
 }
 

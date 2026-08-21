@@ -20,6 +20,11 @@ pub mod email_scheduler;
 /// Single error type for every Tauri command.
 pub mod error;
 /// LAN event forwarding for multi-terminal setups.
+///
+/// Multi-terminal: each POS terminal runs its own process with its own
+/// AppState. The LAN server broadcasts events (KDS orders, stock changes)
+/// to all connected terminals in the same store. Terminal identification
+/// happens at startup via device_id lookup (see state.rs).
 pub mod lan_server;
 /// Global application state (DB, kernel, sync daemon, registry).
 pub mod state;
@@ -244,6 +249,39 @@ pub fn run() {
                 });
             }
 
+            // ── KDS device health monitoring daemon ──────────────────
+            // Runs every 60 seconds to:
+            // 1. Mark connected devices as stale if they haven't pinged recently
+            // 2. Deactivate devices that have been stale for too long (24h)
+            // 3. Prune old KDS orders in terminal states (30-day retention)
+            {
+                let db_clone = app.state::<AppState>().db.clone();
+                platform_startup::spawn_daemon("kds health monitoring", async move {
+                    let mut interval = tokio::time::interval(
+                        std::time::Duration::from_secs(60),
+                    );
+                    interval.tick().await;
+                    loop {
+                        interval.tick().await;
+                        let db = db_clone.lock().await;
+                        let store = oz_core::db::Store::new(&db);
+                        // 1. Mark stale devices (no ping in 30s).
+                        if let Err(e) = store.mark_stale_kds_devices(30) {
+                            tracing::warn!(error = %e, "kds health: mark_stale failed");
+                        }
+                        // 2. Deactivate long-offline devices (stale for 24h).
+                        if let Err(e) = store.deactivate_stale_kds_devices(86400) {
+                            tracing::warn!(error = %e, "kds health: deactivate_stale failed");
+                        }
+                        // 3. Prune old terminal-state orders (30-day retention).
+                        if let Err(e) = store.cleanup_old_kds_orders(30) {
+                            tracing::warn!(error = %e, "kds health: cleanup failed");
+                        }
+                        drop(db);
+                    }
+                });
+            }
+
             // ── LAN event forwarder ────────────────────────────────────
             // Read LAN server config from the settings table (C-4).
             // Default: loopback-only, no PSK. External bind requires
@@ -376,9 +414,15 @@ pub fn run() {
             commands::currencies::list_currencies_scoped,
             commands::currencies::get_default_currency,
             commands::currencies::set_default_currency,
+            commands::currencies::get_default_currency_scoped,
+            commands::currencies::set_default_currency_scoped,
             commands::exchange_rates::list_exchange_rates,
             commands::exchange_rates::create_exchange_rate,
             commands::exchange_rates::delete_exchange_rate,
+            commands::exchange_rates::list_exchange_rates_scoped,
+            commands::exchange_rates::create_exchange_rate_scoped,
+            commands::exchange_rates::delete_exchange_rate_scoped,
+            commands::exchange_rates::get_latest_exchange_rate_scoped,
             commands::features::list_all_features,
             commands::features::set_features_bulk,
             commands::features::set_feature,
@@ -487,6 +531,13 @@ pub fn run() {
             commands::kds::update_kds_order_items,
             commands::kds::update_kds_order_items_scoped,
             commands::kds::print_kds_chit_scoped,
+            commands::kds_device::register_kds_device_scoped,
+            commands::kds_device::list_kds_devices_scoped,
+            commands::kds_device::get_kds_device_scoped,
+            commands::kds_device::update_kds_device_status_scoped,
+            commands::kds_device::deactivate_kds_device_scoped,
+            commands::kds_device::ack_kds_order_scoped,
+            commands::kds_routing::resolve_kds_targets_scoped,
             commands::history::list_sales,
             commands::history::list_sales_scoped,
             commands::history::get_sale,
@@ -731,10 +782,14 @@ pub fn run() {
             commands::workspaces::list_workspace_screens,
             commands::license::activate_license,
             commands::license::get_machine_id,
+            commands::license::get_hardware_fingerprint,
             commands::license::renew_license,
+            commands::license::pause_subscription,
+            commands::license::resume_subscription,
             commands::license::get_license_status,
             commands::license::check_license_status,
             commands::license::test_auth_connection,
+            commands::subscription::get_subscription_capabilities,
             // The legacy unscoped save_topology command is intentionally not
             // registered. All production writes use the authenticated,
             // revision-aware apply_topology_diff command.

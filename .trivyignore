@@ -45,3 +45,5 @@ CVE-2026-58471 # perl-base — affected
 CVE-2026-58472 # perl-base — affected
 CVE-2026-8376  # perl-base — heap overflow on 32-bit builds (runtime is amd64/arm64)
 CVE-2026-9538  # perl-base — no bookworm fix at scan time
+CVE-2026-53613 # bsdutils/libblkid1/libmount1/libsmartcols1 — no bookworm fix
+CVE-2026-14456 # libssl3 (openssl) — no bookworm fix at scan time

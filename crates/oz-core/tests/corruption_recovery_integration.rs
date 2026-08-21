@@ -114,6 +114,11 @@ fn list_sales_with_invalid_currency_returns_error() {
         subtotal: price(100),
         tax_total: price(0),
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
     };
     s.create_sale(&sale).unwrap();
@@ -157,6 +162,11 @@ fn get_sale_with_invalid_currency_returns_error() {
         subtotal: price(50),
         tax_total: price(0),
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
     };
     s.create_sale(&sale).unwrap();
@@ -587,6 +597,11 @@ fn double_void_pending_sale_is_idempotent() {
         subtotal: price(200),
         tax_total: price(0),
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
     };
 
@@ -669,6 +684,11 @@ fn refund_for_sale_without_deduction_locations_falls_back() {
         subtotal: price(100),
         tax_total: price(0),
         customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
         version: 1,
     };
     s.create_sale(&sale).unwrap();

@@ -3,18 +3,19 @@ title: License Activation
 description: Get a license key, activate it in the app, and manage your machines.
 category: gettingStarted
 order: 4
-updated: "2026-08-16"
+updated: "2026-08-17"
 ---
 
 ## Get a license key
 
 Paid plans are bought on the website: open the
-[pricing page](../../pricing/), choose a plan, enter the email the license
-should go to, and pay through the Paddle checkout. The license key and
-receipt are emailed to you automatically — no website login is needed to
-pay.
+[pricing page](../../pricing/), choose a plan, and pay through the Paddle
+checkout. Payment is register-first — the checkout asks you to sign in with
+your email (a one-time code or your password), so the subscription attaches
+to your account. The license key and receipt are emailed to you
+automatically.
 
-The 90-day trial needs no key; it starts on first launch. Activation is for
+The Free plan needs no key; it starts on first launch. Activation is for
 moving to a paid plan.
 
 ## Enter the key in the app
@@ -32,8 +33,8 @@ revoke a machine remotely.
 ## Your account on the website
 
 Sign in on the website [login page](../../login/) with your email and a
-one-time code — there is no password. The account page shows your license
-key, tier, and expiry, and is where you manage your machines.
+one-time code or your password. The account page shows your license key,
+tier, and expiry, and is where you manage your machines.
 
 ## Offline and grace
 

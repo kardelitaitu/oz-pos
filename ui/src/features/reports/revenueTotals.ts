@@ -12,8 +12,11 @@ export interface CurrencyTotal {
  * the first row's currency.
  */
 export function sumRevenueByCurrency(
-  rows: ReadonlyArray<{ total_minor: number; currency: string }>,
+  rows: ReadonlyArray<{ total_minor: number; currency: string }> | null | undefined,
 ): CurrencyTotal[] {
+  if (!rows || rows.length === 0) {
+    return [];
+  }
   const totals = new Map<string, number>();
   for (const row of rows) {
     totals.set(row.currency, (totals.get(row.currency) ?? 0) + row.total_minor);

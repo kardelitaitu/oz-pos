@@ -7,6 +7,24 @@
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** licensing, activation, subscription-signing, pocketbase, northflank
 
+> **Re-scope note:** the architecture described below is implemented and
+> operational. Two deviations from the original design are recorded below:
+>
+> **Deviation 1 (security improvement):** the `/status` endpoint changed from
+> `GET /api/v1/license/status/{tenant_id}` to `POST /api/v1/license/status`
+> with `Authorization: Bearer <api_key>` authentication. This avoids leaking
+> the api_key through webserver access logs, CDN request logs, browser history,
+> and Referer headers. The handler (`status.go`) resolves the tenant by
+> api_key lookup instead of path parameter.
+>
+> **Deviation 2 (schema update):** the `trial_registrations` collection
+> schema in §5 has been updated to match the shipped implementation:
+> - Added `tenant_id` relation field (links claim to tenant for re-install
+>   detection)
+> - Added `macos` and `unknown` to the `platform` select values
+> - Updated help text to reflect the hardware-fingerprint trial lock
+>   (SPEC-2026-TRIAL-LOCK)
+
 ---
 
 ## Context
@@ -160,7 +178,7 @@ CUSTOMER                            POCKETBASE                        POS (LOCAL
 |---|---|---|
 | `POST` | `/api/v1/license/activate` | Activate a license key. Body: `{ key, tenant_id, machine_id }`. Returns signed `tenant_subscription`. |
 | `POST` | `/api/v1/license/renew` | Renew an existing subscription. Body: `{ tenant_id, api_key }`. Returns fresh signed subscription. |
-| `GET` | `/api/v1/license/status/:tenant_id` | Check current subscription status (tier, active, expires_at). |
+| `POST` | `/api/v1/license/status` | Check current subscription status. Auth: `Authorization: Bearer <api_key>`. Body: `{ machine_id, revoke }` (optional). Returns tier, active, expires_at. |
 
 These are **custom Go routes** registered via `app.OnServe()`. They bypass PocketBase's collection API to enforce business logic (key validation, RSA signing, machine binding, rate limiting).
 
@@ -292,8 +310,9 @@ Custom fields:
   hardware_fingerprint text (required, unique)     SHA-256 hash of motherboard + CPU + disk serial
   first_seen_at        date (required)
   trial_expires_at     date (required)            NOW() + 90 days
-  platform             select (required)          windows | android | linux
+  platform             select (required)          windows | android | linux | macos | unknown
   app_version          text (required)
+  tenant_id            relation → tenants.id       tenant that claimed this device's trial
   ip_address           text
 
 API Rules:
@@ -303,6 +322,12 @@ API Rules:
   update:                                          (only via Go hook)
   delete:        @request.auth.id != ""           (admin only)
 ```
+
+> **Note:** The `tenant_id` field was added to support the hardware-fingerprint
+> trial lock (SPEC-2026-TRIAL-LOCK). It links the claim to the tenant so
+> re-installs by the same tenant are allowed, while claims by a different
+> tenant on the same hardware are rejected as reset abuse. See ADR #23
+> Deviation 3 for the full implementation details.
 
 > **Note:** PocketBase does not use SQL migrations. Collections are defined via the admin UI and exported as `pb_schema.json`. For version control, we commit `pb_schema.json` and any seed data.
 

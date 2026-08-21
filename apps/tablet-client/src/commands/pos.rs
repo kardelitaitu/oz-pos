@@ -637,6 +637,16 @@ pub struct CompleteSaleArgs {
     pub customer_name: Option<String>,
     /// Optional serial numbers captured at checkout for track_serial products.
     pub serial_numbers: Option<Vec<SerialNumberArg>>,
+    /// CUR-02: original sale currency when multi-currency checkout is used.
+    pub base_currency: Option<String>,
+    /// CUR-02: original sale total in `base_currency` minor units.
+    pub base_total_minor: Option<i64>,
+    /// CUR-02: fixed-point rate (millionths) `base_currency → sale currency`.
+    pub tender_rate_millionths: Option<i64>,
+    /// Tip amount in minor units collected at checkout (default 0).
+    pub tip_minor: Option<i64>,
+    /// Service-charge amount in minor units collected at checkout (default 0).
+    pub service_charge_minor: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -677,6 +687,13 @@ pub async fn complete_sale(
     sale.payment_method = Some(args.payment_method);
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
+    // CUR-02: record tender-currency metadata when multi-currency checkout
+    // was used. All three are None for single-currency sales.
+    sale.base_currency = args.base_currency.clone();
+    sale.base_total_minor = args.base_total_minor;
+    sale.tender_rate_millionths = args.tender_rate_millionths;
+    sale.tip_minor = args.tip_minor.unwrap_or(0);
+    sale.service_charge_minor = args.service_charge_minor.unwrap_or(0);
 
     let sale_id = sale.id.clone();
 
@@ -768,6 +785,16 @@ pub struct CompleteSaleScopedArgs {
     pub customer_name: Option<String>,
     /// Serial Numbers.
     pub serial_numbers: Option<Vec<SerialNumberArg>>,
+    /// CUR-02: original sale currency when multi-currency checkout is used.
+    pub base_currency: Option<String>,
+    /// CUR-02: original sale total in `base_currency` minor units.
+    pub base_total_minor: Option<i64>,
+    /// CUR-02: fixed-point rate (millionths) `base_currency → sale currency`.
+    pub tender_rate_millionths: Option<i64>,
+    /// Tip amount in minor units collected at checkout (default 0).
+    pub tip_minor: Option<i64>,
+    /// Service-charge amount in minor units collected at checkout (default 0).
+    pub service_charge_minor: Option<i64>,
 }
 
 /// Complete a sale within the session scope. ADR #7 / ADR-19 §6.
@@ -809,6 +836,13 @@ pub async fn complete_sale_scoped(
     sale.payment_method = Some(args.payment_method.clone());
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
+    // CUR-02: record tender-currency metadata when multi-currency checkout
+    // was used. All three are None for single-currency sales.
+    sale.base_currency = args.base_currency.clone();
+    sale.base_total_minor = args.base_total_minor;
+    sale.tender_rate_millionths = args.tender_rate_millionths;
+    sale.tip_minor = args.tip_minor.unwrap_or(0);
+    sale.service_charge_minor = args.service_charge_minor.unwrap_or(0);
 
     let sale_id = sale.id.clone();
 
@@ -901,7 +935,7 @@ pub async fn compute_cart_tax_scoped(
     lines: Vec<oz_core::db::CartLineTaxInput>,
     currency: String,
     state: State<'_, AppState>,
-) -> Result<i64, AppError> {
+) -> Result<oz_core::db::CartTaxResult, AppError> {
     let session = state.resolve_session(&session_token)?;
     let parsed: oz_core::Currency = currency
         .parse()
@@ -919,7 +953,7 @@ pub async fn compute_cart_tax_scoped(
         oz_core::Settings::get_tax_rounding_mode(&db)?,
     )?;
     drop(db);
-    Ok(tax.minor_units)
+    Ok(tax)
 }
 
 // ── Complete Sale With Resolved Shortfalls ───────────────────────────
@@ -966,6 +1000,16 @@ pub struct CompleteSaleWithResolvedShortfallsArgs {
     pub discount_label: Option<String>,
     /// Cashier-resolved shortfalls: per-SKU allocation to specific locations.
     pub resolutions: Vec<oz_core::sale_deduction::ResolvedShortfall>,
+    /// CUR-02: original sale currency when multi-currency checkout is used.
+    pub base_currency: Option<String>,
+    /// CUR-02: original sale total in `base_currency` minor units.
+    pub base_total_minor: Option<i64>,
+    /// CUR-02: fixed-point rate (millionths) `base_currency → sale currency`.
+    pub tender_rate_millionths: Option<i64>,
+    /// Tip amount in minor units collected at checkout (default 0).
+    pub tip_minor: Option<i64>,
+    /// Service-charge amount in minor units collected at checkout (default 0).
+    pub service_charge_minor: Option<i64>,
 }
 
 /// Complete a sale with cashier-resolved shortfalls (split fulfillment).
@@ -1016,6 +1060,13 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     sale.payment_method = Some(args.payment_method.clone());
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
+    // CUR-02: record tender-currency metadata when multi-currency checkout
+    // was used. All three are None for single-currency sales.
+    sale.base_currency = args.base_currency.clone();
+    sale.base_total_minor = args.base_total_minor;
+    sale.tender_rate_millionths = args.tender_rate_millionths;
+    sale.tip_minor = args.tip_minor.unwrap_or(0);
+    sale.service_charge_minor = args.service_charge_minor.unwrap_or(0);
 
     let sale_id = sale.id.clone();
 
@@ -1311,267 +1362,5 @@ pub async fn delete_held_cart_scoped(
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use oz_core::Currency;
-    use oz_core::migrations;
-    use rusqlite::Connection;
-
-    fn usd() -> Currency {
-        "USD".parse().unwrap()
-    }
-
-    fn price(minor: i64) -> Money {
-        Money {
-            minor_units: minor,
-            currency: usd(),
-        }
-    }
-
-    #[test]
-    fn start_cart_add_line() {
-        let mut cart = oz_core::Cart::new(usd());
-        let cart_id = cart.id();
-
-        let line = CartLine::new(Sku::new("COFFEE"), 2, price(350));
-        cart.add_line(line).unwrap();
-
-        assert_eq!(cart.line_count(), 1);
-        let total = cart.total();
-        assert_eq!(total.unwrap().minor_units, 700);
-        assert_eq!(total.unwrap().currency, usd());
-        assert!(!cart_id.to_string().is_empty());
-
-        let line2 = CartLine::new(Sku::new("BAGEL"), 1, price(450));
-        cart.add_line(line2).unwrap();
-        assert_eq!(cart.line_count(), 2);
-        assert_eq!(cart.total().unwrap().minor_units, 1150);
-    }
-
-    #[test]
-    fn cart_total_with_fractional_qty() {
-        let mut cart = oz_core::Cart::new(usd());
-        let line = CartLine::new(Sku::new("TEA"), 3, price(200));
-        let line_total = line.total().unwrap();
-        cart.add_line(line).unwrap();
-        assert_eq!(line_total.minor_units, 600);
-        assert_eq!(cart.total().unwrap().minor_units, 600);
-    }
-
-    #[test]
-    fn start_sale_args_defaults_currency() {
-        let json = r#"{}"#;
-        let args: StartSaleArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.currency, "");
-    }
-
-    #[test]
-    fn add_line_args_deserialize() {
-        let json = r#"{"cartId":"550e8400-e29b-41d4-a716-446655440000","sku":"COFFEE","qty":3,"unitPriceMinor":350}"#;
-        let args: AddLineArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.sku.as_str(), "COFFEE");
-        assert_eq!(args.qty, 3);
-        assert_eq!(args.unit_price_minor, 350);
-    }
-
-    #[test]
-    fn set_cart_discount_args_deserialize() {
-        let json = r#"{"cartId":"660e8400-e29b-41d4-a716-446655440001","percent":10,"label":"Senior Discount","userId":"u1"}"#;
-        let args: SetCartDiscountArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.percent, 10);
-        assert_eq!(args.label, Some("Senior Discount".into()));
-        assert_eq!(args.user_id, "u1");
-    }
-
-    #[test]
-    fn complete_sale_args_deserialize_minimal() {
-        let json = r#"{"cartId":"770e8400-e29b-41d4-a716-446655440002","paymentMethod":"cash","userId":"u2"}"#;
-        let args: CompleteSaleArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.payment_method, "cash");
-        assert!(args.tendered_minor.is_none());
-        assert!(args.customer_id.is_none());
-        assert!(args.serial_numbers.is_none());
-    }
-
-    // ── Bug #2: override_cart_deduction_location permission check ───
-
-    fn fresh_conn() -> Connection {
-        migrations::fresh_db()
-    }
-
-    /// Seed a user with ONLY sales:process permission (no SALES_OVERRIDE_PRICE).
-    /// role-lite: a narrow custom role — the new role-staff preset grants
-    /// sales:override_price, which would flip the rejection below (0048
-    /// retirement sweep).
-    fn seed_cashier_without_override_permission(conn: &Connection, user_id: &str) {
-        conn.execute_batch(&format!(
-            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-                ('role-lite', 'Lite', 'Limited sales', '[\"sales:process\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
-             INSERT INTO users (id, username, display_name, role_id, pin_hash, is_active, created_at, updated_at) VALUES
-                ('{user_id}', '{user_id}', 'Cashier', 'role-lite', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
-        )).unwrap();
-    }
-
-    /// Seed a user with SALES_OVERRIDE_PRICE permission.
-    fn seed_manager_with_override_permission(conn: &Connection, user_id: &str) {
-        conn.execute_batch(&format!(
-            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-                ('role-manager', 'Manager', 'Manager', '[\"sales:override_price\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
-             INSERT INTO users (id, username, display_name, role_id, pin_hash, is_active, created_at, updated_at) VALUES
-                ('{user_id}', '{user_id}', 'Manager', 'role-manager', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
-        )).unwrap();
-    }
-    /// Insert an active cart row and return its `CartId`.
-    /// Also seeds a minimal inventory_location row so the FK on
-    /// `deduction_location_id` is satisfied.
-    fn seed_active_cart(conn: &Connection) -> CartId {
-        // Satisfy the FK from active_carts.deduction_location_id → inventory_locations(id).
-        conn.execute(
-            "INSERT OR IGNORE INTO inventory_locations (id, name, created_at, updated_at)
-             VALUES ('loc-warehouse-1', 'Warehouse', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
-            [],
-        )
-        .unwrap();
-
-        let cart = oz_core::Cart::new("USD".parse::<Currency>().unwrap());
-        let cart_id = cart.id();
-        let cart_data = serde_json::to_string(&cart).unwrap();
-        conn.execute(
-            "INSERT INTO active_carts (id, cart_data, deduction_location_id, updated_at)
-             VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            rusqlite::params![cart_id.to_string(), cart_data, "loc-warehouse-1"],
-        )
-        .unwrap();
-        cart_id
-    }
-
-    #[test]
-    fn override_cart_deduction_location_rejects_user_without_sales_override_price() {
-        // Bug #2: the non-scoped command had NO permission check, so any
-        // caller could override a deduction location — a silent privilege
-        // bypass. After the fix, a user without SALES_OVERRIDE_PRICE must
-        // be rejected before the DB write executes.
-        let conn = fresh_conn();
-        seed_cashier_without_override_permission(&conn, "user-cashier");
-        let cart_id = seed_active_cart(&conn);
-
-        let result = run_override_cart_deduction_location(&conn, "user-cashier", &cart_id);
-
-        assert!(
-            result.is_err(),
-            "Bug #2: override lacked permission check — \
-             cashier without SALES_OVERRIDE_PRICE must be rejected"
-        );
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.to_lowercase().contains("permission") || err.to_lowercase().contains("denied"),
-            "error must mention permission/denied, got: {err}"
-        );
-    }
-
-    #[test]
-    fn override_cart_deduction_location_allows_user_with_sales_override_price() {
-        // Happy-path regression: a manager with SALES_OVERRIDE_PRICE should
-        // succeed — the permission check must not reject authorised users.
-        let conn = fresh_conn();
-        seed_manager_with_override_permission(&conn, "user-mgr");
-        let cart_id = seed_active_cart(&conn);
-
-        let result = run_override_cart_deduction_location(&conn, "user-mgr", &cart_id);
-
-        assert!(
-            result.is_ok(),
-            "manager with SALES_OVERRIDE_PRICE must be allowed, got: {:?}",
-            result.err()
-        );
-    }
-
-    #[test]
-    fn override_cart_deduction_location_fails_for_nonexistent_cart() {
-        // Edge case: permission check passes but the cart doesn't exist.
-        let conn = fresh_conn();
-        seed_manager_with_override_permission(&conn, "user-mgr");
-
-        // Create a CartId that won't exist in the DB.
-        let cart_id = oz_core::Cart::new("USD".parse::<Currency>().unwrap()).id();
-        let result = run_override_cart_deduction_location(&conn, "user-mgr", &cart_id);
-
-        assert!(
-            result.is_err(),
-            "nonexistent cart must fail after permission check"
-        );
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("not found") || err.contains("active_cart"),
-            "error must mention not-found, got: {err}"
-        );
-    }
-
-    // ── Bug #3: add_line_scoped session authorization ──────────────
-
-    /// Seed a user with NO sales permissions at all.
-    fn seed_user_without_sales_process(conn: &Connection, user_id: &str) {
-        conn.execute_batch(&format!(
-            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-                ('role-no-sales', 'No Sales', 'No sales permissions', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
-             INSERT INTO users (id, username, display_name, role_id, pin_hash, is_active, created_at, updated_at) VALUES
-                ('{user_id}', '{user_id}', 'No Sales', 'role-no-sales', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
-        )).unwrap();
-    }
-
-    #[test]
-    fn add_line_scoped_rejects_user_without_sales_process() {
-        // Bug #3: add_line_scoped resolved the session but stored it as
-        // _session (unused). A user without SALES_PROCESS could add lines
-        // to any cart — a silent authorization gap. After the fix, the
-        // permission check must reject unprivileged users.
-        let conn = fresh_conn();
-        seed_user_without_sales_process(&conn, "user-no-sales");
-        let cart_id = seed_active_cart(&conn);
-
-        let args = AddLineArgs {
-            cart_id,
-            sku: Sku::new("COFFEE"),
-            qty: 1,
-            unit_price_minor: 350,
-        };
-        let result = run_add_line_scoped(&conn, "user-no-sales", &args);
-
-        assert!(
-            result.is_err(),
-            "Bug #3: add_line_scoped lacked SALES_PROCESS check — \
-             user without sales:process must be rejected"
-        );
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.to_lowercase().contains("permission") || err.to_lowercase().contains("denied"),
-            "error must mention permission/denied, got: {err}"
-        );
-    }
-
-    #[test]
-    fn add_line_scoped_allows_user_with_sales_process() {
-        // Happy-path regression: a cashier with SALES_PROCESS must be
-        // able to add lines to a cart with a deduction_location lock.
-        let conn = fresh_conn();
-        // seed_cashier_without_override_permission gives the user sales:process
-        seed_cashier_without_override_permission(&conn, "user-cashier");
-        let cart_id = seed_active_cart(&conn);
-
-        let args = AddLineArgs {
-            cart_id,
-            sku: Sku::new("LATTE"),
-            qty: 2,
-            unit_price_minor: 450,
-        };
-        let result = run_add_line_scoped(&conn, "user-cashier", &args);
-
-        assert!(
-            result.is_ok(),
-            "cashier with SALES_PROCESS must be allowed to add lines, got: {:?}",
-            result.err()
-        );
-        let r = result.unwrap();
-        assert_eq!(r.line_total.unwrap().minor_units, 900);
-    }
-}
+#[path = "pos_tests.rs"]
+mod tests;

@@ -20,10 +20,6 @@ use crate::error::CoreError;
 /// without producing false positives on slow or paused devices.
 const CLOCK_SKEW_TOLERANCE_SECONDS: i64 = 30;
 
-/// Offline grace period for paid tiers (14 days). After this period
-/// without a successful cloud sync, the tier reverts to Free quotas.
-const OFFLINE_GRACE_DAYS: i64 = 14;
-
 // ── Instance Status ─────────────────────────────────────────────────
 
 /// Three-state status for workspace instances, replacing the old
@@ -68,27 +64,34 @@ impl InstanceStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionTier {
-    /// 90-day Free Trial — 1 store, 1 register, 1 warehouse, offline-only.
+    /// Free forever — 30-day sales history, 1 store, 1 register, 1 warehouse, offline-only.
     Free,
     /// 1-Time Perpetual License — 1 store, 1 register, 1 warehouse, offline-first.
+    ///
+    /// Deprecated: kept only for database back-compat (`from_db("one_time")`).
+    /// Do not use for new code — the canonical lineup is Free / Plus / Pro / Premium / Enterprise.
+    #[deprecated(
+        note = "legacy perpetual license — kept only for database back-compat; do not use for new code"
+    )]
     OneTime,
-    /// Standard SaaS — 1 store, 2 registers, 1 warehouse, QRIS, basic cloud sync.
-    Standard,
-    /// Pro SaaS — Unlimited stores, unlimited registers, unlimited warehouses, Lua engine, Stripe + QRIS.
+    /// Plus SaaS — 1 store, 2 registers, 2 warehouses, QRIS, cloud sync, Daily Sales Dashboard.
+    Plus,
+    /// Pro SaaS — 2 stores, 5 registers/store, 3 warehouses, analytics + KDS, Stripe + QRIS.
     Pro,
-    /// Legacy alias for Pro tier.
+    /// Premium — unlimited stores/registers/warehouses, loyalty program, Lua engine, priority support.
     Premium,
-    /// Enterprise — Unlimited stores/registers/warehouses, regional zones, custom ERP adaptors.
+    /// Enterprise — unlimited stores/registers/warehouses, regional zones, custom ERP adaptors.
     Enterprise,
 }
 
+#[allow(deprecated)] // OneTime is intentionally referenced for DB back-compat
 impl SubscriptionTier {
     /// Parse from the database TEXT column.
     pub fn from_db(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "free" | "trial" => Self::Free,
             "one_time" | "perpetual" | "one-time" | "onetime" => Self::OneTime,
-            "standard" => Self::Standard,
+            "plus" | "standard" => Self::Plus, // "standard" is a legacy alias for Plus
             "pro" => Self::Pro,
             "premium" => Self::Premium,
             "enterprise" => Self::Enterprise,
@@ -99,40 +102,82 @@ impl SubscriptionTier {
     /// Human-readable tier name.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Free => "Free Trial",
+            Self::Free => "Free",
             Self::OneTime => "1-Time Perpetual",
-            Self::Standard => "Standard",
+            Self::Plus => "Plus",
             Self::Pro => "Pro",
-            Self::Premium => "Premium (Pro)",
+            Self::Premium => "Premium",
             Self::Enterprise => "Enterprise",
         }
     }
 
+    /// Machine-readable tier key used in the DB and the UI
+    /// (`free`, `plus`, `pro`, `premium`, `enterprise`). The deprecated
+    /// `OneTime` variant is reported as `free` — its DB rows were always
+    /// treated as the free quota tier.
+    pub fn tier_key(&self) -> &'static str {
+        match self {
+            Self::Free | Self::OneTime => "free",
+            Self::Plus => "plus",
+            Self::Pro => "pro",
+            Self::Premium => "premium",
+            Self::Enterprise => "enterprise",
+        }
+    }
+
     /// Maximum number of stores allowed for this tier.
-    /// Returns `None` for unlimited (Pro / Enterprise).
+    /// C4.2: Premium allows up to 10 stores self-serve; >10 requires
+    /// Enterprise contract. Enterprise is unlimited.
     pub fn max_stores(&self) -> Option<i64> {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => Some(1),
-            Self::Pro | Self::Premium | Self::Enterprise => None,
+            Self::Free | Self::OneTime | Self::Plus => Some(1),
+            Self::Pro => Some(2),
+            Self::Premium => Some(10),
+            Self::Enterprise => None,
         }
     }
 
     /// Maximum POS register instances per store for this tier.
-    /// Returns `None` for unlimited (Pro / Enterprise).
+    /// Returns `None` for unlimited (Premium / Enterprise).
     pub fn max_pos_instances(&self) -> Option<i64> {
         match self {
             Self::Free | Self::OneTime => Some(1),
-            Self::Standard => Some(2),
-            Self::Pro | Self::Premium | Self::Enterprise => None,
+            Self::Plus => Some(2),
+            Self::Pro => Some(5),
+            Self::Premium | Self::Enterprise => None,
         }
     }
 
     /// Maximum inventory warehouse storage locations allowed for this tier.
-    /// Returns `None` for unlimited (Pro / Enterprise).
+    /// Returns `None` for unlimited (Premium / Enterprise).
     pub fn max_warehouses(&self) -> Option<i64> {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => Some(1),
-            Self::Pro | Self::Premium | Self::Enterprise => None,
+            Self::Free | Self::OneTime => Some(1),
+            Self::Plus => Some(2),
+            Self::Pro => Some(3),
+            Self::Premium | Self::Enterprise => None,
+        }
+    }
+
+    /// Maximum staff users allowed for this tier.
+    /// Returns `None` for unlimited (Premium / Enterprise).
+    /// Enforced pre-launch per subscription-tiers.md §9 item 1.
+    pub fn max_staff_users(&self) -> Option<i64> {
+        match self {
+            Self::Free | Self::OneTime => Some(1),
+            Self::Plus => Some(5),
+            Self::Pro => Some(20),
+            Self::Premium | Self::Enterprise => None,
+        }
+    }
+
+    /// How far back (in days) sales history can be viewed/exported.
+    /// Returns `None` for unlimited (Plus and above). Free is capped at
+    /// 30 days — the primary Free → Plus upgrade trigger (§3, §9 item 2).
+    pub fn sales_history_days(&self) -> Option<i64> {
+        match self {
+            Self::Free | Self::OneTime => Some(30),
+            Self::Plus | Self::Pro | Self::Premium | Self::Enterprise => None,
         }
     }
 
@@ -140,7 +185,7 @@ impl SubscriptionTier {
     pub fn supports_cloud_sync(&self) -> bool {
         match self {
             Self::Free | Self::OneTime => false,
-            Self::Standard | Self::Pro | Self::Premium | Self::Enterprise => true,
+            Self::Plus | Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
 
@@ -148,14 +193,14 @@ impl SubscriptionTier {
     pub fn supports_qris(&self) -> bool {
         match self {
             Self::Free | Self::OneTime => false,
-            Self::Standard | Self::Pro | Self::Premium | Self::Enterprise => true,
+            Self::Plus | Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
 
     /// Whether this tier supports Stripe credit/debit card processing.
     pub fn supports_stripe(&self) -> bool {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => false,
+            Self::Free | Self::OneTime | Self::Plus => false,
             Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
@@ -163,15 +208,15 @@ impl SubscriptionTier {
     /// Whether this tier supports embedded Lua VM rule engine for custom promos.
     pub fn supports_lua_engine(&self) -> bool {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => false,
-            Self::Pro | Self::Premium | Self::Enterprise => true,
+            Self::Free | Self::OneTime | Self::Plus | Self::Pro => false,
+            Self::Premium | Self::Enterprise => true,
         }
     }
 
     /// Whether this tier supports multi-warehouse stock deduction fallback wires in Node Topology.
     pub fn supports_multi_warehouse_fallback(&self) -> bool {
         match self {
-            Self::Free | Self::OneTime | Self::Standard => false,
+            Self::Free | Self::OneTime | Self::Plus => false,
             Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
@@ -181,17 +226,52 @@ impl SubscriptionTier {
         matches!(self, Self::Enterprise)
     }
 
+    /// Whether this tier supports the loyalty program (points & tiers).
+    /// Premium/Enterprise only — Pro sees a locked teaser (§3, §6).
+    pub fn supports_loyalty(&self) -> bool {
+        matches!(self, Self::Premium | Self::Enterprise)
+    }
+
+    /// Whether this tier supports reports & analytics (`analytics:view`).
+    pub fn supports_analytics(&self) -> bool {
+        matches!(self, Self::Pro | Self::Premium | Self::Enterprise)
+    }
+
+    /// Whether this tier supports the Daily Sales Dashboard (Laporan Harian) —
+    /// the Plus hero feature; Free shows a blurred teaser instead.
+    pub fn supports_daily_dashboard(&self) -> bool {
+        matches!(
+            self,
+            Self::Plus | Self::Pro | Self::Premium | Self::Enterprise
+        )
+    }
+
+    /// Offline grace period in days before quotas revert to Free
+    /// (subscription-tiers.md §3 Support table). Enterprise grace is
+    /// negotiated per contract — the fallback below is a generous client-side
+    /// default so a custom contract never locks a customer out client-side.
+    pub fn offline_grace_days(&self) -> i64 {
+        match self {
+            Self::Free | Self::OneTime => 7,
+            Self::Plus | Self::Pro => 14,
+            Self::Premium => 30,
+            Self::Enterprise => 3650, // custom per contract; ~10-year fallback
+        }
+    }
+
     /// Check whether this tier allows the given workspace type.
     pub fn allows_workspace_type(&self, type_key: &str) -> bool {
         match self {
             Self::Free | Self::OneTime => {
                 matches!(type_key, "store-pos" | "restaurant-pos" | "admin")
             }
-            Self::Standard => matches!(
+            // Plus unlocks inventory/warehouse but NOT kds (§3 Workspace Types).
+            Self::Plus => matches!(
                 type_key,
-                "restaurant-pos" | "store-pos" | "warehouse" | "admin" | "kds"
+                "store-pos" | "restaurant-pos" | "admin" | "warehouse" | "inventory"
             ),
-            Self::Pro | Self::Premium | Self::Enterprise => true, // All workspace types + custom plugins
+            // Pro and above unlock every workspace type, including KDS.
+            Self::Pro | Self::Premium | Self::Enterprise => true,
         }
     }
 }
@@ -203,7 +283,7 @@ impl SubscriptionTier {
 pub struct TenantSubscription {
     /// The unique identifier of the tenant.
     pub tenant_id: String,
-    /// The subscription tier (Free, Pro, Premium, Enterprise).
+    /// The subscription tier (Free, Plus, Pro, Premium, Enterprise).
     pub tier: SubscriptionTier,
     /// The subscription status (e.g. "active", "canceled").
     pub status: String,
@@ -343,8 +423,8 @@ impl TenantSubscription {
     /// Check if the subscription is within the offline grace period.
     ///
     /// Free tier has no grace period (always "within grace" since it's free).
-    /// Paid tiers (Pro, Premium, Enterprise) get 14 days offline before
-    /// quotas revert to Free.
+    /// Paid tiers get a per-tier offline grace (`offline_grace_days()`, see
+    /// subscription-tiers.md §3 Support table) before quotas revert to Free.
     ///
     /// A canceled subscription is never within grace.
     ///
@@ -373,9 +453,87 @@ impl TenantSubscription {
         };
 
         let now = chrono::Utc::now();
-        let grace_deadline = expiry + chrono::Duration::days(OFFLINE_GRACE_DAYS);
+        let grace_deadline = expiry + chrono::Duration::days(self.tier.offline_grace_days());
 
         now <= grace_deadline
+    }
+
+    /// A defensive default for tenants without a subscription row — Free
+    /// tier with an empty quota block (workspace types fall back to the
+    /// tier defaults). Mirrors the bootstrap row the migration seeds.
+    pub fn bootstrap_free() -> Self {
+        Self {
+            tenant_id: "default".into(),
+            tier: SubscriptionTier::Free,
+            status: "active".into(),
+            expires_at: None,
+            max_stores: 1,
+            max_pos_instances: 1,
+            allowed_types_json: "[]".into(),
+            signature: String::new(),
+            signed_payload: String::new(),
+            api_key: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    /// Whether the subscription currently allows the given workspace type.
+    ///
+    /// Honors the signed payload's quota block (`allowed_types_json` — e.g.
+    /// a Plus + restaurant_starter bundle lists `kds`, C3.2), falling back
+    /// to the tier's static defaults when the list is empty or unparseable
+    /// (bootstrap `[]`, legacy rows). A grace-expired or canceled
+    /// subscription reverts to the Free defaults regardless of the stored
+    /// list — the entitlement the server granted no longer applies.
+    pub fn allows_workspace_type(&self, type_key: &str) -> bool {
+        if !self.is_within_grace_period() {
+            return SubscriptionTier::Free.allows_workspace_type(type_key);
+        }
+        match serde_json::from_str::<Vec<String>>(&self.allowed_types_json) {
+            Ok(types) if !types.is_empty() => types.iter().any(|t| t == type_key),
+            _ => self.tier.allows_workspace_type(type_key),
+        }
+    }
+
+    /// Parse the add-on identifiers from the signed subscription payload.
+    ///
+    /// Add-ons are stored as a JSON array of strings in the signed payload
+    /// (e.g. `["advanced_analytics", "priority_support"]`). They are additive
+    /// to the base tier quotas — a Plus subscriber with `advanced_analytics`
+    /// gains analytics without upgrading to Pro.
+    ///
+    /// Returns an empty vec if the payload is empty or unparseable.
+    pub fn addons(&self) -> Vec<String> {
+        if self.signed_payload.is_empty() {
+            return Vec::new();
+        }
+        // The signed payload is a JSON object; extract the "addons" array.
+        serde_json::from_str::<serde_json::Value>(&self.signed_payload)
+            .ok()
+            .and_then(|v| v.get("addons").cloned())
+            .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
+            .unwrap_or_default()
+    }
+
+    /// Check if the subscription has a specific add-on.
+    ///
+    /// Case-insensitive comparison against the `addons` list in the signed
+    /// payload. Returns `false` for empty/unparseable payloads.
+    pub fn has_addon(&self, addon: &str) -> bool {
+        let lower = addon.to_lowercase();
+        self.addons().iter().any(|a| a.to_lowercase() == lower)
+    }
+
+    /// Whether the subscription supports analytics, accounting for add-ons.
+    ///
+    /// Pro+ natively supports analytics. Plus gains analytics via the
+    /// `advanced_analytics` add-on. Other tiers do not support analytics
+    /// regardless of add-ons.
+    pub fn supports_analytics_with_addons(&self) -> bool {
+        if self.tier.supports_analytics() {
+            return true;
+        }
+        matches!(self.tier, SubscriptionTier::Plus) && self.has_addon("advanced_analytics")
     }
 
     /// Determine the effective subscription tier after applying
@@ -430,6 +588,24 @@ pub enum QuotaError {
         /// The workspace type key that was rejected.
         type_key: String,
     },
+    /// The tenant has reached their staff-user limit (C1.1, §9 pre-launch item 1).
+    StaffLimit {
+        /// The subscription tier name.
+        tier: String,
+        /// The maximum number of staff users allowed.
+        limit: i64,
+        /// The current active staff count.
+        current: i64,
+    },
+    /// The tenant has reached their warehouse-location limit.
+    WarehouseLimit {
+        /// The subscription tier name.
+        tier: String,
+        /// The maximum number of warehouse locations allowed.
+        limit: i64,
+        /// The current active warehouse count.
+        current: i64,
+    },
 }
 
 impl std::fmt::Display for QuotaError {
@@ -464,6 +640,28 @@ impl std::fmt::Display for QuotaError {
                      Your current tier is {tier}."
                 )
             }
+            Self::StaffLimit {
+                tier,
+                limit,
+                current,
+            } => {
+                write!(
+                    f,
+                    "Your {tier} tier allows maximum {limit} staff users. \
+                     You currently have {current}. Upgrade to add more."
+                )
+            }
+            Self::WarehouseLimit {
+                tier,
+                limit,
+                current,
+            } => {
+                write!(
+                    f,
+                    "Your {tier} tier allows maximum {limit} warehouse locations. \
+                     You currently have {current}. Upgrade to add more."
+                )
+            }
         }
     }
 }
@@ -475,572 +673,5 @@ impl From<QuotaError> for CoreError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── InstanceStatus ────────────────────────────────────
-
-    #[test]
-    fn instance_status_from_db() {
-        assert_eq!(InstanceStatus::from_db("active"), InstanceStatus::Active);
-        assert_eq!(
-            InstanceStatus::from_db("quota_suspended"),
-            InstanceStatus::QuotaSuspended
-        );
-        assert_eq!(
-            InstanceStatus::from_db("archived"),
-            InstanceStatus::Archived
-        );
-        assert_eq!(InstanceStatus::from_db("unknown"), InstanceStatus::Active);
-    }
-
-    #[test]
-    fn instance_status_as_str() {
-        assert_eq!(InstanceStatus::Active.as_str(), "active");
-        assert_eq!(InstanceStatus::QuotaSuspended.as_str(), "quota_suspended");
-        assert_eq!(InstanceStatus::Archived.as_str(), "archived");
-    }
-
-    #[test]
-    fn instance_status_serialize() {
-        let json = serde_json::to_value(InstanceStatus::Active).unwrap();
-        assert_eq!(json, "active");
-
-        let json = serde_json::to_value(InstanceStatus::QuotaSuspended).unwrap();
-        assert_eq!(json, "quota_suspended");
-    }
-
-    // ── SubscriptionTier ──────────────────────────────────
-
-    #[test]
-    fn tier_from_db() {
-        assert_eq!(SubscriptionTier::from_db("free"), SubscriptionTier::Free);
-        assert_eq!(SubscriptionTier::from_db("pro"), SubscriptionTier::Pro);
-        assert_eq!(
-            SubscriptionTier::from_db("premium"),
-            SubscriptionTier::Premium
-        );
-        assert_eq!(
-            SubscriptionTier::from_db("enterprise"),
-            SubscriptionTier::Enterprise
-        );
-        assert_eq!(SubscriptionTier::from_db("invalid"), SubscriptionTier::Free);
-    }
-
-    #[test]
-    fn tier_max_stores() {
-        assert_eq!(SubscriptionTier::Free.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::Pro.max_stores(), None);
-        assert_eq!(SubscriptionTier::Premium.max_stores(), None);
-        assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
-    }
-
-    #[test]
-    fn tier_max_pos_instances() {
-        assert_eq!(SubscriptionTier::Free.max_pos_instances(), Some(1));
-        assert_eq!(SubscriptionTier::OneTime.max_pos_instances(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_pos_instances(), Some(2));
-        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), None);
-        assert_eq!(SubscriptionTier::Premium.max_pos_instances(), None);
-        assert_eq!(SubscriptionTier::Enterprise.max_pos_instances(), None);
-    }
-
-    #[test]
-    fn tier_allows_workspace_type() {
-        // Free tier & OneTime
-        assert!(SubscriptionTier::Free.allows_workspace_type("store-pos"));
-        assert!(SubscriptionTier::Free.allows_workspace_type("admin"));
-        assert!(!SubscriptionTier::Free.allows_workspace_type("kds"));
-        assert!(!SubscriptionTier::Free.allows_workspace_type("warehouse"));
-
-        // Standard tier
-        assert!(SubscriptionTier::Standard.allows_workspace_type("warehouse"));
-        assert!(SubscriptionTier::Standard.allows_workspace_type("kds"));
-
-        // Pro & Enterprise tier allow all
-        assert!(SubscriptionTier::Pro.allows_workspace_type("kds"));
-        assert!(SubscriptionTier::Pro.allows_workspace_type("analytics-pro"));
-        assert!(SubscriptionTier::Pro.allows_workspace_type("warehouse"));
-        assert!(SubscriptionTier::Enterprise.allows_workspace_type("anything"));
-    }
-
-    #[test]
-    fn tier_name() {
-        assert_eq!(SubscriptionTier::Free.name(), "Free Trial");
-        assert_eq!(SubscriptionTier::OneTime.name(), "1-Time Perpetual");
-        assert_eq!(SubscriptionTier::Standard.name(), "Standard");
-        assert_eq!(SubscriptionTier::Pro.name(), "Pro");
-        assert_eq!(SubscriptionTier::Enterprise.name(), "Enterprise");
-    }
-
-    #[test]
-    fn tier_serialize() {
-        let json = serde_json::to_value(SubscriptionTier::Free).unwrap();
-        assert_eq!(json, "free");
-    }
-
-    // ── Signature Verification ────────────────────────────
-
-    #[test]
-    fn verify_bootstrap_signature_passes() {
-        let sub = TenantSubscription {
-            tenant_id: "default".into(),
-            tier: SubscriptionTier::Free,
-            status: "active".into(),
-            expires_at: None,
-            max_stores: 1,
-            max_pos_instances: 1,
-            allowed_types_json: "[]".into(),
-            signature: "BOOTSTRAP_FREE".into(),
-            signed_payload: String::new(),
-            api_key: String::new(),
-            updated_at: String::new(),
-        };
-        assert!(sub.verify_signature().is_ok());
-    }
-
-    #[test]
-    fn verify_non_bootstrap_signature_rejected() {
-        let sub = TenantSubscription {
-            tenant_id: "default".into(),
-            tier: SubscriptionTier::Free,
-            status: "active".into(),
-            expires_at: None,
-            max_stores: 1,
-            max_pos_instances: 1,
-            allowed_types_json: "[]".into(),
-            signature: "TAMPERED_SIGNATURE".into(),
-            signed_payload: String::new(),
-            api_key: String::new(),
-            updated_at: String::new(),
-        };
-        assert!(sub.verify_signature().is_err());
-    }
-
-    // ── QuotaError Display ────────────────────────────────
-
-    #[test]
-    fn quota_error_register_limit() {
-        let err = QuotaError::RegisterLimit {
-            tier: "Free".into(),
-            limit: 1,
-            current: 1,
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("Free"));
-        assert!(msg.contains("1"));
-    }
-
-    #[test]
-    fn quota_error_store_limit() {
-        let err = QuotaError::StoreLimit {
-            tier: "Pro".into(),
-            limit: 2,
-            current: 2,
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("Pro"));
-        assert!(msg.contains("2"));
-    }
-
-    #[test]
-    fn quota_error_type_not_allowed() {
-        let err = QuotaError::TypeNotAllowed {
-            tier: "Free".into(),
-            type_key: "kds".into(),
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("kds"));
-        assert!(msg.contains("Free"));
-    }
-
-    // ── Clock Rollback Detection ──────────────────────────
-
-    #[test]
-    fn clock_rollback_detects_future_timestamps() {
-        use crate::migrations;
-        let conn = migrations::fresh_db();
-
-        // Insert a sale with a timestamp far in the future.
-        conn.execute(
-            "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
-             VALUES ('sale-1', 'completed', 1000, 'USD', 1, '2099-01-01T00:00:00.000Z', '2099-01-01T00:00:00.000Z')",
-            [],
-        )
-        .unwrap();
-
-        let result = TenantSubscription::validate_clock_rollback(&conn);
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("system clock tampered"));
-        assert!(err.contains("2099"));
-    }
-
-    #[test]
-    fn clock_rollback_passes_with_recent_timestamps() {
-        use crate::migrations;
-        let conn = migrations::fresh_db();
-
-        // Insert a sale with a recent timestamp.
-        let now = chrono::Utc::now().to_rfc3339();
-        conn.execute(
-            "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
-             VALUES ('sale-1', 'completed', 1000, 'USD', 1, ?1, ?1)",
-            rusqlite::params![now],
-        )
-        .unwrap();
-
-        let result = TenantSubscription::validate_clock_rollback(&conn);
-        assert!(result.is_ok(), "expected OK, got: {result:?}");
-    }
-
-    #[test]
-    fn clock_rollback_passes_with_empty_tables() {
-        use crate::migrations;
-        let conn = migrations::fresh_db();
-        // No sales or audit_logs — should default to Utc::now().
-        let result = TenantSubscription::validate_clock_rollback(&conn);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn compute_max_ledger_timestamp_prefers_recent_over_older() {
-        use crate::migrations;
-        let conn = migrations::fresh_db();
-
-        conn.execute(
-            "INSERT INTO sales (id, status, total_minor, currency, line_count, created_at, updated_at)
-             VALUES ('s1', 'completed', 1000, 'USD', 1, '2025-06-01T00:00:00.000Z', '2025-06-01T00:00:00.000Z')",
-            [],
-        ).unwrap();
-        conn.execute(
-            "INSERT INTO audit_log (id, action, user_id, created_at)
-             VALUES ('a1', 'login', 'user-1', '2025-07-01T00:00:00.000Z')",
-            [],
-        )
-        .unwrap();
-
-        let ts = TenantSubscription::compute_max_ledger_timestamp(&conn).unwrap();
-        // Should pick the audit_log timestamp (2025-07-01) over sales (2025-06-01).
-        assert!(ts.contains("2025-07-01"), "expected July, got: {ts}");
-    }
-
-    // ── Offline Grace Period ──────────────────────────────
-
-    #[test]
-    fn free_tier_always_within_grace() {
-        let sub = TenantSubscription {
-            tenant_id: "default".into(),
-            tier: SubscriptionTier::Free,
-            status: "active".into(),
-            expires_at: Some("2020-01-01T00:00:00.000Z".into()),
-            max_stores: 1,
-            max_pos_instances: 1,
-            allowed_types_json: "[]".into(),
-            signature: "BOOTSTRAP_FREE".into(),
-            signed_payload: String::new(),
-            api_key: String::new(),
-            updated_at: String::new(),
-        };
-        assert!(sub.is_within_grace_period());
-        assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
-    }
-
-    #[test]
-    fn paid_tier_with_no_expiry_within_grace() {
-        let sub = TenantSubscription {
-            tenant_id: "default".into(),
-            tier: SubscriptionTier::Pro,
-            status: "active".into(),
-            expires_at: None, // lifetime
-            max_stores: 2,
-            max_pos_instances: 3,
-            allowed_types_json: "[]".into(),
-            signature: "BOOTSTRAP_FREE".into(),
-            signed_payload: String::new(),
-            api_key: String::new(),
-            updated_at: String::new(),
-        };
-        assert!(sub.is_within_grace_period());
-        assert_eq!(sub.effective_tier(), SubscriptionTier::Pro);
-    }
-
-    #[test]
-    fn paid_tier_within_14_day_grace() {
-        // Expiry is 7 days ago — still within 14-day grace.
-        let recent = chrono::Utc::now() - chrono::Duration::days(7);
-        let sub = TenantSubscription {
-            tenant_id: "default".into(),
-            tier: SubscriptionTier::Premium,
-            status: "active".into(),
-            expires_at: Some(recent.to_rfc3339()),
-            max_stores: 5,
-            max_pos_instances: 10,
-            allowed_types_json: "[]".into(),
-            signature: "BOOTSTRAP_FREE".into(),
-            signed_payload: String::new(),
-            api_key: String::new(),
-            updated_at: String::new(),
-        };
-        assert!(sub.is_within_grace_period());
-        assert_eq!(sub.effective_tier(), SubscriptionTier::Premium);
-    }
-
-    #[test]
-    fn paid_tier_outside_grace_downgrades_to_free() {
-        // Expiry is 30 days ago — outside 14-day grace.
-        let old = chrono::Utc::now() - chrono::Duration::days(30);
-        let sub = TenantSubscription {
-            tenant_id: "default".into(),
-            tier: SubscriptionTier::Premium,
-            status: "active".into(),
-            expires_at: Some(old.to_rfc3339()),
-            max_stores: 5,
-            max_pos_instances: 10,
-            allowed_types_json: "[]".into(),
-            signature: "BOOTSTRAP_FREE".into(),
-            signed_payload: String::new(),
-            api_key: String::new(),
-            updated_at: String::new(),
-        };
-        assert!(!sub.is_within_grace_period());
-        assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
-    }
-
-    #[test]
-    fn enterprise_lifetime_never_downgrades() {
-        let sub = TenantSubscription {
-            tenant_id: "default".into(),
-            tier: SubscriptionTier::Enterprise,
-            status: "active".into(),
-            expires_at: None,
-            max_stores: 0,
-            max_pos_instances: 0,
-            allowed_types_json: "[]".into(),
-            signature: "BOOTSTRAP_FREE".into(),
-            signed_payload: String::new(),
-            api_key: String::new(),
-            updated_at: String::new(),
-        };
-        assert!(sub.is_within_grace_period());
-        assert_eq!(sub.effective_tier(), SubscriptionTier::Enterprise);
-    }
-
-    // ── constants ────────────────────────────────────────
-
-    #[test]
-    fn canceled_subscription_not_within_grace() {
-        let sub = TenantSubscription {
-            tenant_id: "default".into(),
-            tier: SubscriptionTier::Pro,
-            status: "canceled".into(),
-            expires_at: None, // lifetime but canceled
-            max_stores: 2,
-            max_pos_instances: 3,
-            allowed_types_json: "[]".into(),
-            signature: "BOOTSTRAP_FREE".into(),
-            signed_payload: String::new(),
-            api_key: String::new(),
-            updated_at: String::new(),
-        };
-        assert!(!sub.is_within_grace_period());
-        assert_eq!(sub.effective_tier(), SubscriptionTier::Free);
-    }
-
-    #[test]
-    fn clock_skew_constants_are_reasonable() {
-        assert_eq!(CLOCK_SKEW_TOLERANCE_SECONDS, 30);
-        assert_eq!(OFFLINE_GRACE_DAYS, 14);
-    }
-
-    // ── SubscriptionTier feature-flag coverage ─────────────────────────
-
-    #[test]
-    fn max_warehouses_per_tier() {
-        // Free/OneTime/Standard: 1 warehouse
-        assert_eq!(SubscriptionTier::Free.max_warehouses(), Some(1));
-        assert_eq!(SubscriptionTier::OneTime.max_warehouses(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_warehouses(), Some(1));
-        // Pro/Premium/Enterprise: unlimited
-        assert_eq!(SubscriptionTier::Pro.max_warehouses(), None);
-        assert_eq!(SubscriptionTier::Premium.max_warehouses(), None);
-        assert_eq!(SubscriptionTier::Enterprise.max_warehouses(), None);
-    }
-
-    #[test]
-    fn supports_cloud_sync_per_tier() {
-        assert!(!SubscriptionTier::Free.supports_cloud_sync());
-        assert!(!SubscriptionTier::OneTime.supports_cloud_sync());
-        assert!(SubscriptionTier::Standard.supports_cloud_sync());
-        assert!(SubscriptionTier::Pro.supports_cloud_sync());
-        assert!(SubscriptionTier::Premium.supports_cloud_sync());
-        assert!(SubscriptionTier::Enterprise.supports_cloud_sync());
-    }
-
-    #[test]
-    fn supports_qris_per_tier() {
-        assert!(!SubscriptionTier::Free.supports_qris());
-        assert!(!SubscriptionTier::OneTime.supports_qris());
-        assert!(SubscriptionTier::Standard.supports_qris());
-        assert!(SubscriptionTier::Pro.supports_qris());
-        assert!(SubscriptionTier::Premium.supports_qris());
-        assert!(SubscriptionTier::Enterprise.supports_qris());
-    }
-
-    #[test]
-    fn supports_stripe_per_tier() {
-        assert!(!SubscriptionTier::Free.supports_stripe());
-        assert!(!SubscriptionTier::OneTime.supports_stripe());
-        assert!(!SubscriptionTier::Standard.supports_stripe());
-        assert!(SubscriptionTier::Pro.supports_stripe());
-        assert!(SubscriptionTier::Premium.supports_stripe());
-        assert!(SubscriptionTier::Enterprise.supports_stripe());
-    }
-
-    #[test]
-    fn supports_lua_engine_per_tier() {
-        assert!(!SubscriptionTier::Free.supports_lua_engine());
-        assert!(!SubscriptionTier::OneTime.supports_lua_engine());
-        assert!(!SubscriptionTier::Standard.supports_lua_engine());
-        assert!(SubscriptionTier::Pro.supports_lua_engine());
-        assert!(SubscriptionTier::Premium.supports_lua_engine());
-        assert!(SubscriptionTier::Enterprise.supports_lua_engine());
-    }
-
-    #[test]
-    fn supports_multi_warehouse_fallback_per_tier() {
-        assert!(!SubscriptionTier::Free.supports_multi_warehouse_fallback());
-        assert!(!SubscriptionTier::OneTime.supports_multi_warehouse_fallback());
-        assert!(!SubscriptionTier::Standard.supports_multi_warehouse_fallback());
-        assert!(SubscriptionTier::Pro.supports_multi_warehouse_fallback());
-        assert!(SubscriptionTier::Premium.supports_multi_warehouse_fallback());
-        assert!(SubscriptionTier::Enterprise.supports_multi_warehouse_fallback());
-    }
-
-    #[test]
-    fn supports_regional_zones_only_enterprise() {
-        assert!(!SubscriptionTier::Free.supports_regional_zones());
-        assert!(!SubscriptionTier::OneTime.supports_regional_zones());
-        assert!(!SubscriptionTier::Standard.supports_regional_zones());
-        assert!(!SubscriptionTier::Pro.supports_regional_zones());
-        assert!(!SubscriptionTier::Premium.supports_regional_zones());
-        assert!(SubscriptionTier::Enterprise.supports_regional_zones());
-    }
-
-    #[test]
-    fn max_stores_per_tier() {
-        assert_eq!(SubscriptionTier::Free.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::Pro.max_stores(), None);
-        assert_eq!(SubscriptionTier::Premium.max_stores(), None);
-        assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
-    }
-
-    #[test]
-    fn max_pos_instances_per_tier() {
-        assert_eq!(SubscriptionTier::Free.max_pos_instances(), Some(1));
-        assert_eq!(SubscriptionTier::OneTime.max_pos_instances(), Some(1));
-        assert_eq!(SubscriptionTier::Standard.max_pos_instances(), Some(2));
-        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), None);
-        assert_eq!(SubscriptionTier::Premium.max_pos_instances(), None);
-        assert_eq!(SubscriptionTier::Enterprise.max_pos_instances(), None);
-    }
-
-    #[test]
-    fn allows_workspace_type_free_tier() {
-        let tier = SubscriptionTier::Free;
-        assert!(tier.allows_workspace_type("store-pos"));
-        assert!(tier.allows_workspace_type("restaurant-pos"));
-        assert!(tier.allows_workspace_type("admin"));
-        assert!(!tier.allows_workspace_type("warehouse"));
-        assert!(!tier.allows_workspace_type("kds"));
-        assert!(!tier.allows_workspace_type("custom-plugin"));
-    }
-
-    #[test]
-    fn allows_workspace_type_standard_tier() {
-        let tier = SubscriptionTier::Standard;
-        assert!(tier.allows_workspace_type("store-pos"));
-        assert!(tier.allows_workspace_type("restaurant-pos"));
-        assert!(tier.allows_workspace_type("admin"));
-        assert!(tier.allows_workspace_type("warehouse"));
-        assert!(tier.allows_workspace_type("kds"));
-        assert!(!tier.allows_workspace_type("custom-plugin"));
-    }
-
-    #[test]
-    fn allows_workspace_type_pro_tier_allows_all() {
-        for tier in [
-            SubscriptionTier::Pro,
-            SubscriptionTier::Premium,
-            SubscriptionTier::Enterprise,
-        ] {
-            assert!(tier.allows_workspace_type("store-pos"));
-            assert!(tier.allows_workspace_type("restaurant-pos"));
-            assert!(tier.allows_workspace_type("warehouse"));
-            assert!(tier.allows_workspace_type("kds"));
-            assert!(tier.allows_workspace_type("admin"));
-            assert!(tier.allows_workspace_type("custom-plugin"));
-            assert!(tier.allows_workspace_type("anything"));
-        }
-    }
-
-    #[test]
-    fn from_db_aliases() {
-        assert_eq!(SubscriptionTier::from_db("free"), SubscriptionTier::Free);
-        assert_eq!(SubscriptionTier::from_db("trial"), SubscriptionTier::Free);
-        assert_eq!(SubscriptionTier::from_db("FREE"), SubscriptionTier::Free);
-        assert_eq!(
-            SubscriptionTier::from_db("one_time"),
-            SubscriptionTier::OneTime
-        );
-        assert_eq!(
-            SubscriptionTier::from_db("perpetual"),
-            SubscriptionTier::OneTime
-        );
-        assert_eq!(
-            SubscriptionTier::from_db("one-time"),
-            SubscriptionTier::OneTime
-        );
-        assert_eq!(
-            SubscriptionTier::from_db("onetime"),
-            SubscriptionTier::OneTime
-        );
-        assert_eq!(
-            SubscriptionTier::from_db("standard"),
-            SubscriptionTier::Standard
-        );
-        assert_eq!(SubscriptionTier::from_db("pro"), SubscriptionTier::Pro);
-        assert_eq!(
-            SubscriptionTier::from_db("premium"),
-            SubscriptionTier::Premium
-        );
-        assert_eq!(
-            SubscriptionTier::from_db("enterprise"),
-            SubscriptionTier::Enterprise
-        );
-    }
-
-    #[test]
-    fn from_db_unknown_defaults_to_free() {
-        assert_eq!(SubscriptionTier::from_db("unknown"), SubscriptionTier::Free);
-        assert_eq!(SubscriptionTier::from_db(""), SubscriptionTier::Free);
-        assert_eq!(
-            SubscriptionTier::from_db("ENTREPRISE"),
-            SubscriptionTier::Free
-        ); // case-sensitive after to_lowercase
-    }
-
-    #[test]
-    fn tier_names() {
-        assert_eq!(SubscriptionTier::Free.name(), "Free Trial");
-        assert_eq!(SubscriptionTier::OneTime.name(), "1-Time Perpetual");
-        assert_eq!(SubscriptionTier::Standard.name(), "Standard");
-        assert_eq!(SubscriptionTier::Pro.name(), "Pro");
-        assert_eq!(SubscriptionTier::Premium.name(), "Premium (Pro)");
-        assert_eq!(SubscriptionTier::Enterprise.name(), "Enterprise");
-    }
-}
+#[path = "subscription_tests.rs"]
+mod tests;

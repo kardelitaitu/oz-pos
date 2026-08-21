@@ -123,8 +123,8 @@ Tidak ada pihak yang bertanggung jawab atas kegagalan atau keterlambatan dalam m
 ## 17. Kontak
 
 Pertanyaan tentang Ketentuan ini: **support@oz-pos.com**. Untuk membeli atau meningkatkan paket: halaman harga atau **sales@oz-pos.com**.
-
-
+
+
 ## Riwayat versi
 
 | Versi | Tanggal berlaku | Ringkasan perubahan |

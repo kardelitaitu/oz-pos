@@ -79,6 +79,44 @@ fn rounding_mode_serializes_snake_case() {
     );
 }
 
+// ── RoundingMode::divide equivalence ────────────────────────────────
+//
+// TAX-05: `(numerator + divisor/2) / divisor` with truncating division
+// for divisor/2 must produce the same result as the true "round half away
+// from zero" formula `(2*numerator + divisor) / (2*divisor)` for all
+// non-negative inputs (the only domain tax math produces).
+#[test]
+fn rounding_mode_halfup_equals_true_half_away_for_positive_inputs() {
+    // Test every divisor from 1..=200 against every numerator from 0..=2000.
+    // This is a comprehensive brute-force check that the integer idiom
+    // `(n + d/2) / d` equals the mathematically correct `round(n/d)` for
+    // all positive inputs within a reasonable bounded range.
+    for d in 1i64..=200 {
+        for n in 0i64..=2_000 {
+            // True round-half-away-from-zero: round(n/d) = floor(n/d + 0.5)
+            let true_half_up = (2 * n + d) / (2 * d);
+            let got = RoundingMode::HalfUp.divide(n, d).unwrap();
+            assert_eq!(
+                got, true_half_up,
+                "HalfUp mismatch at n={n}, d={d}: got={got}, true={true_half_up}"
+            );
+        }
+    }
+}
+
+#[test]
+fn rounding_mode_truncate_matches_integer_division() {
+    for d in 1i64..=50 {
+        for n in 0i64..=500 {
+            assert_eq!(
+                RoundingMode::Truncate.divide(n, d).unwrap(),
+                n / d,
+                "Truncate mismatch at n={n}, d={d}"
+            );
+        }
+    }
+}
+
 // ── 3. DB behaviour parity contract ─────────────────────────────────
 
 #[test]

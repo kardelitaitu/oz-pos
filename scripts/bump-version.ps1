@@ -159,9 +159,9 @@ Update-File "ui/src/locales/shared.id.ftl" "statusbar-version = OZ-POS Enterpris
 Update-File "website/package.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
 Update-File "website/package-lock.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
 Update-File "website/src/i18n/en.json" ('"versionValue": "{0}"' -f $currentVersion) ('"versionValue": "{0}"' -f $TargetVersion)
-Update-File "website/src/i18n/en.json" ('"subtitle": "Version {0} {1} free 90-day trial, no signup required."' -f $currentVersion, [char]0x2014) ('"subtitle": "Version {0} {1} free 90-day trial, no signup required."' -f $TargetVersion, [char]0x2014)
+Update-File "website/src/i18n/en.json" ('"subtitle": "Version {0} {1} free forever, no signup required."' -f $currentVersion, [char]0x2014) ('"subtitle": "Version {0} {1} free forever, no signup required."' -f $TargetVersion, [char]0x2014)
 Update-File "website/src/i18n/id.json" ('"versionValue": "{0}"' -f $currentVersion) ('"versionValue": "{0}"' -f $TargetVersion)
-Update-File "website/src/i18n/id.json" ('"subtitle": "Versi {0} {1} uji coba gratis 90 hari, tanpa pendaftaran."' -f $currentVersion, [char]0x2014) ('"subtitle": "Versi {0} {1} uji coba gratis 90 hari, tanpa pendaftaran."' -f $TargetVersion, [char]0x2014)
+Update-File "website/src/i18n/id.json" ('"subtitle": "Versi {0} {1} gratis selamanya, tanpa pendaftaran."' -f $currentVersion, [char]0x2014) ('"subtitle": "Versi {0} {1} gratis selamanya, tanpa pendaftaran."' -f $TargetVersion, [char]0x2014)
 
 # Dockerfile.unified carries the same cache-priming manifests as Dockerfile.server.
 Update-File "Dockerfile.unified" "version = `"$currentVersion`"" "version = `"$TargetVersion`""

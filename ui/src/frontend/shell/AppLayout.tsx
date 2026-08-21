@@ -31,7 +31,9 @@ const SECTION_ORDER: SectionName[] = [
   'dev',
 ];
 
-function groupBySection<T extends { section?: SectionName }>(items: T[]): { section: SectionName; items: T[] }[] {
+/** Group nav items by sidebar section in canonical SECTION_ORDER; items
+ *  without a section fall back to 'management'. Exported for unit tests. */
+export function groupBySection<T extends { section?: SectionName }>(items: T[]): { section: SectionName; items: T[] }[] {
   const map = new Map<SectionName, T[]>();
   const seen = new Set<SectionName>();
   for (const item of items) {

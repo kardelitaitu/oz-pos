@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { getLicenseStatus, checkLicenseStatus, type ServerLicenseStatus } from '@/api/license';
+import { getLicenseStatus, checkLicenseStatus, pauseSubscription, resumeSubscription, type ServerLicenseStatus } from '@/api/license';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import ExitSurveyModal from '@/components/ExitSurveyModal';
 import { useToast } from '@/frontend/shared/Toast';
 import { l10nErrorMessage } from '@/utils/app-error';
 import './LicenseSettings.css';
@@ -91,6 +92,10 @@ export default function LicenseSettings() {
   // ── Row flash animation ─────────────────────────────────────────
   // Track recently-updated rows for a brief green background pulse.
   const [flashRows, setFlashRows] = useState<Map<string, 'updated'>>(new Map());
+  // C3.3: Pause/resume subscription state
+  const [pausing, setPausing] = useState(false);
+  const [showExitSurvey, setShowExitSurvey] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const flashTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const triggerFlash = useCallback((key: string) => {
@@ -224,6 +229,45 @@ export default function LicenseSettings() {
       setCheckingServer(false);
     }
   }, [addToast, l10n, triggerFlash]);
+
+  /** C3.3: Pause the subscription for 1 month. */
+  const handlePauseConfirm = useCallback(async () => {
+    setShowExitSurvey(false);
+    setPausing(true);
+    try {
+      await pauseSubscription(1);
+      addToast({ type: 'info', message: l10n.getString('settings-license-pause-success') });
+      const status = await checkLicenseStatus();
+      setServerStatus(status);
+    } catch (err) {
+      const msg = l10nErrorMessage(err, l10n, 'settings-license-pause-failed');
+      addToast({ type: 'error', message: msg });
+    } finally {
+      setPausing(false);
+    }
+  }, [addToast, l10n]);
+
+  /** Show exit survey before pausing. */
+  const handlePause = useCallback(() => {
+    setShowExitSurvey(true);
+  }, []);
+
+  /** C3.3: Resume a paused subscription. */
+  const handleResume = useCallback(async () => {
+    setResuming(true);
+    try {
+      await resumeSubscription();
+      addToast({ type: 'info', message: l10n.getString('settings-license-resume-success') });
+      // Reload status to reflect active state
+      const status = await checkLicenseStatus();
+      setServerStatus(status);
+    } catch (err) {
+      const msg = l10nErrorMessage(err, l10n, 'settings-license-resume-failed');
+      addToast({ type: 'error', message: msg });
+    } finally {
+      setResuming(false);
+    }
+  }, [addToast, l10n]);
 
   // ── Loading / Error states ──────────────────────────────────
   if (loading) {
@@ -442,7 +486,65 @@ export default function LicenseSettings() {
             )}
           </div>
         )}
+
+        {/* ── C3.3: Pause / Resume subscription ── */}
+        {payload.status === 'active' && (
+          <div className="settings-license-row settings-license-row--actions">
+            <span className="settings-license-label">
+              <Localized id="settings-license-subscription-actions"><span>Subscription</span></Localized>
+            </span>
+            <span className="settings-license-value">
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={pausing}
+                onClick={handlePause}
+                aria-label={l10n.getString('settings-license-pause-aria')}
+              >
+                <Localized id="settings-license-pause-subscription">
+                  <span>Pause subscription</span>
+                </Localized>
+              </Button>
+            </span>
+          </div>
+        )}
+        {payload.status === 'paused' && (
+          <>
+            <div className="settings-license-row settings-license-row--warning">
+              <span className="settings-license-label">
+                <Localized id="settings-license-paused-until"><span>Paused until</span></Localized>
+              </span>
+              <span className="settings-license-value settings-license-value--warning">
+                {formatDate(serverStatus?.expiresAt ?? payload.expires_at, [...l10n.bundles][0]?.locales[0] ?? 'en-US')}
+              </span>
+            </div>
+            <div className="settings-license-row settings-license-row--actions">
+              <span className="settings-license-label">
+                <Localized id="settings-license-subscription-actions"><span>Subscription</span></Localized>
+              </span>
+              <span className="settings-license-value">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={resuming}
+                  onClick={handleResume}
+                  aria-label={l10n.getString('settings-license-resume-aria')}
+                >
+                  <Localized id="settings-license-resume-subscription">
+                    <span>Resume subscription</span>
+                  </Localized>
+                </Button>
+              </span>
+            </div>
+          </>
+        )}
       </div>
+
+      <ExitSurveyModal
+        open={showExitSurvey}
+        onClose={() => setShowExitSurvey(false)}
+        onConfirm={handlePauseConfirm}
+      />
     </Card>
   );
 }

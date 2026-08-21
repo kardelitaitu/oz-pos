@@ -1,6 +1,7 @@
 // ── Staff: Login, Bootstrap, CRUD ──────────────────────────────────
 
 import { loggedInvoke } from '@/utils/logged-invoke';
+import { appErrorSubKind, parseAppError } from '@/utils/app-error';
 
 // ── Auth ──────────────────────────────────────────────────────────
 
@@ -309,3 +310,18 @@ export const createSession = (args: CreateSessionArgs): Promise<CreateSessionRes
  */
 export const destroySession = (sessionToken: string): Promise<void> =>
   loggedInvoke<void>('destroy_session', { sessionToken });
+
+// ── C1.1 staff-quota upgrade detection ─────────────────────────────
+//
+// The backend rejects staff creation past the tier's `max_staff_users()`
+// cap with `CoreError::SubscriptionLimitExceeded` — wire subKind
+// `subscriptionLimitExceeded`. Screens branch on this to show the
+// localized quota message + upgrade CTA instead of the generic error.
+
+/**
+ * True when an IPC failure is the C1.1 staff-user quota rejection.
+ */
+export const isStaffQuotaLimitError = (err: unknown): boolean => {
+  const parsed = parseAppError(err);
+  return parsed !== null && appErrorSubKind(parsed) === 'subscriptionLimitExceeded';
+};

@@ -241,11 +241,32 @@ The license server requires the RSA private key as an environment variable. **Ne
    - **Key:** `OZ_WEB_ALLOWED_ORIGINS` — comma-separated origins allowed to call the web endpoints. **Defaults are already correct** for the current setup (`https://oz-pos.adikaradwiatmaja.workers.dev`, `https://oz-pos.com`, `http://localhost:4321`); only set this if you deploy the website to a different origin.
 7. (Optional) Session lifetime override:
    - **Key:** `OZ_WEB_SESSION_TTL` — Go duration, default `24h` (e.g. `72h` to extend dashboard sessions).
-8. Add the **Paddle webhook** secrets (required for the checkout → provisioning flow):
+8. Add the **billing webhook** secrets (required for the checkout → provisioning flow — Paddle for global, Midtrans for Indonesia, ADR #39):
    - **Key:** `PADDLE_WEBHOOK_SECRET` — the endpoint secret key from Paddle → Developer tools → Notifications → Edit destination. Without it the webhook answers `503 not configured`. **Boot gate:** the server fails fast at startup if this (or `PADDLE_PRICE_TIERS`) is missing or malformed, so a misconfigured deploy can never silently answer 503/500 on every event.
-   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium`. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. Copy the real price IDs from the Paddle dashboard (Catalog → Prices). Both vars are still read per-request, so a redeploy with fixed env recovers without a code change.
+   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key:period[:bundle_id]` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium` (the `:period` segment is "month" or "year" — the webhook cross-checks it against billing_cycle.interval; the optional `:bundle_id` segment marks a vertical-bundle price, C3.2 — see below). **The six real prices are NOT catalogued yet** — the website still carries `pri_placeholder_*` ids (degrading checkout to the mailto fallback). When the catalog lands, replace the placeholders with the six real ids in this exact shape (Plus/Pro/Premium × monthly/yearly, subscription-tiers.md §2):
+
+     ```
+     PADDLE_PRICE_TIERS=pri_<plus_monthly>:plus:month,pri_<plus_yearly>:plus:year,pri_<pro_monthly>:pro:month,pri_<pro_yearly>:pro:year,pri_<premium_monthly>:premium:month,pri_<premium_yearly>:premium:year
+     ```
+
+     Copy the real price IDs from the Paddle dashboard (Catalog → Prices). Do NOT ship the two legacy sandbox prices (`pri_01m05gdnqp30xze6db73qcracp` = old $19/mo Pro, `pri_01m05gdpk4hmnm0k8e6vxm8cec` = old $49/mo Premium) — they charge the superseded amounts. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. For the Restaurant Starter bundle (C3.2), add a Plus+ bundle price: `pri_<plus_bundle_yearly>:plus:year:restaurant_starter` — the webhook cross-checks `custom_data.bundle` against the price's bundle segment and mints the kds-widened quota block; adding the entry makes the bundle purchasable.
    - **Key:** `PADDLE_API_KEY` (optional) — server-side Paddle API key. Only needed when the customer email isn't passed in `custom_data` at checkout; the webhook falls back to fetching it via `GET /customers/{id}`.
    - **Key:** `PADDLE_API_URL` (optional) — defaults to `https://api.paddle.com`.
+   - **Key:** `MIDTRANS_SERVER_KEY` — the **server key** from Midtrans → Settings → Access Keys (production keys start `Mid-server-…`, sandbox `SB-Mid-server-…`). The key must belong to the **same account that owns the webhook URL** — sandbox notifications are signed with the sandbox key and production with the production key, so a mismatched key answers **401** on every notification (never 503). When the key is **unset**, the webhook answers `503 not configured` and Midtrans retries forever. **Boot gate:** the server fails fast at startup if this (or `MIDTRANS_PRICE_TIERS`) is missing or malformed.
+   - **Key:** `MIDTRANS_PRICE_TIERS` — comma-separated `gross_amount:tier_key[:period][:bundle_id]` pairs. **The six fixed IDR prices (subscription-tiers.md §2) are the canonical values — the checkout's Snap endpoint and the webhook's amount cross-check both read this exact map, so every gross_amount a buyer can be charged must be mapped:**
+
+     ```
+     MIDTRANS_PRICE_TIERS=49000:plus:month,500000:plus:year,99000:pro:month,1000000:pro:year,199000:premium:month,2000000:premium:year
+     ```
+
+     The webhook normalizes Midtrans's `gross_amount` formatting (`"49000.00"` → `49000`) before lookup; an unmapped amount answers 500 so Midtrans retries until the operator fixes the map. **Restaurant Starter bundle (C3.2, optional — add ONLY when the bundle goes live, and the amounts must match the pricing-page display, currently placeholder Rp 74.000/mo + Rp 750.000/yr):**
+
+     ```
+     MIDTRANS_PRICE_TIERS=49000:plus:month,500000:plus:year,74000:plus:month:restaurant_starter,750000:plus:year:restaurant_starter,99000:pro:month,1000000:pro:year,199000:premium:month,2000000:premium:year
+     ```
+
+     An unknown bundle id in the map is rejected at boot (loud failure, never a silent no-op). Both vars are still read per-request, so a redeploy with fixed env recovers without a code change.
+   - **Key:** `MIDTRANS_SNAP_URL` (optional) — Snap API base. Defaults to `https://app.midtrans.com` (production). **Sandbox testing:** set `https://app.sandbox.midtrans.com` — otherwise sandbox keys hit the production Snap API and fail token creation. Must match the `MIDTRANS_SERVER_KEY` environment (sandbox key + sandbox URL, production key + production URL).
 9. Click **Save**.
 
 ### 7.2 CORS for the website
@@ -276,6 +297,16 @@ In the Paddle dashboard (**Developer tools → Notifications**):
 4. **Signature verification:** every request carries a `Paddle-Signature` header (`ts=<unix>;h1=<hex>`). The server verifies HMAC-SHA256 over `ts:rawBody` with the endpoint secret and rejects timestamps older than 5 minutes. Nothing else is trusted.
 5. **Idempotency:** Paddle retries non-2xx responses; the server dedups by `event_id` (24h in-memory window) and upserts on `paddle_sub_id`, so replays are no-ops.
 6. **Customer email:** the website checkout passes `custom_data.email` (the email the customer types on the pricing card), which the webhook reads to upsert the tenant — **no `PADDLE_API_KEY` needed**. `PADDLE_API_KEY` remains an optional fallback for events whose `custom_data` lacks the email.
+
+### 7.6 Configure the Midtrans webhook
+
+In the Midtrans dashboard (**Settings → Configuration → Webhook Notification URL**):
+
+1. Set the payment notification URL to `https://license.oz-pos.com/api/v1/midtrans/webhook` (or your service's public URL — the same host as the Paddle webhook).
+2. Enable the **Payment** notification type (`payment.status`/transaction notifications). Midtrans subscription (`subscription.status`) notifications are acknowledged but provisioning is keyed on settled transaction charges — see `midtrans_webhook.go`.
+3. **Signature verification:** every notification carries `signature_key`; the server recomputes `SHA512(order_id + status_code + gross_amount + serverkey)` with the `MIDTRANS_SERVER_KEY` secret and compares constant-time. Nothing else is trusted — an unsigned or mismatched request answers **401** and provisions nothing.
+4. **Idempotency:** Midtrans retries non-2xx responses; the server dedups by `transaction_id` (in-memory) and upserts on `midtrans_sub_id` / `midtrans_order_id`, so replays are no-ops.
+5. **Sandbox vs production:** the sandbox dashboard sends test notifications signed with the sandbox key — point the sandbox webhook at the same URL and the server answers 401 unless `MIDTRANS_SERVER_KEY` is the matching sandbox key. Test end-to-end in sandbox first (§11.7), then flip `MIDTRANS_SERVER_KEY`/`MIDTRANS_SNAP_URL` to production values.
 
 ---
 
@@ -441,6 +472,144 @@ curl -X POST https://license.oz-pos.com/api/v1/paddle/webhook \
 
 The response must be **200** and a tenant + `OZ-PRO-...` license key + subscription must appear in the admin UI. An unsigned or tampered request must return **401** and create nothing.
 
+### 11.7 End-to-end QRIS purchase smoke test (C3.1 billing switch)
+
+Run this in **sandbox first** (ADR #39 verification). Tick every box before considering the switch live.
+
+**Pre-flight (sandbox):**
+
+- [ ] `MIDTRANS_SERVER_KEY` = `SB-Mid-server-…` from the sandbox dashboard (Settings → Access Keys) and `MIDTRANS_SNAP_URL=https://app.sandbox.midtrans.com` in the secret group (§7.1 step 8).
+- [ ] `MIDTRANS_PRICE_TIERS` = the six IDR prices exactly as written in §7.1 step 8 (`49000:plus:month,500000:plus:year,99000:pro:month,1000000:pro:year,199000:premium:month,2000000:premium:year`).
+- [ ] Redeploy and confirm the boot log line: `Midtrans webhook config verified: 6 amount→tier mapping(s)`. The server fails fast (no boot) if the map is malformed or the key is missing.
+- [ ] Sandbox webhook URL set in the Midtrans dashboard (§7.6).
+- [ ] Website Worker: `LICENSE_API_URL` [vars] binding points at the license server (`window.__OZ_CONFIG__.licenseApiUrl` is what the id-locale `CheckoutButton` calls for the snap token).
+
+**Purchase walk (id-locale pricing page → Snap → webhook → POS):**
+
+1. [ ] Open `https://<site>/id/pricing`, keep the **yearly** default, click **Choose Plus**.
+2. [ ] No session → redirected to `/id/login` (register-first — the webhook needs a tenant email). Verify a throwaway email + OTP; then click **Choose Plus** again.
+3. [ ] In DevTools → Network, the button POSTs `…/api/v1/midtrans/snap` with `{tier_key:"plus", period:"yearly"}` and answers `{token, redirect_url, order_id, amount:"500000"}` — **the amount must equal the price map**. Any other amount (or a 400 `not mapped`) means the map is wrong — stop. (Prefer shell? The same calls, with the exact expected JSON, are in §11.8.)
+4. [ ] The Snap overlay opens (QRIS / VA / e-wallet / card). Pay with the sandbox QRIS — scan the QRIS image with the Midtrans sandbox mobile app, or use the sandbox dashboard's simulate-payment flow; the transaction settles within seconds.
+5. [ ] `snap.pay`'s `onSuccess` fires; the webhook answers **200**. In the admin UI (`/_/`): a **tenant** was upserted by the checkout email, and a **license_keys** record exists with `key` = `OZ-PLUS-…`, `payment_provider=midtrans`, `midtrans_sub_id` set, and the plus quota block (max_stores=1, max_pos_instances=2, allowed_types without `kds`).
+6. [ ] The **receipt email** with the license key lands at the buyer address (requires SMTP from §7.1 step 5; failure is non-fatal and logged).
+7. [ ] **POS activation:** in the desktop app, activate with that key + email → the signed payload returns `tier_key=plus`, `max_stores=1`, `max_pos_instances=2`, and `payment_provider=midtrans` on the subscription record.
+8. [ ] **Bundle (C3.2, only if the bundle entry is in the map):** toggle Restaurant Starter on the Plus card → snap `amount` is the bundle amount and `custom_field4=restaurant_starter`; after payment the key's `allowed_types` **includes `kds`** and `bundle_id=restaurant_starter`.
+
+**Negative + lifecycle checks (curl against the webhook URL):**
+
+- [ ] **Tampered amount** — a settled notification whose `gross_amount` is not in the map → **500** and no key minted (Midtrans retries until the map is fixed).
+- [ ] **Bundle claim on a plain amount** — `custom_field4=restaurant_starter` with a plain Plus `gross_amount` → **500**, no key (the price map is authoritative).
+- [ ] **Tampered custom_field3** — `1490000` (plus:year) with `custom_field3="month"` → **500**, no key (the period must match the price-map period).
+- [ ] **Invalid signature** — wrong `signature_key` → **401**, nothing created.
+- [ ] **Replay** — resend the same `transaction_id` → **200** with `{"status":"duplicate"}`, still exactly one license key.
+- [ ] **Renewal** — a second settled charge with the same `subscription_id` but a new `order_id` → the **same** key is refreshed (no second key) and `expires_at` extends +1 year.
+- [ ] **Failed charge** — a `cancel`/`expire` notification for the same subscription → the subscription record moves to `grace_period` with `grace_until` = the old `expires_at`.
+
+**Going live:**
+
+- [ ] Flip `MIDTRANS_SERVER_KEY` to the production `Mid-server-…` key and unset `MIDTRANS_SNAP_URL` (production default). Redeploy, confirm the boot log, then run steps 1–7 once against production with a real small charge.
+- [ ] Remove the sandbox test tenant/keys from the admin UI (or keep a sandbox service for future tests).
+
+### 11.8 Verify the checkout leg with curl (no browser)
+
+The browser walk in §11.7 step 3 is the happy path; this section reproduces the exact same calls with curl so ops can verify the snap leg from a shell. The flow is **register-first** — the webhook needs a tenant email — so the session token comes from the same OTP login the website uses. No `Origin` header is needed: the CORS allowlist only governs browsers (`webOriginAllowed` passes for header-less callers).
+
+**Step 1 — session token (register-or-login).** The 6-digit code arrives by email; the response is the same whether the account existed or not (no enumeration):
+
+```bash
+curl -X POST https://license.oz-pos.com/api/v1/web/request-otp \
+  -H "Content-Type: application/json" \
+  -d '{"email":"buyer@test.com"}'
+```
+
+**Expected 200:** `{"status":"ok"}`
+
+```bash
+# 1b. Exchange the emailed code for a session token
+curl -X POST https://license.oz-pos.com/api/v1/web/verify-otp \
+  -H "Content-Type: application/json" \
+  -d '{"email":"buyer@test.com","code":"123456"}'
+```
+
+**Expected 200:** `{"token":"<session token>","expires_at":"…","tenant":{…},"license":{…},"subscription":{…}}` — capture `token`; it is the Bearer credential for the snap call below.
+
+**Step 2 — create the Snap charge (the checkout leg):**
+
+```bash
+curl -X POST https://license.oz-pos.com/api/v1/midtrans/snap \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token from step 1b>" \
+  -d '{"tier_key":"plus","period":"yearly"}'
+```
+
+**Expected 200:**
+
+```json
+{
+  "token": "6f9d2c11-…-snap-token",
+  "redirect_url": "https://app.midtrans.com/snap/v2/vtweb/…",
+  "order_id": "OZ-PLUS-1755486000-1a2b3c",
+  "amount": "500000"
+}
+```
+
+**Cross-check every run:** `order_id` matches `OZ-<TIER>-<unix>-<hex>`; `amount` equals the §2/§7.1 price-map entry (Rp 500.000 for `plus:year`). Any other amount — or a `400 {"error":"tier … is not mapped in MIDTRANS_PRICE_TIERS"}` — means the map is wrong: **stop** (the endpoint refuses to mint an unbilled tier).
+
+**Bundle variant** (only if the bundle entry is in the map, C3.2):
+
+```bash
+curl -X POST https://license.oz-pos.com/api/v1/midtrans/snap \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"tier_key":"plus","period":"yearly","bundle":"restaurant_starter"}'
+```
+
+**Expected 200:** same shape with `"amount":"750000"` — the bundle amount, so the webhook mints `kds` in `allowed_types` (custom_field4 rides the charge).
+
+**Failure modes (curl the same endpoint):**
+
+| Call | Expected |
+|---|---|
+| No/malformed `Authorization` | `401 {"error":"missing or invalid session token"}`
+| Expired/unknown session | `401 {"error":"invalid or expired session"}`
+| Tier/period not in the map | `400 {"error":"tier "pro" (weekly, bundle=) is not mapped in MIDTRANS_PRICE_TIERS"}`
+| Disallowed `Origin` header (browser only) | `403 {"error":"origin not allowed"}`
+| Midtrans unreachable / wrong server key | `502 {"error":"checkout provider error"}` + server log `midtrans snap: token creation failed`
+
+**Step 3 (optional) — the raw Midtrans leg**, to prove the server key + Snap account independently of the app (this is byte-for-byte what `createMidtransSnapHTTP` sends):
+
+```bash
+curl -X POST https://app.sandbox.midtrans.com/snap/v1/transactions \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -u "SB-Mid-server-…:" \
+  -d '{
+    "transaction_details": {"order_id": "OZ-PLUS-1755486000-1a2b3c", "gross_amount": "500000"},
+    "item_details": [{"id": "plus-year", "price": "500000", "quantity": 1, "name": "OZ-POS PLUS (year)"}],
+    "customer_details": {"email": "buyer@test.com"},
+    "custom_field1": "plus",
+    "custom_field2": "buyer@test.com",
+    "custom_field3": "year",
+    "custom_field4": "",
+    "enabled_payments": ["qris", "bank_transfer", "echannel", "gopay", "shopeepay", "credit_card"],
+    "credit_card": {"secure": true}
+  }'
+```
+
+**Expected 201:** `{"token":"…","redirect_url":"…"}` (use `https://app.midtrans.com` for production; the base must match the `MIDTRANS_SERVER_KEY` environment — sandbox key + sandbox URL, production key + production URL). A 401 here means the server key is wrong or belongs to a different environment.
+
+**Webhook failure modes (curl the webhook endpoint with a signed body):**
+
+| Call | Expected |
+|---|---|
+| Invalid signature | `401 {"error":"invalid signature"}` |
+| Tampered amount (not in map) | `500`; log: `gross_amount "…" is not mapped in MIDTRANS_PRICE_TIERS` |
+| Bundle claim on plain amount | `500`; log: `custom_field4 bundle "…" disagrees with price-mapped bundle ""` |
+| **Tampered custom_field3** | `500`; log: `custom_field3 period "…" disagrees with price-mapped period "…"` |
+| Replay (same `transaction_id`) | `200 {"status":"duplicate"}` |
+| Renewal (same `subscription_id`) | `200`; same key refreshed, `expires_at` extended |
+| Failed charge (`cancel`/`expire`) | `200`; subscription → `grace_period` |
+
 ---
 
 ## 12. Ongoing Maintenance
@@ -460,6 +629,7 @@ Alternatively, export manually from the admin UI (`/_/` → **Settings** → **E
 - **Northflank Dashboard:** CPU, memory, and request logs are available in the service overview.
 - **PocketBase Logs:** Viewable via the Shell (`less /pb/pb_data/logs.db`) or the admin UI.
 - **Uptime Monitoring:** Add a health check endpoint monitor (e.g., UptimeRobot on `https://license.oz-pos.com/api/health`, which returns `{"status":"ok"}`). The payload also includes per-gate status objects: `smtp` (`configured`/`verified`/`error` — runtime sender-identity probe, re-run at most every 60s so monitors don't hammer the relay), `paddle` (`secret_configured`/`price_tiers_configured`/`price_tiers_mappings`/`error`), `rsa` (`configured`), and `discord` (`configured`). These are status, not liveness — only a DB outage fails the check. **Copy-paste monitor config (including the keyword monitor that alerts when `smtp.verified` flips to false): see [`uptime-monitor.md`](./uptime-monitor.md).**
+- **Midtrans (C3.1):** `/api/health` now exposes a `midtrans` gate object — `server_key_configured` / `price_tiers_configured` / `price_tiers_mappings` / `error` — mirroring the boot-time `verifyMidtransConfig` (a missing or rotated `MIDTRANS_SERVER_KEY` flips `server_key_configured` to false; a dropped/malformed `MIDTRANS_PRICE_TIERS` flips `price_tiers_configured` to false and surfaces the parse error). **Keyword monitor:** alert on `"server_key_configured":false` or `"price_tiers_configured":false` (copy-paste row in [`uptime-monitor.md`](./uptime-monitor.md)). These are status, not liveness — a broken Midtrans config never fails the HTTP check, so the keyword monitor is what catches it. Also still watch the service logs for `Midtrans webhook config verified: 6 amount→tier mapping(s)` after every deploy, and alert on webhook **5xx** (a 500 on a settled charge means provisioning failed and Midtrans is retrying — the payload says which `order_id`).
 
 ### Updating the service
 

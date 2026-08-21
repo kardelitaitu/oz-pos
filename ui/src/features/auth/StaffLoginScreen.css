@@ -165,16 +165,6 @@
     }
   }
 
-  /* ── Error fade-in ──────────────────────────── */
-  .staff-login-error {
-    animation: login-error-fade var(--duration-200) var(--ease-out);
-  }
-
-  @keyframes login-error-fade {
-    from { opacity: 0; transform: translateY(-0.25rem); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
   /* ── PIN dot pop ────────────────────────────── */
   .staff-login-pin-dot--filled {
     animation: login-dot-pop var(--duration-200) var(--ease-out);
@@ -496,32 +486,6 @@
   height: clamp(18px, 4vw, 22px);
 }
 
-/* ── Error banner ────────────────────────────────────────────────── */
-
-.staff-login-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-
-  padding: clamp(var(--space-2), 1.5vw, var(--space-3));
-
-  background: var(--color-danger-bg);
-  border: 1px solid var(--color-danger-dim);
-  border-radius: var(--radius-lg);
-
-  color: var(--color-danger);
-  font-size: clamp(var(--text-xs), 2vw, var(--text-sm));
-  font-weight: var(--font-weight-medium);
-  line-height: var(--leading-normal);
-}
-
-.staff-login-error svg {
-  flex-shrink: 0;
-  width: clamp(14px, 2.5vw, 18px);
-  height: clamp(14px, 2.5vw, 18px);
-}
-
 /* ── Step indicator ──────────────────────────────────────────────── */
 
 .staff-login-steps {
@@ -556,24 +520,6 @@
   background: var(--color-border);
   border-radius: var(--radius-sm);
   transition: background var(--duration-200) var(--ease-out);
-}
-
-/* ── Rate-limit indicator within error banner ──────────────────── */
-
-.staff-login-rate-limit {
-  display: inline;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-danger);
-}
-
-.staff-login-rate-limit--lockout {
-  color: var(--color-warning);
-  animation: login-rate-limit-pulse var(--duration-1000) var(--ease-in-out) infinite;
-}
-
-@keyframes login-rate-limit-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.6; }
 }
 
 /* ── Shake — applied via JS when login fails ─────────────────────── */

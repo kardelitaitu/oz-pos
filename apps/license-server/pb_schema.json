@@ -52,6 +52,7 @@
         "maxSelect": 1,
         "values": [
           "free",
+          "plus",
           "pro",
           "premium",
           "enterprise"
@@ -191,6 +192,88 @@
         "type": "text"
       },
       {
+        "help": "Midtrans Subscription API subscription id this key belongs to (recurring charges share it). Set => Midtrans webhook-issued; enables expiry refresh on later charges.",
+        "hidden": false,
+        "id": "text3141592653",
+        "max": 100,
+        "min": 0,
+        "name": "midtrans_sub_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Midtrans order_id of the most recent charge that minted/refreshed this key. Lookup key for charges that arrive before a subscription_id exists.",
+        "hidden": false,
+        "id": "text1618033989",
+        "max": 100,
+        "min": 0,
+        "name": "midtrans_order_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Billing provider that issued this key: \"paddle\" (global, USD cards) or \"midtrans\" (Indonesian QRIS/VA/e-wallet, fixed IDR). Backfilled to paddle for pre-Midtrans keys.",
+        "hidden": false,
+        "id": "select1414213562",
+        "maxSelect": 1,
+        "name": "payment_provider",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "select",
+        "values": [
+          "paddle",
+          "midtrans"
+        ]
+      },
+      {
+        "help": "True for segmented-trial keys (C2.1): activation mints a short Plus/Pro license from the request's trial_vertical instead of the key's own tier/expiry/quota. Paid keys leave this unset.",
+        "hidden": false,
+        "id": "bool2837461521",
+        "name": "is_trial",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool"
+      },
+      {
+        "help": "Vertical-bundle id (subscription-tiers.md §3, C3.2) this license was purchased with — \"restaurant_starter\" widens the Plus quota block with the kds workspace type. Set at webhook mint; renewals fall back to it when the charge notification carries no bundle.",
+        "hidden": false,
+        "id": "text2339013917",
+        "max": 64,
+        "min": 0,
+        "name": "bundle_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "C4.3: JSON array of add-on identifiers purchased with this license (e.g. [\"advanced_analytics\", \"priority_support\"]). Add-ons are additive to base tier quotas.",
+        "hidden": false,
+        "id": "text_addons_field",
+        "name": "addons",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 1024,
+        "min": 0
+      },
+      {
         "hidden": false,
         "id": "autodate3454440663",
         "name": "created",
@@ -213,7 +296,8 @@
     ],
     "indexes": [
       "CREATE UNIQUE INDEX idx_license_keys_key ON license_keys (key)",
-      "CREATE UNIQUE INDEX idx_license_keys_paddle_sub ON license_keys (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''"
+      "CREATE UNIQUE INDEX idx_license_keys_paddle_sub ON license_keys (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''",
+      "CREATE UNIQUE INDEX idx_license_keys_midtrans_sub ON license_keys (midtrans_sub_id) WHERE midtrans_sub_id IS NOT NULL AND midtrans_sub_id != ''"
     ]
   },
   {
@@ -431,6 +515,7 @@
         "maxSelect": 1,
         "values": [
           "free",
+          "plus",
           "pro",
           "premium",
           "enterprise"
@@ -450,7 +535,8 @@
           "active",
           "expired",
           "grace_period",
-          "revoked"
+          "revoked",
+          "paused"
         ]
       },
       {
@@ -482,6 +568,30 @@
         "hidden": false,
         "id": "date5077564346",
         "name": "grace_until",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "When the subscription was paused (C3.3).",
+        "hidden": false,
+        "id": "date_paused_at_01",
+        "name": "paused_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "When the pause expires and billing resumes (C3.3).",
+        "hidden": false,
+        "id": "date_paused_until_01",
+        "name": "paused_until",
         "presentable": false,
         "required": false,
         "system": false,
@@ -526,6 +636,63 @@
         "max": 100,
         "min": 0,
         "name": "paddle_sub_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Midtrans Subscription API subscription id this record mirrors — the lookup key for recurring-charge refreshes.",
+        "hidden": false,
+        "id": "text2718281829",
+        "max": 100,
+        "min": 0,
+        "name": "midtrans_sub_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Midtrans order_id of the most recent charge that provisioned/refreshed this record.",
+        "hidden": false,
+        "id": "text3141592654",
+        "max": 100,
+        "min": 0,
+        "name": "midtrans_order_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Billing provider that issued this record: \"paddle\" (global, USD cards) or \"midtrans\" (Indonesian QRIS/VA/e-wallet, fixed IDR). Backfilled to paddle for pre-Midtrans records.",
+        "hidden": false,
+        "id": "select2236067977",
+        "maxSelect": 1,
+        "name": "payment_provider",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "select",
+        "values": [
+          "paddle",
+          "midtrans"
+        ]
+      },
+      {
+        "help": "Vertical-bundle id (subscription-tiers.md §3, C3.2) this subscription was purchased with — \"restaurant_starter\" widens the Plus quota block with the kds workspace type. Set at webhook mint; plan-change events keep it.",
+        "hidden": false,
+        "id": "text2632455521",
+        "max": 64,
+        "min": 0,
+        "name": "bundle_id",
         "pattern": "",
         "presentable": false,
         "primaryKey": false,
@@ -592,7 +759,8 @@
       }
     ],
     "indexes": [
-      "CREATE UNIQUE INDEX idx_subscriptions_paddle_sub ON subscriptions (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''"
+      "CREATE UNIQUE INDEX idx_subscriptions_paddle_sub ON subscriptions (paddle_sub_id) WHERE paddle_sub_id IS NOT NULL AND paddle_sub_id != ''",
+      "CREATE UNIQUE INDEX idx_subscriptions_midtrans_sub ON subscriptions (midtrans_sub_id) WHERE midtrans_sub_id IS NOT NULL AND midtrans_sub_id != ''"
     ]
   },
   {
@@ -709,6 +877,501 @@
     ],
     "indexes": [
       "CREATE UNIQUE INDEX idx_tenant_machines_machine_id ON tenant_machines (machine_id) WHERE machine_id IS NOT NULL AND machine_id != ''"
+    ]
+  },
+  {
+    "id": "trialreg0000001",
+    "name": "trial_registrations",
+    "type": "base",
+    "system": false,
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text1000000003",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "Hardware fingerprint (SPEC-2026-TRIAL-LOCK): the client's derived hardware identifier, 'hw_' + SHA-256 of the machine anchor. Unique — one trial per physical device.",
+        "hidden": false,
+        "id": "text1000000000",
+        "max": 128,
+        "min": 1,
+        "name": "hardware_fingerprint",
+        "presentable": true,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date1000000000",
+        "name": "first_seen_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "When the claimed trial expires (segmented trial length from subscription-tiers.md §4). Informational — the fingerprint stays claimed permanently to prevent reset abuse.",
+        "hidden": false,
+        "id": "date1000000001",
+        "name": "trial_expires_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "OS platform the trial was claimed from.",
+        "hidden": false,
+        "id": "select1000000000",
+        "maxSelect": 1,
+        "name": "platform",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "values": [
+          "windows",
+          "android",
+          "linux",
+          "macos",
+          "unknown"
+        ]
+      },
+      {
+        "help": "Client app version that claimed the trial.",
+        "hidden": false,
+        "id": "text1000000001",
+        "max": 32,
+        "min": 0,
+        "name": "app_version",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Tenant that claimed this device's trial. Set at claim; a re-install by the SAME tenant is a re-activation (allowed), a claim by a DIFFERENT tenant is the reset abuse the lock exists to block.",
+        "hidden": false,
+        "id": "relation1000000000",
+        "name": "tenant_id",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "relation",
+        "cascadeDelete": false,
+        "collectionId": "64d11bd2cc57a18",
+        "maxSelect": 1,
+        "minSelect": 0
+      },
+      {
+        "help": "Client IP at claim time (informational, from the request).",
+        "hidden": false,
+        "id": "text1000000002",
+        "max": 64,
+        "min": 0,
+        "name": "ip_address",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "hidden": false,
+        "id": "autodate1000000000",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate1000000001",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_trial_registrations_hw ON trial_registrations (hardware_fingerprint) WHERE hardware_fingerprint IS NOT NULL AND hardware_fingerprint != ''"
+    ]
+  },
+  {
+    "id": "trialclaim00001",
+    "name": "trial_claims",
+    "type": "base",
+    "system": false,
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text2000000000",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "SHA-256 of the normalized email + '|' + device id (machine_id at activation, hardware fingerprint at the claim endpoint). Unique — the lightweight repeat-email detector key.",
+        "hidden": false,
+        "id": "text2000000001",
+        "max": 64,
+        "min": 64,
+        "name": "claim_hash",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "^[a-f0-9]{64}$",
+        "primaryKey": false
+      },
+      {
+        "help": "Normalized (lowercased/trimmed) account email the claim was made under.",
+        "hidden": false,
+        "id": "text2000000002",
+        "max": 320,
+        "min": 1,
+        "name": "email",
+        "presentable": true,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Device component of the claim fingerprint (machine_id or hardware fingerprint at claim time).",
+        "hidden": false,
+        "id": "text2000000003",
+        "max": 128,
+        "min": 1,
+        "name": "device_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Tenant the claim belongs to, when known (set at activation; the claim endpoint fills it in when an email is provided).",
+        "hidden": false,
+        "id": "relation2000000000",
+        "name": "tenant_id",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "relation",
+        "cascadeDelete": false,
+        "collectionId": "64d11bd2cc57a18",
+        "maxSelect": 1,
+        "minSelect": 0
+      },
+      {
+        "help": "How many times this (email, device) pair has claimed a trial. 1 = first claim; >1 = repeat email detected.",
+        "hidden": false,
+        "id": "number2000000000",
+        "max": null,
+        "min": 1,
+        "name": "claim_count",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "number",
+        "onlyInt": true
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date2000000000",
+        "name": "first_claimed_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date2000000001",
+        "name": "last_claimed_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
+        "help": "JSON array of the license keys used for each claim (audit trail for repeat detection).",
+        "hidden": false,
+        "id": "text2000000004",
+        "max": 2048,
+        "min": 0,
+        "name": "trial_keys",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "hidden": false,
+        "id": "autodate2000000000",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2000000001",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_trial_claims_hash ON trial_claims (claim_hash) WHERE claim_hash IS NOT NULL AND claim_hash != ''"
+    ]
+  },
+  {
+    "name": "trial_email_log",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text_trial_email_01",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "Subscription record this email was sent for.",
+        "hidden": false,
+        "id": "text_trial_email_02",
+        "max": 15,
+        "min": 0,
+        "name": "subscription",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Day offset when the email was sent (7 or 14).",
+        "hidden": false,
+        "id": "number_trial_email_01",
+        "max": null,
+        "min": null,
+        "name": "day_offset",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "RFC3339 timestamp when the email was sent.",
+        "hidden": false,
+        "id": "date_trial_email_01",
+        "name": "sent_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_trial_email_log_sub_day ON trial_email_log (subscription, day_offset)",
+      "CREATE INDEX idx_trial_email_log_sent ON trial_email_log (sent_at)"
+    ]
+  },
+  {
+    "name": "enterprise_approvals",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != ''",
+    "viewRule": "@request.auth.id != ''",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "help": "Unique approval code shared with the prospect.",
+        "hidden": false,
+        "id": "text_ent_code",
+        "name": "code",
+        "presentable": true,
+        "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 64,
+        "min": 8,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Prospect email this code was issued to.",
+        "hidden": false,
+        "id": "text_ent_email",
+        "name": "email",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 254,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Name of the prospect or company.",
+        "hidden": false,
+        "id": "text_ent_name",
+        "name": "prospect_name",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 256,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "unused = code not yet redeemed; redeemed = trial key minted; expired = past validity window.",
+        "hidden": false,
+        "id": "select_ent_status",
+        "name": "status",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "maxSelect": 1,
+        "values": [
+          "unused",
+          "redeemed",
+          "expired"
+        ]
+      },
+      {
+        "help": "Sales rep or admin who generated this code.",
+        "hidden": false,
+        "id": "text_ent_creator",
+        "name": "created_by",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 256,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "hidden": false,
+        "id": "autodate_ent_created",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate_ent_updated",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_enterprise_approvals_code ON enterprise_approvals (code)",
+      "CREATE INDEX idx_enterprise_approvals_status ON enterprise_approvals (status)"
     ]
   }
 ]

@@ -1,0 +1,168 @@
+---
+import { getRelativeLocaleUrl } from 'astro:i18n';
+import { dict } from '../i18n';
+
+/**
+ * Vertical landing page body (subscription-tiers.md §5). Customers don't
+ * identify as "Pro tier users" — they identify as cafe owners, minimarket
+ * operators, or warung owners — so these pages lead with vertical language
+ * and the OZ-POS positioning statement, never tier names. Each vertical has
+ * an entry hook, highlighted features, and a CTA that deep-links to the
+ * natural tier on the pricing page (kafe/minimarket → Pro, warung → Plus,
+ * restoran → Premium).
+ */
+export type VerticalKey = 'kafe' | 'minimarket' | 'warung' | 'restoran';
+
+export const verticalKeys: VerticalKey[] = ['kafe', 'minimarket', 'warung', 'restoran'];
+
+interface VerticalFeature {
+  title: string;
+  description: string;
+}
+
+interface VerticalContent {
+  label: string;
+  title: string;
+  tagline: string;
+  tierAnchor: string;
+  ctaPrimary: string;
+  features: VerticalFeature[];
+  benefits: string[];
+  /**
+   * Lead with the trial CTA instead of the plan-browsing link (§5). Kafe is
+   * the one vertical whose entry hook is the 14-day Pro trial — the
+   * restaurant/cafe segment gets Pro on trial activation (§4, server
+   * trialSegmentation) — so the primary button funnels into the download
+   * page with ?v=kafe and the pricing deep-link demotes to secondary.
+   */
+  leadWithTrial?: boolean;
+  /** Label for the trial CTA when leadWithTrial is set. */
+  trialCta?: string;
+}
+
+interface VerticalSection {
+  positioning: string;
+  whyTitle: string;
+  otherTitle: string;
+  otherSubtitle: string;
+  ctaSecondary: string;
+  bundleCta?: string;
+  kafe: VerticalContent;
+  minimarket: VerticalContent;
+  warung: VerticalContent;
+  restoran: VerticalContent;
+}
+
+interface Props {
+  vertical: VerticalKey;
+  /** Show the Restaurant Starter bundle CTA (C3.2) — warung + restoran. */
+  showBundle?: boolean;
+}
+
+const { vertical, showBundle } = Astro.props;
+const locale = Astro.currentLocale ?? 'en';
+const section = dict(locale).vertical as VerticalSection;
+const v = section[vertical];
+const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
+const downloadHref = getRelativeLocaleUrl(locale, 'download');
+const tierHref = `${pricingHref}#${v.tierAnchor}`;
+// Segmented-trial passthrough (C2.1, subscription-tiers.md §4): carry the
+// vertical onto the download page (?v=kafe etc.) so the download page can
+// show the matching trial offer and the desktop app's onboarding can detect
+// it (the POS normalizes kafe/restoran → restaurant = 14-day Pro trial).
+const trialHref = `${downloadHref}?v=${vertical}`;
+// CTA leadership (§5): kafe leads with its Pro trial CTA — the restaurant/
+// cafe segment is the one that mints a 14-day Pro trial (§4), so the
+// primary button funnels into the trial download (?v=kafe) instead of a
+// plan-browsing link. All other verticals lead with the natural-tier
+// pricing deep-link and demote the download CTA to secondary.
+const leadsWithTrial = Boolean(v.leadWithTrial);
+const primaryCta = {
+  href: leadsWithTrial ? trialHref : tierHref,
+  label: leadsWithTrial ? (v.trialCta ?? section.ctaSecondary) : v.ctaPrimary,
+};
+const secondaryCta = {
+  href: leadsWithTrial ? tierHref : trialHref,
+  label: leadsWithTrial ? v.ctaPrimary : section.ctaSecondary,
+};
+// Bundle purchase path (C3.2): deep-links to the Plus card with the
+// Restaurant Starter bundle pre-enabled — the pricing grid reads
+// `?bundle=restaurant_starter` and the checkout carries it into the
+// webhook (custom_field4 / custom_data.bundle).
+---
+
+<section class="mx-auto max-w-6xl px-4 py-16">
+  <div class="mx-auto max-w-3xl text-center">
+    <p class="text-sm font-semibold uppercase tracking-wider text-link">{section.positioning}</p>
+    <h1 class="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">{v.title}</h1>
+    <p class="mt-4 text-lg text-muted">{v.tagline}</p>
+    <div class="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+      <a
+        href={primaryCta.href}
+        class="rounded-md bg-accent px-6 py-3 text-base font-semibold text-black transition hover:opacity-90"
+      >
+        {primaryCta.label}
+      </a>
+      <a
+        href={secondaryCta.href}
+        class="rounded-md border border-ink/15 px-6 py-3 text-base font-semibold text-ink transition hover:bg-ink/5"
+      >
+        {secondaryCta.label}
+      </a>
+      {
+        showBundle && (
+          <a
+            href={`${pricingHref}?bundle=restaurant_starter#plus`}
+            class="rounded-md border border-accent/40 bg-accent/10 px-6 py-3 text-base font-semibold text-link transition hover:bg-accent/20"
+          >
+            {section.bundleCta}
+          </a>
+        )
+      }
+    </div>
+  </div>
+
+  <div class="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    {
+      v.features.map((f) => (
+        <article class="rounded-xl border border-ink/10 bg-surface/40 p-6">
+          <h2 class="text-lg font-semibold">{f.title}</h2>
+          <p class="mt-2 text-sm text-muted">{f.description}</p>
+        </article>
+      ))
+    }
+  </div>
+
+  <div class="mt-16 rounded-2xl border border-accent/30 bg-surface/60 p-8 sm:p-10">
+    <h2 class="text-xl font-semibold">{section.whyTitle}</h2>
+    <ul class="mt-6 grid gap-4 sm:grid-cols-3">
+      {
+        v.benefits.map((b) => (
+          <li class="flex items-start gap-2 text-sm text-muted">
+            <span aria-hidden="true" class="text-link">✓</span>
+            {b}
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+
+  <div class="mt-16 text-center">
+    <h2 class="text-xl font-semibold">{section.otherTitle}</h2>
+    <p class="mt-2 text-sm text-muted">{section.otherSubtitle}</p>
+    <div class="mt-6 flex flex-wrap justify-center gap-3">
+      {
+        verticalKeys
+          .filter((key) => key !== vertical)
+          .map((key) => (
+            <a
+              href={getRelativeLocaleUrl(locale, `untuk-${key}`)}
+              class="rounded-full border border-ink/10 px-4 py-2 text-sm text-muted transition hover:border-accent hover:text-ink"
+            >
+              {section[key].label}
+            </a>
+          ))
+      }
+    </div>
+  </div>
+</section>

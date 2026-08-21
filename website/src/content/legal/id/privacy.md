@@ -133,8 +133,8 @@ Pertanyaan, permintaan, atau pengaduan mengenai kebijakan ini atau data Anda:
 - **Subjek surel:** "Permintaan privasi"
 
 Kami berupaya menanggapi setiap permintaan privasi dalam 30 hari.
-
-
+
+
 ## Riwayat versi
 
 | Versi | Tanggal berlaku | Ringkasan perubahan |

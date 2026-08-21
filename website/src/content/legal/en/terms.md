@@ -123,8 +123,8 @@ Neither party is liable for failure or delay in performing obligations under the
 ## 17. Contact
 
 Questions about these Terms: **support@oz-pos.com**. To purchase or upgrade a plan: the pricing page or **sales@oz-pos.com**.
-
-
+
+
 ## Version history
 
 | Version | Effective date | Summary of changes |

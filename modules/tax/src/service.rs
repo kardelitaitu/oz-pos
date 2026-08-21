@@ -26,3 +26,7 @@ impl TaxService {
         repo.list_tax_rates()
     }
 }
+
+#[cfg(test)]
+#[path = "service_tests.rs"]
+mod tests;

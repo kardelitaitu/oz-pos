@@ -43,24 +43,74 @@ export async function getMachineId(): Promise<string> {
   return loggedInvoke('get_machine_id');
 }
 
-/** Activate the license with a key, email, phone, and machine identifier. Returns true if activation succeeded. */
+/**
+ * Get the device-level hardware fingerprint (SPEC-2026-TRIAL-LOCK):
+ * "hw_" + SHA-256 hex of the hardware anchor, stable across reinstalls.
+ * The license server's one-trial-per-device lock keys on it.
+ */
+export async function getHardwareFingerprint(): Promise<string> {
+  return loggedInvoke('get_hardware_fingerprint');
+}
+
+/**
+ * Activate the license with a key, email, phone, and machine identifier.
+ * Returns true if activation succeeded.
+ *
+ * `trialVertical` is the optional segmented-trial vertical (C2.1): the
+ * server only reads it for trial keys and mints a 14-day Plus / 14-day Pro
+ * / 30-day Pro trial per subscription-tiers.md §4 (e.g. detected from a
+ * `?v=restaurant` landing-page URL param). Paid keys ignore it.
+ *
+ * `bundleId` is the optional vertical-bundle id (C3.2): "restaurant_starter"
+ * unlocks the kds workspace type at the Plus trial tier (e.g. detected from
+ * a `?bundle=restaurant_starter` landing-page URL param). The server honors
+ * it for trial keys only.
+ *
+ * `hardwareFingerprint` is the device-level fingerprint (SPEC-2026-TRIAL-LOCK):
+ * the server's one-trial-per-device lock keys on it, falling back to
+ * machineId when omitted, and never gates paid keys.
+ */
 export async function activateLicense(
   key: string,
   email: string,
   machineId: string,
-  phone: string
+  phone: string,
+  trialVertical?: string,
+  bundleId?: string,
+  hardwareFingerprint?: string
 ): Promise<boolean> {
   return loggedInvoke('activate_license', {
     key,
     email,
     machineId,
     phone,
+    ...(trialVertical ? { trialVertical } : {}),
+    ...(bundleId ? { bundleId } : {}),
+    ...(hardwareFingerprint ? { hardwareFingerprint } : {}),
   });
 }
 
 /** Renew an existing license with a new license key. Returns true if renewal succeeded. */
 export async function renewLicense(newKey: string): Promise<boolean> {
   return loggedInvoke('renew_license', { newKey });
+}
+
+/** Pause/resume subscription response from the license server. */
+export interface PauseResumeResponse {
+  status: string;
+  tierKey: string;
+  pausedAt?: string;
+  pausedUntil?: string;
+}
+
+/** Pause the current subscription for 1–3 months. */
+export async function pauseSubscription(pauseMonths: number): Promise<PauseResumeResponse> {
+  return loggedInvoke('pause_subscription', { pauseMonths });
+}
+
+/** Resume a paused subscription. */
+export async function resumeSubscription(): Promise<PauseResumeResponse> {
+  return loggedInvoke('resume_subscription');
 }
 
 /** Auth-server reachability probe result (mirrors PingResult). */

@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,38 @@ func TestCalculateExpiry_Pro(t *testing.T) {
 	diff := exp.Sub(time.Now().UTC().AddDate(1, 0, 0))
 	if diff > time.Hour || diff < -time.Hour {
 		t.Errorf("pro expiry should be ~1 year, got diff %v", diff)
+	}
+}
+
+func TestCalculateExpiry_Plus(t *testing.T) {
+	exp := calculateExpiry("plus")
+	diff := exp.Sub(time.Now().UTC().AddDate(1, 0, 0))
+	if diff > time.Hour || diff < -time.Hour {
+		t.Errorf("plus expiry should be ~1 year, got diff %v", diff)
+	}
+}
+
+func TestMaxMachinesForTier_Plus(t *testing.T) {
+	if got := maxMachinesForTier("plus"); got != 2 {
+		t.Errorf("plus should allow 2 machines, got %d", got)
+	}
+}
+
+func TestTierQuotas_Plus(t *testing.T) {
+	maxStores, maxPOS, allowedTypes := tierQuotas("plus", "")
+	if maxStores != 1 {
+		t.Errorf("plus max_stores should be 1, got %d", maxStores)
+	}
+	if maxPOS != 2 {
+		t.Errorf("plus max_pos_instances should be 2, got %d", maxPOS)
+	}
+	for _, want := range []string{"restaurant-pos", "store-pos", "admin", "inventory", "warehouse"} {
+		if !slices.Contains(allowedTypes, want) {
+			t.Errorf("plus allowed_types should include %q, got %v", want, allowedTypes)
+		}
+	}
+	if slices.Contains(allowedTypes, "kds") {
+		t.Errorf("plus must NOT allow kds (Pro+ only), got %v", allowedTypes)
 	}
 }
 
