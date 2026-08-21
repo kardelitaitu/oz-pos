@@ -1,7 +1,24 @@
 use super::*;
 use crate::mock::MockNotificationClient;
 use oz_core::events::SaleCompletedLine;
-use tokio::time::{Duration, sleep};
+use tokio::time::Duration;
+
+/// Poll the mock until it has sent at least `expected` messages, sleeping
+/// 1 ms between checks, with a 2 s deadline. This is faster than a fixed
+/// sleep (the spawned task often completes in <1 ms) and more robust on
+/// loaded CI (a deadline instead of a blind wait).
+async fn wait_for_messages(mock: &MockNotificationClient, expected: usize) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        if mock.sent_count() >= expected {
+            break;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+}
 
 #[tokio::test]
 async fn order_confirmation_sends_message() {
@@ -25,8 +42,7 @@ async fn order_confirmation_sends_message() {
 
     handler.handle(&event).unwrap();
 
-    // Give the spawned task time to execute.
-    sleep(Duration::from_millis(50)).await;
+    wait_for_messages(&mock, 1).await;
 
     let msgs = mock.sent_messages();
     assert_eq!(msgs.len(), 1);
@@ -54,7 +70,7 @@ async fn order_confirmation_skips_when_no_phone() {
     handler.handle(&event).unwrap();
 
     // No messages should have been sent.
-    sleep(Duration::from_millis(10)).await;
+    wait_for_messages(&mock, 0).await;
     assert_eq!(mock.sent_count(), 0);
 }
 
@@ -71,7 +87,7 @@ async fn stock_low_alert_sends_when_below_threshold() {
     };
 
     handler.handle(&event).unwrap();
-    sleep(Duration::from_millis(50)).await;
+    wait_for_messages(&mock, 1).await;
 
     let msgs = mock.sent_messages();
     assert_eq!(msgs.len(), 1);
@@ -94,7 +110,7 @@ async fn stock_low_alert_skips_when_above_threshold() {
     };
 
     handler.handle(&event).unwrap();
-    sleep(Duration::from_millis(10)).await;
+    wait_for_messages(&mock, 0).await;
 
     // No alert — stock is still plenty.
     assert_eq!(mock.sent_count(), 0);
@@ -113,7 +129,7 @@ async fn stock_low_alert_at_exact_threshold() {
     };
 
     handler.handle(&event).unwrap();
-    sleep(Duration::from_millis(50)).await;
+    wait_for_messages(&mock, 1).await;
 
     // At threshold (≤ 5), alert should fire.
     assert_eq!(mock.sent_count(), 1);
@@ -132,7 +148,7 @@ async fn stock_low_alert_zero_stock_fires() {
     };
 
     handler.handle(&event).unwrap();
-    sleep(Duration::from_millis(50)).await;
+    wait_for_messages(&mock, 1).await;
 
     let msgs = mock.sent_messages();
     assert_eq!(msgs.len(), 1);
@@ -160,7 +176,7 @@ async fn payment_receipt_sends_message() {
     };
 
     handler.handle(&event).unwrap();
-    sleep(Duration::from_millis(50)).await;
+    wait_for_messages(&mock, 1).await;
 
     let msgs = mock.sent_messages();
     assert_eq!(msgs.len(), 1);
@@ -187,7 +203,7 @@ async fn multiple_handlers_on_same_event() {
 
     order_handler.handle(&event).unwrap();
     receipt_handler.handle(&event).unwrap();
-    sleep(Duration::from_millis(50)).await;
+    wait_for_messages(&mock, 2).await;
 
     let msgs = mock.sent_messages();
     // Both handlers use the same mock, so 2 messages.
@@ -217,6 +233,6 @@ async fn handler_logs_error_when_client_fails() {
     handler.handle(&event).unwrap();
 
     // The spawned task will have logged the error — message not recorded.
-    sleep(Duration::from_millis(50)).await;
+    wait_for_messages(&mock, 0).await;
     assert_eq!(mock.sent_count(), 0);
 }

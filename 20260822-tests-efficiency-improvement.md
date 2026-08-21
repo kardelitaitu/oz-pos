@@ -161,7 +161,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A06 oz-payment | 6.07 (cold 32.3) | ~4.1* | | | QRIS poll: check-first instead of 2s pre-sleep (capture tests −98%); *full-suite delta masked by other-agent load |
 | A07 oz-cli | 3.55 (cold 27.4) | — (plateaued) | | | none — spawn-overhead floor, no delays found |
 | A08 oz-logging | 2.46 (cold 5.0) | — (plateaued) | | | none — spawn floor, no delays |
-| A09 oz-notification | | | | | |
+| A09 oz-notification | ~2.5–3.0 (reconstructed) | 2.58 | | | 10× sleep(50ms)→poll-with-deadline (robustness, per-test 50ms→1ms) |
 | A10 oz-lua | | | | | |
 | A11 oz-hal | | | | | |
 | A12 oz-api | | | | | |
@@ -276,7 +276,8 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · baseline · commit `d36c2b06` · cold 5.0 s / warm median 2.46 s (runs 2.46/2.35/2.86)** — `cargo nextest run -p oz-logging`; 36 tests, all pass (~0.6 s real work). No sleeps/waits. **Area plateaued** — spawn-overhead floor.
 
 ### A09 oz-notification
-- [ ] baseline pending
+- **2026-08-22 · baseline (reconstructed) · commit `a9e3c635` · warm ~2.5–3 s (29 tests)** — `cargo nextest run -p oz-notification`; 29 tests. NOTE: pre-change baseline not captured before fixing (inspected → fixed → measured); reconstruction from the unchanged spawn-floor pattern of sibling crates (~2.5 s warm).
+- **2026-08-22 · attempt 1 · commit +`handlers_tests.rs` · technique: sleep → bounded poll (playbook #1) → **ACCEPTED (robustness)** — the 10 handler tests each spawned a fire-and-forget task then did a fixed `sleep(50 ms)` (or 10 ms) before asserting on the mock. Replaced all 10 with a `wait_for_messages()` poll helper (1 ms interval, 2 s deadline): same assertions, per-test delay 50 ms → ~1 ms, and the deadline makes the tests robust on loaded CI instead of blind-waiting. Post-change: warm median 2.58 s (runs 2.58/4.93/2.35 — noisy machine), all 29 pass. Crate at spawn floor; change is quality-neutral robustness + small per-test gain.
 
 ### A10 oz-lua
 - [ ] baseline pending
