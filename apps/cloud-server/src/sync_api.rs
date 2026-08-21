@@ -28,6 +28,39 @@ type CacheEntry = (std::time::Instant, Vec<u8>);
 /// Per-tenant snapshot cache map.
 type SnapshotCache = Arc<Mutex<std::collections::HashMap<String, CacheEntry>>>;
 
+/// Cached global tenant count (status endpoint).
+///
+/// `distinct_tenant_count()` is a `COUNT(DISTINCT tenant_id)` over the
+/// whole `offline_queue` — O(n) on a table bounded only by the 90-day
+/// retention horizon. Every terminal polls `/api/sync/status` on its
+/// heartbeat, so an uncached scan would repeat constantly on the hot
+/// path. The count only feeds the tiered-heartbeat calculation, so a
+/// bounded-stale value is fine: refresh at most once per
+/// [`TENANT_COUNT_CACHE_TTL`](Self::TENANT_COUNT_CACHE_TTL) and serve
+/// the cached value in between.
+#[derive(Clone, Default)]
+pub struct TenantCountCache(Arc<Mutex<Option<(std::time::Instant, i64)>>>);
+
+impl TenantCountCache {
+    /// How long a cached tenant count is trusted before the next refresh.
+    const TENANT_COUNT_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+    /// Return the cached count, or `None` when no refresh has run yet.
+    async fn cached(&self) -> Option<i64> {
+        let guard = self.0.lock().await;
+        guard
+            .as_ref()
+            .filter(|(at, _)| at.elapsed() < Self::TENANT_COUNT_CACHE_TTL)
+            .map(|(_, count)| *count)
+    }
+
+    /// Store a freshly-computed count.
+    async fn store(&self, count: i64) {
+        let mut guard = self.0.lock().await;
+        *guard = Some((std::time::Instant::now(), count));
+    }
+}
+
 /// Shared state for sync handlers — a database connection behind `Arc<Mutex<>>`.
 #[derive(Clone)]
 pub struct SyncState {
@@ -45,6 +78,8 @@ pub struct SyncState {
     /// without parsing the id as UUID — saves ~0.02 core CPU at 200+ terminals.
     /// Set via OZ_SKIP_PUSH_VALIDATION=1.
     pub skip_push_validation: bool,
+    /// TTL-cached global tenant count for the status endpoint.
+    pub tenant_count_cache: TenantCountCache,
 }
 
 impl SyncState {
@@ -62,6 +97,7 @@ impl SyncState {
             skip_push_validation: std::env::var("OZ_SKIP_PUSH_VALIDATION")
                 .map(|v| v == "1" || v == "true")
                 .unwrap_or(false),
+            tenant_count_cache: TenantCountCache::default(),
         }
     }
 
@@ -74,6 +110,19 @@ impl SyncState {
             Some(pool) => crate::sync_store::SyncStore::postgres(pool.clone()),
             None => crate::sync_store::SyncStore::sqlite(self.db.clone()),
         }
+    }
+
+    /// Global tenant count for the status endpoint, served from a
+    /// TTL-bounded cache to avoid a `COUNT(DISTINCT tenant_id)` full scan
+    /// on every heartbeat poll (SOTA: the count only feeds tiered
+    /// heartbeat sizing, so up to 60s of staleness is harmless).
+    async fn cached_tenant_count(&self) -> i64 {
+        if let Some(count) = self.tenant_count_cache.cached().await {
+            return count;
+        }
+        let count = self.store().distinct_tenant_count().await;
+        self.tenant_count_cache.store(count).await;
+        count
     }
 }
 
@@ -410,7 +459,7 @@ async fn status_handler(
     let store = state.store();
     let (pending_count, total_tenants) = (
         store.pending_count(tenant_id).await,
-        store.distinct_tenant_count().await,
+        state.cached_tenant_count().await,
     );
 
     // P-3: Tiered heartbeat — server tells client how often to poll.

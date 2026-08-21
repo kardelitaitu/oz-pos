@@ -49,6 +49,7 @@ fn test_router() -> Router {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     sync_router(state, false)
 }
@@ -66,6 +67,7 @@ fn test_router_with_plan_enforcement(enforce: bool) -> Router {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     sync_router_with_plan_enforcement(state, enforce)
 }
@@ -84,6 +86,7 @@ async fn test_router_with_plan(tenant: &str, plan: &str, enforce: bool) -> Route
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     {
         let conn = state.db.lock().await;
@@ -175,6 +178,7 @@ async fn snapshot_omits_pin_hash_entirely() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -233,6 +237,7 @@ async fn snapshot_query_failure_returns_500_not_empty_success() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -265,6 +270,7 @@ async fn snapshot_serves_store_id_when_present() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -343,6 +349,7 @@ async fn pull_returns_500_on_malformed_row() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -373,6 +380,7 @@ async fn snapshot_tenant_isolation() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -477,6 +485,7 @@ async fn push_inserts_items_with_existing_ids() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -518,6 +527,7 @@ async fn push_duplicate_id_returns_rejected() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -561,6 +571,7 @@ async fn push_rejects_invalid_non_uuid_id() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -635,6 +646,7 @@ async fn pull_returns_items_for_tenant() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -670,6 +682,7 @@ async fn pull_tenant_isolation() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -709,6 +722,7 @@ async fn pull_filters_by_since_and_tenant() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -770,6 +784,7 @@ async fn status_counts_only_current_tenant() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -815,6 +830,7 @@ async fn status_counts_zero_for_empty_tenant() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -837,6 +853,51 @@ async fn status_counts_zero_for_empty_tenant() {
     let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(json["pending_count"], 0);
+}
+
+/// The tenant-count cache must serve the TTL'd value instead of re-scanning
+/// `offline_queue` on every status poll. First read warms the cache; rows
+/// added for new tenants afterwards are NOT visible until the cache
+/// expires (the value only feeds tiered-heartbeat sizing).
+#[tokio::test]
+async fn tenant_count_cache_serves_stale_value_within_ttl() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('t1', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-a')",
+        )
+        .unwrap();
+    }
+
+    // First read warms the cache: 1 distinct tenant.
+    assert_eq!(state.cached_tenant_count().await, 1);
+
+    // A second tenant appears in the DB, but within the 60s TTL the cache
+    // must serve the previous count (no rescan of offline_queue).
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('t2', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-b')",
+        )
+        .unwrap();
+    }
+
+    assert_eq!(
+        state.cached_tenant_count().await,
+        1,
+        "cache must serve the stale count within TTL"
+    );
 }
 
 // ── Plan enforcement (ADR sync-plan-gating) ─────────────────────
@@ -964,6 +1025,7 @@ async fn pull_returns_410_when_anchor_expired() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -1003,6 +1065,7 @@ async fn pull_succeeds_when_anchor_is_fresh() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -1040,6 +1103,7 @@ async fn pull_null_since_never_expired() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state);
 
@@ -1094,6 +1158,7 @@ fn shared_state() -> SyncState {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     }
 }
 
