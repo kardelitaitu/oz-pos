@@ -183,6 +183,17 @@ impl DbPool {
 
         let pool = deadpool_postgres::Pool::builder(manager)
             .max_size(pool_size)
+            // The 5s wait timeout needs a runtime to sleep on. deadpool's
+            // default `rt_tokio_1` feature provides TokioRuntime; binding it
+            // here makes `wait_timeout` actually enforceable.
+            .runtime(deadpool_postgres::Runtime::Tokio1)
+            // Bound the wait for a pool slot: deadpool defaults to an
+            // UNBOUNDED wait, so a stalled DB (slow query holding all
+            // connections, PG addon hiccup) would hang every request
+            // indefinitely — queue buildup, health-check timeout, container
+            // restart. Fail fast after 5s instead (the doc's §7.2 "5-20ms
+            // typical wait" becomes an upper bound, not a hope).
+            .wait_timeout(Some(std::time::Duration::from_secs(5)))
             .build()
             .map_err(|e| DbError::Pool(e.to_string()))?;
 

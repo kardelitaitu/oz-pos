@@ -288,6 +288,57 @@ async fn pg_integration_connect_and_create_tables() {
     );
 }
 
+/// Integration test: a fully-exhausted pool must FAIL FAST instead of
+/// hanging request threads forever.
+///
+/// The pool is built with `max_size(1)` + the 5s `wait_timeout` from
+/// `connect_postgres`. Holding the only connection and then asking for a
+/// second one must return `PoolError::Timeout` in ~5s (not block
+/// indefinitely). This is the SOTA guarantee behind Finding D: a stalled
+/// DB can no longer wedge every request.
+#[tokio::test]
+async fn pg_integration_pool_get_fails_fast_when_exhausted() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match DbPool::connect_postgres(&url, false, 1, false).await {
+        Ok(DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG pool-timeout integration test skipped: {e}");
+            return;
+        }
+    };
+
+    // Exhaust the pool: take the single connection and keep it.
+    let held = pool.get().await.expect("first get should succeed");
+
+    // A second get must time out (deadpool `wait_timeout` = 5s) rather
+    // than wait forever. Wrap in an outer 15s guard so a regression that
+    // removes the timeout fails the test instead of hanging the suite.
+    let start = std::time::Instant::now();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(15), pool.get()).await;
+
+    let elapsed = start.elapsed();
+    let err = match result {
+        Err(_) => panic!("pool.get() blocked beyond the 15s guard — wait_timeout lost"),
+        Ok(Err(e)) => e,
+        Ok(Ok(_)) => panic!("second get succeeded despite max_size(1) — pool not exhausted"),
+    };
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Timeout") || msg.contains("waiting for a slot"),
+        "expected a wait timeout, got: {msg}"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_secs(12),
+        "wait timeout took too long: {elapsed:?}"
+    );
+
+    // Dropping the held connection must free the slot immediately.
+    drop(held);
+    let _ = pool.get().await.expect("get after drop should succeed");
+}
+
 /// Integration test: `OZ_APPLY_SCHEMA=0` skips the `PG_INIT` re-apply.
 ///
 /// `connect_postgres` applies the full schema at startup by default —
