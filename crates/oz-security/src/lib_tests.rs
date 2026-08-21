@@ -219,16 +219,26 @@ fn in_memory_three_rotations_chain_prev_correctly() {
 /// Successive rotation timestamps must be distinct. Pins the
 /// invariant that `chrono::Utc::now()` has sub-millisecond
 /// resolution — failures here would indicate a clock-source
-/// regression on the platform. 25ms sleep is well above all
-/// platforms' clock resolution (Linux clock_gettime, Windows
-/// GetSystemTimeAsFileTime at 100ns, macOS walltime_ns) while
-/// keeping the suite fast on heavily-loaded CI runners.
+/// regression on the platform. Polls with a 1 ms sleep until the
+/// clock actually advances (all platforms' clock resolution is
+/// sub-ms: Linux clock_gettime, Windows GetSystemTimeAsFileTime at
+/// 100ns, macOS walltime_ns); the bounded deadline converts a broken
+/// clock into a fast failed assertion instead of a hang.
 #[test]
 fn in_memory_rotation_timestamps_advance() {
     let k = InMemoryKeyring::new();
     let t1 = k.rotate_key("clk").unwrap().created_at;
-    std::thread::sleep(std::time::Duration::from_millis(25));
-    let t2 = k.rotate_key("clk").unwrap().created_at;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let t2 = loop {
+        let t = k.rotate_key("clk").unwrap().created_at;
+        if t != t1 {
+            break t;
+        }
+        if std::time::Instant::now() >= deadline {
+            break t; // assert below reports the clock never advanced
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    };
     assert_ne!(t1, t2, "two rotations should have distinct timestamps");
     // ISO 8601 round-trips through `chrono::DateTime::parse_from_rfc3339`.
     assert!(chrono::DateTime::parse_from_rfc3339(&t1).is_ok());

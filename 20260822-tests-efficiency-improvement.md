@@ -155,7 +155,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 |------|-------------|-----------------|-----------------|-----------------|-----------------|
 | A01 foundation | 1.3 (cold 6.9) | 1.29 (cold 4.25) | | | `codegen-units=256` test-profile override (cold −38%, warm flat); cargo test kept (nextest 8.65 s — Windows spawn overhead, see §4.1) |
 | A02 oz-core | 58.5 (cold 58.2) | 31.7 | | | nextest runner (cold −41%); backup chunk 5→512 pgs (warm −46%) |
-| A03 oz-security | | | | | |
+| A03 oz-security | 1.78 (cold 19.9) | 1.9 (noise, plateaued) | | | sleep→bounded poll (quality-neutral, crate at floor) |
 | A04 oz-reporting | | | | | |
 | A05 oz-plugin | | | | | |
 | A06 oz-payment | | | | | |
@@ -253,7 +253,8 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · plateau check** — new slow tail: 6.13 s `same_store_racing_writers_serialize_exactly_one_wins` (genuine SQLite busy-race handshake, documented ~5 s platform behavior — not a fixed sleep), 4.27 s `verify_tampered_payload_fails` (argon2 KDF, deliberately slow — security-sensitive, do not touch), 2.6 s sync tests. Remaining costs are inherent; further gains belong to A18 (integration) / A27 (workspace sweep).
 
 ### A03 oz-security
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `51642ce8` · cold 19.9 s / warm 1.78 s (runs 1.78/1.75/1.78)** — `cargo nextest run -p oz-security`; 82 tests, all pass (test runtime ~0.8 s). Crate is already lean: no argon2/RSA keygen in tests (masking, TLS config, keyring backends); credential-store tests use bounded 10 ms poll loops (50 attempts max — the correct pattern, not fixed sleeps).
+- **2026-08-22 · attempt 1 · commit +`lib_tests.rs` · technique: sleep → bounded poll (playbook #1) → **ACCEPTED (robustness; time-neutral)** — the crate's only fixed delay was a 25 ms `thread::sleep` in `in_memory_rotation_timestamps_advance` (waiting for the clock to advance past sub-ms resolution). Replaced with a 1 ms poll loop + 5 s deadline: same assertion (distinct timestamps), faster typical case (0.012 s for the test), and a broken clock now fails fast instead of hanging. Full-suite median 1.9 s vs baseline 1.78 s — **within noise** (2.22 s outlier run = other-agent load), so no measurable gain; the crate is at its floor (0.8 s real work + nextest spawn/compile). Area effectively plateaued.
 
 ### A04 oz-reporting
 - [ ] baseline pending
