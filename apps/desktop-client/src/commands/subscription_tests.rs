@@ -42,7 +42,7 @@ fn capabilities_reflect_plus_and_pro_tiers() {
     assert_eq!(dto.max_stores, Some(1));
     assert_eq!(dto.max_pos_instances, Some(2));
     assert_eq!(dto.max_staff_users, Some(5));
-    assert_eq!(dto.sales_history_days, None);
+    assert_eq!(dto.sales_history_days, Some(365));
     assert!(dto.supports_qris);
     assert!(!dto.supports_analytics, "analytics stays Pro+");
     assert!(!dto.supports_loyalty, "loyalty stays Premium+");
@@ -66,8 +66,8 @@ fn capabilities_reflect_premium_tier() {
     // C4.2: Premium allows up to 5 stores self-serve
     assert_eq!(dto.max_stores, Some(5));
     assert_eq!(dto.max_pos_instances, None);
-    assert_eq!(dto.max_staff_users, None);
-    assert_eq!(dto.sales_history_days, None);
+    assert_eq!(dto.max_staff_users, Some(50));
+    assert_eq!(dto.sales_history_days, None); // unlimited
     assert!(dto.supports_qris);
     assert!(dto.supports_analytics);
     assert!(dto.supports_loyalty);
