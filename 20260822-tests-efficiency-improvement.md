@@ -162,7 +162,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A07 oz-cli | 3.55 (cold 27.4) | — (plateaued) | | | none — spawn-overhead floor, no delays found |
 | A08 oz-logging | 2.46 (cold 5.0) | — (plateaued) | | | none — spawn floor, no delays |
 | A09 oz-notification | ~2.5–3.0 (reconstructed) | 2.58 | | | 10× sleep(50ms)→poll-with-deadline (robustness, per-test 50ms→1ms) |
-| A10 oz-lua | | | | | |
+| A10 oz-lua | 2.18 (cold 11.8) | — (plateaued) | | | none — spawn floor, no delays |
 | A11 oz-hal | | | | | |
 | A12 oz-api | | | | | |
 | A13 cloud-server | | | | | |
@@ -280,7 +280,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · attempt 1 · commit +`handlers_tests.rs` · technique: sleep → bounded poll (playbook #1) → **ACCEPTED (robustness)** — the 10 handler tests each spawned a fire-and-forget task then did a fixed `sleep(50 ms)` (or 10 ms) before asserting on the mock. Replaced all 10 with a `wait_for_messages()` poll helper (1 ms interval, 2 s deadline): same assertions, per-test delay 50 ms → ~1 ms, and the deadline makes the tests robust on loaded CI instead of blind-waiting. Post-change: warm median 2.58 s (runs 2.58/4.93/2.35 — noisy machine), all 29 pass. Crate at spawn floor; change is quality-neutral robustness + small per-test gain.
 
 ### A10 oz-lua
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `6963ddea` · cold 11.8 s / warm median 2.18 s (runs 2.18/2.07/8.65; 8.65 = other-agent load)** — `cargo nextest run -p oz-lua`; 63 tests, all pass (~0.7 s real work). No sleeps/waits. **Area plateaued** — spawn-overhead floor.
 
 ### A11 oz-hal
 - [ ] baseline pending
