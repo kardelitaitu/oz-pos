@@ -18,7 +18,7 @@ To democratize enterprise-grade, zero-downtime point-of-sale infrastructure for 
 > this section are **outdated** — the approved lineup is **Free · Plus · Pro
 > ⭐ · Premium · Enterprise** with USD/IDR prices, annual "2 months free"
 > billing, and the full quota/feature matrix, per
-> [`subscription-tiers.md`](../subscription-tiers.md) (FINAL, single source
+> [`subscription-tiers.md`](../guides/subscription-tiers.md) (FINAL, single source
 > of truth). The 1-Time/Standard/Pro/Enterprise model and the IDR figures
 > below are retained as historical market analysis only.
 

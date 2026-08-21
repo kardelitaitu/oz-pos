@@ -7,7 +7,7 @@
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** subscriptions, entitlements, billing, multi-store, quotas, offline-grace
 
-> **Supersession note:** [`subscription-tiers.md`](../subscription-tiers.md) is now the single source
+> **Supersession note:** [`subscription-tiers.md`](../guides/subscription-tiers.md) is now the single source
 > of truth for tier pricing, quotas, and feature gates. The lineup is
 > **Free · Plus · Pro ⭐ · Premium · Enterprise** (this ADR's `Free / Pro /
 > Premium / Enterprise` matrix and the old numeric quotas — e.g. Pro = 2
