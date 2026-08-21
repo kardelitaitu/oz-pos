@@ -59,6 +59,10 @@ services:
       # the real PADDLE_WEBHOOK_SECRET / PADDLE_PRICE_TIERS.
       PADDLE_WEBHOOK_SECRET: "${PADDLE_WEBHOOK_SECRET:-dummy}"
       PADDLE_PRICE_TIERS: "${PADDLE_PRICE_TIERS:-pri_dummy:pro}"
+      # Midtrans webhook: verifyMidtransConfig() calls log.Fatal when
+      # these are missing. CI-safe dummy values so the license server starts.
+      MIDTRANS_SERVER_KEY: "${MIDTRANS_SERVER_KEY:-dummy-server-key}"
+      MIDTRANS_PRICE_TIERS: "${MIDTRANS_PRICE_TIERS:-99000:free:month,149000:plus:month}"
     volumes:
       - e2e_pb_data:/pb/pb_data
     healthcheck:
