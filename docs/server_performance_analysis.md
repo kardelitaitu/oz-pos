@@ -394,43 +394,43 @@ Same base memory + larger PG pool (~100 MB for 50 connections) + larger snapshot
 
 ### 11.1 Per-Request CPU Optimizations
 
-| # | Optimization | CPU Saved | Extra Terminals | Where |
-|---|-------------|-----------|----------------|--------|
-| 1 | Remove duplicate gzip | ~0.01 core | +20 | `main.rs:470` — removed `CompressionLayer`, Caddy handles it |
-| 2 | Extend snapshot cache TTL | ~0.01 core | +40 | `sync_api.rs:358` — 300s → 900s (15 min) |
-| 3 | JWT token caching | ~0.005 core | +20 | `auth.rs:127` — `RwLock<HashMap>` with 60s TTL, skips HMAC + base64 on hot paths |
-| 4 | Skip UUID validation | ~0.02 core | +80 | `sync_api.rs:193` — `OZ_SKIP_PUSH_VALIDATION=1` env var, saves ~5µs × 20 items × 200 pushes/sec |
-| 5 | Reduce snapshot payload | ~0.005 core | +20 | `sync_store.rs` — omit null optional fields from JSON, saves ~30% payload |
-| 6 | Batch snapshot queries | ~0.002 core | +8 | `sync_store.rs:snapshot_all()` — 1 transaction instead of 3, saves 3 round-trips |
+| Done | # | Optimization | CPU Saved | Extra Terminals | Where |
+|------|---|-------------|-----------|----------------|--------|
+| [x] | 1 | Remove duplicate gzip | ~0.01 core | +20 | `main.rs:470` — removed `CompressionLayer`, Caddy handles it |
+| [x] | 2 | Extend snapshot cache TTL | ~0.01 core | +40 | `sync_api.rs:358` — 300s → 900s (15 min) |
+| [x] | 3 | JWT token caching | ~0.005 core | +20 | `auth.rs:127` — `RwLock<HashMap>` with 60s TTL, skips HMAC + base64 on hot paths |
+| [x] | 4 | Skip UUID validation | ~0.02 core | +80 | `sync_api.rs:193` — `OZ_SKIP_PUSH_VALIDATION=1` env var, saves ~5µs × 20 items × 200 pushes/sec |
+| [x] | 5 | Reduce snapshot payload | ~0.005 core | +20 | `sync_store.rs` — omit null optional fields from JSON, saves ~30% payload |
+| [x] | 6 | Batch snapshot queries | ~0.002 core | +8 | `sync_store.rs:snapshot_all()` — 1 transaction instead of 3, saves 3 round-trips |
 
 ### 11.2 Background Task Optimizations
 
-| # | Optimization | CPU Saved | Where |
-|---|-------------|-----------|--------|
-| 7 | Email sender 60s→300s | ~0.001 core | `email.rs`, `email_pg.rs` — reports are hourly, no need to poll every 60s |
-| 8 | Lazy rate limit cleanup | negligible | `rate_limit.rs` — skip sweep if <500 buckets |
+| Done | # | Optimization | CPU Saved | Where |
+|------|---|-------------|-----------|--------|
+| [x] | 7 | Email sender 60s→300s | ~0.001 core | `email.rs`, `email_pg.rs` — reports are hourly, no need to poll every 60s |
+| [x] | 8 | Lazy rate limit cleanup | negligible | `rate_limit.rs` — skip sweep if <500 buckets |
 
 ### 11.3 Infrastructure Fixes
 
-| Fix | Impact | Where |
-|-----|--------|--------|
-| Connection timeouts | Prevents server hang on DB failure | `db.rs` — 10s for pool.get, 10s for SELECT 1, 60s for schema migration |
-| Health check retries | Survives startup race | `healthcheck.sh` — retries cloud server /health 3× with 2s delay |
-| Caddy active health check | Avoids 502 during startup | `Caddyfile` — health_uri + health_interval on reverse_proxy |
-| Supervisord startup | More time for Rust server | `supervisord.conf` — caddy startsecs 2→10, startretries=5 |
+| Done | Fix | Impact | Where |
+|------|-----|--------|--------|
+| [x] | Connection timeouts | Prevents server hang on DB failure | `db.rs` — 10s for pool.get, 10s for SELECT 1, 60s for schema migration |
+| [x] | Health check retries | Survives startup race | `healthcheck.sh` — retries cloud server /health 3× with 2s delay |
+| [x] | Caddy active health check | Avoids 502 during startup | `Caddyfile` — health_uri + health_interval on reverse_proxy |
+| [x] | Supervisord startup | More time for Rust server | `supervisord.conf` — caddy startsecs 2→10, startretries=5 |
 
 ### 11.4 Summary: Free-Terminal Budget
 
-| Optimization | CPU Saved | Extra Terminals | Effort |
-|-------------|-----------|----------------|--------|
-| Remove duplicate gzip | ~0.01 core | +20 | 5 min |
-| Extend snapshot cache TTL | ~0.01 core | +40 | 10 min |
-| JWT token caching | ~0.005 core | +20 | 1 hr |
-| Skip UUID validation | ~0.02 core | +80 | 30 min |
-| Reduce snapshot payload | ~0.005 core | +20 | 1 hr |
-| Batch snapshot queries | ~0.002 core | +8 | 1 hr |
-| Email sender + lazy cleanup | ~0.001 core | +4 | 10 min |
-| **Total** | **~0.053 core** | **+192** | |
+| Done | Optimization | CPU Saved | Extra Terminals | Effort |
+|------|-------------|-----------|----------------|--------|
+| [x] | Remove duplicate gzip | ~0.01 core | +20 | 5 min |
+| [x] | Extend snapshot cache TTL | ~0.01 core | +40 | 10 min |
+| [x] | JWT token caching | ~0.005 core | +20 | 1 hr |
+| [x] | Skip UUID validation | ~0.02 core | +80 | 30 min |
+| [x] | Reduce snapshot payload | ~0.005 core | +20 | 1 hr |
+| [x] | Batch snapshot queries | ~0.002 core | +8 | 1 hr |
+| [x] | Email sender + lazy cleanup | ~0.001 core | +4 | 10 min |
+| | **Total** | **~0.053 core** | **+192** | |
 
 With all optimizations implemented, the free-tier ceiling rises from **~200 to ~400 terminals** — a 2× increase at $0/month with PostgreSQL.
 
