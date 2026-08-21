@@ -128,6 +128,7 @@ Write-Host "`nUpdating version strings..." -ForegroundColor Cyan
 # literal "$currentVersion", so the pattern would never match and the file
 # would be silently skipped (it happened for 0.0.26).
 Update-File "AGENTS.md" "- **Version is locked at the current release (``$currentVersion``).** Never change the version number" "- **Version is locked at the current release (``$TargetVersion``).** Never change the version number"
+Update-File "AGENTS.md" "all read $currentVersion" "all read $TargetVersion"
 Update-File ".agents/AGENTS.md" "- **Version is locked at ``$currentVersion``.** Never change the version number" "- **Version is locked at ``$TargetVersion``.** Never change the version number"
 Update-File "Cargo.toml" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
 Update-File "Dockerfile.server" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
@@ -136,13 +137,9 @@ Update-File "apps/tablet-client/tauri.conf.json" "`"version`": `"$currentVersion
 Update-File "ui/package.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
 Update-File "ui/package-lock.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
 
-Update-File "apps/desktop-client/src/commands/data.rs" "app_version: `"$currentVersion`".into()" "app_version: `"$TargetVersion`".into()"
-
-Update-File "apps/desktop-client/src/commands/health.rs" "version: `"$currentVersion`"," "version: `"$TargetVersion`","
-Update-File "apps/desktop-client/src/commands/health.rs" "assert_eq!(v.version, `"$currentVersion`");" "assert_eq!(v.version, `"$TargetVersion`");"
-
-Update-File "apps/tablet-client/src/commands/health.rs" "version: `"$currentVersion`"," "version: `"$TargetVersion`","
-Update-File "apps/tablet-client/src/commands/health.rs" "assert_eq!(v.version, `"$currentVersion`");" "assert_eq!(v.version, `"$TargetVersion`");"
+# NOTE: data.rs and health.rs (both clients) now use env!("CARGO_PKG_VERSION")
+# instead of hardcoded version strings, so they are automatically correct once
+# Cargo.toml is bumped above. No per-file updates needed.
 
 Update-File "ui/src/features/auth/LicenseActivationScreen.tsx" ("useState<string>('{0}')" -f $currentVersion) ("useState<string>('{0}')" -f $TargetVersion)
 Update-File "ui/src/features/auth/StaffLoginScreen.tsx" "OZ-POS Enterprise v$currentVersion" "OZ-POS Enterprise v$TargetVersion"
