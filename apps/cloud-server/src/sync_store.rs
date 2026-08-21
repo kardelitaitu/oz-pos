@@ -140,11 +140,15 @@ impl SyncStore {
     /// Per-item outcomes are preserved so a single bad item cannot roll
     /// back its siblings:
     ///
-    /// - PostgreSQL uses `INSERT … ON CONFLICT (id) DO NOTHING RETURNING
-    ///   id` — a duplicate id returns zero rows (reported `Rejected`)
-    ///   *without* poisoning the transaction. A plain INSERT would abort
-    ///   the whole batch on the first UNIQUE violation ("current
-    ///   transaction is aborted").
+    /// - PostgreSQL runs each INSERT inside a **SAVEPOINT** — a duplicate
+    ///   id returns zero rows via `ON CONFLICT (id) DO NOTHING RETURNING
+    ///   id` (reported `Rejected`, savepoint released); a non-unique data
+    ///   error (trigger, CHECK, NOT NULL) is caught, the savepoint rolled
+    ///   back, and the item reported `Rejected` while the rest of the
+    ///   batch continues. Without the SAVEPOINT, ANY statement failure
+    ///   would abort the whole transaction ("current transaction is
+    ///   aborted") and the COMMIT would fail — silently losing the valid
+    ///   items.
     /// - SQLite keeps the `UNIQUE` substring check per item.
     ///
     /// Only backend-connection failures (pool exhaustion, COMMIT failure)
@@ -195,7 +199,20 @@ impl SyncStore {
                     .await
                     .map_err(|e| e.to_string())?;
                 let mut results = Vec::with_capacity(items.len());
-                for item in items {
+                for (i, item) in items.iter().enumerate() {
+                    // Each item runs inside a SAVEPOINT so a non-unique
+                    // data error (trigger, CHECK, NOT NULL) rolls back
+                    // only that item, NOT the whole batch. The SAVEPOINT
+                    // is released on success (Accepted / Rejected-dup)
+                    // or rolled back on a true error.
+                    let sp = format!("push_item_{i}");
+                    if let Err(e) = tx.execute(&format!("SAVEPOINT {sp}"), &[]).await {
+                        let _ = tx
+                            .execute(&format!("ROLLBACK TO SAVEPOINT {sp}"), &[])
+                            .await;
+                        return Err(format!("SAVEPOINT error: {e}"));
+                    }
+
                     let params: &[&(dyn tokio_postgres::types::ToSql + Sync)] = &[
                         &item.id,
                         &item.action,
@@ -220,14 +237,36 @@ impl SyncStore {
                     {
                         // A returned row means the INSERT landed (Accepted);
                         // zero rows means the id already existed (Rejected).
-                        // `DO NOTHING` keeps the transaction alive either way.
-                        Ok(Some(_)) => PushOutcome::Accepted,
-                        Ok(None) => PushOutcome::Rejected {
-                            reason: format!("duplicate id: {}", item.id),
-                        },
-                        Err(e) => PushOutcome::Rejected {
-                            reason: format!("database error: {e}"),
-                        },
+                        // `DO NOTHING` keeps the transaction alive either way —
+                        // release the SAVEPOINT in both cases.
+                        Ok(Some(_)) => {
+                            let _ = tx.execute(&format!("RELEASE SAVEPOINT {sp}"), &[]).await;
+                            PushOutcome::Accepted
+                        }
+                        Ok(None) => {
+                            let _ = tx.execute(&format!("RELEASE SAVEPOINT {sp}"), &[]).await;
+                            PushOutcome::Rejected {
+                                reason: format!("duplicate id: {}", item.id),
+                            }
+                        }
+                        Err(e) => {
+                            // A non-unique error (trigger, CHECK, NOT NULL)
+                            // aborts the transaction — roll back to the
+                            // SAVEPOINT so the rest of the batch survives.
+                            let _ = tx
+                                .execute(&format!("ROLLBACK TO SAVEPOINT {sp}"), &[])
+                                .await;
+                            // Use the REAL db message, not the generic
+                            // tokio-postgres error kind (whose Display is
+                            // just "db error").
+                            let reason = e
+                                .as_db_error()
+                                .map(|d| d.message().to_owned())
+                                .unwrap_or_else(|| e.to_string());
+                            PushOutcome::Rejected {
+                                reason: format!("database error: {reason}"),
+                            }
+                        }
                     };
                     results.push(outcome);
                 }

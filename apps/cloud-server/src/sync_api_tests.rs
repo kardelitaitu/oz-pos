@@ -1406,7 +1406,12 @@ async fn tenant_count_cache_refreshes_after_expiry() {
 
 /// The cache must behave identically on the real PostgreSQL backend:
 /// warm at N, serve stale within TTL, rescan after expiry.
+///
+/// Serialized because `distinct_tenant_count` is a global aggregate
+/// over the whole `offline_queue` table — parallel tests with their
+/// own rows would skew the count.
 #[tokio::test]
+#[serial_test::serial]
 async fn pg_integration_tenant_count_cache() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
@@ -1419,6 +1424,15 @@ async fn pg_integration_tenant_count_cache() {
         }
     };
     let tenant = format!("pg-cache-{}", uuid::Uuid::now_v7());
+
+    // Clean the table so the global aggregate is deterministic.
+    let client = pool.get().await.unwrap();
+    client
+        .execute("DELETE FROM offline_queue", &[])
+        .await
+        .unwrap();
+    drop(client);
+
     let state = SyncState {
         db: Arc::new(Mutex::new(fresh_db())),
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),

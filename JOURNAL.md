@@ -5600,3 +5600,47 @@ and tablet) and `crates/oz-core/src/db/reports.rs:703` /
 aggregation — not touched in this slice (reporting surfaces, separate
 slice). The `Promotion` currency model remains the biggest open money-area
 item (see previous entry).
+
+## 2026-08-21 — TDD cycle: PG push_batch SAVEPOINT isolation + real db-error messages
+
+**Problem:** push_batch's PostgreSQL branch only handled UNIQUE conflicts
+via ON CONFLICT (id) DO NOTHING. Any OTHER per-item failure (trigger,
+CHECK constraint, future NOT NULL column) would abort the whole PG
+transaction ("current transaction is aborted") — every subsequent item
+failed, the final COMMIT errored, and the handler 500'd with ALL valid
+items silently lost. The doc comment claimed "a single bad item cannot
+roll back its siblings", which was only true for duplicates. Secondary:
+the Rejected reason used ormat!("database error: {e}"), but
+tokio-postgres's Display is just "db error" — the real server message
+was discarded, so clients got no diagnostic.
+
+**Solution:** TDD Red→Green→Refactor on oz-cloud-server:
+- RED: pg_integration_push_batch_data_error_does_not_abort_batch —
+  installs a BEFORE INSERT trigger raising on a poison payload, pushes
+  [ok, poison, ok], asserts per-item outcomes + exactly 2 rows land.
+  Failed with Err (aborted txn) before the fix; then failed on the
+  unhelpful "db error" reason.
+- GREEN: each item runs inside a per-item SAVEPOINT — RELEASE on
+  success/duplicate, ROLLBACK TO on a true error — so a data error
+  isolates only that item and the batch COMMIT still succeeds. Rejected
+  reasons now extract the real message via .as_db_error().message().
+- Refactor: clippy 	ype_complexity → BucketShard type alias in
+  rate_limit.rs; serialized + table-cleaned the global tenant-count PG
+  test (parallel PG tests skew the global aggregate); removed the
+  temporary pg_probe bin.
+
+**Also fixed (discovered by the cycle):** the dev PG container's schema
+was stale (pre-KDS) — 20260813_init.pg.sql expects
+restaurant_pos_id/acked_* columns and kds_devices, the live DB lacked
+them, so every PG integration test silently skipped. Applied the missing
+DDL to the dev container so the suite genuinely exercises Postgres.
+
+**Verification:** cargo test -p oz-cloud-server — 200 unit + 5
+integration + 2 startup, all green (PG tests now genuinely run, incl.
+real 5s pool-timeout waits); cargo fmt --all -- --check clean;
+cargo clippy -p oz-cloud-server -- -D warnings clean.
+
+**Risks / follow-ups:** SAVEPOINT names are derived from item index
+(push_item_0..n) — fine within a single batch; batch size is bounded by
+the push rate limit (100/min). The SQLite branch still reports
+rusqlite's full error string (no as_db_error equivalent needed).

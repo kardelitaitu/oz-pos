@@ -151,6 +151,9 @@ impl TokenBucket {
 /// locks only its shard, so contention drops ~16×.
 const SHARD_COUNT: usize = 16;
 
+/// One shard of the bucket map: an independently-locked per-tenant map.
+type BucketShard = RwLock<HashMap<String, TokenBucket>>;
+
 /// Shared per-tenant rate limiter state.
 ///
 /// Buckets are stored across [`SHARD_COUNT`] independent
@@ -162,7 +165,7 @@ pub struct RateLimiterState {
     /// Per-endpoint key → per-tenant → TokenBucket.
     /// Key format: `"{tenant_id}|{endpoint_key}"`.
     /// One `RwLock` per shard; `shard_for(key)` picks the lock.
-    shards: Arc<Vec<Arc<RwLock<HashMap<String, TokenBucket>>>>>,
+    shards: Arc<Vec<Arc<BucketShard>>>,
 }
 
 impl RateLimiterState {
@@ -177,7 +180,7 @@ impl RateLimiterState {
     }
 
     /// Pick the shard lock for a bucket key (stable across calls).
-    fn shard_for(&self, key: &str) -> Arc<RwLock<HashMap<String, TokenBucket>>> {
+    fn shard_for(&self, key: &str) -> Arc<BucketShard> {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         key.hash(&mut hasher);
         let idx = hasher.finish() as usize % SHARD_COUNT;

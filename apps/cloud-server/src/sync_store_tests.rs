@@ -417,3 +417,118 @@ async fn pg_integration_push_batch_commit_visible_to_new_connection() {
         .await
         .unwrap();
 }
+
+/// RED (TDD): a per-item DATA error (not a UNIQUE conflict) in the middle
+/// of a PG batch must NOT abort the whole transaction — the good items
+/// must still land, and the batch must return per-item outcomes.
+///
+/// PostgreSQL aborts a transaction on ANY statement failure, so the
+/// `Err` branch of the current `query_opt` loop leaves every subsequent
+/// item failing with "current transaction is aborted" and `commit()`
+/// fails — silently losing the valid items. This test installs a trigger
+/// that raises on one specific payload to simulate a CHECK/trigger/NOT
+/// NULL failure, exactly the class of error `ON CONFLICT DO NOTHING`
+/// does NOT suppress.
+#[tokio::test]
+async fn pg_integration_push_batch_data_error_does_not_abort_batch() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG push-batch data-error integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-batch-err-{}", uuid::Uuid::now_v7());
+    let store = SyncStore::postgres(pool.clone());
+
+    // Install a trigger that rejects inserts whose payload contains
+    // "poison" — simulating a CHECK constraint / trigger / future NOT
+    // NULL failure that ON CONFLICT DO NOTHING cannot suppress.
+    let trigger_fn = format!("reject_poison_{}", uuid::Uuid::now_v7().simple());
+    let trigger = format!("{trigger_fn}_trg");
+    let client = pool.get().await.unwrap();
+    client
+        .batch_execute(&format!(
+            "CREATE OR REPLACE FUNCTION {trigger_fn}() RETURNS trigger AS $$
+             BEGIN
+                 IF NEW.payload LIKE '%poison%' THEN
+                     RAISE EXCEPTION 'poison payload rejected by test trigger';
+                 END IF;
+                 RETURN NEW;
+             END; $$ LANGUAGE plpgsql;
+             CREATE TRIGGER {trigger}
+                 BEFORE INSERT ON offline_queue
+                 FOR EACH ROW EXECUTE FUNCTION {trigger_fn}();"
+        ))
+        .await
+        .unwrap();
+    drop(client);
+
+    let ok_a = sample_item(&format!("pg-err-a-{}", uuid::Uuid::now_v7()));
+    let mut poison = sample_item(&format!("pg-err-b-{}", uuid::Uuid::now_v7()));
+    poison.payload = r#"{"poison":true}"#.to_owned();
+    let ok_c = sample_item(&format!("pg-err-c-{}", uuid::Uuid::now_v7()));
+    let batch = vec![ok_a.clone(), poison.clone(), ok_c.clone()];
+
+    let result = store.push_batch(&batch, &tenant).await;
+    let outcomes = match result {
+        Ok(o) => o,
+        Err(e) => panic!(
+            "push_batch must return per-item outcomes, not Err: {e}\n\
+             (a data error in one item must not abort the whole batch)"
+        ),
+    };
+
+    assert_eq!(outcomes.len(), 3);
+    assert!(
+        matches!(outcomes[0], PushOutcome::Accepted),
+        "item before the data error must be Accepted, got: {:?}",
+        outcomes[0]
+    );
+    match &outcomes[1] {
+        PushOutcome::Rejected { reason } => {
+            assert!(
+                reason.contains("poison payload rejected"),
+                "poison item must be Rejected with its real error, got: {reason}"
+            );
+        }
+        other => panic!("expected Rejected for poison item, got: {other:?}"),
+    }
+    assert!(
+        matches!(outcomes[2], PushOutcome::Accepted),
+        "item AFTER the data error must STILL be Accepted — the batch must survive, got: {:?}",
+        outcomes[2]
+    );
+
+    // The two good items must actually have landed (the transaction
+    // committed); the poison item must not.
+    let client = pool.get().await.unwrap();
+    let count: i64 = client
+        .query_one(
+            "SELECT COUNT(*) FROM offline_queue WHERE tenant_id = $1",
+            &[&tenant],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        count, 2,
+        "exactly the two good items must be persisted, poison item dropped"
+    );
+
+    // Cleanup: drop the trigger and the tenant's rows.
+    client
+        .batch_execute(&format!(
+            "DROP TRIGGER IF EXISTS {trigger} ON offline_queue;
+             DROP FUNCTION IF EXISTS {trigger_fn}();"
+        ))
+        .await
+        .unwrap();
+    client
+        .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
+        .await
+        .unwrap();
+}
