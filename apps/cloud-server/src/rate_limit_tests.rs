@@ -289,6 +289,92 @@ async fn rate_limiter_sharded_same_bucket_parallel_consumption() {
     assert_eq!(allowed, 100, "exactly 100 of 101 parallel attempts allowed");
 }
 
+/// Cleanup must sweep EVERY shard, not just shard 0. Create enough
+/// buckets to span all 16 shards, then force-remove them all with
+/// `max_age = 0` — a cleanup that only touches one shard would leave
+/// buckets behind and `bucket_count` would be non-zero.
+#[tokio::test]
+async fn rate_limiter_cleanup_sweeps_all_shards() {
+    let limiter = RateLimiterState::new();
+
+    // 512 tenants × push endpoint — with 16 shards and a 512/16 spread
+    // this comfortably hits every shard (DefaultHasher distributes well).
+    for i in 0..512 {
+        assert!(
+            limiter
+                .check_rate_limit(&format!("sweep-tenant-{i}"), "/api/sync/push")
+                .await
+                .is_ok()
+        );
+    }
+    assert_eq!(limiter.bucket_count().await, 512);
+
+    // Force-remove everything: every shard must be swept.
+    limiter.cleanup_stale_buckets(Duration::from_secs(0)).await;
+    assert_eq!(
+        limiter.bucket_count().await,
+        0,
+        "cleanup must sweep all shards, not just one"
+    );
+}
+
+/// The shard index must be a deterministic function of the bucket key:
+/// different tenant/endpoint keys land in different shards (the whole
+/// point of sharding), and the same key always lands in the same shard.
+#[tokio::test]
+async fn rate_limiter_shards_distribute_keys() {
+    let limiter = RateLimiterState::new();
+
+    // Collect the shard index for a spread of keys via the internal
+    // shard_for helper (test module is a child of rate_limit).
+    let mut shard_indexes = std::collections::HashSet::new();
+    for i in 0..256 {
+        let key = format!("tenant-{i}|/api/sync/push");
+        let shard = limiter.shard_for(&key);
+        // Fingerprint the shard by its Arc address.
+        shard_indexes.insert(Arc::as_ptr(&shard) as usize);
+    }
+
+    assert!(
+        shard_indexes.len() > 1,
+        "256 keys must spread across more than one shard, got {}",
+        shard_indexes.len()
+    );
+
+    // Determinism: the same key always maps to the same shard.
+    let key = "deterministic-tenant|/api/sync/pull";
+    let a = Arc::as_ptr(&limiter.shard_for(key)) as usize;
+    let b = Arc::as_ptr(&limiter.shard_for(key)) as usize;
+    assert_eq!(a, b, "shard_for must be deterministic per key");
+}
+
+/// Token-mint rate limiting (per-IP) must stay correct under concurrency:
+/// 8 IPs × parallel mints, each capped at 30/min independently — no
+/// cross-IP leakage even when the sharded buckets are contended.
+#[tokio::test]
+async fn token_mint_concurrent_ips_stay_isolated() {
+    let limiter = RateLimiterState::new();
+
+    let mut handles = Vec::new();
+    for ip in 0..8 {
+        let limiter = limiter.clone();
+        handles.push(tokio::spawn(async move {
+            let ip = format!("203.0.113.{ip}");
+            for _ in 0..30 {
+                if limiter.check_token_rate_limit(&ip).await.is_err() {
+                    return false;
+                }
+            }
+            // 31st must be blocked.
+            limiter.check_token_rate_limit(&ip).await.is_err()
+        }));
+    }
+    for handle in handles {
+        assert!(handle.await.unwrap(), "each IP must allow 30 then block");
+    }
+    assert_eq!(limiter.bucket_count().await, 8);
+}
+
 #[tokio::test]
 async fn rate_limiter_retry_after_header_value() {
     let limiter = RateLimiterState::new();
