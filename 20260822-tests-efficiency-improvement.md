@@ -167,7 +167,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A12 oz-api | 4.44 (non-PG; cold 36.6) | — (plateaued, PG blocked) | | | none — 5 live-PG tests blocked by other agent's migrations |
 | A13 cloud-server | — (blocked) | | | | blocked: other agent's email_pg.rs borrow error breaks compile |
 | A14 desktop-client | — (load-blocked) | | | | blocked: crate too large to time under other agent's concurrent compile; sleeps are network-timing or other-agent topology |
-| A15 tablet-client | | | | | |
+| A15 tablet-client | — (load-blocked) | | | | blocked: 39 test files, no sleeps, not timed under other agent's compile |
 | A16 modules | | | | | |
 | A17 platform | | | | | |
 | A18 oz-core integration | | | | | |
@@ -296,7 +296,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · commit `b3d1d67f` · PARTIALLY BLOCKED (load interference)** — `cargo nextest run -p oz-pos-app` (51 src test files + 7 integration). Crate compiles (`cargo check` 40.5 s) but the full suite could not be timed reliably: >2 min runs under the other agent's concurrent compilation (their builds invalidate artifacts mid-run). Sleeps found: `lan_server_tests.rs` (50–200 ms network-flush timing — necessary for TCP/broadcast delivery) and `topology_command_tests.rs` 150 ms concurrency handshake (**other agent's territory — left untouched**). No quality-reducible delays identified in my scope. Re-measure when the machine is quiet.
 
 ### A15 tablet-client
-- [ ] baseline pending
+- **2026-08-22 · commit `e8a3bc63` · PARTIALLY BLOCKED (load interference)** — `cargo nextest run -p oz-pos-tablet` (39 src test files). Crate compiles (`cargo check` 26.5 s) but the full suite could not be timed: >6 min runs stuck under the other agent's concurrent compilation. No sleeps found in any test file. Re-measure when the machine is quiet.
 
 ### A16 modules
 - [ ] baseline pending
