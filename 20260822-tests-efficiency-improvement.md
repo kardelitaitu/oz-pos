@@ -179,12 +179,12 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A24 cloud-server integration | — (blocked) | | | | blocked: other agent's email_pg.rs borrow error |
 | A25 tax integration | 1.5 | — (plateaued) | | | none — no sleeps |
 | A26 doctests | | | | | |
-| A27 nextest workspace sweep | | | | | |
-| A28 cargo fallback sweep | | | | | |
-| A29 vitest full suite | | | | | |
-| A30 a11y suite | | | | | |
-| A31 vitest coverage | | | | | |
-| A32 vitest per-group | | | | | |
+| A27 nextest workspace sweep | — (blocked) | | | | blocked: other-agent PG flake at test 2011/5286; compile-bound with --all-features |
+| A28 cargo fallback sweep | N/A | | | | fallback runner, not campaign target |
+| A29 vitest full suite | 59.9 | — (plateaued) | | | 395 files / 6911 tests pass; infra-bound (jsdom setup 610s + transform 65s parallel wall) |
+| A30 a11y suite | 4.05 | — (plateaued) | | | no reducible delays — 2.1s test work + vitest transform/jsdom overhead (3s+2s); all 12 tests pass, no waitForTimeout or redundant waits |
+| A31 vitest coverage | ~120–180 (est.) | | | | not precisely measured (infra-bound, machine contended) |
+| A32 vitest per-group | N/A | | | | scoped runs are the iteration tool, not a deliverable |
 | A33 e2e api | | | | | |
 | A34 e2e perf-smoke | | | | | |
 | A35 e2e remaining | 465 (7m45s) | 391 (6m31s, −16%) | | | `waitForTimeout` removal: cut50 redundant fixed waits across adr22 (27), sale (23), settings (7) + helpers (1 convergence wait kept). Playwright auto-wait assertions replace blind sleeps. Quality *improved*: 232→238 passed, 6→0 failed (dev-toolbar click-intercept flakiness eliminated) |
@@ -330,25 +330,25 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · baseline · commit `a02a18d3` · warm 1.5 s (11 tests pass, ~0.1 s real work)** — `cargo nextest run -p modules-tax --test '*'`. No sleeps. **Area plateaued.**
 
 ### A26 doctests
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `6ff8d100` · warm 34.2 s** — `cargo test --doc --workspace`. Doctests run in ~0.2 s total; the 34 s is **entirely compile/link** (each crate's doctest binary, sequentially — `cargo test --doc` doesn't parallelize binaries like nextest). Not quality-reducible without dropping doctests (guardrail). **Area plateaued** — compile-bound by cargo's serial doctest harness.
 
 ### A27 nextest workspace sweep
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `6ff8d100` · BLOCKED (partial)** — `cargo nextest run --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet`. 5286 tests discovered; fail-fast stopped at test 2011 on the **other-agent PG flake** (`pg_integration_rest_rls_non_owner`, same as A12/A24 — their tender-currency/sale-charges migrations mid-change on Docker PG). Re-run with `--no-fail-fast` or after their migrations land. The sweep's wall time is compile-bound (`--all-features` rebuilds the workspace with extra features).
 
 ### A28 cargo fallback sweep
-- [ ] baseline pending
+- **2026-08-22 · N/A** — fallback runner for CI without nextest; not the campaign target (A27 is canonical). Not measured.
 
 ### A29 vitest full suite
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `6ff8d100` · warm 59.9 s** — `npm run test` (from `ui/`); **395 test files, 6911 tests, all pass**. Duration breakdown from vitest: transform 65 s, setup 169 s, import 154 s, tests 403 s, environment 610 s (parallel wall-clock 59.9 s). No fixed waits in the suite (unit tests; waitForTimeout only exists in e2e). **Area plateaued at vitest's own parallel floor** — the 59.9 s is dominated by jsdom environment setup + transform across 395 files, not test logic. Further gains would need vitest workspace splitting or lighter setup files (both infra-level, tracked as future work).
 
 ### A30 a11y suite
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `10d3ac6a` · warm median 4.05 s (runs 4.05/4.39/4.03)** — `npm run test:a11y` (from `ui/`); 7 test files, 12 tests, all pass. machine: DESKTOP-PC-R9 · Ryzen 9 7950X (32 logical) · 63.2 GB RAM · Windows 11 26200 · vitest 4 workers, fileParallelism=true. Breakdown: 2.1 s actual test work (axe-core audits) + vitest transform (3.0 s TypeScript compilation) + jsdom environment setup (2.0 s). No `waitForTimeout` calls, no redundant waits, no delays to cut. **Area PLATEAUED** — the 4 s wall clock is dominated by vitest infrastructure (transform + environment), not test logic.
 
 ### A31 vitest coverage
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `6ff8d100` · ~120–180 s (estimated)** — `npm run test:coverage`; full suite + v8 coverage instrumentation (reports to `../coverage/ui`). Not measured precisely: coverage runs are infra-bound (v8 instrumentation on 395 files) and the machine was contended. Run on a quiet machine for the exact number.
 
 ### A32 vitest per-group
-- [ ] baseline pending
+- **2026-08-22 · N/A** — scoped `vitest run src/__tests__/<group>/` runs are the *iteration tool* for the campaign, not a standalone deliverable; covered implicitly by A29. Not measured separately.
 
 ### A33 e2e api
 - [ ] baseline pending
