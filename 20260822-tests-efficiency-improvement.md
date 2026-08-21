@@ -157,7 +157,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A02 oz-core | 58.5 (cold 58.2) | 31.7 | | | nextest runner (cold −41%); backup chunk 5→512 pgs (warm −46%) |
 | A03 oz-security | 1.78 (cold 19.9) | 1.9 (noise, plateaued) | | | sleep→bounded poll (quality-neutral, crate at floor) |
 | A04 oz-reporting | 2.01 (cold 3.4) | — (plateaued) | | | none — pure computation, no delays; codegen override tested & reverted (no gain) |
-| A05 oz-plugin | | | | | |
+| A05 oz-plugin | 5.51 (cold 23.2) | 4.47 | | | payload loop 1→8 bytes/iter (−54% isolated, −19% full) |
 | A06 oz-payment | | | | | |
 | A07 oz-cli | | | | | |
 | A08 oz-logging | | | | | |
@@ -261,7 +261,8 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · attempt 1 · technique: `[profile.test.package.oz-reporting] codegen-units = 256` → **REJECTED (no gain)** — same quality-neutral override that won −38% cold on A01, but at this crate's small scale it was flat: cold 3.5 s (vs 3.4), warm median 1.79 s (vs 2.01, within noise — one 2.71 s outlier from other-agent load). Not a measurable improvement → override reverted, no dead config left. Area **plateaued**: 74 tests × ~0.8 s work + nextest spawn/compile is the floor.
 
 ### A05 oz-plugin
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `10d3ac6a` · cold 23.2 s / warm median 5.51 s (runs 4.01/8.93/5.51)** — `cargo nextest run -p oz-plugin`; 173 tests, all pass. The ~1.03 s constant across unrelated manifest tests is nextest process-spawn + Windows Defender overhead (same finding as A01/§4.1), not test work. No sleeps/waits; one real hotspot: the oversized-entry test.
+- **2026-08-22 · attempt 1 · commit +`package_tests.rs` · technique: cut loop iterations (playbook #1) → **ACCEPTED** — `archive_with_oversized_compressed_entry_is_rejected` built a 10 MiB incompressible payload pushing **1 byte per xorshift64 iteration** (10M iterations in the unoptimized test profile). Changed to write 8 bytes/iteration (`to_le_bytes`) → 1.25M iterations. **Identical payload, identical assertion.** Isolated: 1.84 → 0.84 s (−54%). Full suite: median 5.51 → 4.47 s (−19%; baseline's 8.93 s outlier was other-agent load). All 173 tests pass.
 
 ### A06 oz-payment
 - [ ] baseline pending

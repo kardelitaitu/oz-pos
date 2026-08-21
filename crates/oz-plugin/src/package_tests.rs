@@ -252,14 +252,18 @@ fn archive_with_oversized_compressed_entry_is_rejected() {
     // large incompressible payload (random bytes) so the stored size is
     // large; the parse-time `compressed_size()` check rejects it early.
     let manifest = br#"{"id": "big", "name": "Big", "version": "1.0.0"}"#;
+    // 10 MiB of incompressible pseudo-random bytes (xorshift64), written
+    // 8 bytes per iteration so the debug-build test loop runs 1.25M times
+    // instead of 10M — same payload, same assertion, 8× less CPU.
     let mut payload: Vec<u8> = Vec::with_capacity(10 * 1024 * 1024);
     let mut seed = 0x1234_5678u64;
-    for _ in 0..payload.capacity() {
+    for _ in 0..payload.capacity() / 8 {
         seed ^= seed << 13;
         seed ^= seed >> 7;
         seed ^= seed << 17;
-        payload.push((seed & 0xFF) as u8);
+        payload.extend_from_slice(&seed.to_le_bytes());
     }
+    payload.truncate(10 * 1024 * 1024);
     let files = vec![
         ("manifest.json".to_string(), manifest.to_vec()),
         ("big.lua".to_string(), payload),
