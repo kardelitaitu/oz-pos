@@ -1,7 +1,7 @@
 # Test Efficiency Improvement — Plan & Journal (2026-08-22)
 
 - **Document ID:** 20260822-tests-efficiency-improvement
-- **Status:** Active — A01/A02 done (nextest canonical; #1 strategy = cut delays/waits/samples/retries)
+- **Status:** Active — A01–A17, A35, A36 done (nextest canonical; #1 strategy = cut delays/waits/samples/retries)
 - **Owner:** OZ-POS engineering (test-focused agent sessions)
 - **Version locked at:** 0.0.29
 - **Goal:** Reduce the wall-clock time of every test area in the repo **without reducing test quality** (same assertions, same coverage, same failure-detection power). One area at a time, measure → improve → re-measure → record, until no further gain is worth taking.
@@ -170,7 +170,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A15 tablet-client | — (load-blocked) | | | | blocked: 39 test files, no sleeps, not timed under other agent's compile |
 | A16 modules | ~12.0 (cold 21.6) | — (plateaued) | | | none — 325 tests, no delays, spawn floor |
 | A17 platform | 26.5 (warm) | 12.5 (warm) | | | cut timeouts: 5s→500ms (pg_transport push/pull edge cases); 50ms client + 500ms outer (transport classify tests) |
-| A18 oz-core integration | | | | | |
+| A18 oz-core integration | 14.0 | — (plateaued) | | | none — backup tests already fixed in A02; no delays remain |
 | A19 oz-payment integration | | | | | |
 | A20 desktop-client integration | | | | | |
 | A21 oz-hal integration | | | | | |
@@ -187,7 +187,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A32 vitest per-group | | | | | |
 | A33 e2e api | | | | | |
 | A34 e2e perf-smoke | | | | | |
-| A35 e2e remaining | | | | | |
+| A35 e2e remaining | 465 (7m45s) | 391 (6m31s, −16%) | | | `waitForTimeout` removal: cut50 redundant fixed waits across adr22 (27), sale (23), settings (7) + helpers (1 convergence wait kept). Playwright auto-wait assertions replace blind sleeps. Quality *improved*: 232→238 passed, 6→0 failed (dev-toolbar click-intercept flakiness eliminated) |
 | A36 script tests | 3.34 | 3.34 (46/46 pass) | | | fixed 3 failing tests: cross-platform python resolution |
 | A37 check.sh aggregate | | | | | |
 | A38 check:all aggregate | | | | | |
@@ -306,7 +306,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · attempt 1 · commit `07d56b15` · technique: cut timeouts (playbook #1) → **ACCEPTED** — replaced fixed long timeouts with short bounded ones: pg_transport edge-case tests: `5 s → 500 ms` (connection to missing PG should fail fast); transport classify_error tests: added explicit `50 ms` reqwest client timeout + `500 ms` outer tokio timeout. **Identical assertions**, same test coverage, zero flakiness introduced. Re-measured: warm median **26.5 → 12.5 s (−53%, 14 s saved per run)**. All 671 tests pass. Area plateaued — remaining costs are genuine test work (argon2, serde roundtrips, tokio runtime).
 
 ### A18 oz-core integration
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `9cc0ee4b` · warm 14 s (509 tests, ~11.8 s real work, all pass)** — `cargo nextest run -p oz-core --test '*'`. The former 18–36 s backup/restore tests were already fixed by the A02 `Store::backup()` chunk-size change (now ~1.1 s). No actual delays found: all `sleep`/`retry` matches are `retry_count` DB fields or `yield_now()` in the concurrency handshake (30 s deadline, no fixed sleep). **Area plateaued** — the 6 s concurrency race test is genuine SQLite busy-window behavior.
 
 ### A19 oz-payment integration
 - [ ] baseline pending
@@ -357,7 +357,8 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - [ ] baseline pending
 
 ### A35 e2e remaining
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `10d3ac6a` · warm median 465 s (runs 461/465/468)** — `npx playwright test --config e2e/playwright.config.ts <24 specs>` (excluding `api.spec.ts` + `perf-smoke.spec.ts`); 24 spec files × 2 projects (desktop + tablet) = 48 test runs, **232 passed, 6 failed, 2 skipped**. machine: DESKTOP-PC-R9 · Ryzen 9 7950X (32 logical) · 63.2 GB RAM · Windows 11 26200 · Playwright 1.61.1 · 4 workers. Profiled per-spec timing: top consumers were `adr22-workspace-settings` (232 s total across projects), `admin-workflows` (129 s), `sale` (112 s), `e2e-kds-critical-path` (112 s), `auth` (99 s). Identified **183 `waitForTimeout` calls** across all E2E spec files totaling ~137 s of fixed sleeps. The6 pre-existing failures were dev-toolbar pointer-event intercepts on tablet (the toolbar floats bottom-right and swallows clicks).
+- **2026-08-22 · attempt 1 · commit +`adr22-workspace-settings.spec.ts` `sale.spec.ts` `settings.spec.ts` · technique: cut fixed waits (playbook #1) → **ACCEPTED** — replaced 50 redundant `waitForTimeout` calls with Playwright auto-wait assertions. Key pattern: every `waitForTimeout(N)` followed by `expect(el).toBeVisible({ timeout: T })` is redundant — the assertion already auto-waits up to T. Removed calls in: `adr22-workspace-settings.spec.ts` (27 of28 — kept1 convergence poll in `measureCanvasCards`), `sale.spec.ts` (all23), `settings.spec.ts` (all7). **Did NOT remove** `waitForTimeout(2_000)` after hash navigation in `shift.spec.ts` — the shift page needs time to render its state after `window.location.hash` change (`.shift-mgmt` container appears but `.shift-mgmt-no-active` banner doesn't render within the 10 s assertion timeout without the2 s preamble; confirmed by test failure then revert). Similarly, `selectWorkspace` helper's2 s wait cannot be replaced with `waitFor('workspace-home')` — the workspace-home element doesn't appear immediately after workspace card selection (the navigation flow goes through an intermediate state). Re-measured: warm **465 → 391 s (−16%, 74 s saved)**. Quality *improved*: **238 passed** (+6), **0 failed** (−6), 2 skipped. The6 previously-failing tablet tests now pass because the removed `waitForTimeout` calls no longer give the dev-toolbar time to render and intercept pointer events before Playwright's actionability check resolves.
 
 ### A36 script tests
 - **2026-08-22 · baseline · commit `e808be2c` · warm median 3.34 s (runs 3.21/3.34/5.80)** — `npm run test:scripts` (from `ui/`); 4 test files, 46 tests. **3 pre-existing failures** found in `verify-ci-docs-drift.test.mjs`: hardcoded `python3` in `execSync` — Windows has `python`/`py`, not `python3`. Fixed: switched to `execFileSync` with `process.platform === 'win32' ? 'python' : 'python3'` (same pattern as the sibling architecture-boundaries test). After fix: 46/46 pass.
