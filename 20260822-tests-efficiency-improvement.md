@@ -169,7 +169,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A14 desktop-client | — (load-blocked) | | | | blocked: crate too large to time under other agent's concurrent compile; sleeps are network-timing or other-agent topology |
 | A15 tablet-client | — (load-blocked) | | | | blocked: 39 test files, no sleeps, not timed under other agent's compile |
 | A16 modules | | | | | |
-| A17 platform | | | | | |
+| A17 platform | 26.5 (warm) | 12.5 (warm) | | | cut timeouts: 5s→500ms (pg_transport push/pull edge cases); 50ms client + 500ms outer (transport classify tests) |
 | A18 oz-core integration | | | | | |
 | A19 oz-payment integration | | | | | |
 | A20 desktop-client integration | | | | | |
@@ -302,7 +302,8 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - [ ] baseline pending
 
 ### A17 platform
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `07d56b15` · cold N/A / warm median 26.5 s (runs 24.3/26.5/37.1; 37.1 = other-agent load)** — `cargo nextest run -p platform-core -p platform-kernel -p platform-startup -p platform-sync`; **671 tests, all pass, 21 skipped**. Slow tail dominated by tests connecting to non-existent servers: `pg_transport::push_items_empty_list_handles_missing_server` (5 s timeout × 1), `pg_transport::pull_updates_both_with_and_without_since` (5 s timeout × 3), `transport::classify_transport_error_connection_refused` (implicit wait on port 1), `transport::classify_transport_error_includes_url` (implicit wait on 192.0.2.1), `transport::classify_transport_error_non_empty` (100 ms/500 ms wait). Machine: DESKTOP-PC-R9 · Ryzen 9 7950X (32 logical) · 63.2 GB RAM · Windows 11 26200.
+- **2026-08-22 · attempt 1 · commit `07d56b15` · technique: cut timeouts (playbook #1) → **ACCEPTED** — replaced fixed long timeouts with short bounded ones: pg_transport edge-case tests: `5 s → 500 ms` (connection to missing PG should fail fast); transport classify_error tests: added explicit `50 ms` reqwest client timeout + `500 ms` outer tokio timeout. **Identical assertions**, same test coverage, zero flakiness introduced. Re-measured: warm median **26.5 → 12.5 s (−53%, 14 s saved per run)**. All 671 tests pass. Area plateaued — remaining costs are genuine test work (argon2, serde roundtrips, tokio runtime).
 
 ### A18 oz-core integration
 - [ ] baseline pending
