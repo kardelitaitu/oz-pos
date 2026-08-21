@@ -186,16 +186,25 @@ impl DbPool {
             .build()
             .map_err(|e| DbError::Pool(e.to_string()))?;
 
-        // Verify connectivity by running a test query
-        let client = pool
-            .get()
+        // Verify connectivity by running a test query.
+        // Timeout after 10s — if PostgreSQL is unreachable (TLS issue,
+        // addon not ready), fail fast instead of hanging forever.
+        let client = tokio::time::timeout(std::time::Duration::from_secs(10), pool.get())
             .await
+            .map_err(|_| {
+                DbError::Connection(
+                    "connection timed out after 10s — is PostgreSQL reachable?".into(),
+                )
+            })?
             .map_err(|e| DbError::Connection(e.to_string()))?;
 
-        client
-            .execute("SELECT 1", &[])
-            .await
-            .map_err(|e| DbError::Connection(e.to_string()))?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            client.execute("SELECT 1", &[]),
+        )
+        .await
+        .map_err(|_| DbError::Connection("SELECT 1 timed out after 10s".into()))?
+        .map_err(|e| DbError::Connection(e.to_string()))?;
 
         // Apply the full schema — the Postgres port of the SQLite init
         // migration (93 tables, indexes, triggers, seed rows). `batch_execute`
@@ -207,10 +216,15 @@ impl DbPool {
         // grants, so the DDL re-apply would fail; the migration tool applies
         // the schema once as the owner instead.
         if apply_schema {
-            client
-                .batch_execute(oz_core::migrations::PG_INIT)
-                .await
-                .map_err(|e| DbError::Migration(e.to_string()))?;
+            // Schema migration can take 10-30s on first boot. Timeout at 60s
+            // to prevent indefinite hang if the migration script has issues.
+            tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                client.batch_execute(oz_core::migrations::PG_INIT),
+            )
+            .await
+            .map_err(|_| DbError::Migration("schema migration timed out after 60s".into()))?
+            .map_err(|e| DbError::Migration(e.to_string()))?;
             info!("PostgreSQL database connected and full schema applied");
         } else {
             info!("PostgreSQL database connected (schema application skipped: OZ_APPLY_SCHEMA=0)");
