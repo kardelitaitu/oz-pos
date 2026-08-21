@@ -160,7 +160,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A05 oz-plugin | 5.51 (cold 23.2) | 4.47 | | | payload loop 1→8 bytes/iter (−54% isolated, −19% full) |
 | A06 oz-payment | 6.07 (cold 32.3) | ~4.1* | | | QRIS poll: check-first instead of 2s pre-sleep (capture tests −98%); *full-suite delta masked by other-agent load |
 | A07 oz-cli | 3.55 (cold 27.4) | — (plateaued) | | | none — spawn-overhead floor, no delays found |
-| A08 oz-logging | | | | | |
+| A08 oz-logging | 2.46 (cold 5.0) | — (plateaued) | | | none — spawn floor, no delays |
 | A09 oz-notification | | | | | |
 | A10 oz-lua | | | | | |
 | A11 oz-hal | | | | | |
@@ -273,7 +273,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · baseline · commit `7ce4550e` · cold 27.4 s / warm median 3.55 s (runs 3.46/3.55/7.65; 7.65 = other-agent load)** — `cargo nextest run -p oz-cli`; 87 tests, all pass (~1.8 s real work). All tests ~1.1 s process-spawn floor (Defender). No sleeps/waits/loops found. **Area plateaued** — crate is at its spawn-overhead floor, no lever to pull.
 
 ### A08 oz-logging
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `d36c2b06` · cold 5.0 s / warm median 2.46 s (runs 2.46/2.35/2.86)** — `cargo nextest run -p oz-logging`; 36 tests, all pass (~0.6 s real work). No sleeps/waits. **Area plateaued** — spawn-overhead floor.
 
 ### A09 oz-notification
 - [ ] baseline pending
