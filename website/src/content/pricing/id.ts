@@ -78,7 +78,7 @@ export const pricing: PricingTier[] = [
     features: [
       { label: '2 toko', included: true },
       { label: '5 register per toko', included: true },
-      { label: 'Display Dapur', included: true },
+      { label: '2 Display Dapur', included: true },
       { label: 'Laporan & analitik', included: true },
       { label: 'Kartu Stripe', included: true },
       { label: 'Sinkron cloud', included: true },
@@ -131,7 +131,8 @@ export const featureRows: FeatureRow[] = [
   { label: 'Toko', values: { free: 1, plus: 1, pro: 2, premium: 5, enterprise: 'Tanpa batas' } },
   { label: 'Terminal (register) per toko', values: { free: 1, plus: 2, pro: 5, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
   { label: 'Gudang', values: { free: 1, plus: 2, pro: 3, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
-  { label: 'Layar Display Dapur', values: { free: 0, plus: 0, pro: '1 per toko', premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
+  { label: 'Layar Display Dapur', values: { free: 0, plus: 0, pro: 2, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
+  { label: 'Max produk/menu', values: { free: 200, plus: 500, pro: 1000, premium: 10000, enterprise: 'Tanpa batas' } },
   { label: 'Staf pengguna', values: { free: 1, plus: 5, pro: 20, premium: 50, enterprise: 'Tanpa batas' } },
   { label: 'Riwayat penjualan', values: { free: '3 bulan', plus: '1 tahun', pro: '5 tahun', premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
   { label: 'Pembayaran QRIS', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
