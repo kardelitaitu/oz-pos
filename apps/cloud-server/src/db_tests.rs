@@ -846,3 +846,60 @@ async fn pg_integration_rls_force_blocks_owner() {
         .await
         .expect("probe cleanup should succeed");
 }
+
+/// A connection killed server-side (PG addon idle-timeout, restart,
+/// `pg_terminate_backend`) must be recycled — the next `pool.get()`
+/// returns a WORKING connection, not the stale socket.
+///
+/// This is the behavior `RecyclingMethod::Fast`'s `is_closed()` probe
+/// relies on (SOTA finding F): deadpool 0.12 has no max_lifetime, so
+/// server-closed connections are detected reactively on checkout.
+#[tokio::test]
+async fn pg_integration_stale_connection_recycled() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match DbPool::connect_postgres(&url, false, 20, false).await {
+        Ok(DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG stale-connection integration test skipped: {e}");
+            return;
+        }
+    };
+
+    // Take one connection and find its backend PID.
+    let mut client = pool.get().await.expect("get should succeed");
+    let pid: i32 = client
+        .query_one("SELECT pg_backend_pid()", &[])
+        .await
+        .expect("pg_backend_pid should work")
+        .get(0);
+
+    // Kill it server-side, simulating the PG addon dropping the session.
+    let killer = pool.get().await.expect("second get should succeed");
+    killer
+        .execute("SELECT pg_terminate_backend($1)", &[&pid])
+        .await
+        .expect("pg_terminate_backend should succeed");
+    drop(killer);
+
+    // The next query on the killed client must fail — proving it really
+    // is dead (not a false-positive scenario).
+    let query_after_kill = client.query_one("SELECT 1", &[]).await;
+    assert!(
+        query_after_kill.is_err(),
+        "the terminated connection must fail its next query"
+    );
+    drop(client);
+
+    // The pool must recycle it: a fresh get() gives a working connection.
+    let fresh = pool
+        .get()
+        .await
+        .expect("pool must hand out a new connection");
+    let row = fresh
+        .query_one("SELECT 1", &[])
+        .await
+        .expect("fresh connection must serve queries after recycle");
+    assert_eq!(row.get::<_, i32>(0), 1);
+}
