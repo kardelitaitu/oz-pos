@@ -73,6 +73,7 @@ ui/src/nul
 # Coverage
 /coverage/
 /ui/coverage/
+/ui/coverage.txt
 /apps/license-server/coverage.html
 
 # Test artifacts
