@@ -162,9 +162,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ── Database ─────────────────────────────────────────────────────
     // Supports both SQLite (OZ_DB_PATH) and PostgreSQL (DATABASE_URL).
     // SQLite is the default backend.
+    info!("starting database connection (this may take up to 60s on first boot)...");
     let pool = db::DbPool::from_config(&config)
         .await
         .map_err(|e| format!("failed to initialise database: {e}"))?;
+    info!("database connection established");
 
     match &pool {
         db::DbPool::Sqlite(conn) => {

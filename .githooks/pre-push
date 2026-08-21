@@ -9,6 +9,22 @@
 # total cost is bounded by number of refs being pushed.
 set -e
 
+# ── Portable Python locator ─────────────────────────────────────────────
+# Git Bash on Windows ships `python` (not `python3`), while WSL/Linux have
+# `python3` — hardcoding either breaks the FTL-dedupe gate for the other
+# environment. Same resolution as `.githooks/pre-commit`.
+PYTHON=""
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON="python"
+fi
+
+if [ -z "$PYTHON" ]; then
+    echo "error: python3/python not found — install Python or add it to PATH. Aborting push." >&2
+    exit 1
+fi
+
 # ── FTL dedupe dry-run ────────────────────────────────────────────────────
 # Fast fail-fast check (~50ms) for file-level Fluent key duplicates
 # across all 48 .ftl + .id.ftl files. The lint script below only
@@ -18,7 +34,7 @@ set -e
 # keys). Run BEFORE the lint so a cheap drift errors out before
 # paying for vitest.
 if [ -f scripts/dedupe-ftl.py ]; then
-    if output=$(python3 scripts/dedupe-ftl.py --dry-run 2>&1); then
+    if output=$("$PYTHON" scripts/dedupe-ftl.py --dry-run 2>&1); then
         : # clean — silently discard the "no duplicates" line
     else
         printf '%s\n' "error: FTL duplicates detected — run 'npm run dedupe:ftl' to fix:" >&2

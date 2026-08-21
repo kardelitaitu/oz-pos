@@ -48,6 +48,7 @@ fn test_router() -> Router {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     sync_router(state, false)
 }
@@ -64,6 +65,7 @@ fn test_router_with_plan_enforcement(enforce: bool) -> Router {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     sync_router_with_plan_enforcement(state, enforce)
 }
@@ -81,6 +83,7 @@ async fn test_router_with_plan(tenant: &str, plan: &str, enforce: bool) -> Route
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     {
         let conn = state.db.lock().await;
@@ -171,6 +174,7 @@ async fn snapshot_omits_pin_hash_entirely() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -228,6 +232,7 @@ async fn snapshot_query_failure_returns_500_not_empty_success() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -259,6 +264,7 @@ async fn snapshot_serves_store_id_when_present() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -336,6 +342,7 @@ async fn pull_returns_500_on_malformed_row() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -365,6 +372,7 @@ async fn snapshot_tenant_isolation() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -468,6 +476,7 @@ async fn push_inserts_items_with_existing_ids() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -508,6 +517,7 @@ async fn push_duplicate_id_returns_rejected() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -550,6 +560,7 @@ async fn push_rejects_invalid_non_uuid_id() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -623,6 +634,7 @@ async fn pull_returns_items_for_tenant() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -657,6 +669,7 @@ async fn pull_tenant_isolation() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -695,6 +708,7 @@ async fn pull_filters_by_since_and_tenant() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -755,6 +769,7 @@ async fn status_counts_only_current_tenant() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -799,6 +814,7 @@ async fn status_counts_zero_for_empty_tenant() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -947,6 +963,7 @@ async fn pull_returns_410_when_anchor_expired() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -985,6 +1002,7 @@ async fn pull_succeeds_when_anchor_is_fresh() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state.clone());
 
@@ -1021,6 +1039,7 @@ async fn pull_null_since_never_expired() {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     };
     let app = test_router_with_state(state);
 
@@ -1074,6 +1093,7 @@ fn shared_state() -> SyncState {
         snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
         rate_limiter: RateLimiterState::new(),
         pg: None,
+        skip_push_validation: false,
     }
 }
 

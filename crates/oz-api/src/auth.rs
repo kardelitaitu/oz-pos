@@ -145,10 +145,10 @@ pub async fn validate_token(
     // Check cache first (read lock — non-blocking for concurrent readers).
     {
         let cache = JWT_CACHE.read().await;
-        if let Some((claims, cached_at)) = cache.get(token_str) {
-            if cached_at.elapsed().as_secs() < JWT_CACHE_TTL_SECS {
-                return Ok(claims.clone());
-            }
+        if let Some((claims, cached_at)) = cache.get(token_str)
+            && cached_at.elapsed().as_secs() < JWT_CACHE_TTL_SECS
+        {
+            return Ok(claims.clone());
         }
     }
 
