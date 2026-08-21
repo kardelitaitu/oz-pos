@@ -5644,3 +5644,36 @@ cargo clippy -p oz-cloud-server -- -D warnings clean.
 (push_item_0..n) — fine within a single batch; batch size is bounded by
 the push rate limit (100/min). The SQLite branch still reports
 rusqlite's full error string (no as_db_error equivalent needed).
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 2 (snapshot cache leak, advisory lock leak, health timeout)
+
+**Problem:** Three PostgreSQL-adjacent bugs found by reviewing the same SOTA targets:
+1. Snapshot cache was an unbounded memory leak — entries were inserted per tenant
+   but never evicted; a tenant that stopped polling left its bytes in the HashMap
+   forever, growing without bound under tenant churn (512MB free tier ceiling).
+2. Email advisory lock could leak permanently onto a pooled connection: the
+   unlock was let _ = (failure swallowed) and a panic inside the send cycle
+   skipped it entirely. Session-level locks survive connection return to the
+   pool, so the next borrower would inherit the lock and that tenant's email
+   cycle would be blocked forever.
+3. Health check raced the Docker healthcheck timeout: it used bare pool.get(),
+   so under saturation it waited the full 5s builder wait_timeout while the
+   healthcheck's own --timeout is also 5s — container flap during bursts.
+
+**Solution:** TDD Red→Green per bug:
+- RED: snapshot_cache_evicts_expired_entries_on_insert (5 stale + 1 fresh ->
+  1 entry). GREEN: opportunistic etain() on cache insert.
+- RED: pg_integration_advisory_lock_guard_detaches_on_drop_without_release.
+  GREEN: AdvisoryLockGuard RAII — release() on normal paths, Drop() detaches
+  the connection (deadpool Client::take) so the session + lock die on panic.
+- RED: pg_integration_health_fails_fast_when_pool_exhausted. GREEN: health
+  path wraps pool.get() in a 2s timeout (degraded db_connected: false beats
+  a container restart).
+
+**Verification:** cargo test -p oz-cloud-server — 204 unit + 5 integration +
+2 startup, all green; fmt + clippy -D warnings clean.
+
+**Risks / follow-ups:** deadpool has no max_lifetime (documented in db.rs); the
+5s builder wait_timeout remains for normal request paths where failing fast is
+correct — only health got the shorter bound. Session advisory locks on other
+sites should be audited for the same pooled-connection leak pattern.

@@ -459,8 +459,12 @@ async fn snapshot_handler(
         Err(e) => return Err(error_json(&e.to_string())),
     };
 
-    // Cache the result.
+    // Cache the result, opportunistically pruning expired entries so a
+    // tenant that stops polling cannot leave its bytes in memory forever
+    // (unbounded growth under tenant churn). The TTL read-check above
+    // only skips STALE reads; this eviction is what bounds the map size.
     let mut cache = state.snapshot_cache.lock().await;
+    cache.retain(|_, (cached_at, _)| cached_at.elapsed().as_secs() < SNAPSHOT_CACHE_TTL_SECS);
     cache.insert(
         tenant_id.to_owned(),
         (std::time::Instant::now(), bytes.clone()),

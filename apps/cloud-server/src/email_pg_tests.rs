@@ -622,3 +622,90 @@ async fn pg_integration_sent_reports_skips_claimed_period_before_smtp() {
         .await
         .unwrap();
 }
+
+/// The advisory lock must not leak onto a pooled connection (Bug 2).
+///
+/// `pg_try_advisory_lock` is session-level: if the lock holder's
+/// connection is returned to the pool still holding the lock, the next
+/// borrower inherits it and that tenant's email cycle is blocked
+/// forever. The RAII guard must release on the normal path, and on the
+/// panic path must detach/close the connection so the lock dies with
+/// the session.
+#[tokio::test]
+async fn pg_integration_advisory_lock_released_after_cycle() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG advisory-lock integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-adv-lock-{}", uuid::Uuid::now_v7());
+
+    // Simulate the full guard lifecycle WITHOUT running the inner cycle
+    // (which would need seeded settings + SMTP): acquire, then release.
+    {
+        let mut guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            guard.acquired,
+            "fresh tenant must acquire the advisory lock"
+        );
+        guard.release().await;
+    }
+
+    // The lock must be released — a second acquire on a (possibly
+    // recycled) pool connection must succeed, proving the lock was not
+    // leaked onto the returned connection.
+    {
+        let mut guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            guard.acquired,
+            "advisory lock must be released after the cycle — a leaked lock would block this tenant forever"
+        );
+        guard.release().await;
+    }
+}
+
+/// The panic path: if the inner cycle panics while holding the advisory
+/// lock, the guard's Drop must close the connection so the session (and
+/// the lock) dies — the tenant must not be blocked forever.
+#[tokio::test]
+async fn pg_integration_advisory_lock_guard_detaches_on_drop_without_release() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG advisory-lock guard integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-adv-lock-panic-{}", uuid::Uuid::now_v7());
+
+    // Acquire the lock, then drop the guard WITHOUT calling release —
+    // this simulates a panic inside the inner cycle (Drop runs during
+    // unwinding). The guard must detach the connection, closing the
+    // session and releasing the lock.
+    {
+        let guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            guard.acquired,
+            "fresh tenant must acquire the advisory lock"
+        );
+        // No `release()` — dropped here, as during panic unwinding.
+    }
+
+    // The lock must be gone: a new acquire must succeed.
+    {
+        let mut guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            guard.acquired,
+            "a dropped-without-release guard must close the connection so the advisory lock dies with the session"
+        );
+        guard.release().await;
+    }
+}

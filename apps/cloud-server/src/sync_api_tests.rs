@@ -439,6 +439,80 @@ async fn snapshot_cache_hit_serves_without_db_access() {
     assert_eq!(json1, json2);
 }
 
+/// The snapshot cache must evict expired entries — otherwise every
+/// tenant that ever connects leaves a (Instant, Vec<u8>) entry forever,
+/// an unbounded memory leak (Bug 1 — snapshot cache).
+///
+/// Seed 5 stale entries directly into the cache, then insert a fresh
+/// one. The store must opportunistically prune the expired entries so
+/// the cache does not grow unboundedly with tenant churn.
+#[tokio::test]
+async fn snapshot_cache_evicts_expired_entries_on_insert() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    // Seed 5 stale entries directly into the cache (expired past the
+    // 900s TTL).
+    {
+        let mut cache = state.snapshot_cache.lock().await;
+        for i in 0..5 {
+            cache.insert(
+                format!("stale-tenant-{i}"),
+                (
+                    std::time::Instant::now() - std::time::Duration::from_secs(1800),
+                    b"{}".to_vec(),
+                ),
+            );
+        }
+        assert_eq!(cache.len(), 5, "precondition: 5 stale entries");
+    }
+
+    // Seed a product so the miss path produces a real snapshot.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-evic', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-evic', 'SKU-EVIC', 'EvictTest', 100, 'USD', 'fresh-tenant')",
+            [],
+        )
+        .unwrap();
+    }
+
+    // A miss for a new tenant triggers a cache insert with opportunistic
+    // eviction — the 5 stale entries must be gone.
+    let app = test_router_with_state(state.clone());
+    let req = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("fresh-tenant"),
+    );
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let cache = state.snapshot_cache.lock().await;
+    assert_eq!(
+        cache.len(),
+        1,
+        "stale entries must be evicted; only the fresh tenant's entry should remain, got {} entries",
+        cache.len()
+    );
+    assert!(
+        cache.contains_key("fresh-tenant"),
+        "the fresh tenant's entry must be present"
+    );
+}
+
 /// When the snapshot cache TTL expires, the next request must re-query
 /// the DB and serve FRESH data. The cache entry's timestamp is
 /// backdated directly (child module can reach the cache map) so no real

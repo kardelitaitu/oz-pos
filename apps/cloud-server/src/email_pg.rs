@@ -98,25 +98,92 @@ async fn try_send_scheduled_pg(pool: &Pool) -> Result<(), String> {
 /// entirely — two instances can never both send the same tenant's report.
 /// The lock lives on its own dedicated connection for the whole cycle
 /// (every helper below uses independent pooled connections, so a
-/// transaction-scoped lock would not guard them); it is released on every
-/// exit path and, worst case, dies with the connection when deadpool
-/// recycles it.
+/// transaction-scoped lock would not guard them).
+///
+/// # Lock lifecycle
+///
+/// The advisory lock is session-level, and the connection comes from the
+/// pool. If the unlock failed or the inner cycle panicked, the lock would
+/// leak onto the recycled connection, permanently blocking that tenant's
+/// future sends. The guard handles this:
+///
+/// 1. On success → explicit `release()` unlocks the lock and returns the
+///    connection to the pool normally.
+/// 2. On error → `release()` still unlocks (runs after inner), then the
+///    error is propagated — the lock is clean.
+/// 3. On panic → `Drop` runs, which calls `AdvisoryLockGuard::take()` to
+///    **detach** the connection from the pool. When the detached wrapper
+///    drops, the underlying socket is closed, the session ends, and the
+///    advisory lock dies with it — no leak.
 async fn try_send_scheduled_for_tenant_pg(pool: &Pool, tenant: &str) -> Result<(), String> {
-    let lock_conn = pool.get().await.map_err(|e| e.to_string())?;
-    let acquired: bool = lock_conn
-        .query_one("SELECT pg_try_advisory_lock(hashtext($1))", &[&tenant])
-        .await
-        .map_err(|e| format!("DB error: {e}"))?
-        .get(0);
-    if !acquired {
-        // Another instance is handling this tenant's cycle this round.
+    let mut guard = AdvisoryLockGuard::acquire(pool, tenant).await?;
+    if !guard.acquired {
         return Ok(());
     }
     let result = try_send_scheduled_tenant_inner_pg(pool, tenant).await;
-    let _ = lock_conn
-        .execute("SELECT pg_advisory_unlock(hashtext($1))", &[&tenant])
-        .await;
+    // `release` unlocks on success OR error — the guard's Drop only runs
+    // if release is NOT called (panic or early return before this line).
+    guard.release().await;
     result
+}
+
+/// RAII guard for a session-level advisory lock on a pooled connection.
+/// On `Drop` (including panic unwinding), the connection is detached from
+/// the pool and closed — the session ends, and the advisory lock dies
+/// with it. This prevents a classic PG pooled-connection footgun: a
+/// leaked lock on a recycled connection would block that tenant forever.
+struct AdvisoryLockGuard {
+    /// `None` after `release()` or `take()` — prevents double-free.
+    conn: Option<deadpool_postgres::Client>,
+    /// `false` when `pg_try_advisory_lock` returned false (lock not held).
+    acquired: bool,
+    /// Tenant identifier for the unlock query.
+    tenant: String,
+}
+
+impl AdvisoryLockGuard {
+    /// Acquire the advisory lock. Returns `Ok(guard)` with `acquired`
+    /// set to `false` when another instance holds the lock.
+    async fn acquire(pool: &Pool, tenant: &str) -> Result<Self, String> {
+        let conn = pool.get().await.map_err(|e| e.to_string())?;
+        let acquired: bool = conn
+            .query_one("SELECT pg_try_advisory_lock(hashtext($1))", &[&tenant])
+            .await
+            .map_err(|e| format!("DB error: {e}"))?
+            .get(0);
+        Ok(Self {
+            conn: Some(conn),
+            acquired,
+            tenant: tenant.to_owned(),
+        })
+    }
+
+    /// Release the advisory lock. Always called on the success OR error
+    /// path (after `inner`) — the guard's `Drop` is only for the panic
+    /// case.
+    async fn release(&mut self) {
+        let Some(conn) = self.conn.take() else {
+            return; // already released or taken
+        };
+        // `pg_advisory_unlock` with the same key as the lock.
+        // If the unlock fails (dead connection), the guard's Drop will
+        // detach and close the connection — the lock dies with the session.
+        let _ = conn
+            .execute("SELECT pg_advisory_unlock(hashtext($1))", &[&self.tenant])
+            .await;
+        // Connection returned to pool normally (not taken) — no lock held.
+    }
+}
+
+impl Drop for AdvisoryLockGuard {
+    fn drop(&mut self) {
+        if let Some(conn) = self.conn.take() {
+            // Panic or early return: the lock was never released. Detach
+            // the connection from the pool so the socket is closed and
+            // the session (and advisory lock) dies with it.
+            let _ = deadpool_postgres::Client::take(conn);
+        }
+    }
 }
 /// The un-serialized per-tenant send cycle: scoped settings → due check →
 /// claim the period → tenant-filtered report → send → scoped last-sent
