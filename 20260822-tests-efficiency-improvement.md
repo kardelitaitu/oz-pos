@@ -168,7 +168,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A13 cloud-server | — (blocked) | | | | blocked: other agent's email_pg.rs borrow error breaks compile |
 | A14 desktop-client | — (load-blocked) | | | | blocked: crate too large to time under other agent's concurrent compile; sleeps are network-timing or other-agent topology |
 | A15 tablet-client | — (load-blocked) | | | | blocked: 39 test files, no sleeps, not timed under other agent's compile |
-| A16 modules | | | | | |
+| A16 modules | ~12.0 (cold 21.6) | — (plateaued) | | | none — 325 tests, no delays, spawn floor |
 | A17 platform | 26.5 (warm) | 12.5 (warm) | | | cut timeouts: 5s→500ms (pg_transport push/pull edge cases); 50ms client + 500ms outer (transport classify tests) |
 | A18 oz-core integration | | | | | |
 | A19 oz-payment integration | | | | | |
@@ -299,7 +299,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · commit `e8a3bc63` · PARTIALLY BLOCKED (load interference)** — `cargo nextest run -p oz-pos-tablet` (39 src test files). Crate compiles (`cargo check` 26.5 s) but the full suite could not be timed: >6 min runs stuck under the other agent's concurrent compilation. No sleeps found in any test file. Re-measure when the machine is quiet.
 
 ### A16 modules
-- [ ] baseline pending
+- **2026-08-22 · baseline · commit `98e0e049` · cold 21.6 s / warm ~12 s (325 tests, ~10.6 s real work)** — `cargo nextest run -p modules-crm -p modules-inventory -p modules-loyalty -p modules-reporting -p modules-settings -p modules-staff -p modules-tax -p modules-terminal`; 325 tests, all pass. (sales/currency have no sibling test files; sales is other-agent territory.) No sleeps/waits anywhere — all tests at ~0.8 s spawn floor. **Area plateaued.**
 
 ### A17 platform
 - **2026-08-22 · baseline · commit `07d56b15` · cold N/A / warm median 26.5 s (runs 24.3/26.5/37.1; 37.1 = other-agent load)** — `cargo nextest run -p platform-core -p platform-kernel -p platform-startup -p platform-sync`; **671 tests, all pass, 21 skipped**. Slow tail dominated by tests connecting to non-existent servers: `pg_transport::push_items_empty_list_handles_missing_server` (5 s timeout × 1), `pg_transport::pull_updates_both_with_and_without_since` (5 s timeout × 3), `transport::classify_transport_error_connection_refused` (implicit wait on port 1), `transport::classify_transport_error_includes_url` (implicit wait on 192.0.2.1), `transport::classify_transport_error_non_empty` (100 ms/500 ms wait). Machine: DESKTOP-PC-R9 · Ryzen 9 7950X (32 logical) · 63.2 GB RAM · Windows 11 26200.
