@@ -5776,3 +5776,34 @@ registry) — follow-up.
 **Risks / follow-ups:** active_tenants_pg discovery (above); the settings
 helpers are correctly left bare (settings is not RLS'd — key-prefix
 scoping).
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 6 (email tenant discovery vs RLS)
+
+**Problem:** Round 5 fixed the email analytics/claim functions' missing
+tenant GUC, but left ctive_tenants_pg — the loop's tenant DISCOVERY
+query — reading tenant_plans / offline_queue / sync_terminals with no
+GUC and no tenant (it's cross-tenant by nature). Post-cutover (oz_app +
+FORCE RLS) every row is hidden → discovery returns only 'default' → the
+email loop silently stops sending reports for every real tenant. Same
+read-before-tenant-known class the webhook path solved with a BYPASSRLS
+resolver role.
+
+**Solution:** TDD Red→Green.
+- RED: pg_integration_active_tenants_survives_rls_cutover — real cutover
+  setup on the 3 discovery tables, drives the ACTUAL active_tenants_pg
+  through a restricted-role pool; asserts the seeded tenant is
+  enumerated. Failed with ["default"] before the fix.
+- GREEN: rls-cutover.sql gains oz_email_discovery (NOLOGIN BYPASSRLS,
+  SELECT on the 3 discovery tables, granted to oz_app) — same pattern as
+  oz_webhook_resolver; active_tenants_pg checks membership then
+  SET LOCAL ROLE oz_email_discovery for the cross-tenant read
+  (auto-resets on commit; unscoped owner path pre-cutover).
+
+**Verification:** oz-cloud-server — 209 unit + 5 integration + 2 startup
+green; webhook (27) + RLS (3) tests that execute the real cutover script
+still pass; fmt + clippy -D warnings clean.
+
+**Risks / follow-ups:** none new — the email loop is now fully
+cutover-compatible (discovery + analytics + claim/release). The two
+BYPASSRLS roles are NOLOGIN and reachable only via membership, so the
+exposure is bounded to the email/webhook code paths.

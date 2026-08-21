@@ -959,3 +959,139 @@ async fn pg_integration_email_analytics_visible_as_restricted_role() {
         .await
         .expect("email-RLS probe cleanup should succeed");
 }
+
+/// RED (TDD): tenant discovery must survive RLS cutover.
+///
+/// `active_tenants_pg` enumerates every tenant by reading tenant_plans /
+/// offline_queue / sync_terminals — all RLS FORCEd tables. As the
+/// restricted role with no GUC, RLS hides all rows → the loop discovers
+/// 0 tenants and scheduled reports silently stop. The webhook path solved
+/// the identical read-before-tenant-known problem with a BYPASSRLS
+/// resolver role; the email discovery path needs the same treatment.
+#[tokio::test]
+async fn pg_integration_active_tenants_survives_rls_cutover() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG active-tenants integration test skipped: {e}");
+            return;
+        }
+    };
+    let mut admin = pool.get().await.unwrap();
+    let ns = format!("pg-email-tenants-{}", std::process::id());
+    let tenant = format!("{ns}-tenant");
+    let role = "oz_email_tenants_probe";
+
+    // Set up the restricted role + FORCE RLS on the discovery tables,
+    // mirroring the real cutover.
+    admin
+        .batch_execute(&format!(
+            "DO $$ BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') THEN
+                    EXECUTE 'DROP OWNED BY {role}';
+                    EXECUTE 'DROP ROLE {role}';
+                END IF;
+             END $$;
+             CREATE ROLE {role} LOGIN PASSWORD 'oz_email_tenants_probe_pw';
+             GRANT USAGE ON SCHEMA public TO {role};
+             GRANT SELECT ON tenant_plans, offline_queue, sync_terminals TO {role};
+             -- The BYPASSRLS discovery role (mirrors rls-cutover.sql 2d):
+             -- the code SET LOCAL ROLEs into it to read cross-tenant.
+             DO $$ BEGIN
+                 IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_email_discovery') THEN
+                     CREATE ROLE oz_email_discovery NOLOGIN BYPASSRLS;
+                 END IF;
+             END $$;
+             GRANT USAGE ON SCHEMA public TO oz_email_discovery;
+             GRANT SELECT ON tenant_plans, offline_queue, sync_terminals TO oz_email_discovery;
+             GRANT oz_email_discovery TO {role};
+             ALTER TABLE tenant_plans ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE offline_queue ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE sync_terminals ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE tenant_plans FORCE ROW LEVEL SECURITY;
+             ALTER TABLE offline_queue FORCE ROW LEVEL SECURITY;
+             ALTER TABLE sync_terminals FORCE ROW LEVEL SECURITY;
+             DROP POLICY IF EXISTS tenant_isolation ON tenant_plans;
+             CREATE POLICY tenant_isolation ON tenant_plans
+                 USING (tenant_id = current_setting('oz.tenant_id', true));
+             DROP POLICY IF EXISTS tenant_isolation ON offline_queue;
+             CREATE POLICY tenant_isolation ON offline_queue
+                 USING (tenant_id = current_setting('oz.tenant_id', true));
+             DROP POLICY IF EXISTS tenant_isolation ON sync_terminals;
+             CREATE POLICY tenant_isolation ON sync_terminals
+                 USING (tenant_id = current_setting('oz.tenant_id', true));"
+        ))
+        .await
+        .expect("active-tenants probe role setup should succeed");
+
+    // Seed a tenant_plans row (owner + GUC, since FORCE applies to owner).
+    let mut seed_tx = admin.transaction().await.unwrap();
+    seed_tx
+        .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .unwrap();
+    seed_tx
+        .execute(
+            "INSERT INTO tenant_plans (tenant_id, plan, updated_at)
+             VALUES ($1, 'pro', '2026-01-01T00:00:00Z')
+             ON CONFLICT (tenant_id) DO NOTHING",
+            &[&tenant],
+        )
+        .await
+        .unwrap();
+    seed_tx.commit().await.unwrap();
+    drop(admin);
+
+    // The app pool connects AS the restricted role.
+    let scheme_end = url.find("://").expect("URL has a scheme") + 3;
+    let at = url.find('@').expect("URL has credentials");
+    let app_url = format!(
+        "{}oz_email_tenants_probe:oz_email_tenants_probe_pw@{}",
+        &url[..scheme_end],
+        &url[at + 1..]
+    );
+    let app_pool = {
+        use deadpool_postgres::Manager;
+        use std::str::FromStr;
+        let config = tokio_postgres::Config::from_str(&app_url).expect("valid app URL");
+        let manager = Manager::new(config, tokio_postgres::NoTls);
+        deadpool_postgres::Pool::builder(manager)
+            .max_size(2)
+            .build()
+            .expect("app pool build")
+    };
+
+    // The REAL discovery function, as the restricted role. Post-cutover it
+    // must still enumerate the seeded tenant — today it returns only
+    // 'default' (RLS hides every tenant row without a GUC).
+    let tenants = active_tenants_pg(&app_pool).await.unwrap();
+    assert!(
+        tenants.contains(&tenant),
+        "active_tenants_pg must enumerate the seeded tenant post-cutover, got: {tenants:?}"
+    );
+
+    // Cleanup.
+    let admin = pool.get().await.unwrap();
+    admin
+        .batch_execute(&format!(
+            "ALTER TABLE tenant_plans NO FORCE ROW LEVEL SECURITY;
+             ALTER TABLE offline_queue NO FORCE ROW LEVEL SECURITY;
+             ALTER TABLE sync_terminals NO FORCE ROW LEVEL SECURITY;
+             ALTER TABLE tenant_plans DISABLE ROW LEVEL SECURITY;
+             ALTER TABLE offline_queue DISABLE ROW LEVEL SECURITY;
+             ALTER TABLE sync_terminals DISABLE ROW LEVEL SECURITY;
+             DROP POLICY IF EXISTS tenant_isolation ON tenant_plans;
+             DROP POLICY IF EXISTS tenant_isolation ON offline_queue;
+             DROP POLICY IF EXISTS tenant_isolation ON sync_terminals;
+             DELETE FROM tenant_plans WHERE tenant_id = '{tenant}';
+             DROP OWNED BY {role};
+             DROP ROLE IF EXISTS {role};
+             DROP OWNED BY oz_email_discovery;
+             DROP ROLE IF EXISTS oz_email_discovery;"
+        ))
+        .await
+        .expect("active-tenants probe cleanup should succeed");
+}

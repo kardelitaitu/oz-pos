@@ -273,8 +273,38 @@ async fn try_send_scheduled_tenant_inner_pg(pool: &Pool, tenant: &str) -> Result
 /// sends). `default` sorts first, the rest alphabetically, for
 /// deterministic log output.
 async fn active_tenants_pg(pool: &Pool) -> Result<Vec<String>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    let rows = client
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+
+    // Tenant discovery is a CROSS-tenant read: the loop must enumerate
+    // every tenant before any single tenant is known. Post-RLS-cutover
+    // (oz_app + FORCE RLS) a bare read sees zero rows — the email loop
+    // would silently stop. Mirror the webhook pattern: if this session
+    // user is a member of the dedicated BYPASSRLS discovery role, scope
+    // the read to it (`SET LOCAL ROLE` auto-resets on commit so the
+    // pooled connection never keeps the bypass). Pre-cutover the app
+    // connects as the table owner, which is not a member and bypasses
+    // RLS until FORCE — the unscoped read below is the owner's behaviour.
+    let is_discovery_member: bool = tx
+        .query_one(
+            "SELECT EXISTS(
+                SELECT 1 FROM pg_roles r
+                JOIN pg_auth_members m ON m.roleid = r.oid
+                WHERE r.rolname = 'oz_email_discovery'
+                  AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+             )",
+            &[],
+        )
+        .await
+        .map_err(|e| format!("DB error: {e}"))?
+        .get(0);
+    if is_discovery_member {
+        tx.execute("SET LOCAL ROLE oz_email_discovery", &[])
+            .await
+            .map_err(|e| format!("DB error: {e}"))?;
+    }
+
+    let rows = tx
         .query(
             "SELECT tenant_id FROM tenant_plans
              UNION SELECT tenant_id FROM offline_queue
