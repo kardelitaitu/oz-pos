@@ -178,19 +178,19 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A23 oz-cli integration | 6.1 (compile-dom.) | — (plateaued) | | | none — no sleeps |
 | A24 cloud-server integration | — (blocked) | | | | blocked: other agent's email_pg.rs borrow error |
 | A25 tax integration | 1.5 | — (plateaued) | | | none — no sleeps |
-| A26 doctests | | | | | |
+| A26 doctests | 34.2 (compile-bound) | — (plateaued) | | | no lever — cargo runs doctest binaries serially; doctests can't be dropped |
 | A27 nextest workspace sweep | — (blocked) | | | | blocked: other-agent PG flake at test 2011/5286; compile-bound with --all-features |
 | A28 cargo fallback sweep | N/A | | | | fallback runner, not campaign target |
 | A29 vitest full suite | 59.9 | — (plateaued) | | | 395 files / 6911 tests pass; infra-bound (jsdom setup 610s + transform 65s parallel wall) |
 | A30 a11y suite | 4.05 | — (plateaued) | | | no reducible delays — 2.1s test work + vitest transform/jsdom overhead (3s+2s); all 12 tests pass, no waitForTimeout or redundant waits |
 | A31 vitest coverage | ~120–180 (est.) | | | | not precisely measured (infra-bound, machine contended) |
 | A32 vitest per-group | N/A | | | | scoped runs are the iteration tool, not a deliverable |
-| A33 e2e api | | | | | |
-| A34 e2e perf-smoke | | | | | |
+| A33 e2e api | — (pending) | | | | needs Docker-provisioned backend (npm run e2e pipeline) |
+| A34 e2e perf-smoke | — (pending) | | | | needs Docker backend + perf baseline |
 | A35 e2e remaining | 465 (7m45s) | 391 (6m31s, −16%) | | | `waitForTimeout` removal: cut50 redundant fixed waits across adr22 (27), sale (23), settings (7) + helpers (1 convergence wait kept). Playwright auto-wait assertions replace blind sleeps. Quality *improved*: 232→238 passed, 6→0 failed (dev-toolbar click-intercept flakiness eliminated) |
 | A36 script tests | 3.34 | 3.34 (46/46 pass) | | | fixed 3 failing tests: cross-platform python resolution |
-| A37 check.sh aggregate | | | | | |
-| A38 check:all aggregate | | | | | |
+| A37 check.sh aggregate | — (blocked) | | | | blocked: other agent's email_pg_tests.rs unclosed delimiter kills cargo fmt gate |
+| A38 check:all aggregate | — (blocked) | | | | blocked: same root cause as A37 |
 
 **Totals (A27 + A29 + A33–A36 as the canonical CI sweep):** baseline ___ s → current ___ s → **Δ ___ s (−__%)**
 
@@ -351,10 +351,10 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · N/A** — scoped `vitest run src/__tests__/<group>/` runs are the *iteration tool* for the campaign, not a standalone deliverable; covered implicitly by A29. Not measured separately.
 
 ### A33 e2e api
-- [ ] baseline pending
+- **2026-08-22 · PENDING** — `api.spec.ts` requires the Docker-provisioned backend via the managed `npm run e2e` pipeline. Not run in this pass (heavy provisioning; machine contended). Revisit in the e2e-focused session.
 
 ### A34 e2e perf-smoke
-- [ ] baseline pending
+- **2026-08-22 · PENDING** — `perf-smoke.spec.ts` requires Docker backend + perf baseline. Not run in this pass.
 
 ### A35 e2e remaining
 - **2026-08-22 · baseline · commit `10d3ac6a` · warm median 465 s (runs 461/465/468)** — `npx playwright test --config e2e/playwright.config.ts <24 specs>` (excluding `api.spec.ts` + `perf-smoke.spec.ts`); 24 spec files × 2 projects (desktop + tablet) = 48 test runs, **232 passed, 6 failed, 2 skipped**. machine: DESKTOP-PC-R9 · Ryzen 9 7950X (32 logical) · 63.2 GB RAM · Windows 11 26200 · Playwright 1.61.1 · 4 workers. Profiled per-spec timing: top consumers were `adr22-workspace-settings` (232 s total across projects), `admin-workflows` (129 s), `sale` (112 s), `e2e-kds-critical-path` (112 s), `auth` (99 s). Identified **183 `waitForTimeout` calls** across all E2E spec files totaling ~137 s of fixed sleeps. The6 pre-existing failures were dev-toolbar pointer-event intercepts on tablet (the toolbar floats bottom-right and swallows clicks).
@@ -365,10 +365,10 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · attempt 1 · technique: cross-platform python resolution → **ACCEPTED** — 3 failing tests now pass. No measurable performance change (3.34 s median, spawn-overhead floor). **Area plateaued.**
 
 ### A37 check.sh aggregate
-- [ ] baseline pending
+- **2026-08-22 · BLOCKED BY OTHER AGENT** — fails at gate 01 (`cargo fmt`) in 0.7 s: the other agent's `apps/cloud-server/src/email_pg_tests.rs` has an unclosed delimiter, so `cargo fmt --all` cannot parse it. No gate can run until their WIP is fixed. Re-measure after their work lands.
 
 ### A38 check:all aggregate
-- [ ] baseline pending
+- **2026-08-22 · BLOCKED BY OTHER AGENT** — same root cause as A37 (check-ui.mjs → check.sh chain stops at cargo fmt). Re-measure after their work lands.
 
 ---
 
