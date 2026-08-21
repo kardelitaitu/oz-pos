@@ -121,14 +121,13 @@ Every design decision follows these principles (in priority order):
 
 ### 4.1 Push (`POST /api/sync/push`)
 
-- **Items processed sequentially** in a `for` loop (not batched INSERT)
-- Each item: UUID validation → INSERT into `offline_queue` → outcome recorded
-- On SQLite: one mutex lock acquisition per request, items inserted one-by-one within
-- On PostgreSQL: one transaction per request with explicit COMMIT
-- **Metrics:** `sync_push_duration_ms`, `db_contention_seconds{op="push"}`, `sync_pushes_total{outcome}`
+- **Batch inserted in one transaction** (`push_batch`): UUID validation per item → INSERT into `offline_queue` → per-item outcome recorded
+- On SQLite: one mutex lock acquisition for the whole batch
+- On PostgreSQL: one transaction + one `oz.tenant_id` GUC for the whole batch; duplicates detected via `ON CONFLICT (id) DO NOTHING RETURNING id` (implemented — was one transaction per item)
+- **Metrics:** `sync_push_duration_ms`, `db_connection_contention_seconds{handler="push"}`, `sync_pushes_total{outcome}`
 - **Rate limit:** 100 pushes/min per tenant
 
-**Bottleneck:** Sequential per-item INSERT is O(n) in batch size. A 50-item push batch takes ~50× longer than a 1-item batch (each INSERT is a separate SQL statement within the same lock/transaction).
+**Note:** Inserts are sequential SQL statements within the shared batch transaction (the `for` loop keeps per-item outcomes). The per-item transaction overhead that made batches O(n) in round-trips was eliminated by `push_batch` — a 50-item batch is now 1 transaction, 1 GUC, 50 INSERTs, 1 COMMIT.
 
 ### 4.2 Pull (`POST /api/sync/pull`)
 
@@ -139,17 +138,17 @@ Every design decision follows these principles (in priority order):
 - **Snapshot fallback:** when anchor expires, clients call `GET /api/sync/snapshot` for a full reference-data baseline (products + tax rates + users)
 - **Rate limit:** 300 pulls/min per tenant
 
-**Performance note:** The pull query uses `ORDER BY created_at ASC, id ASC LIMIT $5` which benefits from an index on `(tenant_id, created_at, id)`. Without this composite index, pull queries on large tables would full-scan.
+**Performance note:** The pull query uses `ORDER BY created_at ASC, id ASC LIMIT $5` which benefits from the composite index `idx_offline_queue_tenant_created ON offline_queue(tenant_id, created_at)` (plus `idx_offline_queue_tenant_status ON offline_queue(tenant_id, status)` for the pending-count query). Without these composite indexes, pull/status queries on large tables would full-scan.
 
 ### 4.3 Snapshot (`GET /api/sync/snapshot`)
 
 - Returns all products, tax rates, and users for a tenant
-- **In-memory cache** with 5-minute TTL per tenant (keyed by `tenant_id`)
-- First call: three SQL SELECT queries → serialize to JSON → cache
-- Subsequent calls within 5 min: serve from cache (no DB access)
+- **In-memory cache** with 15-minute TTL per tenant (keyed by `tenant_id`)
+- First call: `snapshot_all()` — products + tax_rates + users in a single transaction → serialize to JSON once → cache
+- Subsequent calls within 15 min: serve the cached bytes directly (no DB access, no JSON re-parse)
 - **Rate limit:** 50/min per tenant (expensive endpoint)
 
-**Cache behavior:** The cache is an `Arc<Mutex<HashMap<String, (Instant, Vec<u8>)>>>`. Lock contention is minimal since the cache is only accessed at the start and end of the handler. The 5-minute TTL means stale data is acceptable (reference data changes rarely during a shift).
+**Cache behavior:** The cache is an `Arc<Mutex<HashMap<String, (Instant, Vec<u8>)>>>`. Lock contention is minimal since the cache is only accessed at the start and end of the handler. The 15-minute TTL means stale data is acceptable (reference data changes rarely during a shift). Cache hits serve the stored `Vec<u8>` as-is with `Content-Type: application/json` — zero JSON processing.
 
 ### 4.4 Client-Side Sync Daemon
 
@@ -197,7 +196,7 @@ The license server's rate limiter persists bucket state to SQLite so server rest
 
 - Average POS terminal syncs once per 90 s (randomized 60–120 s)
 - Each sync cycle: 1 pull (50–200 items) + 1 push (5–20 items) + 1 status check
-- Snapshot called once per terminal boot (cached for 5 min)
+- Snapshot called once per terminal boot (cached for 15 min)
 - License activation: once per terminal installation
 - Average push payload: ~2 KB per item (JSON with product/sale data)
 - Average pull payload: ~1.5 KB per item
@@ -211,9 +210,9 @@ The license server's rate limiter persists bucket state to SQLite so server rest
 |--------|-------|
 | Concurrent sync connections | ~200–400 (20-connection PG pool + async) |
 | Sustained sync throughput | ~100–200 sync cycles/s |
-| Push items/s | ~500–1,000 (async per-item INSERT in transaction) |
+| Push items/s | ~500–1,000 (batched in one transaction per request) |
 | Pull items/s | ~5,000–10,000 (read-only, PG handles concurrent reads) |
-| Snapshot requests/s | ~20–50 (3 SQL queries each, cached 5 min) |
+| Snapshot requests/s | ~20–50 (single snapshot_all query, cached 15 min) |
 | Memory per connection | ~50 KB (tokio task + buffer) |
 | Memory for 200 connections | ~10 MB (well within 512 MB) |
 | PG pool overhead | ~30 MB (20 connections × ~1.5 MB each) |
@@ -273,11 +272,11 @@ The 20-connection PG pool (`OZ_DB_POOL_SIZE=20`) handles concurrent requests. Wh
 
 ### 7.3 Snapshot Cache Miss Penalty
 
-When the 5-minute cache expires, the snapshot handler executes three SQL queries (products + tax_rates + users) and serializes the result to JSON. For a tenant with 1,000 products, this takes ~50–100 ms on PostgreSQL.
+When the 15-minute cache expires, the snapshot handler executes `snapshot_all` (products + tax_rates + users in one transaction) and serializes the result to JSON once. For a tenant with 1,000 products, this takes ~50–100 ms on PostgreSQL.
 
-**Impact:** Every 5 minutes, each terminal pays a one-time latency penalty on its next sync.
+**Impact:** Every 15 minutes, each terminal pays a one-time latency penalty on its next sync.
 
-**Mitigation:** The 5-minute TTL is a reasonable trade-off. Extending to 15 minutes would reduce cache misses by 3× with minimal staleness risk for reference data.
+**Mitigation:** The 15-minute TTL (implemented — was 5 min) is a reasonable trade-off: it reduces cache misses by 3× with minimal staleness risk for reference data.
 
 ### 7.4 Tokio Worker Threads
 
@@ -289,7 +288,7 @@ Two worker threads by default. CPU-bound work (JSON serialization, HMAC verifica
 
 ### 7.5 Health Check DB Queries
 
-The `/health` endpoint runs three async SQL queries on PostgreSQL (ping, queue depth, last sync). Under load, health checks share the connection pool with sync handlers.
+The `/health` endpoint runs two async SQL queries on PostgreSQL (queue depth, last sync; the pool acquisition doubles as the ping) and three on SQLite (ping + depth + last sync). Under load, health checks share the connection pool with sync handlers.
 
 **Impact:** Health check latency may spike if the pool is saturated. Docker healthcheck may mark the container unhealthy if the health endpoint takes >5 s.
 
@@ -306,13 +305,13 @@ The `/health` endpoint runs three async SQL queries on PostgreSQL (ping, queue d
 - Runs in `spawn_blocking` to avoid blocking the async runtime
 - **Impact:** Negligible under normal load. On large databases (>100K rows), the first prune cycle may take 10–30 s.
 
-### 8.2 Email Report Sender (Every 60 s)
+### 8.2 Email Report Sender (Every 300 s)
 
 - Polls tenant settings for scheduled reports
 - Acquires a Postgres advisory lock per tenant (serializes across instances)
 - Generates analytics bundle (10 report queries) + builds HTML email
 - Sends via SMTP (lettre async transport)
-- **Impact:** CPU-intensive (analytics queries + HTML rendering). On PostgreSQL, advisory locks prevent duplicate sends across multiple container instances.
+- **Impact:** CPU-intensive (analytics queries + HTML rendering). On PostgreSQL, advisory locks prevent duplicate sends across multiple container instances. Poll interval was reduced from 60 s to 300 s — reports are hourly, so a 60 s poll wasted CPU.
 
 ### 8.3 Rate Limit Cleanup (Every 5 min)
 
@@ -514,7 +513,7 @@ The current architecture is single-instance (SQLite mutex, in-memory cache, in-m
 |-----------|------|-----------|
 | Tokio runtime config | `apps/cloud-server/src/main.rs` | `#[tokio::main(flavor = "multi_thread", worker_threads = 2)]` |
 | Concurrency limits | `apps/cloud-server/src/main.rs` | `ConcurrencyLimitLayer::new(10)` / `new(40)` |
-| Sync push handler | `apps/cloud-server/src/sync_api.rs` | `push_handler` — sequential per-item INSERT |
+| Sync push handler | `apps/cloud-server/src/sync_api.rs` | `push_handler` — batch insert in one transaction (`push_batch`) |
 | Sync pull handler | `apps/cloud-server/src/sync_api.rs` | `pull_handler` — cursor-based pagination |
 | Snapshot cache | `apps/cloud-server/src/sync_api.rs` | `SnapshotCache` type alias, 5-min TTL |
 | Rate limiter | `apps/cloud-server/src/rate_limit.rs` | Token bucket with per-endpoint config |
