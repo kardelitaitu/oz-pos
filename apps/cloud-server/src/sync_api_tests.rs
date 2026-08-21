@@ -1665,3 +1665,123 @@ async fn rate_limit_status_endpoint_within_burst_limit() {
         );
     }
 }
+
+// ── Pool wait bound (SOTA finding D) ─────────────────────────────
+
+/// Build a PG-backed SyncState + router whose pool is `max_size(1)`.
+async fn pg_router_with_pool_size(
+    url: &str,
+    size: usize,
+) -> Option<(axum::Router, deadpool_postgres::Pool, SyncState)> {
+    let pool = match crate::db::DbPool::connect_postgres(url, false, size, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG pool-bound integration test skipped: {e}");
+            return None;
+        }
+    };
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: Some(pool.clone()),
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+    Some((app, pool, state))
+}
+
+/// The end-to-end version of the pool wait bound: with a fully-exhausted
+/// PG pool (max_size(1), connection held), a real push request must
+/// complete with a 500 within ~5s — NOT hang indefinitely. This is the
+/// doc §7.2 scenario through the full handler → store → pool stack.
+#[tokio::test]
+async fn pg_integration_push_returns_500_when_pool_exhausted() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let Some((app, pool, _state)) = pg_router_with_pool_size(&url, 1).await else {
+        return;
+    };
+
+    // Exhaust the pool: take the single connection and hold it.
+    let _held = pool.get().await.expect("first get should succeed");
+
+    let id = uuid::Uuid::now_v7().to_string();
+    let body = format!(
+        r#"[{{"id":"{id}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+
+    // Guard with 15s: a regression that removes the 5s wait_timeout
+    // fails the test instead of hanging the whole suite.
+    let result = tokio::time::timeout(std::time::Duration::from_secs(15), app.oneshot(req)).await;
+    let resp = match result {
+        Err(_) => panic!("push hung beyond 15s — wait_timeout lost"),
+        Ok(Ok(resp)) => resp,
+        Ok(Err(_)) => unreachable!("tower oneshot error is infallible"),
+    };
+
+    assert_eq!(
+        resp.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "exhausted pool must fail fast with 500, not hang"
+    );
+}
+
+/// After the held connection is dropped, the same router must serve
+/// requests again — the pool must not be permanently poisoned by the
+/// timeout path.
+#[tokio::test]
+async fn pg_integration_pool_recovers_after_exhaustion() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let Some((app, pool, _state)) = pg_router_with_pool_size(&url, 1).await else {
+        return;
+    };
+
+    // Exhaust → push fails fast.
+    {
+        let _held = pool.get().await.expect("first get should succeed");
+        let id = uuid::Uuid::now_v7().to_string();
+        let body = format!(
+            r#"[{{"id":"{id}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+        );
+        let req = authed_post("/api/sync/push", &body, None);
+        let resp =
+            tokio::time::timeout(std::time::Duration::from_secs(15), app.clone().oneshot(req))
+                .await
+                .expect("push must complete within 15s")
+                .expect("tower oneshot error is infallible");
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    } // held connection dropped here → slot freed
+
+    // The SAME router now succeeds: the pool recovers.
+    let id = uuid::Uuid::now_v7().to_string();
+    let body = format!(
+        r#"[{{"id":"{id}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "pool must recover after drop"
+    );
+
+    // Verify the item actually persisted in PG (the handler wrote through
+    // the PG store, not the SQLite fallback).
+    let client = pool.get().await.unwrap();
+    let count: i64 = client
+        .query_one("SELECT COUNT(*) FROM offline_queue WHERE id = $1", &[&id])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(count, 1);
+    client
+        .execute("DELETE FROM offline_queue WHERE id = $1", &[&id])
+        .await
+        .unwrap();
+}
