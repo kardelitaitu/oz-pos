@@ -165,7 +165,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A10 oz-lua | 2.18 (cold 11.8) | — (plateaued) | | | none — spawn floor, no delays |
 | A11 oz-hal | ~3.5–5.0 (cold 27.9) | — (plateaued) | | | none — spawn floor; tcp_reconnect sleeps are kernel-necessary |
 | A12 oz-api | 4.44 (non-PG; cold 36.6) | — (plateaued, PG blocked) | | | none — 5 live-PG tests blocked by other agent's migrations |
-| A13 cloud-server | | | | | |
+| A13 cloud-server | — (blocked) | | | | blocked: other agent's email_pg.rs borrow error breaks compile |
 | A14 desktop-client | | | | | |
 | A15 tablet-client | | | | | |
 | A16 modules | | | | | |
@@ -290,7 +290,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · clean measurement (non-PG) · commit `f7bd0feb` · warm median 4.44 s (runs 5.03/4.44/3.96)** — `cargo nextest run -p oz-api -E 'not test(pg_integration_)'`; **158 tests, all pass** in ~2.5–3.5 s real work. No sleeps/waits in non-PG tests. **Area plateaued (non-PG)**; the 5 PG tests need the other agent's schema work to land before they can be re-measured.
 
 ### A13 cloud-server
-- [ ] baseline pending
+- **2026-08-22 · commit `59732736` · BLOCKED BY OTHER AGENT** — `email_pg.rs:821` has a borrow error (`cannot borrow client as immutable because it is also borrowed as mutable`) from the other agent's in-flight WIP. The crate does not compile. 185 non-PG tests exist but cannot be measured until the other agent's work lands. Marked for re-measurement later.
 
 ### A14 desktop-client
 - [ ] baseline pending
