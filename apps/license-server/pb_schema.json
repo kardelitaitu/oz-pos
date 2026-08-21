@@ -953,14 +953,14 @@
         "presentable": false,
         "required": true,
         "system": false,
-      "type": "select",
-      "values": [
-        "windows",
-        "android",
-        "linux",
-        "macos",
-        "unknown"
-      ]
+        "type": "select",
+        "values": [
+          "windows",
+          "android",
+          "linux",
+          "macos",
+          "unknown"
+        ]
       },
       {
         "help": "Client app version that claimed the trial.",
@@ -1263,7 +1263,6 @@
     ]
   },
   {
-    "id": "enterprise_approvals",
     "name": "enterprise_approvals",
     "type": "base",
     "system": false,
@@ -1328,7 +1327,11 @@
         "system": false,
         "type": "select",
         "maxSelect": 1,
-        "values": ["unused", "redeemed", "expired"]
+        "values": [
+          "unused",
+          "redeemed",
+          "expired"
+        ]
       },
       {
         "help": "Sales rep or admin who generated this code.",
