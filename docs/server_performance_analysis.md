@@ -110,16 +110,6 @@ The only downside vs SQLite is ~1 ms network latency per query (vs 0 ms for loca
 Every design decision follows these principles (in priority order):
 
 1. **Minimize CPU** — The server runs on 0.2 cores. Every CPU cycle spent on compression, HMAC verification, or JSON serialization is a cycle stolen from serving terminals.
-2. **Minimize memory** — 512 MB is plenty, but every MB used by the server is a MB unavailable for the connection pool and OS buffers.
-3. **Minimize I/O** — Fewer disk writes = longer SSD life = fewer upgrades. Batch writes, prune aggressively, compress responses.
-4. **Minimize network** — Smaller payloads = less bandwidth = faster sync. Gzip compression, cursor-based pagination, snapshot caching.
-5. **Minimize complexity** — Simple code has fewer bugs, faster cold starts, and smaller Docker images. Single container, managed database, auto-detection.
-
-### 3.3 Efficiency Principles
-
-Every design decision follows these principles (in priority order):
-
-1. **Minimize CPU** — The server runs on 0.2 cores. Every CPU cycle spent on compression, HMAC verification, or JSON serialization is a cycle stolen from serving terminals.
 2. **Minimize memory** — 512 MB is plenty, but every MB used by the server is a MB unavailable for the PostgreSQL connection pool and OS buffers.
 3. **Minimize I/O** — Fewer disk writes = longer SSD life = fewer upgrades. Batch writes, prune aggressively, compress responses.
 4. **Minimize network** — Smaller payloads = less bandwidth = faster sync. Gzip compression, cursor-based pagination, snapshot caching.
@@ -397,8 +387,8 @@ Same base memory + larger PG pool (~100 MB for 50 connections) + larger snapshot
 | Done | # | Optimization | CPU Saved | Extra Terminals | Where |
 |------|---|-------------|-----------|----------------|--------|
 | [x] | 1 | Remove duplicate gzip | ~0.01 core | +20 | `main.rs:470` — removed `CompressionLayer`, Caddy handles it |
-| [x] | 2 | Extend snapshot cache TTL | ~0.01 core | +40 | `sync_api.rs:358` — 300s → 900s (15 min) |
-| [x] | 3 | JWT token caching | ~0.005 core | +20 | `auth.rs:127` — `RwLock<HashMap>` with 60s TTL, skips HMAC + base64 on hot paths |
+| [x] | 2 | Extend snapshot cache TTL | ~0.01 core | +40 | `sync_api.rs:357` — 300s → 900s (15 min) |
+| [x] | 3 | JWT token caching | ~0.005 core | +20 | `auth.rs:34` — `RwLock<HashMap>` with 60s TTL, skips HMAC + base64 on hot paths |
 | [x] | 4 | Skip UUID validation | ~0.02 core | +80 | `sync_api.rs:193` — `OZ_SKIP_PUSH_VALIDATION=1` env var, saves ~5µs × 20 items × 200 pushes/sec |
 | [x] | 5 | Reduce snapshot payload | ~0.005 core | +20 | `sync_store.rs` — omit null optional fields from JSON, saves ~30% payload |
 | [x] | 6 | Batch snapshot queries | ~0.002 core | +8 | `sync_store.rs:snapshot_all()` — 1 transaction instead of 3, saves 3 round-trips |
@@ -443,10 +433,10 @@ With all optimizations implemented, the free-tier ceiling rises from **~200 to ~
 | Metric | Alert Threshold | Meaning |
 |--------|-----------------|---------|
 | `sync_push_duration_ms` (histogram) | p99 > 500 ms | Push latency spike — likely mutex contention |
-| `db_contention_seconds{op="push"}` (histogram) | mean > 100 ms | DB lock wait time too high |
+| `db_connection_contention_seconds{handler="push"}` (histogram) | mean > 100 ms | DB lock wait time too high |
 | `sync_anchor_expired_total` (counter) | rate > 0.1/s | Clients falling behind 90-day retention |
 | `rate_limit_429_total` (counter) | rate > 1/s sustained | Tenant misbehaving or brute-force |
-| `health_check_failure_total` (counter) | > 0 | DB unreachable |
+| `health_check_failures_total` (counter) | > 0 | DB unreachable |
 | `health_db_latency_micros` (histogram) | p99 > 5000 µs | DB under pressure |
 | `sync_pull_row_decode_failures_total` (counter) | > 0 | Schema drift between server and client |
 | `webhook_5xx_total` (counter) | > 0 | Payment state may be stale |
