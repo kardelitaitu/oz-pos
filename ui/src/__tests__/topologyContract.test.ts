@@ -1149,7 +1149,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    const tierErrors = validateTopologyGraph(normalized, 'standard').filter(
+    const tierErrors = validateTopologyGraph(normalized, 'plus').filter(
       (e) => e.code === 'warehouse-tier-limit',
     );
     // Exactly ONE excess Stock Room for two warehouses — the second node is
@@ -1181,7 +1181,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    const tierErrors = validateTopologyGraph(normalized, 'standard').filter(
+    const tierErrors = validateTopologyGraph(normalized, 'plus').filter(
       (e) => e.code === 'warehouse-tier-limit',
     );
     expect(tierErrors.map((e) => e.nodeId)).toEqual(['wh-mid', 'wh-leaf']);

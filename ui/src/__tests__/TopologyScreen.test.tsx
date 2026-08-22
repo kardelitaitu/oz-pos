@@ -15,7 +15,7 @@ import type { SubscriptionCapabilities } from '@/api/subscription';
 
 // Tier is switchable per test — the capacity guards are Pro-gated, and
 // the screen's Apply gate must agree with the editor's live gate.
-let mockLicenseTier: string = 'standard';
+let mockLicenseTier: string = 'plus';
 vi.mock('@/api/license', () => ({
   checkLicenseStatus: () => Promise.resolve({ tier: mockLicenseTier }),
 }));
@@ -270,7 +270,7 @@ function appliedArgs() {
 describe('TopologyScreen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockLicenseTier = 'standard';
+    mockLicenseTier = 'plus';
     mockIsManager = true;
     mockCanSaveTopology.mockImplementation(() => Promise.resolve(mockIsManager));
     capturedEditorProps = {};
