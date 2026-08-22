@@ -96,20 +96,22 @@ impl Store<'_> {
 
         let id = uuid::Uuid::now_v7().to_string();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let store_key = input.store_id.as_deref().unwrap_or("");
 
         let tx = self.conn.unchecked_transaction()?;
 
-        // Upsert the daily counter.
+        // Upsert the daily counter, keyed by (date, store) so each store's
+        // tickets start at #1 daily. '' = legacy single-store rows.
         tx.execute(
-            "INSERT INTO kds_daily_counters (date, counter) VALUES (?1, 1)
-             ON CONFLICT(date) DO UPDATE SET counter = counter + 1",
-            params![today],
+            "INSERT INTO kds_daily_counters (date, store_id, counter) VALUES (?1, ?2, 1)
+             ON CONFLICT(date, store_id) DO UPDATE SET counter = counter + 1",
+            params![today, store_key],
         )?;
 
         // Read back the counter.
         let display_number: i64 = tx.query_row(
-            "SELECT counter FROM kds_daily_counters WHERE date = ?1",
-            params![today],
+            "SELECT counter FROM kds_daily_counters WHERE date = ?1 AND store_id = ?2",
+            params![today, store_key],
             |row| row.get(0),
         )?;
 

@@ -6102,3 +6102,28 @@ left as documented behavior; no further action. Next: consider extracting
 the inline test modules to *_tests.rs siblings per AGENTS.md convention
 (currency module still uses inline #[cfg(test)] mod tests).
 
+
+## 2026-08-22 — TDD cycle: KDS bug hunt round 3 (per-store display numbers)
+
+**Problem:** kds_daily_counters was keyed by date only, so in a multi-store
+deployment two stores' first tickets of the day collided (store B's first
+ticket got #N where N = store A's count). The counter is used for kitchen
+display number ("Order #42 up!"), so colliding numbers across stores
+cause confusion on shared databases.
+
+**Solution:** TDD Red->Green.
+- RED: display_number_is_per_store — creates orders for store A (2) and
+  store B (1), asserts store B's first ticket is #1. Failed with #3
+  (global counter claimed 1, 2 for store A, then 3 for store B).
+- GREEN: counter keyed by (date, store_id) — schema change in both
+  init.sql + init.pg.sql; incremental migration
+  (20260822_kds_counter_store.sql) rebuilds the table for existing DBs;
+  create_kds_order_with_target keys the counter upsert on store_id
+  ('' for legacy single-store). Migration registered in ALL array.
+
+**Verification:** oz-core 2022/2022; migration tests 19/19 (incl. PG
+table-surface parity + upgrade idempotency); fmt + clippy -D warnings
+clean.
+
+**Risks / follow-ups:** fanout atomicity (partial ticket on crash) is the
+remaining KDS area — deferred.

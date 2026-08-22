@@ -236,8 +236,12 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
     REFERENCES inventory_shifts(id));
 
 CREATE TABLE IF NOT EXISTS kds_daily_counters (
-    date        TEXT PRIMARY KEY,
-    counter     INTEGER NOT NULL DEFAULT 0
+    -- Display-number counter per (day, store): each store's tickets start
+    -- at #1 daily. '' = legacy single-store rows (no store identity).
+    date        TEXT NOT NULL,
+    store_id    TEXT NOT NULL DEFAULT '',
+    counter     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (date, store_id)
 );
 
 CREATE TABLE IF NOT EXISTS kds_line_items (

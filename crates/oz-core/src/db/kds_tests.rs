@@ -682,6 +682,95 @@ fn display_number_increments_per_day() {
     assert_eq!(o2.display_number, Some(2));
 }
 
+/// RED: display numbers must be per-STORE, not global. The counter is keyed
+/// by date only, so in a multi-store deployment (kds_orders carries
+/// store_id) two stores' first tickets of the day collide — the kitchen
+/// shouts "#1 up!" at both stores. Each store must start at 1.
+#[test]
+fn display_number_is_per_store() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    let mk_sale = |sid: &str| {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        Sale {
+            id: sid.to_string(),
+            status: crate::SaleStatus::Completed,
+            total: price(0),
+            currency: usd(),
+            line_count: 0,
+            payment_method: None,
+            tendered_minor: None,
+            discount_percent: 0,
+            discount_label: None,
+            user_id: None,
+            created_at: now.clone(),
+            updated_at: now,
+            subtotal: price(0),
+            tax_total: price(0),
+            customer_id: None,
+            base_currency: None,
+            base_total_minor: None,
+            tender_rate_millionths: None,
+            tip_minor: 0,
+            service_charge_minor: 0,
+            lines: vec![],
+            version: 1,
+        }
+    };
+    s.create_sale(&mk_sale("store-a-sale-1")).unwrap();
+    s.create_sale(&mk_sale("store-a-sale-2")).unwrap();
+    s.create_sale(&mk_sale("store-b-sale-1")).unwrap();
+
+    // Store A gets two tickets today.
+    let a1 = s
+        .create_kds_order(CreateKdsOrderInput {
+            sale_id: "store-a-sale-1".into(),
+            store_id: Some("store-a".into()),
+            items_summary: "A1".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+    let a2 = s
+        .create_kds_order(CreateKdsOrderInput {
+            sale_id: "store-a-sale-2".into(),
+            store_id: Some("store-a".into()),
+            items_summary: "A2".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+    // Store B gets its first ticket of the day.
+    let b1 = s
+        .create_kds_order(CreateKdsOrderInput {
+            sale_id: "store-b-sale-1".into(),
+            store_id: Some("store-b".into()),
+            items_summary: "B1".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+    assert_eq!(a1.display_number, Some(1));
+    assert_eq!(a2.display_number, Some(2));
+    assert_eq!(
+        b1.display_number,
+        Some(1),
+        "store B's first ticket of the day must be #1, not #{} (global counter collision)",
+        b1.display_number.unwrap_or(0)
+    );
+}
+
 // ── CHECK constraint tests ──────────────────────────────────────
 
 #[test]
