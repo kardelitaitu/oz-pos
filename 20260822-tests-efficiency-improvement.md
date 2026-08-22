@@ -185,7 +185,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A30 a11y suite | 4.05 | — (plateaued) | | | no reducible delays — 2.1s test work + vitest transform/jsdom overhead (3s+2s); all 12 tests pass, no waitForTimeout or redundant waits |
 | A31 vitest coverage | 67.3 (warm median) | | | | 395 files / 6911 tests + v8 instrumentation; ~12% overhead vs full suite (59.9s) |
 | A32 vitest per-group | N/A | | | | scoped runs are the iteration tool, not a deliverable |
-| A33 e2e api | — (pending) | | | | needs Docker-provisioned backend (npm run e2e pipeline) |
+| A33 e2e api | 3.2 (warm median) | | | | 12 tests (2 projects × 6), all pass; cloud-server + license-server + redis healthy |
 | A34 e2e perf-smoke | — (pending) | | | | needs Docker backend + perf baseline |
 | A35 e2e remaining | 465 (7m45s) | 391 (6m31s, −16%) | 369 (6m9s, −20.7%) | | round 1: cut50 waits (adr22, sale, settings). round 2: −52 more (inventory-workflows 18, settings-persist 15, refund 10, kds-critical-path 9). shift.spec.ts/shift-reconciliation untouched (timing-sensitive) |
 | A36 script tests | 3.34 | 3.34 (46/46 pass) | | | fixed 3 failing tests: cross-platform python resolution |
@@ -357,7 +357,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · N/A** — scoped `vitest run src/__tests__/<group>/` runs are the *iteration tool* for the campaign, not a standalone deliverable; covered implicitly by A29. Not measured separately.
 
 ### A33 e2e api
-- **2026-08-22 · PENDING** — `api.spec.ts` requires the Docker-provisioned backend via the managed `npm run e2e` pipeline. Not run in this pass (heavy provisioning; machine contended). Revisit in the e2e-focused session.
+- **2026-08-22 · baseline · commit `aa0e6980` · warm median 3.2 s (runs 3.1/3.2/5.3)** — `npm run test:e2e -- e2e/api.spec.ts` (from `ui/`); **12 tests (desktop + tablet × 6)**, all pass. Backend: e2e-cloud-server (port 3099), e2e-license-server (port 8080), e2e-redis (port 6379), dev PG (port 15432) — all healthy. Machine: DESKTOP-PC-R9 · Ryzen 9 7950X (32 logical) · 63.2 GB · Windows 11 26200 · Playwright 1.61.1 · 2 workers. Duration breakdown: setup (Docker services pre-provisioned) + Vite dev server (2s) + 12 fast API calls (<20ms each). **Area plateaued** — test logic is pure HTTP asserts; no waits to cut. Further gains would need Playwright parallelism or lighter backend (infra-level).
 
 ### A34 e2e perf-smoke
 - **2026-08-22 · PENDING** — `perf-smoke.spec.ts` requires Docker backend + perf baseline. Not run in this pass.
