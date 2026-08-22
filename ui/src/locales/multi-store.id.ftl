@@ -238,6 +238,15 @@ topology-ws-type-store-pos = POS Ritel
 topology-ws-type-restaurant-pos = POS Restoran
 topology-ws-type-kds = Kitchen Display (KDS)
 topology-ws-type-warehouse = Gudang
+topology-node-type-store = Branch Location
+topology-node-type-workspace = Workspace
+topology-node-type-warehouse = Gudang
+topology-node-type-hardware = Perangkat Keras
+topology-hardware-thermal-receipt = Printer Thermal Struk
+topology-hardware-thermal-kitchen = Printer Dapur
+topology-hardware-barcode-scanner = Pemindai Barcode
+topology-hardware-cash-drawer = Laci Kas
+topology-hardware-display-customer = Display Pelanggan
 
 # ── Aria labels & tooltips ──
 topology-node-drag-hint = Seret untuk memindahkan

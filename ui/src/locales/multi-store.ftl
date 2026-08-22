@@ -240,6 +240,15 @@ topology-ws-type-store-pos = Retail POS
 topology-ws-type-restaurant-pos = Restaurant POS
 topology-ws-type-kds = Kitchen Display (KDS)
 topology-ws-type-warehouse = Warehouse
+topology-node-type-store = Branch Location
+topology-node-type-workspace = Workspace
+topology-node-type-warehouse = Warehouse
+topology-node-type-hardware = Hardware Device
+topology-hardware-thermal-receipt = Thermal Receipt Printer
+topology-hardware-thermal-kitchen = Kitchen Printer
+topology-hardware-barcode-scanner = Barcode Scanner
+topology-hardware-cash-drawer = Cash Drawer
+topology-hardware-display-customer = Customer Display
 
 # ── Aria labels & tooltips ──
 topology-node-drag-hint = Drag to move
