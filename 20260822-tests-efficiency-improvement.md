@@ -389,6 +389,19 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 ### A38 check:all aggregate
 - **2026-08-22 · ENVIRONMENT-LIMITED (not repo-blocked)** — `npm run check:all` → `scripts/check-ui.mjs` shells out to `check.sh`, which fails at gate 01 for the same bash-PATH reason as A37. **N/A on this machine** — the same environmental limitation; measure in CI / Linux.
 
+### PosScreen TDD Audit (2026-08-23)
+
+- **2026-08-23 · baseline** — PosScreen.tsx 2,329 lines, existing coverage 41.59% (PosScreen.test.tsx + PosScreenDeductionLocation.test.tsx cover bundle scan toasts + deduction badge only).
+- **2026-08-23 · attempt 1** — Added PosScreen.integration.test.tsx covering:
+  - Cart panel width persistence (localStorage init, clamping, window resize re-clamp)
+  - Shift display (no active shift, elapsed time via shiftFixture)
+  - Cart locked persistence (restore on mount, clear after restore)
+  - Empty cart state
+  - Sub-screens navigation (Tables, Sales History via header buttons)
+  - Payment button (Charge button visibility)
+  - **Coverage delta**: 41.59% → 44.24% (+2.65%)
+- **Status**: IN PROGRESS — need to add tests for: keyboard navigation, discount input, tip segments, service charge, open bills, price override, FastPINOverlay, course firing, payment modal integration, WorkspaceSettingsModal, undo stack, live tax preview.
+
 ---
 
 ## 8. Coordination & boundaries
