@@ -531,29 +531,36 @@ pub async fn apply_topology_diff(
                 )));
             }
         }
-        if let Some(limit) = effective_tier.max_pos_instances() {
-            let current = store.count_active_instances(&effective_store_id)?;
-            let archived_ids: std::collections::HashSet<&str> =
-                workspace_archives.iter().map(String::as_str).collect();
-            let archived_active = archived_ids
-                .iter()
-                .filter(|id| {
-                    store
-                        .conn()
-                        .query_row(
-                            "SELECT status = 'active' FROM workspace_instances WHERE id = ?1",
-                            rusqlite::params![id],
-                            |row| row.get::<_, bool>(0),
-                        )
-                        .unwrap_or(false)
-                })
-                .count() as i64;
-            let projected = current - archived_active + workspace_creations.len() as i64;
-            if projected > limit {
-                return Err(AppError::PermissionDenied(format!(
-                    "workspace instance quota exceeded: limit {limit}, current {current}, archived {archived_active}, requested {}, projected {projected}",
-                    workspace_creations.len()
-                )));
+        // Quota check: only enforce when new workspaces are actually being
+        // created. Topology edits (0 creates, 0 archives) should not be
+        // blocked by the quota — the user is reorganizing existing workspaces,
+        // not adding new ones. This prevents a tier downgrade from locking
+        // the user out of editing their existing topology.
+        if !workspace_creations.is_empty() {
+            if let Some(limit) = effective_tier.max_pos_instances() {
+                let current = store.count_active_instances(&effective_store_id)?;
+                let archived_ids: std::collections::HashSet<&str> =
+                    workspace_archives.iter().map(String::as_str).collect();
+                let archived_active = archived_ids
+                    .iter()
+                    .filter(|id| {
+                        store
+                            .conn()
+                            .query_row(
+                                "SELECT status = 'active' FROM workspace_instances WHERE id = ?1",
+                                rusqlite::params![id],
+                                |row| row.get::<_, bool>(0),
+                            )
+                            .unwrap_or(false)
+                    })
+                    .count() as i64;
+                let projected = current - archived_active + workspace_creations.len() as i64;
+                if projected > limit {
+                    return Err(AppError::PermissionDenied(format!(
+                        "workspace instance quota exceeded: limit {limit}, current {current}, archived {archived_active}, requested {}, projected {projected}",
+                        workspace_creations.len()
+                    )));
+                }
             }
         }
 
