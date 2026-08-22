@@ -9,7 +9,7 @@ use oz_core::db::Store;
 use oz_core::permissions;
 use oz_core::subscription::TenantSubscription;
 
-use crate::commands::authz::require_permission_for_session;
+use crate::commands::authz::require_permission_for_user;
 use crate::commands::workspaces::CreateInstanceRequest;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -30,7 +30,12 @@ pub async fn can_save_topology(
     state: State<'_, AppState>,
 ) -> Result<bool, AppError> {
     let session = state.resolve_session(&session_token)?;
-    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
+    // Topology is a global admin tool — use scope-free permission check.
+    {
+        let global_db = state.db.lock().await;
+        let global_store = Store::new(&global_db);
+        require_permission_for_user(&global_store, &session.user_id, permissions::STAFF_UPDATE)?;
+    }
     Ok(true)
 }
 
@@ -183,12 +188,19 @@ pub async fn apply_topology_diff(
     )?;
 
     // Authorization: workspace topology changes require admin access. The
-    // session user's identity + role live in the GLOBAL identity DB — the
-    // store-scoped DB below has an empty `users` table by design, so the
-    // gate MUST run here against the global DB. (Authorizing against the
-    // store connection would deny every caller — owner included — with
-    // "user not found".)
-    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
+    // topology Apply is a GLOBAL admin operation — it modifies workspace
+    // instances across branches/stores, so it must NOT be scope-restricted.
+    // Use require_permission_for_user (which skips the branch/workspace
+    // scope check) instead of require_permission_for_session. The user's
+    // identity + role live in the GLOBAL identity DB — the store-scoped
+    // DB below has an empty `users` table by design, so the gate MUST run
+    // here against the global DB. (Authorizing against the store connection
+    // would deny every caller — owner included — with "user not found".)
+    {
+        let global_db = state.db.lock().await;
+        let global_store = Store::new(&global_db);
+        require_permission_for_user(&global_store, &session.user_id, permissions::STAFF_UPDATE)?;
+    }
 
     // A retried request returns the original result without repeating any
     // workspace mutation. The process-wide Apply lock also makes the
