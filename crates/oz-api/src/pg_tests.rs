@@ -70,6 +70,74 @@ fn unique_id(prefix: &str) -> String {
     format!("{prefix}-{}", uuid::Uuid::now_v7())
 }
 
+/// Create a throwaway database, apply the full schema to it, and return
+/// `(pool, db_name, admin_pool)`. Tests that exercise concurrency on
+/// `products`/`sales` rows (`FOR UPDATE` chains, `adjust_stock`,
+/// `create_sale`) must run on a throwaway DB: on the SHARED base DB, a
+/// lock-ordering collision with another parallel test process (or its
+/// `PG_INIT` DDL re-apply) surfaces as a spurious deadlock/lock-timeout
+/// abort — the terse `Db("db error")`. The throwaway DB removes that whole
+/// flake class while keeping the test's semantics identical. Callers must
+/// `DROP DATABASE {db_name} WITH (FORCE)` in cleanup (see the existing
+/// `concurrent_adjust_stock` test for the exact shape).
+async fn throwaway_test_pool(
+    url: &str,
+    prefix: &str,
+) -> Option<(deadpool_postgres::Pool, String, deadpool_postgres::Pool)> {
+    // Admin connection is raw (no schema): it only creates/drops the
+    // throwaway database, so it must not re-apply PG_INIT to the shared
+    // base DB (concurrent catalog DDL across parallel test binaries).
+    let admin_pool = raw_pool(url).await?;
+    let admin = admin_pool.get().await.ok()?;
+
+    // Sweep throwaway databases a crashed run left behind (only tests
+    // with this prefix create them), so stale DBs cannot accumulate or
+    // collide with a fresh run after an OS PID is reused.
+    let stale: Vec<String> = admin
+        .query(
+            "SELECT datname FROM pg_database WHERE datname LIKE $1",
+            &[&format!("{prefix}_%")],
+        )
+        .await
+        .ok()?
+        .iter()
+        .map(|r| r.get::<_, String>(0))
+        .collect();
+    for d in &stale {
+        admin
+            .batch_execute(&format!("DROP DATABASE IF EXISTS {d} WITH (FORCE);"))
+            .await
+            .ok()?;
+    }
+    // PID + random suffix: unique even if the OS reuses a PID while a
+    // stale DB from a crashed run is still present.
+    let db_name = format!("{prefix}_{}_{}", std::process::id(), uuid::Uuid::now_v7());
+    if admin
+        .execute(&format!("CREATE DATABASE {db_name}"), &[])
+        .await
+        .is_err()
+    {
+        eprintln!("PG integration skipped: cannot CREATE DATABASE");
+        return None;
+    }
+    drop(admin);
+
+    let (base, query) = match url.split_once('?') {
+        Some((b, q)) => (b, Some(q)),
+        None => (url, None),
+    };
+    let (head, _old_db) = base
+        .rsplit_once('/')
+        .expect("URL must have a database path");
+    let db_url = match query {
+        Some(q) => format!("{head}/{db_name}?{q}"),
+        None => format!("{head}/{db_name}"),
+    };
+    // `test_pool` applies PG_INIT (full schema) to the throwaway DB.
+    let pool = test_pool(&db_url).await?;
+    Some((pool, db_name, admin_pool))
+}
+
 /// Integration test against a live Postgres (the same Docker service
 /// `db.rs` uses, port 15432). Skips when unreachable, so the suite stays
 /// green on machines without a running Postgres.
@@ -77,7 +145,10 @@ fn unique_id(prefix: &str) -> String {
 async fn pg_integration_rest_roundtrip() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let Some(pool) = test_pool(&url).await else {
+    // Throwaway DB: this test exercises `adjust_stock` FOR UPDATE chains on
+    // `products`; on the shared base DB a lock-ordering collision with a
+    // parallel test process surfaces as a spurious `Db("db error")` abort.
+    let Some((pool, db_name, admin_pool)) = throwaway_test_pool(&url, "oz_rest").await else {
         eprintln!("PG REST integration test skipped (Postgres unreachable at {url})");
         return;
     };
@@ -352,6 +423,16 @@ async fn pg_integration_rest_roundtrip() {
             .await
             .unwrap();
     }
+
+    // Cleanup: drop the throwaway database.
+    drop(pool);
+    admin_pool
+        .get()
+        .await
+        .expect("cleanup admin client")
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop throwaway database should succeed");
 }
 
 /// Integration test: the REST layer works under RLS as a NON-OWNER role
@@ -377,7 +458,11 @@ async fn pg_integration_rest_roundtrip() {
 async fn pg_integration_rest_rls_non_owner() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let Some(pool) = test_pool(&url).await else {
+    // Throwaway DB: this test creates a restricted role with DML grants
+    // on shared tables and runs create_sale/adjust chains; on the shared
+    // base DB concurrent role setup + FOR UPDATE chains race parallel
+    // test processes. The throwaway DB isolates both.
+    let Some((pool, db_name, admin_pool)) = throwaway_test_pool(&url, "oz_rest_rls").await else {
         eprintln!("PG REST RLS test skipped (Postgres unreachable at {url})");
         return;
     };
@@ -558,6 +643,16 @@ async fn pg_integration_rest_rls_non_owner() {
         ))
         .await
         .expect("cleanup should succeed");
+
+    // Cleanup: drop the throwaway database.
+    drop(pool);
+    admin_pool
+        .get()
+        .await
+        .expect("cleanup admin client")
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop throwaway database should succeed");
 }
 
 /// Concurrent `adjust_stock` calls must not lose updates: the whole
@@ -732,7 +827,11 @@ async fn pg_integration_concurrent_adjust_stock() {
 async fn pg_integration_concurrent_sale_status_transition() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let Some(pool) = test_pool(&url).await else {
+    // Throwaway DB: this test exercises concurrent status transitions with
+    // `FOR UPDATE` chains on `sales`; on the shared base DB a
+    // lock-ordering collision with a parallel test process surfaces as a
+    // spurious `Db("db error")` abort.
+    let Some((pool, db_name, admin_pool)) = throwaway_test_pool(&url, "oz_sale_race").await else {
         eprintln!("PG concurrent status test skipped (Postgres unreachable at {url})");
         return;
     };
@@ -805,6 +904,16 @@ async fn pg_integration_concurrent_sale_status_transition() {
         .execute("DELETE FROM sales WHERE id = $1", &[&sale.id])
         .await
         .unwrap();
+
+    // Cleanup: drop the throwaway database.
+    drop(pool);
+    admin_pool
+        .get()
+        .await
+        .expect("cleanup admin client")
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop throwaway database should succeed");
 }
 
 /// Two tenants can hold the same product SKU and the same username; each
@@ -815,7 +924,10 @@ async fn pg_integration_concurrent_sale_status_transition() {
 async fn pg_integration_tenant_sku_isolation() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let Some(pool) = test_pool(&url).await else {
+    // Throwaway DB: this test exercises `adjust_stock` FOR UPDATE chains on
+    // `products`; on the shared base DB a lock-ordering collision with a
+    // parallel test process surfaces as a spurious `Db("db error")` abort.
+    let Some((pool, db_name, admin_pool)) = throwaway_test_pool(&url, "oz_sku_iso").await else {
         eprintln!("PG tenant-isolation test skipped (Postgres unreachable at {url})");
         return;
     };
@@ -968,6 +1080,16 @@ async fn pg_integration_tenant_sku_isolation() {
         )
         .await
         .unwrap();
+
+    // Cleanup: drop the throwaway database.
+    drop(pool);
+    admin_pool
+        .get()
+        .await
+        .expect("cleanup admin client")
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop throwaway database should succeed");
 }
 
 /// RED (TDD): terminal credential verification must survive RLS cutover.
