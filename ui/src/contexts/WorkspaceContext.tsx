@@ -374,7 +374,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         // auto-boots into its store+instance instead of the primary.
         const deviceId = await getDeviceId().catch(() => "");
         const resolution = await resolveBootStore(deviceId || undefined);
-        storeId = resolution.store_id;
+        storeId = resolution.store_id || DEFAULT_STORE_ID;
         if (!cancelled) {
           setResolvedStoreId(storeId);
         }
