@@ -192,7 +192,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A37 check.sh aggregate | — (blocked) | | | | blocked: other agent's email_pg_tests.rs unclosed delimiter kills cargo fmt gate |
 | A38 check:all aggregate | — (blocked) | | | | blocked: same root cause as A37 |
 
-**Totals (A27 + A29 + A33–A36 as the canonical CI sweep):** baseline ___ s → current ___ s → **Δ ___ s (−__%)**
+**Totals (A27 + A29 + A33–A36 as the canonical CI sweep):** baseline 667.7 s → current 546.6 s → **Δ 121.1 s (−18.1%)**
 
 ---
 
