@@ -6003,3 +6003,33 @@ gate:
 Verification: oz-cloud-server clippy -D warnings clean; 211+5+2 green
 twice consecutively (a transient webhook-test stale-lock failure on the
 first pre-fix run was not reproducible).
+
+## 2026-08-21 — TDD cycle: KDS bug hunt round 1 (status state machine)
+
+**Problem:** update_kds_status (order + line item) had NO state machine:
+- any valid status could be set from any other — a stale offline replay
+  (useKdsOffline queues a status action when the KDS terminal is offline
+  and replays it on reconnect) could regress a ready/served ticket back
+  to preparing, silently OVERWRITING started_at and re-surfacing a
+  served order on the kitchen queue.
+- prep_time_seconds was read in every SELECT but NEVER written — always
+  0, so the prep-time metric the KDS queue exposes was permanently dead.
+
+**Solution:** TDD Red->Green (4 new tests in db/kds_tests.rs).
+- RED: update_kds_status_rejects_regression, _served_is_terminal,
+  _cancelled_is_terminal, _computes_prep_time_on_served — all failed
+  before the fix (regressions accepted, prep_time always 0).
+- GREEN: forward-only state machine in update_kds_status AND
+  update_kds_line_item_status: pending -> preparing -> ready -> served,
+  plus cancelled from any active state; same-state no-op allowed;
+  regressions + terminal-state moves rejected with Validation. Reaching
+  served computes prep_time_seconds = served_at - started_at (clamped
+  >= 0). Two fixture tests that jumped pending->served directly were
+  updated to walk the machine.
+
+**Verification:** oz-core 2020/2020; fmt + clippy -D warnings clean;
+oz-pos-app compiles.
+
+**Risks / follow-ups:** the UI sends strictly forward transitions, so
+the machine is compatible; the offline-replay path now dead-letters a
+stale regression instead of corrupting the ticket.

@@ -217,6 +217,155 @@ fn update_kds_status_sets_timestamps() {
     assert!(updated.served_at.is_some());
 }
 
+/// RED: status transitions must be FORWARD-only. A regression (e.g. a stale
+/// offline replay moving a ready/served order back to preparing) must be
+/// rejected — today the backend accepts it and OVERWRITES started_at,
+/// corrupting the ticket's prep metrics and re-surfacing a served order on
+/// the kitchen queue.
+#[test]
+fn update_kds_status_rejects_regression() {
+    let conn = fresh();
+    let s = store(&conn);
+    let (order, _sale) = seed_completed_sale_to_kds(&s);
+
+    // Advance to ready.
+    let updated = s.update_kds_status(&order.id, "preparing").unwrap();
+    let started_at = updated.started_at.clone();
+    assert!(started_at.is_some());
+    s.update_kds_status(&order.id, "ready").unwrap();
+
+    // Regression: ready -> preparing must be rejected and must NOT overwrite
+    // the original started_at.
+    let err = s.update_kds_status(&order.id, "preparing").unwrap_err();
+    assert!(
+        matches!(err, CoreError::Validation { .. }),
+        "regression must be a validation error, got: {err:?}"
+    );
+    let after = s.get_kds_order(&order.id).unwrap().unwrap();
+    assert_eq!(after.status, "ready", "status must stay at ready");
+    assert_eq!(
+        after.started_at, started_at,
+        "started_at must not be overwritten"
+    );
+}
+
+/// RED: served is terminal — a served order must not go back to the queue.
+#[test]
+fn update_kds_status_served_is_terminal() {
+    let conn = fresh();
+    let s = store(&conn);
+    let (order, _sale) = seed_completed_sale_to_kds(&s);
+
+    s.update_kds_status(&order.id, "preparing").unwrap();
+    s.update_kds_status(&order.id, "ready").unwrap();
+    let served = s.update_kds_status(&order.id, "served").unwrap();
+    assert!(served.served_at.is_some());
+
+    // served -> preparing / ready / pending must all be rejected.
+    for regression in ["preparing", "ready", "pending"] {
+        let err = s.update_kds_status(&order.id, regression).unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { .. }),
+            "served -> {regression} must be rejected, got: {err:?}"
+        );
+    }
+    let after = s.get_kds_order(&order.id).unwrap().unwrap();
+    assert_eq!(after.status, "served");
+}
+
+/// RED: cancelled is terminal — a cancelled order must not be resurrected.
+#[test]
+fn update_kds_status_cancelled_is_terminal() {
+    let conn = fresh();
+    let s = store(&conn);
+    let (order, _sale) = seed_completed_sale_to_kds(&s);
+
+    s.update_kds_status(&order.id, "cancelled").unwrap();
+
+    let err = s.update_kds_status(&order.id, "preparing").unwrap_err();
+    assert!(
+        matches!(err, CoreError::Validation { .. }),
+        "cancelled -> preparing must be rejected, got: {err:?}"
+    );
+}
+
+/// RED: prep_time_seconds must be computed when the order reaches served
+/// (served_at - started_at). Today the column is never written — it is read
+/// in every SELECT but always 0.
+#[test]
+fn update_kds_status_computes_prep_time_on_served() {
+    let conn = fresh();
+    let s = store(&conn);
+    let (order, _sale) = seed_completed_sale_to_kds(&s);
+
+    // Start prep 2 minutes in the past so the elapsed time is deterministic.
+    s.update_kds_status(&order.id, "preparing").unwrap();
+    let started_at = chrono::Utc::now() - chrono::Duration::minutes(2);
+    conn.execute(
+        "UPDATE kds_orders SET started_at = ?1 WHERE id = ?2",
+        rusqlite::params![
+            started_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            order.id
+        ],
+    )
+    .unwrap();
+    s.update_kds_status(&order.id, "ready").unwrap();
+    let served = s.update_kds_status(&order.id, "served").unwrap();
+    assert!(
+        served.prep_time_seconds >= 120,
+        "prep_time_seconds must be ~2 minutes (120s), got: {}",
+        served.prep_time_seconds
+    );
+}
+
+/// Helper: seed a completed sale and create a KDS order from it.
+fn seed_completed_sale_to_kds(s: &Store<'_>) -> (KdsOrder, Sale) {
+    let conn = s.conn;
+    seed_product(conn, "KDS-SKU", "Burger");
+    let sale_id = uuid::Uuid::now_v7().to_string();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let sale = Sale {
+        id: sale_id.clone(),
+        status: crate::SaleStatus::Completed,
+        total: price(0),
+        currency: usd(),
+        line_count: 0,
+        payment_method: None,
+        tendered_minor: None,
+        discount_percent: 0,
+        discount_label: None,
+        user_id: None,
+        created_at: now.clone(),
+        updated_at: now,
+        subtotal: price(0),
+        tax_total: price(0),
+        customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
+        lines: vec![],
+        version: 1,
+    };
+    s.create_sale(&sale).unwrap();
+    // No restaurant lines → complete_sale_to_kds returns nothing; create a
+    // KDS order directly so the status machine can be exercised.
+    let order = s
+        .create_kds_order(CreateKdsOrderInput {
+            sale_id: sale_id.clone(),
+            store_id: None,
+            items_summary: "Burger x1".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+    (order, sale)
+}
+
 #[test]
 fn update_kds_status_invalid() {
     let conn = fresh();
@@ -424,6 +573,8 @@ fn get_kds_queue_returns_pending_and_preparing() {
         .unwrap();
 
     s.update_kds_status(&o2.id, "preparing").unwrap();
+    s.update_kds_status(&o3.id, "preparing").unwrap();
+    s.update_kds_status(&o3.id, "ready").unwrap();
     s.update_kds_status(&o3.id, "served").unwrap();
 
     let queue = s.get_kds_queue(None).unwrap();
@@ -692,7 +843,24 @@ fn get_kds_queue_excludes_served_and_cancelled() {
             })
             .unwrap();
         if *st != "pending" {
-            s.update_kds_status(&order.id, st).unwrap();
+            // Advance through the state machine to reach the target status.
+            match *st {
+                "preparing" => {
+                    s.update_kds_status(&order.id, "preparing").unwrap();
+                }
+                "served" | "cancelled" => {
+                    s.update_kds_status(&order.id, "preparing").unwrap();
+                    s.update_kds_status(&order.id, "ready").unwrap();
+                    if *st == "served" {
+                        s.update_kds_status(&order.id, "served").unwrap();
+                    } else {
+                        s.update_kds_status(&order.id, "cancelled").unwrap();
+                    }
+                }
+                _ => {
+                    s.update_kds_status(&order.id, st).unwrap();
+                }
+            }
         }
         ids.push(order.id);
     }

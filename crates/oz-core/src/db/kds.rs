@@ -374,6 +374,14 @@ impl Store<'_> {
 
     /// Update the status of a KDS order. Automatically sets the corresponding
     /// timestamp field (started_at, ready_at, served_at) based on the new status.
+    ///
+    /// Transitions are FORWARD-ONLY: `pending → preparing → ready → served`,
+    /// plus `cancelled` from any non-terminal state. A regression (e.g. a
+    /// stale offline replay moving a served order back to preparing) is
+    /// rejected with a `Validation` error so ticket timestamps and the
+    /// kitchen queue are never corrupted. `served` and `cancelled` are
+    /// terminal. Reaching `served` computes `prep_time_seconds`
+    /// (`served_at − started_at`).
     pub fn update_kds_status(&self, id: &str, new_status: &str) -> Result<KdsOrder, CoreError> {
         let valid = KdsStatus::from_str(new_status).is_some();
         if !valid {
@@ -383,9 +391,58 @@ impl Store<'_> {
             });
         }
 
+        // ── State machine: reject regressions + transitions from terminal
+        //    states before touching any row (no partial writes).
+        let current = self.get_kds_order(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "kds_order",
+            id: id.to_owned(),
+        })?;
+        let allowed = |from: &str, to: &str| match (from, to) {
+            // Forward progression.
+            ("pending", "preparing") | ("preparing", "ready") | ("ready", "served") => true,
+            // Cancellation from any active state.
+            ("pending", "cancelled") | ("preparing", "cancelled") | ("ready", "cancelled") => true,
+            // No-op (idempotent replay of the current state).
+            (from, to) if from == to => true,
+            // Everything else (regressions, terminal-state moves) is invalid.
+            _ => false,
+        };
+        if !allowed(&current.status, new_status) {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: format!(
+                    "invalid KDS status transition: {} -> {new_status}",
+                    current.status
+                ),
+            });
+        }
+
         let now = chrono::Utc::now()
             .format("%Y-%m-%dT%H:%M:%S%.3fZ")
             .to_string();
+
+        // Compute prep time when the ticket is served: served_at - started_at.
+        let prep_time = if new_status == "served" {
+            match (current.started_at.as_deref(), Some(now.as_str())) {
+                (Some(started), Some(served)) => {
+                    let parse = |ts: &str| {
+                        chrono::DateTime::parse_from_rfc3339(ts)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .ok()
+                    };
+                    match (parse(started), parse(served)) {
+                        (Some(start), Some(served_dt)) => {
+                            let secs = served_dt.signed_duration_since(start).num_seconds();
+                            std::cmp::max(0, secs)
+                        }
+                        _ => current.prep_time_seconds,
+                    }
+                }
+                _ => current.prep_time_seconds,
+            }
+        } else {
+            current.prep_time_seconds
+        };
 
         let timestamp_col = match new_status {
             "preparing" => "started_at",
@@ -396,13 +453,15 @@ impl Store<'_> {
 
         if timestamp_col.is_empty() {
             self.conn.execute(
-                "UPDATE kds_orders SET status = ?1 WHERE id = ?2",
-                params![new_status, id],
+                "UPDATE kds_orders SET status = ?1, prep_time_seconds = ?2 WHERE id = ?3",
+                params![new_status, prep_time, id],
             )?;
         } else {
-            let sql =
-                format!("UPDATE kds_orders SET status = ?1, {timestamp_col} = ?2 WHERE id = ?3");
-            self.conn.execute(&sql, params![new_status, now, id])?;
+            let sql = format!(
+                "UPDATE kds_orders SET status = ?1, {timestamp_col} = ?2, prep_time_seconds = ?3 WHERE id = ?4"
+            );
+            self.conn
+                .execute(&sql, params![new_status, now, prep_time, id])?;
         }
 
         self.get_kds_order(id)?.ok_or_else(|| CoreError::NotFound {
@@ -815,6 +874,10 @@ impl Store<'_> {
     }
 
     /// Update a line item's status and its corresponding workflow timestamp.
+    ///
+    /// Forward-only transitions (pending → preparing → ready → served, plus
+    /// cancelled from any active state) — mirrors the order-level state
+    /// machine so a stale offline replay cannot regress a line item.
     pub fn update_kds_line_item_status(
         &self,
         item_id: &str,
@@ -824,6 +887,37 @@ impl Store<'_> {
             return Err(CoreError::Validation {
                 field: "item_status",
                 message: format!("invalid KDS line item status: {new_status}"),
+            });
+        }
+
+        // Read the current status before mutating (no partial writes on
+        // regression).
+        let current_status: String = self
+            .conn
+            .query_row(
+                "SELECT item_status FROM kds_line_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                    entity: "kds_line_item",
+                    id: item_id.to_owned(),
+                },
+                other => CoreError::Db(other),
+            })?;
+        let allowed = |from: &str, to: &str| match (from, to) {
+            ("pending", "preparing") | ("preparing", "ready") | ("ready", "served") => true,
+            ("pending", "cancelled") | ("preparing", "cancelled") | ("ready", "cancelled") => true,
+            (from, to) if from == to => true,
+            _ => false,
+        };
+        if !allowed(&current_status, new_status) {
+            return Err(CoreError::Validation {
+                field: "item_status",
+                message: format!(
+                    "invalid KDS line item status transition: {current_status} -> {new_status}"
+                ),
             });
         }
 
