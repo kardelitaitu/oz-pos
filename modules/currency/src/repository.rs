@@ -813,4 +813,58 @@ mod tests {
         assert_eq!(currencies[1].code, "EUR");
         assert_eq!(currencies[2].code, "USD");
     }
+
+    // ── Input normalization: whitespace handling ─────────────────────
+
+    #[test]
+    fn create_exchange_rate_normalizes_currency_whitespace() {
+        // "USD " (trailing space) passes the trim().is_empty() validation
+        // but must be stored normalized so a "USD" lookup finds it.
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = CurrencyRepository::new(&conn);
+        let row = repo
+            .create_exchange_rate("USD ", "EUR", 920_000, "ecb", "2026-06-28")
+            .unwrap();
+        assert_eq!(row.from_currency, "USD", "from_currency must be trimmed");
+        let found = repo
+            .get_latest_exchange_rate("USD", "EUR", "2026-07-01")
+            .unwrap()
+            .expect("rate must be findable by normalized code");
+        assert_eq!(found.id, row.id);
+    }
+
+    #[test]
+    fn create_exchange_rate_rejects_whitespace_only_currency() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        let err = repo
+            .create_exchange_rate("   ", "EUR", 920_000, "ecb", "2026-06-28")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CurrencyError::Validation {
+                field: "from_currency",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn upsert_exchange_rate_normalizes_currency_whitespace() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = CurrencyRepository::new(&conn);
+        let row = repo
+            .upsert_exchange_rate("USD ", "EUR", 920_000, "ecb", "2026-06-28")
+            .unwrap();
+        assert_eq!(row.from_currency, "USD", "from_currency must be trimmed");
+        let found = repo
+            .get_latest_exchange_rate("USD", "EUR", "2026-07-01")
+            .unwrap()
+            .expect("rate must be findable by normalized code");
+        assert_eq!(found.id, row.id);
+    }
 }
