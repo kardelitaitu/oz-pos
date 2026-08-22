@@ -266,7 +266,10 @@ CREATE TABLE IF NOT EXISTS kds_order_targets (
 
 CREATE TABLE IF NOT EXISTS "kds_orders" (
     id              TEXT PRIMARY KEY,
-    sale_id         TEXT NOT NULL UNIQUE REFERENCES sales(id),
+    -- One order per sale AND kitchen zone: a sale with items in multiple
+    -- zones fans out into one ticket per zone (multi-KDS routing), so the
+    -- uniqueness key is the (sale, zone) pair, not the sale alone.
+    sale_id         TEXT NOT NULL REFERENCES sales(id),
     -- Valid states: pending (received, not started), preparing,
     -- ready (cooked, awaiting pickup), served (delivered),
     -- cancelled (voided by kitchen or POS).
@@ -281,7 +284,8 @@ CREATE TABLE IF NOT EXISTS "kds_orders" (
     served_at       TEXT,
     prep_time_seconds INTEGER DEFAULT 0,
     notes           TEXT NOT NULL DEFAULT ''
-, store_id TEXT, kitchen_zone TEXT, table_number TEXT, priority INTEGER NOT NULL DEFAULT 0, target_instance_id TEXT);
+, store_id TEXT, kitchen_zone TEXT, table_number TEXT, priority INTEGER NOT NULL DEFAULT 0, target_instance_id TEXT,
+    UNIQUE (sale_id, kitchen_zone));
 
 CREATE TABLE IF NOT EXISTS login_attempts (
     id          TEXT PRIMARY KEY,

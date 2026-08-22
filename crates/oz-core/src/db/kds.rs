@@ -272,20 +272,17 @@ impl Store<'_> {
         }
     }
 
-    /// Get a KDS order by the originating sale id.
-    pub fn get_kds_order_by_sale(&self, sale_id: &str) -> Result<Option<KdsOrder>, CoreError> {
+    /// Get the KDS orders originating from one sale (one per kitchen zone
+    /// when the sale's items span multiple zones).
+    pub fn get_kds_orders_by_sale(&self, sale_id: &str) -> Result<Vec<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders WHERE sale_id = ?1",
         )?;
-        let result = stmt.query_row(params![sale_id], Self::row_to_kds_order);
-        match result {
-            Ok(order) => Ok(Some(order)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e.into()),
-        }
+        let rows = stmt.query_map(params![sale_id], Self::row_to_kds_order)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     /// Update the items (summary + count) on an existing KDS order.

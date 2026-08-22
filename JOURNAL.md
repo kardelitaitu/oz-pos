@@ -6033,3 +6033,36 @@ oz-pos-app compiles.
 **Risks / follow-ups:** the UI sends strictly forward transitions, so
 the machine is compatible; the offline-replay path now dead-letters a
 stale regression instead of corrupting the ticket.
+
+## 2026-08-22 — TDD cycle: KDS bug hunt round 2 (multi-zone fanout)
+
+**Problem:** complete_sale_to_kds_fanout groups a sale's restaurant lines by
+kitchen zone and creates ONE order per zone — but the schema declared
+sale_id TEXT NOT NULL UNIQUE (one order per sale). A sale with items in
+two zones (e.g. grill + bar) hit the UNIQUE constraint on the second
+insert and the WHOLE completion failed with a constraint error — the
+kitchen never received either ticket. Also get_kds_order_by_sale used
+query_row (≤1 row) so it would break once multi-zone orders existed.
+
+**Solution:** TDD Red->Green.
+- RED: complete_sale_to_kds_multi_zone_creates_one_order_per_zone —
+  seeds STEAK (zone grill) + BEER (zone bar), completes the sale, asserts
+  2 orders (one per zone). Failed with UNIQUE constraint failed before
+  the fix.
+- GREEN: schema uniqueness changed to UNIQUE (sale_id, kitchen_zone) in
+  BOTH migrations (init.sql + init.pg.sql) — placed AFTER the trailing
+  column list so SQLite sees kitchen_zone declared before the constraint
+  ("no such column: kitchen_zone" otherwise). get_kds_order_by_sale
+  renamed to get_kds_orders_by_sale returning Vec<KdsOrder>; 2 test
+  consumers updated.
+
+**Verification:** oz-core 2021/2021 (incl. the new multi-zone test);
+kds module 70/70; pg_init table-surface parity holds; display-number
+tests still green (2 orders → 2 display numbers, correct); fmt + clippy
+-D warnings clean.
+
+**Risks / follow-ups:** a crash mid-fanout (zone A committed, zone B not)
+can still leave a partial set — the per-zone inserts are not one
+transaction. Idempotency is now per (sale, zone), so a re-complete of an
+already-completed sale errors on the first matching zone (fail-loud,
+consistent). Deeper atomicity (whole fanout in one tx) is a follow-up.

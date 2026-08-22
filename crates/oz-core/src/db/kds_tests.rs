@@ -151,8 +151,9 @@ fn get_kds_order_by_sale() {
         })
         .unwrap();
 
-    let by_sale = s.get_kds_order_by_sale(&sale_id).unwrap().unwrap();
-    assert_eq!(by_sale.id, order.id);
+    let by_sale = s.get_kds_orders_by_sale(&sale_id).unwrap();
+    assert_eq!(by_sale.len(), 1);
+    assert_eq!(by_sale[0].id, order.id);
 }
 
 #[test]
@@ -1005,6 +1006,38 @@ fn complete_sale_to_kds_no_restaurant_lines_returns_empty() {
     assert!(orders.is_empty(), "no KDS orders for retail-only sale");
 }
 
+/// RED: a sale with items in TWO kitchen zones must create TWO KDS orders
+/// (one per zone). The schema declares `sale_id UNIQUE` (one order per sale),
+/// so the second zone's insert collides and the whole completion fails with a
+/// constraint error — the kitchen never sees either ticket.
+#[test]
+fn complete_sale_to_kds_multi_zone_creates_one_order_per_zone() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    seed_product_with_zone(&conn, "STEAK", "Ribeye Steak", "grill");
+    seed_product_with_zone(&conn, "BEER", "Craft Beer", "bar");
+
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("STEAK"), 1, price(1500)))
+        .unwrap();
+    cart.add_line(CartLine::new(Sku::new("BEER"), 1, price(600)))
+        .unwrap();
+
+    let sale = Sale::from_cart(&cart).unwrap();
+    s.create_sale(&sale).unwrap();
+
+    let orders = s.complete_sale_to_kds(&sale.id, None).unwrap();
+    assert_eq!(
+        orders.len(),
+        2,
+        "one KDS order per kitchen zone (grill + bar), got: {orders:?}"
+    );
+    let mut zones: Vec<Option<String>> = orders.iter().map(|o| o.kitchen_zone.clone()).collect();
+    zones.sort();
+    assert_eq!(zones, vec![Some("bar".into()), Some("grill".into())]);
+}
+
 fn seed_product_with_zone(conn: &Connection, sku: &str, name: &str, zone: &str) {
     let s = store(conn);
     s.create_product(sku, name, price(500), None, None, 100, Some("restaurant"))
@@ -1236,8 +1269,8 @@ fn kds_order_targets_support_multiple_instances() {
 fn get_kds_order_by_sale_not_found() {
     let conn = fresh();
     let s = store(&conn);
-    let result = s.get_kds_order_by_sale("no-such-sale").unwrap();
-    assert!(result.is_none());
+    let result = s.get_kds_orders_by_sale("no-such-sale").unwrap();
+    assert!(result.is_empty());
 }
 
 #[test]

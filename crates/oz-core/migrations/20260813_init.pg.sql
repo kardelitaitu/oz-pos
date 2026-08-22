@@ -918,7 +918,10 @@ CREATE TABLE IF NOT EXISTS gift_card_transactions (
 
 CREATE TABLE IF NOT EXISTS "kds_orders" (
     id              TEXT PRIMARY KEY,
-    sale_id         TEXT NOT NULL UNIQUE REFERENCES sales(id),
+    -- One order per sale AND kitchen zone: a sale with items in multiple
+    -- zones fans out into one ticket per zone (multi-KDS routing), so the
+    -- uniqueness key is the (sale, zone) pair, not the sale alone.
+    sale_id         TEXT NOT NULL REFERENCES sales(id),
     -- Valid states: pending (received, not started), preparing,
     -- ready (cooked, awaiting pickup), served (delivered),
     -- cancelled (voided by kitchen or POS).
@@ -933,7 +936,8 @@ CREATE TABLE IF NOT EXISTS "kds_orders" (
     served_at       TEXT,
     prep_time_seconds BIGINT DEFAULT 0,
     notes           TEXT NOT NULL DEFAULT ''
-, store_id TEXT, kitchen_zone TEXT, table_number TEXT, priority BIGINT NOT NULL DEFAULT 0, target_instance_id TEXT, restaurant_pos_id TEXT, acked_by_device TEXT, acked_at TEXT);
+, store_id TEXT, kitchen_zone TEXT, table_number TEXT, priority BIGINT NOT NULL DEFAULT 0, target_instance_id TEXT, restaurant_pos_id TEXT, acked_by_device TEXT, acked_at TEXT,
+    UNIQUE (sale_id, kitchen_zone));
 
 
 CREATE TABLE IF NOT EXISTS loyalty_transactions (
