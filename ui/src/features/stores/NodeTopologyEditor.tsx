@@ -2985,14 +2985,23 @@ export default function NodeTopologyEditor({
 
   /** Delete a set of nodes in one history entry — every wire touching any
    *  of them goes too. Single-node and batch deletes share this path. */
+  /** Branch Location nodes (type === 'store') are the topology anchor
+   *  and must never be deleted — every workspace, warehouse, and hardware
+   *  node is organized under them. */
+  const isBranchLocation = useCallback((nodeId: string) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    return node?.type === 'store';
+  }, [nodes]);
+
   const deleteNodes = useCallback((ids: string[]) => {
-    if (ids.length === 0) return;
-    const doomed = new Set(ids);
+    // Filter out Branch Location nodes — they are permanent anchors.
+    const doomed = new Set(ids.filter((id) => !isBranchLocation(id)));
+    if (doomed.size === 0) return;
     pushHistory();
     setNodes((prev) => prev.filter((n) => !doomed.has(n.id)));
     setWires((prev) => prev.filter((w) => !doomed.has(w.fromNodeId) && !doomed.has(w.toNodeId)));
     clearSelection();
-  }, [pushHistory, setNodes, setWires, clearSelection]);
+  }, [pushHistory, setNodes, setWires, clearSelection, isBranchLocation]);
 
   /** Fit the whole diagram into the viewport (clamped 40%..200%). */
   const zoomToFit = useCallback(() => {
@@ -3329,7 +3338,9 @@ export default function NodeTopologyEditor({
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedNodeIds.size > 0 || selectedWireId)) {
         e.preventDefault();
         if (selectedNodeIds.size > 0) {
-          const targets = [...selectedNodeIds];
+          // Filter out Branch Location nodes — they are permanent anchors.
+          const targets = [...selectedNodeIds].filter((id) => !isBranchLocation(id));
+          if (targets.length === 0) return; // Only Branch Location(s) selected
           const hasWires = wires.some((w) => targets.includes(w.fromNodeId) || targets.includes(w.toNodeId));
           if (hasWires) {
             // A single wired node keeps the established dialog; 2+ use the
@@ -5186,7 +5197,9 @@ export default function NodeTopologyEditor({
 
   const handleDeleteRequest = () => {
     if (selectedNodeIds.size > 0) {
-      const targets = [...selectedNodeIds];
+      // Filter out Branch Location nodes — they are permanent anchors.
+      const targets = [...selectedNodeIds].filter((id) => !isBranchLocation(id));
+      if (targets.length === 0) return; // Only Branch Location(s) selected
       const hasWires = wires.some((w) => targets.includes(w.fromNodeId) || targets.includes(w.toNodeId));
       if (hasWires) {
         if (targets.length === 1) setConfirmDelete(targets[0]!);
@@ -5795,22 +5808,26 @@ export default function NodeTopologyEditor({
                           {l10n.getString('topology-context-rename')}
                         </button>
                       )}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); duplicateSelection(); }}
-                      >
-                        {l10n.getString('topology-context-duplicate')}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); handleDeleteRequest(); }}
-                      >
-                        {l10n.getString('topology-confirm-delete-node-title')}
-                      </button>
+                      {menuNode.type !== 'store' && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topology-context-item"
+                          onClick={() => { setContextMenu(null); duplicateSelection(); }}
+                        >
+                          {l10n.getString('topology-context-duplicate')}
+                        </button>
+                      )}
+                      {menuNode.type !== 'store' && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topology-context-item"
+                          onClick={() => { setContextMenu(null); handleDeleteRequest(); }}
+                        >
+                          {l10n.getString('topology-confirm-delete-node-title')}
+                        </button>
+                      )}
                       <div className="topology-context-divider" />
                       <button
                         type="button"
@@ -6598,14 +6615,23 @@ export default function NodeTopologyEditor({
               <div className="inspector-section inspector-section--actions">
                 <h4 className="inspector-section-title"><Localized id="topology-inspector-section-actions">Actions</Localized></h4>
                 <div className="inspector-actions">
-                  <button type="button" className="inspector-action-btn" onClick={() => { duplicateSelection(); }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-                    <Localized id="topology-inspector-duplicate">Duplicate</Localized>
-                  </button>
-                  <button type="button" className="inspector-action-btn inspector-action-btn--danger" onClick={handleDeleteRequest}>
-                    <TrashIcon size={14} />
-                    <Localized id="topology-inspector-delete">Delete</Localized>
-                  </button>
+                  {selectedNode.type !== 'store' && (
+                    <button type="button" className="inspector-action-btn" onClick={() => { duplicateSelection(); }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                      <Localized id="topology-inspector-duplicate">Duplicate</Localized>
+                    </button>
+                  )}
+                  {selectedNode.type !== 'store' ? (
+                    <button type="button" className="inspector-action-btn inspector-action-btn--danger" onClick={handleDeleteRequest}>
+                      <TrashIcon size={14} />
+                      <Localized id="topology-inspector-delete">Delete</Localized>
+                    </button>
+                  ) : (
+                    <span className="inspector-anchor-badge">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="12" height="12"><circle cx="12" cy="5" r="2" /><path d="M12 7v10" /><path d="M8 21h8" /></svg>
+                      <Localized id="topology-inspector-anchor-label">Anchor</Localized>
+                    </span>
+                  )}
                 </div>
               </div>
               </ErrorBoundary>

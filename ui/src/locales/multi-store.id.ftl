@@ -198,6 +198,7 @@ topology-inspector-device-address = Alamat Koneksi
 topology-inspector-device-address-placeholder = IP atau hostname
 topology-inspector-duplicate = Gandakan
 topology-inspector-delete = Hapus
+topology-inspector-anchor-label = Anchor
 topology-tier-suffix = { $tier } TIER
 topology-toast-multi-warehouse = Beberapa Gudang memerlukan lisensi Pro Tier.
 topology-warehouse-excess-badge = { $count } Gudang — 1 diizinkan

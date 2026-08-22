@@ -200,6 +200,7 @@ topology-inspector-device-address = Connection Address
 topology-inspector-device-address-placeholder = IP or hostname
 topology-inspector-duplicate = Duplicate
 topology-inspector-delete = Delete
+topology-inspector-anchor-label = Anchor
 topology-tier-suffix = { $tier } TIER
 topology-toast-multi-warehouse = Multiple Warehouses require a Pro Tier license.
 topology-warehouse-excess-badge = { $count } Warehouses — 1 allowed
