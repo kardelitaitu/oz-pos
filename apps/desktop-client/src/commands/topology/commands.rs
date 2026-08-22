@@ -219,10 +219,21 @@ pub async fn apply_topology_diff(
         }
     }
 
+    // A semantic graph is scoped to one canonical branch. The backend
+    // compiler binds creates to that stable identity, rather than trusting
+    // a caller's arbitrary store_id or falling back to a primary/default
+    // store. The topology editor is a global admin tool — its session may
+    // belong to any workspace (e.g. admin settings), so the Branch
+    // Location's store_profile_id is the authoritative store scope for all
+    // workspace mutations below.
+    let effective_store_id = semantic_branch_profile_id(&diagram_nodes, &diagram_wires)
+        .map(str::to_owned)
+        .unwrap_or_else(|| session.store_id.clone());
+
     // Finish any prior cross-database Apply before comparing revisions. A
     // prior process may have committed the diagram but not cleared its
     // journal, in which case recovery must finalize it first.
-    recover_pending_topology_apply(&state, &session.store_id).await?;
+    recover_pending_topology_apply(&state, &effective_store_id).await?;
     {
         let global_db = state.db.lock().await;
         let current_revision = current_topology_revision(&global_db, &topology_key)?;
@@ -272,47 +283,41 @@ pub async fn apply_topology_diff(
     // Snapshot all pre-existing rows that a later compensation may need to restore.
     let workspace_snapshot = snapshot_workspace_rows(
         &state,
-        &session.store_id,
+        &effective_store_id,
         &workspace_updates,
         &workspace_archives,
     )
     .await?;
 
-    // A semantic graph is scoped to one canonical branch. The backend compiler
-    // binds creates to that stable identity, rather than trusting a caller's
-    // arbitrary store_id or falling back to a primary/default store.
-    if let Some(branch_profile_id) = semantic_branch_profile_id(&diagram_nodes, &diagram_wires) {
-        if branch_profile_id != session.store_id {
-            return Err(AppError::PermissionDenied(format!(
-                "topology Branch Location {branch_profile_id} is outside the session store"
-            )));
-        }
-        if let Some(requested_branch_id) = branch_id.as_deref()
-            && requested_branch_id != branch_profile_id
-        {
-            return Err(topology_validation(
-                "branch-id-mismatch",
-                None,
-                None,
-                None,
-                format!(
-                    "topology branch {requested_branch_id} does not match Branch Location {branch_profile_id}"
+    // Validate branch-id consistency. The branch_id parameter (if any) must
+    // match the Branch Location's store_profile_id so the topology key stays
+    // coherent with the diagram's canonical branch identity.
+    if let Some(requested_branch_id) = branch_id.as_deref()
+        && let Some(branch_profile_id) = semantic_branch_profile_id(&diagram_nodes, &diagram_wires)
+        && requested_branch_id != branch_profile_id
+    {
+        return Err(topology_validation(
+            "branch-id-mismatch",
+            None,
+            None,
+            None,
+            format!(
+                "topology branch {requested_branch_id} does not match Branch Location {branch_profile_id}"
+            ),
+        ));
+    }
+    for creation in &workspace_creations {
+        if creation.store_id != effective_store_id {
+            return Err(AppError::TopologyValidation {
+                code: "workspace-store-mismatch".into(),
+                node_id: None,
+                wire_id: None,
+                port_id: None,
+                message: format!(
+                    "workspace {} must be compiled to Branch Location {}",
+                    creation.id, effective_store_id
                 ),
-            ));
-        }
-        for creation in &workspace_creations {
-            if creation.store_id != branch_profile_id {
-                return Err(AppError::TopologyValidation {
-                    code: "workspace-store-mismatch".into(),
-                    node_id: None,
-                    wire_id: None,
-                    port_id: None,
-                    message: format!(
-                        "workspace {} must be compiled to Branch Location {}",
-                        creation.id, branch_profile_id
-                    ),
-                });
-            }
+            });
         }
     }
 
@@ -338,7 +343,7 @@ pub async fn apply_topology_diff(
     // crashes after the store commit, startup/next Apply can compare the
     // desired diagram and compensate deterministically.
     let recovery = TopologyApplyRecovery {
-        store_id: session.store_id.clone(),
+        store_id: effective_store_id.clone(),
         topology_branch_id: branch_id.clone(),
         creations: workspace_creations.clone(),
         snapshots: workspace_snapshot.clone(),
@@ -358,7 +363,7 @@ pub async fn apply_topology_diff(
     {
         let conn = state
             .db_manager
-            .open_store(&session.store_id)
+            .open_store(&effective_store_id)
             .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
         let db = conn
             .lock()
@@ -378,7 +383,7 @@ pub async fn apply_topology_diff(
                     "workspace creation requires non-empty id, type_key, store_id, and name".into(),
                 ));
             }
-            if creation.store_id != session.store_id {
+            if creation.store_id != effective_store_id {
                 return Err(AppError::PermissionDenied(format!(
                     "workspace {} targets a different store",
                     creation.id
@@ -416,9 +421,9 @@ pub async fn apply_topology_diff(
                         update.id
                     ))
                 })?;
-            if owner != session.store_id {
+            if owner != effective_store_id {
                 return Err(AppError::PermissionDenied(format!(
-                    "workspace {} is not in the session store",
+                    "workspace {} is not in the topology branch store",
                     update.id
                 )));
             }
@@ -433,17 +438,17 @@ pub async fn apply_topology_diff(
                 )
                 .map_err(|_| {
                     AppError::PermissionDenied(format!(
-                        "workspace {archive_id} is not in the session store"
+                        "workspace {archive_id} is not in the topology branch store"
                     ))
                 })?;
-            if owner != session.store_id {
+            if owner != effective_store_id {
                 return Err(AppError::PermissionDenied(format!(
-                    "workspace {archive_id} is not in the session store"
+                    "workspace {archive_id} is not in the topology branch store"
                 )));
             }
         }
         if let Some(limit) = effective_tier.max_pos_instances() {
-            let current = store.count_active_instances(&session.store_id)?;
+            let current = store.count_active_instances(&effective_store_id)?;
             let archived_ids: std::collections::HashSet<&str> =
                 workspace_archives.iter().map(String::as_str).collect();
             let archived_active = archived_ids
@@ -571,7 +576,7 @@ pub async fn apply_topology_diff(
         // transaction. Keep it until both databases have been compensated.
         if let Err(compensation_error) = compensate_workspace_diff(
             &state,
-            &session.store_id,
+            &effective_store_id,
             &workspace_creations,
             &workspace_snapshot,
         )

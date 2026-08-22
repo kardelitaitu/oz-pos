@@ -58,6 +58,7 @@ import { TopologyMinimap } from './topologyMinimap';
 import { TopologyRelationshipPicker } from './topologyRelationshipPicker';
 import { TopologyValidationWidget } from './topologyValidationWidget';
 import type { TopologyOverlay } from './topologyBranchCompare';
+import { TopologyApplyValidationError } from './topologyApply';
 import { layoutGhosts, buildGhostWireStubs, compareFocusDimIds, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
@@ -1128,6 +1129,10 @@ export default function NodeTopologyEditor({
   const [showShortcuts, setShowShortcuts] = useState(false);
   const toggleShortcuts = useCallback(() => setShowShortcuts((p) => !p), []);
   const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
+
+  /** Right-side tool rack panel state. */
+  const [rackPanel, setRackPanel] = useState<string | null>(null);
+  const toggleRackPanel = useCallback((key: string) => setRackPanel((p) => (p === key ? null : key)), []);
 
   /** Live canvas getter for the relationship picker's position clamp. */
   const getCanvas = useCallback(() => canvasRef.current, []);
@@ -5276,10 +5281,14 @@ export default function NodeTopologyEditor({
                     setReloadKey((k) => k + 1);
                     return;
                   }
-                  addToast({
-                    message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
-                    type: 'error',
-                  });
+                  // Validation errors already show their own specific toast in
+                  // the Apply helper — skip the generic toast to avoid doubles.
+                  if (!(err instanceof TopologyApplyValidationError)) {
+                    addToast({
+                      message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
+                      type: 'error',
+                    });
+                  }
                   skipNextLoadRef.current = false;
                   failApply();
                   return;
@@ -5363,226 +5372,71 @@ export default function NodeTopologyEditor({
 
       <div className="node-topology-main">
         <div className="node-tool-rack">
-          <h3><Localized id="topology-palette-title">Palette Tools</Localized></h3>
-          <p className="tool-rack-desc"><Localized id="topology-palette-desc">Drag or click to spawn topology nodes:</Localized></p>
-
-          <div className="tool-rack-section">
-            <h4 className="tool-rack-section-title"><Localized id="topology-rack-add-title">Add Nodes</Localized></h4>
-
-          {allowLegacyApply && (
-            <button type="button" className="tool-card" onClick={() => handleAddNode('store')}>
-              <span className="tool-card-icon"><StoreIcon size={22} /></span>
-              <div className="tool-card-info">
-                <strong><Localized id="topology-tool-store">+ Store Node</Localized></strong>
-                <span><Localized id="topology-tool-store-desc">Store Branch Profile</Localized></span>
-              </div>
-              <kbd className="tool-card-shortcut" aria-hidden="true">1</kbd>
-            </button>
-          )}
-
-          <div className="tool-rack-subsection-title">{l10n.getString('topology-workspace-types-title')}</div>
-
-          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace', undefined, 'restaurant-pos')}>
-            <span className="tool-card-icon"><UtensilsIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-restaurant-pos">+ Restaurant POS</Localized></strong>
-              <span><Localized id="topology-tool-restaurant-pos-desc">Restaurant checkout workspace</Localized></span>
-            </div>
-          </button>
-
-          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace', undefined, 'store-pos')}>
-            <span className="tool-card-icon"><CartIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-retail-pos">+ Retail POS</Localized></strong>
-              <span><Localized id="topology-tool-retail-pos-desc">Retail checkout workspace</Localized></span>
-            </div>
-          </button>
-
-          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace', undefined, 'kds')}>
-            <span className="tool-card-icon"><NodesIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-kds">+ KDS</Localized></strong>
-              <span><Localized id="topology-tool-kds-desc">Kitchen display workspace</Localized></span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            className={`tool-card ${!isProAllowed && nodes.some((n) => n.type === 'warehouse') ? 'locked' : ''}`}
-            onClick={() => handleAddNode('warehouse')}
-          >
-            <span className="tool-card-icon"><WarehouseIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-warehouse-workspace">+ Warehouse</Localized></strong>
-              <span><Localized id="topology-tool-warehouse-workspace-desc">Inventory storage workspace</Localized></span>
-            </div>
-            {!isProAllowed && nodes.some((n) => n.type === 'warehouse') && (
-              <span className="lock-badge"><LockIcon size={12} /> <Localized id="topology-lock-pro">Pro</Localized></span>
-            )}
-          </button>
-
-          <div className="tool-rack-subsection-title"><Localized id="topology-other-nodes-title">Other Nodes</Localized></div>
-          <button type="button" className="tool-card" onClick={() => handleAddNode('hardware')}>
-            <span className="tool-card-icon"><PrinterIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-hardware">+ Hardware Node</Localized></strong>
-              <span><Localized id="topology-tool-hardware-desc">Printer / KDS Peripheral</Localized></span>
-            </div>
-          </button>
-          </div>
-
+          <button type="button" className={`rack-icon-btn${rackPanel === 'add' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('add')} title={l10n.getString('topology-rack-add-title')} aria-expanded={rackPanel === 'add'}><PlusIcon size={18} /></button>
           {(selectedNodeIds.size > 0 || selectedWireId || history.length > 0 || redo.length > 0) && (
-            <div className="tool-rack-section">
-              <h4 className="tool-rack-section-title"><Localized id="topology-rack-edit-title">Edit</Localized></h4>
-
-          {selectedNodeIds.size > 0 || selectedWireId ? (
-            <Button variant="secondary" onClick={handleDeleteRequest} className="delete-btn" icon={<TrashIcon size={16} />}>
-              <Localized id="topology-delete-selected">Delete Selected Element</Localized>
-            </Button>
-          ) : null}
-
-          {history.length > 0 && (
-            <Button variant="secondary" onClick={popUndo} style={{ fontSize: 'var(--text-xs)' }}>
-              <Localized id="topology-undo">Undo (Ctrl+Z)</Localized>
-            </Button>
+            <button type="button" className={`rack-icon-btn${rackPanel === 'edit' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('edit')} title={l10n.getString('topology-rack-edit-title')} aria-expanded={rackPanel === 'edit'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg></button>
           )}
+          <button type="button" className={`rack-icon-btn${rackPanel === 'view' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('view')} title={l10n.getString('topology-rack-view-title')} aria-expanded={rackPanel === 'view'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg></button>
+          <button type="button" className={`rack-icon-btn${rackPanel === 'share' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('share')} title={l10n.getString('topology-rack-share-title')} aria-expanded={rackPanel === 'share'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg></button>
 
-          {redo.length > 0 && (
-            <Button variant="secondary" onClick={popRedo} style={{ fontSize: 'var(--text-xs)' }}>
-              <Localized id="topology-redo">Redo (Ctrl+Y)</Localized>
-            </Button>
-          )}
-            </div>
-          )}
-
-            <div className="tool-rack-section">
-              <h4 className="tool-rack-section-title"><Localized id="topology-rack-view-title">View</Localized></h4>                <button
-                  type="button"
-                  className={`rack-view-toggle ${wireRouting === 'elbow' ? 'is-active' : ''}`}
-                  aria-pressed={wireRouting === 'elbow'}
-                  onClick={() => setWireRouting((r) => (r === 'elbow' ? 'curved' : 'elbow'))}
-                  title={anyBentWires ? l10n.getString('topology-bends-override-note') : undefined}
-                >
-                  <Localized id="topology-wire-routing-toggle">Elbow wires</Localized>
-                </button>
-                {anyBentWires && (
-                  <span className="rack-view-note" role="status">
-                    {l10n.getString('topology-bends-override-note')}
-                  </span>
-                )}
-              <button
-                type="button"
-                className={`rack-view-toggle ${snapEnabled ? 'is-active' : ''}`}
-                aria-pressed={snapEnabled}
-                onClick={() => setSnapEnabled((s) => !s)}
-              >
-                <Localized id="topology-snap-toggle">Snap to grid</Localized>
-              </button>
-              <button
-                type="button"
-                className={`rack-view-toggle ${panToolActive ? 'is-active' : ''}`}
-                aria-pressed={panToolActive}
-                onClick={() => setPanToolActive((v) => !v)}
-              >
-                <Localized id="topology-pan-tool-toggle">Pan tool</Localized>
-              </button>
-              <button
-                type="button"
-                className={`rack-view-toggle ${wireLabelsVisible ? 'is-active' : ''}`}
-                aria-pressed={wireLabelsVisible}
-                onClick={() => setWireLabelsVisible((v) => !v)}
-              >
-                <Localized id="topology-wire-labels-toggle">Wire labels</Localized>
-              </button>
-            </div>
-
-            <div className="tool-rack-section">
-              <h4 className="tool-rack-section-title"><Localized id="topology-rack-share-title">Share</Localized></h4>
-              <div className="rack-share-row">
-                <button type="button" className="rack-view-toggle" onClick={handleExport}>
-                  <Localized id="topology-export">Export</Localized>
-                </button>
-                <button type="button" className="rack-view-toggle" onClick={handleImport}>
-                  <Localized id="topology-import">Import</Localized>
-                </button>
+          {rackPanel && (
+            <div className="rack-panel" role="group" aria-label={l10n.getString(`topology-rack-${rackPanel}-title`)}>
+              <div className="rack-panel-header">
+                <h4 className="rack-panel-title"><Localized id={`topology-rack-${rackPanel}-title`}>{rackPanel}</Localized></h4>
+                <button type="button" className="rack-panel-close" onClick={() => setRackPanel(null)} aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
               </div>
-              <div className="rack-share-row">
-                <button
-                  type="button"
-                  className="rack-view-toggle"
-                  aria-expanded={templateSaveOpen}
-                  onClick={() => setTemplateSaveOpen((v) => !v)}
-                >
-                  <Localized id="topology-save-template">Save template</Localized>
-                </button>
-                <button
-                  type="button"
-                  className="rack-view-toggle"
-                  aria-expanded={templatesOpen}
-                  onClick={openTemplates}
-                >
-                  <Localized id="topology-templates">Templates</Localized>
-                </button>
-              </div>
-              {templateSaveOpen && (
-                <div
-                  className="rack-template-pop"
-                  role="group"
-                  aria-label={l10n.getString('topology-save-template')}
-                >
-                  <input
-                    type="text"
-                    className="rack-template-input"
-                    placeholder={l10n.getString('topology-template-name-placeholder')}
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveTemplate(templateName);
-                      else if (e.key === 'Escape') {
-                        setTemplateSaveOpen(false);
-                        setTemplateName('');
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="rack-template-save"
-                    onClick={() => handleSaveTemplate(templateName)}
-                  >
-                    <Localized id="topology-template-save">Save</Localized>
-                  </button>
+              {rackPanel === 'add' && (
+                <div className="rack-panel-body">
+                  {allowLegacyApply && (
+                    <button type="button" className="tool-card" onClick={() => { handleAddNode('store'); setRackPanel(null); }}><span className="tool-card-icon"><StoreIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-store">+ Store Node</Localized></strong><span><Localized id="topology-tool-store-desc">Store Branch Profile</Localized></span></div><kbd className="tool-card-shortcut">1</kbd></button>
+                  )}
+                  <div className="rack-panel-subsection"><span className="rack-panel-subsection-title">{l10n.getString('topology-workspace-types-title')}</span></div>
+                  <button type="button" className="tool-card" onClick={() => { handleAddNode('workspace', undefined, 'restaurant-pos'); setRackPanel(null); }}><span className="tool-card-icon"><UtensilsIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-restaurant-pos">+ Restaurant POS</Localized></strong><span><Localized id="topology-tool-restaurant-pos-desc">Restaurant checkout workspace</Localized></span></div></button>
+                  <button type="button" className="tool-card" onClick={() => { handleAddNode('workspace', undefined, 'store-pos'); setRackPanel(null); }}><span className="tool-card-icon"><CartIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-retail-pos">+ Retail POS</Localized></strong><span><Localized id="topology-tool-retail-pos-desc">Retail checkout workspace</Localized></span></div></button>
+                  <button type="button" className="tool-card" onClick={() => { handleAddNode('workspace', undefined, 'kds'); setRackPanel(null); }}><span className="tool-card-icon"><NodesIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-kds">+ KDS</Localized></strong><span><Localized id="topology-tool-kds-desc">Kitchen display workspace</Localized></span></div></button>
+                  <button type="button" className={`tool-card${!isProAllowed && nodes.some((n) => n.type === 'warehouse') ? ' locked' : ''}`} onClick={() => { handleAddNode('warehouse'); setRackPanel(null); }}><span className="tool-card-icon"><WarehouseIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-warehouse-workspace">+ Warehouse</Localized></strong><span><Localized id="topology-tool-warehouse-workspace-desc">Inventory storage workspace</Localized></span></div>{!isProAllowed && nodes.some((n) => n.type === 'warehouse') && <span className="lock-badge"><LockIcon size={12} /> Pro</span>}</button>
+                  <div className="rack-panel-subsection"><span className="rack-panel-subsection-title"><Localized id="topology-other-nodes-title">Other Nodes</Localized></span></div>
+                  <button type="button" className="tool-card" onClick={() => { handleAddNode('hardware'); setRackPanel(null); }}><span className="tool-card-icon"><PrinterIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-hardware">+ Hardware Node</Localized></strong><span><Localized id="topology-tool-hardware-desc">Printer / KDS Peripheral</Localized></span></div></button>
                 </div>
               )}
-              {templatesOpen && (
-                <div
-                  className="rack-template-list"
-                  role="group"
-                  aria-label={l10n.getString('topology-templates')}
-                >
-                  {savedTemplates.length === 0 ? (
-                    <span className="rack-template-empty">
-                      <Localized id="topology-no-templates">No saved templates</Localized>
-                    </span>
-                  ) : (
-                    <ul className="rack-template-items">
-                      {savedTemplates.map((name) => (
-                        <li key={name} className="rack-template-item">
-                          <span className="rack-template-name">{name}</span>
-                          <div className="rack-template-actions">
-                            <button type="button" onClick={() => handleLoadTemplate(name)}>
-                              <Localized id="topology-template-load">Load</Localized>
-                            </button>
-                            <button type="button" onClick={() => handleDeleteTemplate(name)}>
-                              <Localized id="topology-template-delete">Delete</Localized>
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+              {rackPanel === 'edit' && (
+                <div className="rack-panel-body">
+                  {selectedNodeIds.size > 0 || selectedWireId ? (
+                    <button type="button" className="tool-card" onClick={handleDeleteRequest}><span className="tool-card-icon" style={{ color: 'var(--color-danger)' }}><TrashIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-delete-selected">Delete Selected Element</Localized></strong></div></button>
+                  ) : <p className="rack-panel-empty">Select a node or wire to delete</p>}
+                  {history.length > 0 && <button type="button" className="tool-card" onClick={popUndo}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-undo">Undo</Localized></strong><span>Ctrl+Z</span></div></button>}
+                  {redo.length > 0 && <button type="button" className="tool-card" onClick={popRedo}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-redo">Redo</Localized></strong><span>Ctrl+Y</span></div></button>}
+                </div>
+              )}
+              {rackPanel === 'view' && (
+                <div className="rack-panel-body">
+                  <button type="button" className={`tool-card${wireRouting === 'elbow' ? ' is-active' : ''}`} onClick={() => setWireRouting((r) => (r === 'elbow' ? 'curved' : 'elbow'))}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="4 4 4 20 20 20" /><polyline points="4 4 12 12" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-wire-routing-toggle">Elbow wires</Localized></strong>{anyBentWires && <span className="rack-panel-note">{l10n.getString('topology-bends-override-note')}</span>}</div></button>
+                  <button type="button" className={`tool-card${snapEnabled ? ' is-active' : ''}`} onClick={() => setSnapEnabled((s) => !s)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-snap-toggle">Snap to grid</Localized></strong></div></button>
+                  <button type="button" className={`tool-card${panToolActive ? ' is-active' : ''}`} onClick={() => setPanToolActive((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M18 11V6a2 2 0 0 0-4 0v5" /><path d="M14 10V4a2 2 0 0 0-4 0v6" /><path d="M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-pan-tool-toggle">Pan tool</Localized></strong></div></button>
+                  <button type="button" className={`tool-card${wireLabelsVisible ? ' is-active' : ''}`} onClick={() => setWireLabelsVisible((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-wire-labels-toggle">Wire labels</Localized></strong></div></button>
+                </div>
+              )}
+              {rackPanel === 'share' && (
+                <div className="rack-panel-body">
+                  <button type="button" className="tool-card" onClick={handleExport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-export">Export</Localized></strong><span>Download as JSON</span></div></button>
+                  <button type="button" className="tool-card" onClick={handleImport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-import">Import</Localized></strong><span>Load from JSON file</span></div></button>
+                  <div className="rack-panel-divider" />
+                  <button type="button" className="tool-card" onClick={() => setTemplateSaveOpen((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-save-template">Save template</Localized></strong></div></button>
+                  {templateSaveOpen && (
+                    <div className="rack-template-pop" role="group"><input type="text" className="rack-template-input" placeholder={l10n.getString('topology-template-name-placeholder')} value={templateName} onChange={(e) => setTemplateName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTemplate(templateName); else if (e.key === 'Escape') { setTemplateSaveOpen(false); setTemplateName(''); } }} /><button type="button" className="rack-template-save" onClick={() => handleSaveTemplate(templateName)}><Localized id="topology-template-save">Save</Localized></button></div>
+                  )}
+                  <button type="button" className="tool-card" onClick={openTemplates}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-templates">Templates</Localized></strong></div></button>
+                  {templatesOpen && (
+                    <div className="rack-template-list" role="group">
+                      {savedTemplates.length === 0 ? <p className="rack-panel-empty"><Localized id="topology-no-templates">No saved templates</Localized></p> : (
+                        <ul className="rack-template-items">{savedTemplates.map((name) => (<li key={name} className="rack-template-item"><span className="rack-template-name">{name}</span><div className="rack-template-actions"><button type="button" onClick={() => handleLoadTemplate(name)}>Load</button><button type="button" onClick={() => handleDeleteTemplate(name)}>Delete</button></div></li>))}</ul>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
             </div>
+          )}
         </div>
 
         <div

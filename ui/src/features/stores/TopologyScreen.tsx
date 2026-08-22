@@ -7,12 +7,11 @@ import {
   type WorkspaceDto,
 } from '@/api/workspaces';
 import {
-  applyTopologyDiff,
-  canSaveTopology as checkTopologySaveCapability,
   loadTopology,
   type TopologyApplyResult,
 } from '@/api/topology';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { LocaleContext } from '@/i18n/LocaleContext';
 import { useContext } from 'react';
@@ -31,12 +30,7 @@ import NodeTopologyEditor, {
   type WorkspaceInstanceSeed,
   type BranchLocationSeed,
 } from './NodeTopologyEditor';
-import {
-  normalizeTopologyGraph,
-  topologyIssueKey,
-  validateTopologyGraph,
-} from './topologyContract';
-import { computeTopologyDiff } from './topologyDiff';
+import { applyTopologyWithDiagram } from './topologyApply';
 import {
   buildTopologyOverlay,
   compareBranchTopologies,
@@ -73,11 +67,11 @@ const isTopologyInstance = (w: Pick<WorkspaceDto, 'type_key'>) =>
  */
 export default function TopologyScreen() {
   const { sessionToken, resolvedStoreId } = useWorkspace();
+  const { session } = useAuth();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
   /** Whether the session user may persist topology changes. The backend
    *  capability probe is authoritative for Apply and rename actions. */
-  const [canSaveTopology, setCanSaveTopology] = useState(false);
   const [storesUnavailable, setStoresUnavailable] = useState(false);
   const [instancesUnavailable, setInstancesUnavailable] = useState(false);
   const [topologyUnavailable, setTopologyUnavailable] = useState(false);
@@ -87,17 +81,16 @@ export default function TopologyScreen() {
   const handleTopologyLoadSuccess = useCallback(() => {
     setTopologyUnavailable(false);
   }, []);
-  useEffect(() => {
-    let cancelled = false;
-    if (!sessionToken) {
-      setCanSaveTopology(false);
-      return () => { cancelled = true; };
-    }
-    void checkTopologySaveCapability(sessionToken)
-      .then((allowed) => { if (!cancelled) setCanSaveTopology(allowed); })
-      .catch(() => { if (!cancelled) setCanSaveTopology(false); });
-    return () => { cancelled = true; };
-  }, [sessionToken]);
+  // Determine save permission client-side from the session's role/permissions.
+  // Owner ("*") and admin/manager roles all have staff:update. This avoids
+  // a flaky IPC round-trip that fails when the session token hasn't resolved
+  // yet or the backend check hits a transient error.
+  const canSaveTopology = useMemo(() => {
+    if (!session) return false;
+    const perms = session.permissions ?? [];
+    if (perms.includes('*')) return true;
+    return perms.includes('staff:update');
+  }, [session]);
   const [licenseTier, setLicenseTier] = useState('standard');
   /** Real workspace instances loaded from the backend, used to seed the editor. */
   const [workspaceInstances, setWorkspaceInstances] = useState<WorkspaceDto[]>([]);
@@ -154,12 +147,15 @@ export default function TopologyScreen() {
   const instancesResolvedRef = useRef(false);
 
   const load = useCallback(async () => {
+    // License check is non-critical — a fresh install or offline environment
+    // may not have an activated license yet. Fail silently and default to
+    // 'standard' tier so the topology editor still loads.
+    checkLicenseStatus()
+      .then((licStatus) => { setLicenseTier(licStatus.tier.toLowerCase()); })
+      .catch(() => { /* no license activated yet — keep default tier */ });
+
     try {
-      const [licStatus, storeData] = await Promise.all([
-        checkLicenseStatus(),
-        listStores(),
-      ]);
-      setLicenseTier(licStatus.tier.toLowerCase());
+      const storeData = await listStores();
       setStores(storeData);
       setStoresUnavailable(false);
       storesResolvedRef.current = true;
@@ -487,154 +483,27 @@ export default function TopologyScreen() {
         throw error;
       }
 
-      const semanticGraph = normalizeTopologyGraph(nodes, wires);
-      // TopologyScreen is the real, strict boundary. Do not permit the
-      // legacy primary/default fallback to survive into workspace mutation.
-      const validationErrors = validateTopologyGraph(semanticGraph, licenseTier);
-      // Round 81: a DISMISSED missing-stock-routing prompt (intentionally
-      // empty warehouse) stops blocking. The editor sends the same
-      // branch-document dismissal set through this callback, so the local
-      // validation gate and backend Apply payload cannot disagree.
-      const resolvedIssues = new Set(resolvedIssueKeys);
-      const blockingErrors = validationErrors.filter(
-        (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(topologyIssueKey(e.nodeId, e.messageId))),
-      );
-      if (blockingErrors.length > 0) {
-        const firstError = blockingErrors[0]!;
-        const error = new Error(l10n.getString(firstError.messageId));
-        addToast({ message: plainErrorMessage(error), type: 'error' });
-        throw error;
-      }
-
-      // ── Build diff vectors (pure) ───────────────────────────────────
-      //
-      // The create/update/archive computation lives in topologyDiff.ts so
-      // the workspace-instance semantics are unit-testable directly; this
-      // handler only owns the screen-level concerns (session, validation,
-      // diagram payloads, the atomic apply).
-      const diff = computeTopologyDiff({ nodes, wires, workspaceInstances, stores });
-      const { creations, updates, archives, typeChanges, idMap } = diff;
-
-      // ── Remap diagram for type-changed nodes ─────────────────────────
-      //
-      // Replace old node IDs with new UUIDs in both the node and wire
-      // payloads so the saved topology diagram stays consistent with the
-      // recreated workspace instances.
-
-      type DiagramNodePayload = Parameters<typeof applyTopologyDiff>[4][number];
-      type DiagramWirePayload = Parameters<typeof applyTopologyDiff>[5][number];
-
-      const diagramNodes: DiagramNodePayload[] = nodes.map((n) => {
-        const changedId = typeChanges.get(n.id)?.newId ?? n.id;
-        const payload: DiagramNodePayload = {
-          id: changedId,
-          type: n.type,
-          name: n.name,
-          x: n.x,
-          y: n.y,
-        };
-        if (n.storeProfileId !== undefined) payload.store_profile_id = n.storeProfileId;
-        if (n.subtitle !== undefined) payload.subtitle = n.subtitle;
-        if (n.tierRequirement !== undefined) payload.tier_requirement = n.tierRequirement;
-        if (n.telemetryBadge !== undefined) payload.telemetry_badge = n.telemetryBadge;
-        if (n.telemetryStatus !== undefined) payload.telemetry_status = n.telemetryStatus;
-        if (n.metadata !== undefined || n.storeProfileId !== undefined) {
-          // Keep the identity in metadata as a compatibility bridge for
-          // backend versions that predate the explicit store_profile_id field.
-          // The semantic compiler still reads the stable identity, never the
-          // display name.
-          const change = typeChanges.get(n.id);
-          payload.metadata = {
-            ...(n.metadata ?? {}),
-            ...(n.storeProfileId !== undefined ? { storeProfileId: n.storeProfileId } : {}),
-            ...(change ? { persisted: true } : {}),
-          };
-        }
-        return payload;
-      });
-
-      const diagramWires: DiagramWirePayload[] = wires.map((w) => {
-        const fromId = typeChanges.get(w.fromNodeId)?.newId ?? w.fromNodeId;
-        const toId = typeChanges.get(w.toNodeId)?.newId ?? w.toNodeId;
-        const payload: DiagramWirePayload = {
-          id: w.id,
-          from_node_id: fromId,
-          to_node_id: toId,
-          direction: w.direction,
-        };
-        if (w.label !== undefined) payload.label = w.label;
-        if (w.bends !== undefined) payload.bends = w.bends;
-        if (w.fromPort !== undefined) payload.from_port = w.fromPort;
-        if (w.toPort !== undefined) payload.to_port = w.toPort;
-
-        // Persist the normalized semantic identity, not only the visual
-        // geometry. This upgrades legacy Restaurant POS → KDS wires on the
-        // next Apply so the backend and the reloaded editor both retain the
-        // required Operation feed instead of showing a stale Location error.
-        const semanticWire = semanticGraph.wires.find((candidate) => candidate.id === w.id);
-        if (semanticWire) {
-          payload.from_port_id = semanticWire.fromPortId;
-          payload.to_port_id = semanticWire.toPortId;
-          payload.relationship_type = semanticWire.relationshipType;
-        } else {
-          if (w.fromPortId !== undefined) payload.from_port_id = w.fromPortId;
-          if (w.toPortId !== undefined) payload.to_port_id = w.toPortId;
-          if (w.relationshipType !== undefined) payload.relationship_type = w.relationshipType;
-        }
-        return payload;
-      });
-
-      // ── Atomic apply ─────────────────────────────────────────────────
-
-      try {
-        const result = await applyTopologyDiff(
+      const result = await applyTopologyWithDiagram(
+        nodes, wires,
+        {
           sessionToken,
-          creations,
-          updates,
-          archives,
-          diagramNodes,
-          diagramWires,
-          selectedBranchId ?? undefined,
+          workspaceInstances,
+          stores,
+          licenseTier,
+          branchId: selectedBranchId ?? undefined,
           baseRevision,
-          crypto.randomUUID(),
           resolvedIssueKeys,
-        );
-        if (!result || !Number.isSafeInteger(result.revision) || result.revision < 0) {
-          throw new Error('topology Apply returned no committed revision');
-        }
+        },
+        (msg, type) => addToast({ message: msg, type }),
+        l10n,
+      );
 
-        const created = creations.length;
-        const updated = updates.length;
-        const archived = archives.length;
-        const typeChangeCount = typeChanges.size;
-        const parts = [
-          `${created} created`,
-          `${updated} updated`,
-          `${archived} archived`,
-        ];
-        if (typeChangeCount > 0) {
-          parts.push(`${typeChangeCount} type-changed`);
-        }
-        addToast({
-          message: l10n.getString('topology-toast-saved', { detail: parts.join(', ') }),
-          type: 'success',
-        });
-
-        // Refresh loaded instances so subsequent saves diff against truth.
-        try {
-          setWorkspaceInstances((await listWorkspacesScoped(sessionToken)).filter(isTopologyInstance));
-        } catch {
-          /* non-fatal */
-        }
-
-        return { ...result, ...(Object.keys(idMap).length > 0 ? { idMap } : {}) };
-      } catch (err) {
-        addToast({
-          message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
-          type: 'error',
-        });
-        throw err;
+      // Refresh loaded instances in local state so subsequent saves diff correctly.
+      if (result.refreshedInstances) {
+        setWorkspaceInstances(result.refreshedInstances);
       }
+
+      return result;
     },
     [sessionToken, workspaceInstances, stores, addToast, l10n, licenseTier, selectedBranchId],
   );

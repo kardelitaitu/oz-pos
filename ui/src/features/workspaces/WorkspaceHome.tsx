@@ -70,36 +70,108 @@ const WS_ORDER: Record<string, number> = {
   admin: 5,
 };
 
-// ── Role-scoped workspace access ─────────────────────────────────
-// All five preset roles (owner, admin, manager, staff, auditor) reach the
-// workspaces they are assigned to — the picker list itself comes from the
-// backend `list_workspaces` (assignment-filtered), so this client-side
-// gate is only a fallback for the demo mock. Cashier/kitchen were retired
-// (0048 2c) and no longer appear.
+// ── Tools section — role-gated quick-access items ─────────────
 
-// ── Dummy coming-soon cards (placeholder for future workspaces) ──
+interface ToolItem {
+  id: string;
+  route: string;
+  labelKey: string;
+  descKey: string;
+  /** Minimum role required. Hierarchy: owner > admin > manager > staff > auditor. */
+  minRole: 'owner' | 'admin' | 'manager' | 'staff' | 'auditor';
+  icon: React.ReactNode;
+}
 
-const COMING_SOON_CARDS = [
-  { name: 'Loyalty', description: 'Coming soon' },
-  { name: 'Marketing', description: 'Coming soon' },
-  { name: 'Online Orders', description: 'Coming soon' },
+const ROLE_HIERARCHY: Record<string, number> = {
+  owner: 5,
+  'role-owner': 5,
+  admin: 4,
+  'role-admin': 4,
+  manager: 3,
+  'role-manager': 3,
+  staff: 2,
+  'role-staff': 2,
+  auditor: 1,
+  'role-auditor': 1,
+};
+
+const TOOLS: ToolItem[] = [
+  {
+    id: 'analytics',
+    route: 'analytics',
+    labelKey: 'workspace-home-analytics-title',
+    descKey: 'workspace-home-analytics-desc',
+    minRole: 'admin',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+        <path d="M18 20V10" />
+        <path d="M12 20V4" />
+        <path d="M6 20v-6" />
+      </svg>
+    ),
+  },
+  {
+    id: 'reports',
+    route: 'dashboard',
+    labelKey: 'workspace-home-reports-title',
+    descKey: 'workspace-home-reports-desc',
+    minRole: 'manager',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+        <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+        <path d="M22 12A10 10 0 0 0 12 2v10z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'staff',
+    route: 'staff',
+    labelKey: 'workspace-home-staff-title',
+    descKey: 'workspace-home-staff-desc',
+    minRole: 'manager',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    ),
+  },
+  {
+    id: 'settings',
+    route: 'settings',
+    labelKey: 'workspace-home-settings-title',
+    descKey: 'workspace-home-settings-desc',
+    minRole: 'manager',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'audit',
+    route: 'audit-log',
+    labelKey: 'workspace-home-audit-title',
+    descKey: 'workspace-home-audit-desc',
+    minRole: 'manager',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
+      </svg>
+    ),
+  },
 ];
 
 // ── Icons ─────────────────────────────────────────────────────────
-//
-// Workspace type keys (WS_ORDER) plus the coming-soon placeholders are
-// the only icon sources; anything else falls back to the default icon
-// and is logged so new workspace keys surface during development.
-
-const KNOWN_ICON_KEYS = new Set<string>([
-  ...Object.keys(WS_ORDER),
-  ...COMING_SOON_CARDS.map((c) => c.name),
-]);
 
 function getIcon(key: string) {
-  if (!KNOWN_ICON_KEYS.has(key)) {
-    console.warn(`WorkspaceHome: unknown workspace key "${key}" — using default icon`);
-  }
   return <WorkspaceIcon wsKey={key} />;
 }
 
@@ -279,7 +351,7 @@ function LayerFloatingButtons({
 
 // ── Component ─────────────────────────────────────────────────────
 
-/** Workspace home screen — 5-layer architecture with role-based workspace selection grid. */
+/** Workspace home screen — two areas: active workspaces (top) + role-gated tools (bottom). */
 export default function WorkspaceHome() {
   const { l10n } = useLocalization();
   const { availableWorkspaces, loading, error, retry, setActiveWorkspace, lastWorkspace } = useWorkspace();
@@ -296,20 +368,11 @@ export default function WorkspaceHome() {
   const [pinnedKeys, setPinnedKeys] = useState<Set<string>>(loadPins);
   const [lastUsedMap, setLastUsedMap] = useState<Record<string, number>>(loadLastUsed);
 
-  // Refs mirror the state so event handlers can compute the next value
-  // synchronously and persist it as a normal side effect, instead of
-  // mutating localStorage inside a setState updater (which React may run
-  // twice under StrictMode).
   const pinnedKeysRef = useRef(pinnedKeys);
   const lastUsedMapRef = useRef(lastUsedMap);
 
-  useEffect(() => {
-    pinnedKeysRef.current = pinnedKeys;
-  }, [pinnedKeys]);
-
-  useEffect(() => {
-    lastUsedMapRef.current = lastUsedMap;
-  }, [lastUsedMap]);
+  useEffect(() => { pinnedKeysRef.current = pinnedKeys; }, [pinnedKeys]);
+  useEffect(() => { lastUsedMapRef.current = lastUsedMap; }, [lastUsedMap]);
 
   const togglePin = useCallback((key: string) => {
     const next = new Set(pinnedKeysRef.current);
@@ -332,7 +395,11 @@ export default function WorkspaceHome() {
     const pinnedArr: typeof availableWorkspaces = [];
     const unpinnedArr: typeof availableWorkspaces = [];
 
-    for (const ws of availableWorkspaces) {
+    // The admin workspace is not shown on the home screen — its features
+    // (settings, analytics, reports) are accessible via the Tools section below.
+    const visible = availableWorkspaces.filter((ws) => ws.type_key !== 'admin');
+
+    for (const ws of visible) {
       if (pinnedKeys.has(ws.type_key)) {
         pinnedArr.push(ws);
       } else {
@@ -340,17 +407,19 @@ export default function WorkspaceHome() {
       }
     }
 
-    // Pinned sorted by pin order (earliest pin first in the set iteration)
-    // Last-used sorted by most recent first
     unpinnedArr.sort((a, b) => {
       const aLast = lastUsedMap[a.type_key] ?? 0;
       const bLast = lastUsedMap[b.type_key] ?? 0;
-      if (aLast !== bLast) return bLast - aLast; // most recent first
+      if (aLast !== bLast) return bLast - aLast;
       return (WS_ORDER[a.type_key] ?? 99) - (WS_ORDER[b.type_key] ?? 99);
     });
 
     return [...pinnedArr, ...unpinnedArr];
   }, [availableWorkspaces, pinnedKeys, lastUsedMap]);
+
+  // ── Role-based access ────────────────────────────────────────
+
+  const roleLevel = ROLE_HIERARCHY[roleName] ?? 0;
 
   const isAdminOrOwner =
     roleName === 'owner' ||
@@ -358,35 +427,33 @@ export default function WorkspaceHome() {
     roleName === 'admin' ||
     roleName === 'role-admin';
 
-  // ── Shortcut navigation to analytics / reports (owner/admin only) ──
+  const canAccessTool = useCallback(
+    (minRole: ToolItem['minRole']): boolean => roleLevel >= (ROLE_HIERARCHY[minRole] ?? 0),
+    [roleLevel],
+  );
+
+  const visibleTools = useMemo(
+    () => TOOLS.filter((t) => canAccessTool(t.minRole)),
+    [canAccessTool],
+  );
+
+  // ── Shortcut navigation to tools (switches to admin workspace) ──
   const handleShortcutNav = useCallback(
     (route: string) => {
-      // Set hash before switching workspace — AppShell respects hash-based
-      // routes when the workspace mounts (see workspace effect in AppShell).
       window.location.hash = `#/${route}`;
       setActiveWorkspace('admin');
     },
     [setActiveWorkspace],
   );
 
-  // Role-scoped access gate. Every preset role (owner/admin/manager/staff/
-  // auditor) can activate the workspaces assigned to it — the picker list
-  // itself is assignment-filtered by the backend, so this client-side gate
-  // only blocks unknown/legacy roles. The workspace key is accepted for
-  // call-site compatibility but does not restrict access (0048 2c).
   const canAccess = useCallback(
     (_key: string): boolean => {
       switch (roleName) {
-        case 'owner':
-        case 'role-owner':
-        case 'admin':
-        case 'role-admin':
-        case 'manager':
-        case 'role-manager':
-        case 'staff':
-        case 'role-staff':
-        case 'auditor':
-        case 'role-auditor':
+        case 'owner': case 'role-owner':
+        case 'admin': case 'role-admin':
+        case 'manager': case 'role-manager':
+        case 'staff': case 'role-staff':
+        case 'auditor': case 'role-auditor':
           return true;
         default:
           return false;
@@ -396,30 +463,15 @@ export default function WorkspaceHome() {
   );
 
   const greeting = useMemo(() => pickGreeting(), []);
-
   const displayName = session?.display_name ?? '';
-
-  // ── Loading state (no entrance animations) ────────────────────
-
   const showSkeleton = loading;
-
-  // ── Fullscreen toggle ─────────────────────────────────────────
   const { toggleFullscreen } = useFullscreen();
 
   // ── Logout confirmation ────────────────────────────────────────
 
-  const handleLogoutClick = useCallback(() => {
-    setShowLogoutModal(true);
-  }, []);
-
-  const handleLogoutCancel = useCallback(() => {
-    setShowLogoutModal(false);
-  }, []);
-
-  const handleLogoutConfirm = useCallback(() => {
-    setShowLogoutModal(false);
-    logout();
-  }, [logout]);
+  const handleLogoutClick = useCallback(() => { setShowLogoutModal(true); }, []);
+  const handleLogoutCancel = useCallback(() => { setShowLogoutModal(false); }, []);
+  const handleLogoutConfirm = useCallback(() => { setShowLogoutModal(false); logout(); }, [logout]);
 
   // ── Ripple cleanup on unmount ──────────────────────────────
 
@@ -450,7 +502,6 @@ export default function WorkspaceHome() {
       const card = e.currentTarget;
       const rect = card.getBoundingClientRect();
 
-      // Ripple effect
       const ripple = document.createElement('span');
       ripple.className = 'workspace-card-ripple';
       const size = Math.max(rect.width, rect.height);
@@ -478,8 +529,6 @@ export default function WorkspaceHome() {
       };
 
       ripple.addEventListener('animationend', cleanup);
-      // Fallback if `animationend` never fires (reduced motion or an
-      // interrupted animation). Tracked so it can be cleared on unmount.
       timer = window.setTimeout(cleanup, 600);
       rippleTimersRef.current.push(timer);
     },
@@ -502,9 +551,6 @@ export default function WorkspaceHome() {
       }
     }
 
-    // Column count is derived from the grid's actual layout (cards in the
-    // first row), so it stays correct regardless of how the CSS expresses
-    // the track list (`repeat(3, 1fr)`, `minmax(...)`, etc.).
     function getColumns(): number {
       const all = grid!.querySelectorAll<HTMLElement>('.workspace-card');
       if (all.length === 0) return 1;
@@ -518,10 +564,6 @@ export default function WorkspaceHome() {
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // ── Quick-launch: number keys 1-9 select a workspace by index ──
-      // Only the workspace cards (which render a visible number hint) are
-      // mapped; the Analytics/Reports shortcuts and coming-soon cards are
-      // intentionally excluded.
       if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const activeTag = document.activeElement?.tagName;
         if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
@@ -539,40 +581,19 @@ export default function WorkspaceHome() {
 
       let currentIndex = -1;
       for (let i = 0; i < cards.length; i++) {
-        if (cards[i] === active) {
-          currentIndex = i;
-          break;
-        }
+        if (cards[i] === active) { currentIndex = i; break; }
       }
       if (currentIndex < 0) return;
 
       const cols = getColumns();
 
       switch (e.key) {
-        case 'ArrowRight':
-          e.preventDefault();
-          if (currentIndex < cards.length - 1) focusCard(currentIndex + 1);
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          if (currentIndex > 0) focusCard(currentIndex - 1);
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          if (currentIndex + cols < cards.length) focusCard(currentIndex + cols);
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          if (currentIndex - cols >= 0) focusCard(currentIndex - cols);
-          break;
-        case 'Home':
-          e.preventDefault();
-          focusCard(0);
-          break;
-        case 'End':
-          e.preventDefault();
-          focusCard(cards.length - 1);
-          break;
+        case 'ArrowRight': e.preventDefault(); if (currentIndex < cards.length - 1) focusCard(currentIndex + 1); break;
+        case 'ArrowLeft':  e.preventDefault(); if (currentIndex > 0) focusCard(currentIndex - 1); break;
+        case 'ArrowDown':  e.preventDefault(); if (currentIndex + cols < cards.length) focusCard(currentIndex + cols); break;
+        case 'ArrowUp':    e.preventDefault(); if (currentIndex - cols >= 0) focusCard(currentIndex - cols); break;
+        case 'Home':       e.preventDefault(); focusCard(0); break;
+        case 'End':        e.preventDefault(); focusCard(cards.length - 1); break;
       }
     };
 
@@ -580,13 +601,7 @@ export default function WorkspaceHome() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [sortedWorkspaces, canAccess, activateWorkspace]);
 
-
-
   // ── Clear stale focus on mount ─────────────────────────────────
-  // When returning from a workspace (Escape), the active element from
-  // the previous view may still be focused in the DOM, or the browser
-  // may restore focus to a card. A stuck :focus-visible outline draws
-  // over the hover glow and makes the card look unresponsive.
   useEffect(() => {
     if (document.activeElement && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -596,15 +611,8 @@ export default function WorkspaceHome() {
   // ── Shared floating layer props ────────────────────────────────
 
   const floatingProps = {
-    session,
-    displayName,
-    roleName,
-    l10n,
-    toggleFullscreen,
-    handleLogoutClick,
-    error,
-    retry,
-    greeting,
+    session, displayName, roleName, l10n,
+    toggleFullscreen, handleLogoutClick, error, retry, greeting,
   };
 
   // ── Loading state ────────────────────────────────────────────
@@ -612,10 +620,7 @@ export default function WorkspaceHome() {
   if (showSkeleton) {
     return (
       <div className="workspace-home" data-testid="workspace-home">
-        {/* Layer 1: Background */}
         <LayerBackground />
-
-        {/* Layer 2+3: Content container + content */}
         <div className="ws-layer-content">
           <div className="ws-header">
             <LayerFloatingButtons {...floatingProps} />
@@ -626,13 +631,9 @@ export default function WorkspaceHome() {
           </div>
           <div className="ws-footer" />
         </div>
-
-        {/* SR-only status */}
         <span className="ws-sr-status" role="status" aria-live="polite">
           {loading ? requiredLocalized(l10n, 'workspace-home-loading') : error && !loading ? requiredLocalized(l10n, 'workspace-home-sr-error') : requiredLocalized(l10n, 'workspace-home-available', { count: sortedWorkspaces.length })}
         </span>
-
-        {/* Layer 5: Overlays */}
         <ConfirmDialog
           open={showLogoutModal}
           onCancel={handleLogoutCancel}
@@ -647,15 +648,12 @@ export default function WorkspaceHome() {
     );
   }
 
-  // ── Error state (no fallback available) ──────────────────────
+  // ── Error state ──────────────────────────────────────────────
 
   if (error && availableWorkspaces.length === 0) {
     return (
       <div className="workspace-home">
-        {/* Layer 1: Background */}
         <LayerBackground />
-
-        {/* Layer 2+3: Content container + content */}
         <div className="ws-layer-content">
           <div className="ws-header">
             <LayerFloatingButtons {...floatingProps} />
@@ -670,34 +668,22 @@ export default function WorkspaceHome() {
                 </svg>
               </div>
               <p className="workspace-error-title">
-                <Localized id="workspace-home-error-title">
-                  <span>Connection Error</span>
-                </Localized>
+                <Localized id="workspace-home-error-title"><span>Connection Error</span></Localized>
               </p>
               <p className="workspace-error-desc">
-                <Localized id="workspace-home-error-desc">
-                  <span>Could not load your workspaces. Check your connection and try again.</span>
-                </Localized>
+                <Localized id="workspace-home-error-desc"><span>Could not load your workspaces. Check your connection and try again.</span></Localized>
               </p>
-              <button
-                type="button"
-                className="workspace-error-retry"
-                onClick={retry}
-              >
+              <button type="button" className="workspace-error-retry" onClick={retry}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="1 4 1 10 7 10" />
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
                 </svg>
-                <Localized id="workspace-home-retry">
-                  <span>Try Again</span>
-                </Localized>
+                <Localized id="workspace-home-retry"><span>Try Again</span></Localized>
               </button>
             </div>
           </div>
           <div className="ws-footer" />
         </div>
-
-        {/* Layer 5: Overlays */}
         <ConfirmDialog
           open={showLogoutModal}
           onCancel={handleLogoutCancel}
@@ -716,10 +702,8 @@ export default function WorkspaceHome() {
 
   return (
     <div className="workspace-home" data-testid="workspace-home">
-      {/* Layer 1: Background */}
       <LayerBackground />
 
-      {/* Layer 2+3: Content container + content */}
       <div className="ws-layer-content">
         <div className="ws-header">
           <LayerFloatingButtons {...floatingProps} />
@@ -728,6 +712,49 @@ export default function WorkspaceHome() {
           <header className="workspace-home-header" />
 
           {sortedWorkspaces.length === 0 ? (
+            isAdminOrOwner ? (
+              <div className="workspace-home-content">
+                <div className="workspace-section">
+                  <div className="workspace-section-header">
+                    <h2 className="workspace-section-title">
+                      <Localized id="workspace-home-workspaces-section"><span>Workspaces</span></Localized>
+                    </h2>
+                  </div>
+                  <div className="workspace-grid" ref={gridRef} role="group" aria-label={l10n.getString('workspaces-aria')}>
+                    <button
+                      type="button"
+                      className="workspace-card workspace-card--add"
+                      data-testid="workspace-card-add"
+                      onClick={() => handleShortcutNav('settings/topology')}
+                      aria-label={l10n.getString('workspace-home-add-workspace-aria')}
+                    >
+                      <div className="workspace-card-row">
+                        <div className="workspace-card-icon">
+                          <div className="workspace-card-icon-inner">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
+                              <line x1="12" y1="5" x2="12" y2="19" />
+                              <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                          </div>
+                        </div>
+                        <div className="workspace-card-body">
+                          <div className="workspace-card-title">
+                            <h2 className="workspace-card-name">
+                              <Localized id="workspace-home-add-workspace"><span>Add Workspace</span></Localized>
+                            </h2>
+                          </div>
+                          <div className="workspace-card-text">
+                            <p className="workspace-card-desc">
+                              <Localized id="workspace-home-add-workspace-desc"><span>Configure workspaces in the topology editor</span></Localized>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className="workspace-empty">
               <div className="workspace-empty-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -738,275 +765,188 @@ export default function WorkspaceHome() {
                 </svg>
               </div>
               <p className="workspace-empty-title">
-                <Localized id="workspace-home-empty">
-                  <span>No workspaces available</span>
-                </Localized>
+                <Localized id="workspace-home-empty"><span>No workspaces available</span></Localized>
               </p>
               <p className="workspace-empty-desc">
-                <Localized id="workspace-home-empty-desc">
-                  <span>You don&apos;t have access to any workspaces yet. Contact an administrator.</span>
-                </Localized>
+                <Localized id="workspace-home-empty-desc"><span>You don&apos;t have access to any workspaces yet. Contact an administrator.</span></Localized>
               </p>
             </div>
+            )
           ) : (
-            <div className="workspace-grid" ref={gridRef} role="group" aria-label={l10n.getString('workspaces-aria')}>
-              {sortedWorkspaces.map((ws, idx) => {
-                const disabled = !canAccess(ws.type_key);
-                const colorClass = WS_COLORS[ws.type_key] ?? '';
-                const isActive = ws.type_key === lastWorkspace && !disabled;
-                if (disabled) {
-                  return (
-                    <div
-                      key={ws.type_key}
-                      className={`workspace-card ${colorClass} workspace-card--disabled`}
-                      data-testid="workspace-card"
-                      aria-label={l10n.getString('workspace-card-no-access-aria', { name: ws.name })}
+            <div className="workspace-home-content">
+              {/* ── Section 1: Active Workspaces ───────────────────── */}
+              <div className="workspace-section">
+                <div className="workspace-section-header">
+                  <h2 className="workspace-section-title">
+                    <Localized id="workspace-home-workspaces-section"><span>Workspaces</span></Localized>
+                  </h2>
+                </div>
+                <div className="workspace-grid" ref={gridRef} role="group" aria-label={l10n.getString('workspaces-aria')}>
+                  {sortedWorkspaces.map((ws, idx) => {
+                    const disabled = !canAccess(ws.type_key);
+                    const colorClass = WS_COLORS[ws.type_key] ?? '';
+                    const isActive = ws.type_key === lastWorkspace && !disabled;
+                    if (disabled) {
+                      return (
+                        <div
+                          key={ws.type_key}
+                          className={`workspace-card ${colorClass} workspace-card--disabled`}
+                          data-testid="workspace-card"
+                          aria-label={l10n.getString('workspace-card-no-access-aria', { name: ws.name })}
+                        >
+                          <div className="workspace-card-key-hint">{idx + 1}</div>
+                          <div className="workspace-card-row">
+                            <div className="workspace-card-icon">
+                              <div className="workspace-card-icon-inner">{getIcon(ws.type_key)}</div>
+                            </div>
+                            <div className="workspace-card-body">
+                              <div className="workspace-card-title">
+                                <h2 className="workspace-card-name">{ws.name}</h2>
+                              </div>
+                              <div className="workspace-card-text">
+                                <p className="workspace-card-desc">{ws.description}</p>
+                              </div>
+                              <div className="workspace-card-actions">
+                                <span className="workspace-card-badge">
+                                  <Localized id="workspace-card-no-access-badge"><span>Not available</span></Localized>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={ws.type_key}
+                        type="button"
+                        aria-current={isActive ? 'true' : undefined}
+                        className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}`}
+                        data-testid="workspace-card"
+                        onClick={(e) => handleCardClick(ws.type_key, e)}
+                        aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
+                      >
+                        <div className="workspace-card-key-hint">{idx + 1}</div>
+                        <span
+                          role="button"
+                          className={`workspace-card-pin-btn${pinnedKeys.has(ws.type_key) ? ' workspace-card-pin-btn--pinned' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); togglePin(ws.type_key); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); togglePin(ws.type_key); } }}
+                          aria-label={pinnedKeys.has(ws.type_key) ? l10n.getString('workspace-card-unpin-aria', { name: ws.name }) : l10n.getString('workspace-card-pin-aria', { name: ws.name })}
+                          tabIndex={0}
+                        >
+                          <svg viewBox="0 0 24 24" fill={pinnedKeys.has(ws.type_key) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                          </svg>
+                        </span>
+                        {isActive && (
+                          <div className="workspace-card-active-dot" aria-label={requiredLocalized(l10n, 'workspace-card-active-aria')}>
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
+                              <circle cx="12" cy="12" r="6" />
+                            </svg>
+                          </div>
+                        )}
+                        <div className="workspace-card-row">
+                          <div className="workspace-card-icon">
+                            <div className="workspace-card-icon-inner">{getIcon(ws.type_key)}</div>
+                          </div>
+                          <div className="workspace-card-body">
+                            <div className="workspace-card-title">
+                              <h2 className="workspace-card-name">{ws.name}</h2>
+                            </div>
+                            <div className="workspace-card-text">
+                              <p className="workspace-card-desc">{ws.description}</p>
+                            </div>
+                            <div className="workspace-card-actions" />
+                          </div>
+                        </div>
+                        <div className="workspace-card-overlay" aria-hidden="true">
+                          <span className="workspace-card-overlay-hint">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                              <rect x="2" y="4" width="20" height="16" rx="2" />
+                              <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
+                              <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
+                            </svg>
+                            <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
+                              <span>Press {idx + 1} to open</span>
+                            </Localized>
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {/* ── Add workspace card (owner/admin only) ───── */}
+                  {isAdminOrOwner && (
+                    <button
+                      type="button"
+                      className="workspace-card workspace-card--add"
+                      data-testid="workspace-card-add"
+                      onClick={() => handleShortcutNav('settings/topology')}
+                      aria-label={l10n.getString('workspace-home-add-workspace-aria')}
                     >
-                      <div className="workspace-card-key-hint">{idx + 1}</div>
                       <div className="workspace-card-row">
                         <div className="workspace-card-icon">
                           <div className="workspace-card-icon-inner">
-                            {getIcon(ws.type_key)}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
+                              <line x1="12" y1="5" x2="12" y2="19" />
+                              <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
                           </div>
                         </div>
                         <div className="workspace-card-body">
                           <div className="workspace-card-title">
-                            <h2 className="workspace-card-name">{ws.name}</h2>
+                            <h2 className="workspace-card-name">
+                              <Localized id="workspace-home-add-workspace"><span>Add Workspace</span></Localized>
+                            </h2>
                           </div>
                           <div className="workspace-card-text">
-                            <p className="workspace-card-desc">{ws.description}</p>
-                          </div>
-                          <div className="workspace-card-actions">
-                            <span className="workspace-card-badge">
-                              <Localized id="workspace-card-no-access-badge">
-                                <span>Not available</span>
-                              </Localized>
-                            </span>
+                            <p className="workspace-card-desc">
+                              <Localized id="workspace-home-add-workspace-desc"><span>Configure workspaces in the topology editor</span></Localized>
+                            </p>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                }
+                    </button>
+                  )}
+                </div>
+              </div>
 
-                return (
-                  <button
-                    key={ws.type_key}
-                    type="button"
-                    aria-current={isActive ? 'true' : undefined}
-                    className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}`}
-                    data-testid="workspace-card"
-                    onClick={(e) => handleCardClick(ws.type_key, e)}
-                    aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
-                  >
-                    <div className="workspace-card-key-hint">{idx + 1}</div>
-                    {/* Pin button — <span> with role="button" to avoid 
-                        nested <button> inside <button> (invalid HTML). */}
-                    <span
-                      role="button"
-                      className={`workspace-card-pin-btn${pinnedKeys.has(ws.type_key) ? ' workspace-card-pin-btn--pinned' : ''}`}
-                      onClick={(e) => { e.stopPropagation(); togglePin(ws.type_key); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); togglePin(ws.type_key); } }}
-                      aria-label={pinnedKeys.has(ws.type_key) ? l10n.getString('workspace-card-unpin-aria', { name: ws.name }) : l10n.getString('workspace-card-pin-aria', { name: ws.name })}
-                      tabIndex={0}
-                    >
-                      <svg viewBox="0 0 24 24" fill={pinnedKeys.has(ws.type_key) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                      </svg>
-                    </span>
-                    {isActive && (
-                      <div className="workspace-card-active-dot" aria-label={requiredLocalized(l10n, 'workspace-card-active-aria')}>
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
-                          <circle cx="12" cy="12" r="6" />
-                        </svg>
-                      </div>
-                    )}
-                    <div className="workspace-card-row">
-                      <div className="workspace-card-icon">
-                        <div className="workspace-card-icon-inner">
-                          {getIcon(ws.type_key)}
-                        </div>
-                      </div>
-                      <div className="workspace-card-body">
-                        <div className="workspace-card-title">
-                          <h2 className="workspace-card-name">{ws.name}</h2>
-                        </div>
-                        <div className="workspace-card-text">
-                          <p className="workspace-card-desc">{ws.description}</p>
-                        </div>
-                        <div className="workspace-card-actions" />
-                      </div>
-                    </div>
-
-                    {/* Overlay: keyboard shortcut hint */}
-                    <div className="workspace-card-overlay" aria-hidden="true">
-                      <span className="workspace-card-overlay-hint">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
-                          <rect x="2" y="4" width="20" height="16" rx="2" />
-                          <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01" />
-                          <path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01" />
-                        </svg>
-                        <Localized id="workspace-home-shortcut-hint" vars={{ key: `${idx + 1}` }}>
-                          <span>Press {idx + 1} to open</span>
-                        </Localized>
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-
-              {/* ── Analytics & Reports shortcuts (owner/admin only) ── */}
-              {isAdminOrOwner && (
-                <>
-                  {/* Section divider */}
-                  <div className="workspace-section-label" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
-                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                    </svg>
-                    <Localized id="workspace-home-insights-section">
-                      <span>Insights</span>
-                    </Localized>
+              {/* ── Section 2: Tools (role-gated) ──────────────────── */}
+              {visibleTools.length > 0 && (
+                <div className="workspace-section">
+                  <div className="workspace-section-header">
+                    <h2 className="workspace-section-title">
+                      <Localized id="workspace-home-tools-section"><span>Tools</span></Localized>
+                    </h2>
                   </div>
-
-                  {/* Analytics card */}
-                  <button
-                    type="button"
-                    className="workspace-card ws-color-admin"
-                    data-testid="workspace-card"
-                    onClick={() => handleShortcutNav('analytics')}
-                    aria-label={l10n.getString('workspace-home-analytics-aria')}
-                  >
-                    <div className="workspace-card-row">
-                      <div className="workspace-card-icon">
-                        <div className="workspace-card-icon-inner">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
-                            <path d="M18 20V10" />
-                            <path d="M12 20V4" />
-                            <path d="M6 20v-6" />
-                          </svg>
+                  <div className="workspace-tools-grid">
+                    {visibleTools.map((tool) => (
+                      <button
+                        key={tool.id}
+                        type="button"
+                        className="workspace-tool-card"
+                        data-testid="workspace-tool-card"
+                        onClick={() => handleShortcutNav(tool.route)}
+                        aria-label={l10n.getString(tool.labelKey)}
+                      >
+                        <div className="workspace-tool-icon">
+                          {tool.icon}
                         </div>
-                      </div>
-                      <div className="workspace-card-body">
-                        <div className="workspace-card-title">
-                          <h2 className="workspace-card-name">
-                            <Localized id="workspace-home-analytics-title">
-                              <span>Analytics</span>
-                            </Localized>
-                          </h2>
-                        </div>
-                        <div className="workspace-card-text">
-                          <p className="workspace-card-desc">
-                            <Localized id="workspace-home-analytics-desc">
-                              <span>Staff performance, sales trends, and shift metrics</span>
-                            </Localized>
+                        <div className="workspace-tool-body">
+                          <h3 className="workspace-tool-name">
+                            <Localized id={tool.labelKey}><span>{tool.id}</span></Localized>
+                          </h3>
+                          <p className="workspace-tool-desc">
+                            <Localized id={tool.descKey}><span></span></Localized>
                           </p>
                         </div>
-                      </div>
-                    </div>
-                    {/* Overlay: keyboard shortcut hint */}
-                    <div className="workspace-card-overlay" aria-hidden="true">
-                      <span className="workspace-card-overlay-hint">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                        <Localized id="workspace-home-shortcut-open">
-                          <span>Open</span>
-                        </Localized>
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* Reports (Dashboard) card */}
-                  <button
-                    type="button"
-                    className="workspace-card ws-color-admin"
-                    data-testid="workspace-card"
-                    onClick={() => handleShortcutNav('dashboard')}
-                    aria-label={l10n.getString('workspace-home-reports-aria')}
-                  >
-                    <div className="workspace-card-row">
-                      <div className="workspace-card-icon">
-                        <div className="workspace-card-icon-inner">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
-                            <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-                            <path d="M22 12A10 10 0 0 0 12 2v10z" />
-                          </svg>
-                        </div>
-                      </div>
-                      <div className="workspace-card-body">
-                        <div className="workspace-card-title">
-                          <h2 className="workspace-card-name">
-                            <Localized id="workspace-home-reports-title">
-                              <span>Reports</span>
-                            </Localized>
-                          </h2>
-                        </div>
-                        <div className="workspace-card-text">
-                          <p className="workspace-card-desc">
-                            <Localized id="workspace-home-reports-desc">
-                              <span>Sales, inventory, and custom reports dashboard</span>
-                            </Localized>
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Overlay: keyboard shortcut hint */}
-                    <div className="workspace-card-overlay" aria-hidden="true">
-                      <span className="workspace-card-overlay-hint">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                        <Localized id="workspace-home-shortcut-open">
-                          <span>Open</span>
-                        </Localized>
-                      </span>
-                    </div>
-                  </button>
-                </>
-              )}
-
-              {COMING_SOON_CARDS.map((cs) => (
-                <div
-                  key={cs.name}
-                  className="workspace-card workspace-card--disabled"
-                >
-                  <div className="workspace-card-row">
-                    <div className="workspace-card-icon">
-                      <div className="workspace-card-icon-inner">
-                        {getIcon(cs.name)}
-                      </div>
-                    </div>
-                    <div className="workspace-card-body">
-                      <div className="workspace-card-title">
-                        <h2 className="workspace-card-name">{cs.name}</h2>
-                      </div>
-                      <div className="workspace-card-text">
-                        <p className="workspace-card-desc">{cs.description}</p>
-                      </div>
-                      <div className="workspace-card-actions">
-                        <span className="workspace-card-badge">
-                          <Localized id="workspace-card-no-access-badge">
-                            <span>Not available</span>
-                          </Localized>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Overlay: coming soon hint */}
-                  <div className="workspace-card-overlay" aria-hidden="true">
-                    <span className="workspace-card-overlay-hint">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                      </svg>
-                      <Localized id="workspace-home-coming-soon"><span>Coming soon</span></Localized>
-                    </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>

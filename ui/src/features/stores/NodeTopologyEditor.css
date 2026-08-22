@@ -79,27 +79,428 @@
   overflow: hidden;
 }
 
-/* Left Tool Rack Sidebar */
+/* Right-side tool rack (icon strip) */
 .node-tool-rack {
-  width: 260px;
-  background-color: var(--color-bg-surface);
-  border-right: 1px solid var(--color-border);
-  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--color-bg-surface);
+  border-left: 1px solid var(--color-border);
+  order: 3;
   z-index: 10;
+  flex-shrink: 0;
+  position: relative;
 }
 
-.node-tool-rack h3 {
+/* Icon buttons */
+.rack-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out), border-color 0.12s var(--ease-out);
+}
+
+.rack-icon-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-fg);
+}
+
+.rack-icon-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.rack-icon-btn.is-active {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* ══════════════════════════════════════════════════════════════
+ * Expandable submenu panel — frosted glass design
+ * ══════════════════════════════════════════════════════════════ */
+
+.rack-panel {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  margin-right: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  width: 17rem;
+  max-height: 100%;
+  background: color-mix(in srgb, var(--color-bg-elevated) 85%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-bg) 40%, transparent),
+    0 8px 32px -4px rgba(0, 0, 0, 0.25),
+    0 2px 8px -2px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 20;
+  animation: rack-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes rack-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px) scale(0.97);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.rack-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  flex-shrink: 0;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-accent) 6%, transparent) 0%,
+    transparent 100%
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 40%, transparent);
+}
+
+.rack-panel-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-fg-secondary);
   margin: 0;
-  font-size: var(--text-base);
 }
 
-.tool-rack-desc {
+.rack-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-fg) 8%, transparent);
+  color: var(--color-fg-tertiary);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.rack-panel-close:hover {
+  background: color-mix(in srgb, var(--color-danger) 15%, transparent);
+  color: var(--color-danger);
+}
+
+.rack-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.rack-panel-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.rack-panel-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-fg) 15%, transparent);
+  border-radius: var(--radius-full);
+}
+
+.rack-panel-subsection {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}
+
+.rack-panel-subsection-title {
+  font-size: 0.625rem;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-tertiary);
+  opacity: 0.7;
+}
+
+.rack-panel-empty {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  text-align: center;
+  padding: var(--space-4) var(--space-3);
+  margin: 0;
+  opacity: 0.6;
+}
+
+.rack-panel-note {
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  opacity: 0.8;
+}
+
+.rack-panel-divider {
+  height: 1px;
+  background: color-mix(in srgb, var(--color-border) 40%, transparent);
+  margin: var(--space-1) var(--space-2);
+}
+
+/* ── Tool cards (two-area split) ────────────────────────────── */
+
+.rack-panel .tool-card {
+  display: grid;
+  grid-template-columns: 2.75rem 1fr;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-fg);
+  font-family: inherit;
+  position: relative;
+  overflow: hidden;
+  transition:
+    background 0.15s var(--ease-out),
+    transform 0.15s var(--ease-out);
+}
+
+.rack-panel .tool-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    120px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    color-mix(in srgb, var(--color-accent) 10%, transparent) 0%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.rack-panel .tool-card:hover {
+  background: color-mix(in srgb, var(--color-fg) 5%, transparent);
+  transform: translateX(2px);
+}
+
+.rack-panel .tool-card:hover::before {
+  opacity: 1;
+}
+
+.rack-panel .tool-card:active {
+  transform: translateX(2px) scale(0.98);
+}
+
+.rack-panel .tool-card:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.rack-panel .tool-card.is-active {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.rack-panel .tool-card.is-active .tool-card-icon {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+}
+
+.rack-panel .tool-card.locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rack-panel .tool-card.locked:hover {
+  transform: none;
+  background: transparent;
+}
+
+/* Left area: icon zone */
+.rack-panel .tool-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  background: color-mix(in srgb, var(--color-fg) 4%, transparent);
+  color: var(--color-fg-secondary);
+  transition: color 0.15s, background 0.15s;
+  border-right: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+}
+
+.rack-panel .tool-card:hover .tool-card-icon {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  border-right-color: color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+/* Right area: text zone */
+.rack-panel .tool-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+.rack-panel .tool-card-info strong {
   font-size: var(--text-sm);
-  color: var(--color-fg-muted);
-  margin: 0 0 var(--space-2) 0;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+
+.rack-panel .tool-card-info span {
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.7;
+}
+
+.rack-panel .tool-card-shortcut {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--color-fg-tertiary);
+  background: color-mix(in srgb, var(--color-fg) 6%, transparent);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.125rem var(--space-1_5);
+  line-height: 1.5;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.rack-panel .tool-card:hover .tool-card-shortcut {
+  opacity: 1;
+}
+
+.rack-panel .lock-badge {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.625rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-warning);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  padding: 0.125rem var(--space-1_5);
+  border-radius: var(--radius-full);
+}
+
+/* Template sub-widgets */
+.rack-template-pop {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.rack-template-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+}
+
+.rack-template-input:focus {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -1px;
+}
+
+.rack-template-save {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.rack-template-list {
+  padding: var(--space-2) var(--space-3);
+}
+
+.rack-template-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.rack-template-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+.rack-template-item:hover {
+  background: var(--color-bg-hover);
+}
+
+.rack-template-name {
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rack-template-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.rack-template-actions button {
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rack-panel { animation: none; }
+  .rack-icon-btn, .rack-panel .tool-card { transition: none; }
 }
 
 .tool-card {
@@ -1724,11 +2125,11 @@
 .topology-validation-widget {
   position: absolute;
   top: var(--space-3);
-  right: var(--space-3);
+  left: var(--space-3);
   z-index: 6;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .topology-issues-btn {
