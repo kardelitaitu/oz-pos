@@ -428,8 +428,8 @@ describe('NodeTopologyEditor Component', () => {
     renderEditor();
 
     // The header no longer carries a title — the tier badge (default
-    // currentTier = 'standard') marks the header instead.
-    expect(screen.getByText('STANDARD TIER')).toBeInTheDocument();
+    // currentTier = 'plus') marks the header instead.
+    expect(screen.getByText('PLUS TIER')).toBeInTheDocument();
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
     expect(screen.getByText('Retail POS #1')).toBeInTheDocument();
     expect(screen.getByText('Main Warehouse')).toBeInTheDocument();
