@@ -108,9 +108,49 @@ fn total_refunded_for_sale_no_refunds() {
     let conn = fresh();
     seed_completed_sale(&conn);
     let s = store(&conn);
-    let result = s.total_refunded_for_sale("ref-sale-1");
-    assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), CoreError::NotFound { .. }));
+    // No refunds → zero balance (not NotFound — callers use this as a
+    // refundable-balance check).
+    let result = s.total_refunded_for_sale("ref-sale-1").unwrap();
+    assert_eq!(result.minor_units, 0);
+    assert_eq!(result.currency, usd());
+}
+
+/// RED: a sale must not be refunded for MORE than the original total. The
+/// current code applies no over-refund guard — the same completed sale can
+/// be refunded unlimited times, and each refund restores stock.
+#[test]
+fn create_refund_rejects_over_refund() {
+    let conn = fresh();
+    seed_completed_sale(&conn);
+    let s = store(&conn);
+
+    // First refund: $7 (full amount).
+    let line1 = RefundLine::new("ref-sl-1", "COFFEE", 2, price(350), price(700));
+    let refund1 = Refund::new(
+        "ref-sale-1",
+        price(700),
+        "refund",
+        "",
+        "user-1",
+        vec![line1],
+    );
+    s.create_refund(&refund1).unwrap();
+
+    // Second refund: $3.50 (partial — total refunded would be $10.50 > $7 sale).
+    let line2 = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+    let refund2 = Refund::new(
+        "ref-sale-1",
+        price(350),
+        "over-refund",
+        "",
+        "user-1",
+        vec![line2],
+    );
+    let err = s.create_refund(&refund2).unwrap_err();
+    assert!(
+        matches!(err, CoreError::Validation { .. }),
+        "over-refunding a sale must be rejected, got: {err:?}"
+    );
 }
 
 #[test]
@@ -305,8 +345,14 @@ fn refund_qty_exceeds_original_deduction_fails() {
     let result = s.create_refund(&refund);
     assert!(result.is_err(), "refund exceeding original qty should fail");
     match result.unwrap_err() {
+        // The over-refund (total) guard fires first — the refund amount
+        // 49500 exceeds the sale total 2500. The qty guard is the
+        // second-line check.
         CoreError::Validation { field, .. } => {
-            assert_eq!(field, "refund_line.qty");
+            assert!(
+                field == "total" || field == "refund_line.qty",
+                "expected total or qty validation, got field: {field}"
+            );
         }
         other => panic!("expected Validation error, got: {other:?}"),
     }

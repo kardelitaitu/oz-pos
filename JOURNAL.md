@@ -6256,3 +6256,30 @@ expectation corrected):
 **Verification:** oz-api 182/182 (was 174); fmt + clippy -D warnings
 clean.
 
+## 2026-08-22 — TDD cycle: money flows round 1 (refund over-refund guard)
+
+**Problem:** create_refund had NO over-refund guard. The sale stays
+'completed' after a refund (nothing transitions it to 'refunded'), so the
+same completed sale could be refunded unlimited times — the customer is
+paid out repeatedly and stock is credited each time. Also
+total_refunded_for_sale returned Err(NotFound) when no refunds existed
+(callers want a zero balance) and used GROUP BY currency with query_row
+(breaks on multi-currency refunds).
+
+**Solution:** TDD Red->Green.
+- RED: create_refund_rejects_over_refund — refund a $7 sale for $7 then
+  again for $3.50; the second must be rejected. Failed before the fix.
+- GREEN: create_refund now sums prior refunds (same currency) and rejects
+  when cumulative + this refund exceeds the sale total (checked_add for
+  overflow). total_refunded_for_sale returns Money::zero in the sale's
+  currency when no refunds exist; sums only same-currency refunds.
+  One existing test updated (excessive-qty now hits the total guard
+  first, field is "total" not "refund_line.qty") and one updated
+  (total_refunded no-refunds now expects zero).
+
+**Verification:** oz-core 2025/2025; refund module 22/22; fmt + clippy
+-D warnings clean.
+
+**Risks / follow-ups:** the refundable-balance guard is per-currency and
+per-sale. Cross-currency refunds of a single-currency sale are rejected by
+the caller's checked_add (currency mismatch). Next: voids + gift cards.
