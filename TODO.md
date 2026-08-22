@@ -138,12 +138,12 @@ match the plan (`Free, Plus, Pro, Premium, Enterprise`). `Standard` maps to the 
 - [x] In [`crates/oz-core/src/subscription.rs`](./crates/oz-core/src/subscription.rs):
   - [x] Add `Plus` variant (maps to what `Standard` did — 1 store, 2 terminals, 2 warehouses, QRIS, cloud sync)
   - [x] Update `from_db()` to accept `"plus"` and keep `"standard"` as a legacy alias → `Plus`
-  - [x] Rename docstring of `Free` from "90-day Free Trial" to "Free forever — 30-day sales history"
-  - [x] Update `max_stores()`: `Plus → Some(1)`, `Pro → Some(2)`, `Premium → None`
+  - [x] Rename docstring of `Free` from "90-day Free Trial" to "Free forever — 3-month sales history"
+  - [x] Update `max_stores()`: `Plus → Some(1)`, `Pro → Some(2)`, `Premium → Some(5)`
   - [x] Update `max_pos_instances()`: `Plus → Some(2)`, `Pro → Some(5)`, `Premium → None`
   - [x] Update `max_warehouses()`: `Plus → Some(2)`, `Pro → Some(3)`, `Premium → None`
-  - [x] Add `max_staff_users() -> Option<i64>`: `Free → Some(1)`, `Plus → Some(5)`, `Pro → Some(20)`, `Premium/Enterprise → None`
-  - [x] Add `sales_history_days() -> Option<i64>`: `Free → Some(30)`, all others → `None` (unlimited)
+  - [x] Add `max_staff_users() -> Option<i64>`: `Free → Some(1)`, `Plus → Some(5)`, `Pro → Some(20)`, `Premium → Some(50)`, `Enterprise → None`
+  - [x] Add `sales_history_days() -> Option<i64>`: `Free → Some(90)` (3 months), `Plus → Some(365)`, `Pro → Some(5*365)`, `Premium/Enterprise → None` (unlimited)
   - [x] Update `supports_qris()`: `Free → false`, `Plus/Pro/Premium/Enterprise → true`
   - [x] Update `supports_stripe()`: `Free/Plus → false`, `Pro/Premium/Enterprise → true`
   - [x] Update `supports_lua_engine()`: `Free/Plus/Pro → false`, `Premium/Enterprise → true`
@@ -160,7 +160,7 @@ match the plan (`Free, Plus, Pro, Premium, Enterprise`). `Standard` maps to the 
 - [x] **New tests** (added to `#[cfg(test)]` block in `subscription.rs`):
   - `test_plus_quota_limits` — assert `max_stores`, `max_pos_instances`, `max_staff_users`, `sales_history_days`
   - `test_pro_quota_limits` — assert `max_stores(2)`, `max_pos_instances(5)`, `max_staff_users(20)`
-  - `test_free_history_limit` — assert `sales_history_days() == Some(30)`
+  - `test_free_history_limit` — assert `sales_history_days() == Some(90)`
   - `test_workspace_type_matrix` — assert `Plus` allows `inventory` but not `kds`; `Pro` allows `kds`
   - Also added: `test_staff_limits_per_tier`, `test_feature_flag_matrix`, `test_offline_grace_days_per_tier`, `test_from_db_plus_and_standard_alias`
 
@@ -212,7 +212,7 @@ Staff limit currently has no enforcement in the codebase (`max_staff_users` does
 - [x] **Test (UI):** `cd ui && npm run test -- --testPathPattern=staff`
 
 > **Shipped** (2026-08-18): `SubscriptionTier::max_staff_users()` (Free 1 / Plus 5 / Pro 20 /
-> Premium+ unlimited) enforced via `Db::enforce_staff_quota(&tier)` in **both** clients'
+> Premium 50 / Enterprise unlimited) enforced via `Db::enforce_staff_quota(&tier)` in **both** clients'
 > `create_staff_scoped` (desktop + tablet) before insert. Error surfaces as
 > `QuotaError::StaffLimit { tier, limit, current }` → wire `SubscriptionLimitExceeded`
 > subKind; the UI (`ui/src/api/staff.ts` `isStaffQuotaLimitError` + `StaffManagementScreen`)
@@ -224,7 +224,7 @@ Staff limit currently has no enforcement in the codebase (`max_staff_users` does
 
 ---
 
-#### C1.2 — Enforce 30-day sales history cap on Free tier
+#### C1.2 — Enforce 3-month (90-day) sales history cap on Free tier
 
 **Why:** Primary upgrade forcing function for Free → Plus (§9 Pre-Launch item 2).
 
@@ -235,7 +235,7 @@ Staff limit currently has no enforcement in the codebase (`max_staff_users` does
 - [x] In `ui/src/api/sales.ts`: add `salesHistoryCapped?: boolean` to the response type
 - [x] In the Sales History screen (`ui/src/features/sales/`):
   - [x] When `salesHistoryCapped === true`, render a blurred/overlay row at the bottom of the list
-  - [x] Overlay text (Fluent key `sales-history-cap-teaser`): *"Lihat riwayat lebih dari 30 hari — upgrade ke Plus"*
+  - [x] Overlay text (Fluent key `sales-history-cap-teaser`): *"Lihat riwayat lebih dari 3 bulan — upgrade ke Plus"*
   - [x] Overlay has an "Upgrade" CTA button linking to the subscription/upgrade flow
 
 - [x] **i18n:** Add `sales-history-cap-teaser` key to `ui/src/locales/sales.ftl` and `sales.id.ftl`
@@ -249,7 +249,8 @@ Staff limit currently has no enforcement in the codebase (`max_staff_users` does
 > compares lexicographically) and returns `(Vec<Sale>, bool)`; `list_sales()`
 > delegates to the same SQL builder. Commands: desktop `list_sales` /
 > `list_sales_scoped` + tablet `list_sales` load the tenant subscription
-> (`sales_history_days()` — Free 30, paid tiers unlimited) and return a new
+> (`sales_history_days()` — Free 3 months / Plus 1 year / Pro 5 years,
+> Premium+ unlimited) and return a new
 > `SaleListResponse { sales, salesHistoryCapped }` DTO (`serde rename_all
 > camelCase`). UI: `api/sales.ts` `SaleListResponse`; Sales History screen
 > renders the blurred `SalesHistoryCapTeaser` row (FTL `sales-history-cap-teaser`
@@ -257,7 +258,7 @@ Staff limit currently has no enforcement in the codebase (`max_staff_users` does
 > `/{locale}/pricing/#plus`, shown after the table or after the filtered-empty
 > state when history exists but fell outside the window; `VoidOrdersScreen`
 > consumes the same wrapper. Tests: oz-core `test_sales_history_cap_free_tier`,
-> UI `shows the 30-day history cap teaser … (C1.2)` / `hides the history cap
+> UI `shows the 3-month history cap teaser … (C1.2)` / `hides the history cap
 > teaser … (C1.2)`, dev-mock + auth-contract updated to the wrapper shape.
 > Note: `SaleListItem` still serializes snake_case on the wire while the TS
 > type is camelCase (pre-existing mismatch, out of scope).
@@ -286,7 +287,7 @@ Staff limit currently has no enforcement in the codebase (`max_staff_users` does
 > `prices: Record<'monthly' | 'yearly', TierPrice>` (each with `price`/`period`/`priceId`)
 > and `useState('yearly')` drives the default — same behavior, less duplication.
 
-- [x] **Test:** `cd website && npm run check` + `npm run build` — green; rendered HTML verified (annual prices `$49.99/$99.99/$199.99` visible server-side)
+- [x] **Test:** `cd website && npm run check` + `npm run build` — green; rendered HTML verified (annual prices `$49.99/$99.99/$399.99` visible server-side)
 
 ---
 
@@ -314,9 +315,9 @@ Staff limit currently has no enforcement in the codebase (`max_staff_users` does
   - [x] Change `trial` tier: renamed to `free`, description "Free forever", period `'free forever'`, no 90-day mention
   - [x] Add `plus` tier between `free` and `pro`: `$4.99/mo`, `$49.99/yr`, features: QRIS, cloud sync, Daily Sales Dashboard, 2 registers, 2 warehouses (5-staff quota lives in the matrix row)
   - [x] Update `pro` tier: corrected to `$9.99/mo` (was $19/mo — wrong vs the plan)
-  - [x] Update `premium` tier: corrected to `$19.99/mo` (was $49/mo — wrong)
+  - [x] Update `premium` tier: corrected to `$39.99/mo` (was $49/mo — wrong; the interim $19.99 in the 2026-08-17 plan was itself superseded by the website pricing)
   - [x] Update `featureRows` table to include all 5 tier columns (16 rows mirroring §3)
-- [x] In `website/src/content/pricing/id.ts`: mirrored with IDR prices (Rp 49.000/99.000/199.000 monthly; Rp 500.000/1.000.000/2.000.000 yearly)
+- [x] In `website/src/content/pricing/id.ts`: mirrored with IDR prices (Rp 49.000/99.000/399.000 monthly; Rp 500.000/1.000.000/3.999.000 yearly)
 - [x] In `website/src/content/pricing/types.ts`: `TierKey = free/plus/pro/premium/enterprise`; each tier carries `prices: Record<'monthly' | 'yearly', TierPrice>` and `highlight?: boolean`
 
 > **Shipped** (2026-08-18): fully implemented and verified (check + build + rendered HTML:
@@ -595,13 +596,13 @@ For each trigger:
 
 **Status:** ✅ Complete (2026-08-18)
 
-- [x] In `tierQuotas()`: Premium allows 10 stores self-serve; Enterprise unlimited
-- [x] In Rust `SubscriptionTier::max_stores()`: Premium → `Some(10)`, Enterprise → `None`
+- [x] In `tierQuotas()`: Premium allows 5 stores self-serve; Enterprise unlimited
+- [x] In Rust `SubscriptionTier::max_stores()`: Premium → `Some(5)`, Enterprise → `None`
 - [x] `POST /api/v1/license/enterprise-trial` endpoint (approval-code gated, 30-day trial)
 - [x] Tests updated for new Premium max_stores value
 
-> **Shipped** (2026-08-18): `tierQuotas("premium")` returns `maxStores=10` (was
-> unlimited). `SubscriptionTier::Premium.max_stores()` returns `Some(10)` (was
+> **Shipped** (2026-08-18): `tierQuotas("premium")` returns `maxStores=5` (was
+> unlimited). `SubscriptionTier::Premium.max_stores()` returns `Some(5)` (was
 > `None`). Enterprise remains unlimited. `handleEnterpriseTrial` mints a 30-day
 > Enterprise trial gated by an approval code.
 
@@ -652,4 +653,4 @@ npm run e2e
 
 > After C0 and C1 are complete, add a Playwright E2E spec:
 > `ui/e2e/e2e-upgrade-trigger-flow.spec.ts`
-> covering: Free user hits 30-day history cap → sees blurred overlay → clicks upgrade → upgrade modal opens.
+> covering: Free user hits 3-month history cap → sees blurred overlay → clicks upgrade → upgrade modal opens.
