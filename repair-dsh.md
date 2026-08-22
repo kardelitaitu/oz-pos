@@ -1,7 +1,11 @@
 # Repair Plan — DSH `reasoning_content must be passed back` 400 error
 
-**Status:** Planned (not yet applied — deal with later)
+**Status:** Applied ✅
 **Date:** 2026-08-22
+**Applied:** 2026-08-22 21:33–21:34 (local)
+**Backups:**
+- `index.js.bak-20260822-213350`
+- `openai-completions.js.bak-20260822-213350`
 **Affects:** DeepSeek Harness Desktop (DSH) agent runtime — NOT the oz-pos repo code.
 
 ---
@@ -187,6 +191,6 @@ cleanest non-elevated path — investigate before touching Program Files.
 
 - [ ] No `reasoning_content` 400 across: normal turns, tool-heavy turns,
       long-session compaction, session resume, subagent forks.
-- [ ] Originals backed up.
-- [ ] Change recorded here + JOURNAL.
+- [x] Originals backed up.
+- [x] Change recorded here.
 - [ ] Rollback path verified.
