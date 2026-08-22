@@ -154,6 +154,12 @@ impl DbPool {
     /// restricted `oz_app` role that only has DML grants — re-running the DDL
     /// would fail with `permission denied for schema public`. The schema is
     /// then applied once by the migration tool as the table owner.
+    ///
+    /// This is the production entry point (5-attempt retry budget). The
+    /// crate is a binary, so the only callers inside the crate are the test
+    /// suite; `connect_postgres_with_retries` exists for tests that assert a
+    /// failure without burning the backoff sleeps.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub async fn connect_postgres(
         url: &str,
         require_tls: bool,
@@ -246,7 +252,7 @@ impl DbPool {
         let mut last_err = String::new();
         let mut connected = false;
         for attempt in 1..=max_attempts {
-            let delay_secs = std::cmp::min(2u64.pow(attempt as u32), 30);
+            let delay_secs = std::cmp::min(2u64.pow(attempt), 30);
             info!(attempt, delay_secs, "attempting PostgreSQL connection");
 
             match tokio::time::timeout(std::time::Duration::from_secs(10), pool.get()).await {

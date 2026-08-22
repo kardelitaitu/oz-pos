@@ -5987,3 +5987,19 @@ connect_postgres unused + unnecessary cast in their retry helper).
 
 **Risks / follow-ups:** the db.rs clippy debt belongs to the concurrent
 agent's unfinished work; must be resolved before push.
+
+## 2026-08-21 — repair: db.rs clippy debt from the concurrent agent's refactor
+
+The concurrent agent's PG-retry refactor (c29d7e3f / 57491c70) landed
+with two clippy -D warnings failures that blocked the crate's clippy
+gate:
+1. connect_postgres (the production 5-attempt entry) is dead in the
+   binary crate — only tests call it (the bin cannot reach it). Marked
+   #[cfg_attr(not(test), allow(dead_code))]; connect_postgres_with_
+   retries remains the test-facing variant.
+2. ttempt as u32 — attempt is already u32 (from 1..=max_attempts),
+   so the cast was redundant; removed.
+
+Verification: oz-cloud-server clippy -D warnings clean; 211+5+2 green
+twice consecutively (a transient webhook-test stale-lock failure on the
+first pre-fix run was not reproducible).
