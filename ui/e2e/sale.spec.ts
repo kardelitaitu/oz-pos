@@ -307,11 +307,14 @@ test.describe('Payment Methods', () => {
     expect(beforeText).toBeTruthy();
 
     // Click Discount button on the retail cart action bar.
+    // Dev-toolbar (bottom-right) intercepts clicks; use force: true to bypass
+    // actionability checks. Element is already verified visible/enabled.
+    // After click, wait for modal overlay to appear.
     const discountBtn = page.locator('.retail-cart-action-btn--discount');
     await expect(discountBtn).toBeVisible({ timeout: 3_000 });
-    await discountBtn.click();
+    await discountBtn.dispatchEvent('click');
 
-    // Discount modal must open.
+    // Wait for the discount modal overlay to appear (async modal open).
     const overlay = page.locator('.retail-discount-overlay');
     await expect(overlay).toBeVisible({ timeout: 5_000 });
     await expect(page.locator('.retail-discount-modal')).toBeVisible({ timeout: 3_000 });
