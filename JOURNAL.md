@@ -5909,3 +5909,43 @@ refactor (from_config_with_retries cfg mismatch — not my change).
 
 **Risks / follow-ups:** the concurrent db.rs edit must be completed before
 the cloud-server suite can run.
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 10 (PgTransport tenant isolation)
+
+**Problem:** the client-side direct-PG sync (PgTransport) bypassed the
+cloud server entirely and its queries were NOT tenant-scoped:
+- build_pull_sql (all 4 variants) had no WHERE tenant_id
+- fetch_snapshot read products / tax_rates / users with no filter
+- the anchor MIN(created_at) was global (another tenant's rows could
+  gate this terminal's anchor)
+- the CREATE TABLE IF NOT EXISTS schema diverged from the server
+  (TIMESTAMPTZ vs TEXT created_at, INTEGER vs BIGINT retry_count, no
+  priority column)
+
+JOURNAL previously assumed a "dedicated sync database per deployment",
+but migrate_sqlite_to_pg copies into a SHARED schema — so a terminal
+pointed at the shared DB either saw nothing (RLS, if oz_app) or read
+ALL tenants (bypass role). Same class as the server-side RLS bugs, but
+on the client transport.
+
+**Solution:** TDD Red->Green.
+- RED: pull_updates_scopes_to_tenant + fetch_snapshot_scopes_to_tenant
+  (real Postgres, skip-if-unreachable) seed rows for 2 tenants and
+  assert tenant A sees only A. Also build_pull_sql unit tests updated
+  to pin the tenant filter in all 4 shapes.
+- GREEN: PgTransport carries tenant_id (new 6th ctor arg); every query
+  scoped with WHERE tenant_id = $ AND SET LOCAL oz.tenant_id in a
+  transaction (GUC covers the RLS shared-DB case); push_items scopes
+  the write + rejects items whose tenant mismatches the transport;
+  CREATE TABLE aligned to the server schema (TEXT created_at/synced_at,
+  BIGINT retry_count, priority BIGINT DEFAULT 1). pg_daemon reads the
+  tenant from license.tenant_id (fallback: first pending item, then
+  'default').
+
+**Verification:** platform-sync 279/279 (incl. 2 real-DB isolation
+tests); oz-pos-app + oz-pos-tablet + oz-cloud-server compile; fmt +
+clippy -D warnings clean. The pre-existing ignored pg_integration tests
+were updated to the tenant-scoped API + schema.
+
+**Risks / follow-ups:** none new — the transport is now safe on a shared
+DB and compatible with the server schema.

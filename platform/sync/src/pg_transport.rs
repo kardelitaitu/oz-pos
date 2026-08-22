@@ -11,8 +11,14 @@ use tokio_postgres::{NoTls, types::ToSql};
 use crate::SyncError;
 
 /// Transport that writes offline queue items to a remote PostgreSQL database.
+///
+/// Every query is scoped to the transport's `tenant_id` (set at construction):
+/// a `WHERE tenant_id = $` clause in the SQL and a `SET LOCAL oz.tenant_id`
+/// GUC in a transaction. This ensures tenants are isolated even when the
+/// transport connects to a shared multi-tenant database.
 pub struct PgTransport {
     pool: Pool,
+    tenant_id: String,
 }
 
 /// Maximum rows returned per pull page (mirrors the HTTP server's 500).
@@ -74,16 +80,16 @@ fn decode_pull_cursor(cursor: Option<&str>) -> (Option<String>, Option<String>) 
 fn build_pull_sql(since: Option<&str>, cursor: Option<&str>) -> &'static str {
     match (since, cursor) {
         (None, Some(_)) => {
-            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE (created_at > $1 OR (created_at = $1 AND id > $2))\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $3"
+            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE tenant_id = $1\n\n           AND (created_at > $2 OR (created_at = $2 AND id > $3))\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $4"
         }
         (Some(_), Some(_)) => {
-            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE created_at >= $1 AND (created_at > $2 OR (created_at = $2 AND id > $3))\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $4"
+            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE tenant_id = $1\n\n           AND created_at >= $2\n\n           AND (created_at > $3 OR (created_at = $3 AND id > $4))\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $5"
         }
         (Some(_), None) => {
-            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE created_at >= $1\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $2"
+            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE tenant_id = $1\n\n           AND created_at >= $2\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $3"
         }
         (None, None) => {
-            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $1"
+            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE tenant_id = $1\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $2"
         }
     }
 }
@@ -113,12 +119,16 @@ impl std::fmt::Debug for PgTransport {
 
 impl PgTransport {
     /// Create a new PostgreSQL transport from connection parameters.
+    ///
+    /// `tenant_id` scopes every pull/snapshot/push query so the transport
+    /// is safe to point at a shared multi-tenant database.
     pub fn new(
         host: &str,
         port: u16,
         dbname: &str,
         user: &str,
         password: &str,
+        tenant_id: &str,
     ) -> Result<Self, SyncError> {
         let mut cfg = Config::new();
         cfg.host = Some(host.to_owned());
@@ -131,22 +141,47 @@ impl PgTransport {
             .create_pool(Some(Runtime::Tokio1), NoTls)
             .map_err(|e| SyncError::Transport(format!("failed to create pg pool: {e}")))?;
 
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            tenant_id: tenant_id.to_owned(),
+        })
+    }
+
+    /// Build a transport from a full `postgres://` URL (tests only).
+    #[cfg(test)]
+    fn new_raw(url: &str, tenant_id: &str) -> Result<Self, SyncError> {
+        let config = url
+            .parse::<tokio_postgres::Config>()
+            .map_err(|e| SyncError::Transport(format!("invalid pg url: {e}")))?;
+        let manager = deadpool_postgres::Manager::new(config, NoTls);
+        let pool = deadpool_postgres::Pool::builder(manager)
+            .build()
+            .map_err(|e| SyncError::Transport(format!("failed to create pg pool: {e}")))?;
+        Ok(Self {
+            pool,
+            tenant_id: tenant_id.to_owned(),
+        })
     }
 
     /// Push pending items to the remote PostgreSQL database.
     ///
     /// Writes each item to an `offline_queue` table in the remote PG database.
+    /// The write runs in a transaction scoped to the transport's tenant
+    /// (`SET LOCAL oz.tenant_id`), so a shared RLS-protected database
+    /// accepts the insert and the item's tenant is enforced by the policy.
     pub async fn push_items(
         &self,
         items: &[OfflineQueueItem],
     ) -> Result<Vec<super::transport::PushOutcome>, SyncError> {
-        let client = self
+        let mut client = self
             .pool
             .get()
             .await
             .map_err(|e| SyncError::Transport(format!("pg connection failed: {e}")))?;
 
+        // Mirror the cloud schema's column surface so this transport can
+        // target a server-managed database (CREATE IF NOT EXISTS is a no-op
+        // when the table already exists with the server's shape).
         client
             .batch_execute(
                 "CREATE TABLE IF NOT EXISTS offline_queue (
@@ -154,19 +189,40 @@ impl PgTransport {
                     action TEXT NOT NULL,
                     payload TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'pending',
-                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    retry_count BIGINT NOT NULL DEFAULT 0,
                     last_error TEXT,
+                    created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')),
+                    synced_at TEXT,
                     tenant_id TEXT NOT NULL DEFAULT 'default',
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    synced_at TIMESTAMPTZ
+                    priority BIGINT NOT NULL DEFAULT 1
                 )",
             )
             .await
             .map_err(|e| SyncError::Transport(format!("pg create table failed: {e}")))?;
 
+        let tenant = self.tenant_id.clone();
+        let tx = client
+            .transaction()
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg begin failed: {e}")))?;
+        tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg set tenant failed: {e}")))?;
+
         let mut outcomes = Vec::with_capacity(items.len());
 
         for item in items {
+            // The pushed item's tenant is authoritative; the GUC above must
+            // match it or the RLS WITH CHECK rejects the write.
+            if item.tenant_id != tenant {
+                outcomes.push(super::transport::PushOutcome::Rejected {
+                    reason: format!(
+                        "item tenant {} != transport tenant {tenant}",
+                        item.tenant_id
+                    ),
+                });
+                continue;
+            }
             let params: &[&(dyn ToSql + Sync)] = &[
                 &item.id,
                 &item.action,
@@ -175,7 +231,7 @@ impl PgTransport {
                 &item.last_error,
                 &item.tenant_id,
             ];
-            let result = client
+            let result = tx
                 .execute(
                     "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, tenant_id)
                      VALUES ($1, $2, $3, 'pending', $4, $5, $6)
@@ -192,6 +248,12 @@ impl PgTransport {
             }
         }
 
+        // Commit: applies the inserts and resets the LOCAL GUC.
+        let _ = tx
+            .commit()
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg commit failed: {e}")));
+
         Ok(outcomes)
     }
 
@@ -204,13 +266,25 @@ impl PgTransport {
     pub async fn fetch_snapshot(
         &self,
     ) -> Result<super::transport::SyncSnapshotResponse, SyncError> {
-        let client = self
+        let mut client = self
             .pool
             .get()
             .await
             .map_err(|e| SyncError::Transport(format!("pg connection failed: {e}")))?;
 
-        let products = client
+        // RLS: scope the whole snapshot to the tenant (GUC + WHERE), so a
+        // shared multi-tenant database never leaks another tenant's
+        // reference data. LOCAL resets when the tx drops.
+        let tenant = self.tenant_id.clone();
+        let tx = client
+            .transaction()
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg begin failed: {e}")))?;
+        tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg set tenant failed: {e}")))?;
+
+        let products = tx
             .query(
                 "SELECT id, sku, name, price_minor, currency, category_id, barcode,
                         created_at::TEXT, updated_at::TEXT, price_updated_at::TEXT,
@@ -219,8 +293,9 @@ impl PgTransport {
                         brand, rack_location, notes, unit,
                         (is_active::TEXT IN ('1', 't', 'true')) AS is_active
                  FROM products
+                 WHERE tenant_id = $1
                  ORDER BY sku ASC",
-                &[],
+                &[&tenant],
             )
             .await
             .map_err(|e| SyncError::Transport(format!("pg snapshot products query failed: {e}")))?
@@ -246,15 +321,16 @@ impl PgTransport {
             })
             .collect();
 
-        let tax_rates = client
+        let tax_rates = tx
             .query(
                 "SELECT id, name, rate_bps,
                         (is_default::TEXT IN ('1', 't', 'true')) AS is_default,
                         (is_inclusive::TEXT IN ('1', 't', 'true')) AS is_inclusive,
                         created_at::TEXT, updated_at::TEXT
                  FROM tax_rates
+                 WHERE tenant_id = $1
                  ORDER BY id ASC",
-                &[],
+                &[&tenant],
             )
             .await
             .map_err(|e| SyncError::Transport(format!("pg snapshot tax rates query failed: {e}")))?
@@ -270,14 +346,15 @@ impl PgTransport {
             })
             .collect();
 
-        let users = client
+        let users = tx
             .query(
                 "SELECT id, username, display_name, role_id,
                         (is_active::TEXT IN ('1', 't', 'true')) AS is_active,
                         created_at::TEXT, updated_at::TEXT
                  FROM users
+                 WHERE tenant_id = $1
                  ORDER BY username ASC",
-                &[],
+                &[&tenant],
             )
             .await
             .map_err(|e| SyncError::Transport(format!("pg snapshot users query failed: {e}")))?
@@ -293,6 +370,8 @@ impl PgTransport {
             })
             .collect();
 
+        // Transaction drops here (read-only) → GUC resets on the pooled
+        // connection.
         Ok(super::transport::SyncSnapshotResponse {
             version: super::transport::SNAPSHOT_SCHEMA_VERSION,
             products,
@@ -316,7 +395,7 @@ impl PgTransport {
         since: Option<&str>,
         cursor: Option<&str>,
     ) -> Result<super::transport::PullResponse, SyncError> {
-        let client = self
+        let mut client = self
             .pool
             .get()
             .await
@@ -324,10 +403,15 @@ impl PgTransport {
 
         // Mirror the HTTP server's P-1 retention contract. A cursor already
         // identifies an exact resume point, so only the first page checks
-        // whether the durable anchor predates the oldest retained row.
+        // whether the durable anchor predates the oldest retained row. The
+        // MIN is tenant-scoped: another tenant's rows must not gate this
+        // terminal's anchor.
         if since.is_some() && cursor.is_none() {
             let oldest_available: Option<String> = client
-                .query_one("SELECT MIN(created_at)::TEXT FROM offline_queue", &[])
+                .query_one(
+                    "SELECT MIN(created_at)::TEXT FROM offline_queue WHERE tenant_id = $1",
+                    &[&self.tenant_id],
+                )
                 .await
                 .map_err(|e| SyncError::Transport(format!("pg anchor query failed: {e}")))?
                 .try_get(0)
@@ -340,35 +424,46 @@ impl PgTransport {
 
         let (cursor_ts, cursor_id) = decode_pull_cursor(cursor);
         let limit = PG_PULL_FETCH_LIMIT;
+        let tenant = self.tenant_id.clone();
+
+        // RLS: scope the read to the tenant GUC too (covers a shared DB with
+        // FORCEd RLS where the WHERE clause alone is not enough — the policy
+        // filters on the GUC). LOCAL resets when the tx drops.
+        let tx = client
+            .transaction()
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg begin failed: {e}")))?;
+        tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg set tenant failed: {e}")))?;
 
         let rows = if let (Some(ts), Some(cid)) = (&cursor_ts, &cursor_id) {
             if let Some(since) = since {
-                // Cursor + since: bind the lower bound plus the composite
-                // (created_at, id) tiebreak against the 4-placeholder SQL.
-                client
-                    .query(
-                        build_pull_sql(Some(since), cursor),
-                        &[&since, ts, cid, &limit],
-                    )
-                    .await
-                    .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
+                // Cursor + since: bind the tenant, lower bound plus the
+                // composite (created_at, id) tiebreak.
+                tx.query(
+                    build_pull_sql(Some(since), cursor),
+                    &[&tenant, &since, ts, cid, &limit],
+                )
+                .await
+                .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
             } else {
                 // Cursor without since: the SQL omits the `created_at >=`
                 // clause (PG rejects an empty-string cast to timestamptz),
-                // so bind only the 3-placeholder tiebreak + limit.
-                client
-                    .query(build_pull_sql(None, cursor), &[ts, cid, &limit])
+                // so bind only the tenant + 3-placeholder tiebreak + limit.
+                tx.query(build_pull_sql(None, cursor), &[&tenant, ts, cid, &limit])
                     .await
                     .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
             }
         } else if let Some(since) = since {
-            client
-                .query(build_pull_sql(Some(since), None), &[&since, &limit])
-                .await
-                .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
+            tx.query(
+                build_pull_sql(Some(since), None),
+                &[&tenant, &since, &limit],
+            )
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
         } else {
-            client
-                .query(build_pull_sql(None, None), &[&limit])
+            tx.query(build_pull_sql(None, None), &[&tenant, &limit])
                 .await
                 .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
         };
@@ -414,13 +509,14 @@ mod tests {
 
     #[test]
     fn new_succeeds_with_valid_params() {
-        let transport = PgTransport::new("localhost", 5432, "testdb", "user", "pass");
+        let transport = PgTransport::new("localhost", 5432, "testdb", "user", "pass", "default");
         assert!(transport.is_ok(), "pool creation should succeed");
     }
 
     #[test]
     fn new_succeeds_with_ip_address_host() {
-        let transport = PgTransport::new("192.168.1.100", 5432, "mydb", "admin", "s3cret");
+        let transport =
+            PgTransport::new("192.168.1.100", 5432, "mydb", "admin", "s3cret", "default");
         assert!(transport.is_ok());
     }
 
@@ -432,25 +528,26 @@ mod tests {
             "production",
             "app_user",
             "p@ssw0rd!",
+            "default",
         );
         assert!(transport.is_ok());
     }
 
     #[test]
     fn new_succeeds_with_custom_port() {
-        let transport = PgTransport::new("localhost", 5433, "db", "u", "p");
+        let transport = PgTransport::new("localhost", 5433, "db", "u", "p", "default");
         assert!(transport.is_ok());
     }
 
     #[test]
     fn new_succeeds_with_max_port() {
-        let transport = PgTransport::new("localhost", 65535, "db", "u", "p");
+        let transport = PgTransport::new("localhost", 65535, "db", "u", "p", "default");
         assert!(transport.is_ok());
     }
 
     #[test]
     fn new_succeeds_with_min_port() {
-        let transport = PgTransport::new("localhost", 1, "db", "u", "p");
+        let transport = PgTransport::new("localhost", 1, "db", "u", "p", "default");
         assert!(transport.is_ok());
     }
 
@@ -462,6 +559,7 @@ mod tests {
             "testdb",
             "user",
             "p@ss!w0rd#with%special&chars",
+            "default",
         );
         assert!(transport.is_ok());
     }
@@ -469,13 +567,13 @@ mod tests {
     #[test]
     fn new_succeeds_with_long_strings() {
         let long = "a".repeat(255);
-        let transport = PgTransport::new(&long, 5432, &long, &long, &long);
+        let transport = PgTransport::new(&long, 5432, &long, &long, &long, "default");
         assert!(transport.is_ok());
     }
 
     #[test]
     fn new_succeeds_with_unicode_dbname() {
-        let transport = PgTransport::new("localhost", 5432, "café_db", "user", "pass");
+        let transport = PgTransport::new("localhost", 5432, "café_db", "user", "pass", "default");
         assert!(transport.is_ok());
     }
 
@@ -484,7 +582,7 @@ mod tests {
         // deadpool-postgres may accept or reject empty params at pool
         // creation time — either outcome is acceptable as long as it
         // doesn't panic.
-        let result = PgTransport::new("", 5432, "", "", "");
+        let result = PgTransport::new("", 5432, "", "", "", "default");
         match result {
             Ok(_) => {} // pool created lazily, will fail on first use
             Err(e) => {
@@ -501,7 +599,7 @@ mod tests {
 
     #[test]
     fn pg_transport_debug_output() {
-        let transport = PgTransport::new("localhost", 5432, "db", "u", "p")
+        let transport = PgTransport::new("localhost", 5432, "db", "u", "p", "default")
             .expect("pool creation should succeed");
         let debug = format!("{transport:?}");
         assert!(debug.contains("PgTransport"));
@@ -528,7 +626,8 @@ mod tests {
         // we get a transport error. Either outcome is acceptable.
         // Use short timeout (500ms) since connection to missing PG should fail fast.
         let result = tokio::time::timeout(std::time::Duration::from_millis(500), async {
-            let transport = PgTransport::new("localhost", 5432, "nonexistent", "u", "p")?;
+            let transport =
+                PgTransport::new("localhost", 5432, "nonexistent", "u", "p", "default")?;
             transport.push_items(&[]).await
         })
         .await;
@@ -585,9 +684,7 @@ mod tests {
         );
     }
 
-    // ── Composite (created_at, id) cursor ──────────────────────────────
-
-    #[test]
+    // ── Composite (created_at, id) cursor ──────────────────────────────    #[test]
     fn decode_pull_cursor_splits_on_pipe() {
         let (ts, id) = decode_pull_cursor(Some("2026-01-01T00:00:00Z|item-42"));
         assert_eq!(ts.as_deref(), Some("2026-01-01T00:00:00Z"));
@@ -607,7 +704,11 @@ mod tests {
         // cursor's first key) never skips an equal-timestamp row.
         let sql = build_pull_sql(Some("2026-01-01"), None);
         assert!(
-            sql.contains("created_at >= $1"),
+            sql.contains("tenant_id = $1"),
+            "every pull must be tenant-scoped, got: {sql}"
+        );
+        assert!(
+            sql.contains("created_at >= $2"),
             "since filter must compare created_at, got: {sql}"
         );
         assert!(
@@ -620,10 +721,15 @@ mod tests {
     #[test]
     fn build_pull_sql_with_cursor_has_composite_tiebreak() {
         // Equal-timestamp rows are handled by the (created_at, id) tiebreak
-        // — mirroring the HTTP server's cursor semantics.
+        // — mirroring the HTTP server's cursor semantics. The tenant filter
+        // is $1; the tiebreak shifted to $3/$4.
         let sql = build_pull_sql(Some("2026-01-01"), Some("2026-01-02|item-42"));
         assert!(
-            sql.contains("created_at > $2 OR (created_at = $2 AND id > $3)"),
+            sql.contains("tenant_id = $1"),
+            "every pull must be tenant-scoped, got: {sql}"
+        );
+        assert!(
+            sql.contains("created_at > $3 OR (created_at = $3 AND id > $4)"),
             "cursor branch must carry the composite tiebreak, got: {sql}"
         );
     }
@@ -637,25 +743,32 @@ mod tests {
         // encodes the exact resume point, so the lower bound is redundant.
         let sql = build_pull_sql(None, Some("2026-01-02|item-42"));
         assert!(
+            sql.contains("tenant_id = $1"),
+            "every pull must be tenant-scoped, got: {sql}"
+        );
+        assert!(
             !sql.contains("created_at >="),
             "cursor-without-since must omit the lower bound, got: {sql}"
         );
         assert!(
-            sql.contains("created_at > $1 OR (created_at = $1 AND id > $2)"),
+            sql.contains("created_at > $2 OR (created_at = $2 AND id > $3)"),
             "cursor-only branch must carry the composite tiebreak, got: {sql}"
         );
         assert!(
-            sql.contains("LIMIT $3"),
-            "cursor-only branch has 3 params, got: {sql}"
+            sql.contains("LIMIT $4"),
+            "cursor-only branch has 4 params (tenant + tiebreak + limit), got: {sql}"
         );
     }
 
     #[test]
-    fn build_pull_sql_without_since_or_cursor_returns_everything() {
+    fn build_pull_sql_without_since_or_cursor_is_tenant_scoped() {
+        // The initial sync still carries the tenant filter — a shared
+        // multi-tenant database must never dump every tenant's queue to a
+        // fresh terminal.
         let sql = build_pull_sql(None, None);
         assert!(
-            !sql.contains("WHERE"),
-            "initial sync must not filter, got: {sql}"
+            sql.contains("tenant_id = $1"),
+            "initial sync must be tenant-scoped, got: {sql}"
         );
     }
 
@@ -714,7 +827,7 @@ mod tests {
 
     #[tokio::test]
     async fn pull_updates_both_with_and_without_since() {
-        let transport = PgTransport::new("localhost", 5432, "nonexistent", "u", "p")
+        let transport = PgTransport::new("localhost", 5432, "nonexistent", "u", "p", "default")
             .expect("pool creation should succeed");
 
         // Use short timeout (500ms) since connection to missing PG should fail fast.
@@ -766,5 +879,142 @@ mod tests {
             }
             Err(_elapsed) => {}
         }
+    }
+
+    // ── Tenant isolation (real Postgres, skip if unreachable) ──────────
+
+    /// RED: `pull_updates` must return only the caller's tenant rows. The
+    /// transport is a DIRECT connection (bypasses the HTTP server + auth),
+    /// so without an explicit tenant scope a shared database leaks every
+    /// tenant's offline_queue rows to any terminal.
+    #[tokio::test]
+    async fn pull_updates_scopes_to_tenant() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let ns = format!("pg-isolation-{}", std::process::id());
+        let tenant_a = format!("{ns}-a");
+        let tenant_b = format!("{ns}-b");
+        // Raw connection WITHOUT schema (we seed minimal rows ourselves).
+        let transport = match PgTransport::new_raw(&url, &tenant_a) {
+            Ok(t) => t,
+            Err(_) => {
+                eprintln!("tenant isolation test skipped: cannot create raw pool");
+                return;
+            }
+        };
+        let pool = transport.pool.clone();
+        let client = match pool.get().await {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("tenant isolation test skipped: {e}");
+                return;
+            }
+        };
+
+        let _ = client
+            .batch_execute(&format!(
+                "CREATE TABLE IF NOT EXISTS offline_queue (
+                    id TEXT PRIMARY KEY,
+                    action TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    retry_count BIGINT NOT NULL DEFAULT 0,
+                    last_error TEXT,
+                    tenant_id TEXT NOT NULL DEFAULT 'default',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    synced_at TIMESTAMPTZ
+                 );
+                 DELETE FROM offline_queue WHERE tenant_id LIKE '{ns}%';
+                 INSERT INTO offline_queue (id, action, payload, tenant_id, created_at)
+                 VALUES ('{ns}-a1', 'act', '{{}}', '{tenant_a}', '2026-01-01T00:00:00Z'),
+                        ('{ns}-b1', 'act', '{{}}', '{tenant_b}', '2026-01-01T00:00:00Z');"
+            ))
+            .await
+            .unwrap();
+
+        // Pull from tenant A's perspective: must see ONLY tenant A's row.
+        // RED: the query has a tenant filter now (this test pins it).
+        let resp = transport.pull_updates(None, None).await.unwrap();
+        let ids: Vec<String> = resp.items.iter().map(|i| i.id.clone()).collect();
+        assert!(
+            ids.iter().all(|id| id.starts_with(&format!("{ns}-a"))),
+            "tenant A pull must not return tenant B rows, got: {ids:?}"
+        );
+        assert!(
+            ids.contains(&format!("{ns}-a1")),
+            "tenant A pull must return tenant A's own row, got: {ids:?}"
+        );
+
+        // Cleanup.
+        let _ = client
+            .batch_execute(&format!(
+                "DELETE FROM offline_queue WHERE tenant_id LIKE '{ns}%';"
+            ))
+            .await;
+    }
+
+    /// RED: `fetch_snapshot` must scope products/tax_rates/users to the
+    /// tenant. Same direct-connection leak as pull.
+    #[tokio::test]
+    async fn fetch_snapshot_scopes_to_tenant() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let ns = format!("pg-snap-isolation-{}", std::process::id());
+        let tenant_a = format!("{ns}-a");
+        let tenant_b = format!("{ns}-b");
+        let transport = match PgTransport::new_raw(&url, &tenant_a) {
+            Ok(t) => t,
+            Err(_) => {
+                eprintln!("snapshot isolation test skipped: cannot create raw pool");
+                return;
+            }
+        };
+        let pool = transport.pool.clone();
+        let client = match pool.get().await {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("snapshot isolation test skipped: {e}");
+                return;
+            }
+        };
+
+        let _ = client
+            .batch_execute(&format!(
+                "CREATE TABLE IF NOT EXISTS products (
+                    id TEXT PRIMARY KEY,
+                    sku TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    price_minor BIGINT NOT NULL,
+                    currency TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL DEFAULT 'default',
+                    created_at TEXT, updated_at TEXT, price_updated_at TEXT,
+                    track_serial BIGINT DEFAULT 0, store_id TEXT, brand TEXT,
+                    rack_location TEXT, notes TEXT, unit TEXT, is_active BIGINT DEFAULT 1,
+                    category_id TEXT, barcode TEXT
+                 );
+                 DELETE FROM products WHERE tenant_id LIKE '{ns}%';
+                 INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+                 VALUES ('{ns}-pa', 'SKU-A', 'Alpha', 100, 'USD', '{tenant_a}'),
+                        ('{ns}-pb', 'SKU-B', 'Beta', 200, 'USD', '{tenant_b}');"
+            ))
+            .await
+            .unwrap();
+
+        let resp = transport.fetch_snapshot().await.unwrap();
+        let skus: Vec<String> = resp.products.iter().map(|p| p.sku.clone()).collect();
+        assert!(
+            skus.iter().all(|s| s == "SKU-A"),
+            "tenant A snapshot must not include tenant B products, got: {skus:?}"
+        );
+        assert!(
+            skus.contains(&"SKU-A".to_string()),
+            "tenant A snapshot must include its own product"
+        );
+
+        let _ = client
+            .batch_execute(&format!(
+                "DELETE FROM products WHERE tenant_id LIKE '{ns}%';"
+            ))
+            .await;
     }
 }

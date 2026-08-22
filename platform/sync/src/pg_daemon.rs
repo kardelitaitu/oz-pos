@@ -200,9 +200,19 @@ impl PgSyncDaemon {
                     let password = Settings::get_pg_sync_password(&conn)
                         .unwrap_or_default()
                         .unwrap_or_default();
+                    // The transport scopes every query to this tenant, so a
+                    // shared multi-tenant database never leaks another
+                    // tenant's rows to this terminal. Falls back to the
+                    // local queue's tenant when the license setting is
+                    // absent (pre-license installs).
+                    let tenant_id: String = Settings::get(&conn, "license.tenant_id")
+                        .unwrap_or_default()
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| pending.first().map(|i| i.tenant_id.clone()))
+                        .unwrap_or_else(|| "default".into());
 
                     if !host.is_empty() && !dbname.is_empty() {
-                        Some((host, port, dbname, user, password))
+                        Some((host, port, dbname, user, password, tenant_id))
                     } else {
                         None
                     }
@@ -227,12 +237,13 @@ impl PgSyncDaemon {
         let mut pulled = 0usize;
         let mut sync_error: Option<String> = None;
 
-        let pg_transport = pg_config
-            .as_ref()
-            .and_then(|(host, port, dbname, user, password)| {
-                let port_u16: u16 = port.parse().unwrap_or(5432);
-                PgTransport::new(host, port_u16, dbname, user, password).ok()
-            });
+        let pg_transport =
+            pg_config
+                .as_ref()
+                .and_then(|(host, port, dbname, user, password, tenant_id)| {
+                    let port_u16: u16 = port.parse().unwrap_or(5432);
+                    PgTransport::new(host, port_u16, dbname, user, password, tenant_id).ok()
+                });
 
         if let Some(ref transport) = pg_transport {
             // Phase 3: push pending items (no-op when nothing is pending).
