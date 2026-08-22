@@ -6327,3 +6327,27 @@ wrapper's connection contract was the gap.
 **Verification:** platform-startup 41/41 (was 38); oz-pos-app still
 compiles (consumer of the reaper); fmt + clippy -D warnings clean.
 
+## 2026-08-22 — TDD cycle: money flows round 2 (shift close cash-refund reconciliation)
+
+**Problem:** close_shift's expected_cash ignored cash refunds:
+expected = opening + cash_sales - payouts, but a cash refund takes cash
+OUT of the drawer. So after a $10 cash refund, expected_cash was
+overstated by $10 and cash_difference read $10 OVER — masking a real
+drawer shortage as a false surplus.
+
+**Solution:** TDD Red->Green.
+- RED: close_shift_includes_cash_refunds_in_expected_cash — open $100,
+  $10 cash refund, close at $90 → expected 9000, diff 0. Failed before
+  the fix (expected 100, diff -10).
+- GREEN: close_shift computes cash_refunds (refunds joined to their
+  sales where payment_method='cash') and subtracts them from
+  expected_cash.
+
+**Verification:** oz-core 2026/2026; close_shift tests 6/6; fmt +
+clippy -D warnings clean; desktop compiles.
+
+**Money-flow sweep summary:** refunds (P0 over-refund guard, round 1),
+voids (correct: status guards + stock restore), gift cards + loyalty
+(correct: atomic conditional update + idempotency), promotions/discounts
+(correct: audited MONEY-AUDIT-2 percentage math, capped fixed discount),
+shifts (this fix: cash-refund reconciliation).

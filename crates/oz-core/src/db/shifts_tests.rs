@@ -142,6 +142,64 @@ fn close_shift_calculates_cash_difference() {
     assert_eq!(closed.cash_difference_minor, Some(50)); // 150 - 100
 }
 
+/// RED: expected_cash must subtract cash refunds. A $10 cash refund during
+/// the shift takes $10 out of the drawer, so the expected cash should be
+/// opening + cash_sales − cash_refunds − payouts. Without this the
+/// expected_cash is overstated and the cash_difference hides a real shortage.
+#[test]
+fn close_shift_includes_cash_refunds_in_expected_cash() {
+    let conn = fresh();
+    seed_user(&conn);
+    let s = store(&conn);
+    let usd: crate::Currency = "USD".parse().unwrap();
+    let money = |minor: i64| crate::Money {
+        minor_units: minor,
+        currency: usd,
+    };
+
+    // Open with $100 (10000 minor), then a $10 (1000 minor) cash refund
+    // occurs.
+    let shift = s.open_shift("user-1", None, 10000).unwrap();
+    conn.execute_batch(
+        "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at, product_type)
+         VALUES ('p-sku', 'SKU', 'Sku', 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 'retail');
+         INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method,
+                            created_at, updated_at, user_id, version)
+         VALUES ('refund-sale-1', 1000, 'USD', 1, 'completed', 'cash',
+                 '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'user-1', 1);"
+    )
+    .unwrap();
+    s.create_refund(&crate::Refund::new(
+        "refund-sale-1",
+        money(1000),
+        "refund",
+        "",
+        "user-1",
+        vec![crate::RefundLine::new(
+            "sl-1",
+            "SKU",
+            1,
+            money(1000),
+            money(1000),
+        )],
+    ))
+    .unwrap();
+
+    // Close with $90 (9000). Drawer: 10000 opening − 1000 refund = 9000.
+    // Expected cash = 10000 − 1000 = 9000, diff = 9000 − 9000 = 0.
+    let closed = s.close_shift(&shift.id, 9000, None).unwrap();
+    assert_eq!(
+        closed.expected_cash_minor,
+        Some(9000),
+        "expected_cash must include cash refunds (10000 opening − 1000 refund = 9000)"
+    );
+    assert_eq!(
+        closed.cash_difference_minor,
+        Some(0),
+        "drawer equals expected (9000 − 9000 = 0)"
+    );
+}
+
 #[test]
 fn close_shift_already_closed_rejected() {
     let conn = fresh();
