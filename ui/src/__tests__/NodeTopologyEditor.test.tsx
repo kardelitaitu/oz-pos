@@ -2012,7 +2012,7 @@ describe('NodeTopologyEditor Component', () => {
       // Regression: the editor's Pro set was ['pro', 'enterprise'] and the
       // screen's tier union omitted 'premium', so a Premium install saw the
       // standard-tier warehouse-tier-limit banner and Apply gate even though
-      // the backend treats Premium as Pro (unlimited warehouses).
+      // the backend treats Premium as an unlimited-warehouse tier.
       mockLoadTopology.mockResolvedValueOnce(twoWarehouseDiagram);
       const onSave = vi.fn();
       renderEditor({ currentTier: 'premium', onSave });

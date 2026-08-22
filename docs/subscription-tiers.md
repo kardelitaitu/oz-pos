@@ -628,7 +628,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 
 #### Short-Term Optimizations (0-3 months)
 1. **A/B test Pro tier pricing** — optimize revenue
-2. **Launch 30-day Pro trial** — boost conversion
+2. **Launch segmented trial strategy** — 14-day Plus (general), 14-day Pro (restaurant/cafe), 30-day Pro (enterprise-referral) — boost conversion
 3. **Implement upgrade prompts** — increase adoption
 
 #### Medium-Term Strategies (3-6 months)
