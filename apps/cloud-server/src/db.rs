@@ -29,6 +29,12 @@ use tracing::{info, warn};
 
 /// A pooled database connection, either SQLite (behind a Mutex) or
 /// PostgreSQL (via deadpool).
+///
+/// Cluster-wide advisory lock key used to serialize PG_INIT schema apply
+/// and cutover role mutations across parallel test processes (and two
+/// app instances booting simultaneously). Value = ASCII "OZTESTSQ".
+pub(crate) const SCHEMA_LOCK_KEY: i64 = 0x4f5a_5445_5354_5351;
+
 #[derive(Clone, Debug)]
 pub enum DbPool {
     /// SQLite connection wrapped in `Arc<Mutex<>>` (compatible with
@@ -329,7 +335,6 @@ impl DbPool {
             // raced catalog DDL (the recurring flake); the same race exists
             // between two app instances booting at once. The lock is
             // session-scoped, so a crashed process releases it automatically.
-            const SCHEMA_LOCK_KEY: i64 = 0x4f5a_5445_5354_5351; // "OZTESTSQ"
             migrate_client
                 .batch_execute(&format!("SELECT pg_advisory_lock({SCHEMA_LOCK_KEY});"))
                 .await

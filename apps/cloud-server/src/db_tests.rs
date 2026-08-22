@@ -488,7 +488,49 @@ async fn pg_integration_apply_schema_can_be_skipped() {
 async fn pg_integration_rls_fails_closed() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let pool = match DbPool::connect_postgres(&url, false, 20, true).await {
+    // Throwaway DB: this test queries `products` while the cutover test
+    // (`pg_integration_rls_force_blocks_owner`) runs FORCE RLS on the
+    // shared base tables inside an open transaction — a concurrent query
+    // there surfaces as a spurious RLS denial. The throwaway DB isolates
+    // this test from that window entirely.
+    // Admin connection is raw (apply_schema = false): it only creates /
+    // drops the throwaway database.
+    let admin_pool = match DbPool::connect_postgres(&url, false, 20, false).await {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("PG integration test skipped: {e}");
+            return;
+        }
+    };
+    let admin = admin_pool
+        .pg_client()
+        .await
+        .expect("pg_client should succeed");
+    let db_name = format!("oz_rls_closed_{}", std::process::id());
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop stale database should succeed");
+    if let Err(e) = admin
+        .execute(&format!("CREATE DATABASE {db_name}"), &[])
+        .await
+    {
+        eprintln!("PG integration test skipped: cannot CREATE DATABASE ({e})");
+        return;
+    }
+    drop(admin);
+    let (base, query) = match url.split_once('?') {
+        Some((b, q)) => (b, Some(q)),
+        None => (url.as_str(), None),
+    };
+    let (head, _old_db) = base
+        .rsplit_once('/')
+        .expect("URL must have a database path");
+    let db_url = match query {
+        Some(q) => format!("{head}/{db_name}?{q}"),
+        None => format!("{head}/{db_name}"),
+    };
+    let pool = match DbPool::connect_postgres(&db_url, false, 20, true).await {
         Ok(p) => p,
         Err(e) => {
             eprintln!("PG integration test skipped: {e}");
@@ -550,8 +592,9 @@ async fn pg_integration_rls_fails_closed() {
         .expect("seed beta product should succeed");
 
     // A dedicated connection for the probe role — SET ROLE must never
-    // leak onto a pooled connection another test might reuse.
-    let (probe, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+    // leak onto a pooled connection another test might reuse. Connects to
+    // the THROWAWAY database (the probe role's grants live there).
+    let (probe, conn) = tokio_postgres::connect(&db_url, tokio_postgres::NoTls)
         .await
         .expect("dedicated probe connection should succeed");
     tokio::spawn(async move {
@@ -633,6 +676,17 @@ async fn pg_integration_rls_fails_closed() {
         )
         .await
         .expect("update of the visible row should succeed");
+
+    // Cleanup: drop the throwaway database.
+    drop(probe);
+    drop(pool);
+    admin_pool
+        .pg_client()
+        .await
+        .expect("cleanup admin client")
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop throwaway database should succeed");
 }
 
 /// Integration test: the deployment cutover script
@@ -712,6 +766,8 @@ async fn pg_integration_rls_force_blocks_owner() {
         .expect("probe leftovers cleanup should succeed");
 
     // ── Proof 1: the real cutover script executes and is idempotent. ──
+    // Runs inside a transaction that ROLLBACKs below; the assertion after
+    // rollback (`forced == 0`) proves FORCE RLS is transactional here.
     const CUTOVER: &str = include_str!("../../../scripts/rls-cutover.sql");
     client
         .batch_execute("BEGIN")
