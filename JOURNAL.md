@@ -6307,3 +6307,23 @@ clean.
 only (skip-if-unreachable pattern); the SQLite default path is fully
 covered now.
 
+
+## 2026-08-22 — TDD cycle: platform/startup pending-sale reaper
+
+**Problem:** init_pending_sale_reaper (ADR-20) spawned a background
+daemon but its dedicated-connection setup (WAL + foreign_keys pragmas,
+graceful DB-open failure) was untested. The store's
+reap_stale_pending_sales logic was already covered in oz-core; the
+wrapper's connection contract was the gap.
+
+**Solution:** TDD refactor + coverage:
+- Extracted open_reaper_connection() from the reaper's inline open +
+  pragma code — now returns Result so pragma failures surface as errors
+  (a reaper silently running without WAL/FK would misbehave); the
+  daemon still logs-and-exits on open failure (no crash).
+- 3 new tests: WAL + FK pragmas configured; unopenable path fails
+  gracefully; second connection reuses the existing app schema.
+
+**Verification:** platform-startup 41/41 (was 38); oz-pos-app still
+compiles (consumer of the reaper); fmt + clippy -D warnings clean.
+

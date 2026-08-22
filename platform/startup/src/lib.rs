@@ -239,6 +239,22 @@ pub fn spawn_daemon(
     });
 }
 
+/// Open a dedicated WAL-mode connection for the pending-sale reaper.
+///
+/// The reaper runs on its own connection so it never blocks (or is blocked
+/// by) the main application connection. Foreign-key enforcement and WAL
+/// journal mode are configured exactly like [`open_handler_connection`];
+/// pragma failures are surfaced as errors (a reaper running without WAL or
+/// FK enforcement would silently misbehave).
+fn open_reaper_connection(
+    db_path: &std::path::Path,
+) -> Result<rusqlite::Connection, rusqlite::Error> {
+    let conn = Connection::open(db_path)?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    Ok(conn)
+}
+
 /// Spawn the ADR-20 stale-pending-sale reaper as a periodic background task.
 ///
 /// Every 60 seconds, queries for pending sales whose `pending_expires_at`
@@ -255,15 +271,13 @@ pub fn init_pending_sale_reaper(db_path: &std::path::Path) {
     let path = db_path.to_owned();
     spawn_daemon("pending-sale-reaper", async move {
         // Create a dedicated connection for the reaper.
-        let conn = match Connection::open(&path) {
+        let conn = match open_reaper_connection(&path) {
             Ok(c) => c,
             Err(e) => {
                 tracing::error!(?e, "pending sale reaper: failed to open DB — skipping");
                 return;
             }
         };
-        conn.pragma_update(None, "foreign_keys", "ON").ok();
-        conn.pragma_update(None, "journal_mode", "WAL").ok();
 
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await;
@@ -452,5 +466,50 @@ mod tests {
         let k = kernel.blocking_lock();
         let bus = k.event_bus();
         assert_eq!(bus.topic_count(), 4, "should have 4 event topics");
+    }
+
+    // ── init_pending_sale_reaper / open_reaper_connection ────────────
+
+    #[test]
+    fn open_reaper_connection_configures_wal_and_foreign_keys() {
+        let (_dir, db_path) = create_temp_db();
+
+        let conn = open_reaper_connection(&db_path).unwrap();
+        let wal: String = conn
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(wal.to_lowercase(), "wal", "reaper connection must use WAL");
+
+        let fk: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(fk, 1, "reaper connection must enforce foreign keys");
+    }
+
+    #[test]
+    fn open_reaper_connection_fails_on_unopenable_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let bad_path = dir.path().join("nonexistent_subdir").join("db.sqlite");
+        assert!(
+            open_reaper_connection(&bad_path).is_err(),
+            "a path in a nonexistent parent must fail to open"
+        );
+    }
+
+    #[test]
+    fn open_reaper_connection_reuses_existing_db() {
+        // The reaper opens the same DB the app uses; a second connection
+        // must succeed on the existing file and see the migrated schema.
+        let (_dir, db_path) = create_temp_db();
+
+        let conn = open_reaper_connection(&db_path).unwrap();
+        let sales_table: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sales'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(sales_table, 1, "reaper connection must see the app schema");
     }
 }
