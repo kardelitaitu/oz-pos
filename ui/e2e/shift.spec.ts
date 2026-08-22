@@ -43,45 +43,56 @@ test.describe('Shift Management', () => {
     // first so every test starts from the deterministic baseline. Mirrors
     // the close-shift block in e2e-shift-reconciliation.spec.ts.
     await page.evaluate(() => { window.location.hash = '#/shifts'; });
-    await page.waitForTimeout(2_000);
+    // Wait for the shift management container to be fully rendered.
     await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
 
-    const closeShiftBtn = page.locator('button:has-text("Close Shift"), button:has-text("Tutup")').first();
-    if (await closeShiftBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    // Ensure we end up in the "No active shift" state.
+    // If an active shift card is present, close it.
+    const activeCard = page.locator('.shift-mgmt-active-card');
+    const noActiveBanner = page.locator('.shift-mgmt-no-active');
+
+    if (await activeCard.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      // Active shift exists — close it.
+      const closeShiftBtn = page.locator('button:has-text("Close Shift"), button:has-text("Tutup")').first();
+      await expect(closeShiftBtn).toBeVisible({ timeout: 5_000 });
       await closeShiftBtn.click();
-      await page.waitForTimeout(500);
+
       const closingInput = page.locator('#close-balance');
       await expect(closingInput).toBeVisible({ timeout: 3_000 });
       await closingInput.fill('0');
-      await page.waitForTimeout(200);
+
       await page.locator(
         '.shift-mgmt-modal-actions button:has-text("Close Shift"), ' +
         '.shift-mgmt-modal-actions button:has-text("Tutup")',
       ).click();
-      await page.waitForTimeout(1_000);
 
-      // Dismiss the "Shift Closed" summary dialog so the Open Shift button
-      // becomes reachable.
+      // Wait for the "Shift Closed" summary dialog.
+      await expect(page.locator('.shift-mgmt-summary-grid')).toBeVisible({ timeout: 5_000 });
+
+      // Dismiss the summary dialog.
       const doneBtn = page.locator(
         '.shift-mgmt-overlay .shift-mgmt-modal-actions button:has-text("Done"), ' +
         '.shift-mgmt-overlay .shift-mgmt-modal-actions button:has-text("Selesai")',
       );
-      if (await doneBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await doneBtn.click();
-        await page.waitForTimeout(500);
-      }
+      await expect(doneBtn).toBeVisible({ timeout: 3_000 });
+      await doneBtn.click();
+
+      // Verify we're back to "No active shift".
+      await expect(noActiveBanner).toBeVisible({ timeout: 5_000 });
+    } else {
+      // Already in "No active shift" state — verify banner is visible.
+      await expect(noActiveBanner).toBeVisible({ timeout: 5_000 });
     }
   });
 
   // ── Bonus: Shift history table is visible ───────────────────
 
   test('shift history table renders with columns', async ({ page }) => {
-    await page.evaluate(() => {
-      window.location.hash = '#/shifts';
-    });
-    await page.waitForTimeout(2_000);
-
+    await page.evaluate(() => { window.location.hash = '#/shifts'; });
+    // Wait for the shift management container and content to be fully rendered.
     await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
+    // In this test we expect "No active shift" (beforeEach guarantees it).
+    await expect(page.locator('.shift-mgmt-no-active')).toBeVisible({ timeout: 5_000 });
 
     // The shift history section must have a title.
     await expect(page.locator('.shift-mgmt-table-title')).toBeVisible({ timeout: 5_000 });
@@ -96,22 +107,14 @@ test.describe('Shift Management', () => {
 
   test('shift screen loads and shows "No active shift"', async ({ page }) => {
     // Navigate to shifts page via hash.
-    await page.evaluate(() => {
-      window.location.hash = '#/shifts';
-    });
-    await page.waitForTimeout(2_000);
-
-    // Shift management container must be visible.
-    const shiftContainer = page.locator('.shift-mgmt');
-    await expect(shiftContainer).toBeVisible({ timeout: 10_000 });
+    await page.evaluate(() => { window.location.hash = '#/shifts'; });
+    // Wait for the shift management container and "No active shift" banner.
+    await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
+    const noActiveBanner = page.locator('.shift-mgmt-no-active');
+    await expect(noActiveBanner).toBeVisible({ timeout: 5_000 });
 
     // Title "Shift Management" must be present.
     await expect(page.locator('.shift-mgmt-title')).toBeVisible();
-
-    // Dev-mock returns null for active shift → "No active shift" banner must be visible.
-    const noActiveBanner = page.locator('.shift-mgmt-no-active');
-    await expect(noActiveBanner).toBeVisible({ timeout: 5_000 });
-    await expect(page.locator('.shift-mgmt-no-active-title')).toBeVisible();
 
     // "Open Shift" button must be visible.
     const openBtn = page.locator('button:has-text("Open Shift"), button:has-text("Buka")');
@@ -121,19 +124,14 @@ test.describe('Shift Management', () => {
   // ── E2E-24: Open shift flow ───────────────────────────────
 
   test('opens a shift with opening balance', async ({ page }) => {
-    await page.evaluate(() => {
-      window.location.hash = '#/shifts';
-    });
-    await page.waitForTimeout(2_000);
-
+    await page.evaluate(() => { window.location.hash = '#/shifts'; });
     await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.shift-mgmt-no-active')).toBeVisible({ timeout: 5_000 });
 
     // Click "Open Shift" button.
     const openBtn = page.locator('button:has-text("Open Shift"), button:has-text("Buka")').first();
     await openBtn.click();
-    await page.waitForTimeout(500);
-
-    // Open Shift modal must appear.
+    // Wait for the modal to appear.
     const modal = page.locator('.shift-mgmt-overlay');
     await expect(modal).toBeVisible({ timeout: 3_000 });
 
@@ -145,15 +143,11 @@ test.describe('Shift Management', () => {
     const balanceInput = page.locator('#open-balance');
     await expect(balanceInput).toBeVisible();
     await balanceInput.fill('50000');
-    await page.waitForTimeout(200);
 
     // Click confirm button in modal.
     const confirmBtn = modal.locator('button:has-text("Open Shift"), button:has-text("Buka")');
     await confirmBtn.click();
-    await page.waitForTimeout(1_000);
-
-    // After opening, the "No active shift" banner should be gone
-    // because an active shift card must appear.
+    // Wait for the active shift card to appear (modal closes, active shift renders).
     const activeCard = page.locator('.shift-mgmt-active-card');
     await expect(activeCard).toBeVisible({ timeout: 5_000 });
 
@@ -166,17 +160,13 @@ test.describe('Shift Management', () => {
   // ── E2E-25: Close shift flow ──────────────────────────────
 
   test('closes an active shift', async ({ page }) => {
-    await page.evaluate(() => {
-      window.location.hash = '#/shifts';
-    });
-    await page.waitForTimeout(2_000);
-
+    await page.evaluate(() => { window.location.hash = '#/shifts'; });
     await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.shift-mgmt-no-active')).toBeVisible({ timeout: 5_000 });
 
     // Open shift first (mock always returns null for active shift).
     const openBtn = page.locator('button:has-text("Open Shift"), button:has-text("Buka")').first();
     await openBtn.click();
-
     const openModal = page.locator('.shift-mgmt-overlay');
     await expect(openModal).toBeVisible({ timeout: 3_000 });
 
@@ -186,15 +176,14 @@ test.describe('Shift Management', () => {
 
     const confirmOpenBtn = openModal.locator('button:has-text("Open Shift"), button:has-text("Buka")');
     await confirmOpenBtn.click();
-    await page.waitForTimeout(1_000);
+    // Wait for the active shift card to appear.
+    await expect(page.locator('.shift-mgmt-active-card')).toBeVisible({ timeout: 5_000 });
 
     // Now close the shift.
     const closeBtn = page.locator('button:has-text("Close Shift"), button:has-text("Tutup")').first();
     await expect(closeBtn).toBeVisible({ timeout: 5_000 });
     await closeBtn.click();
-    await page.waitForTimeout(500);
-
-    // Close Shift modal must appear.
+    // Wait for the Close Shift modal to appear.
     const closeModal = page.locator('.shift-mgmt-overlay');
     await expect(closeModal).toBeVisible({ timeout: 3_000 });
 
@@ -202,16 +191,13 @@ test.describe('Shift Management', () => {
     const closingInput = page.locator('#close-balance');
     await expect(closingInput).toBeVisible();
     await closingInput.fill('55000');
-    await page.waitForTimeout(200);
 
     // Click confirm close button.
     const confirmCloseBtn = closeModal.locator(
       '.shift-mgmt-modal-actions button:has-text("Close Shift"), .shift-mgmt-modal-actions button:has-text("Tutup")',
     );
     await confirmCloseBtn.click();
-    await page.waitForTimeout(1_000);
-
-    // Close summary modal must appear (mock close_shift returns a closed shift).
+    // Wait for the Close summary modal to appear.
     const summaryGrid = page.locator('.shift-mgmt-summary-grid');
     await expect(summaryGrid).toBeVisible({ timeout: 5_000 });
 
@@ -224,17 +210,13 @@ test.describe('Shift Management', () => {
   // ── E2E-26: Cash payout recording ───────────────────────────
 
   test('records a cash payout from an active shift', async ({ page }) => {
-    await page.evaluate(() => {
-      window.location.hash = '#/shifts';
-    });
-    await page.waitForTimeout(2_000);
-
+    await page.evaluate(() => { window.location.hash = '#/shifts'; });
     await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.shift-mgmt-no-active')).toBeVisible({ timeout: 5_000 });
 
     // Open shift first.
     const openBtn = page.locator('button:has-text("Open Shift"), button:has-text("Buka")').first();
     await openBtn.click();
-
     const openModal = page.locator('.shift-mgmt-overlay');
     await expect(openModal).toBeVisible({ timeout: 3_000 });
 
@@ -244,9 +226,7 @@ test.describe('Shift Management', () => {
 
     const confirmOpenBtn = openModal.locator('button:has-text("Open Shift"), button:has-text("Buka")');
     await confirmOpenBtn.click();
-    await page.waitForTimeout(1_000);
-
-    // Now the active shift card must be visible with the "Record Payout" button.
+    // Wait for the active shift card to appear.
     const activeCard = page.locator('.shift-mgmt-active-card');
     await expect(activeCard).toBeVisible({ timeout: 5_000 });
 
@@ -254,9 +234,7 @@ test.describe('Shift Management', () => {
     const payoutBtn = page.locator('button:has-text("Record Payout"), button:has-text("Payout")').first();
     await expect(payoutBtn).toBeVisible({ timeout: 5_000 });
     await payoutBtn.click();
-    await page.waitForTimeout(500);
-
-    // Payout modal must appear.
+    // Wait for the payout modal to appear.
     const payoutModal = page.locator('.shift-mgmt-overlay');
     await expect(payoutModal).toBeVisible({ timeout: 3_000 });
 
@@ -268,21 +246,17 @@ test.describe('Shift Management', () => {
     const amountInput = page.locator('#payout-amount');
     await expect(amountInput).toBeVisible();
     await amountInput.fill('20000');
-    await page.waitForTimeout(200);
 
     // Fill payout reason.
     const reasonInput = page.locator('#payout-reason');
     await expect(reasonInput).toBeVisible();
     await reasonInput.fill('Safe drop');
-    await page.waitForTimeout(200);
 
     // Click "Record Payout" confirm button in modal.
     const confirmPayoutBtn = payoutModal.locator('button:has-text("Record Payout")').last();
     await expect(confirmPayoutBtn).toBeEnabled({ timeout: 3_000 });
     await confirmPayoutBtn.click();
-    await page.waitForTimeout(1_000);
-
-    // After recording, the payout modal should close and active card remains.
+    // Wait for the payout modal to close and active card to remain.
     await expect(page.locator('.shift-mgmt-active-card')).toBeVisible({ timeout: 5_000 });
 
     // Verify no crash.
