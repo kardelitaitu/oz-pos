@@ -294,7 +294,7 @@ const renderEditor = (props?: {
   compareFocus?: boolean;
   canSave?: boolean;
 }) =>
-  renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
+  renderWithProvidersSync(<NodeTopologyEditor currentTier="plus" {...props} />, multiStoreFtl, sharedFtl);
 
 /**
  * Harness that re-renders the editor with a NEW workspaceInstances array
@@ -310,7 +310,7 @@ function ReloadingHarness({ next }: { next: WorkspaceInstanceSeed[] }) {
         reload-instances
       </button>
       {/* exactOptionalPropertyTypes: omit the prop while instances is undefined */}
-      <NodeTopologyEditor currentTier="standard" {...(instances ? { workspaceInstances: instances } : {})} />
+      <NodeTopologyEditor currentTier="plus" {...(instances ? { workspaceInstances: instances } : {})} />
     </>
   );
 }
@@ -341,7 +341,7 @@ function BranchRenameHarness() {
   ]);
   return (
     <NodeTopologyEditor
-      currentTier="standard"
+      currentTier="plus"
       workspaceInstances={renameWsInstances}
       branchLocations={locations}
       onRenameBranch={async (id, name) => {
@@ -361,7 +361,7 @@ function WorkspaceRenameHarness() {
   ]);
   return (
     <NodeTopologyEditor
-      currentTier="standard"
+      currentTier="plus"
       workspaceInstances={instances}
       branchLocations={[{ id: 'store-1', name: 'Downtown Branch' }]}
       onRenameWorkspace={async (id, name) => {
@@ -386,7 +386,7 @@ function BothChangeHarness() {
         both-change
       </button>
       <NodeTopologyEditor
-        currentTier="standard"
+        currentTier="plus"
         {...(instances ? { workspaceInstances: instances } : {})}
         {...(locations ? { branchLocations: locations } : {})}
       />
@@ -2508,7 +2508,7 @@ function DeleteAllHarness() {
         delete-all-branches
       </button>
       <NodeTopologyEditor
-        currentTier="standard"
+        currentTier="plus"
         workspaceInstances={instances}
         branchLocations={locations}
       />
@@ -2531,7 +2531,7 @@ function BranchDeleteHarness() {
         delete-store-1
       </button>
       <NodeTopologyEditor
-        currentTier="standard"
+        currentTier="plus"
         workspaceInstances={renameWsInstances}
         branchLocations={locations}
       />
@@ -5216,7 +5216,7 @@ describe('NodeTopologyEditor — warehouse capacity tier gate', () => {
 // ── Warehouse capacity tier notice ──────────────────────────────
 
 describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
-  const renderGraph = async (tier: 'standard' | 'pro', metadata: Record<string, unknown>) => {
+  const renderGraph = async (tier: 'plus' | 'pro', metadata: Record<string, unknown>) => {
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
@@ -5232,8 +5232,8 @@ describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
     await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
   };
 
-  it('shows the notice on standard tier when capacity numbers are stored', async () => {
-    await renderGraph('standard', { stock: 500, capacity: 1000 });
+  it('shows the notice on plus tier when capacity numbers are stored', async () => {
+    await renderGraph('plus', { stock: 500, capacity: 1000 });
 
     const notice = document.querySelector('.topology-tier-notice');
     expect(notice).not.toBeNull();
@@ -5245,8 +5245,8 @@ describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
     expect(document.querySelector('.topology-tier-notice')).toBeNull();
   });
 
-  it('hides the notice on standard tier without capacity numbers', async () => {
-    await renderGraph('standard', { stock: 500 });
+  it('hides the notice on plus tier without capacity numbers', async () => {
+    await renderGraph('plus', { stock: 500 });
     expect(document.querySelector('.topology-tier-notice')).toBeNull();
   });
 
@@ -7460,7 +7460,7 @@ describe('NodeTopologyEditor — wire click keeps an in-flight connection', () =
     // receive the bubbled wire click, standing in for a future
     // canvas-level background-click-cancels-connection handler.
     function Wrap() {
-      return <button type="button" onClick={onCanvasClick}><NodeTopologyEditor currentTier="standard" /></button>;
+      return <button type="button" onClick={onCanvasClick}><NodeTopologyEditor currentTier="plus" /></button>;
     }
     renderWithProvidersSync(<Wrap />, multiStoreFtl, sharedFtl);
 

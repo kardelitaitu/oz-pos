@@ -278,7 +278,7 @@ export interface WorkspaceInstanceSeed {
 }
 
 export interface NodeTopologyEditorProps {
-  currentTier?: 'free' | 'one_time' | 'standard' | 'pro' | 'premium' | 'enterprise';
+  currentTier?: 'free' | 'one_time' | 'plus' | 'pro' | 'premium' | 'enterprise';
   /**
    * Optional toolbar content rendered inside the topology header, above the
    * title/actions row. The parent screen uses this slot to merge its branch
@@ -792,7 +792,7 @@ function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
 }
 
 export default function NodeTopologyEditor({
-  currentTier = 'standard',
+  currentTier = 'free',
   onSave,
   workspaceInstances,
   branchLocations,

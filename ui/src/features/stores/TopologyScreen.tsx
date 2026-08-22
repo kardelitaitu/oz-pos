@@ -91,7 +91,7 @@ export default function TopologyScreen() {
     if (perms.includes('*')) return true;
     return perms.includes('staff:update');
   }, [session]);
-  const [licenseTier, setLicenseTier] = useState('standard');
+  const [licenseTier, setLicenseTier] = useState('free');
   /** Real workspace instances loaded from the backend, used to seed the editor. */
   const [workspaceInstances, setWorkspaceInstances] = useState<WorkspaceDto[]>([]);
   const [stores, setStores] = useState<StoreProfile[]>([]);
@@ -149,10 +149,10 @@ export default function TopologyScreen() {
   const load = useCallback(async () => {
     // License check is non-critical — a fresh install or offline environment
     // may not have an activated license yet. Fail silently and default to
-    // 'standard' tier so the topology editor still loads.
+    // 'free' tier (matching the backend's default when no subscription exists).
     checkLicenseStatus()
       .then((licStatus) => { setLicenseTier(licStatus.tier.toLowerCase()); })
-      .catch(() => { /* no license activated yet — keep default tier */ });
+      .catch(() => { setLicenseTier('free'); });
 
     try {
       const storeData = await listStores();
@@ -520,7 +520,7 @@ export default function TopologyScreen() {
       <NodeTopologyEditor
         key={selectedBranchId ?? 'unassigned'}
         branchId={selectedBranchId ?? 'unassigned'}
-        currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'premium' | 'enterprise'}
+        currentTier={licenseTier as 'free' | 'one_time' | 'plus' | 'pro' | 'premium' | 'enterprise'}
         compareOverlay={compareOverlay}
         compareFocus={compareFocus}
         {...(workspaceSeed !== undefined ? { workspaceInstances: workspaceSeed } : {})}

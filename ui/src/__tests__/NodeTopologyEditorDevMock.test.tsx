@@ -102,7 +102,7 @@ const handleSave = async (
 
 const renderEditor = () =>
   renderWithProvidersSync(
-    <NodeTopologyEditor currentTier="standard" onSave={handleSave} />,
+    <NodeTopologyEditor currentTier="free" onSave={handleSave} />,
     multiStoreFtl,
     sharedFtl,
   );

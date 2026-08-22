@@ -151,12 +151,12 @@ const COMPARE_OVERLAY = {
 
 describe('NodeTopologyEditor a11y', () => {
   it('has no axe violations on initial render', async () => {
-    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="standard" />);
+    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="plus" />);
     await checkA11y(container);
   });
 
   it('has no axe violations with the node finder open', async () => {
-    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="standard" />);
+    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="plus" />);
     fireEvent.keyDown(document, { key: 'f', ctrlKey: true });
     const input = container.querySelector('.topology-finder-input') as HTMLInputElement | null;
     expect(input).not.toBeNull();
@@ -169,7 +169,7 @@ describe('NodeTopologyEditor a11y', () => {
 
   it('has no axe violations with the branch-compare overlay active', async () => {
     const { container } = renderWithProviders(
-      <NodeTopologyEditor currentTier="standard" compareOverlay={COMPARE_OVERLAY} compareFocus />,
+      <NodeTopologyEditor currentTier="plus" compareOverlay={COMPARE_OVERLAY} compareFocus />,
     );
     // Ghost layer + only-here markers + the compare panel all render.
     expect(container.querySelector('.topology-overlay-ghost-layer')).not.toBeNull();
@@ -188,7 +188,7 @@ describe('NodeTopologyEditor a11y', () => {
       ],
       wires: [],
     } as never);
-    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="standard" />);
+    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="plus" />);
     // Wait for the async load to land the two-node diagram (the preset
     // placeholder validates clean, so the widget only appears post-load).
     await waitFor(() => {
