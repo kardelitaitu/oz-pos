@@ -240,20 +240,21 @@ async fn push_handler(
     // access for the whole batch (mutex lock / pool acquisition).
     let store = state.store();
     let db_start = std::time::Instant::now();
-    let mut results = Vec::with_capacity(items.len());
-
     // Phase 1: separate valid items from rejected UUIDs (cheap, no DB).
+    // `valid_indexes` records each valid item's ORIGINAL position so the
+    // batch outcomes can be reassembled in request order — the client
+    // zips `pending` against `results` by index (apply_push_results), so
+    // a reordering would mark the WRONG items as synced/failed.
     let mut valid_items: Vec<oz_core::offline::OfflineQueueItem> = Vec::with_capacity(items.len());
-    for item in &items {
+    let mut valid_indexes: Vec<usize> = Vec::with_capacity(items.len());
+    for (idx, item) in items.iter().enumerate() {
         if !state.skip_push_validation && uuid::Uuid::parse_str(&item.id).is_err() {
             metrics::SYNC_PUSHES_TOTAL
                 .with_label_values(&["rejected"])
                 .inc();
-            results.push(PushOutcome::Rejected {
-                reason: format!("invalid id: {}", item.id),
-            });
         } else {
             valid_items.push(item.clone());
+            valid_indexes.push(idx);
         }
     }
 
@@ -271,7 +272,22 @@ async fn push_handler(
                 (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e)
             })?
     };
-    for outcome in batch_results {
+
+    // Reassemble in request order: invalid ids stay Rejected at their
+    // original position; batch outcomes land at the valid items' slots.
+    let mut results = Vec::with_capacity(items.len());
+    for (idx, item) in items.iter().enumerate() {
+        let outcome = match valid_indexes.iter().position(|&v| v == idx) {
+            Some(pos) => batch_results.get(pos).cloned().unwrap_or_else(|| {
+                // Should be unreachable: every valid index has an outcome.
+                PushOutcome::Rejected {
+                    reason: format!("missing batch outcome for {}", item.id),
+                }
+            }),
+            None => PushOutcome::Rejected {
+                reason: format!("invalid id: {}", item.id),
+            },
+        };
         let label = match &outcome {
             PushOutcome::Accepted => "accepted",
             PushOutcome::Rejected { reason } if reason.starts_with("duplicate id:") => "conflict",

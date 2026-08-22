@@ -1117,6 +1117,63 @@ async fn handler_mixed_batch_invalid_uuid_valid_duplicate() {
     assert_eq!(dup_total, 1, "duplicate id must not be double-inserted");
 }
 
+/// The push response outcomes must be in the SAME ORDER as the request
+/// items — the client (`apply_push_results`) zips `pending` against
+/// `results` by index to mark items synced/failed. A regression hoisted
+/// invalid-UUID rejections to the front, shifting outcomes for mixed
+/// batches and marking the WRONG items as synced. RED: [valid, invalid,
+/// valid] must return [Accepted, Rejected, Accepted] in request order.
+#[tokio::test]
+async fn push_outcomes_preserve_request_order_with_mixed_batch() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    let first = uuid::Uuid::now_v7().to_string();
+    let hostile = "middle-not-a-uuid";
+    let last = uuid::Uuid::now_v7().to_string();
+    let body = format!(
+        r#"[
+            {{"id":"{first}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+            {{"id":"{hostile}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+            {{"id":"{last}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}
+        ]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let push_resp: PushResponse = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(push_resp.results.len(), 3, "one outcome per request item");
+
+    // Index 0 = first item (valid) → Accepted.
+    assert!(
+        matches!(push_resp.results[0], PushOutcome::Accepted),
+        "results[0] must be Accepted (first item), got: {:?}",
+        push_resp.results[0]
+    );
+    // Index 1 = middle item (invalid) → Rejected.
+    match &push_resp.results[1] {
+        PushOutcome::Rejected { reason } => {
+            assert!(reason.contains("invalid id"), "got: {reason}");
+        }
+        other => panic!("results[1] must be Rejected (middle item), got: {other:?}"),
+    }
+    // Index 2 = last item (valid) → Accepted.
+    assert!(
+        matches!(push_resp.results[2], PushOutcome::Accepted),
+        "results[2] must be Accepted (last item), got: {:?}",
+        push_resp.results[2]
+    );
+}
+
 /// With `OZ_SKIP_PUSH_VALIDATION=1` (trusted server-to-server), a
 /// non-UUID id must pass through the handler and be inserted — the
 /// validation gate is the only thing stopping it.
@@ -1481,15 +1538,51 @@ async fn tenant_count_cache_refreshes_after_expiry() {
 /// The cache must behave identically on the real PostgreSQL backend:
 /// warm at N, serve stale within TTL, rescan after expiry.
 ///
-/// Serialized because `distinct_tenant_count` is a global aggregate
-/// over the whole `offline_queue` table — parallel tests with their
-/// own rows would skew the count.
+/// Runs on a DEDICATED throwaway database: `distinct_tenant_count` is a
+/// global aggregate over the whole `offline_queue`, so sharing the dev DB
+/// with parallel PG tests (which write their own rows) makes the count
+/// non-deterministic. The temp DB is process-unique and dropped after.
 #[tokio::test]
-#[serial_test::serial]
 async fn pg_integration_tenant_count_cache() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+    // Admin connection (raw, no schema) to create the throwaway DB.
+    let admin_pool = match crate::db::DbPool::connect_postgres(&url, false, 20, false).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG tenant-count cache integration test skipped: {e}");
+            return;
+        }
+    };
+    let admin = admin_pool.get().await.expect("admin client");
+    let db_name = format!("oz_tenant_count_{}", std::process::id());
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop stale database should succeed");
+    if let Err(e) = admin
+        .execute(&format!("CREATE DATABASE {db_name}"), &[])
+        .await
+    {
+        eprintln!("PG tenant-count cache test skipped: cannot CREATE DATABASE ({e})");
+        return;
+    }
+    let (base, query) = match url.split_once('?') {
+        Some((b, q)) => (b, Some(q)),
+        None => (url.as_str(), None),
+    };
+    let (head, _old_db) = base
+        .rsplit_once('/')
+        .expect("URL must have a database path");
+    let db_url = match query {
+        Some(q) => format!("{head}/{db_name}?{q}"),
+        None => format!("{head}/{db_name}"),
+    };
+    drop(admin);
+
+    // The dedicated DB: full schema applied here, no other test touches it.
+    let pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await {
         Ok(crate::db::DbPool::Postgres(pool)) => pool,
         Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
         Err(e) => {
@@ -1498,14 +1591,6 @@ async fn pg_integration_tenant_count_cache() {
         }
     };
     let tenant = format!("pg-cache-{}", uuid::Uuid::now_v7());
-
-    // Clean the table so the global aggregate is deterministic.
-    let client = pool.get().await.unwrap();
-    client
-        .execute("DELETE FROM offline_queue", &[])
-        .await
-        .unwrap();
-    drop(client);
 
     let state = SyncState {
         db: Arc::new(Mutex::new(fresh_db())),
@@ -1567,13 +1652,12 @@ async fn pg_integration_tenant_count_cache() {
         "expired PG cache must rescan"
     );
 
-    // Cleanup.
-    pool.get()
+    // Cleanup: drop the dedicated database.
+    let admin = admin_pool.get().await.expect("admin client for cleanup");
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
         .await
-        .unwrap()
-        .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
-        .await
-        .unwrap();
+        .expect("drop dedicated database should succeed");
 }
 
 /// Concurrent cold reads must all agree on the same count and leave the

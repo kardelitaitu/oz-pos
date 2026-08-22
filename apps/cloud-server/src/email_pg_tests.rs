@@ -1,5 +1,94 @@
 use super::*;
 use oz_core::export::email_report::SMTP_CONFIG_SETTINGS_KEY;
+use serial_test::serial;
+
+/// Create a process-unique throwaway database (the established pattern for
+/// tests that mutate global catalog state — roles, FORCE RLS — which would
+/// otherwise race the other PG integration tests on a shared dev DB).
+///
+/// Returns `(db_url, db_name, admin_pool)`; the admin pool stays connected
+/// to the base DB so the caller can `DROP DATABASE` on cleanup. Returns
+/// `None` (test skips) when Postgres is unreachable or the URL role lacks
+/// `CREATE DATABASE`.
+async fn throwaway_pg_db(
+    url: &str,
+    prefix: &str,
+) -> Option<(String, String, deadpool_postgres::Pool)> {
+    // Admin connection is raw (apply_schema = false): it only sweeps stale
+    // DBs and creates the throwaway one, so it must not re-apply PG_INIT
+    // to the shared base DB (concurrent catalog DDL across parallel PG
+    // test binaries is a flake source).
+    let admin_pool = match crate::db::DbPool::connect_postgres(url, false, 20, false).await {
+        Ok(crate::db::DbPool::Postgres(p)) => p,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG test skipped: {e}");
+            return None;
+        }
+    };
+    let admin = admin_pool.get().await.expect("admin client");
+
+    // Sweep any stale throwaway DBs a crashed run left behind (only
+    // tests create `{prefix}_%`), so the fixed-name probe role never
+    // owns objects in a leftover DB — DROP ROLE would then fail.
+    let stale: Vec<String> = admin
+        .query(
+            "SELECT datname FROM pg_database WHERE datname LIKE $1",
+            &[&format!("{prefix}\\_%")],
+        )
+        .await
+        .expect("stale database query")
+        .iter()
+        .map(|r| r.get::<_, String>(0))
+        .collect();
+    for d in &stale {
+        admin
+            .batch_execute(&format!("DROP DATABASE IF EXISTS {d} WITH (FORCE);"))
+            .await
+            .expect("drop stale test database");
+    }
+
+    // A crashed earlier run (before the throwaway-DB refactor) may have
+    // left the fixed-name probe roles owning objects in the BASE database.
+    // DROP OWNED BY releases those so the role setup's DROP ROLE succeeds.
+    for role in [
+        "oz_email_rls_probe",
+        "oz_email_tenants_probe",
+        "oz_email_discovery",
+    ] {
+        let _ = admin.batch_execute(&format!("DROP OWNED BY {role};")).await;
+        let _ = admin
+            .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
+            .await;
+    }
+
+    let db_name = format!("{prefix}_{}", std::process::id());
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop stale database should succeed");
+    if let Err(e) = admin
+        .execute(&format!("CREATE DATABASE {db_name}"), &[])
+        .await
+    {
+        eprintln!("PG test skipped: cannot CREATE DATABASE ({e})");
+        return None;
+    }
+
+    // URL for the throwaway DB (swap the path segment, keep any query).
+    let (base, query) = match url.split_once('?') {
+        Some((b, q)) => (b, Some(q)),
+        None => (url, None),
+    };
+    let (head, _old_db) = base
+        .rsplit_once('/')
+        .expect("URL must have a database path");
+    let db_url = match query {
+        Some(q) => format!("{head}/{db_name}?{q}"),
+        None => format!("{head}/{db_name}"),
+    };
+    Some((db_url, db_name, admin_pool))
+}
 
 /// Integration test against a live Postgres instance — seeds a product,
 /// a completed sale with lines, stock, and the settings the loop reads,
@@ -829,10 +918,17 @@ async fn pg_integration_advisory_lock_not_acquired_returns_connection() {
 /// silently empty (bug), and the sent_reports INSERT violates WITH
 /// CHECK.
 #[tokio::test]
+#[serial]
 async fn pg_integration_email_analytics_visible_as_restricted_role() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+    // Throwaway DB: FORCE RLS on shared tables would race the other PG
+    // integration tests (webhooks writes to the same tables). The admin
+    // pool stays connected to the base DB for cleanup.
+    let Some((db_url, db_name, admin_pool)) = throwaway_pg_db(&url, "oz_email_rls").await else {
+        return;
+    };
+    let pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await {
         Ok(crate::db::DbPool::Postgres(pool)) => pool,
         Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
         Err(e) => {
@@ -900,13 +996,13 @@ async fn pg_integration_email_analytics_visible_as_restricted_role() {
     drop(admin);
 
     // The app pool: connects AS the restricted role (same pattern as the
-    // webhook cutover test).
-    let scheme_end = url.find("://").expect("URL has a scheme") + 3;
-    let at = url.find('@').expect("URL has credentials");
+    // webhook cutover test), to the THROWAWAY database.
+    let scheme_end = db_url.find("://").expect("URL has a scheme") + 3;
+    let at = db_url.find('@').expect("URL has credentials");
     let app_url = format!(
         "{}oz_email_rls_probe:oz_email_rls_probe_pw@{}",
-        &url[..scheme_end],
-        &url[at + 1..]
+        &db_url[..scheme_end],
+        &db_url[at + 1..]
     );
     let app_pool = {
         use deadpool_postgres::Manager;
@@ -941,23 +1037,19 @@ async fn pg_integration_email_analytics_visible_as_restricted_role() {
         "the sent_reports claim must succeed as the restricted role (WITH CHECK needs the GUC)"
     );
 
-    // Cleanup.
-    let admin = pool.get().await.unwrap();
+    // Cleanup: drop every handle, then the throwaway database (kills the
+    // role's objects), then remove the probe role from the shared cluster.
+    // DROP DATABASE cannot run inside a transaction — separate statements.
+    drop(pool);
+    let admin = admin_pool.get().await.unwrap();
     admin
-        .batch_execute(&format!(
-            "ALTER TABLE sales NO FORCE ROW LEVEL SECURITY;
-             ALTER TABLE sent_reports NO FORCE ROW LEVEL SECURITY;
-             ALTER TABLE sales DISABLE ROW LEVEL SECURITY;
-             ALTER TABLE sent_reports DISABLE ROW LEVEL SECURITY;
-             DROP POLICY IF EXISTS tenant_isolation ON sales;
-             DROP POLICY IF EXISTS tenant_isolation ON sent_reports;
-             DELETE FROM sale_lines WHERE id = '{ns}-line';
-             DELETE FROM sales WHERE id = '{ns}-sale';
-             DROP OWNED BY {role};
-             DROP ROLE IF EXISTS {role};"
-        ))
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
         .await
-        .expect("email-RLS probe cleanup should succeed");
+        .expect("email-RLS drop throwaway database should succeed");
+    admin
+        .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
+        .await
+        .expect("email-RLS probe role cleanup should succeed");
 }
 
 /// RED (TDD): tenant discovery must survive RLS cutover.
@@ -969,10 +1061,17 @@ async fn pg_integration_email_analytics_visible_as_restricted_role() {
 /// the identical read-before-tenant-known problem with a BYPASSRLS
 /// resolver role; the email discovery path needs the same treatment.
 #[tokio::test]
+#[serial]
 async fn pg_integration_active_tenants_survives_rls_cutover() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+    // Throwaway DB: FORCE RLS on shared tables (offline_queue etc.) would
+    // race the other PG integration tests. Admin pool stays on base DB.
+    let Some((db_url, db_name, admin_pool)) = throwaway_pg_db(&url, "oz_email_tenants").await
+    else {
+        return;
+    };
+    let pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await {
         Ok(crate::db::DbPool::Postgres(pool)) => pool,
         Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
         Err(e) => {
@@ -1045,13 +1144,13 @@ async fn pg_integration_active_tenants_survives_rls_cutover() {
     seed_tx.commit().await.unwrap();
     drop(admin);
 
-    // The app pool connects AS the restricted role.
-    let scheme_end = url.find("://").expect("URL has a scheme") + 3;
-    let at = url.find('@').expect("URL has credentials");
+    // The app pool connects AS the restricted role, to the THROWAWAY DB.
+    let scheme_end = db_url.find("://").expect("URL has a scheme") + 3;
+    let at = db_url.find('@').expect("URL has credentials");
     let app_url = format!(
         "{}oz_email_tenants_probe:oz_email_tenants_probe_pw@{}",
-        &url[..scheme_end],
-        &url[at + 1..]
+        &db_url[..scheme_end],
+        &db_url[at + 1..]
     );
     let app_pool = {
         use deadpool_postgres::Manager;
@@ -1073,25 +1172,20 @@ async fn pg_integration_active_tenants_survives_rls_cutover() {
         "active_tenants_pg must enumerate the seeded tenant post-cutover, got: {tenants:?}"
     );
 
-    // Cleanup.
-    let admin = pool.get().await.unwrap();
+    // Cleanup: drop every handle, then the throwaway database (kills the
+    // roles' objects), then remove the probe + discovery roles.
+    // DROP DATABASE cannot run inside a transaction — separate statements.
+    drop(pool);
+    let admin = admin_pool.get().await.unwrap();
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("active-tenants drop throwaway database should succeed");
     admin
         .batch_execute(&format!(
-            "ALTER TABLE tenant_plans NO FORCE ROW LEVEL SECURITY;
-             ALTER TABLE offline_queue NO FORCE ROW LEVEL SECURITY;
-             ALTER TABLE sync_terminals NO FORCE ROW LEVEL SECURITY;
-             ALTER TABLE tenant_plans DISABLE ROW LEVEL SECURITY;
-             ALTER TABLE offline_queue DISABLE ROW LEVEL SECURITY;
-             ALTER TABLE sync_terminals DISABLE ROW LEVEL SECURITY;
-             DROP POLICY IF EXISTS tenant_isolation ON tenant_plans;
-             DROP POLICY IF EXISTS tenant_isolation ON offline_queue;
-             DROP POLICY IF EXISTS tenant_isolation ON sync_terminals;
-             DELETE FROM tenant_plans WHERE tenant_id = '{tenant}';
-             DROP OWNED BY {role};
-             DROP ROLE IF EXISTS {role};
-             DROP OWNED BY oz_email_discovery;
+            "DROP ROLE IF EXISTS {role};
              DROP ROLE IF EXISTS oz_email_discovery;"
         ))
         .await
-        .expect("active-tenants probe cleanup should succeed");
+        .expect("active-tenants probe role cleanup should succeed");
 }

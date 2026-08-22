@@ -4,6 +4,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
+use serial_test::serial;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
@@ -796,7 +797,13 @@ async fn pg_integration_webhooks_read_write_postgres() {
 /// committed cutover cannot race the other PG integration tests on a
 /// shared dev DB. Skips when Postgres is unreachable or the URL role
 /// lacks `CREATE DATABASE` (the established pattern).
+///
+/// Serialized with the email RLS tests: the real cutover script creates
+/// cluster-wide roles (oz_app, oz_webhook_resolver, oz_email_discovery)
+/// that the email tests also create/drop — concurrent CREATE/DROP ROLE
+/// on the shared cluster races.
 #[tokio::test]
+#[serial]
 async fn pg_integration_webhooks_restricted_role_after_cutover() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());

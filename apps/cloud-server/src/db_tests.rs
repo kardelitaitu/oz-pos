@@ -472,6 +472,7 @@ async fn pg_integration_apply_schema_can_be_skipped() {
 /// pool), rows are namespaced per process for shared dev databases, and
 /// the test skips when Postgres is unreachable.
 #[tokio::test]
+#[serial]
 async fn pg_integration_rls_fails_closed() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
@@ -641,6 +642,7 @@ async fn pg_integration_rls_fails_closed() {
 ///    are visible again. This is exactly the mechanism the cutover
 ///    relies on for a non-superuser deployment role.
 #[tokio::test]
+#[serial]
 async fn pg_integration_rls_force_blocks_owner() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
@@ -661,6 +663,20 @@ async fn pg_integration_rls_force_blocks_owner() {
     client
         .batch_execute(
             "DO $$ DECLARE r record; BEGIN
+                -- A crashed run leaves FORCE RLS applied to the shared
+                -- tenant tables (FORCE is non-transactional). NO FORCE
+                -- them so the Proof-1 rollback assertion starts clean.
+                FOR r IN
+                    SELECT relname FROM pg_class
+                    WHERE relkind = 'r' AND relforcerowsecurity
+                      AND relname IN ('bundle_items','offline_queue','product_activity',
+                                      'product_bundles','product_taxes','product_variants',
+                                      'products','sales','sent_reports','stripe_customers',
+                                      'sync_terminals','tax_rates','tenant_plans',
+                                      'tenant_subscription','users')
+                LOOP
+                    EXECUTE format('ALTER TABLE %I NO FORCE ROW LEVEL SECURITY', r.relname);
+                END LOOP;
                 FOR r IN
                     SELECT relname FROM pg_class
                     WHERE relkind = 'r' AND relname LIKE 'rls_force_probe_%'

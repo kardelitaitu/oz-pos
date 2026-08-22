@@ -5841,3 +5841,39 @@ finalize_sale. The client-side finalize is idempotent (WHERE
 status='pending'), so double-apply is harmless; the offline_queue gets a
 duplicate row. Cleanup is a follow-up (event-id-keyed enqueue or atomic
 claim), not a correctness bug today.
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 8 (push outcome ORDER + RLS test isolation)
+
+**Problem A (P0 regression from round 1):** the push handler's batching
+reordered outcomes. Invalid-UUID rejections were hoisted to the front,
+then batch outcomes appended — but the client (apply_push_results) zips
+pending against esults BY INDEX, so a mixed [valid, invalid, valid]
+batch returned [Rejected, Accepted, Accepted] and the client marked the
+WRONG items synced/failed. Introduced in e84dbd3d (batch push).
+
+**Problem B (RLS test interference):** my round-4/5/6 PG integration
+tests mutated SHARED dev-DB state (FORCE RLS on real tables, 2000-row
+seeds, cluster roles), racing the webhook cutover test and each other
+under parallel execution. Also: FORCE ROW LEVEL SECURITY is
+NON-transactional, so a crashed run left residue that broke
+rls_force_blocks_owner's rollback assertion.
+
+**Solution:**
+- A: push handler reassembles outcomes in REQUEST order via a
+  valid_indexes map (invalid ids stay Rejected at their original slot).
+  RED: push_outcomes_preserve_request_order_with_mixed_batch.
+- B: email RLS tests moved to process-unique throwaway databases
+  (throwaway_pg_db helper + stale-DB/role sweep, drop-DB-first cleanup);
+  all four RLS tests + the two env tests share the global bare #[serial]
+  lock (serial_test: bare #[serial] = one global lock; #[serial(key)]
+  would have split them). rls_force_blocks_owner cleanup now NO FORCEs
+  the 15 canonical tenant tables first.
+
+**Also:** restored db.rs/db_tests.rs from a concurrent agent's broken
+in-flight edit (from_config_with_retries cfg mismatch) so the tree
+compiles — that agent may still be mid-change.
+
+**Verification:** oz-cloud-server 210+5+2 green TWICE consecutively
+(flake eliminated); fmt + clippy -D warnings clean.
+
+**Risks / follow-ups:** none new.
