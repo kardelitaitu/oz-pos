@@ -128,16 +128,19 @@ GRANT USAGE ON SCHEMA public TO oz_webhook_resolver;
 GRANT SELECT ON stripe_customers, sales, payments TO oz_webhook_resolver;
 GRANT oz_webhook_resolver TO oz_app;
 
--- 2d. Cross-tenant discovery role. Two pre-tenant readers share it:
+-- 2d. Cross-tenant discovery role. Three pre-tenant consumers share it:
 --     (1) the email report sender enumerates tenants by reading
 --     tenant_plans / offline_queue / sync_terminals BEFORE any tenant is
 --     known (the whole point of discovery); (2) terminal client-credential
 --     verification (verify_terminal_credentials) learns the tenant_id FROM
---     the sync_terminals row it matches, so it cannot set the GUC first.
---     As a non-owner, oz_app cannot read those rows without the tenant GUC.
---     Both run in a transaction scoped to this role (`SET LOCAL ROLE
---     oz_email_discovery`, auto-resets on commit) — same BYPASSRLS pattern
---     as the webhook resolver. NOLOGIN, reachable only via membership.
+--     the sync_terminals row it matches, so it cannot set the GUC first;
+--     (3) the hourly prune cycle is a GLOBAL maintenance task that deletes
+--     rows across ALL tenants (offline_queue + sent_reports retention), so
+--     it needs DELETE under FORCE RLS. As a non-owner, oz_app cannot read
+--     those rows without the tenant GUC. All run in a transaction scoped to
+--     this role (`SET LOCAL ROLE oz_email_discovery`, auto-resets on
+--     commit) — same BYPASSRLS pattern as the webhook resolver. NOLOGIN,
+--     reachable only via membership.
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_email_discovery') THEN
@@ -146,6 +149,7 @@ BEGIN
 END $$;
 GRANT USAGE ON SCHEMA public TO oz_email_discovery;
 GRANT SELECT ON tenant_plans, offline_queue, sync_terminals TO oz_email_discovery;
+GRANT SELECT, DELETE ON offline_queue, sent_reports TO oz_email_discovery;
 GRANT oz_email_discovery TO oz_app;
 
 -- 2e. The non-RLS tables the webhook path touches after resolution.

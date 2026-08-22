@@ -5949,3 +5949,41 @@ were updated to the tenant-scoped API + schema.
 
 **Risks / follow-ups:** none new — the transport is now safe on a shared
 DB and compatible with the server schema.
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 11 (prune loop vs RLS cutover)
+
+**Problem:** the hourly PG prune loop (run_prune_cycle_pg) is a GLOBAL
+maintenance task that deletes offline_queue + sent_reports rows across
+ALL tenants — but post-cutover the app connects as oz_app (FORCE RLS)
+and the loop ran bare queries with no GUC and no bypass role. With
+current_setting('oz.tenant_id') = NULL the tenant_isolation policy hid
+every row: SELECT found nothing, DELETE deleted nothing. The prune
+silently stopped working and the cloud DB grew unbounded.
+
+**Solution:** TDD Red->Green.
+- RED: pg_integration_prune_survives_rls_cutover — throwaway DB, FORCEd
+  RLS, restricted LOGIN role granted membership in oz_email_discovery;
+  drives the REAL run_prune_cycle_pg; asserts the old row is gone from
+  the OWNER's perspective (a probe-side assert would be a false
+  positive — the probe can't see the row under RLS either way).
+  Failed with the row still present.
+- GREEN: run_prune_cycle_pg opens a transaction, checks oz_email_
+  discovery membership, SET LOCAL ROLEs into it for the batch SELECT +
+  DELETE (and the sent_reports sweep) — mirroring active_tenants_pg.
+  rls-cutover.sql 2d grants SELECT, DELETE on offline_queue + sent_reports
+  to oz_email_discovery (was SELECT-only).
+
+**Also fixed (test-infra):** the round-8 #[serial] fix was incomplete —
+bare #[serial] uses per-test-name lock keys, so serialized PG tests
+still raced on cluster-wide roles (oz_app / oz_webhook_resolver /
+oz_email_discovery). All RLS-mutating tests now share ONE explicit key
+#[serial(pg_rls_cutover)]: db_tests (2 RLS + 2 env), email_pg_tests (2),
+webhooks_tests (1), prune_tests. Full suite 211+5+2 green twice
+consecutively.
+
+**Verification:** oz-cloud-server 211+5+2 twice; fmt + clippy clean on
+all files EXCEPT db.rs (a concurrent agent's in-flight refactor —
+connect_postgres unused + unnecessary cast in their retry helper).
+
+**Risks / follow-ups:** the db.rs clippy debt belongs to the concurrent
+agent's unfinished work; must be resolved before push.

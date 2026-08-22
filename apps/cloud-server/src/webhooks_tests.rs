@@ -803,7 +803,7 @@ async fn pg_integration_webhooks_read_write_postgres() {
 /// that the email tests also create/drop — concurrent CREATE/DROP ROLE
 /// on the shared cluster races.
 #[tokio::test]
-#[serial]
+#[serial(pg_rls_cutover)]
 async fn pg_integration_webhooks_restricted_role_after_cutover() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
@@ -841,10 +841,14 @@ async fn pg_integration_webhooks_restricted_role_after_cutover() {
             .await
             .expect("drop stale test database");
     }
-    admin
-        .batch_execute("DROP ROLE IF EXISTS oz_webhook_resolver;")
-        .await
-        .expect("drop stale resolver role");
+    // NOTE: `oz_webhook_resolver` is deliberately NOT dropped here. It is
+    // a cluster-wide role that the real cutover script (`rls-cutover.sql`,
+    // executed below) creates on the shared cluster; under nextest each
+    // test runs in its own process, so dropping it from this stale-cleanup
+    // raced a concurrent test that was mid-flight creating/using it (the
+    // observed flake: "tuple concurrently updated" / deadlock). The cutover
+    // creates it idempotently (`IF NOT EXISTS`) and it owns nothing, so it
+    // is safe to leave in place across test runs.
     let db_name = format!("oz_wh_rls_{}", std::process::id());
     if let Err(e) = admin
         .execute(&format!("CREATE DATABASE {db_name}"), &[])
@@ -1087,10 +1091,11 @@ async fn pg_integration_webhooks_restricted_role_after_cutover() {
     // (it is the documented deployment role); restore it to the
     // cutover's canonical NOLOGIN state.
     admin
-        .batch_execute(
-            "DROP ROLE IF EXISTS oz_webhook_resolver;\n\
-             ALTER ROLE oz_app NOLOGIN;",
-        )
+        .batch_execute("ALTER ROLE oz_app NOLOGIN;")
         .await
         .expect("role cleanup should succeed");
+    // `oz_webhook_resolver` is deliberately left in place — see the NOTE at
+    // the stale-role cleanup above. Dropping it here would race concurrent
+    // tests that use it; the cutover re-creates it idempotently (`IF NOT
+    // EXISTS`) on the next run.
 }

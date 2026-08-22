@@ -144,7 +144,7 @@ async fn require_tls_accepts_sslmode_require_and_fails_on_connection() {
 static ENV_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
     std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
-#[serial]
+#[serial(pg_rls_cutover)]
 #[tokio::test]
 async fn from_env_defaults_to_sqlite() {
     let _guard = ENV_LOCK.lock().await;
@@ -161,7 +161,7 @@ async fn from_env_defaults_to_sqlite() {
     unsafe { std::env::remove_var("OZ_DB_PATH") };
 }
 
-#[serial]
+#[serial(pg_rls_cutover)]
 #[tokio::test]
 async fn from_env_detects_postgres_url() {
     let _guard = ENV_LOCK.lock().await;
@@ -484,7 +484,7 @@ async fn pg_integration_apply_schema_can_be_skipped() {
 /// pool), rows are namespaced per process for shared dev databases, and
 /// the test skips when Postgres is unreachable.
 #[tokio::test]
-#[serial]
+#[serial(pg_rls_cutover)]
 async fn pg_integration_rls_fails_closed() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
@@ -659,7 +659,7 @@ async fn pg_integration_rls_fails_closed() {
 ///    are visible again. This is exactly the mechanism the cutover
 ///    relies on for a non-superuser deployment role.
 #[tokio::test]
-#[serial]
+#[serial(pg_rls_cutover)]
 async fn pg_integration_rls_force_blocks_owner() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());

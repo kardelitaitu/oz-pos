@@ -921,7 +921,7 @@ async fn pg_integration_advisory_lock_not_acquired_returns_connection() {
 /// silently empty (bug), and the sent_reports INSERT violates WITH
 /// CHECK.
 #[tokio::test]
-#[serial]
+#[serial(pg_rls_cutover)]
 async fn pg_integration_email_analytics_visible_as_restricted_role() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
@@ -1064,7 +1064,7 @@ async fn pg_integration_email_analytics_visible_as_restricted_role() {
 /// the identical read-before-tenant-known problem with a BYPASSRLS
 /// resolver role; the email discovery path needs the same treatment.
 #[tokio::test]
-#[serial]
+#[serial(pg_rls_cutover)]
 async fn pg_integration_active_tenants_survives_rls_cutover() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());

@@ -187,7 +187,7 @@ async fn run_prune_cycle_pg(pool: &deadpool_postgres::Pool) {
     let mut queue_deleted: usize = 0;
 
     loop {
-        let client = match pool.get().await {
+        let mut client = match pool.get().await {
             Ok(c) => c,
             Err(e) => {
                 error!(error = %e, "prune (pg): failed to acquire connection");
@@ -195,8 +195,42 @@ async fn run_prune_cycle_pg(pool: &deadpool_postgres::Pool) {
             }
         };
 
-        // Select up to 500 old IDs in a stable order.
-        let ids: Vec<String> = match client
+        // Post-cutover the app connects as oz_app (FORCE RLS). The prune
+        // is a global maintenance task (deletes across ALL tenants), so it
+        // must bypass the per-tenant policy. Mirror the active_tenants_pg
+        // pattern: check oz_email_discovery membership and SET LOCAL ROLE.
+        // The role already has SELECT, DELETE on offline_queue and
+        // sent_reports (granted by the cutover script 2d + this round).
+        let tx = match client.transaction().await {
+            Ok(t) => t,
+            Err(e) => {
+                error!(error = %e, "prune (pg): failed to begin transaction");
+                break;
+            }
+        };
+        let is_discovery_member: bool = tx
+            .query_one(
+                "SELECT EXISTS(
+                    SELECT 1 FROM pg_roles r
+                    JOIN pg_auth_members m ON m.roleid = r.oid
+                    WHERE r.rolname = 'oz_email_discovery'
+                      AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+                 )",
+                &[],
+            )
+            .await
+            .map(|r| r.get::<_, bool>(0))
+            .unwrap_or(false);
+        if is_discovery_member
+            && let Err(e) = tx.execute("SET LOCAL ROLE oz_email_discovery", &[]).await
+        {
+            error!(error = %e, "prune (pg): failed to set role");
+            break;
+        }
+
+        // Select up to 500 old IDs in a stable order — runs inside the
+        // transaction scoped to the discovery role, so RLS is bypassed.
+        let ids: Vec<String> = match tx
             .query(
                 "SELECT id FROM offline_queue WHERE created_at < $1 ORDER BY id LIMIT $2",
                 &[&cutoff, &PRUNE_BATCH_SIZE],
@@ -211,13 +245,14 @@ async fn run_prune_cycle_pg(pool: &deadpool_postgres::Pool) {
         };
 
         if ids.is_empty() {
+            // Commit the idle transaction so the next iteration (or the
+            // sent_reports sweep) starts fresh.
+            let _ = tx.commit().await;
             break;
         }
 
-        // Delete the batch. ids are bound as a text array parameter — never
-        // interpolated — because they originate from client pushes and must
-        // always be treated as data, never SQL.
-        let deleted = match client
+        // Delete the batch inside the same transaction.
+        let deleted = match tx
             .execute("DELETE FROM offline_queue WHERE id = ANY($1)", &[&ids])
             .await
         {
@@ -228,28 +263,60 @@ async fn run_prune_cycle_pg(pool: &deadpool_postgres::Pool) {
             }
         };
 
+        // Commit the batch and release the role/GUC.
+        if let Err(e) = tx.commit().await {
+            error!(error = %e, "prune (pg): commit failed");
+            break;
+        }
+
         queue_deleted += deleted as usize;
         metrics::PRUNE_QUEUE_DELETED_TOTAL.inc_by(deleted as f64);
     }
 
-    // Age out `sent_reports` claims. Single DELETE — the table is small
-    // (one row per tenant/period per cadence) and the same 90-day horizon
-    // bounds its size, so batching is unnecessary.
-    let sent_reports_deleted = match pool.get().await {
-        Ok(client) => match client
+    // Age out `sent_reports` claims. Single DELETE — the table is small.
+    let sent_reports_deleted: usize = {
+        let mut client = match pool.get().await {
+            Ok(c) => c,
+            Err(e) => {
+                error!(error = %e, "prune (pg): failed to acquire connection for sent_reports sweep");
+                return;
+            }
+        };
+        let tx = match client.transaction().await {
+            Ok(t) => t,
+            Err(e) => {
+                error!(error = %e, "prune (pg): sent_reports begin failed");
+                return;
+            }
+        };
+        let is_discovery_member: bool = tx
+            .query_one(
+                "SELECT EXISTS(
+                    SELECT 1 FROM pg_roles r
+                    JOIN pg_auth_members m ON m.roleid = r.oid
+                    WHERE r.rolname = 'oz_email_discovery'
+                      AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+                 )",
+                &[],
+            )
+            .await
+            .map(|r| r.get::<_, bool>(0))
+            .unwrap_or(false);
+        if is_discovery_member {
+            let _ = tx.execute("SET LOCAL ROLE oz_email_discovery", &[]).await;
+        }
+        let count = match tx
             .execute("DELETE FROM sent_reports WHERE sent_at < $1", &[&cutoff])
             .await
         {
-            Ok(count) => count as usize,
+            Ok(c) => c as usize,
             Err(e) => {
                 error!(error = %e, "prune (pg): sent_reports sweep failed");
                 0
             }
-        },
-        Err(e) => {
-            error!(error = %e, "prune (pg): failed to acquire connection for sent_reports sweep");
-            0
-        }
+        };
+        let _ = tx.commit().await;
+        count
     };
     if sent_reports_deleted > 0 {
         metrics::PRUNE_SENT_REPORTS_DELETED_TOTAL.inc_by(sent_reports_deleted as f64);
