@@ -1127,6 +1127,61 @@ fn complete_sale_to_kds_multi_zone_creates_one_order_per_zone() {
     assert_eq!(zones, vec![Some("bar".into()), Some("grill".into())]);
 }
 
+/// RED: the multi-zone fanout must be ATOMIC. If one zone's order insert
+/// fails (e.g. a concurrent terminal already completed this sale, so the
+/// (sale, zone) pair exists), NO new tickets may be created — today the
+/// loop commits each zone in its own transaction, so the earlier zones'
+/// tickets survive the error, leaving a partial set on the kitchen
+/// display.
+#[test]
+fn complete_sale_to_kds_fanout_is_atomic_on_partial_failure() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    seed_product_with_zone(&conn, "STEAK", "Ribeye Steak", "grill");
+    seed_product_with_zone(&conn, "BEER", "Craft Beer", "bar");
+
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("STEAK"), 1, price(1500)))
+        .unwrap();
+    cart.add_line(CartLine::new(Sku::new("BEER"), 1, price(600)))
+        .unwrap();
+    let sale = Sale::from_cart(&cart).unwrap();
+    s.create_sale(&sale).unwrap();
+
+    // Simulate a concurrent terminal that already created the GRILL zone
+    // ticket for this sale (partial completion / double-complete). Zones
+    // are processed in sorted order (bar before grill), so the fanout
+    // commits the BAR ticket first, then hits the grill conflict — the
+    // non-atomic loop leaves the bar ticket behind on error.
+    s.create_kds_order(CreateKdsOrderInput {
+        sale_id: sale.id.clone(),
+        store_id: None,
+        items_summary: "Steak".into(),
+        item_count: 1,
+        kitchen_zone: Some("grill".into()),
+        notes: String::new(),
+        table_number: None,
+        priority: false,
+    })
+    .unwrap();
+
+    let err = s.complete_sale_to_kds(&sale.id, None).unwrap_err();
+    assert!(
+        matches!(err, CoreError::Validation { .. }) || matches!(err, CoreError::Db(_)),
+        "duplicate zone must error, got: {err:?}"
+    );
+
+    // Atomicity: the failed fanout must NOT have created the bar ticket.
+    let orders = s.get_kds_orders_by_sale(&sale.id).unwrap();
+    assert_eq!(
+        orders.len(),
+        1,
+        "only the pre-existing grill ticket may exist; the failed fanout must leave no partial tickets, got: {orders:?}"
+    );
+    assert_eq!(orders[0].kitchen_zone.as_deref(), Some("grill"));
+}
+
 fn seed_product_with_zone(conn: &Connection, sku: &str, name: &str, zone: &str) {
     let s = store(conn);
     s.create_product(sku, name, price(500), None, None, 100, Some("restaurant"))

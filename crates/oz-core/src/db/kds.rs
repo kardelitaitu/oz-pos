@@ -59,10 +59,25 @@ impl Store<'_> {
         input: CreateKdsOrderInput,
         target_instance_ids: &[String],
     ) -> Result<KdsOrder, CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let order = self.create_kds_order_fanout_in_tx(&tx, input, target_instance_ids)?;
+        tx.commit()?;
+        Ok(order)
+    }
+
+    /// Same as [`Store::create_kds_order_fanout`] but inside a caller-owned
+    /// transaction, so a multi-zone fanout commits atomically (a failure on
+    /// one zone rolls back the whole set instead of leaving partial tickets).
+    fn create_kds_order_fanout_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        input: CreateKdsOrderInput,
+        target_instance_ids: &[String],
+    ) -> Result<KdsOrder, CoreError> {
         let primary_target = target_instance_ids.first().map(String::as_str);
-        let order = self.create_kds_order_with_target(input, primary_target)?;
+        let order = self.create_kds_order_with_target_in_tx(tx, input, primary_target)?;
         for target_instance_id in target_instance_ids {
-            self.conn.execute(
+            tx.execute(
                 "INSERT OR IGNORE INTO kds_order_targets (kds_order_id, target_instance_id) VALUES (?1, ?2)",
                 params![order.id, target_instance_id],
             )?;
@@ -72,6 +87,18 @@ impl Store<'_> {
 
     fn create_kds_order_with_target(
         &self,
+        input: CreateKdsOrderInput,
+        target_instance_id: Option<&str>,
+    ) -> Result<KdsOrder, CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let order = self.create_kds_order_with_target_in_tx(&tx, input, target_instance_id)?;
+        tx.commit()?;
+        Ok(order)
+    }
+
+    fn create_kds_order_with_target_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
         input: CreateKdsOrderInput,
         target_instance_id: Option<&str>,
     ) -> Result<KdsOrder, CoreError> {
@@ -97,8 +124,6 @@ impl Store<'_> {
         let id = uuid::Uuid::now_v7().to_string();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         let store_key = input.store_id.as_deref().unwrap_or("");
-
-        let tx = self.conn.unchecked_transaction()?;
 
         // Upsert the daily counter, keyed by (date, store) so each store's
         // tickets start at #1 daily. '' = legacy single-store rows.
@@ -139,11 +164,16 @@ impl Store<'_> {
             ],
         )?;
 
-        tx.commit()?;
-
-        self.get_kds_order(&id)?.ok_or_else(|| {
-            CoreError::Internal("KDS order was inserted but could not be read back".into())
-        })
+        // Read back (within the caller's transaction so the whole fanout
+        // commits atomically).
+        let mut stmt = tx.prepare(
+            "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
+                    received_at, started_at, ready_at, served_at,
+                    prep_time_seconds, kitchen_zone, notes, table_number, priority
+             FROM kds_orders WHERE id = ?1",
+        )?;
+        let order = stmt.query_row(params![id], Self::row_to_kds_order)?;
+        Ok(order)
     }
 
     /// List KDS orders, optionally filtered by status. Ordered by received_at DESC.
@@ -609,6 +639,10 @@ impl Store<'_> {
         };
 
         let mut orders = Vec::with_capacity(by_zone.len());
+        // One transaction for the WHOLE fanout: a failure on any zone
+        // (duplicate sale/zone, line-item error) rolls back every ticket
+        // created so far, so the kitchen never sees a partial set.
+        let tx = self.conn.unchecked_transaction()?;
         for (zone, lines) in by_zone {
             // Build structured line items with course + modifier data (TODO 2a).
             let structured_items: Vec<CreateKdsLineItemInput> = lines
@@ -640,7 +674,8 @@ impl Store<'_> {
 
             let (items_summary, item_count) = Store::derive_kds_summary(&structured_items);
 
-            let order = self.create_kds_order_fanout(
+            let order = self.create_kds_order_fanout_in_tx(
+                &tx,
                 CreateKdsOrderInput {
                     sale_id: sale_id.to_owned(),
                     store_id: store_id.map(|s| s.to_owned()),
@@ -655,10 +690,11 @@ impl Store<'_> {
             )?;
 
             // Create the structured line items in the new kds_line_items table.
-            self.create_kds_line_items(&order.id, &structured_items)?;
+            self.create_kds_line_items_in_tx(&tx, &order.id, &structured_items)?;
 
             orders.push(order);
         }
+        tx.commit()?;
 
         Ok(orders)
     }
