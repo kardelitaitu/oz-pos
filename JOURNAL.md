@@ -6283,3 +6283,27 @@ total_refunded_for_sale returned Err(NotFound) when no refunds existed
 **Risks / follow-ups:** the refundable-balance guard is per-currency and
 per-sale. Cross-currency refunds of a single-currency sale are rejected by
 the caller's checked_add (currency mismatch). Next: voids + gift cards.
+
+## 2026-08-22 — TDD cycle: oz-api users handler coverage
+
+**Problem:** routes/users.rs (122 lines) had only 2 deserialization
+tests. The create_user handler (201, tenant-stamp, 400, 409) and
+username normalization were untested. Unlike tax_rates, users.username
+HAS a UNIQUE constraint and the store maps violations to
+CoreError::Conflict — so the 409 path is live, not dead code.
+
+**Solution:** TDD coverage cycle (existing behavior pinned):
+- 6 new tests: 201 default tenant; tenant_id stamped from JWT claims;
+  username trimmed+lowercased (store normalization); 400 on empty
+  username; 409 on duplicate username (real conflict path); helper
+  seeds the roles FK target (fresh_db has no roles table rows).
+- Followed the tax_rates test pattern (State + Extension(claims) +
+  Json direct handler calls).
+
+**Verification:** oz-api 187/187 (was 182); fmt + clippy -D warnings
+clean.
+
+**Risks / follow-ups:** PG path (state.pg = Some) still integration-
+only (skip-if-unreachable pattern); the SQLite default path is fully
+covered now.
+
