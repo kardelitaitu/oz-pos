@@ -2,6 +2,13 @@ use super::*;
 
 /// Build a deadpool pool from a `postgres://` URL (plaintext — the test
 /// DB runs locally in Docker, mirroring `sync_store`'s integration test).
+///
+/// The schema apply is wrapped in a cluster-wide advisory lock: under
+/// nextest every PG test runs in its own process and several call this on
+/// the SAME base DB, so concurrent `PG_INIT` catalog DDL was a recurring
+/// flake source (duplicate-object / cache-invalidation errors). The lock
+/// serializes the DDL across processes; it is released immediately after,
+/// so test bodies still run fully in parallel.
 async fn test_pool(url: &str) -> Option<deadpool_postgres::Pool> {
     use deadpool_postgres::Manager;
     use std::str::FromStr;
@@ -13,7 +20,17 @@ async fn test_pool(url: &str) -> Option<deadpool_postgres::Pool> {
         .expect("pool build");
     match pool.get().await {
         Ok(client) => {
-            if let Err(e) = client.batch_execute(oz_core::migrations::PG_INIT).await {
+            // Serialize PG_INIT across test processes (same fixed key as
+            // sync_store's integration tests use for their schema apply).
+            const SCHEMA_LOCK_KEY: i64 = 0x4f5a_5445_5354_5351; // "OZTESTSQ"
+            let _ = client
+                .batch_execute(&format!("SELECT pg_advisory_lock({SCHEMA_LOCK_KEY});"))
+                .await;
+            let apply = client.batch_execute(oz_core::migrations::PG_INIT).await;
+            let _ = client
+                .batch_execute(&format!("SELECT pg_advisory_unlock({SCHEMA_LOCK_KEY});"))
+                .await;
+            if let Err(e) = apply {
                 eprintln!("PG REST integration: schema apply failed: {e:?}");
                 return None;
             }
@@ -989,12 +1006,17 @@ async fn pg_integration_terminal_auth_survives_rls_cutover() {
             .await
             .unwrap();
     }
-    for role in ["oz_term_auth_probe", "oz_email_discovery"] {
+    for role in ["oz_term_auth_probe"] {
         let _ = admin.batch_execute(&format!("DROP OWNED BY {role};")).await;
         let _ = admin
             .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
             .await;
     }
+    // NOTE: `oz_email_discovery` is deliberately NOT dropped here — it is a
+    // cluster-wide role that production code depends on, and other test
+    // processes (`pg_integration_active_tenants_survives_rls_cutover` in
+    // cloud-server) may be mid-flight using it. Created idempotently
+    // (`IF NOT EXISTS`) and owns nothing, so safe to leave in place.
     let db_name = format!("oz_term_auth_{}", std::process::id());
     admin
         .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
@@ -1126,8 +1148,7 @@ async fn pg_integration_terminal_auth_survives_rls_cutover() {
         .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
         .await
         .unwrap();
-    admin
-        .batch_execute("DROP ROLE IF EXISTS oz_email_discovery;")
-        .await
-        .unwrap();
+    // `oz_email_discovery` deliberately left in place — see the NOTE at the
+    // stale-role cleanup above. Dropping it here would race concurrent
+    // tests that use it; it is re-created idempotently by the next run.
 }

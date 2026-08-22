@@ -51,11 +51,14 @@ async fn throwaway_pg_db(
     // A crashed earlier run (before the throwaway-DB refactor) may have
     // left the fixed-name probe roles owning objects in the BASE database.
     // DROP OWNED BY releases those so the role setup's DROP ROLE succeeds.
-    for role in [
-        "oz_email_rls_probe",
-        "oz_email_tenants_probe",
-        "oz_email_discovery",
-    ] {
+    // NOTE: `oz_email_discovery` is deliberately NOT dropped here — it is a
+    // cluster-wide role that production code (`SET LOCAL ROLE
+    // oz_email_discovery`) depends on, and nextest runs each test in its own
+    // process, so dropping it from this helper would race a concurrent test
+    // that is mid-flight using it (the observed flake). It is created
+    // idempotently (`IF NOT EXISTS`) and owns nothing, so it is safe to
+    // leave in place across test runs.
+    for role in ["oz_email_rls_probe", "oz_email_tenants_probe"] {
         let _ = admin.batch_execute(&format!("DROP OWNED BY {role};")).await;
         let _ = admin
             .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
@@ -1182,10 +1185,12 @@ async fn pg_integration_active_tenants_survives_rls_cutover() {
         .await
         .expect("active-tenants drop throwaway database should succeed");
     admin
-        .batch_execute(&format!(
-            "DROP ROLE IF EXISTS {role};
-             DROP ROLE IF EXISTS oz_email_discovery;"
-        ))
+        .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
         .await
         .expect("active-tenants probe role cleanup should succeed");
+    // `oz_email_discovery` is deliberately left in place (see the NOTE at
+    // the stale-role cleanup in `throwaway_pg_db`): it is cluster-wide,
+    // production depends on it, and dropping it here would race concurrent
+    // tests that use it. It is idempotently re-created (`IF NOT EXISTS`) by
+    // the next run.
 }

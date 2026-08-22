@@ -317,13 +317,28 @@ impl DbPool {
 
             // Schema migration can take 10-30s on first boot. Timeout at 60s
             // to prevent indefinite hang if the migration script has issues.
-            tokio::time::timeout(
+            // Serialize the DDL with a cluster-wide advisory lock: under
+            // nextest every PG integration test runs in its own process and
+            // several apply PG_INIT to the SAME base DB concurrently, which
+            // raced catalog DDL (the recurring flake); the same race exists
+            // between two app instances booting at once. The lock is
+            // session-scoped, so a crashed process releases it automatically.
+            const SCHEMA_LOCK_KEY: i64 = 0x4f5a_5445_5354_5351; // "OZTESTSQ"
+            migrate_client
+                .batch_execute(&format!("SELECT pg_advisory_lock({SCHEMA_LOCK_KEY});"))
+                .await
+                .map_err(|e| DbError::Migration(format!("failed to take schema lock: {e}")))?;
+            let apply = tokio::time::timeout(
                 std::time::Duration::from_secs(60),
                 migrate_client.batch_execute(oz_core::migrations::PG_INIT),
             )
             .await
             .map_err(|_| DbError::Migration("schema migration timed out after 60s".into()))?
-            .map_err(|e| DbError::Migration(e.to_string()))?;
+            .map_err(|e| DbError::Migration(e.to_string()));
+            let _ = migrate_client
+                .batch_execute(&format!("SELECT pg_advisory_unlock({SCHEMA_LOCK_KEY});"))
+                .await;
+            apply?;
             info!("PostgreSQL database connected and full schema applied");
         } else {
             info!("PostgreSQL database connected (schema application skipped: OZ_APPLY_SCHEMA=0)");
