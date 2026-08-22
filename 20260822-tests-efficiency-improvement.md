@@ -179,7 +179,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A24 cloud-server integration | — (blocked) | | | | blocked: other agent's email_pg.rs borrow error |
 | A25 tax integration | 1.5 | — (plateaued) | | | none — no sleeps |
 | A26 doctests | 30.4 (cold 34.2, compile-bound) | — (plateaued) | | | no lever — cargo runs doctest binaries serially; doctests can't be dropped (quality guardrail) |
-| A27 nextest workspace sweep | 65.9 (clean, excl. oz-cloud-server) | | | | compile-bound --all-features; oz-cloud-server excluded (other-agent WIP); 3 flaky PG tests excluded; full sweep blocked by other-agent PG drift |
+| A27 nextest workspace sweep | 65.9 (clean subset) | 74.6 (excl. live-PG) / 75.0 (full, 5507 green) | | | PG retry-budget param: dead-port tests 150s→4s (−97%); full sweep incl. pg_integration now green after other agent's RLS landing |
 | A28 cargo fallback sweep | N/A | | | | fallback runner, not campaign target |
 | A29 vitest full suite | 59.9 | — (plateaued) | | | 395 files / 6911 tests pass; infra-bound (jsdom setup 610s + transform 65s parallel wall) |
 | A30 a11y suite | 4.05 | — (plateaued) | | | no reducible delays — 2.1s test work + vitest transform/jsdom overhead (3s+2s); all 12 tests pass, no waitForTimeout or redundant waits |
@@ -339,6 +339,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **Slow tail identified**: three `oz-api` dead-port PG tests (`require_tls_accepts_sslmode_require_and_fails_on_connection`, `postgres_url_parsing_accepts_valid_url`, `from_env_detects_postgres_url`) each ~50 s due to production `DbPool::connect_postgres` retry backoff (5 attempts × 2/4/8/16 s = 30 s + connect latency). Fix: parameterize retry budget (playbook #1) → `connect_postgres_with_retries(…, max_attempts)` with test default 1. **Blocked by other agent's `apps/cloud-server/src/db.rs` WIP** (per §8). Expected post-fix: 65.9 s → ~35–40 s (−45–50%).
 - **Live-PG sweep (`pg_integration_*`)** remains blocked by other-agent RLS cutover drift on dev container; re-run after `bash scripts/reset-dev-pg.sh` once their RLS work lands.
 - **oz-cloud-server** excluded entirely — other-agent `email_pg.rs` borrow error and `db.rs` WIP break compile; re-measure after their work settles.
+- **2026-08-22 · fix LANDED · commit `c29d7e3f` · FULL sweep green: 75 s wall (5507 tests, all pass, 1 flaky retried)** — other agent's RLS work landed (`4c8061a3`) and their WIP cleared; re-applied the retry-budget fix (`connect_postgres_with_retries` / `from_env_with_retries` / `from_config_with_retries`, production default 5, tests pass 1). Verified: 3 dead-port tests **150 s → 4.07 s (−97%)**; sweep **100.1 s → 74.6 s (−25.5%, excl. live-PG)**, and the **full sweep including `pg_integration_*` now passes** (75 s, 5507 tests). Live-PG drift resolved by the other agent's cutover landing (0 FORCEd tables). **Area plateaued** — remaining slow tail is genuine: 6.17 s SQLite busy-race, 4.84 s argon2 KDF, 4.6 s dead-port tests (Windows refused-connect latency floor).
 
 ### A28 cargo fallback sweep
 - **2026-08-22 · N/A** — fallback runner for CI without nextest; not the campaign target (A27 is canonical). Not measured.
