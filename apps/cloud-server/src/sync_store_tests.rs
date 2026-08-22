@@ -187,7 +187,7 @@ async fn pg_integration_push_pull_plan_snapshot_roundtrip() {
         Some(TenantPlan::Pro)
     );
 
-    let mut item = sample_item("pg-item-1");
+    let mut item = sample_item(&format!("pg-item-{tenant}"));
     item.tenant_id = tenant.clone();
     assert!(matches!(
         store.push_item(&item, &tenant).await.unwrap(),
@@ -203,7 +203,7 @@ async fn pg_integration_push_pull_plan_snapshot_roundtrip() {
         .await
         .unwrap();
     assert_eq!(items.len(), 1);
-    assert_eq!(items[0].id, "pg-item-1");
+    assert_eq!(items[0].id, format!("pg-item-{tenant}"));
     assert_eq!(items[0].tenant_id, tenant);
 
     assert_eq!(store.pending_count(&tenant).await, 1);
@@ -237,8 +237,14 @@ async fn pg_integration_push_pull_plan_snapshot_roundtrip() {
             .unwrap();
         client
             .execute(
+                // is_default=0: the idx_tax_rates_single_default partial
+                // UNIQUE index is GLOBAL (one default across the whole DB),
+                // so seeding is_default=1 here would collide with any
+                // concurrent test that also seeds a default. The snapshot
+                // mapping (BIGINT 0/1 -> bool) is exercised identically
+                // with a non-default row.
                 "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, tenant_id)
-                 VALUES ($1, 'Tax', 800, 1, 0, $2)",
+                 VALUES ($1, 'Tax', 800, 0, 0, $2)",
                 &[&format!("tax-{tenant}"), &tenant],
             )
             .await
@@ -259,9 +265,9 @@ async fn pg_integration_push_pull_plan_snapshot_roundtrip() {
     assert_eq!(products[0]["track_serial"], true);
     assert_eq!(products[0]["is_active"], true);
 
-    // Tax rates: is_default=1 → true, is_inclusive=0 → false.
+    // Tax rates: is_default=0 → false, is_inclusive=0 → false.
     assert_eq!(tax_rates.len(), 1);
-    assert_eq!(tax_rates[0]["is_default"], true);
+    assert_eq!(tax_rates[0]["is_default"], false);
     assert_eq!(tax_rates[0]["is_inclusive"], false);
 
     // Users: is_active=0 → false, and pin_hash must not leak (SYNC-06).

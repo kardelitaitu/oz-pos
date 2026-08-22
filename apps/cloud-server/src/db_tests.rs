@@ -503,6 +503,11 @@ async fn pg_integration_rls_fails_closed() {
     let alpha = format!("{ns}-alpha");
     let beta = format!("{ns}-beta");
     let sku = format!("{ns}-sku");
+    // Per-process role name: under nextest each test runs in its own
+    // process, and a FIXED name would race a concurrent test session
+    // (another agent's run) doing DROP OWNED BY on the same role →
+    // "tuple concurrently updated". A pid-suffixed role can never collide.
+    let probe_role = format!("oz_rls_probe_{}", std::process::id());
 
     // Set up the non-owner role (idempotent) and clear prior rows. A
     // previous run's role persists WITH its grants (this test
@@ -512,14 +517,14 @@ async fn pg_integration_rls_fails_closed() {
     client
         .batch_execute(&format!(
             "DO $$ BEGIN
-                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_rls_probe') THEN
-                    EXECUTE 'DROP OWNED BY oz_rls_probe';
-                    EXECUTE 'DROP ROLE oz_rls_probe';
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{probe_role}') THEN
+                    EXECUTE 'DROP OWNED BY {probe_role}';
+                    EXECUTE 'DROP ROLE {probe_role}';
                 END IF;
              END $$;
-             CREATE ROLE oz_rls_probe;
-             GRANT USAGE ON SCHEMA public TO oz_rls_probe;
-             GRANT SELECT, INSERT, UPDATE, DELETE ON products TO oz_rls_probe;
+             CREATE ROLE {probe_role};
+             GRANT USAGE ON SCHEMA public TO {probe_role};
+             GRANT SELECT, INSERT, UPDATE, DELETE ON products TO {probe_role};
              DELETE FROM products WHERE tenant_id LIKE '{ns}%';"
         ))
         .await
@@ -553,7 +558,7 @@ async fn pg_integration_rls_fails_closed() {
         let _ = conn.await;
     });
     probe
-        .execute("SET ROLE oz_rls_probe", &[])
+        .execute(&format!("SET ROLE {probe_role}"), &[])
         .await
         .expect("SET ROLE should succeed");
 
