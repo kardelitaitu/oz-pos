@@ -93,7 +93,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-validation-details': 'Issues ({count})',
   'topology-validation-panel-aria': 'Diagram issues',
   'topology-validation-dismiss': 'Dismiss',
-  'topology-inspector-title': 'Node Inspector',
+  'topology-inspector-title': 'Node Properties',
   'topology-inspector-node-name': 'Node Name',
   'topology-inspector-subtitle': 'Subtitle / Location',
   'topology-inspector-close-aria': 'Close inspector',

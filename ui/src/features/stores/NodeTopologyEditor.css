@@ -1951,13 +1951,61 @@
 
 .inspector-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
 }
 
-.inspector-header h3 {
+.inspector-type-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.inspector-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.inspector-header-text h3 {
   margin: 0;
   font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-type-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.inspector-close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.inspector-close-btn:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-fg);
 }
 
 .inspector-content {
@@ -2005,9 +2053,80 @@
   line-height: 1.5;
 }
 
-.inspector-section h4 {
+.inspector-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.inspector-section-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-muted);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.inspector-field-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.inspector-field--half {
+  flex: 1;
+  min-width: 0;
+}
+
+.inspector-select {
+  padding: var(--space-2);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
   font-size: var(--text-sm);
-  margin: 0 0 var(--space-2) 0;
+}
+
+.inspector-section--actions {
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.inspector-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.inspector-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.inspector-action-btn:hover {
+  background: var(--color-bg-subtle);
+  border-color: var(--color-fg-muted);
+}
+
+.inspector-action-btn--danger {
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
+}
+
+.inspector-action-btn--danger:hover {
+  background: var(--color-danger-subtle);
+  border-color: var(--color-danger);
 }
 
 .inspector-checkbox {

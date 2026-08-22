@@ -20,10 +20,10 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-new-hardware': 'New Hardware',
   'topology-new-hardware-subtitle': 'Peripheral',
   'topology-new-ready': 'Ready',
-  'topology-inspector-title': 'Node Inspector',
+  'topology-inspector-title': 'Node Properties',
   'topology-inspector-node-name': 'Node Name',
   'topology-inspector-subtitle': 'Subtitle / Location',
-  'topology-inspector-close-aria': 'Close inspector',
+  'topology-inspector-close-aria': 'Close properties panel',
   'topology-inspector-section-coords': 'Coordinates',
   'workspace-type-selector-label': 'Workspace Type',
   'topology-ws-type-store-pos': 'Retail POS',
@@ -140,7 +140,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('store');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Inspector')).toBeInTheDocument();
+      expect(screen.getByText('Node Properties')).toBeInTheDocument();
       expect(screen.getByTestId('store-info-card')).toBeInTheDocument();
     });
   });
@@ -153,7 +153,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('workspace');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Inspector')).toBeInTheDocument();
+      expect(screen.getByText('Node Properties')).toBeInTheDocument();
       expect(screen.getByTestId('workspace-store-pos')).toBeInTheDocument();
     });
   });
@@ -166,7 +166,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('store');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Inspector')).toBeInTheDocument();
+      expect(screen.getByText('Node Properties')).toBeInTheDocument();
     });
 
     // Fire Escape on the canvas
@@ -175,7 +175,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     fireEvent.keyDown(canvas!, { key: 'Escape' });
 
     await waitFor(() => {
-      expect(screen.queryByText('Node Inspector')).not.toBeInTheDocument();
+      expect(screen.queryByText('Node Properties')).not.toBeInTheDocument();
     });
   });
 
@@ -218,7 +218,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('warehouse');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Inspector')).toBeInTheDocument();
+      expect(screen.getByText('Node Properties')).toBeInTheDocument();
       expect(screen.getByTestId('warehouse-inspector')).toBeInTheDocument();
       expect(screen.getByLabelText(/Capacity/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Low-Stock Threshold/)).toBeInTheDocument();
@@ -241,7 +241,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
 
     // The drawer opens with the hardware-specific card and the name prefilled.
     await waitFor(() => {
-      expect(screen.getByText('Node Inspector')).toBeInTheDocument();
+      expect(screen.getByText('Node Properties')).toBeInTheDocument();
       expect(screen.getByTestId('hardware-inspector')).toBeInTheDocument();
       expect(screen.getByText('Hardware Device')).toBeInTheDocument();
     });
@@ -268,7 +268,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('store');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Inspector')).toBeInTheDocument();
+      expect(screen.getByText('Node Properties')).toBeInTheDocument();
       expect(screen.getByTestId('store-info-card')).toBeInTheDocument();
     });
 
@@ -292,7 +292,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     fireEvent.keyDown(canvas!, { key: 'i', ctrlKey: true });
 
     // No crash, no inspector — no focus shift
-    expect(screen.queryByText('Node Inspector')).not.toBeInTheDocument();
+    expect(screen.queryByText('Node Properties')).not.toBeInTheDocument();
   });
 
   // ── Node name input updates on typing ─────────────────────
@@ -303,7 +303,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('store');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Inspector')).toBeInTheDocument();
+      expect(screen.getByText('Node Properties')).toBeInTheDocument();
     });
 
     const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;

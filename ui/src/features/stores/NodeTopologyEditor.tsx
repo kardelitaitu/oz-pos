@@ -8,9 +8,9 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { loadTopology, type TopologyApplyResult } from '@/api/topology';
 import { useSettings } from '@/contexts/SettingsContext';
 import {
-  StoreInfoCard,
   type WorkspaceCardProps,
 } from '@/features/settings/workspace-cards';
+import { updateStore, getStore, type StoreProfile } from '@/api/stores';
 import {
   StoreIcon,
   WarehouseIcon,
@@ -702,6 +702,95 @@ export function validateEditorGraph(
     : [];
 }
 
+/** Branch Location profile fields — fetched lazily from the backend. */
+function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
+  nodeId: string;
+  l10n: ReturnType<typeof useLocalization>['l10n'];
+  beginInspectorEdit: (id: string) => void;
+}) {
+  const [profile, setProfile] = useState<StoreProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [draft, setDraft] = useState<Partial<Pick<StoreProfile, 'address' | 'currency' | 'timezone' | 'tax_id'>> | null>(null);
+  const active = draft && profile ? { ...profile, ...draft } : profile;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getStore(nodeId)
+      .then((p) => { if (!cancelled) { setProfile(p); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [nodeId]);
+
+  const persist = useCallback(() => {
+    if (draft && profile) {
+      const merged = { ...profile, ...draft };
+      updateStore(merged).then(setProfile).catch(() => {});
+      setDraft(null);
+    }
+  }, [draft, profile]);
+
+  if (loading) {
+    return (
+      <div className="inspector-section">
+        <h4 className="inspector-section-title"><Localized id="topology-inspector-section-location">Branch Location</Localized></h4>
+        <span className="inspector-type-label">Loading…</span>
+      </div>
+    );
+  }
+
+  if (!active) return null;
+
+  return (
+    <div className="inspector-section">
+      <h4 className="inspector-section-title"><Localized id="topology-inspector-section-location">Branch Location</Localized></h4>
+      <label className="inspector-field">
+        <span><Localized id="topology-inspector-address">Address</Localized></span>
+        <input
+          type="text"
+          value={active.address}
+          placeholder={l10n.getString('topology-inspector-address-placeholder')}
+          onChange={(e) => { beginInspectorEdit(nodeId); setDraft((d) => ({ ...d ?? {}, address: e.target.value })); }}
+          onBlur={persist}
+        />
+      </label>
+      <div className="inspector-field-row">
+        <label className="inspector-field inspector-field--half">
+          <span><Localized id="topology-inspector-currency">Currency</Localized></span>
+          <input
+            type="text"
+            value={active.currency}
+            placeholder="USD"
+            maxLength={3}
+            onChange={(e) => { beginInspectorEdit(nodeId); setDraft((d) => ({ ...d ?? {}, currency: e.target.value.toUpperCase() })); }}
+            onBlur={persist}
+          />
+        </label>
+        <label className="inspector-field inspector-field--half">
+          <span><Localized id="topology-inspector-timezone">Timezone</Localized></span>
+          <input
+            type="text"
+            value={active.timezone}
+            placeholder="UTC"
+            onChange={(e) => { beginInspectorEdit(nodeId); setDraft((d) => ({ ...d ?? {}, timezone: e.target.value })); }}
+            onBlur={persist}
+          />
+        </label>
+      </div>
+      <label className="inspector-field">
+        <span><Localized id="topology-inspector-tax-id">Tax ID</Localized></span>
+        <input
+          type="text"
+          value={active.tax_id}
+          placeholder={l10n.getString('topology-inspector-tax-id-placeholder')}
+          onChange={(e) => { beginInspectorEdit(nodeId); setDraft((d) => ({ ...d ?? {}, tax_id: e.target.value })); }}
+          onBlur={persist}
+        />
+      </label>
+    </div>
+  );
+}
+
 export default function NodeTopologyEditor({
   currentTier = 'standard',
   onSave,
@@ -725,8 +814,8 @@ export default function NodeTopologyEditor({
   /** Latest l10n for ref-based callbacks (duplicate commit/cancel) so the
    *  announcement strings always come from the current bundle. */
   const l10nRef = useRef(l10n);
-  l10nRef.current = l10n;
-  const { settings } = useSettings();
+  l10nRef.current = l10n;    const { settings } = useSettings();
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -2309,6 +2398,7 @@ export default function NodeTopologyEditor({
     setApplyPinVerifying(true);
     try {
       const { verifyPin } = await import('@/api/staff');
+      if (!sessionToken) { setApplyPinError(true); return; }
       const valid = await verifyPin(sessionToken, applyPin);
       if (!valid) {
         setApplyPinError(true);
@@ -3119,8 +3209,7 @@ export default function NodeTopologyEditor({
       // shortcuts, so keyboard Delete on a focused node still works.
       // `closest` only exists on Elements — keydown can target window/document
       // (tests, programmatic dispatch), which must never throw out of the guard.
-      if (target && typeof target.closest === 'function'
-        && target.closest('.node-tool-rack, .node-topology-header, .node-inspector-drawer')) {
+      if (target && typeof target.closest === 'function'            && target.closest('.node-tool-rack, .node-topology-header, .node-inspector-drawer, .topology-apply-confirm-overlay')) {
         return;
       }
       // Guard: a confirm dialog owns the keyboard while it is open — Escape
@@ -5335,8 +5424,11 @@ export default function NodeTopologyEditor({
                 const plan = planTopologyDiff(nodes, beforeInstances);
                 const wsNodes = new Map(nodes.filter((n) => n.type === 'workspace').map((n) => [n.id, n]));
                 const instanceMap = new Map((workspaceInstances ?? []).map((s) => [s.instanceId, s]));
-                const items = (ids: string[], map: Map<string, { id: string; name: string; typeKey: string }>): ApplyDiffItem[] =>
-                  ids.map((id) => map.get(id) ?? { id, name: id, typeKey: 'store-pos' });
+                const items = (ids: string[], map: Map<string, { name: string; typeKey?: string; type_key?: string }>): ApplyDiffItem[] =>
+                  ids.map((id) => {
+                    const entry = map.get(id);
+                    return { id, name: entry?.name ?? id, typeKey: entry?.typeKey ?? entry?.type_key ?? 'store-pos' };
+                  });
                 const createdItems = items(
                   plan.createNodeIds.filter((id) => !plan.typeChanges.has(id)),
                   wsNodes,
@@ -6268,51 +6360,86 @@ export default function NodeTopologyEditor({
           )}
         </div>
 
-        {selectedNode && (
+        {selectedNode && (() => {
+          const NodeIcon = NODE_TYPE_ICON[selectedNode.type];
+          const typeColors: Record<string, string> = {
+            store: 'var(--color-warning, #f59e0b)',
+            workspace: 'var(--color-accent, #5a9fd4)',
+            warehouse: 'var(--color-success, #4caf50)',
+            hardware: 'var(--color-fg-muted, #8b95a5)',
+          };
+          const typeLabelKey: Record<string, string> = {
+            store: 'topology-node-type-store',
+            workspace: `topology-node-type-${(selectedNode.metadata?.['typeKey'] as string) ?? 'workspace'}`,
+            warehouse: 'topology-node-type-warehouse',
+            hardware: 'topology-node-type-hardware',
+          };
+          const typeColor = typeColors[selectedNode.type] ?? 'var(--color-fg-muted)';
+          return (
           <div className="node-inspector-drawer">
+            {/* Type-specific header */}
             <div className="inspector-header">
-              <h3><Localized id="topology-inspector-title">Node Inspector</Localized></h3>
-              <Button variant="secondary" onClick={clearSelection} icon={<CloseIcon size={14} />} aria-label={l10n.getString('topology-inspector-close-aria')}>{null}</Button>
+              <div className="inspector-type-badge" style={{ backgroundColor: typeColor }}>
+                <NodeIcon size={18} />
+              </div>
+              <div className="inspector-header-text">
+                <h3>{selectedNode.name || l10n.getString(typeLabelKey[selectedNode.type] ?? 'topology-node-type-workspace')}</h3>
+                <span className="inspector-type-label" style={{ color: typeColor }}>
+                  {l10n.getString(typeLabelKey[selectedNode.type] ?? 'topology-node-type-workspace')}
+                </span>
+              </div>
+              <button type="button" className="inspector-close-btn" onClick={clearSelection} aria-label={l10n.getString('topology-inspector-close-aria')}>
+                <CloseIcon size={16} />
+              </button>
             </div>
 
             <div className="inspector-content">
               <ErrorBoundary>
-              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
-              <label className="inspector-field">
-                <span><Localized id="topology-inspector-node-name">Node Name</Localized></span>
-                <input
-                  type="text"
-                  value={selectedNode.name}
-                  onChange={(e) => {
-                    beginInspectorEdit(selectedNode.id);
-                    const name = e.target.value;
-                    setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, name } : n)));
-                  }}
-                  onFocus={() => { renameBaselineRef.current = selectedNode.name; }}
-                  onBlur={() => void persistNodeRename(selectedNode.id, selectedNode.name)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void persistNodeRename(selectedNode.id, selectedNode.name); } }}
-                />
-              </label>
+              {/* ── Name section ─────────────────────────────────────── */}
+              <div className="inspector-section">
+                <h4 className="inspector-section-title"><Localized id="topology-inspector-section-identity">Identity</Localized></h4>
+                <label className="inspector-field">
+                  <span><Localized id="topology-inspector-node-name">Name</Localized></span>
+                  <input
+                    type="text"
+                    value={selectedNode.name}
+                    onChange={(e) => {
+                      beginInspectorEdit(selectedNode.id);
+                      const name = e.target.value;
+                      setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, name } : n)));
+                    }}
+                    onFocus={() => { renameBaselineRef.current = selectedNode.name; }}
+                    onBlur={() => void persistNodeRename(selectedNode.id, selectedNode.name)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void persistNodeRename(selectedNode.id, selectedNode.name); } }}
+                  />
+                </label>
+                <label className="inspector-field">
+                  <span><Localized id="topology-inspector-subtitle">Subtitle / Location</Localized></span>
+                  <input
+                    type="text"
+                    value={selectedNode.subtitle || ''}
+                    onChange={(e) => {
+                      beginInspectorEdit(selectedNode.id);
+                      const subtitle = e.target.value;
+                      setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, subtitle } : n)));
+                    }}
+                  />
+                </label>
+              </div>
 
-              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
-              <label className="inspector-field">
-                <span><Localized id="topology-inspector-subtitle">Subtitle / Location</Localized></span>
-                <input
-                  type="text"
-                  value={selectedNode.subtitle || ''}
-                  onChange={(e) => {
-                    beginInspectorEdit(selectedNode.id);
-                    const subtitle = e.target.value;
-                    setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, subtitle } : n)));
-                  }}
+              {/* ── Branch Location store profile fields ──────────── */}
+              {selectedNode.type === 'store' && (
+                <BranchLocationFields
+                  nodeId={selectedNode.storeProfileId ?? selectedNode.id}
+                  l10n={l10n}
+                  beginInspectorEdit={beginInspectorEdit}
                 />
-              </label>
+              )}
 
-              {/* Workspace type selector + settings card */}
-              {selectedNode.type === 'workspace' && (                  <div className="inspector-section">
-                  <h4>
-                    <Localized id="workspace-type-selector-label">Workspace Type</Localized>
-                  </h4>
+              {/* ── Workspace type section ────────────────────────── */}
+              {selectedNode.type === 'workspace' && (
+                <div className="inspector-section">
+                  <h4 className="inspector-section-title"><Localized id="workspace-type-selector-label">Workspace Type</Localized></h4>
                   <div className="topology-workspace-identity" data-testid="workspace-identity-fields">
                     <span className="topology-identity-row">
                       <Localized id="topology-workspace-purpose-label">Purpose</Localized>:
@@ -6388,28 +6515,81 @@ export default function NodeTopologyEditor({
                   {renderWorkspaceCard(selectedNode)}
                 </div>
               )}
+
+              {/* ── Warehouse section ────────────────────────────── */}
               {selectedNode.type === 'warehouse' && (
-                <WarehouseSettingsCard node={selectedNode} onChange={handleSetNodeMetadata} capacityLocked={!isProAllowed} />
+                <div className="inspector-section">
+                  <h4 className="inspector-section-title"><Localized id="topology-inspector-section-warehouse">Warehouse</Localized></h4>
+                  <WarehouseSettingsCard node={selectedNode} onChange={handleSetNodeMetadata} capacityLocked={!isProAllowed} />
+                </div>
               )}
-              {selectedNode.type === 'store' && (
-                <StoreInfoCard variant="inspector-drawer" />
-              )}
+
+              {/* ── Hardware section ──────────────────────────────── */}
               {selectedNode.type === 'hardware' && (
                 <div className="inspector-section" data-testid="hardware-inspector">
-                  <h4>
-                    <Localized id="topology-inspector-hardware-title">Hardware Device</Localized>
-                  </h4>
+                  <h4 className="inspector-section-title"><Localized id="topology-inspector-hardware-title">Hardware Device</Localized></h4>
                   {selectedNode.telemetryBadge && (
                     <span className={`node-telemetry-badge telemetry-${selectedNode.telemetryStatus ?? 'online'}`}>
                       {selectedNode.telemetryBadge}
                     </span>
                   )}
+                  <label className="inspector-field">
+                    <span><Localized id="topology-inspector-device-type">Device Type</Localized></span>
+                    <select
+                      className="inspector-select"
+                      value={(selectedNode.metadata?.['deviceType'] as string) ?? 'thermal-receipt'}
+                      onChange={(e) => {
+                        beginInspectorEdit(selectedNode.id);
+                        const deviceType = e.target.value;
+                        setNodes((prev) => prev.map((n) => n.id === selectedNode.id
+                          ? { ...n, metadata: { ...n.metadata, deviceType } }
+                          : n));
+                      }}
+                    >
+                      <option value="thermal-receipt">{l10n.getString('topology-hardware-thermal-receipt')}</option>
+                      <option value="thermal-kitchen">{l10n.getString('topology-hardware-thermal-kitchen')}</option>
+                      <option value="barcode-scanner">{l10n.getString('topology-hardware-barcode-scanner')}</option>
+                      <option value="cash-drawer">{l10n.getString('topology-hardware-cash-drawer')}</option>
+                      <option value="display-customer">{l10n.getString('topology-hardware-display-customer')}</option>
+                    </select>
+                  </label>
+                  <label className="inspector-field">
+                    <span><Localized id="topology-inspector-device-address">Connection Address</Localized></span>
+                    <input
+                      type="text"
+                      placeholder={l10n.getString('topology-inspector-device-address-placeholder')}
+                      value={(selectedNode.metadata?.['deviceAddress'] as string) ?? ''}
+                      onChange={(e) => {
+                        beginInspectorEdit(selectedNode.id);
+                        const deviceAddress = e.target.value;
+                        setNodes((prev) => prev.map((n) => n.id === selectedNode.id
+                          ? { ...n, metadata: { ...n.metadata, deviceAddress } }
+                          : n));
+                      }}
+                    />
+                  </label>
                 </div>
               )}
+
+              {/* ── Quick actions ─────────────────────────────────── */}
+              <div className="inspector-section inspector-section--actions">
+                <h4 className="inspector-section-title"><Localized id="topology-inspector-section-actions">Actions</Localized></h4>
+                <div className="inspector-actions">
+                  <button type="button" className="inspector-action-btn" onClick={() => { duplicateSelection(); }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                    <Localized id="topology-inspector-duplicate">Duplicate</Localized>
+                  </button>
+                  <button type="button" className="inspector-action-btn inspector-action-btn--danger" onClick={handleDeleteRequest}>
+                    <TrashIcon size={14} />
+                    <Localized id="topology-inspector-delete">Delete</Localized>
+                  </button>
+                </div>
+              </div>
               </ErrorBoundary>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* ── Apply confirmation popup ──────────────────────────────── */}
