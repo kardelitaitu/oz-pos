@@ -104,14 +104,15 @@ The Node Topology Builder dynamically enforces license limits based on the activ
 > in the table below are superseded by `subscription-tiers.md` (FINAL
 > 2026-08-17) — the lineup is now **Free · Plus · Pro ⭐ · Premium ·
 > Enterprise**, and the numeric quotas come from `subscription-tiers.md` §3
-> (e.g. Pro = 2 stores / 5 registers / 3 warehouses; Premium = unlimited).
+> (e.g. Pro = 2 stores / 5 registers / 3 warehouses; Premium = 5 stores /
+> unlimited registers & warehouses / 50 staff).
 > The feature gates map cleanly: multi-warehouse fallback + 2-way transfer
 > wires stay Pro+ (per the doc's Business Logic matrix), and regional zone
 > containers stay Enterprise-only.
 
 | Node / Topology Feature | Free | Plus | Pro | Premium | Enterprise |
 |---|:---:|:---:|:---:|:---:|
-| **Max Store Nodes** | **1** | **1** | **2** | **Unlimited** | **Unlimited** |
+| **Max Store Nodes** | **1** | **1** | **2** | **5** | **Unlimited** |
 | **Max Workspace Nodes** | **1** | **2** | **5** | **Unlimited** | **Unlimited** |
 | **Max Warehouse Nodes** | **1** | **2** | **3** | **Unlimited** | **Unlimited** |
 | **Multi-Warehouse Fallback Wires** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled** | **✓ Enabled** | **✓ Enabled** |
