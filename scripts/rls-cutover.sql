@@ -128,11 +128,14 @@ GRANT USAGE ON SCHEMA public TO oz_webhook_resolver;
 GRANT SELECT ON stripe_customers, sales, payments TO oz_webhook_resolver;
 GRANT oz_webhook_resolver TO oz_app;
 
--- 2d. Email report discovery role. The report sender enumerates tenants
---     by reading tenant_plans / offline_queue / sync_terminals BEFORE any
---     tenant is known (the whole point of discovery). As a non-owner,
---     oz_app cannot read those rows without the tenant GUC. The discovery
---     query runs in a transaction scoped to this role (`SET LOCAL ROLE
+-- 2d. Cross-tenant discovery role. Two pre-tenant readers share it:
+--     (1) the email report sender enumerates tenants by reading
+--     tenant_plans / offline_queue / sync_terminals BEFORE any tenant is
+--     known (the whole point of discovery); (2) terminal client-credential
+--     verification (verify_terminal_credentials) learns the tenant_id FROM
+--     the sync_terminals row it matches, so it cannot set the GUC first.
+--     As a non-owner, oz_app cannot read those rows without the tenant GUC.
+--     Both run in a transaction scoped to this role (`SET LOCAL ROLE
 --     oz_email_discovery`, auto-resets on commit) — same BYPASSRLS pattern
 --     as the webhook resolver. NOLOGIN, reachable only via membership.
 DO $$

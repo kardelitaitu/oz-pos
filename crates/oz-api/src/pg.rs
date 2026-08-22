@@ -487,13 +487,12 @@ pub async fn register_terminal(
 /// RLS exception (pre-tenant by design): this lookup IS the tenant-resolution
 /// step — the `oz.tenant_id` GUC is read FROM the terminal row it returns, so
 /// it cannot set the GUC first. Under `FORCE ROW LEVEL SECURITY` with the
-/// restricted `oz_app` role the query therefore returns zero rows and
-/// client-credential minting fails closed. Same class as the webhook
-/// `stripe_customers` lookup documented in `scripts/rls-cutover.sql`; a
-/// policy decision (e.g. a bootstrap role or a non-tenant policy on
-/// `sync_terminals` keyed on the unique `terminal_id`) is required before
-/// client-credential minting can work under the cutover. The admin-key mint
-/// path is unaffected.
+/// restricted `oz_app` role a bare query returns zero rows. The function
+/// therefore scopes the read to the BYPASSRLS `oz_email_discovery` role
+/// (when the session user is a member) — the same pattern as the webhook
+/// resolver and `active_tenants_pg`, so client-credential minting works
+/// post-cutover. Pre-cutover (no discovery role yet) it reads unscoped, as
+/// before.
 pub async fn verify_terminal_credentials(
     pool: &Pool,
     client_id: &str,
