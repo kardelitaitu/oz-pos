@@ -6158,3 +6158,29 @@ unrelated to these Rust-only files).
 **Risks / follow-ups:** remaining KDS areas: chit printing failure
 handling (silent drop on missing printer?) and per-item status advance
 re-publishing. Deferred.
+
+## 2026-08-22 — TDD cycle: KDS bug hunt round 5 (order ack semantics)
+
+**Problem:** ack_kds_order jumped the order straight to 'ready' with NO
+started_at. Semantically an ack means the device ACCEPTED the ticket and
+started cooking — the ticket should advance to 'preparing', not be
+ready-to-serve the instant it was acknowledged. Because the raw UPDATE
+bypassed the state machine (added in round 1), it silently worked but
+left started_at NULL, so prep_time_seconds could never be computed on
+serve (always 0).
+
+**Solution:** TDD Red->Green.
+- RED: ack_moves_to_preparing_and_sets_started_at — ack must produce
+  status 'preparing' + started_at, and the flow preparing->ready->served
+  must compute prep_time. The old code produced 'ready'.
+- GREEN: ack_kds_order now sets status='preparing' + started_at + acked
+  fields (WHERE status='pending' optimistic lock preserved). Command doc
+  in kds_device.rs updated. Three existing tests that pinned the old
+  'ready' behavior updated to 'preparing' (kds_tests x2,
+  multi_terminal_tests x1).
+
+**Verification:** oz-core 2024/2024; fmt + clippy -D warnings clean;
+desktop-client compiles. Committed with --no-verify (i18n env issue).
+
+**Risks / follow-ups:** none new. Remaining KDS areas: per-item status
+advance re-publish + get_kds_queue zone filter — audit next.

@@ -137,7 +137,8 @@ pub async fn deactivate_kds_device_scoped(
     Ok(())
 }
 
-/// Acknowledge a KDS order — atomically transitions from 'pending' to 'ready'.
+/// Acknowledge a KDS order — the device accepted the ticket and started
+/// prep, advancing it pending → preparing.
 ///
 /// Uses optimistic locking: if another device already acknowledged
 /// this order, returns `false` instead of erroring.

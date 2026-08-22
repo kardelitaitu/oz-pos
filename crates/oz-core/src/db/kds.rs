@@ -1259,19 +1259,22 @@ struct KdsDeviceRow {
 // ── Order Acknowledgment ─────────────────────────────────────────
 
 impl Store<'_> {
-    /// Acknowledge a KDS order — atomically transitions status from 'pending' to 'acked'.
-    ///
-    /// Uses an `UPDATE ... WHERE status = 'pending'` pattern for optimistic
-    /// locking: only one device can win the race. Returns `Ok(true)` on
-    /// success, `Ok(false)` if another device already acknowledged it.
+    /// Acknowledge a KDS order — the device accepted the ticket and started
+    /// prep, so the order advances pending → preparing. Uses an
+    /// `UPDATE WHERE status = 'pending'` pattern for optimistic locking:
+    /// only one device can win the race. Returns `Ok(true)` on success,
+    /// `Ok(false)` if another device already acknowledged it.
     pub fn ack_kds_order(&self, order_id: &str, device_id: &str) -> Result<bool, CoreError> {
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let updated = self.conn.execute(
-            "UPDATE kds_orders SET status = 'ready', acked_by_device = ?1, acked_at = ?2
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
+        let affected = self.conn.execute(
+            "UPDATE kds_orders SET status = 'preparing', started_at = ?1,
+             acked_by_device = ?2, acked_at = ?1
              WHERE id = ?3 AND status = 'pending'",
-            params![device_id, now, order_id],
+            params![now, device_id, order_id],
         )?;
-        Ok(updated > 0)
+        Ok(affected > 0)
     }
 }
 

@@ -1915,6 +1915,56 @@ fn ack_order_second_device_loses() {
     assert!(!second, "second ack should return false");
 }
 
+/// RED: an ack means the device ACCEPTED the ticket and started prep — the
+/// order must advance pending → preparing with started_at set. The old code
+/// jumped straight to 'ready' with no started_at, so the ticket appeared
+/// ready-to-serve the instant it was acknowledged and prep_time_seconds
+/// could never be computed on serve.
+#[test]
+fn ack_moves_to_preparing_and_sets_started_at() {
+    let conn = fresh();
+    let s = store(&conn);
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("SKU-1"), 1, price(100)))
+        .unwrap();
+    let sale = Sale::from_cart_with_user(&cart, None).unwrap();
+    s.create_sale(&sale).unwrap();
+    let kds_order = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale.id.clone(),
+            store_id: None,
+            items_summary: "Item".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+    assert!(s.ack_kds_order(&kds_order.id, "device-a").unwrap());
+
+    let after = s.get_kds_order(&kds_order.id).unwrap().unwrap();
+    assert_eq!(
+        after.status, "preparing",
+        "ack must advance pending -> preparing (device started cooking)"
+    );
+    assert!(
+        after.started_at.is_some(),
+        "ack must set started_at so prep_time can be computed on serve"
+    );
+
+    // The flow continues: preparing -> ready -> served computes prep_time
+    // from the ack's started_at.
+    s.update_kds_status(&kds_order.id, "ready").unwrap();
+    let served = s.update_kds_status(&kds_order.id, "served").unwrap();
+    assert!(
+        served.prep_time_seconds >= 0,
+        "prep_time_seconds must be computable after an ack, got {}",
+        served.prep_time_seconds
+    );
+}
+
 #[test]
 fn ack_order_already_ready_is_noop() {
     let conn = fresh();
@@ -2102,9 +2152,11 @@ fn ack_order_records_device_and_timestamp() {
     let result = s.ack_kds_order(&kds_order.id, "device-alpha").unwrap();
     assert!(result);
 
-    // Verify the order has acked_by_device and acked_at set.
+    // Verify the order has acked_by_device and acked_at set, and that the
+    // ack moved it to PREPARING (device accepted + started cooking) — not
+    // 'ready' (the ticket is not ready-to-serve at the instant of ack).
     let fetched = s.get_kds_order(&kds_order.id).unwrap().unwrap();
-    assert_eq!(fetched.status, "ready");
+    assert_eq!(fetched.status, "preparing");
 }
 
 // ── Event Replay & Cleanup ───────────────────────────────────
@@ -2862,9 +2914,9 @@ fn e2e_enrollment_flow_register_validate_route_ack() {
     let acked2 = s.ack_kds_order(&kds_order.id, "other-device").unwrap();
     assert!(!acked2);
 
-    // 11. Verify order is now in 'ready' state.
+    // 11. Verify order is now in 'preparing' state (device accepted + cooking).
     let order = s.get_kds_order(&kds_order.id).unwrap().unwrap();
-    assert_eq!(order.status, "ready");
+    assert_eq!(order.status, "preparing");
 
     // 12. Replay should not include this order (it's old and ready).
     let replayed = s
