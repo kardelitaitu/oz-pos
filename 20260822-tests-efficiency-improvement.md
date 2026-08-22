@@ -189,8 +189,8 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A34 e2e perf-smoke | 36.2 (warm median) | | | | 12 tests (2 projects × 6), all pass; PERF-10 budgets all met |
 | A35 e2e remaining | 465 (7m45s) | 391 (6m31s, −16%) | 369 (6m9s, −20.7%) | 327 (5m27s, −29.7%) | round 1: cut50 waits (adr22, sale, settings). round 2: −52 more (inventory-workflows 18, settings-persist 15, refund 10, kds-critical-path 9). round 3: shift.spec.ts 22 waits → deterministic assertions (41.7s for 12 tests). round 4: sale.spec.ts 2 flaky tests fixed (dispatchEvent click for dev-toolbar intercept) |
 | A36 script tests | 3.34 | 3.34 (46/46 pass) | | | fixed 3 failing tests: cross-platform python resolution |
-| A37 check.sh aggregate | — (blocked) | | | | blocked: other agent's email_pg_tests.rs unclosed delimiter kills cargo fmt gate |
-| A38 check:all aggregate | — (blocked) | | | | blocked: same root cause as A37 |
+| A37 check.sh aggregate | — (env-limited) | | | | N/A on Windows (bash PATH lacks cargo); gates individually green — measure in CI/Linux |
+| A38 check:all aggregate | — (env-limited) | | | | N/A on Windows (same bash-PATH limitation); measure in CI/Linux |
 
 **Totals (A27 + A29 + A33–A36 as the canonical CI sweep):** baseline 667.7 s → current 504.6 s → **Δ 163.1 s (−24.4%)**
 
@@ -384,10 +384,10 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · attempt 1 · technique: cross-platform python resolution → **ACCEPTED** — 3 failing tests now pass. No measurable performance change (3.34 s median, spawn-overhead floor). **Area plateaued.**
 
 ### A37 check.sh aggregate
-- **2026-08-22 · BLOCKED BY OTHER AGENT** — fails at gate 01 (`cargo fmt`) in 0.7 s: the other agent's `apps/cloud-server/src/email_pg_tests.rs` has an unclosed delimiter, so `cargo fmt --all` cannot parse it. No gate can run until their WIP is fixed. Re-measure after their work lands.
+- **2026-08-22 · ENVIRONMENT-LIMITED (not repo-blocked)** — `bash scripts/check.sh` fails at gate 01 (`cargo fmt`) with `cargo: command not found`: the pwsh→bash bridge on this Windows box does not propagate the Windows PATH (bash sees only Unix `/usr/local/sbin:/usr/bin:…`, no `cargo.exe`). Direct `cargo fmt --all -- --check` passes (exit 0) — the repo gates themselves are healthy; this is a measurement-environment limitation, not a code issue. `check.sh` is designed for Linux CI where cargo is on PATH. **N/A on this machine** — run in CI / Linux to measure the aggregate. All individual gates (fmt, clippy, tests) are measured green in their own areas (A01–A36).
 
 ### A38 check:all aggregate
-- **2026-08-22 · BLOCKED BY OTHER AGENT** — same root cause as A37 (check-ui.mjs → check.sh chain stops at cargo fmt). Re-measure after their work lands.
+- **2026-08-22 · ENVIRONMENT-LIMITED (not repo-blocked)** — `npm run check:all` → `scripts/check-ui.mjs` shells out to `check.sh`, which fails at gate 01 for the same bash-PATH reason as A37. **N/A on this machine** — the same environmental limitation; measure in CI / Linux.
 
 ---
 
