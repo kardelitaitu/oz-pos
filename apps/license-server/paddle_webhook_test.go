@@ -195,8 +195,8 @@ func TestPaddleWebhook_ValidSignature_ProvisioningFlow(t *testing.T) {
 	// The tier quota block must be persisted on the subscription record so
 	// /status and subscription.updated / canceled re-signs read real values
 	// instead of zero values.
-	if subRec.GetInt("max_stores") != 0 || subRec.GetInt("max_pos_instances") != 0 {
-		t.Errorf("expected pro tier to persist unlimited quotas, got max_stores=%d max_pos_instances=%d",
+	if subRec.GetInt("max_stores") != 2 || subRec.GetInt("max_pos_instances") != 5 {
+		t.Errorf("expected pro tier to persist quotas (2 stores, 5 registers), got max_stores=%d max_pos_instances=%d",
 			subRec.GetInt("max_stores"), subRec.GetInt("max_pos_instances"))
 	}
 	if got := subRec.GetString("allowed_types"); !strings.Contains(got, "restaurant-pos") {
