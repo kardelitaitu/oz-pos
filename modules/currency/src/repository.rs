@@ -1051,4 +1051,38 @@ mod tests {
             "an unrelated pair's rate must not satisfy a USD/EUR lookup"
         );
     }
+
+    // ── FK enforcement + list-for-pair empty ─────────────────────────
+
+    #[test]
+    fn create_exchange_rate_rejects_unknown_currency() {
+        // exchange_rates.from_currency/to_currency have FK references to
+        // currencies(code); a code not in the table must be rejected.
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        let result = repo.create_exchange_rate("XXX", "EUR", 920_000, "manual", "2026-01-01");
+        assert!(
+            result.is_err(),
+            "a rate for an unknown currency must be rejected by the FK"
+        );
+    }
+
+    #[test]
+    fn upsert_exchange_rate_rejects_unknown_currency() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        let result = repo.upsert_exchange_rate("USD", "ZZZ", 920_000, "manual", "2026-01-01");
+        assert!(
+            result.is_err(),
+            "an upsert for an unknown currency must be rejected by the FK"
+        );
+    }
+
+    #[test]
+    fn list_exchange_rates_for_pair_empty_returns_empty() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        let rates = repo.list_exchange_rates_for_pair("USD", "EUR").unwrap();
+        assert!(rates.is_empty(), "no rates for the pair → empty vec");
+    }
 }
