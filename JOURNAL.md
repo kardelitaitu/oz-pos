@@ -6234,3 +6234,25 @@ the i18n gate. Commits land cleanly through the full pre-commit chain
 under git's own bash. The only real requirement: run git from a shell
 where git can find its own bash (normal on Windows), and never diagnose
 the hook by invoking bash from PowerShell/WSL directly.
+
+## 2026-08-22 — TDD cycle: oz-api tax_rates handler coverage
+
+**Problem:** routes/tax_rates.rs (122 lines) had only 2 deserialization
+tests. The store_error_response mapping (400/409/404/500) and the
+create_tax_rate handler (201, tenant-stamp, validation-400) were
+untested.
+
+**Solution:** TDD coverage cycle (existing behavior pinned; one
+expectation corrected):
+- 9 new tests: error mapping for all 4 CoreError variants; handler
+  201 with default tenant; tenant_id stamped from JWT claims; 400 on
+  empty-name validation error; duplicate-name create.
+- Finding: tax_rates.name has NO unique constraint and the tax store
+  never emits CoreError::Conflict — so duplicate names are legal (201)
+  and the store_error_response 409 branch is defensive dead code for
+  this route. The test pins the current contract; if name uniqueness
+  is added later, the handler's 409 path must be exercised too.
+
+**Verification:** oz-api 182/182 (was 174); fmt + clippy -D warnings
+clean.
+
