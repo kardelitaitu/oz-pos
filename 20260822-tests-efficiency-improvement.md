@@ -183,7 +183,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A28 cargo fallback sweep | N/A | | | | fallback runner, not campaign target |
 | A29 vitest full suite | 59.9 | — (plateaued) | | | 395 files / 6911 tests pass; infra-bound (jsdom setup 610s + transform 65s parallel wall) |
 | A30 a11y suite | 4.05 | — (plateaued) | | | no reducible delays — 2.1s test work + vitest transform/jsdom overhead (3s+2s); all 12 tests pass, no waitForTimeout or redundant waits |
-| A31 vitest coverage | ~120–180 (est.) | | | | not precisely measured (infra-bound, machine contended) |
+| A31 vitest coverage | 67.3 (warm median) | | | | 395 files / 6911 tests + v8 instrumentation; ~12% overhead vs full suite (59.9s) |
 | A32 vitest per-group | N/A | | | | scoped runs are the iteration tool, not a deliverable |
 | A33 e2e api | — (pending) | | | | needs Docker-provisioned backend (npm run e2e pipeline) |
 | A34 e2e perf-smoke | — (pending) | | | | needs Docker backend + perf baseline |
@@ -351,7 +351,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · baseline · commit `10d3ac6a` · warm median 4.05 s (runs 4.05/4.39/4.03)** — `npm run test:a11y` (from `ui/`); 7 test files, 12 tests, all pass. machine: DESKTOP-PC-R9 · Ryzen 9 7950X (32 logical) · 63.2 GB RAM · Windows 11 26200 · vitest 4 workers, fileParallelism=true. Breakdown: 2.1 s actual test work (axe-core audits) + vitest transform (3.0 s TypeScript compilation) + jsdom environment setup (2.0 s). No `waitForTimeout` calls, no redundant waits, no delays to cut. **Area PLATEAUED** — the 4 s wall clock is dominated by vitest infrastructure (transform + environment), not test logic.
 
 ### A31 vitest coverage
-- **2026-08-22 · baseline · commit `6ff8d100` · ~120–180 s (estimated)** — `npm run test:coverage`; full suite + v8 coverage instrumentation (reports to `../coverage/ui`). Not measured precisely: coverage runs are infra-bound (v8 instrumentation on 395 files) and the machine was contended. Run on a quiet machine for the exact number.
+- **2026-08-22 · baseline · commit `6bde8690` · warm median 67.3 s (runs 66.2/67.3/69.8; machine: DESKTOP-PC-R9 · Ryzen 9 7950X · 63.2 GB · Windows 11 26200)** — `npm run test:coverage` (from `ui/`); **395 test files, 6911 tests + v8 instrumentation**, all pass. Coverage report to `../coverage/ui`. **Overhead vs full suite: +12% (67.3 vs 59.9 s)** — v8 instrumentation adds ~7.4 s to the vitest infra-bound baseline. No fixed waits in the suite (unit tests only; `waitForTimeout` only exists in e2e). **Area plateaued at vitest's parallel floor + v8 overhead** — further gains would need vitest workspace splitting, lighter setup files, or v8 instrumentation optimization (all infra-level).
 
 ### A32 vitest per-group
 - **2026-08-22 · N/A** — scoped `vitest run src/__tests__/<group>/` runs are the *iteration tool* for the campaign, not a standalone deliverable; covered implicitly by A29. Not measured separately.
