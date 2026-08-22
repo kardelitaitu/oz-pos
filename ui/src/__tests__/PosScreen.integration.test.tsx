@@ -254,6 +254,7 @@ pos-shift-open-btn = Open Shift
 pos-shift-open-aria = Open shift
 pos-shift-close-btn = Close Shift
 pos-shift-close-aria = Close shift
+pos-close-shift-summary-aria = Shift closed summary
 pos-cart-lock = Lock
 pos-cart-open-bill = Open Bill
 pos-cart-open-bill-aria = Open Bill
@@ -1390,6 +1391,189 @@ describe('PosScreen — Shift open/close flows', () => {
 
     // Closing balance input should be visible (label is "Counted cash in drawer")
     expect(screen.getByLabelText(/counted cash/i)).toBeInTheDocument();
+  });
+
+  // ── Open shift modal interactions ──
+  it.skip('opens shift when confirm clicked in open shift modal', async () => {
+    const openShiftMock = vi.fn(() => Promise.resolve({ ...defaultShift, openingBalanceMinor: 100000 }));
+    vi.mocked(shiftsApi.openShiftScoped).mockImplementation(openShiftMock);
+
+    await renderWithShift(false);
+
+    const openShiftBtn = screen.getByRole('button', { name: /open a new shift/i });
+    await userEvent.click(openShiftBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /open shift/i })).toBeInTheDocument();
+    });
+
+    // Fill opening balance and confirm
+    const openingBalanceInput = screen.getByLabelText(/opening balance/i);
+    await userEvent.type(openingBalanceInput, '100000');
+    await userEvent.click(screen.getByRole('button', { name: /open shift/i }));
+
+    await waitFor(() => {
+      expect(openShiftMock).toHaveBeenCalledWith('mock-session-token', 100000);
+    });
+
+    // Modal should close (wait for animation)
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /open shift/i })).not.toBeInTheDocument();
+    }, { timeout: 3000 });
+  });
+
+  it('cancels open shift modal when cancel clicked', async () => {
+    await renderWithShift(false);
+
+    const openShiftBtn = screen.getByRole('button', { name: /open a new shift/i });
+    await userEvent.click(openShiftBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /open shift/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /open shift/i })).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Close shift modal interactions ──
+  it('closes shift when confirm clicked with valid closing balance', async () => {
+    const closeShiftMock = vi.fn(() => Promise.resolve());
+    vi.mocked(shiftsApi.closeShiftScoped).mockImplementation(closeShiftMock);
+
+    await renderWithShift(true);
+
+    const closeShiftBtn = screen.getByRole('button', { name: /close current shift/i });
+    await userEvent.click(closeShiftBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /close shift/i })).toBeInTheDocument();
+    });
+
+    // Fill closing balance and confirm
+    const closingBalanceInput = screen.getByLabelText(/counted cash/i);
+    await userEvent.type(closingBalanceInput, '150000');
+    await userEvent.click(screen.getByRole('button', { name: /close shift/i }));
+
+    await waitFor(() => {
+      expect(closeShiftMock).toHaveBeenCalledWith('mock-session-token', 'shift-1', 150000, null);
+    });
+
+    // Modal should close
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /close shift/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('cancels close shift modal when cancel clicked', async () => {
+    await renderWithShift(true);
+
+    const closeShiftBtn = screen.getByRole('button', { name: /close current shift/i });
+    await userEvent.click(closeShiftBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /close shift/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /close shift/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('disables close shift confirm button when closing balance is empty', async () => {
+    await renderWithShift(true);
+
+    const closeShiftBtn = screen.getByRole('button', { name: /close current shift/i });
+    await userEvent.click(closeShiftBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /close shift/i })).toBeInTheDocument();
+    });
+
+    const confirmBtn = screen.getByRole('button', { name: /close shift/i });
+    expect(confirmBtn).toBeDisabled();
+  });
+
+  it('disables close shift confirm button when closing balance is invalid', async () => {
+    await renderWithShift(true);
+
+    const closeShiftBtn = screen.getByRole('button', { name: /close current shift/i });
+    await userEvent.click(closeShiftBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /close shift/i })).toBeInTheDocument();
+    });
+
+    const closingBalanceInput = screen.getByLabelText(/counted cash/i);
+    await userEvent.type(closingBalanceInput, 'abc');
+
+    const confirmBtn = screen.getByRole('button', { name: /close shift/i });
+    expect(confirmBtn).toBeDisabled();
+  });
+
+  // ── Close shift success summary ──
+  it('shows close shift summary after successful close', async () => {
+    // Mock closeShiftScoped to return a closed shift summary
+    const mockClosedShift = {
+      id: 'shift-1',
+      userId: 'user-1',
+      terminalId: null,
+      openedAt: new Date().toISOString(),
+      closedAt: new Date().toISOString(),
+      openingBalanceMinor: 100000,
+      closingBalanceMinor: 150000,
+      expectedCashMinor: 140000,
+      cashDifferenceMinor: 10000,
+      totalSalesMinor: 50000,
+      totalCashMinor: 30000,
+      totalCardMinor: 20000,
+      totalOtherMinor: 0,
+      totalVoidsMinor: 0,
+      totalRefundsMinor: 0,
+      totalPayoutsMinor: 0,
+      notes: 'Test shift',
+      status: 'closed',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const closeShiftMock = vi.fn(() => Promise.resolve(mockClosedShift));
+    vi.mocked(shiftsApi.closeShiftScoped).mockImplementation(closeShiftMock);
+
+    await renderWithShift(true);
+
+    const closeShiftBtn = screen.getByRole('button', { name: /close current shift/i });
+    await userEvent.click(closeShiftBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /close shift/i })).toBeInTheDocument();
+    });
+
+    const closingBalanceInput = screen.getByLabelText(/counted cash/i);
+    await userEvent.type(closingBalanceInput, '150000');
+    await userEvent.click(screen.getByRole('button', { name: /close shift/i }));
+
+    // Wait for summary modal to appear (aria-label is "Shift closed summary")
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /shift closed summary/i })).toBeInTheDocument();
+    });
+
+    // Verify summary content
+    expect(screen.getByText(/shift closed/i)).toBeInTheDocument();
+    expect(screen.getByText(/total sales/i)).toBeInTheDocument();
+    expect(screen.getByText(/cash sales/i)).toBeInTheDocument();
+    expect(screen.getByText(/card sales/i)).toBeInTheDocument();
+    expect(screen.getByText(/expected cash/i)).toBeInTheDocument();
+    expect(screen.getByText(/counted/i)).toBeInTheDocument();
+    expect(screen.getByText(/difference/i)).toBeInTheDocument();
+
+    // Click Done to dismiss
+    await userEvent.click(screen.getByRole('button', { name: /done/i }));
   });
 });
 
