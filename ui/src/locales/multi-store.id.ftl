@@ -384,7 +384,7 @@ topology-wire-label-fallback = Cadangan (P{ $priority })
 # C2.2: gerbang toko kedua (Plus→Pro) + ajakan batas 2 toko Pro (Pro→Premium).
 store-limit-upgrade-pro = Paket Anda mengizinkan { $max } toko. Tingkatkan ke Pro untuk menambah toko.
 store-limit-upgrade-cta = Tingkatkan ke Pro
-store-limit-upgrade-premium = Buka toko ke-3? Tingkatkan ke Premium untuk toko tanpa batas.
+store-limit-upgrade-premium = Buka toko ke-3? Tingkatkan ke Premium untuk hingga 5 toko.
 store-limit-upgrade-premium-cta = Tingkatkan ke Premium
 
 # ── Offline Queue ──

@@ -290,7 +290,7 @@ on the owned domain is the real inbox-not-spam fix — see
 | Free | `free` | $0 | Free forever |
 | Plus | `plus` | $4.99/mo · $49.99/yr | Monthly / yearly |
 | Pro ⭐ | `pro` | $9.99/mo · $99.99/yr | Monthly / yearly |
-| Premium | `premium` | $19.99/mo · $199.99/yr | Monthly / yearly |
+| Premium | `premium` | $39.99/mo · $399.99/yr | Monthly / yearly |
 | Enterprise | `enterprise` | Custom | Contact sales |
 
 ### Indonesia (IDR) — subscription-tiers.md §2 (FINAL 2026-08-17)
@@ -300,7 +300,7 @@ on the owned domain is the real inbox-not-spam fix — see
 | Free | `free` | Rp 0 | Gratis selamanya |
 | Plus | `plus` | Rp 49.000/mo · Rp 500.000/yr | Bulanan / tahunan |
 | Pro ⭐ | `pro` | Rp 99.000/mo · Rp 1.000.000/yr | Bulanan / tahunan |
-| Premium | `premium` | Rp 199.000/mo · Rp 2.000.000/yr | Bulanan / tahunan |
+| Premium | `premium` | Rp 399.000/mo · Rp 3.999.000/yr | Bulanan / tahunan |
 | Enterprise | `enterprise` | Kustom | Hubungi sales |
 
 > **"1-Time / perpetual" is NOT in the tier enum today.** Adding it means a
@@ -312,11 +312,13 @@ on the owned domain is the real inbox-not-spam fix — see
 
 | Feature | Free | Plus | Pro | Premium | Enterprise |
 |---------|------|------|-----|---------|------------|
-| Stores | 1 | 1 | 2 | Unlimited | Unlimited |
+| Stores | 1 | 1 | 2 | 5 | Unlimited |
 | Registers / store | 1 | 2 | 5 | Unlimited | Unlimited |
 | Warehouses | 1 | 2 | 3 | Unlimited | Unlimited |
-| Staff users | 1 | 5 | 20 | Unlimited | Unlimited |
-| Sales history | 30 days | Unlimited | Unlimited | Unlimited | Unlimited |
+| KDS screens | 0 | 0 | 2 | Unlimited | Unlimited |
+| Max products/menu | 200 | 500 | 1,000 | 10,000 | Unlimited |
+| Staff users | 1 | 5 | 20 | 50 | Unlimited |
+| Sales history | 3 months | 1 year | 5 years | Unlimited | Unlimited |
 | QRIS | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Daily Sales Dashboard | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Analytics / KDS | ✗ | ✗ | ✓ | ✓ | ✓ |
@@ -366,6 +368,12 @@ Implementation notes (see `website/src/components/paddle.ts`):
   (e.g. `pri_pro_usd:pro,pri_pro_idr:pro`).
 
 ### Paddle Product Mapping (6 products)
+
+> ⚠️ **Legacy sandbox catalog** — these are the old pre-5-tier prices
+> (superseded by `subscription-tiers.md` §2 and §6 above; see the warning
+> note in §6). The new Plus/Pro/Premium × monthly/yearly catalog has not
+> been created yet, so the site ships placeholder price ids and checkout
+> degrades to the mailto fallback.
 
 | Product ID | Locale | tier_key | Price |
 |------------|--------|----------|-------|

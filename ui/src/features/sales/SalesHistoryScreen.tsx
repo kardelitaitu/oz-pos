@@ -125,7 +125,7 @@ function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: Swi
 
 /** Sales history screen — filters by status, staff, and date range with swipable rows for manager void actions and detail drill-down. */
 /**
- * C1.2: the Free tier's 30-day history window was applied — a blurred
+ * C1.2: the Free tier's 3-month history window was applied — a blurred
  * teaser row at the bottom of the list with an upgrade CTA.
  */
 function SalesHistoryCapTeaser({ onUpgrade }: { onUpgrade: () => void }) {
@@ -817,7 +817,7 @@ export default function SalesHistoryScreen() {
             </div>
           </Card>
           {/* C1.2: history exists but everything fell outside the tier's
-              window (Free = 30 days) — surface the upgrade teaser. */}
+              window (Free = 3 months) — surface the upgrade teaser. */}
           {salesHistoryCapped && sales.length > 0 && (
             <SalesHistoryCapTeaser onUpgrade={openUpgradePricing} />
           )}

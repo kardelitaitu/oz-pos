@@ -179,9 +179,9 @@ describe('MultiStoreDashboardScreen', () => {
     }, { timeout: 3000 });
   });
 
-  it('hides the store-cap banner on Premium (unlimited stores) (C2.2)', async () => {
+  it('hides the store-cap banner on Premium below its 5-store cap (C2.2)', async () => {
     vi.mocked(useSubscription).mockReturnValue({
-      caps: makeSubscriptionCaps({ tier: 'premium', storeCount: 2 }),
+      caps: makeSubscriptionCaps({ tier: 'premium', maxStores: 5, storeCount: 2 }),
       loading: false,
       refresh: vi.fn(),
     });

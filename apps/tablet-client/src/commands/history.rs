@@ -42,8 +42,8 @@ pub struct SaleListItem {
 pub struct SaleListResponse {
     /// The sales — already capped to the tier's history window.
     pub sales: Vec<SaleListItem>,
-    /// C1.2: true when the tier's history window (Free = 30 days) was
-    /// applied, so the UI can show the upgrade teaser.
+    /// C1.2: true when the tier's history window (Free = 3 months, Plus = 1
+    /// year, Pro = 5 years) was applied, so the UI can show the upgrade teaser.
     pub sales_history_capped: bool,
 }
 
@@ -51,7 +51,8 @@ pub struct SaleListResponse {
 /// List sales.
 ///
 /// C1.2: the list is capped to the tier's sales-history window
-/// (`sales_history_days()` — Free = 30 days, paid tiers = unlimited).
+/// (`sales_history_days()` — Free = 3 months, Plus = 1 year, Pro = 5 years,
+/// Premium/Enterprise = unlimited).
 pub async fn list_sales(state: State<'_, AppState>) -> Result<SaleListResponse, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);

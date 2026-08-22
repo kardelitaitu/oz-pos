@@ -52,7 +52,7 @@ workspace, and tune features per device. See [Terminals](../terminals/) and
 ## Plans & pricing
 
 OZ-POS is **free forever** to get started — one store, one register, one
-warehouse, and 30 days of sales history. Paid plans add more stores,
+warehouse, and 3 months of sales history. Paid plans add more stores,
 registers, and warehouses, plus QRIS payments, cloud sync, and automation.
 See [Licensing & Plans](../licensing/).
 

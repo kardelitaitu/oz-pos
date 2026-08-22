@@ -77,7 +77,7 @@ The POS is designed for offline operation:
 | Sync (push/pull) | ⚠️ | Queued locally, retried when online |
 | License validation | ⚠️ | 14-day grace period after last check |
 
-**Verdict:** ✅ Core POS operations work offline. Payment + sync gracefully degrade. License has a 14-day grace period (`OFFLINE_GRACE_DAYS = 14` in `crates/oz-core/src/subscription.rs` — the 0.0.14-era "30-day" figure is stale).
+**Verdict:** ✅ Core POS operations work offline. Payment + sync gracefully degrade. License validation runs on a per-tier offline grace period (`SubscriptionTier::offline_grace_days()` in `crates/oz-core/src/subscription.rs` — Free 7 days, Plus/Pro 14, Premium 30, Enterprise custom; the 0.0.14-era flat "30-day" figure is stale).
 
 ### Already implemented in UI:
 - `OfflineQueueScreen`: shows pending sync items

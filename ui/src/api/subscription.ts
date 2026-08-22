@@ -15,7 +15,7 @@ export interface SubscriptionCapabilities {
   maxPosInstances: number | null;
   maxWarehouses: number | null;
   maxStaffUsers: number | null;
-  /** Free = 30 days; paid tiers = unlimited (`null`). */
+  /** Free = 3 months; Plus = 1 year; Pro = 5 years; Premium/Enterprise = unlimited (`null`). */
   salesHistoryDays: number | null;
   // ── Feature flags ─────────────────────────────────────────
   supportsQris: boolean;

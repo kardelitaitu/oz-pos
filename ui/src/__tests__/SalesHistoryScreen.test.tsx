@@ -124,11 +124,11 @@ describe('SalesHistoryScreen', () => {
 
   // ── C1.2 history-cap teaser ──────────────────────────────────
 
-  it('shows the 30-day history cap teaser with an upgrade CTA (C1.2)', async () => {
+  it('shows the 3-month history cap teaser with an upgrade CTA (C1.2)', async () => {
     mockListSales.mockResolvedValue({ sales: sampleSales, salesHistoryCapped: true });
     renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByText(/more than 30 days of sales history/i)).toBeInTheDocument();
+      expect(screen.getByText(/more than 3 months of sales history/i)).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /upgrade/i })).toBeInTheDocument();
   });
@@ -139,7 +139,7 @@ describe('SalesHistoryScreen', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Alice').length).toBeGreaterThanOrEqual(1);
     });
-    expect(screen.queryByText(/more than 30 days of sales history/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/more than 3 months of sales history/i)).not.toBeInTheDocument();
   });
 
   // ── Table rendering ──────────────────────────────────────────

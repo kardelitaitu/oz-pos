@@ -11,7 +11,7 @@
 
 | Tier | Position |
 | :--- | :--- |
-| **Free** | Free forever — 1 workspace only (1 store, 1 terminal, 1 warehouse, 30-day sales history) |
+| **Free** | Free forever — 1 workspace only (1 store, 1 terminal, 1 warehouse, 3-month sales history) |
 | **Plus** | Entry paid tier — hero feature: **Daily Sales Dashboard** (Laporan Harian) |
 | **Pro** ⭐ **Most Popular** | Mid paid tier — best for growing single-to-multi-store businesses |
 | **Premium** | Top paid tier — multi-store chains with loyalty & automation |
@@ -28,7 +28,7 @@ market). See **Payment routing** below for how each is charged.
 | **Free** | $0 | — | Rp 0 | — |
 | **Plus** | $4.99 | $49.99 | Rp 49.000 | Rp 500.000 |
 | **Pro** ⭐ | $9.99 | $99.99 | Rp 99.000 | Rp 1.000.000 |
-| **Premium** | $19.99 | $199.99 | Rp 199.000 | Rp 2.000.000 |
+| **Premium** | $39.99 | $399.99 | Rp 399.000 | Rp 3.999.000 |
 | **Enterprise** | Bespoke | Bespoke | Kustom | Kustom |
 
 Yearly = **2 months free** (pay 10 months, get 12). Always market as "2 months free" /
@@ -79,27 +79,28 @@ Final pricing determined by: number of stores, terminals, users, support level, 
 
 | Tier | Best For | Hero Feature |
 | :--- | :--- | :--- |
-| **Free** | Warung / kios trying OZ-POS — limited to 30 days of sales history | Cash POS + receipt printing |
+| **Free** | Warung / kios trying OZ-POS — limited to 3 months of sales history | Cash POS + receipt printing |
 | **Plus** | Single-store shops ready to grow from manual to smart | **Daily Sales Dashboard** (Laporan Harian) + QRIS |
 | **Pro** ⭐ | Cafes, toko, growing businesses ready for full analytics & KDS | Analytics + KDS + multi-terminal |
-| **Premium** | Multi-store chains needing loyalty & automation | Loyalty program + unlimited stores + 1h support |
+| **Premium** | Multi-store chains needing loyalty & automation | Loyalty program + 5 stores + 1h support |
 | **Enterprise** | Large organizations needing white-label, custom hardware & dedicated support | Account manager + custom HAL drivers |
 
 ### Numeric Limits
 
 | Feature | Free | Plus | Pro | Premium | Enterprise |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| Max stores | 1 | 1 | 2 | Unlimited | Unlimited |
+| Max stores | 1 | 1 | 2 | 5 | Unlimited |
 | Max terminals (registers) / store | 1 | 2 | 5 | Unlimited | Unlimited |
 | Max warehouses | 1 | 2 | 3 | Unlimited | Unlimited |
-| Max KDS screens | 0 | 0 | 1 / store | Unlimited | Unlimited |
-| Max staff users * | 1 | 5 | 20 | Unlimited | Unlimited |
-| Sales history (view & export) ** | 30 days | Unlimited | Unlimited | Unlimited | Unlimited |
+| Max KDS screens | 0 | 0 | 2 | Unlimited | Unlimited |
+| Max products/menu | 200 | 500 | 1,000 | 10,000 | Unlimited |
+| Max staff users * | 1 | 5 | 20 | 50 | Unlimited |
+| Sales history (view & export) ** | 3 months | 1 year | 5 years | Unlimited | Unlimited |
 
 \* Max staff users — **MUST be enforced before launch** to prevent revenue leakage.
 
 \*\* Sales history cap — **MUST be enforced before launch**. Free users see only the last
-30 days of transactions. After 30+ days of use, the owner naturally wants to compare
+3 months of transactions. After 3+ months of use, the owner naturally wants to compare
 months — that is the primary upgrade trigger for Free → Plus. Show a blurred/locked
 history preview with an upgrade CTA, not a hard error.
 
@@ -171,7 +172,7 @@ history preview with an upgrade CTA, not a hard error.
 ## 4. Trial & Conversion Strategy
 
 ### Free Tier Trial Flow
-- Free tier provides permanent access to basic features (1 store, 1 terminal, 1 staff, **30-day sales history**)
+- Free tier provides permanent access to basic features (1 store, 1 terminal, 1 staff, **3-month sales history**)
 - Trial offer is **segmented by signup vertical** — do NOT offer Pro trial universally:
   a Pro trial anchors users to features they won't pay for and suppresses Plus conversion.
 
@@ -188,7 +189,7 @@ history preview with an upgrade CTA, not a hard error.
 - **Day 3:** In-app highlight of Daily Sales Dashboard — show yesterday's summary prominently
 - **Day 7:** Email — *"Here's what your first week looked like"* (personalized sales totals)
 - **Day 10:** In-app QRIS stats — how many digital payments were processed during the trial
-- **Day 14 (last day):** Final email — 30-day history limit warning + upgrade CTA
+- **Day 14 (last day):** Final email — 3-month history limit warning + upgrade CTA
 - **Day 14 (end of trial):** Downgrade screen with blurred history preview and
   *"Upgrade ke Plus untuk tetap melihat riwayat penjualan Anda"*
 
@@ -232,7 +233,7 @@ A **hardware-fingerprint trial lock** prevents trial reset abuse by limiting one
 | **Toko / Minimarket** | Inventory + multi-terminal | Pro | Multi-terminal, warehouse, stock visibility |
 | **Salon / Laundry** | Staff & receipt management | Plus/Pro | Staff management, product bundles |
 | **Restoran / Rumah Makan** | KDS + loyalty | Pro → Premium | KDS, loyalty points, scheduled reports |
-| **Retail chain** | Multi-store ops | Premium | Unlimited stores, analytics, priority support |
+| **Retail chain** | Multi-store ops | Premium | 5 stores, analytics, priority support |
 
 ### Vertical Landing Pages (Month 1-3 priority)
 Create dedicated landing pages per vertical — higher-converting than a generic pricing page:
@@ -261,7 +262,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 ### Free → Plus Triggers
 | Condition | Trigger message |
 | :--- | :--- |
-| User views sales history older than 30 days | Blurred preview: *"Lihat riwayat lebih dari 30 hari — upgrade ke Plus"* |
+| User views sales history older than 3 months | Blurred preview: *"Lihat riwayat lebih dari 3 bulan — upgrade ke Plus"* |
 | User attempts to set up QRIS | *"Aktifkan QRIS — terima pembayaran digital. Upgrade ke Plus"* |
 | Second staff member tries to log in | *"Tambah anggota tim — upgrade ke Plus, hingga 5 staff"* |
 
@@ -275,8 +276,8 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 ### Pro → Premium Triggers
 | Condition | Trigger message |
 | :--- | :--- |
-| Store count reaches 2 (approaching Pro limit) | *"Buka toko ke-3? Upgrade ke Premium — unlimited stores"* |
-| Staff count reaches 16+ (approaching 20 limit) | *"Tim Anda berkembang! Premium mendukung unlimited staff"* |
+| Store count reaches 2 (approaching Pro limit) | *"Buka toko ke-3? Upgrade ke Premium — 5 stores"* |
+| Staff count reaches 16+ (approaching 20 limit) | *"Tim Anda berkembang! Premium mendukung 50 staff"* |
 | User views loyalty module (locked teaser) | Animated loyalty dashboard preview: *"Hadirkan program poin — upgrade ke Premium"* |
 
 ---
@@ -287,7 +288,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 
 | Tier | Churn risk | Primary reason | Key intervention |
 | :--- | :---: | :--- | :--- |
-| **Plus** | 🔴 High | "Doesn't do enough" or post-Pro-trial letdown | Strong Daily Sales Dashboard onboarding, 30-day history trigger |
+| **Plus** | 🔴 High | "Doesn't do enough" or post-Pro-trial letdown | Strong Daily Sales Dashboard onboarding, 3-month history trigger |
 | **Pro** | 🟡 Medium | Staff/store limit reached without prompt | Proactive usage alerts at 80% of limits |
 | **Premium** | 🟢 Low | Occasional downgrade to Pro | Enterprise self-serve pathway |
 | **Enterprise** | 🟢 Very Low | Long contracts | Quarterly business reviews |
@@ -332,7 +333,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 
 ### Pre-Launch (Critical — before any paid marketing spend)
 1. ✅ **Enforce staff user limits** — `enforce_staff_quota()` in staff.rs, wired in desktop + tablet clients
-2. ✅ **Enforce 30-day sales history cap on Free** — `list_sales_with_history_cap()` in sales.rs
+2. ✅ **Enforce 3-month sales history cap on Free** — `list_sales_with_history_cap()` in sales.rs
 3. ✅ **Set annual plan as default on pricing page** — PricingGrid.tsx defaults to annual
 4. ✅ **Add ⭐ Most Popular badge to Pro** on pricing page — `mostPopular` in i18n
 5. ✅ **Reframe annual discount as "2 bulan gratis" / "2 months free"** — all docs and pricing pages
@@ -406,7 +407,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 | :--- | :---: | :---: |
 | Plus | $4.50 (90% monthly) | $54.00 |
 | Pro | $9.00 (90% monthly) | $108.00 |
-| Premium | $18.00 (90% monthly) | $216.00 |
+| Premium | $36.00 (90% monthly) | $432.00 |
 | Enterprise | $250.00 | $3,000.00 |
 
 **Blended ARPU Target:** $12-15/month (across all paid tiers)
@@ -416,7 +417,7 @@ Create dedicated landing pages per vertical — higher-converting than a generic
 | :--- | :---: | :---: |
 | Plus | 12 months | $54 |
 | Pro | 18 months | $162 |
-| Premium | 24 months | $432 |
+| Premium | 24 months | $864 |
 | Enterprise | 36 months | $9,000 |
 
 **Assumptions:**
@@ -687,11 +688,11 @@ Target: >100% (growth from existing customers)
 #### Impact of Churn Rate Changes on LTV
 | Churn Rate | Plus LTV | Pro LTV | Premium LTV |
 | :---: | :---: | :---: | :---: |
-| 10% | $45 | $90 | $180 |
-| 8% | $56 | $112 | $225 |
-| 6% | $75 | $150 | $300 |
-| 4% | $112 | $225 | $450 |
-| 2% | $225 | $450 | $900 |
+| 10% | $45 | $90 | $360 |
+| 8% | $56 | $112 | $450 |
+| 6% | $75 | $150 | $600 |
+| 4% | $112 | $225 | $900 |
+| 2% | $225 | $450 | $1,800 |
 
 #### Impact of ARPU Changes on Break-Even
 | ARPU | Customers Needed | Time to Break-Even |

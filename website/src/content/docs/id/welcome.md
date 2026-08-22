@@ -53,7 +53,7 @@ sesuaikan fitur per perangkat. Lihat [Terminal](../terminals/) dan
 ## Paket & harga
 
 OZ-POS **gratis selamanya** untuk memulai — satu toko, satu register, satu
-gudang, dan riwayat penjualan 30 hari. Paket berbayar menambahkan lebih
+gudang, dan riwayat penjualan 3 bulan. Paket berbayar menambahkan lebih
 banyak toko, register, dan gudang, plus pembayaran QRIS, sinkron cloud, dan
 otomasi. Lihat [Lisensi & Paket](../licensing/).
 

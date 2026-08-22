@@ -27,7 +27,7 @@ pub struct SubscriptionCapabilitiesDto {
     pub max_warehouses: Option<i64>,
     /// Maximum staff users (`None` = unlimited).
     pub max_staff_users: Option<i64>,
-    /// Free = 30 days; paid tiers = unlimited (`None`).
+    /// Free = 3 months; Plus = 1 year; Pro = 5 years; Premium/Enterprise = unlimited (`None`).
     pub sales_history_days: Option<i64>,
     /// Whether the tier can process QRIS payments (Plus+).
     pub supports_qris: bool,

@@ -184,8 +184,8 @@ sales-history-loading = Loading sales…
 sales-history-error-load = Failed to load sales history
 sales-history-empty = No sales recorded yet
 sales-history-empty-filtered = No sales match your filters
-# C1.2: the Free tier's 30-day history window was applied — upgrade teaser.
-sales-history-cap-teaser = See more than 30 days of sales history — upgrade to Plus
+# C1.2: the Free tier's 3-month history window was applied — upgrade teaser.
+sales-history-cap-teaser = See more than 3 months of sales history — upgrade to Plus
 sales-history-cap-upgrade-cta = Upgrade
 sales-history-count = { $count } sale{ $count ->
   [one] 

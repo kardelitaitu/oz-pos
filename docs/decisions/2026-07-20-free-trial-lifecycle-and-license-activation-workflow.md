@@ -10,8 +10,8 @@
   - `subscription-tiers.md` §4 (trial & conversion strategy — the replacement)
 
 > **Re-scope note:** the flat **90-day full-product trial** described below is
-> superseded by [`subscription-tiers.md`](../guides/subscription-tiers.md) §4: the
-> Free tier is **free forever** (1 store / 1 register / 1 warehouse / 30-day
+> superseded by [`subscription-tiers.md`](../subscription-tiers.md) §4: the
+> Free tier is **free forever** (1 store / 1 register / 1 warehouse / 3-month
 > sales history), and paid trials are **segmented by signup vertical** —
 > 14-day Plus trial for general signups, 14-day Pro trial for
 > restaurant/cafe signups, 30-day Pro trial for enterprise referrals.

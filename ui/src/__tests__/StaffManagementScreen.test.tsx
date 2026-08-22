@@ -585,9 +585,9 @@ describe('StaffManagementScreen', () => {
     expect(screen.getByRole('button', { name: /upgrade to premium/i })).toBeInTheDocument();
   });
 
-  it('hides the approaching-limit banner on Premium (unlimited staff) (C2.2)', async () => {
+  it('hides the approaching-limit banner on Premium below its 50-staff cap (C2.2)', async () => {
     vi.mocked(useSubscription).mockReturnValue({
-      caps: makeSubscriptionCaps({ tier: 'premium', maxStaffUsers: null, staffCount: 16 }),
+      caps: makeSubscriptionCaps({ tier: 'premium', maxStaffUsers: 50, staffCount: 16 }),
       loading: false,
       refresh: vi.fn(),
     });

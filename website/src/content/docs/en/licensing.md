@@ -14,10 +14,11 @@ sync, and scripting — is shown on the [pricing page](../../pricing/).
 
 | Capability      | Free | Plus | Pro | Premium | Enterprise |
 | --------------- | ---- | ---- | --- | ------- | ---------- |
-| Stores          | 1    | 1    | 2   | Unlimited | Unlimited |
+| Stores          | 1    | 1    | 2   | 5       | Unlimited |
 | Registers / store | 1  | 2    | 5   | Unlimited | Unlimited |
 | Warehouses      | 1    | 2    | 3   | Unlimited | Unlimited |
-| Sales history   | 30 days | Unlimited | Unlimited | Unlimited | Unlimited |
+| Staff users     | 1    | 5    | 20  | 50      | Unlimited |
+| Sales history   | 3 months | 1 year | 5 years | Unlimited | Unlimited |
 | QRIS payments   | No   | ✓    | ✓   | ✓       | ✓         |
 | Cloud sync      | No   | ✓    | ✓   | ✓       | ✓         |
 | Scripting (Lua) | No   | No   | No  | ✓       | ✓         |
@@ -27,9 +28,9 @@ Yearly plans = 2 months free (pay 10 months, get 12).
 ## The Free plan
 
 The Free plan is **free forever** — one store, one register, one warehouse,
-and 30 days of sales history. No license key is needed to start: the Free
+and 3 months of sales history. No license key is needed to start: the Free
 plan begins at first launch, and you can upgrade at any point without
-reinstalling. After 30 days of history, older transactions are hidden behind
+reinstalling. After 3 months of history, older transactions are hidden behind
 an upgrade prompt — nothing is deleted.
 
 ## Buying and activating
