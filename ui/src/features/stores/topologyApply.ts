@@ -118,6 +118,16 @@ export async function applyTopologyWithDiagram(
   );
 
   // ── Step 4: Atomic apply ──────────────────────────────────────────
+  // eslint-disable-next-line no-console
+  console.groupCollapsed('%c[Topology Apply] IPC Payload', 'color: #3b82f6; font-weight: bold');
+  console.log('sessionToken:', ctx.sessionToken?.slice(0, 8) + '…');
+  console.log('branchId:', ctx.branchId);
+  console.log('baseRevision:', ctx.baseRevision);
+  console.log('creations:', creations.map((c) => ({ id: c.id, store_id: c.store_id, type_key: c.type_key, name: c.name })));
+  console.log('updates:', updates.map((u) => ({ id: u.id, name: u.name })));
+  console.log('archives:', archives);
+  console.log('resolvedIssueKeys:', ctx.resolvedIssueKeys);
+  console.groupEnd();
   try {
     const result = await applyTopologyDiff(
       ctx.sessionToken,

@@ -171,7 +171,33 @@ pub async fn apply_topology_diff(
     state: State<'_, AppState>,
 ) -> Result<TopologyApplyResult, AppError> {
     let session = state.resolve_session(&session_token)?;
-    tracing::info!(user_id = %session.user_id, store_id = %session.store_id, "topology Apply: session resolved");
+    tracing::info!(
+        user_id = %session.user_id,
+        role_id = %session.role_id,
+        session_store_id = %session.store_id,
+        session_type_key = %session.type_key,
+        creations = workspace_creations.len(),
+        updates = workspace_updates.len(),
+        archives = workspace_archives.len(),
+        "topology Apply: START — full session + payload context"
+    );
+    // Log each workspace creation's store_id for mismatch diagnosis.
+    for c in &workspace_creations {
+        tracing::info!(
+            workspace_id = %c.id,
+            creation_store_id = %c.store_id,
+            type_key = %c.type_key,
+            name = %c.name,
+            "topology Apply: creation payload"
+        );
+    }
+    for u in &workspace_updates {
+        tracing::info!(
+            workspace_id = %u.id,
+            name = %u.name,
+            "topology Apply: update payload"
+        );
+    }
     let _apply_guard = state.topology_apply_lock.lock().await;
     let topology_key = topology_setting_key(branch_id.as_deref())?;
     let request_key = topology_apply_request_key(&request_id)?;
@@ -200,9 +226,20 @@ pub async fn apply_topology_diff(
     {
         let global_db = state.db.lock().await;
         let global_store = Store::new(&global_db);
-        require_permission_for_user(&global_store, &session.user_id, permissions::STAFF_UPDATE)?;
+        match require_permission_for_user(
+            &global_store,
+            &session.user_id,
+            permissions::STAFF_UPDATE,
+        ) {
+            Ok(()) => {
+                tracing::info!(user_id = %session.user_id, "topology Apply: RBAC check PASSED")
+            }
+            Err(e) => {
+                tracing::error!(user_id = %session.user_id, error = %e, "topology Apply: RBAC check FAILED");
+                return Err(e);
+            }
+        }
     }
-    tracing::info!(user_id = %session.user_id, "topology Apply: permission check passed");
 
     // The topology is a global admin tool. The diagram's Branch Location
     // determines which store owns the workspace instances — this may differ
