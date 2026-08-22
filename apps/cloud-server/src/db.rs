@@ -39,9 +39,6 @@ pub enum DbPool {
 }
 
 impl DbPool {
-    /// Create a new `DbPool` from the environment.
-    ///
-    /// Resolution order:
     /// Create a new `DbPool` from a [`CloudServerConfig`].
     ///
     /// Resolution order:
@@ -49,14 +46,25 @@ impl DbPool {
     ///    connect to PostgreSQL.
     /// 2. Otherwise, open SQLite from `db_path`.
     pub async fn from_config(config: &CloudServerConfig) -> Result<Self, DbError> {
+        Self::from_config_with_retries(config, 5).await
+    }
+
+    /// Like [`from_config`] but with a caller-chosen PG retry budget.
+    /// Production uses the default (5) via [`from_config`]; tests asserting a
+    /// connection failure on a dead port pass `1` to skip the backoff sleeps.
+    pub(crate) async fn from_config_with_retries(
+        config: &CloudServerConfig,
+        max_attempts: u32,
+    ) -> Result<Self, DbError> {
         if let Some(ref url) = config.database_url
             && (url.starts_with("postgres://") || url.starts_with("postgresql://"))
         {
-            return Self::connect_postgres(
+            return Self::connect_postgres_with_retries(
                 url,
                 config.require_tls,
                 config.db_pool_size,
                 config.apply_schema,
+                max_attempts,
             )
             .await;
         }
@@ -67,9 +75,18 @@ impl DbPool {
     /// Production code should go through [`CloudServerConfig`].
     #[cfg(test)]
     pub async fn from_env() -> Result<Self, DbError> {
+        Self::from_env_with_retries(5).await
+    }
+
+    /// Like [`from_env`] but with a caller-chosen retry budget for the
+    /// underlying `connect_postgres`. Tests asserting a connection failure
+    /// on a dead port should pass `max_attempts: 1` to avoid 30+ seconds
+    /// of backoff sleeps.
+    #[cfg(test)]
+    pub async fn from_env_with_retries(max_attempts: u32) -> Result<Self, DbError> {
         let config =
             CloudServerConfig::from_env().expect("CloudServerConfig::from_env failed in test");
-        Self::from_config(&config).await
+        Self::from_config_with_retries(&config, max_attempts).await
     }
 
     /// Detect paths that are obviously non-Linux: a Windows drive-letter
@@ -127,6 +144,9 @@ impl DbPool {
     /// When `require_tls` is set, the URL must specify `sslmode=require`;
     /// otherwise startup fails rather than allowing a plaintext fallback.
     /// `pool_size` bounds the deadpool connection pool (max open connections).
+    /// `max_attempts` controls the connectivity retry budget (5 for production
+    /// to handle PG addon startup; tests asserting a connection failure use 1
+    /// to avoid 30+ seconds of backoff sleeps).
     ///
     /// When `apply_schema` is true (the default), the full schema (`PG_INIT`)
     /// is applied at startup. Set it to false (via `OZ_APPLY_SCHEMA=0`) for
@@ -139,6 +159,20 @@ impl DbPool {
         require_tls: bool,
         pool_size: usize,
         apply_schema: bool,
+    ) -> Result<Self, DbError> {
+        Self::connect_postgres_with_retries(url, require_tls, pool_size, apply_schema, 5).await
+    }
+
+    /// Like [`connect_postgres`] but with a caller-chosen retry budget.
+    /// Tests that assert a connection failure should pass `max_attempts: 1`
+    /// to avoid the 30+ seconds of backoff sleeps the production retry loop
+    /// burns on a dead port.
+    pub(crate) async fn connect_postgres_with_retries(
+        url: &str,
+        require_tls: bool,
+        pool_size: usize,
+        apply_schema: bool,
+        max_attempts: u32,
     ) -> Result<Self, DbError> {
         use deadpool_postgres::{Manager, ManagerConfig, RecyclingMethod};
 
@@ -211,7 +245,7 @@ impl DbPool {
         // Retry with exponential backoff: 2s, 4s, 8s, 16s, 30s (max 5 attempts = ~60s total).
         let mut last_err = String::new();
         let mut connected = false;
-        for attempt in 1..=5 {
+        for attempt in 1..=max_attempts {
             let delay_secs = std::cmp::min(2u64.pow(attempt as u32), 30);
             info!(attempt, delay_secs, "attempting PostgreSQL connection");
 
@@ -248,7 +282,7 @@ impl DbPool {
                 }
             }
 
-            if attempt < 5 {
+            if attempt < max_attempts {
                 info!(attempt, delay_secs, "retrying after delay");
                 tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
             }
@@ -256,7 +290,7 @@ impl DbPool {
 
         if !connected {
             return Err(DbError::Connection(format!(
-                "failed to connect to PostgreSQL after 5 attempts: {last_err}"
+                "failed to connect to PostgreSQL after {max_attempts} attempts: {last_err}"
             )));
         }
 

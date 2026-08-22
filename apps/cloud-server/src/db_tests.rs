@@ -85,9 +85,17 @@ async fn postgres_url_parsing_rejects_bad_url() {
 
 #[tokio::test]
 async fn postgres_url_parsing_accepts_valid_url() {
-    // This won't connect, but the URL parsing should succeed
-    let result =
-        DbPool::connect_postgres("postgresql://localhost:5432/test", false, 20, true).await;
+    // This won't connect, but the URL parsing should succeed.
+    // max_attempts=1 skips the 30+ seconds of production retry backoff
+    // on a dead port — the test only asserts parsing + connection failure.
+    let result = DbPool::connect_postgres_with_retries(
+        "postgresql://localhost:5432/test",
+        false,
+        20,
+        true,
+        1,
+    )
+    .await;
     // Will fail at connection, not parsing
     let err = result.unwrap_err();
     let msg = err.to_string();
@@ -113,12 +121,14 @@ async fn require_tls_rejects_url_without_sslmode_require() {
 #[tokio::test]
 async fn require_tls_accepts_sslmode_require_and_fails_on_connection() {
     // sslmode=require passes the check; it then fails because no server
-    // is listening — a Connection error, not a config error.
-    let err = DbPool::connect_postgres(
+    // is listening — a Connection error, not a config error. max_attempts=1
+    // skips the 30+ seconds of production retry backoff on a dead port.
+    let err = DbPool::connect_postgres_with_retries(
         "postgresql://localhost:5432/test?sslmode=require",
         true,
         20,
         true,
+        1,
     )
     .await
     .unwrap_err();
@@ -158,7 +168,9 @@ async fn from_env_detects_postgres_url() {
     // SAFETY: ENV_LOCK (held by _guard) serializes access to the process-global
     // environment. The set_var is paired with a remove_var before the guard drops.
     unsafe { std::env::set_var("DATABASE_URL", "postgresql://localhost:5432/test") };
-    let pool = DbPool::from_env().await;
+    // max_attempts=1 skips the 30+ seconds of production retry backoff on a
+    // dead port — the test only asserts the URL is routed to PostgreSQL.
+    let pool = DbPool::from_env_with_retries(1).await;
     // SAFETY: Restores the environment — see SAFETY note on set_var above.
     unsafe { std::env::remove_var("DATABASE_URL") };
     // Should attempt connection but fail
