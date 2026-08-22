@@ -11,6 +11,51 @@ fn args(from: &str, to: &str, effective_date: Option<&str>) -> CreateExchangeRat
     }
 }
 
+// ── validate_create_rate_args pure-function coverage (CUR-05) ──
+
+#[test]
+fn validate_rejects_empty_from_currency() {
+    let err = validate_create_rate_args(&args("", "IDR", None)).unwrap_err();
+    assert!(matches!(err, AppError::Invalid(msg) if msg.contains("from_currency")));
+}
+
+#[test]
+fn validate_rejects_empty_to_currency() {
+    let err = validate_create_rate_args(&args("USD", "", None)).unwrap_err();
+    assert!(matches!(err, AppError::Invalid(msg) if msg.contains("to_currency")));
+}
+
+#[test]
+fn validate_rejects_zero_and_negative_rate() {
+    let mut a = args("USD", "IDR", None);
+    a.rate_millionths = 0;
+    let err = validate_create_rate_args(&a).unwrap_err();
+    assert!(matches!(err, AppError::Invalid(msg) if msg.contains("positive")));
+
+    a.rate_millionths = -1;
+    let err = validate_create_rate_args(&a).unwrap_err();
+    assert!(matches!(err, AppError::Invalid(msg) if msg.contains("positive")));
+}
+
+#[test]
+fn validate_rejects_non_iso_to_currency() {
+    // to_currency is validated too — not just from_currency.
+    let err = validate_create_rate_args(&args("USD", "US1", None)).unwrap_err();
+    assert!(matches!(err, AppError::Invalid(msg) if msg.contains("to_currency")));
+}
+
+#[test]
+fn validate_rejects_same_currency_pair() {
+    let err = validate_create_rate_args(&args("USD", "USD", None)).unwrap_err();
+    assert!(matches!(err, AppError::Invalid(msg) if msg.contains("differ")));
+}
+
+#[test]
+fn validate_accepts_valid_input() {
+    assert!(validate_create_rate_args(&args("USD", "IDR", Some("2026-08-11"))).is_ok());
+    assert!(validate_create_rate_args(&args("USD", "IDR", None)).is_ok());
+}
+
 // ── CUR-05: field-level validation on create_exchange_rate ──
 
 #[tokio::test]
