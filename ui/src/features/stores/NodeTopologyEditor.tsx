@@ -1134,6 +1134,21 @@ export default function NodeTopologyEditor({
   const [rackPanel, setRackPanel] = useState<string | null>(null);
   const toggleRackPanel = useCallback((key: string) => setRackPanel((p) => (p === key ? null : key)), []);
 
+  // ── Apply confirmation popup ──────────────────────────────────────
+  type ApplyDiffItem = { id: string; name: string; typeKey: string };
+  interface ApplyConfirmData {
+    created: ApplyDiffItem[];
+    updated: ApplyDiffItem[];
+    archived: ApplyDiffItem[];
+    typeChanged: ApplyDiffItem[];
+  }
+  const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
+  const [applyConfirmData, setApplyConfirmData] = useState<ApplyConfirmData | null>(null);
+  const [applyPin, setApplyPin] = useState('');
+  const [applyPinError, setApplyPinError] = useState(false);
+  const [applyPinVerifying, setApplyPinVerifying] = useState(false);
+  const applyPinRef = useRef<HTMLInputElement>(null);
+
   /** Live canvas getter for the relationship picker's position clamp. */
   const getCanvas = useCallback(() => canvasRef.current, []);
   /** Legacy-schema migration dialog (ADR #34 item 7): a fully-unknown
@@ -2286,6 +2301,96 @@ export default function NodeTopologyEditor({
     setTemplateName('');
     addToast({ message: l10nRef.current.getString('topology-toast-template-saved'), type: 'info' });
   }, [nodes, wires, addToast]);
+
+  // ── Confirm-apply: the actual save after the confirmation popup ──
+  const confirmApply = useCallback(async () => {
+    if (!beginApply()) return;
+    setApplyConfirmOpen(false);
+    setApplyPinVerifying(true);
+    try {
+      const { verifyPin } = await import('@/api/staff');
+      const valid = await verifyPin(sessionToken, applyPin);
+      if (!valid) {
+        setApplyPinError(true);
+        setApplyPin('');
+        setApplyConfirmOpen(true);
+        failApply();
+        setTimeout(() => applyPinRef.current?.focus(), 50);
+        return;
+      }
+    } catch {
+      setApplyPinError(true);
+      setApplyPin('');
+      setApplyConfirmOpen(true);
+      failApply();
+      setTimeout(() => applyPinRef.current?.focus(), 50);
+      return;
+    } finally {
+      setApplyPinVerifying(false);
+    }
+    skipNextLoadRef.current = true;
+    let savedNodes = nodes;
+    let savedWires = wires;
+    let nextRevision: number | undefined;
+    try {
+      const result = await onSave?.(nodes, wires, topologyRevision, [...resolvedIssues]);
+      const idMap: Record<string, string> | undefined = result && typeof result === 'object' && 'idMap' in result
+        ? (result.idMap && typeof result.idMap === 'object'
+          ? result.idMap as Record<string, string>
+          : undefined)
+        : result && typeof result === 'object' && !('revision' in result)
+          ? result as Record<string, string>
+          : undefined;
+      if (result && typeof result === 'object' && 'revision' in result && typeof result.revision === 'number') {
+        nextRevision = result.revision;
+      }
+      if (idMap && Object.keys(idMap).length > 0) {
+        clearAll();
+        setHistory([]);
+        setRedo([]);
+        savedNodes = nodes.map((n) => {
+          const newId = idMap[n.id];
+          return newId ? { ...n, id: newId } : n;
+        });
+        savedWires = wires.map((w) => {
+          const newFrom = idMap[w.fromNodeId];
+          const newTo = idMap[w.toNodeId];
+          if (newFrom || newTo) {
+            return {
+              ...w,
+              fromNodeId: newFrom ?? w.fromNodeId,
+              toNodeId: newTo ?? w.toNodeId,
+            };
+          }
+          return w;
+        });
+        setNodes(savedNodes);
+        setWires(savedWires);
+      }
+    } catch (err) {
+      if (isTopologyRevisionConflict(err)) {
+        addToast({ message: l10n.getString('topology-toast-revision-conflict'), type: 'error' });
+        skipNextLoadRef.current = false;
+        failApply();
+        setReloadKey((k) => k + 1);
+        return;
+      }
+      if (!(err instanceof TopologyApplyValidationError)) {
+        addToast({
+          message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
+          type: 'error',
+        });
+      }
+      skipNextLoadRef.current = false;
+      failApply();
+      return;
+    }
+    commitSnapshot({ nodes: savedNodes, wires: savedWires });
+    setTimeout(() => {
+      skipNextLoadRef.current = false;
+      finishApply(nextRevision ?? topologyRevision);
+    }, 0);
+  }, [nodes, wires, topologyRevision, resolvedIssues, onSave, addToast, l10n, beginApply, failApply, finishApply, commitSnapshot, applyPin, sessionToken]);
 
   /** Load a saved template, replacing the canvas under one undo entry. */
   const handleLoadTemplate = useCallback((name: string) => {
@@ -5210,101 +5315,51 @@ export default function NodeTopologyEditor({
                   });
                   return;
                 }
-                if (!beginApply()) return;
-                skipNextLoadRef.current = true;
-                // Hoisted ABOVE the try: the snapshot below is written after
-                // the catch, and let/const are block-scoped to the try — a
-                // declaration inside would ReferenceError on success.
-                let savedNodes = nodes;
-                let savedWires = wires;
-                // Revision returned by the backend on success; hoisted above
-                // the try so the deferred finishApply (setTimeout below) can
-                // read it — same block-scoping rule as savedNodes/savedWires.
-                let nextRevision: number | undefined;
-                try {
-                  const result = await onSave?.(nodes, wires, topologyRevision, [...resolvedIssues]);
-                  const idMap: Record<string, string> | undefined = result && typeof result === 'object' && 'idMap' in result
-                    ? (result.idMap && typeof result.idMap === 'object'
-                      ? result.idMap as Record<string, string>
-                      : undefined)
-                    : result && typeof result === 'object' && !('revision' in result)
-                      ? result as Record<string, string>
-                      : undefined;
-                  if (result && typeof result === 'object' && 'revision' in result && typeof result.revision === 'number') {
-                    nextRevision = result.revision;
-                  }
-                  if (idMap && Object.keys(idMap).length > 0) {
-                    // Remap old UUIDs to new UUIDs from archive+recreate
-                    // operations so the canvas stays in sync with the backend.
-                    // Clear selection to avoid dangling references to old IDs,
-                    // and drop the undo/redo stacks — every pre-save entry
-                    // holds the OLD ids, which no longer exist on the canvas
-                    // or in the DB. Undo must not restore dangling ids.
-                    clearAll();
-                    setHistory([]);
-                    setRedo([]);
-                    savedNodes = nodes.map((n) => {
-                      const newId = idMap[n.id];
-                      return newId ? { ...n, id: newId } : n;
-                    });
-                    savedWires = wires.map((w) => {
-                      const newFrom = idMap[w.fromNodeId];
-                      const newTo = idMap[w.toNodeId];
-                      if (newFrom || newTo) {
-                        return {
-                          ...w,
-                          fromNodeId: newFrom ?? w.fromNodeId,
-                          toNodeId: newTo ?? w.toNodeId,
-                        };
-                      }
-                      return w;
-                    });
-                    // Direct array set (not the updater form): nothing can
-                    // interleave during this handler's synchronous tail after
-                    // the await, and the same arrays are snapshotted below.
-                    setNodes(savedNodes);
-                    setWires(savedWires);
-                  }
-                } catch (err) {
-                  if (isTopologyRevisionConflict(err)) {
-                    // A stale base revision can never retry — the backend
-                    // rejected it (round 133) and every retry will fail the
-                    // same way. Adopt the authoritative topology so the user
-                    // re-applies onto the fresh revision instead of being
-                    // stranded on a stale canvas.
-                    addToast({
-                      message: l10n.getString('topology-toast-revision-conflict'),
-                      type: 'error',
-                    });
-                    skipNextLoadRef.current = false;
-                    failApply();
-                    setReloadKey((k) => k + 1);
-                    return;
-                  }
-                  // Validation errors already show their own specific toast in
-                  // the Apply helper — skip the generic toast to avoid doubles.
-                  if (!(err instanceof TopologyApplyValidationError)) {
-                    addToast({
-                      message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
-                      type: 'error',
-                    });
-                  }
-                  skipNextLoadRef.current = false;
-                  failApply();
-                  return;
-                }
-                // Save succeeded — the canvas now matches the backend, so a
-                // preset load must not ask about unsaved changes. (A failed
-                // save returned above and stays dirty.) The snapshot is the
-                // FINAL canvas — remapped ids included — so exact tracking
-                // compares against what is actually on screen post-remap.
-                commitSnapshot({ nodes: savedNodes, wires: savedWires });
-                // Defer reset so React commits state updates + fires effects first,
-                // preventing post-save reload from clobbering in-flight edits (#8).
-                setTimeout(() => {
-                  skipNextLoadRef.current = false;
-                  finishApply(nextRevision ?? topologyRevision);
-                }, 0);
+                // Compute the diff preview and show the confirmation popup.
+                const snap = appliedSnapshotRef.current;
+                const beforeInstances = workspaceInstances !== undefined
+                  ? workspaceInstances.map((s) => ({
+                    instance_id: s.instanceId,
+                    type_key: s.typeKey,
+                    ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
+                    name: s.name,
+                  }))
+                  : (snap?.nodes ?? [])
+                    .filter((n) => n.type === 'workspace')
+                    .map((n) => ({
+                      instance_id: n.id,
+                      type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
+                      purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
+                      name: n.name,
+                    }));
+                const plan = planTopologyDiff(nodes, beforeInstances);
+                const wsNodes = new Map(nodes.filter((n) => n.type === 'workspace').map((n) => [n.id, n]));
+                const instanceMap = new Map((workspaceInstances ?? []).map((s) => [s.instanceId, s]));
+                const items = (ids: string[], map: Map<string, { id: string; name: string; typeKey: string }>): ApplyDiffItem[] =>
+                  ids.map((id) => map.get(id) ?? { id, name: id, typeKey: 'store-pos' });
+                const createdItems = items(
+                  plan.createNodeIds.filter((id) => !plan.typeChanges.has(id)),
+                  wsNodes,
+                );
+                const typeChangedItems = [...plan.typeChanges.entries()].map(([id, ch]) => ({
+                  id: ch.newId, name: wsNodes.get(id)?.name ?? id, typeKey: ch.newTypeKey,
+                }));
+                const updatedItems = items(plan.updateNodeIds, instanceMap);
+                const archivedItems = items(
+                  plan.archiveIds.filter((id) => !plan.typeChanges.has(id)),
+                  instanceMap,
+                );
+                setApplyConfirmData({
+                  created: [...createdItems, ...typeChangedItems],
+                  updated: updatedItems,
+                  archived: archivedItems,
+                  typeChanged: typeChangedItems,
+                });
+                setApplyPin('');
+                setApplyPinError(false);
+                setApplyConfirmOpen(true);
+                // Focus the PIN input after the popup renders.
+                setTimeout(() => applyPinRef.current?.focus(), 50);
               }}
               icon={<CheckIcon size={16} />}
             >
@@ -6356,6 +6411,140 @@ export default function NodeTopologyEditor({
           </div>
         )}
       </div>
+
+      {/* ── Apply confirmation popup ──────────────────────────────── */}
+      {applyConfirmOpen && applyConfirmData && (
+        <div
+          className="topology-apply-confirm-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="topology-apply-confirm-title"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="topology-apply-confirm">
+            <h3 id="topology-apply-confirm-title" className="topology-apply-confirm-title">
+              <Localized id="topology-apply-confirm-title">Confirm Topology Changes</Localized>
+            </h3>
+
+            {/* Diff summary */}
+            <div className="topology-apply-confirm-diff">
+              {applyConfirmData.created.length > 0 && (
+                <div className="topology-apply-confirm-section">
+                  <h4 className="topology-apply-confirm-section-title topology-apply-confirm-section--created">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                    <Localized id="topology-apply-confirm-created">Created</Localized>
+                    <span className="topology-apply-confirm-count">{applyConfirmData.created.length}</span>
+                  </h4>
+                  <ul className="topology-apply-confirm-list">
+                    {applyConfirmData.created.map((item) => (
+                      <li key={item.id} className="topology-apply-confirm-item">
+                        <span className="topology-apply-confirm-dot topology-apply-confirm-dot--created" />
+                        <span className="topology-apply-confirm-name">{item.name}</span>
+                        <span className="topology-apply-confirm-type">{item.typeKey}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {applyConfirmData.updated.length > 0 && (
+                <div className="topology-apply-confirm-section">
+                  <h4 className="topology-apply-confirm-section-title topology-apply-confirm-section--updated">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                    <Localized id="topology-apply-confirm-updated">Updated</Localized>
+                    <span className="topology-apply-confirm-count">{applyConfirmData.updated.length}</span>
+                  </h4>
+                  <ul className="topology-apply-confirm-list">
+                    {applyConfirmData.updated.map((item) => (
+                      <li key={item.id} className="topology-apply-confirm-item">
+                        <span className="topology-apply-confirm-dot topology-apply-confirm-dot--updated" />
+                        <span className="topology-apply-confirm-name">{item.name}</span>
+                        <span className="topology-apply-confirm-type">{item.typeKey}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {applyConfirmData.archived.length > 0 && (
+                <div className="topology-apply-confirm-section">
+                  <h4 className="topology-apply-confirm-section-title topology-apply-confirm-section--archived">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><circle cx="12" cy="12" r="10" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                    <Localized id="topology-apply-confirm-archived">Archived</Localized>
+                    <span className="topology-apply-confirm-count">{applyConfirmData.archived.length}</span>
+                  </h4>
+                  <ul className="topology-apply-confirm-list">
+                    {applyConfirmData.archived.map((item) => (
+                      <li key={item.id} className="topology-apply-confirm-item">
+                        <span className="topology-apply-confirm-dot topology-apply-confirm-dot--archived" />
+                        <span className="topology-apply-confirm-name">{item.name}</span>
+                        <span className="topology-apply-confirm-type">{item.typeKey}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {applyConfirmData.created.length === 0
+                && applyConfirmData.updated.length === 0
+                && applyConfirmData.archived.length === 0 && (
+                <p className="topology-apply-confirm-empty">
+                  <Localized id="topology-apply-confirm-no-changes">No workspace changes detected.</Localized>
+                </p>
+              )}
+            </div>
+
+            {/* PIN confirmation */}
+            <label className="topology-apply-confirm-pin-label" htmlFor="topology-apply-pin">
+              <Localized id="topology-apply-confirm-pin-label">Enter your PIN to confirm</Localized>
+            </label>
+            <input
+              ref={applyPinRef}
+              id="topology-apply-pin"
+              type="password"
+              className={`topology-apply-confirm-pin${applyPinError ? ' topology-apply-confirm-pin--error' : ''}`}
+              placeholder={l10n.getString('topology-apply-confirm-pin-placeholder')}
+              value={applyPin}
+              onChange={(e) => { setApplyPin(e.target.value); setApplyPinError(false); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && applyPin.length >= 4 && !applyPinVerifying) {
+                  e.preventDefault();
+                  void confirmApply();
+                }
+              }}
+              autoComplete="off"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              disabled={applyPinVerifying}
+            />
+            {applyPinError && (
+              <p className="topology-apply-confirm-pin-error">
+                <Localized id="topology-apply-confirm-pin-error">Incorrect PIN. Please try again.</Localized>
+              </p>
+            )}
+
+            {/* Actions */}
+            <div className="topology-apply-confirm-actions">
+              <Button
+                variant="secondary"
+                onClick={() => setApplyConfirmOpen(false)}
+              >
+                <Localized id="topology-apply-confirm-cancel">Cancel</Localized>
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void confirmApply()}
+                disabled={saving || applyPinVerifying || applyPin.length < 4}
+                icon={applyPinVerifying ? undefined : <CheckIcon size={16} />}
+              >
+                {applyPinVerifying
+                  ? <Localized id="topology-apply-confirm-verifying">Verifying…</Localized>
+                  : <Localized id="topology-apply-confirm-apply">Apply</Localized>}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

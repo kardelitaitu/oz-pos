@@ -2892,3 +2892,210 @@
   pointer-events: none;
 }
 
+/* ── Apply confirmation popup ────────────────────────────────────── */
+
+.topology-apply-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-bg-base, #0a0e1a) 70%, transparent);
+  backdrop-filter: blur(6px);
+  animation: apply-confirm-fade-in 0.18s ease-out;
+}
+
+@keyframes apply-confirm-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.topology-apply-confirm {
+  width: min(480px, 90vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--color-bg-surface, #161b2e) 85%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border, #2a3050) 60%, transparent);
+  border-radius: var(--radius-xl, 16px);
+  padding: var(--space-5);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-accent, #5a9fd4) 15%, transparent),
+    0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: apply-confirm-slide-up 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes apply-confirm-slide-up {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.topology-apply-confirm-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+/* ── Diff summary sections ─────────────────────────────────────── */
+
+.topology-apply-confirm-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.topology-apply-confirm-section {
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--color-bg-subtle, #0d1120) 60%, transparent);
+}
+
+.topology-apply-confirm-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-1);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-muted);
+}
+
+.topology-apply-confirm-section--created .topology-apply-confirm-section-title,
+.topology-apply-confirm-section-title.topology-apply-confirm-section--created {
+  color: var(--color-success, #4caf50);
+}
+
+.topology-apply-confirm-section--updated .topology-apply-confirm-section-title,
+.topology-apply-confirm-section-title.topology-apply-confirm-section--updated {
+  color: var(--color-accent, #5a9fd4);
+}
+
+.topology-apply-confirm-section--archived .topology-apply-confirm-section-title,
+.topology-apply-confirm-section-title.topology-apply-confirm-section--archived {
+  color: var(--color-danger, #e74c3c);
+}
+
+.topology-apply-confirm-count {
+  margin-left: auto;
+  background: color-mix(in srgb, currentColor 15%, transparent);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+}
+
+.topology-apply-confirm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topology-apply-confirm-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  padding: var(--space-1) 0;
+}
+
+.topology-apply-confirm-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.topology-apply-confirm-dot--created { background: var(--color-success, #4caf50); }
+.topology-apply-confirm-dot--updated { background: var(--color-accent, #5a9fd4); }
+.topology-apply-confirm-dot--archived { background: var(--color-danger, #e74c3c); }
+
+.topology-apply-confirm-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topology-apply-confirm-type {
+  font-size: 10px;
+  color: var(--color-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.topology-apply-confirm-empty {
+  margin: 0;
+  text-align: center;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+/* ── Note textarea ─────────────────────────────────────────────── */
+
+.topology-apply-confirm-pin-label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-muted);
+}
+
+.topology-apply-confirm-pin {
+  width: 100%;
+  height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-bg-subtle, #0d1120);
+  color: var(--color-fg);
+  font-size: var(--text-base);
+  font-family: inherit;
+  letter-spacing: 0.2em;
+  text-align: center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.topology-apply-confirm-pin:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent, #5a9fd4) 20%, transparent);
+}
+
+.topology-apply-confirm-pin--error {
+  border-color: var(--color-danger, #e74c3c);
+  animation: apply-confirm-shake 0.3s ease;
+}
+
+@keyframes apply-confirm-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.topology-apply-confirm-pin-error {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-danger, #e74c3c);
+}
+
+/* ── Action buttons ────────────────────────────────────────────── */
+
+.topology-apply-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid color-mix(in srgb, var(--color-border, #2a3050) 40%, transparent);
+}
+

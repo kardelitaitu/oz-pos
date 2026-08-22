@@ -419,6 +419,29 @@ pub async fn create_session(
     })
 }
 
+/// Result of the `has_users` check.
+#[derive(Debug, Serialize)]
+pub struct HasUsersResult {
+    /// Whether at least one user account exists in the database.
+    pub has_users: bool,
+}
+
+/// Check whether any staff accounts exist in the database.
+///
+/// Used on startup to decide whether to show the owner bootstrap
+/// screen (CreatePinScreen) or the regular login screen. This is a
+/// pre-auth query — it does not reveal any account details, only
+/// whether the `users` table is non-empty.
+#[tauri::command]
+pub async fn has_users(state: State<'_, AppState>) -> Result<HasUsersResult, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let users = store.list_users()?;
+    Ok(HasUsersResult {
+        has_users: !users.is_empty(),
+    })
+}
+
 /// Destroy an active session, invalidating the token.
 ///
 /// ADR #4 / ADR #7: Called on logout or store switch. After this
@@ -436,6 +459,28 @@ pub async fn destroy_session(
     store.remove(&session_token);
     tracing::info!("session destroyed");
     Ok(())
+}
+
+/// Verify the current session user's PIN.
+///
+/// Used by destructive operations (topology Apply, void, etc.) to
+/// confirm the operator's identity before committing. The PIN is
+/// compared against the hash stored in the global identity DB.
+#[tauri::command]
+pub async fn verify_pin(
+    state: State<'_, AppState>,
+    session_token: String,
+    pin: String,
+) -> Result<bool, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let user = store
+        .get_user(&session.user_id)?
+        .ok_or_else(|| AppError::Invalid("user not found".into()))?;
+    let valid = oz_core::auth::verify_pin(&pin, &user.pin_hash)
+        .map_err(|e| AppError::Internal(format!("PIN verification failed: {e}")))?;
+    Ok(valid)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────

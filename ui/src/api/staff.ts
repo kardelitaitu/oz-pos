@@ -62,6 +62,15 @@ export const checkUsername = (args: CheckUsernameArgs): Promise<CheckUsernameRes
 export const staffLogin = (args: StaffLoginArgs): Promise<StaffLoginResult> =>
   loggedInvoke<StaffLoginResult>('staff_login', { args });
 
+/** Result of the `has_users` pre-auth check. */
+export interface HasUsersResult {
+  has_users: boolean;
+}
+
+/** Check whether any staff accounts exist (pre-auth, no details exposed). */
+export const hasUsers = (): Promise<HasUsersResult> =>
+  loggedInvoke<HasUsersResult>('has_users');
+
 // ── Bootstrap (first-owner, no auth required) ─────────────────────
 
 /** Arguments for bootstrapping the first owner account. */
@@ -310,6 +319,17 @@ export const createSession = (args: CreateSessionArgs): Promise<CreateSessionRes
  */
 export const destroySession = (sessionToken: string): Promise<void> =>
   loggedInvoke<void>('destroy_session', { sessionToken });
+
+/**
+ * Verify the current session user's PIN.
+ * Used by destructive operations (topology Apply, void, etc.) to
+ * confirm the operator's identity before committing.
+ */
+export const verifyPin = (
+  sessionToken: string,
+  pin: string,
+): Promise<boolean> =>
+  loggedInvoke<boolean>('verify_pin', { sessionToken, pin });
 
 // ── C1.1 staff-quota upgrade detection ─────────────────────────────
 //
