@@ -46,17 +46,22 @@ impl ExchangeRateRow {
 /// Format an `i64` rate-millionths value as a display string with up to 6
 /// fractional digits and trailing zeros trimmed.
 fn format_rate(millionths: i64) -> String {
-    let (int_part, frac_part) = (millionths / 1_000_000, (millionths % 1_000_000).abs());
+    let int_part = millionths / 1_000_000;
+    let frac_part = (millionths % 1_000_000).abs();
     let sign = if millionths < 0 { "-" } else { "" };
+    // Use unsigned abs for display: int_part is negative via truncation-
+    // toward-zero (e.g., -1_000_000 / 1_000_000 = -1), and the sign
+    // string already carries the sign — so "-1" would become "--1".
+    let display_int = int_part.unsigned_abs();
     if frac_part == 0 {
-        return format!("{sign}{int_part}");
+        return format!("{sign}{display_int}");
     }
     // Pad to 6 digits, trim trailing zeros.
     let mut s = format!("{frac_part:06}");
     while s.ends_with('0') {
         s.pop();
     }
-    format!("{sign}{int_part}.{s}")
+    format!("{sign}{display_int}.{s}")
 }
 
 #[cfg(test)]
@@ -241,5 +246,84 @@ mod tests {
             created_at: "2026-06-20T00:00:00.000Z".into(),
         };
         assert_eq!(row.display_rate(), "102345.67");
+    }
+
+    #[test]
+    fn display_rate_negative_integer_value() {
+        let row = ExchangeRateRow {
+            id: "r".into(),
+            from_currency: "USD".into(),
+            to_currency: "EUR".into(),
+            rate_millionths: -1_000_000,
+            source: "manual".into(),
+            effective_date: "2026-01-01".into(),
+            created_at: "2026-01-01T00:00:00.000Z".into(),
+        };
+        assert_eq!(row.display_rate(), "-1");
+    }
+
+    #[test]
+    fn display_rate_negative_with_trailing_zero_fraction() {
+        // -920_000 millionths = -0.92; the fraction must be trimmed to
+        // "92", not left as "920000" or "92" without the dot.
+        let row = ExchangeRateRow {
+            id: "r".into(),
+            from_currency: "USD".into(),
+            to_currency: "EUR".into(),
+            rate_millionths: -920_000,
+            source: "manual".into(),
+            effective_date: "2026-01-01".into(),
+            created_at: "2026-01-01T00:00:00.000Z".into(),
+        };
+        assert_eq!(row.display_rate(), "-0.92");
+    }
+
+    #[test]
+    fn display_rate_negative_with_integer_and_fraction() {
+        // -1_500_000 millionths = -1.5 (int part -1, fraction 500_000).
+        let row = ExchangeRateRow {
+            id: "r".into(),
+            from_currency: "USD".into(),
+            to_currency: "JPY".into(),
+            rate_millionths: -1_500_000,
+            source: "manual".into(),
+            effective_date: "2026-01-01".into(),
+            created_at: "2026-01-01T00:00:00.000Z".into(),
+        };
+        assert_eq!(row.display_rate(), "-1.5");
+    }
+
+    #[test]
+    fn display_rate_negative_six_decimal_fraction() {
+        // -250 millionths = -0.00025; six-decimal fraction kept, zeros trimmed.
+        let row = ExchangeRateRow {
+            id: "r".into(),
+            from_currency: "JPY".into(),
+            to_currency: "KWD".into(),
+            rate_millionths: -250,
+            source: "manual".into(),
+            effective_date: "2026-01-01".into(),
+            created_at: "2026-01-01T00:00:00.000Z".into(),
+        };
+        assert_eq!(row.display_rate(), "-0.00025");
+    }
+
+    #[test]
+    fn display_rate_i64_min_does_not_panic() {
+        // The rate is stored as i64; the formatter must not panic on the
+        // most negative value (the .abs() path in format_rate would
+        // overflow if applied to i64::MIN itself).
+        let row = ExchangeRateRow {
+            id: "r".into(),
+            from_currency: "USD".into(),
+            to_currency: "EUR".into(),
+            rate_millionths: i64::MIN,
+            source: "manual".into(),
+            effective_date: "2026-01-01".into(),
+            created_at: "2026-01-01T00:00:00.000Z".into(),
+        };
+        let s = row.display_rate();
+        assert!(s.starts_with('-'), "negative value must keep its sign: {s}");
+        assert!(!s.contains("NaN"), "no NaN allowed: {s}");
     }
 }

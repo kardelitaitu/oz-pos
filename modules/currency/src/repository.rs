@@ -205,6 +205,11 @@ impl<'a> CurrencyRepository<'a> {
             ));
         }
         let id = uuid::Uuid::now_v7().to_string();
+        // Normalize currency codes: validation trims for emptiness, so a
+        // value like "USD " must be stored as "USD" — otherwise lookups
+        // by the trimmed code never match (CUR-08).
+        let from_currency = from_currency.trim();
+        let to_currency = to_currency.trim();
         self.conn.execute(
             "INSERT INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             rusqlite::params![id, from_currency, to_currency, rate_millionths, source, effective_date],
@@ -271,6 +276,10 @@ impl<'a> CurrencyRepository<'a> {
             ));
         }
         let id = uuid::Uuid::now_v7().to_string();
+        // Normalize currency codes (same as create): "USD " must be stored
+        // as "USD" so lookups by the trimmed code match.
+        let from_currency = from_currency.trim();
+        let to_currency = to_currency.trim();
         self.conn.execute(
             "INSERT OR REPLACE INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             rusqlite::params![id, from_currency, to_currency, rate_millionths, source, effective_date],
@@ -866,5 +875,180 @@ mod tests {
             .unwrap()
             .expect("rate must be findable by normalized code");
         assert_eq!(found.id, row.id);
+    }
+
+    // ── Currency-format settings delegation (R2 Phase 5) ─────────────
+
+    #[test]
+    fn default_currency_defaults_to_none() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        assert_eq!(repo.get_default_currency().unwrap(), None);
+    }
+
+    #[test]
+    fn default_currency_roundtrip() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        repo.set_default_currency("IDR").unwrap();
+        assert_eq!(repo.get_default_currency().unwrap(), Some("IDR".into()));
+        // Overwrite to a different code.
+        repo.set_default_currency("USD").unwrap();
+        assert_eq!(repo.get_default_currency().unwrap(), Some("USD".into()));
+    }
+
+    #[test]
+    fn currency_format_defaults_to_symbol() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        assert_eq!(repo.get_currency_format().unwrap(), "symbol");
+    }
+
+    #[test]
+    fn currency_format_roundtrip() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        repo.set_currency_format("code").unwrap();
+        assert_eq!(repo.get_currency_format().unwrap(), "code");
+    }
+
+    #[test]
+    fn currency_symbol_position_defaults_to_prefix() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        assert_eq!(repo.get_currency_symbol_position().unwrap(), "prefix");
+    }
+
+    #[test]
+    fn currency_symbol_position_roundtrip() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        repo.set_currency_symbol_position("suffix").unwrap();
+        assert_eq!(repo.get_currency_symbol_position().unwrap(), "suffix");
+    }
+
+    #[test]
+    fn currency_decimal_separator_defaults_to_dot() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        assert_eq!(repo.get_currency_decimal_separator().unwrap(), "dot");
+    }
+
+    #[test]
+    fn currency_decimal_separator_roundtrip() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        repo.set_currency_decimal_separator("comma").unwrap();
+        assert_eq!(repo.get_currency_decimal_separator().unwrap(), "comma");
+    }
+
+    #[test]
+    fn currency_thousands_separator_defaults_to_comma() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        assert_eq!(repo.get_currency_thousands_separator().unwrap(), "comma");
+    }
+
+    #[test]
+    fn currency_thousands_separator_roundtrip() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        repo.set_currency_thousands_separator("space").unwrap();
+        assert_eq!(repo.get_currency_thousands_separator().unwrap(), "space");
+    }
+
+    #[test]
+    fn all_currency_format_settings_are_independent() {
+        // Each setting writes its own key: setting one must not disturb
+        // the others (regression guard against key collisions).
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        repo.set_currency_format("code").unwrap();
+        repo.set_currency_symbol_position("suffix").unwrap();
+        repo.set_currency_decimal_separator("comma").unwrap();
+        repo.set_currency_thousands_separator("dot").unwrap();
+        repo.set_default_currency("EUR").unwrap();
+
+        assert_eq!(repo.get_currency_format().unwrap(), "code");
+        assert_eq!(repo.get_currency_symbol_position().unwrap(), "suffix");
+        assert_eq!(repo.get_currency_decimal_separator().unwrap(), "comma");
+        assert_eq!(repo.get_currency_thousands_separator().unwrap(), "dot");
+        assert_eq!(repo.get_default_currency().unwrap(), Some("EUR".into()));
+    }
+
+    // ── get_latest_exchange_rate edge cases ──────────────────────────
+
+    #[test]
+    fn get_latest_unique_pair_date_constraint_prevents_duplicate_rows() {
+        // The schema has UNIQUE (from_currency, to_currency, effective_date),
+        // so creating a second rate for the same pair+date must fail with a
+        // constraint violation — the created_at tie-break in the query is
+        // defensive, not reachable through the repository API.
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = CurrencyRepository::new(&conn);
+        repo.create_exchange_rate("USD", "EUR", 900_000, "manual", "2026-07-01")
+            .unwrap();
+        let result = repo.create_exchange_rate("USD", "EUR", 920_000, "manual", "2026-07-01");
+        assert!(
+            result.is_err(),
+            "duplicate (from,to,effective_date) must be rejected by the UNIQUE constraint"
+        );
+    }
+
+    #[test]
+    fn get_latest_forward_fallback_picks_earliest_future_rate() {
+        // No rate on/before the date: the earliest future rate wins.
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "GBP", "826", "Pound", 2, "\u{a3}");
+        let repo = CurrencyRepository::new(&conn);
+        repo.create_exchange_rate("USD", "GBP", 780_000, "ecb", "2026-08-01")
+            .unwrap();
+        repo.create_exchange_rate("USD", "GBP", 790_000, "ecb", "2026-09-01")
+            .unwrap();
+        let got = repo
+            .get_latest_exchange_rate("USD", "GBP", "2026-07-01")
+            .unwrap()
+            .expect("forward fallback must exist");
+        assert_eq!(got.rate_millionths, 780_000, "earliest future rate");
+        assert_eq!(got.effective_date, "2026-08-01");
+    }
+
+    #[test]
+    fn get_latest_exact_date_inclusive() {
+        // The on-or-before bound is inclusive: a rate effective ON the
+        // requested date must be selected.
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "JPY", "392", "Yen", 0, "\u{a5}");
+        let repo = CurrencyRepository::new(&conn);
+        repo.create_exchange_rate("USD", "JPY", 150_000_000, "ecb", "2026-07-15")
+            .unwrap();
+        let got = repo
+            .get_latest_exchange_rate("USD", "JPY", "2026-07-15")
+            .unwrap()
+            .expect("rate effective on the date must be found");
+        assert_eq!(got.rate_millionths, 150_000_000);
+    }
+
+    #[test]
+    fn get_latest_ignores_other_pairs() {
+        // Only rates for the requested pair participate; an unrelated
+        // pair's future/historical rates must not leak in.
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        seed_currency(&conn, "GBP", "826", "Pound", 2, "\u{a3}");
+        let repo = CurrencyRepository::new(&conn);
+        repo.create_exchange_rate("EUR", "GBP", 850_000, "ecb", "2026-01-01")
+            .unwrap();
+        assert!(
+            repo.get_latest_exchange_rate("USD", "EUR", "2026-07-01")
+                .unwrap()
+                .is_none(),
+            "an unrelated pair's rate must not satisfy a USD/EUR lookup"
+        );
     }
 }

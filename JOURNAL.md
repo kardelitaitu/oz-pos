@@ -6066,3 +6066,39 @@ can still leave a partial set — the per-zone inserts are not one
 transaction. Idempotency is now per (sale, zone), so a re-complete of an
 already-completed sale errors on the first matching zone (fail-loud,
 consistent). Deeper atomicity (whole fanout in one tx) is a follow-up.
+
+## 2026-08-22 — TDD cycle: modules/currency coverage + 2 real bugs fixed
+
+**Problem:** modules/currency (54KB, 6 files) had zero sibling *_tests.rs
+files; its inline tests covered the happy paths but left real gaps: 10
+settings-delegation methods untested, get_latest_exchange_rate edge cases
+untested, negative-formatting untested, and a whitespace-normalization bug
+where "USD " passed validation but was stored raw so a "USD" lookup never
+matched.
+
+**Solution:** TDD Red→Green cycles (test first, then fix):
+- Whitespace bug (Red tests first, then fix): create/upsert now trim
+  from_currency/to_currency before INSERT — a "USD " rate is findable by
+  "USD". Both create and upsert paths normalized.
+- display_rate double-sign bug (found by new negative tests): format_rate
+  computed int_part via truncation-toward-zero (-1_000_000/1_000_000=-1)
+  AND prefixed the sign string -> "--1". Fixed by using unsigned_abs for
+  the displayed integer part; sign applied once.
+- Added 23 new tests: 11 settings-delegation (defaults + roundtrips +
+  independence), 4 get_latest edge cases (exact-date inclusive, forward
+  fallback, other-pair isolation, UNIQUE-constraint rejection), 6
+  negative display_rate edges (integer, trailing-zero fraction,
+  int+fraction, 6-decimal, i64::MIN no-panic, existing -0.5), 3
+  whitespace normalization/rejection.
+
+**Verification:** modules-currency 79/79 (was 56); fmt + clippy -D
+warnings clean. The KDS migration SQL error (duplicate kitchen_zone) that
+blocked fresh_db() during the cycle was the other agent's in-flight WIP
+and has since been resolved.
+
+**Risks / follow-ups:** get_latest created_at tie-break is defensive dead
+code (UNIQUE(from,to,effective_date) makes same-date rows impossible) —
+left as documented behavior; no further action. Next: consider extracting
+the inline test modules to *_tests.rs siblings per AGENTS.md convention
+(currency module still uses inline #[cfg(test)] mod tests).
+
