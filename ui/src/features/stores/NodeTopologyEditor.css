@@ -1290,11 +1290,14 @@
 .wire-label-pill {
   position: absolute;
   transform: translate(-50%, -50%);
-  max-width: 160px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 1px var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   background: var(--color-bg-elevated);
@@ -1305,6 +1308,19 @@
   box-shadow: var(--shadow-sm);
   cursor: pointer;
   z-index: 10;
+}
+
+.wire-label-badge {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wire-label-text-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .wire-label-pill:hover {
   border-color: var(--color-border-focus);

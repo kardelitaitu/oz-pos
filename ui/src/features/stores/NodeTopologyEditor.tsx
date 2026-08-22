@@ -1550,6 +1550,24 @@ export default function NodeTopologyEditor({
     [],
   );
 
+  /** Relationship type display metadata: color, icon SVG, and localized label. */
+  const relationshipStyle = useCallback((type?: SemanticRelationshipType): { color: string; icon: string; label: string } => {
+    const map: Record<string, { color: string; icon: string; labelKey: string }> = {
+      'location':            { color: '#3b82f6', icon: '📍', labelKey: 'topology-relationship-location' },
+      'generic':             { color: '#6b7280', icon: '🔗', labelKey: 'topology-relationship-generic' },
+      'stock-routing':       { color: '#10b981', icon: '📦', labelKey: 'topology-relationship-stock-routing' },
+      'inventory-transfer':  { color: '#f59e0b', icon: '🔄', labelKey: 'topology-relationship-inventory-transfer' },
+      'ticket-routing':      { color: '#8b5cf6', icon: '🎫', labelKey: 'topology-relationship-ticket-routing' },
+      'hardware-connection': { color: '#ef4444', icon: '🔌', labelKey: 'topology-relationship-hardware-connection' },
+    };
+    const entry = type ? map[type] : undefined;
+    return {
+      color: entry?.color ?? '#6b7280',
+      icon: entry?.icon ?? '🔗',
+      label: entry ? l10n.getString(entry.labelKey) : l10n.getString('topology-relationship-generic'),
+    };
+  }, [l10n]);
+
   /** User-visible wire label: the custom label, else the endpoint-name join,
    *  else the generic connection fallback. Shared by the context-menu title
    *  and the label pills so the two surfaces can never disagree. */
@@ -6097,13 +6115,17 @@ export default function NodeTopologyEditor({
               const isDimmed = hoverConnections !== null
                 && wire.fromNodeId !== hoveredNodeId
                 && wire.toNodeId !== hoveredNodeId;
+              const rStyle = relationshipStyle(wire.relationshipType);
+              const fromName = nodeMap.get(wire.fromNodeId)?.name ?? '';
+              const toName = nodeMap.get(wire.toNodeId)?.name ?? '';
+              const tooltip = `${rStyle.icon} ${rStyle.label}: ${fromName} → ${toName}`;
               return (
                 <button
                   key={wire.id}
                   type="button"
                   className={`wire-label-pill${isDimmed ? ' wire-label-pill-dimmed' : ''}`}
                   style={{ left: mid.x, top: mid.y }}
-                  title={l10n.getString('topology-context-rename-wire')}
+                  title={tooltip}
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -6111,7 +6133,8 @@ export default function NodeTopologyEditor({
                     startWireRename(wire.id);
                   }}
                 >
-                  {wireDisplayLabel(wire)}
+                  <span className="wire-label-badge" style={{ backgroundColor: rStyle.color }} />
+                  <span className="wire-label-text-content">{wireDisplayLabel(wire)}</span>
                 </button>
               );
             })}
