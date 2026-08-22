@@ -447,15 +447,22 @@ pub async fn apply_topology_diff(
                     |row| row.get(0),
                 )
                 .map_err(|_| {
+                    tracing::warn!(workspace_id = %update.id, "topology Apply: workspace not found in store DB");
                     AppError::PermissionDenied(format!(
-                        "workspace {} is not in the session store",
-                        update.id
+                        "workspace '{}' not found in store '{}' — it may have been created in a different store",
+                        update.id, effective_store_id
                     ))
                 })?;
             if owner != effective_store_id {
+                tracing::warn!(
+                    workspace_id = %update.id,
+                    workspace_store = %owner,
+                    effective_store = %effective_store_id,
+                    "topology Apply: workspace ownership mismatch"
+                );
                 return Err(AppError::PermissionDenied(format!(
-                    "workspace {} is not in the topology branch store",
-                    update.id
+                    "workspace '{}' is in store '{}' but topology targets store '{}'",
+                    update.id, owner, effective_store_id
                 )));
             }
         }
@@ -468,13 +475,22 @@ pub async fn apply_topology_diff(
                     |row| row.get(0),
                 )
                 .map_err(|_| {
+                    tracing::warn!(workspace_id = %archive_id, "topology Apply: archive target not found in store DB");
                     AppError::PermissionDenied(format!(
-                        "workspace {archive_id} is not in the topology branch store"
+                        "workspace '{}' not found in store '{}' for archive",
+                        archive_id, effective_store_id
                     ))
                 })?;
             if owner != effective_store_id {
+                tracing::warn!(
+                    workspace_id = %archive_id,
+                    workspace_store = %owner,
+                    effective_store = %effective_store_id,
+                    "topology Apply: archive target ownership mismatch"
+                );
                 return Err(AppError::PermissionDenied(format!(
-                    "workspace {archive_id} is not in the topology branch store"
+                    "workspace '{}' is in store '{}' but topology targets store '{}' for archive",
+                    archive_id, owner, effective_store_id
                 )));
             }
         }

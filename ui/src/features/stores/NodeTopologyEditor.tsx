@@ -5487,6 +5487,16 @@ export default function NodeTopologyEditor({
                 const effectiveStoreId = branchNode?.storeProfileId
                   ?? (branchNode?.metadata?.['storeProfileId'] as string | undefined)
                   ?? sessionStoreId;
+                // eslint-disable-next-line no-console
+                console.groupCollapsed('%c[Topology Apply] Debug Info', 'color: #f59e0b; font-weight: bold');
+                console.log('sessionStoreId:', sessionStoreId);
+                console.log('effectiveStoreId:', effectiveStoreId);
+                console.log('branchNode:', branchNode ? { id: branchNode.id, storeProfileId: branchNode.storeProfileId, metadata: branchNode.metadata } : 'NONE');
+                console.log('workspaceInstances:', (workspaceInstances ?? []).map((w) => ({ id: w.instanceId, storeId: w.storeId, name: w.name, type: w.typeKey })));
+                console.log('creations:', createdItems.map((i) => ({ id: i.id, name: i.name, typeKey: i.typeKey })));
+                console.log('updates:', updatedItems.map((i) => ({ id: i.id, name: i.name })));
+                console.log('archives:', archivedItems.map((i) => ({ id: i.id, name: i.name })));
+                console.groupEnd();
                 setApplyConfirmData({
                   created: [...createdItems, ...typeChangedItems],
                   updated: updatedItems,
