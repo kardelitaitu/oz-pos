@@ -128,6 +128,16 @@ const mockLoadTopology = vi.mocked(loadTopology);
 const renderEditor = () =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="pro" />, multiStoreFtl, sharedFtl);
 
+/** Open a tool-rack panel by clicking its icon button (the redesign collapsed
+ *  the always-visible sidebar into click-to-open panels). Idempotent. */
+const openRackPanel = (panel: 'add' | 'edit' | 'view' | 'share') => {
+  const title = `topology-rack-${panel}-title`;
+  const btn = document.querySelector(`.rack-icon-btn[title="${title}"]`) as HTMLElement | null;
+  if (!btn) throw new Error(`rack icon button for '${panel}' panel not found`);
+  if (btn.classList.contains('is-active')) return;
+  fireEvent.click(btn);
+};
+
 /** Click the first topology node of a given type to select it. */
 const selectNodeByType = (type: string) => {
   const node = document.querySelector(`.node-type-${type}`);
@@ -142,15 +152,20 @@ describe('Inspector drawer integration (Phase 2)', () => {
 
   // ── P2-I3-1: Store node renders StoreInfoCard ──────────────
 
-  it('selecting a store node renders StoreInfoCard', async () => {
+  it('selecting a store node renders the Branch Location fields', async () => {
     renderEditor();
 
     // Retail preset has a store node named 'Downtown Branch'
     selectNodeByType('store');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Properties')).toBeInTheDocument();
-      expect(screen.getByTestId('store-info-card')).toBeInTheDocument();
+      // The inspector header now shows the selected node's name — the card
+      // title AND the inspector h3 both match.
+      expect(screen.getAllByText('Downtown Branch').length).toBeGreaterThanOrEqual(1);
+      // The redesign replaced StoreInfoCard with the Branch Location fields
+      // section (address / currency / timezone / tax id) — the inspector
+      // type label AND the section title both read "Branch Location".
+      expect(screen.getAllByText('Branch Location').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -162,7 +177,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('workspace');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Properties')).toBeInTheDocument();
+      expect(screen.getAllByText('Retail POS #1').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('workspace-store-pos')).toBeInTheDocument();
     });
   });
@@ -175,7 +190,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('store');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Properties')).toBeInTheDocument();
+      expect(screen.getAllByText('Downtown Branch').length).toBeGreaterThanOrEqual(1);
     });
 
     // Fire Escape on the canvas
@@ -184,7 +199,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     fireEvent.keyDown(canvas!, { key: 'Escape' });
 
     await waitFor(() => {
-      expect(screen.queryByText('Node Properties')).not.toBeInTheDocument();
+      expect(document.querySelector('.node-inspector-drawer')).toBeNull();
     });
   });
 
@@ -227,7 +242,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('warehouse');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Properties')).toBeInTheDocument();
+      expect(screen.getAllByText('Main Warehouse').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('warehouse-inspector')).toBeInTheDocument();
       expect(screen.getByLabelText(/Capacity/)).toBeInTheDocument();
       expect(screen.getByLabelText(/Low-Stock Threshold/)).toBeInTheDocument();
@@ -243,16 +258,19 @@ describe('Inspector drawer integration (Phase 2)', () => {
     fireEvent.click(screen.getByText('+ Hardware Node'));
 
     await waitFor(() => {
-      expect(screen.getByText('New Hardware')).toBeInTheDocument();
+      // The spawned node is auto-selected — card AND inspector header match.
+      expect(screen.getAllByText('New Hardware').length).toBeGreaterThanOrEqual(1);
     });
 
     selectNodeByType('hardware');
 
     // The drawer opens with the hardware-specific card and the name prefilled.
     await waitFor(() => {
-      expect(screen.getByText('Node Properties')).toBeInTheDocument();
+      expect(screen.getAllByText('New Hardware').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('hardware-inspector')).toBeInTheDocument();
-      expect(screen.getByText('Hardware Device')).toBeInTheDocument();
+      // The inspector type label AND the section title both read
+      // "Hardware Device".
+      expect(screen.getAllByText('Hardware Device').length).toBeGreaterThanOrEqual(1);
     });
 
     const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
@@ -260,8 +278,10 @@ describe('Inspector drawer integration (Phase 2)', () => {
 
     // Renaming flows through the beginInspectorEdit session — one undo restores.
     fireEvent.change(nameInput, { target: { value: 'Kitchen Printer' } });
-    expect(screen.getByText('Kitchen Printer')).toBeInTheDocument();
+    expect(screen.getAllByText('Kitchen Printer').length).toBeGreaterThanOrEqual(1);
 
+    // The Undo button lives in the collapsed edit rack panel.
+    openRackPanel('edit');
     fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect(
@@ -277,8 +297,10 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('store');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Properties')).toBeInTheDocument();
-      expect(screen.getByTestId('store-info-card')).toBeInTheDocument();
+      expect(screen.getAllByText('Downtown Branch').length).toBeGreaterThanOrEqual(1);
+      // The store inspector type label AND section title both read
+      // "Branch Location".
+      expect(screen.getAllByText('Branch Location').length).toBeGreaterThanOrEqual(1);
     });
 
     // Fire Ctrl+I on the canvas
@@ -301,7 +323,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     fireEvent.keyDown(canvas!, { key: 'i', ctrlKey: true });
 
     // No crash, no inspector — no focus shift
-    expect(screen.queryByText('Node Properties')).not.toBeInTheDocument();
+    expect(document.querySelector('.node-inspector-drawer')).toBeNull();
   });
 
   // ── Node name input updates on typing ─────────────────────
@@ -312,7 +334,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
     selectNodeByType('store');
 
     await waitFor(() => {
-      expect(screen.getByText('Node Properties')).toBeInTheDocument();
+      expect(screen.getAllByText('Downtown Branch').length).toBeGreaterThanOrEqual(1);
     });
 
     const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
@@ -320,7 +342,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
 
     fireEvent.change(nameInput!, { target: { value: 'Renamed Store' } });
 
-    // The node title on the canvas should update
-    expect(screen.getByText('Renamed Store')).toBeInTheDocument();
+    // The node title on the canvas AND the inspector header both update.
+    expect(screen.getAllByText('Renamed Store').length).toBeGreaterThanOrEqual(1);
   });
 });

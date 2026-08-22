@@ -61,10 +61,16 @@ vi.mock('@/contexts/SubscriptionContext', () => ({
 
 // The editor's Apply gate mirrors the backend `staff:update` permission via
 // the session role. Switchable per test so the view-only behavior can be
-// pinned.
+// pinned. The screen derives canSave from session.permissions (staff:update
+// or the `*` wildcard), not from a role-name boolean.
 let mockIsManager: boolean = true;
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ isManager: mockIsManager }),
+  useAuth: () => ({
+    isManager: mockIsManager,
+    session: mockIsManager
+      ? { user_id: 'u-1', display_name: 'Owner', role_name: 'Owner', role_id: 'r-owner', permissions: ['*'] }
+      : { user_id: 'u-2', display_name: 'Cashier', role_name: 'Cashier', role_id: 'r-cashier', permissions: [] },
+  }),
 }));
 
 const mockAddToast = vi.fn();
