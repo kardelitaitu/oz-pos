@@ -6209,3 +6209,28 @@ is still only integration-tested via pg_tests; the SQLite path used
 here is the desktop default. Handler-level PG parity test would need a
 live pool (skip-if-unreachable pattern) — future work.
 
+
+## 2026-08-22 — i18n-lint "env issue" resolved (was never a repo bug)
+
+The pre-commit i18n gate appeared to fail with a rollup
+MODULE_NOT_FOUND / "vitest infrastructure failure" on some commits.
+Investigation found the real cause was NOT the repo:
+
+- My PowerShell bash resolves to WSL (c:\windows\system32\bash.exe).
+  Under WSL, npx vitest runs the Linux node against the Windows-built
+  ui/node_modules, where rollup's platform binary is
+  rollup-win32-x64-* — the Linux @rollup/rollup-linux-x64-gnu is
+  absent, so vitest crashes before running any test.
+- Git on Windows invokes hooks via ITS OWN bash (Git for Windows), which
+  runs the Windows node + Windows rollup — the i18n lint passes cleanly
+  there: 20/20 vitest tests.
+- The round-3 "Test Files 1 failed (1)" abort was a TRANSIENT UI test
+  failure from a concurrent agent's in-flight changes (fixed since), not
+  an environment defect.
+
+Conclusion: the hook is healthy; --no-verify was never required for
+the i18n gate. Commits land cleanly through the full pre-commit chain
+(cargo fmt + i18n lint + bundle parity + FTL dedupe + go vet) when run
+under git's own bash. The only real requirement: run git from a shell
+where git can find its own bash (normal on Windows), and never diagnose
+the hook by invoking bash from PowerShell/WSL directly.
