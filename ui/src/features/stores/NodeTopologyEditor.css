@@ -3202,6 +3202,60 @@
   font-size: var(--text-sm);
 }
 
+/* ── Store scope debug info ──────────────────────────────────── */
+
+.topology-apply-confirm-scope {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+}
+
+.topology-apply-confirm-scope-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.topology-apply-confirm-scope-label {
+  color: var(--color-fg-muted);
+  font-weight: 500;
+}
+
+.topology-apply-confirm-scope-value {
+  font-family: var(--font-family-mono, monospace);
+  color: var(--color-fg);
+  background: var(--color-bg-subtle);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.topology-apply-confirm-scope-value--mismatch {
+  color: var(--color-warning);
+  background: var(--color-warning-subtle);
+}
+
+.topology-apply-confirm-scope-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.topology-apply-confirm-scope-warning svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 /* ── Note textarea ─────────────────────────────────────────────── */
 
 .topology-apply-confirm-pin-label {

@@ -808,7 +808,7 @@ export default function NodeTopologyEditor({
   compareFocus = false,
   canSave = true,
 }: NodeTopologyEditorProps) {
-  const { sessionToken } = useWorkspace();
+  const { sessionToken, resolvedStoreId: sessionStoreId } = useWorkspace();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
   /** Latest l10n for ref-based callbacks (duplicate commit/cancel) so the
@@ -1230,6 +1230,10 @@ export default function NodeTopologyEditor({
     updated: ApplyDiffItem[];
     archived: ApplyDiffItem[];
     typeChanged: ApplyDiffItem[];
+    /** The session's store ID (where the caller is authenticated). */
+    sessionStoreId: string;
+    /** The Branch Location's store profile ID from the diagram (the effective store for workspace CRUD). */
+    effectiveStoreId: string;
   }
   const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
   const [applyConfirmData, setApplyConfirmData] = useState<ApplyConfirmData | null>(null);
@@ -5478,11 +5482,18 @@ export default function NodeTopologyEditor({
                   plan.archiveIds.filter((id) => !plan.typeChanges.has(id)),
                   instanceMap,
                 );
+                // Resolve store IDs for the debug info panel.
+                const branchNode = nodes.find((n) => n.type === 'store');
+                const effectiveStoreId = branchNode?.storeProfileId
+                  ?? (branchNode?.metadata?.['storeProfileId'] as string | undefined)
+                  ?? sessionStoreId;
                 setApplyConfirmData({
                   created: [...createdItems, ...typeChangedItems],
                   updated: updatedItems,
                   archived: archivedItems,
                   typeChanged: typeChangedItems,
+                  sessionStoreId,
+                  effectiveStoreId,
                 });
                 setApplyPin('');
                 setApplyPinError(false);
@@ -6725,6 +6736,30 @@ export default function NodeTopologyEditor({
                 && applyConfirmData.archived.length === 0 && (
                 <p className="topology-apply-confirm-empty">
                   <Localized id="topology-apply-confirm-no-changes">No workspace changes detected.</Localized>
+                </p>
+              )}
+            </div>
+
+            {/* Store scope debug info */}
+            <div className="topology-apply-confirm-scope">
+              <div className="topology-apply-confirm-scope-row">
+                <span className="topology-apply-confirm-scope-label">
+                  <Localized id="topology-apply-confirm-scope-session">Session store</Localized>
+                </span>
+                <code className="topology-apply-confirm-scope-value">{applyConfirmData.sessionStoreId}</code>
+              </div>
+              <div className="topology-apply-confirm-scope-row">
+                <span className="topology-apply-confirm-scope-label">
+                  <Localized id="topology-apply-confirm-scope-target">Target store</Localized>
+                </span>
+                <code className={`topology-apply-confirm-scope-value${applyConfirmData.sessionStoreId !== applyConfirmData.effectiveStoreId ? ' topology-apply-confirm-scope-value--mismatch' : ''}`}>
+                  {applyConfirmData.effectiveStoreId}
+                </code>
+              </div>
+              {applyConfirmData.sessionStoreId !== applyConfirmData.effectiveStoreId && (
+                <p className="topology-apply-confirm-scope-warning">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                  <Localized id="topology-apply-confirm-scope-mismatch">Session store differs from Branch Location store. Workspace CRUD will target the Branch Location's store.</Localized>
                 </p>
               )}
             </div>
