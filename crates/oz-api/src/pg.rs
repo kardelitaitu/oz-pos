@@ -500,21 +500,54 @@ pub async fn verify_terminal_credentials(
     client_secret: &str,
 ) -> Result<Option<RegisteredTerminal>, PgError> {
     let digest = crate::routes::terminals::hash_secret(client_secret);
-    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
-    let row = client
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+
+    // Terminal credential verification is a PRE-tenant read: the whole
+    // point of the lookup is to learn the tenant_id. After RLS cutover
+    // (oz_app + FORCE RLS), a bare read on sync_terminals sees zero rows
+    // because current_setting('oz.tenant_id') is NULL. Mirror the
+    // active_tenants_pg pattern: if the session user is a member of the
+    // BYPASSRLS discovery role, scope the read to it.
+    let is_discovery_member: bool = tx
+        .query_one(
+            "SELECT EXISTS(
+                SELECT 1 FROM pg_roles r
+                JOIN pg_auth_members m ON m.roleid = r.oid
+                WHERE r.rolname = 'oz_email_discovery'
+                  AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+             )",
+            &[],
+        )
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?
+        .get(0);
+    if is_discovery_member {
+        tx.execute("SET LOCAL ROLE oz_email_discovery", &[])
+            .await
+            .map_err(|e| PgError::Db(e.to_string()))?;
+    }
+
+    let row = tx
         .query_opt(
             "SELECT terminal_id, tenant_id FROM sync_terminals WHERE terminal_id = $1 AND secret_hash = $2",
             &[&client_id, &digest],
         )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
-    row.map(|r| {
-        Ok(RegisteredTerminal {
-            terminal_id: r.try_get(0).map_err(|e| PgError::Db(e.to_string()))?,
-            tenant_id: r.try_get(1).map_err(|e| PgError::Db(e.to_string()))?,
+    let result = row
+        .map(|r| {
+            Ok(RegisteredTerminal {
+                terminal_id: r.try_get(0).map_err(|e| PgError::Db(e.to_string()))?,
+                tenant_id: r.try_get(1).map_err(|e| PgError::Db(e.to_string()))?,
+            })
         })
-    })
-    .transpose()
+        .transpose();
+    // Transaction drops here → rollback (read-only) → GUC and role reset.
+    result
 }
 
 // ── Products ──────────────────────────────────────────────────────────

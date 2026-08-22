@@ -5877,3 +5877,35 @@ compiles — that agent may still be mid-change.
 (flake eliminated); fmt + clippy -D warnings clean.
 
 **Risks / follow-ups:** none new.
+
+## 2026-08-21 — TDD cycle: PG bug hunt round 9 (terminal auth vs RLS cutover)
+
+**Problem:** erify_terminal_credentials reads sync_terminals — an RLS
+FORCEd table — with no tenant GUC and no BYPASSRLS role. It is a
+PRE-tenant read (the whole point is to learn tenant_id), so the same
+class of bug as the webhook resolution and email tenant discovery: after
+cutover, oz_app sees zero rows and TERMINAL AUTHENTICATION FAILS for
+every terminal. Unlike those two, this path had NO BYPASSRLS treatment.
+The oz_email_discovery role (round 6) already had SELECT on
+sync_terminals — the code just never used it.
+
+**Solution:** TDD Red->Green.
+- RED: pg_integration_terminal_auth_survives_rls_cutover — throwaway DB
+  with FORCEd RLS on sync_terminals + a restricted LOGIN role granted
+  membership in oz_email_discovery; drives the REAL
+  verify_terminal_credentials. Failed (None) before the fix. Test-side
+  bug fixed during the cycle: seeded secret_hash must be the real
+  hash_secret("secret"), not a literal.
+- GREEN: verify_terminal_credentials now opens a transaction, checks
+  oz_email_discovery membership, SET LOCAL ROLEs into it for the read
+  (mirroring active_tenants_pg); tx drop resets role + GUC.
+
+**Also:** discovered the shared-dev-DB FORCE residue issue earlier this
+session (FORCE RLS is non-transactional); round-8 hardened the cleanup.
+
+**Verification:** oz-api 165 + 1 green; fmt + clippy -D warnings clean.
+oz-cloud-server suite BLOCKED by a concurrent agent's in-flight db.rs
+refactor (from_config_with_retries cfg mismatch — not my change).
+
+**Risks / follow-ups:** the concurrent db.rs edit must be completed before
+the cloud-server suite can run.

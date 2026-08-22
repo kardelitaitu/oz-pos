@@ -952,3 +952,182 @@ async fn pg_integration_tenant_sku_isolation() {
         .await
         .unwrap();
 }
+
+/// RED (TDD): terminal credential verification must survive RLS cutover.
+///
+/// `verify_terminal_credentials` reads `sync_terminals` (an RLS FORCEd
+/// table) with no tenant GUC and no BYPASSRLS role — post-cutover, as
+/// `oz_app`, `current_setting('oz.tenant_id')` is NULL and the policy
+/// hides every row, so terminal authentication would fail for every
+/// terminal. The `oz_email_discovery` role already has SELECT on
+/// `sync_terminals` (from the round-6 cutover); the code must
+/// `SET LOCAL ROLE` into it before the read, mirroring `active_tenants_pg`.
+#[tokio::test]
+async fn pg_integration_terminal_auth_survives_rls_cutover() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    // Admin connection (raw) to create the throwaway DB.
+    let Some(admin_pool) = raw_pool(&url).await else {
+        return;
+    };
+    let admin = admin_pool.get().await.expect("admin client");
+
+    // Sweep stale DBs and the probe role.
+    let stale: Vec<String> = admin
+        .query(
+            "SELECT datname FROM pg_database WHERE datname LIKE 'oz_term_auth_%'",
+            &[],
+        )
+        .await
+        .expect("stale database query")
+        .iter()
+        .map(|r| r.get::<_, String>(0))
+        .collect();
+    for d in &stale {
+        admin
+            .batch_execute(&format!("DROP DATABASE IF EXISTS {d} WITH (FORCE);"))
+            .await
+            .unwrap();
+    }
+    for role in ["oz_term_auth_probe", "oz_email_discovery"] {
+        let _ = admin.batch_execute(&format!("DROP OWNED BY {role};")).await;
+        let _ = admin
+            .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
+            .await;
+    }
+    let db_name = format!("oz_term_auth_{}", std::process::id());
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .unwrap();
+    if let Err(e) = admin
+        .execute(&format!("CREATE DATABASE {db_name}"), &[])
+        .await
+    {
+        eprintln!("PG terminal-auth test skipped: cannot CREATE DATABASE ({e})");
+        return;
+    }
+    let (base, query) = match url.split_once('?') {
+        Some((b, q)) => (b, Some(q)),
+        None => (url.as_str(), None),
+    };
+    let (head, _) = base
+        .rsplit_once('/')
+        .expect("URL must have a database path");
+    let db_url = match query {
+        Some(q) => format!("{head}/{db_name}?{q}"),
+        None => format!("{head}/{db_name}"),
+    };
+    drop(admin);
+
+    // Schema pool on the throwaway DB.
+    let Some(pool) = test_pool(&db_url).await else {
+        return;
+    };
+    let mut owner = pool.get().await.expect("owner client");
+
+    // Set up the restricted role + FORCE RLS on sync_terminals.
+    let role = "oz_term_auth_probe";
+    let tenant = format!("pg-term-auth-{}", uuid::Uuid::now_v7());
+    let term_id = format!("term-{tenant}");
+    owner
+        .batch_execute(&format!(
+            "DO $$ BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') THEN
+                    EXECUTE 'DROP OWNED BY {role}';
+                    EXECUTE 'DROP ROLE {role}';
+                END IF;
+             END $$;
+             CREATE ROLE {role} LOGIN PASSWORD 'oz_term_auth_pw';
+             GRANT USAGE ON SCHEMA public TO {role};
+             GRANT SELECT ON sync_terminals TO {role};
+             -- The BYPASSRLS discovery role (mirrors rls-cutover.sql 2d):
+             DO $$ BEGIN
+                 IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_email_discovery') THEN
+                     CREATE ROLE oz_email_discovery NOLOGIN BYPASSRLS;
+                 END IF;
+             END $$;
+             GRANT USAGE ON SCHEMA public TO oz_email_discovery;
+             GRANT SELECT ON sync_terminals TO oz_email_discovery;
+             GRANT oz_email_discovery TO {role};
+             ALTER TABLE sync_terminals ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE sync_terminals FORCE ROW LEVEL SECURITY;
+             DROP POLICY IF EXISTS tenant_isolation ON sync_terminals;
+             CREATE POLICY tenant_isolation ON sync_terminals
+                 USING (tenant_id = current_setting('oz.tenant_id', true));"
+        ))
+        .await
+        .expect("terminal-auth probe role setup should succeed");
+
+    // Seed a terminal, owner + GUC (FORCE applies to owner). The secret
+    // hash must match what verify_terminal_credentials computes
+    // (hash_secret("secret")) — a literal 'hash' would never match.
+    let real_hash = crate::routes::terminals::hash_secret("secret");
+    let mut seed_tx = owner.transaction().await.unwrap();
+    seed_tx
+        .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .unwrap();
+    seed_tx
+        .execute(
+            "INSERT INTO sync_terminals (terminal_id, secret_hash, label, tenant_id)
+             VALUES ($1, $2, 'Test Terminal', $3)",
+            &[&term_id, &real_hash, &tenant],
+        )
+        .await
+        .unwrap();
+    seed_tx.commit().await.unwrap();
+    drop(owner);
+
+    // The app pool: connects AS the restricted role (same pattern as the
+    // webhook cutover test), to the throwaway database.
+    let scheme_end = db_url.find("://").expect("URL has a scheme") + 3;
+    let at = db_url.find('@').expect("URL has credentials");
+    let app_url = format!(
+        "{}oz_term_auth_probe:oz_term_auth_pw@{}",
+        &db_url[..scheme_end],
+        &db_url[at + 1..]
+    );
+    let app_pool = {
+        use deadpool_postgres::Manager;
+        use std::str::FromStr;
+        let config = tokio_postgres::Config::from_str(&app_url).expect("valid app URL");
+        let manager = Manager::new(config, tokio_postgres::NoTls);
+        deadpool_postgres::Pool::builder(manager)
+            .max_size(2)
+            .build()
+            .expect("app pool build")
+    };
+
+    // The REAL terminal auth function, as the restricted role. Post-cutover
+    // it must still find the seeded terminal (the code must SET LOCAL ROLE
+    // oz_email_discovery to bypass RLS for the pre-tenant read).
+    let verified = verify_terminal_credentials(&app_pool, &term_id, "secret")
+        .await
+        .expect("verify_terminal_credentials");
+    assert!(
+        verified.is_some(),
+        "terminal auth must survive RLS cutover — the seeded terminal must be found"
+    );
+    assert_eq!(
+        verified.unwrap().tenant_id,
+        Some(tenant),
+        "terminal auth must return the correct tenant"
+    );
+
+    // Cleanup: drop handles, then throwaway DB, then roles.
+    drop(app_pool);
+    let admin = admin_pool.get().await.unwrap();
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .unwrap();
+    admin
+        .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
+        .await
+        .unwrap();
+    admin
+        .batch_execute("DROP ROLE IF EXISTS oz_email_discovery;")
+        .await
+        .unwrap();
+}
