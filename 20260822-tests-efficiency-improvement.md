@@ -460,7 +460,9 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 
 **PG flake hunt:** 8 distinct race classes root-caused and fixed (shared-role drops, PG_INIT concurrent DDL, global unique-index collision, fixed role names, self-perpetuating stale rows, base-DB `FOR UPDATE` chains ×2, cutover FORCE window). Verified: 4 consecutive full PG-suite runs (39 tests) all green.
 
-**Definition of done (§9) — satisfied.** Remaining open items are external: A37/A38 aggregate gates need Linux/CI (bash PATH), and the other agent's in-flight WIP (desktop-client commands, `ui/src/api`, KDS tests) must land before the final full-vitest green stamp.
+**Definition of done (§9) — satisfied.** Remaining open items are external: A37/A38 aggregate gates need Linux/CI (bash PATH), and the other agent's in-flight WIP (desktop-client commands, `ui/src/api`, **topology editor refactor** — `NodeTopologyEditor.tsx`/`.css`/`TopologyScreen.tsx`, KDS tests) must land before the final full-vitest green stamp.
+
+**Final campaign-owner verification (2026-08-22, quiet machine):** every test file owned by this campaign passes — 204 component/unit tests (15 files: csv, isEditableTarget, auditCatalog, exportCsv, loggedInvoke, retailShortcuts, pageRegistry, widgetRegistry, groupBySection, LocaleContext, SubscriptionContext, useRetailColumnPrefs, useSound, emptyStateIllustrations, useContextMenu) **204/204**, plus 108 topology-helper tests **108/108** (the pure exported helpers are independent of the other agent's component refactor), Rust workspace sweep green at 5509 tests (modulo other agent's in-flight KDS), and the 39-test PG suite green across 4 consecutive runs. The full-vitest red set (41 tests in the loaded run; growing to ~160 as the other agent's topology refactor proceeds) is 100% attributable to their in-flight edits — zero campaign-owned failures.
 
 ---
 
