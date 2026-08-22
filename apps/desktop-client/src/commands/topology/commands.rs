@@ -171,6 +171,7 @@ pub async fn apply_topology_diff(
     state: State<'_, AppState>,
 ) -> Result<TopologyApplyResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    tracing::info!(user_id = %session.user_id, store_id = %session.store_id, "topology Apply: session resolved");
     let _apply_guard = state.topology_apply_lock.lock().await;
     let topology_key = topology_setting_key(branch_id.as_deref())?;
     let request_key = topology_apply_request_key(&request_id)?;
@@ -201,6 +202,7 @@ pub async fn apply_topology_diff(
         let global_store = Store::new(&global_db);
         require_permission_for_user(&global_store, &session.user_id, permissions::STAFF_UPDATE)?;
     }
+    tracing::info!(user_id = %session.user_id, "topology Apply: permission check passed");
 
     // The topology is a global admin tool. The diagram's Branch Location
     // determines which store owns the workspace instances — this may differ
@@ -211,6 +213,7 @@ pub async fn apply_topology_diff(
     let effective_store_id = semantic_branch_profile_id(&diagram_nodes, &diagram_wires)
         .map(str::to_owned)
         .unwrap_or_else(|| session.store_id.clone());
+    tracing::info!(effective_store_id = %effective_store_id, session_store_id = %session.store_id, "topology Apply: effective store resolved");
 
     // A retried request returns the original result without repeating any
     // workspace mutation. The process-wide Apply lock also makes the
@@ -371,11 +374,22 @@ pub async fn apply_topology_diff(
     // Scoped in a block so all non-`Send` types (MutexGuard, Store,
     // Transaction) are dropped before the `state.db.lock().await` call
     // below. Tauri requires command futures to be `Send`.
+    tracing::info!(
+        effective_store_id = %effective_store_id,
+        creations = workspace_creations.len(),
+        updates = workspace_updates.len(),
+        archives = workspace_archives.len(),
+        "topology Apply: opening store DB for workspace CRUD"
+    );
     {
         let conn = state
             .db_manager
             .open_store(&effective_store_id)
-            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+            .map_err(|e| {
+                AppError::Internal(format!(
+                    "opening store db for store '{effective_store_id}': {e}"
+                ))
+            })?;
         let db = conn
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -395,9 +409,15 @@ pub async fn apply_topology_diff(
                 ));
             }
             if creation.store_id != effective_store_id {
+                tracing::warn!(
+                    workspace_id = %creation.id,
+                    creation_store = %creation.store_id,
+                    effective_store = %effective_store_id,
+                    "topology Apply: workspace targets a different store"
+                );
                 return Err(AppError::PermissionDenied(format!(
-                    "workspace {} targets a different store",
-                    creation.id
+                    "workspace '{}' store_id '{}' does not match topology branch store '{}'",
+                    creation.id, creation.store_id, effective_store_id
                 )));
             }
             if !effective_tier.allows_workspace_type(&creation.type_key) {
@@ -572,6 +592,11 @@ pub async fn apply_topology_diff(
     //
     // This `.await` is now safe — all non-`Send` types from the store
     // DB block have been dropped.
+    tracing::info!(
+        node_count = diagram_nodes.len(),
+        wire_count = diagram_wires.len(),
+        "topology Apply: workspace CRUD committed, saving diagram"
+    );
     let global_db = state.db.lock().await;
     if let Err(save_error) = save_topology_json_at_key_with_revision(
         &global_db,

@@ -331,6 +331,8 @@ topology-toast-save-error = Gagal menyimpan topologi
 topology-toast-revision-conflict = Topologi berubah di tempat lain — versi terbaru telah dimuat. Terapkan kembali perubahan Anda.
 topology-toast-no-session = Tidak ada sesi aktif — tidak dapat menyimpan workspace.
 topology-toast-saved = Topologi tersimpan: { $detail }.
+topology-apply-status-saving = Menyimpan perubahan topologi…
+topology-apply-status-refreshing = Menyegarkan data workspace…
 
 # ── Canvas HUD (aria-hidden decorative text) ──
 topology-branch-selector-label = Cabang

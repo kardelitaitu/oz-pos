@@ -333,6 +333,8 @@ topology-toast-save-error = Failed to save topology
 topology-toast-revision-conflict = The topology changed elsewhere — loaded the latest version. Re-apply your changes.
 topology-toast-no-session = No active session — cannot save workspaces.
 topology-toast-saved = Topology saved: { $detail }.
+topology-apply-status-saving = Saving topology changes…
+topology-apply-status-refreshing = Refreshing workspace data…
 
 # ── Canvas HUD (aria-hidden decorative text) ──
 topology-branch-selector-label = Branch

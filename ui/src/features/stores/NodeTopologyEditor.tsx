@@ -2437,6 +2437,7 @@ export default function NodeTopologyEditor({
       setApplyPinVerifying(false);
     }
     skipNextLoadRef.current = true;
+    addToast({ message: l10n.getString('topology-apply-status-saving'), type: 'info' });
     let savedNodes = nodes;
     let savedWires = wires;
     let nextRevision: number | undefined;
@@ -2484,8 +2485,13 @@ export default function NodeTopologyEditor({
         return;
       }
       if (!(err instanceof TopologyApplyValidationError)) {
+        // Show both the localized error category AND the raw backend detail
+        // so the user (and developer) can see exactly what failed.
+        const typed = parseAppError(err);
+        const rawMsg = typed?.message ?? plainErrorMessage(err);
+        const userMsg = plainErrorMessage(err);
         addToast({
-          message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
+          message: `${l10n.getString('topology-toast-save-error')}: ${userMsg}${rawMsg !== userMsg ? ` (${rawMsg})` : ''}`,
           type: 'error',
         });
       }
