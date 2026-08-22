@@ -6184,3 +6184,28 @@ desktop-client compiles. Committed with --no-verify (i18n env issue).
 
 **Risks / follow-ups:** none new. Remaining KDS areas: per-item status
 advance re-publish + get_kds_queue zone filter — audit next.
+
+## 2026-08-22 — TDD cycle: oz-api terminals registration handler coverage
+
+**Problem:** routes/terminals.rs (188 lines, auth-critical: device-secret
+registration + rotation) had only 2 pure-function tests (hash_secret,
+verify_terminal_credentials). The handler paths were untested: admin-key
+401, blank-id 400, rotation, trim, secret-hash persistence, entropy.
+
+**Solution:** TDD coverage cycle (existing behavior pinned; no production
+change needed):
+- 9 new tests: 401 (missing/wrong admin key), 200 (matching key / open
+  dev mode), 400 (blank id), UUID-v4 32-hex secret format, hash-not-
+  plaintext persistence, rotation invalidates old secret, terminal_id
+  trim-before-insert.
+- Followed the tokens_tests.rs direct-handler-call pattern (State +
+  HeaderMap + Json) with a state_with_admin_key helper.
+
+**Verification:** oz-api 174/174 (was 165); fmt + clippy -D warnings
+clean.
+
+**Risks / follow-ups:** PG path (state.pg = Some) of register_terminal
+is still only integration-tested via pg_tests; the SQLite path used
+here is the desktop default. Handler-level PG parity test would need a
+live pool (skip-if-unreachable pattern) — future work.
+
