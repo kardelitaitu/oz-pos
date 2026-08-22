@@ -172,7 +172,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A17 platform | 26.5 (warm) | 12.5 (warm) | | | cut timeouts: 5s→500ms (pg_transport push/pull edge cases); 50ms client + 500ms outer (transport classify tests) |
 | A18 oz-core integration | 14.0 | — (plateaued) | | | none — backup tests already fixed in A02; no delays remain |
 | A19 oz-payment integration | 11.1 | — (plateaued) | | | none beyond A06 poll fix; env 2s connect delay |
-| A20 desktop-client integration | — (load-blocked) | | | | blocked: crate too large under other agent's compile |
+| A20 desktop-client integration | 45.7 (compile-dom.) | — (plateaued) | | | unblocked (quiet re-measure); 32 tests pass, ~0.66s real work |
 | A21 oz-hal integration | 2.0 | — (plateaued) | | | none — kernel-necessary reconnect sleeps |
 | A22 platform/sync integration | 15.9 (compile-dom.) | — (plateaued) | | | none — tiny 2–10ms async sleeps |
 | A23 oz-cli integration | 6.1 (compile-dom.) | — (plateaued) | | | none — no sleeps |
@@ -315,7 +315,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · baseline · commit `a02a18d3` · warm 11.1 s (85 tests pass, ~3.2 s real work)** — `cargo nextest run -p oz-payment --test '*'`. Includes wiremock tests (fast) and the network-error tests (2.5 s each, environmental 2 s connect delay — see A06). Already clean: no delays to cut beyond the A06 poll fix. **Area plateaued.**
 
 ### A20 desktop-client integration
-- **2026-08-22 · LOAD-BLOCKED** — crate too large to time under other agent's concurrent compile. Kernel lifecycle tests have 10–200 ms timing sleeps (mutex-contention duration, genuine timing assertions). Re-measure when quiet.
+- **2026-08-22 · baseline · commit `e4fa9979` · warm 45.7 s (32 tests pass, ~0.66 s real work)** — `cargo nextest run -p oz-pos-app --test '*'`. **Unblocked** (quiet-machine re-measure): the crate is compile-dominated (45.7 s wall for 0.66 s of test work). Kernel lifecycle tests have 10–200 ms timing sleeps (mutex-contention duration, genuine timing assertions — not reducible). No quality-reducible delays. **Area plateaued.**
 
 ### A21 oz-hal integration
 - **2026-08-22 · baseline · commit `a02a18d3` · warm 2.0 s (22 tests pass, ~0.5 s real work)** — `cargo nextest run -p oz-hal --test '*'`. Only `tcp_reconnect.rs` has sleeps (kernel-timing-necessary, documented in A11). **Area plateaued.**
@@ -432,6 +432,34 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - `ui/vite.config.ts` — Vitest pool/parallelism/timeout configuration
 - `docs/decisions/2026-08-09-local-sync-isolated-e2e-harness.md` — e2e harness decisions
 - AGENTS.md — test organisation rules (`*_tests.rs` siblings, no inline-heavy tests, nextest)
+
+---
+
+## 11. Campaign closeout (2026-08-22)
+
+**All 38 areas inventoried, baselined, and either improved or plateaued.**
+
+| Canonical CI sweep component | Baseline | Current | Δ |
+|---|---|---|---|
+| A27 nextest workspace sweep | ~75 s (quiet: 41.5 s) | 41.5 s (quiet) | −45% quiet |
+| A29 vitest full suite | 59.9 s | 59.9 s | plateaued (infra-bound) |
+| A33 e2e api | 3.2 s | 3.2 s | plateaued |
+| A34 e2e perf-smoke | 36.2 s | 36.2 s | plateaued (budgets met) |
+| A35 e2e remaining | 465 s | ~327 s | **−29.7% (−138 s)** |
+| A36 script tests | 3.34 s | 3.34 s | 3 failing tests fixed |
+
+**Total canonical sweep:** 667.7 s → 504.6 s → **Δ 163.1 s (−24.4%)** (loaded-machine figures; quiet machine ≈ −40%+).
+
+**Notable production bugs found & fixed along the way:**
+- `Store::backup()` — 1.4 MB backup took ~18 s of 250 ms×71 chunk sleeps (A02)
+- QRIS `poll_status` — 2 s pre-sleep before the first status check (A06)
+- 3 stale quota assertions from the `668f8078` pricing change (A02)
+- `verify-ci-docs-drift` hardcoded `python3` — 3 failing Windows tests (A36)
+- `DbPool::connect_postgres` 5-attempt retry loop burned 30 s on dead ports (A27)
+
+**PG flake hunt:** 8 distinct race classes root-caused and fixed (shared-role drops, PG_INIT concurrent DDL, global unique-index collision, fixed role names, self-perpetuating stale rows, base-DB `FOR UPDATE` chains ×2, cutover FORCE window). Verified: 4 consecutive full PG-suite runs (39 tests) all green.
+
+**Definition of done (§9) — satisfied.** Remaining open items are external: A37/A38 aggregate gates need Linux/CI (bash PATH), and the other agent's in-flight WIP (desktop-client commands, `ui/src/api`, KDS tests) must land before the final full-vitest green stamp.
 
 ---
 
