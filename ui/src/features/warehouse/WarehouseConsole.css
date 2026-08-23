@@ -581,3 +581,26 @@
   background: var(--color-surface, #fff);
   cursor: pointer;
 }
+
+/* ── Phase 2: PO receive ────────────────────────────────────────── */
+
+.warehouse-popup-source-row {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+}
+
+.warehouse-damage-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-left: auto;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-muted, #666);
+}
+
+.warehouse-damage-field input {
+  width: 3.5rem;
+  padding: 0.25rem 0.375rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+}

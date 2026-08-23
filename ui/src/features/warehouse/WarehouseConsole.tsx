@@ -34,7 +34,7 @@ import { useWarehouseSession, type WarehouseMode } from './useWarehouseSession';
 import { useWarehouseScanner } from './useWarehouseScanner';
 import WarehouseFnBar from './WarehouseFnBar';
 import { WAREHOUSE_SHORTCUTS, ACTIVE_SHORTCUT_ACTIONS } from './warehouseShortcuts';
-import { type PurchaseOrderDto } from '@/api/purchasing';
+import { listPurchaseOrders, receivePurchaseOrderWithLines, type PurchaseOrderDto } from '@/api/purchasing';
 import './WarehouseConsole.css';
 
 interface PendingTransferPick {
@@ -79,9 +79,9 @@ export default function WarehouseConsole() {
   const [destinationOpen, setDestinationOpen] = useState(false);
 
   // PO receive (Phase 2)
-  const [_pendingPo, _setPendingPo] = useState<PurchaseOrderDto | null>(null);
-  const [_poListOpen, _setPoListOpen] = useState(false);
-  const [_poList, _setPoList] = useState<PurchaseOrderDto[]>([]);
+  const [pendingPo, setPendingPo] = useState<PurchaseOrderDto | null>(null);
+  const [poListOpen, setPoListOpen] = useState(false);
+  const [poList, setPoList] = useState<PurchaseOrderDto[]>([]);
 
   // ── Products for the bound location ────────────────────────────────
   const loadProducts = useCallback(async () => {
@@ -293,7 +293,7 @@ export default function WarehouseConsole() {
     (t: PendingTransferPick) => {
       session.clear();
       for (const line of t.lines) {
-        session.addLine(line.sku, line.product_name, null, line.qty, line.id);
+        session.addLine(line.sku, line.product_name, null, line.qty, line.id, 'transfer');
       }
       session.setTransferId(t.id);
       setPendingTransfer(t);
@@ -301,6 +301,62 @@ export default function WarehouseConsole() {
     },
     [session],
   );
+
+  // ── PO receive (Phase 2) ──────────────────────────────────────────
+  const loadApprovedPos = useCallback(async () => {
+    if (!sessionToken) return;
+    try {
+      const all = await listPurchaseOrders();
+      setPoList(all.filter((po) => po.status === 'approved'));
+    } catch {
+      // Non-critical — dialog shows the empty state.
+    }
+  }, [sessionToken]);
+
+  const openPoList = useCallback(() => {
+    void loadApprovedPos();
+    setPoListOpen(true);
+  }, [loadApprovedPos]);
+
+  const pickPo = useCallback(
+    (po: PurchaseOrderDto) => {
+      session.clear();
+      for (const line of po.lines) {
+        session.addLine(line.sku, line.product_name, null, line.qty, line.id, 'po');
+      }
+      session.setPoId(po.id);
+      setPendingPo(po);
+      setPoListOpen(false);
+    },
+    [session],
+  );
+
+  const completeReceivePo = useCallback(async () => {
+    if (!sessionToken || session.isEmpty || !session.poId) return;
+    try {
+      const input = session.lines
+        .filter((l) => l.poLineId)
+        .map((l) => ({
+          line_id: l.poLineId!,
+          received_qty: Math.max(0, l.qty - l.damagedQty),
+          damaged_qty: l.damagedQty,
+        }));
+      const received = await receivePurchaseOrderWithLines(session.poId, input);
+      addToast({
+        type: 'success',
+        message: requiredLocalized(l10n, 'warehouse-receive-confirmed', {
+          number: received.po_number,
+          count: String(session.itemCount),
+        }),
+      });
+      session.clear();
+      setPendingPo(null);
+      setReceivePopupOpen(false);
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      addToast({ type: 'error', message: l10nErrorMessage(err, l10n, 'warehouse-adjust-error') });
+    }
+  }, [sessionToken, session, l10n, addToast]);
 
   const grid = useMemo(() => {
     const q = scanInput.trim().toLowerCase();
@@ -460,9 +516,18 @@ export default function WarehouseConsole() {
                   {requiredLocalized(l10n, 'warehouse-session-items', { count: String(session.itemCount) })}
                 </span>
                 {session.mode === 'receive' && (
-                  <Button variant="primary" onClick={completeReceive} disabled={!session.transferId}>
-                    {requiredLocalized(l10n, 'warehouse-session-complete-receive')}
-                  </Button>
+                  <>
+                    {session.transferId && (
+                      <Button variant="primary" onClick={completeReceive} disabled={!session.transferId}>
+                        {requiredLocalized(l10n, 'warehouse-session-complete-receive')}
+                      </Button>
+                    )}
+                    {session.poId && (
+                      <Button variant="primary" onClick={completeReceivePo} disabled={!session.poId}>
+                        {requiredLocalized(l10n, 'warehouse-session-complete-receive')}
+                      </Button>
+                    )}
+                  </>
                 )}
                 {session.mode === 'send' && (
                   <Button
@@ -503,22 +568,47 @@ export default function WarehouseConsole() {
             </button>
           </div>
           <div className="warehouse-popup-body">
-            <Button variant="secondary" onClick={openTransferList}>
-              {requiredLocalized(l10n, 'warehouse-receive-source-transfer')}
-            </Button>
-            {pendingTransfer && (
+            <div className="warehouse-popup-source-row">
+              <Button variant="secondary" onClick={openTransferList}>
+                {requiredLocalized(l10n, 'warehouse-receive-source-transfer')}
+              </Button>
+              <Button variant="secondary" onClick={openPoList}>
+                {requiredLocalized(l10n, 'warehouse-receive-source-po')}
+              </Button>
+            </div>
+            {(pendingTransfer || pendingPo) && (
               <div className="warehouse-popup-session">
                 <div className="warehouse-session-lines">
                   {session.lines.map((line) => (
                     <div key={line.id} className="warehouse-session-line">
                       <span>{line.sku}</span>
                       <span>× {line.qty}</span>
+                      {pendingPo && line.poLineId && (
+                        <label className="warehouse-damage-field">
+                          {requiredLocalized(l10n, 'warehouse-receive-damaged')}:
+                          <input
+                            type="number"
+                            min={0}
+                            max={line.qty}
+                            value={line.damagedQty}
+                            aria-label={`Damaged ${line.sku}`}
+                            onChange={(e) => session.setDamagedQty(line.id, parseInt(e.target.value, 10) || 0)}
+                          />
+                        </label>
+                      )}
                     </div>
                   ))}
                 </div>
-                <Button variant="primary" onClick={completeReceive}>
-                  {requiredLocalized(l10n, 'warehouse-session-complete-receive')}
-                </Button>
+                {pendingTransfer && (
+                  <Button variant="primary" onClick={completeReceive}>
+                    {requiredLocalized(l10n, 'warehouse-session-complete-receive')}
+                  </Button>
+                )}
+                {pendingPo && (
+                  <Button variant="primary" onClick={completeReceivePo}>
+                    {requiredLocalized(l10n, 'warehouse-session-complete-receive')}
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -577,6 +667,33 @@ export default function WarehouseConsole() {
           cancelLabel={requiredLocalized(l10n, 'warehouse-adjust-cancel')}
           onConfirm={() => setTransferListOpen(false)}
           onCancel={() => setTransferListOpen(false)}
+        />
+      )}
+
+      {/* ── PO picker dialog (Phase 2) ── */}
+      {poListOpen && (
+        <ConfirmDialog
+          open
+          title={requiredLocalized(l10n, 'warehouse-receive-source-po')}
+          message={
+            poList.length === 0 ? (
+              <p>{requiredLocalized(l10n, 'warehouse-receive-no-pos')}</p>
+            ) : (
+              <ul className="warehouse-transfer-list">
+                {poList.map((po) => (
+                  <li key={po.id}>
+                    <button type="button" className="warehouse-transfer-item" onClick={() => pickPo(po)}>
+                      {po.po_number} · {po.supplier_name ?? '—'} · {po.lines.length} lines
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
+          }
+          confirmLabel={requiredLocalized(l10n, 'warehouse-popup-close')}
+          cancelLabel={requiredLocalized(l10n, 'warehouse-adjust-cancel')}
+          onConfirm={() => setPoListOpen(false)}
+          onCancel={() => setPoListOpen(false)}
         />
       )}
 

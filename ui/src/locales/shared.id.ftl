@@ -528,6 +528,7 @@ warehouse-send-unpicked = { $count } baris belum dipetik
 warehouse-receive-source-po = Terima dari pesanan pembelian
 warehouse-receive-source-transfer = Terima dari transfer
 warehouse-receive-no-transfers = Tidak ada transfer dalam perjalanan
+warehouse-receive-no-pos = Tidak ada pesanan pembelian yang disetujui
 warehouse-receive-confirmed = Diterima! { $number } — { $count } item
 warehouse-receive-expected = Diharapkan
 warehouse-receive-received = Diterima
