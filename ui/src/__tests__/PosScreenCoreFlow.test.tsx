@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import salesFtl from '@/locales/sales.ftl?raw';
@@ -1366,11 +1366,20 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
 
   // ── Open Shift Tests ──────────────────────────────────────────────────
 
-  it.skip('opens shift with opening balance', async () => {
+  it('opens shift with opening balance', async () => {
     // Render without active shift first
-    // Mock the shift API to return no active shift
     vi.mocked(shiftsApi.getActiveShiftScoped).mockResolvedValueOnce(null);
     vi.mocked(settingsApi.getReceiptSettingsScoped).mockResolvedValueOnce(receiptSettingsFixture);
+    vi.mocked(shiftsApi.openShiftScoped).mockResolvedValue({
+      id: 'shift-1', userId: 'user-1', terminalId: null,
+      openedAt: new Date().toISOString(), closedAt: null,
+      openingBalanceMinor: 50000, closingBalanceMinor: null,
+      expectedCashMinor: null, cashDifferenceMinor: null,
+      totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0,
+      totalOtherMinor: 0, totalVoidsMinor: 0, totalRefundsMinor: 0,
+      totalPayoutsMinor: 0, notes: '', status: 'open',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
     vi.mocked(salesApi.startSaleScoped).mockResolvedValue({
       cartId: 'test-cart-1' as CartId,
       deductionLocationId: 'loc-store-inventory',
@@ -1389,36 +1398,29 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
       testCoreFtl,
     );
 
-    // Debug: check what's rendered
+    // Wait for the no-shift state to appear, then click the open shift button
     await waitFor(() => {
-      console.log('Document HTML:', document.body?.innerHTML?.slice(0, 2000) || 'empty');
-    }, { timeout: 2000 });
-
-    await waitFor(() => {
-      expect(screen.getByText('No active shift')).toBeInTheDocument();
+      const shiftLabel = screen.getByText('No active shift');
+      const shiftBar = shiftLabel.closest('.pos-cart-header-shift');
+      expect(shiftBar).toBeTruthy();
     });
-
-    // Debug: list all buttons
-    await waitFor(() => {
-      const buttons = screen.getAllByRole('button');
-      console.log('All buttons:', buttons.map(b => b.getAttribute('aria-label') || b.textContent?.slice(0, 30)));
-    }, { timeout: 2000 });
-
-    // Click Open Shift button
-    const openShiftBtn = screen.getByRole('button', { name: /open shift/i });
+    const shiftBar = document.querySelector('.pos-cart-header-shift')!;
+    const openShiftBtn = shiftBar.querySelector('.pos-shift-open-btn') as HTMLButtonElement;
+    expect(openShiftBtn).toBeInTheDocument();
     await userEvent.click(openShiftBtn);
 
-    // Open shift modal should appear
+    // Open shift overlay should appear with balance input
     await waitFor(() => {
-      expect(screen.getByText('Open Shift')).toBeInTheDocument();
+      expect(screen.getByLabelText(/opening balance/i)).toBeInTheDocument();
     });
 
     // Enter opening balance
-    const balanceInput = screen.getByPlaceholderText(/enter opening balance/i);
-    await userEvent.type(balanceInput, '500');
+    const balanceInput = screen.getByLabelText(/opening balance/i);
+    await userEvent.type(balanceInput, '50000');
 
-    // Click Open Shift confirm
-    const confirmBtn = screen.getByRole('button', { name: /open shift/i });
+    // Click the confirm button inside the dialog
+    const dialog = screen.getByRole('dialog', { name: /open/i });
+    const confirmBtn = within(dialog).getByRole('button', { name: /open/i });
     await userEvent.click(confirmBtn);
 
     // Should show shift as open (0m elapsed)
@@ -1429,23 +1431,31 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
 
   // ── Deduction Badge / FastPIN Tests ──────────────────────────────────
 
+  // ADR-19 §17: deduction badge → FastPIN overlay for manager override.
+  // This flow requires ensureCart() which is only called from the price-override
+  // handler, not during normal product add. A proper integration test needs
+  // the full manager-override → PIN → override chain.
   it.skip('opens FastPIN overlay when deduction badge clicked', async () => {
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001', name: 'Test Item', category: 'Test',
+      price: { minor_units: 700, currency: 'USD' }, barcode: 'BARCODE-001',
+      in_stock: true, stock_qty: 100, tax_rate_ids: [], product_type: 'standard',
+      created_at: '', price_updated_at: '',
+    });
     await renderPosScreenWithShift();
-
     await waitFor(() => {
       expect(screen.getByText('0m')).toBeInTheDocument();
     });
-
-    // Click deduction badge (the badge shows deduction location)
-    const deductionBadge = screen.getByTestId('cart-deduction-badge');
-    if (deductionBadge) {
-      await userEvent.click(deductionBadge);
-
-      // FastPIN overlay should appear
-      await waitFor(() => {
-        expect(screen.getByText(/enter pin/i)).toBeInTheDocument();
-      });
-    }
+    // Scan a product — note: ensureCart is only called via price override,
+    // not during normal add, so the deduction badge may never appear here.
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+    const deductionBadge = await screen.findByTestId('deduction-location-badge', {}, { timeout: 3000 });
+    await userEvent.click(deductionBadge);
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
   });
 
   // ── Workspace Settings Tests ──────────────────────────────────────────
@@ -1475,10 +1485,9 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
 
   // ── Table Management Tests ──────────────────────────────────────────
 
-  it.skip('opens table management via onNavigate', async () => {
-    const onNavigate = vi.fn();
+  it('opens table management sub-screen', async () => {
     await renderWithProviders(
-      <PosScreen onNavigate={onNavigate} />,
+      <PosScreen />,
       salesFtl,
       productsFtl,
       inventoryFtl,
@@ -1494,8 +1503,10 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
     const tablesBtn = screen.getByRole('button', { name: /table management/i });
     await userEvent.click(tablesBtn);
 
-    // onNavigate should be called with 'tables'
-    expect(onNavigate).toHaveBeenCalledWith('tables');
+    // Table management sub-screen should appear (it renders a back button)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
+    });
   });
 
   // ── KDS Tests ────────────────────────────────────────────────────────
@@ -1525,10 +1536,9 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
 
   // ── Sales History Tests ──────────────────────────────────────────────
 
-  it.skip('opens sales history via onNavigate', async () => {
-    const onNavigate = vi.fn();
+  it('opens sales history sub-screen', async () => {
     await renderWithProviders(
-      <PosScreen onNavigate={onNavigate} />,
+      <PosScreen />,
       salesFtl,
       productsFtl,
       inventoryFtl,
@@ -1540,20 +1550,21 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
       expect(screen.getByText('0m')).toBeInTheDocument();
     });
 
-    // Click sales history button (aria-label is "History" from sales.ftl)
+    // Click sales history button
     const historyBtn = screen.getByRole('button', { name: /history/i });
     await userEvent.click(historyBtn);
 
-    // onNavigate should be called with 'sales-history'
-    expect(onNavigate).toHaveBeenCalledWith('sales-history');
+    // Sales history sub-screen should appear (renders a back button)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
+    });
   });
 
   // ── Stock Inquiry Tests ──────────────────────────────────────────────
 
-  it.skip('opens stock inquiry via onNavigate', async () => {
-    const onNavigate = vi.fn();
+  it('opens stock inquiry sub-screen', async () => {
     await renderWithProviders(
-      <PosScreen onNavigate={onNavigate} />,
+      <PosScreen />,
       salesFtl,
       productsFtl,
       inventoryFtl,
@@ -1565,11 +1576,13 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
       expect(screen.getByText('0m')).toBeInTheDocument();
     });
 
-    // Click stock inquiry button (aria-label is "Stok" from sales.ftl)
+    // Click stock inquiry button
     const stockBtn = screen.getByRole('button', { name: /stok/i });
     await userEvent.click(stockBtn);
 
-    // onNavigate should be called with 'stock-inquiry'
-    expect(onNavigate).toHaveBeenCalledWith('stock-inquiry');
+    // Stock inquiry sub-screen should appear (renders a back button)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
+    });
   });
 });
