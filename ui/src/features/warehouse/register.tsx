@@ -1,12 +1,12 @@
 import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 
-const WarehouseScreen = lazy(() => import('./WarehouseScreen'));
+const WarehouseConsole = lazy(() => import('./WarehouseConsole'));
 
 export function registerWarehouseFeature() {
   registerPage({
     route: 'warehouse',
-    component: WarehouseScreen,
+    component: WarehouseConsole,
     label: 'Warehouse',
     requiredRole: 'manager',
     requiredPermission: 'inventory:view',

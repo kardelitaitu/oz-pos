@@ -477,3 +477,65 @@ warehouse-adjust-reason-label = Reason
 warehouse-adjust-reason-placeholder = e.g. stock count, damage, return
 warehouse-adjust-confirm = Confirm
 warehouse-adjust-cancel = Cancel
+
+# ── Warehouse POS console (v2) ────────────────────────────────
+warehouse-mode-receive = Receive
+warehouse-mode-send = Send
+warehouse-mode-count = Count
+warehouse-mode-stock = Stock
+warehouse-mode-receive-desc = Receive goods inbound
+warehouse-mode-send-desc = Send goods outbound
+warehouse-mode-count-desc = Cycle count
+warehouse-mode-stock-desc = View stock
+
+warehouse-scan-placeholder = Scan barcode or type SKU…
+warehouse-scan-aria = Scan barcode or type SKU
+warehouse-scan-add = Add
+warehouse-scan-no-match = No product matches that barcode
+warehouse-bin = Bin: { $bin }
+
+warehouse-session-empty = Session is empty — scan or pick products
+warehouse-session-items = { $count } item{ $count ->
+  [one] 
+ *[other] s
+}
+warehouse-session-line-qty = Qty
+warehouse-session-line-picked = Picked
+warehouse-session-complete-receive = Complete Receive
+warehouse-session-complete-send = Complete Send
+warehouse-session-print = Print
+warehouse-session-clear = Clear
+
+warehouse-fn-receive = Receive
+warehouse-fn-send = Send
+warehouse-fn-count = Count
+warehouse-fn-stock = Stock
+warehouse-fn-print = Print
+warehouse-fn-reserved = { $key }
+warehouse-fn-fullscreen = Fullscreen
+warehouse-fn-bar-aria = Function keys
+warehouse-shortcut-list = Shortcut list
+warehouse-shortcut-close = Close
+
+warehouse-popup-receive-title = Incoming session
+warehouse-popup-send-title = Outgoing session
+warehouse-popup-count-title = Count session
+warehouse-popup-close = Close
+
+warehouse-send-destination = Send to…
+warehouse-send-destination-aria = Choose destination
+warehouse-send-confirmed = Sent! { $number } — { $count } items to { $destination }
+warehouse-send-verify-hint = Scan each item to verify it is picked
+warehouse-send-unpicked = { $count } line{ $count ->
+  [one]  not picked
+ *[other] s not picked
+}
+
+warehouse-receive-source-po = Receive from purchase order
+warehouse-receive-source-transfer = Receive from transfer
+warehouse-receive-no-transfers = No in-transit transfers
+warehouse-receive-confirmed = Received! { $number } — { $count } items
+warehouse-receive-expected = Expected
+warehouse-receive-received = Received
+warehouse-receive-damaged = Damaged
+warehouse-receive-short = Short

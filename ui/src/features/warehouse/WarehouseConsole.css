@@ -350,3 +350,234 @@
   border-color: var(--color-primary, #6366f1);
   outline: none;
 }
+
+/* ── Warehouse POS console (v2) ─────────────────────────────── */
+
+.warehouse-mode-tabs {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+  margin-bottom: var(--space-4, 1rem);
+}
+
+.warehouse-mode-tab {
+  padding: 0.5rem 1.25rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 6px);
+  background: var(--color-surface, #fff);
+  color: var(--color-fg);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.warehouse-mode-tab--active {
+  background: var(--color-primary, #2563eb);
+  border-color: var(--color-primary, #2563eb);
+  color: #fff;
+}
+
+.warehouse-scan-row {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+  margin-bottom: var(--space-4, 1rem);
+}
+
+.warehouse-scan-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  font-size: var(--text-lg, 1.125rem);
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 6px);
+}
+
+.warehouse-body {
+  display: flex;
+  gap: var(--space-4, 1rem);
+}
+
+.warehouse-grid-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.warehouse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-2, 0.5rem);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.warehouse-grid-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 6px);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+  text-align: left;
+}
+
+.warehouse-grid-sku { font-weight: 600; font-size: var(--text-sm, 0.875rem); }
+.warehouse-grid-name { font-size: var(--text-sm, 0.875rem); color: var(--color-fg); }
+.warehouse-grid-bin { font-size: var(--text-xs, 0.75rem); color: var(--color-muted, #666); }
+
+.warehouse-session-panel {
+  width: 360px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 6px);
+  padding: var(--space-3, 0.75rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+.warehouse-session-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.warehouse-session-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  padding: 0.5rem;
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius, 4px);
+}
+
+.warehouse-session-line-info { display: flex; flex-direction: column; gap: 0.125rem; }
+.warehouse-session-line-sku { font-weight: 600; font-size: var(--text-sm, 0.875rem); }
+.warehouse-session-line-name { font-size: var(--text-sm, 0.875rem); }
+.warehouse-session-line-bin { font-size: var(--text-xs, 0.75rem); color: var(--color-muted, #666); }
+.warehouse-session-line-actions { display: flex; align-items: center; gap: 0.5rem; }
+.warehouse-session-line-qty { font-weight: 600; }
+
+.warehouse-session-pick-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: var(--text-xs, 0.75rem);
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+}
+
+.warehouse-session-remove {
+  border: none;
+  background: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: var(--color-danger, #dc2626);
+}
+
+.warehouse-session-empty { color: var(--color-muted, #666); padding: 0.5rem; }
+.warehouse-empty-panel { color: var(--color-muted, #666); padding: 2rem 0; }
+
+.warehouse-session-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  border-top: 1px solid var(--color-border, #eee);
+  padding-top: var(--space-3, 0.75rem);
+}
+
+.warehouse-session-count { font-weight: 600; }
+
+/* ── FnBar ─────────────────────────────────────────────────────── */
+
+.warehouse-fn-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  margin-top: var(--space-4, 1rem);
+  padding: 0.5rem;
+  border-top: 1px solid var(--color-border, #eee);
+  position: sticky;
+  bottom: 0;
+  background: var(--color-surface, #fff);
+}
+
+.warehouse-fn-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+  min-width: 56px;
+}
+
+.warehouse-fn-btn--placeholder { opacity: 0.45; cursor: default; }
+.warehouse-fn-btn--help { margin-left: auto; }
+.warehouse-fn-key { font-weight: 700; font-size: var(--text-xs, 0.75rem); }
+.warehouse-fn-label { font-size: var(--text-xs, 0.75rem); }
+.warehouse-fn-spacer { flex: 1; }
+
+/* ── Popup sessions ────────────────────────────────────────────── */
+
+.warehouse-popup {
+  position: fixed;
+  right: var(--space-4, 1rem);
+  bottom: 4rem;
+  width: 420px;
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 8px);
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.2));
+  z-index: 50;
+  padding: var(--space-4, 1rem);
+}
+
+.warehouse-popup-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3, 0.75rem);
+}
+
+.warehouse-popup-head h2 { margin: 0; font-size: var(--text-lg, 1.125rem); }
+
+.warehouse-popup-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-muted, #666);
+}
+
+.warehouse-popup-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+.warehouse-transfer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.warehouse-transfer-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+}

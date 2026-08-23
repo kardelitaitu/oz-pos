@@ -474,3 +474,62 @@ warehouse-adjust-reason-label = Alasan
 warehouse-adjust-reason-placeholder = contoh: hitung stok, kerusakan, pengembalian
 warehouse-adjust-confirm = Konfirmasi
 warehouse-adjust-cancel = Batal
+
+# ── Warehouse POS console (v2) ────────────────────────────────
+warehouse-mode-receive = Terima
+warehouse-mode-send = Kirim
+warehouse-mode-count = Hitung
+warehouse-mode-stock = Stok
+warehouse-mode-receive-desc = Terima barang masuk
+warehouse-mode-send-desc = Kirim barang keluar
+warehouse-mode-count-desc = Hitung stok
+warehouse-mode-stock-desc = Lihat stok
+
+warehouse-scan-placeholder = Pindai barcode atau ketik SKU…
+warehouse-scan-aria = Pindai barcode atau ketik SKU
+warehouse-scan-add = Tambah
+warehouse-scan-no-match = Tidak ada produk yang cocok dengan barcode itu
+warehouse-bin = Rak: { $bin }
+
+warehouse-session-empty = Sesi kosong — pindai atau pilih produk
+warehouse-session-items = { $count } item{ $count ->
+  [one] 
+ *[other] s
+}
+warehouse-session-line-qty = Jumlah
+warehouse-session-line-picked = Dipetik
+warehouse-session-complete-receive = Selesaikan Terima
+warehouse-session-complete-send = Selesaikan Kirim
+warehouse-session-print = Cetak
+warehouse-session-clear = Kosongkan
+
+warehouse-fn-receive = Terima
+warehouse-fn-send = Kirim
+warehouse-fn-count = Hitung
+warehouse-fn-stock = Stok
+warehouse-fn-print = Cetak
+warehouse-fn-reserved = { $key }
+warehouse-fn-fullscreen = Layar penuh
+warehouse-fn-bar-aria = Tombol fungsi
+warehouse-shortcut-list = Daftar pintasan
+warehouse-shortcut-close = Tutup
+
+warehouse-popup-receive-title = Sesi masuk
+warehouse-popup-send-title = Sesi keluar
+warehouse-popup-count-title = Sesi hitung
+warehouse-popup-close = Tutup
+
+warehouse-send-destination = Kirim ke…
+warehouse-send-destination-aria = Pilih tujuan
+warehouse-send-confirmed = Terkirim! { $number } — { $count } item ke { $destination }
+warehouse-send-verify-hint = Pindai setiap item untuk memverifikasi pemetikan
+warehouse-send-unpicked = { $count } baris belum dipetik
+
+warehouse-receive-source-po = Terima dari pesanan pembelian
+warehouse-receive-source-transfer = Terima dari transfer
+warehouse-receive-no-transfers = Tidak ada transfer dalam perjalanan
+warehouse-receive-confirmed = Diterima! { $number } — { $count } item
+warehouse-receive-expected = Diharapkan
+warehouse-receive-received = Diterima
+warehouse-receive-damaged = Rusak
+warehouse-receive-short = Kurang
