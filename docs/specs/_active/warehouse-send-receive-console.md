@@ -20,6 +20,9 @@ The console has a **function-key quick menu** for fast daily operations, mirrori
 |---|---|---|
 | **F1** | `receive-popup` | **Incoming popup session** — receive popup |
 | **F2** | `send-popup` | **Outgoing popup session** — send popup |
+| **F3–F10** | *(placeholder)* | Reserved — rendered in the FnBar as placeholders, no behavior yet |
+| **F11** | `fullscreen` | Toggle fullscreen — **owned by the global shell binding** (`useFullscreen`), which is already active for every workspace except `store-pos` (retail claims F11 there, KEY-01). The warehouse does not re-bind F11; the FnBar shows an F11 badge pointing at the existing fullscreen toggle. |
+| **F12** | *(reserved)* | Reserved for future use |
 
 ### Popup session behavior
 
@@ -37,10 +40,10 @@ The console has a **function-key quick menu** for fast daily operations, mirrori
 
 ### Implementation notes
 
-- Manifest: `warehouseShortcuts.ts` exports `WAREHOUSE_SHORTCUTS` (key, action, labelId, scope, editableGuard) + `getWarehouseShortcut()` — the FnBar, help overlay, and keydown handler all read from it (KEY-02 parity test included).
-- Keydown handler: `e.key === 'F1'` / `'F2'` with `editableGuard: true` (suppressed while typing in an input).
+- Manifest: `warehouseShortcuts.ts` exports `WAREHOUSE_SHORTCUTS` (key, action, labelId, scope, editableGuard) + `getWarehouseShortcut()` — the FnBar, help overlay, and keydown handler all read from it (KEY-02 parity test included). F3–F10 and F12 entries carry placeholder actions so they render in the FnBar with a reserved label.
+- Keydown handler: `e.key === 'F1'` / `'F2'` with `editableGuard: true` (suppressed while typing in an input). F11 is **not** bound here — the global shell fullscreen binding already owns it for the warehouse workspace (KEY-01 single-owner rule).
 - Help overlay: `?` opens a shortcut list rendered from the same manifest.
-- `WarehouseFnBar.tsx`: bottom toolbar showing `F1 Receive` / `F2 Send` (plus future F-keys), pure presentational with callbacks wired in the console.
+- `WarehouseFnBar.tsx`: bottom toolbar showing `F1 Receive` / `F2 Send`, F3–F10 placeholders, and an `F11 Fullscreen` badge (calls `useFullscreen().toggleFullscreen`), pure presentational with callbacks wired in the console.
 
 
 
@@ -189,6 +192,8 @@ warehouse-receive-confirmed = Received! { $number } — { $count } items
 
 warehouse-fn-receive = Receive
 warehouse-fn-send = Send
+warehouse-fn-reserved = { $key }
+warehouse-fn-fullscreen = Fullscreen
 warehouse-fn-bar-aria = Function keys
 warehouse-popup-receive-title = Incoming session
 warehouse-popup-send-title = Outgoing session
@@ -216,6 +221,6 @@ Same keys in the ID bundle with Indonesian translations.
 - Vitest: unit-test the state hook (`useWarehouseCart` — add line, remove line, change qty, switch mode)
 - Vitest: the two dialogs render and submit the right commands
 - Vitest: the console renders both modes
-- Vitest: F-key parity test — `warehouseShortcuts` manifest ⇄ `WarehouseFnBar` labels ⇄ keydown handler agree (KEY-02 pattern)
+- Vitest: F-key parity test — `warehouseShortcuts` manifest ⇄ `WarehouseFnBar` labels ⇄ keydown handler agree (KEY-02 pattern); F3–F10/F12 are placeholders (no keydown handlers), F11 is owned by the shell (asserted, not re-bound)
 - Vitest: F1/F2 open and dismiss popup sessions; Esc closes; re-press focuses instead of stacking
 - Rust: existing stock_transfer tests already cover send/receive — no Rust changes expected
