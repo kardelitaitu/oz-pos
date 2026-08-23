@@ -311,12 +311,17 @@ export default function PaymentModal({
         { id: 1, method: 'cash', otherLabel: '', amountMinor: '' },
         { id: 2, method: 'card', otherLabel: '', amountMinor: '' },
       ]);
-      notifyCustomerChangeRef.current(null);
+      // Only clear the customer if the parent did NOT explicitly provide a selectedCustomer prop.
+      // If selectedCustomerProp is undefined, the parent expects us to manage the customer internally.
+      // If it's null or a CustomerDto, the parent is controlling the customer selection.
+      if (selectedCustomerProp === undefined) {
+        notifyCustomerChangeRef.current(null);
+      }
     }
     // onCustomerChange is intentionally omitted: it is routed through
     // notifyCustomerChangeRef, so depending on it here would re-run this
     // reset (and wipe the tendered amount) on every parent re-render.
-  }, [open, total.currency]);
+  }, [open, total.currency, selectedCustomerProp]);
 
   useEffect(() => {
     if (!showCustomerSearch) return;
