@@ -83,7 +83,7 @@ pub struct AppState {
 
     /// Per-process secret for the pre-session picker ticket HMAC.
     ///
-    /// Parity with the desktop client (audit/06 residual). Generated
+    /// Parity with the desktop client (audit-open-findings residual). Generated
     /// once at startup. Tickets are short-lived (5 min) and die with
     /// the process, so the secret is never persisted — a restart
     /// simply invalidates outstanding tickets.

@@ -20,7 +20,7 @@ export interface AuthState {
   /** The currently logged-in user's session, or null if not logged in. */
   session: LoginSessionDto | null;
   /**
-   * Short-lived picker ticket (audit/06) minted at login.
+   * Short-lived picker ticket (audit-open-findings) minted at login.
    *
    * Consumed by the pre-session workspace picker (`listWorkspaces` /
    * `listWorkspaceScreens`) until `createSession` returns the opaque
@@ -50,7 +50,7 @@ export interface AuthContextValue extends AuthState {
    * FastPINOverlay for shared touchscreen operator switching.
    *
    * `pickerTicket` is the fresh ticket from the hot-swap login; pass it
-   * when available so the picker stays bound to the new user (audit/06).
+   * when available so the picker stays bound to the new user (audit-open-findings).
    */
   swapSession: (session: LoginSessionDto, pickerTicket?: string) => void;
 }
@@ -120,7 +120,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
    * without triggering the login flow (no loading/error reset, no onLogin).
    * This is the hot-swap path used by FastPINOverlay.
    *
-   * audit/06: the picker ticket is replaced alongside the session so the
+   * audit-open-findings: the picker ticket is replaced alongside the session so the
    * pre-session picker stays bound to the freshly-authenticated user.
    */
   const swapSession = useCallback((newSession: LoginSessionDto, newPickerTicket?: string) => {

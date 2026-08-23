@@ -36,7 +36,7 @@ pub struct StaffLoginArgs {
 pub struct StaffLoginResult {
     /// Session info including user id, display name, and role.
     pub session: LoginSession,
-    /// Short-lived picker ticket (audit/06 residual).
+    /// Short-lived picker ticket (audit-open-findings residual).
     ///
     /// Parity with the desktop client: the pre-session
     /// `list_workspaces` / `list_workspace_screens` commands verify
@@ -208,7 +208,7 @@ pub async fn staff_login(
     drop(db);
 
     // Mint the short-lived picker ticket bound to this authenticated
-    // user (audit/06 residual, parity with the desktop client). It is
+    // user (audit-open-findings residual, parity with the desktop client). It is
     // only valid for the pre-session workspace picker; `create_session`
     // hands out the opaque session token afterwards.
     let now_ts = SystemTime::now()

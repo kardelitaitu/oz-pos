@@ -257,7 +257,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const fetchWorkspaces = useCallback(
     async (storeId: string, cancelled: () => boolean) => {
-      // audit/06: the picker ticket binds the caller server-side; the
+      // audit-open-findings: the picker ticket binds the caller server-side; the
       // backend derives the real role from the ticket, so the UI never
       // sends a role/user claim that could be forged.
       if (!pickerTicket) return;
@@ -409,7 +409,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setWorkspaceScreensState([]);
       return;
     }
-    // audit/06: the picker ticket binds the caller server-side — the screen
+    // audit-open-findings: the picker ticket binds the caller server-side — the screen
     // list is only readable by a genuinely-authenticated user.
     listWorkspaceScreens(
       pickerTicket ?? "",

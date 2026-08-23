@@ -13,14 +13,13 @@ import { listWorkspacesScoped, type WorkspaceDto } from '@/api/workspaces';
 import { type StoreProfile } from '@/api/stores';
 import {
   normalizeTopologyGraph,
+  topologyIssueKey,
   validateTopologyGraph,
 } from './topologyContract';
 import { computeTopologyDiff } from './topologyDiff';
 import type { TopologyNodeData, TopologyWireData } from './NodeTopologyEditor';
 
 // ── Types ─────────────────────────────────────────────────────────
-
-type TopologyIssueKey = string;
 
 export interface ApplyContext {
   /** Active session token for IPC calls. */
@@ -96,9 +95,12 @@ export async function applyTopologyWithDiagram(
   const validationErrors = validateTopologyGraph(semanticGraph, ctx.licenseTier);
 
   // Filter out resolved (dismissed) issues — e.g. intentionally empty warehouse.
+  // The key format is the contract's topologyIssueKey (`node:<id>:<messageId>`),
+  // the SAME format the editor writes to resolved_issue_keys — a drift here
+  // would silently break the dismissed-prompt bypass on Apply.
   const resolvedSet = new Set(ctx.resolvedIssueKeys);
   const blockingErrors = validationErrors.filter(
-    (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedSet.has(issueKey(e.nodeId, e.messageId))),
+    (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedSet.has(topologyIssueKey(e.nodeId, e.messageId))),
   );
 
   if (blockingErrors.length > 0) {
@@ -245,10 +247,6 @@ function buildDiagramPayloads(
   });
 
   return { diagramNodes, diagramWires };
-}
-
-function issueKey(nodeId: string, messageId: string): TopologyIssueKey {
-  return `${nodeId}::${messageId}`;
 }
 
 function isTopologyInstance(ws: WorkspaceDto): boolean {

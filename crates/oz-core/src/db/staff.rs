@@ -515,7 +515,7 @@ impl Store<'_> {
 
     // ── Login attempt rate limiting (persistent) ───────────────────
     //
-    // STAFF-07 (audit/06): per-account throttling is now combined with
+    // STAFF-07 (audit-open-findings): per-account throttling is now combined with
     // per-device and global abuse controls, and uses exponential backoff
     // instead of a fixed short lock. All rows are persisted in
     // `login_attempts` so lockouts survive app restarts.

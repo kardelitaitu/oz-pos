@@ -403,7 +403,7 @@ pub async fn update_staff(
     ))
 }
 
-// ── Session-scoped staff commands (ADR #7 · audit/06 STAFF-01) ────────
+// ── Session-scoped staff commands (ADR #7 · audit-open-findings STAFF-01) ────────
 //
 // These are the replacement for the legacy staff commands. They resolve the
 // caller identity from the opaque `session_token` and NEVER accept a
@@ -806,7 +806,7 @@ pub struct BootstrapOwnerArgs {
 pub struct BootstrapOwnerResult {
     /// LoginSession dto.
     pub session: oz_core::auth::LoginSession,
-    /// Short-lived picker ticket (audit/06 residual).
+    /// Short-lived picker ticket (audit-open-findings residual).
     ///
     /// The pre-session `list_workspaces` / `list_workspace_screens`
     /// commands verify this ticket and resolve the caller's REAL role

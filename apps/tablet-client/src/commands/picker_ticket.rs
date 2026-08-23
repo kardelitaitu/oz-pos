@@ -1,5 +1,5 @@
 //! Short-lived HMAC-signed picker tickets for the pre-session
-//! workspace picker (audit/06 residual).
+//! workspace picker (audit-open-findings residual).
 //!
 //! Parity with the desktop client: `staff_login` mints a ticket after
 //! successful authentication. The pre-session `list_workspaces` /

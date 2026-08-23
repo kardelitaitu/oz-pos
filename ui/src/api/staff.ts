@@ -32,7 +32,7 @@ export interface LoginSessionDto {
 export interface StaffLoginResult {
   session: LoginSessionDto;
   /**
-   * Short-lived ticket for the pre-session workspace picker (audit/06).
+   * Short-lived ticket for the pre-session workspace picker (audit-open-findings).
    * Passed to listWorkspaces / listWorkspaceScreens until createSession
    * returns the opaque session token.
    */
@@ -83,7 +83,7 @@ export interface BootstrapOwnerArgs {
 /** Result of bootstrapping the first owner account. */
 export interface BootstrapOwnerResult {
   session: LoginSessionDto;
-  /** Short-lived ticket for the pre-session workspace picker (audit/06). */
+  /** Short-lived ticket for the pre-session workspace picker (audit-open-findings). */
   picker_ticket: string;
 }
 
@@ -198,7 +198,7 @@ export interface RoleDto {
   permissions: string[];
 }
 
-// ── Session-scoped Staff Management (ADR #7 · audit/06 STAFF-01) ───
+// ── Session-scoped Staff Management (ADR #7 · audit-open-findings STAFF-01) ───
 //
 // These are the secure replacements. The caller identity is resolved from
 // the session token on the backend — the args carry NO caller_user_id.

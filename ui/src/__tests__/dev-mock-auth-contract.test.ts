@@ -36,12 +36,12 @@ afterEach(() => {
   fakeInternalsInvoke.mockReset();
 });
 
-// audit/06 regression: the real backend mints a picker ticket at login and
+// audit-open-findings regression: the real backend mints a picker ticket at login and
 // first-owner bootstrap. WorkspaceProvider bails (availableWorkspaces stays
 // []) when pickerTicket is null, which renders "No workspaces available"
 // for EVERY user in browser dev previews — even owner. The mock must keep
 // parity with the backend contract or the picker can never load in dev.
-describe('dev-mock auth contract (audit/06 picker ticket parity)', () => {
+describe('dev-mock auth contract (audit-open-findings picker ticket parity)', () => {
   it('staff_login returns a picker_ticket alongside the session', async () => {
     const result = (await invoke('staff_login', {
       args: { username: 'owner', pin: '1234' },

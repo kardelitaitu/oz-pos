@@ -246,7 +246,7 @@ fn redeem_points_returns_discount_value() {
     seed_customer(&conn, "cust-1", "Alice");
     seed_sale(&conn, "sale-1", 5000);
     // The redemption target sale must belong to the customer AND have a
-    // total >= the redemption value (audit/02: redemption cannot exceed the
+    // total >= the redemption value (audit-open-findings: redemption cannot exceed the
     // sale total).
     seed_customer_sale(&conn, "sale-2", "cust-1", 1000);
 
@@ -267,7 +267,7 @@ fn redeem_insufficient_points_fails() {
     let conn = setup();
     seed_customer(&conn, "cust-1", "Alice");
     // The sale must belong to the customer and have a total >= 100 so the
-    // insufficient-balance guard is what rejects the redemption (audit/02).
+    // insufficient-balance guard is what rejects the redemption (audit-open-findings).
     seed_customer_sale(&conn, "sale-1", "cust-1", 1000);
 
     store(&conn)

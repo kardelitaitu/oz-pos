@@ -120,7 +120,7 @@ fn boot_resolution_dto_debug() {
     assert!(d.contains("false"));
 }
 
-// ── Pre-session picker ticket binding (audit/06 residual) ──────────
+// ── Pre-session picker ticket binding (audit-open-findings residual) ──────────
 //
 // TDD red: `list_workspaces` / `list_workspace_screens` must bind the
 // listing to the authenticated user server-side. Previously the commands

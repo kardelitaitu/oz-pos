@@ -170,7 +170,7 @@ export async function getUserWorkspaceInstancesScoped(
  * session exists, use listWorkspacesScoped so the store and permissions are
  * resolved from the session token.
  *
- * audit/06: the backend resolves the caller's REAL role from the picker
+ * audit-open-findings: the backend resolves the caller's REAL role from the picker
  * ticket — caller-supplied role/user are no longer accepted.
  */
 export async function listWorkspaces(
@@ -185,7 +185,7 @@ export async function listWorkspaces(
 
 /**
  * List workspace instances in an explicitly named store for the session
- * user (audit/06). Authenticated replacement for the terminal-management
+ * user (audit-open-findings). Authenticated replacement for the terminal-management
  * screen's cross-store instance picker.
  */
 export async function listWorkspacesForStoreScoped(
@@ -202,7 +202,7 @@ export async function listWorkspacesForStoreScoped(
  * List screens during pre-session workspace selection.
  *
  * The explicit store ID keeps this bootstrap read on the selected store
- * database, but only after the picker ticket (audit/06) proves a real login.
+ * database, but only after the picker ticket (audit-open-findings) proves a real login.
  * Authenticated callers should use listWorkspaceScreensScoped.
  */
 export async function listWorkspaceScreens(

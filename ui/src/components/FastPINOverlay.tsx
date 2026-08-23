@@ -301,7 +301,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
 
       // Step 2: Swap the AuthContext session (no workspace reset). Pass the
       // fresh picker ticket so the pre-session picker stays bound to the new
-      // user (audit/06).
+      // user (audit-open-findings).
       swapSession(newSession, result.picker_ticket);
 
       // Step 3: Create a new session token with the new user's identity

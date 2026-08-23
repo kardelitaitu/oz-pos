@@ -401,7 +401,7 @@ pub async fn update_staff(
     ))
 }
 
-// ── Session-scoped staff commands (ADR #7 · audit/06 STAFF-01) ────────
+// ── Session-scoped staff commands (ADR #7 · audit-open-findings STAFF-01) ────────
 //
 // Replacement for the legacy staff commands. Caller identity is resolved
 // from the opaque `session_token`; the commands NEVER accept a
@@ -782,7 +782,7 @@ pub async fn update_staff_scoped(
 
 // ── Bootstrap first owner (no authentication required) ────────────────
 //
-// Parity with the desktop client (audit/06 residual): the tablet needs the
+// Parity with the desktop client (audit-open-findings residual): the tablet needs the
 // same first-owner path so a fresh installation can be provisioned from the
 // tablet itself. Like `staff_login`, the command mints a short-lived picker
 // ticket so the pre-session workspace picker stays bound to the real user.
@@ -806,7 +806,7 @@ pub struct BootstrapOwnerArgs {
 pub struct BootstrapOwnerResult {
     /// LoginSession dto.
     pub session: oz_core::auth::LoginSession,
-    /// Short-lived picker ticket (audit/06 residual).
+    /// Short-lived picker ticket (audit-open-findings residual).
     ///
     /// The pre-session `list_workspaces` / `list_workspace_screens`
     /// commands verify this ticket and resolve the caller's REAL role

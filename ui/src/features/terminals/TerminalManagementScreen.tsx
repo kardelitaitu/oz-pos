@@ -281,7 +281,7 @@ export default function TerminalManagementScreen() {
           setBindingStores(stores);
           if (b.boundStoreId) {
             setSelectedStoreId(b.boundStoreId);
-            // Load instances for the bound store (audit/06: session-scoped,
+            // Load instances for the bound store (audit-open-findings: session-scoped,
             // never a hardcoded role-owner claim).
             try {
               const instances = sessionToken

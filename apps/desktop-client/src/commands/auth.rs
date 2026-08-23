@@ -38,7 +38,7 @@ pub struct StaffLoginArgs {
 pub struct StaffLoginResult {
     /// Session info including user id, display name, and role.
     pub session: LoginSession,
-    /// Short-lived picker ticket (audit/06 residual).
+    /// Short-lived picker ticket (audit-open-findings residual).
     ///
     /// The pre-session `list_workspaces` / `list_workspace_screens`
     /// commands verify this ticket and resolve the caller's REAL role

@@ -1076,7 +1076,7 @@ fn update_workspace_instance_rejects_empty_name() {
     assert!(matches!(err, CoreError::Validation { field: "name", .. }));
 }
 
-// ── Session-mint authorization gate (audit/06 residual) ────────────
+// ── Session-mint authorization gate (audit-open-findings residual) ────────────
 //
 // `verify_instance_access` is the server-side gate `create_session`
 // calls in both desktop and tablet clients (ADR #4 / ADR #7). TDD red:
@@ -1087,7 +1087,7 @@ fn update_workspace_instance_rejects_empty_name() {
 // and never resolved the user, so any IPC caller who knew a user id
 // could mint a session AS that user (privilege escalation) in ANY
 // store's active instance (cross-store session minting) — the residual
-// recorded in audit/06.
+// recorded in audit-open-findings.
 
 /// Seed the built-in roles plus an owner user (role-owner carries `*`).
 fn seed_owner_user(conn: &rusqlite::Connection) {

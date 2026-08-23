@@ -228,7 +228,7 @@ fn migrations_create_expected_tables() {
         // 094 adds deduction_location_id + location_override_at to active_carts (no new table).
         // ── ADR #22 Phase 0d (migration 100) ──
         "setting_updated",
-        // ── audit/09 SYNC-01 (migration 114) ──
+        // ── audit-open-findings SYNC-01 (migration 114) ──
         "sync_pull_state",
         "sync_applied_items",
         "sync_remote_failures",

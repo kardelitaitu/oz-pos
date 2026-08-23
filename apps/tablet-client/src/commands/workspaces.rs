@@ -1,6 +1,6 @@
 //! Workspace listing and boot-resolution commands for the tablet client.
 //!
-//! Parity with the desktop client (audit/06 residual): the pre-session
+//! Parity with the desktop client (audit-open-findings residual): the pre-session
 //! workspace picker (`list_workspaces` / `list_workspace_screens`) only
 //! accepts the short-lived picker ticket minted by `staff_login` and
 //! resolves the caller's REAL user + role from the global identity
@@ -36,7 +36,7 @@ pub struct WorkspaceScreenDto {
 /// List workspace instances for the pre-session workspace picker.
 ///
 /// Parity with the desktop client: the caller presents the short-lived
-/// picker ticket minted by `staff_login` (audit/06 residual); the REAL
+/// picker ticket minted by `staff_login` (audit-open-findings residual); the REAL
 /// user is resolved from the global identity database and the REAL role
 /// is used for the listing. The requested store is opened through
 /// `StoreDatabaseManager` so this read cannot accidentally query the
@@ -110,7 +110,7 @@ pub async fn list_workspaces(
 /// selection. The store ID is explicit so the read is routed to the correct
 /// store database.
 ///
-/// Parity with the desktop client: the picker ticket (audit/06 residual)
+/// Parity with the desktop client: the picker ticket (audit-open-findings residual)
 /// proves the caller completed a real login before this bootstrap read can
 /// touch any store database.
 #[tauri::command]

@@ -7,7 +7,7 @@
 //! `rollback_last` reverts the most recently applied migration by
 //! running its `down` SQL (if one exists).
 //!
-//! # Integrity guarantees (audit/29 DB-02 / DB-05)
+//! # Integrity guarantees (audit-open-findings DB-02 / DB-05)
 //!
 //! * **Migration checksums** — every applied migration records a SHA-256
 //!   checksum of its SQL. [`run`] recomputes the checksum of each

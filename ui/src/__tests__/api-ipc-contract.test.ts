@@ -552,7 +552,7 @@ describe('workspaces.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('list_workspaces_scoped', { sessionToken: 'tok' });
   });
 
-  it('listWorkspaces binds the picker ticket server-side (audit/06)', async () => {
+  it('listWorkspaces binds the picker ticket server-side (audit-open-findings)', async () => {
     mockInvoke.mockResolvedValue([]);
     await listWorkspaces('ticket-abc', 'store-1');
     expect(mockInvoke).toHaveBeenCalledWith('list_workspaces', {
@@ -570,7 +570,7 @@ describe('workspaces.ts IPC contract', () => {
     });
   });
 
-  it('listWorkspaceScreens routes pre-session reads with ticket + typeKey + storeId (audit/06)', async () => {
+  it('listWorkspaceScreens routes pre-session reads with ticket + typeKey + storeId (audit-open-findings)', async () => {
     mockInvoke.mockResolvedValue([]);
     await listWorkspaceScreens('ticket-abc', 'restaurant-pos', 'store-1');
     expect(mockInvoke).toHaveBeenCalledWith('list_workspace_screens', {
