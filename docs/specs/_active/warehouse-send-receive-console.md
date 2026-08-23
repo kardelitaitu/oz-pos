@@ -1,226 +1,248 @@
-# Warehouse — Send/Receive Console
+# Warehouse POS — Professional Operations Console
 
-> **Status:** Proposed · **Area:** inventory, warehouse · **Depends on:** existing `stock_transfers` domain (Rust), workspace instance binding, product listing
+> **Status:** Proposed · **Area:** inventory, warehouse · **Version:** 2.0 (expanded to professional warehouse POS)
 
-**Architecture rule:** each workspace type is independently evolvable. The warehouse workspace **copies** its UI structure from the retail POS (`features/sales/`) rather than sharing components — no imports from `features/sales/*`. This keeps warehouse and retail-pos free to diverge without coupling.
+**Architecture rule:** each workspace type is independently evolvable. The warehouse workspace **copies** its UI structure from the retail POS (`features/retail/`) rather than sharing components — no imports from `features/retail/*` or `features/sales/*`. This keeps warehouse and retail-pos free to diverge without coupling.
+
+**Backend rule:** reuse the existing Rust domains (`stock_transfers`, `purchase_orders`, `stock_counts`, `inventory_locations`, `products.barcode/rack_location`) and ESC/POS printing. Add backend only where a workflow genuinely needs new state (damage marking, pick-list status).
 
 ---
 
 ## 1. Goal
 
-Replace the current WarehouseScreen (stock-view + manual adjust table) with a **POS-shaped daily operations console** where staff **send** goods outbound and **receive** goods inbound — the warehouse equivalent of ringing up sales.
+A **professional warehouse POS**: barcode-first, document-driven daily operations for inbound receiving, outbound picking/sending, cycle counting, and bin-level stock visibility — the warehouse equivalent of a retail POS, with the retail POS's speed and feel.
 
----
+## 2. What exists to build on (no re-invention)
 
-## 1b. Quick menu (function keys) — popup sessions
-
-The console has a **function-key quick menu** for fast daily operations, mirroring the retail workspace's F-key bar pattern (retail uses `retailShortcuts.ts` manifest + `RetailFnBar.tsx`; warehouse gets its own **copy** — `warehouseShortcuts.ts` + `WarehouseFnBar.tsx`, no shared imports, KEY-02 single-source rule applies).
-
-| Key | Action | Opens |
+| Capability | Existing artifact | Reuse |
 |---|---|---|
-| **F1** | `receive-popup` | **Incoming popup session** — receive popup |
-| **F2** | `send-popup` | **Outgoing popup session** — send popup |
-| **F3–F10** | *(placeholder)* | Reserved — rendered in the FnBar as placeholders, no behavior yet |
-| **F11** | `fullscreen` | Toggle fullscreen — **owned by the global shell binding** (`useFullscreen`), which is already active for every workspace except `store-pos` (retail claims F11 there, KEY-01). The warehouse does not re-bind F11; the FnBar shows an F11 badge pointing at the existing fullscreen toggle. |
-| **F12** | *(reserved)* | Reserved for future use |
+| Send/receive stock between locations | `stock_transfers` domain (draft → in_transit → received, partial receive) | Direct reuse |
+| Receive against supplier purchase orders | `purchase_orders` domain + `receive_purchase_order` (updates inventory) | Direct reuse |
+| Cycle counting | `stock_counts` domain (full / cyclic / spot → draft / in_progress → complete + adjustments) | Direct reuse |
+| Barcode scanning | `useBarcodeScanner` hook (sales) — **copied** into warehouse | Copy + edit |
+| Bin/rack per product | `products.rack_location` (ADR #36) | Direct reuse |
+| Printing | ESC/POS `print_receipt` / `print_sales_receipt` commands + printer abstraction | Add warehouse print payloads (label, packing slip, receiving report) |
 
-### Popup session behavior
+---
 
-- **F1 / F2** toggle a **persistent popup session** (a floating overlay, not a full navigation) that **stays open until explicitly dismissed** — "can be held open as needed".
-- The popup is a **mini console**: product grid + cart inside the overlay, sized to be usable while the main screen stays visible behind it.
-- It can be **held** (left open) while the operator does something else (checks the stock tab, another popup), and **dismissed** with Esc or the ✕ button.
-- Multiple sessions: F1 and F2 can be open **simultaneously** (incoming + outgoing at the same time), each a separate overlay — or one at a time if a single-overlay constraint is preferred (open decision).
-- Opening the same popup again (F1 while F1 is open) **focuses/brings it to front** instead of stacking duplicates.
-- Draggable/pinnable (open decision): a pinned popup stays attached; unpinned ones can be moved.
-
-### Why popups instead of tabs-only
-
-- Operators often process **interleaved** send and receive actions during a day (a truck arrives while outgoing picks are being packed). Popups let them switch instantly with two keys instead of tab-switching.
-- The **SEND / RECEIVE / STOCK tabs remain** in the main console for full-screen workflows; the F-keys are the fast path.
-
-### Implementation notes
-
-- Manifest: `warehouseShortcuts.ts` exports `WAREHOUSE_SHORTCUTS` (key, action, labelId, scope, editableGuard) + `getWarehouseShortcut()` — the FnBar, help overlay, and keydown handler all read from it (KEY-02 parity test included). F3–F10 and F12 entries carry placeholder actions so they render in the FnBar with a reserved label.
-- Keydown handler: `e.key === 'F1'` / `'F2'` with `editableGuard: true` (suppressed while typing in an input). F11 is **not** bound here — the global shell fullscreen binding already owns it for the warehouse workspace (KEY-01 single-owner rule).
-- Help overlay: `?` opens a shortcut list rendered from the same manifest.
-- `WarehouseFnBar.tsx`: bottom toolbar showing `F1 Receive` / `F2 Send`, F3–F10 placeholders, and an `F11 Fullscreen` badge (calls `useFullscreen().toggleFullscreen`), pure presentational with callbacks wired in the console.
-
-
-
-## 2. UI layout (copied from POS, edited)
+## 3. Console layout
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Warehouse · [SEND ▸] / [RECEIVE ◂] / [STOCK]    (tab) │
-├───────────────────────────┬─────────────────────────────┤
-│  PRODUCT GRID             │  CART PANEL                 │
-│                           │                             │
-│  ┌─────────────────────┐  │  SKU-001  Widget       5 ×  │
-│  │ 🔍 Search products  │  │  SKU-042  Bolt          2 ×  │
-│  └─────────────────────┘  │  SKU-103  Spring        1 ×  │
-│                           │                             │
-│  [SKU-001] [SKU-002]     │  ──────────                  │
-│  [SKU-003] [SKU-004]     │  Items: 8                    │
-│                           │                             │
-│                           │  [Complete SEND]            │
-│                           │  [Complete RECEIVE]         │
-├───────────────────────────┴─────────────────────────────┤
-│  (Stock transfer history list — collapsed accordion)     │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  Warehouse · [RECEIVE ▸] [SEND ▸] [COUNT] [STOCK]   (mode tabs)     │
+├───────────────────────────────────────────┬─────────────────────────┤
+│  SCAN / PICK INPUT                        │  SESSION PANEL (cart)   │
+│  ┌─────────────────────────────────────┐  │  Document: PO-2411 /     │
+│  │  [ 🔍 scan barcode or type SKU… ]  │  │  TRF-092  (source)      │
+│  └─────────────────────────────────────┘  │  ───────────────────    │
+│  [quick product grid — fallback tap]     │  SKU-042 Bolt      3×   │
+│  [SKU-001] [SKU-002] [SKU-003]          │  SKU-103 Spring    1×   │
+│  (bin: A-12)  (bin: B-04)  (bin: A-07)  │  ───────────────────    │
+│                                          │  Lines: 2 · Items: 4    │
+│                                          │  [Complete RECEIVE]     │
+│                                          │  [Print Label] [Print]  │
+├──────────────────────────────────────────┴─────────────────────────┤
+│  [F1 Receive] [F2 Send] [F3 Count] [F4 Stock] [F5 Print]  F3–F10  │
+│  F11 Fullscreen · F12 reserved                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.1 Copied from POS (self-contained copy in `features/warehouse/`)
+- **Barcode-first**: the top input is a persistent scan field; a hardware scan (or Enter) resolves the product and adds it to the session. The grid is a fallback for products without barcodes.
+- **Session panel** is the "cart" — but it shows the active document (PO or transfer), line quantities, and per-line bin hints.
+- **FnBar** mirrors the retail pattern (`warehouseShortcuts.ts` manifest + `WarehouseFnBar.tsx` + parity test).
 
-| POS artifact | Warehouse copy | Change |
+---
+
+## 4. F-key map
+
+| Key | Action | Behavior |
 |---|---|---|
-| Product grid (search, tap-to-add) | `WarehouseProductGrid.tsx` | Drop pricing highlights; show stock qty; tap adds to transfer cart not sale cart |
-| Cart panel (line items, qty editing, totals) | `WarehouseCartPanel.tsx` | Drop currency/tax rows; show simple item count; SEND/RECEIVE button replaces PAY button |
-| Layout (split panel, resizable cart) | `WarehouseConsole.tsx` (main screen) | Same two-panel flex layout; 3 mode tabs instead of POS features |
-| `posScreenUtils.ts` → cart width clamping | `warehouseUtils.ts` | Copied, same logic |
-| `usePosState.ts` (cart state machine) | `useWarehouseCart.ts` | Simplified: no modifiers, no courses, no tax, no customer. State: items + mode (send/receive) |
+| **F1** | `receive` | Incoming popup session — receive (PO or transfer) |
+| **F2** | `send` | Outgoing popup session — pick + send |
+| **F3** | `count` | Cycle-count popup session |
+| **F4** | `stock` | Stock view (bin-level) |
+| **F5** | `print` | Print menu (label / packing slip / receiving report) |
+| **F6–F10** | *(placeholder)* | Reserved — rendered, no handler |
+| **F11** | `fullscreen` | Global shell binding (already active for warehouse) — badge only |
+| **F12** | *(reserved)* | Placeholder |
 
-### 2.2 NOT copied (irrelevant to warehouse)
-
-- Payment modal, refund modal, price override, void orders
-- Customer management, table management
-- Restaurant-menu, course-bars
-- Barcode scanner (deferred — can add later)
-- Tax calculation, discount, promotion engine
-- EOD report, sales history
+**Popup sessions** (F1/F2/F3): persistent floating mini-consoles that stay open until dismissed (Esc / ✕) and can be held open while switching to another task. F1+F2 can be open simultaneously (interleaved inbound/outbound day). Re-press focuses instead of stacking.
 
 ---
 
-## 3. Mode tabs
+## 5. Workflows
 
-### SEND tab
+### 5.1 RECEIVE (inbound)
 
-1. Pick a **destination** from the topology (other warehouse/store instances — bound via `inventory_locations` + `workspace_instances`)
-2. Tap products in the grid → adds to cart (lines become transfer line items)
-3. Adjust quantities in cart
-4. Tap **"Complete Send"** → creates a draft transfer (`create_stock_transfer_scoped` with `sourceLocation=this_location`, `destinationLocation=picked`), then immediately sends it (`send_stock_transfer_scoped`) → stock leaves this location, transfer → `in_transit`
-5. Shows confirmation: "Sent! Transfer #WBL-042 — 8 items to Gudang Pusat"
+Two receive sources, selected at session start:
 
-**Design decisions:**
-- SEND creates + sends in one step (no separate "save draft" for daily ops — draft is for the form-based StockTransfersScreen which is separate).
-- The destination picker is a modal/popover listing available locations from `inventory_locations` (filtered by topology connections — warehouse → warehouse fallback wires, or warehouse → store for distributing stock).
+**A. Receive against Purchase Order (supplier inbound)** — primary
+1. Pick a PO (open/approved) → session pre-fills with its lines (SKU, expected qty, bin)
+2. **Scan each barcode** → line highlights, staff enters/confirms received qty
+3. Per-line **damage/quality marking**: `ok` / `damaged` / `short` (missing) — new state per line
+4. "Complete Receive" → `receive_purchase_order` for the good qty + a stock adjustment for damaged/short (new backend: record damage on the PO line)
+5. Auto-print **receiving report** (or queue for batch print)
 
-### RECEIVE tab
+**B. Receive against Stock Transfer (inter-warehouse inbound)**
+1. Pick an in-transit transfer destined for this location (`list_in_transit_transfers_scoped`)
+2. Scan lines, adjust `received_qty` per line (partial receive supported)
+3. "Complete Receive" → `receive_stock_transfer_scoped`
 
-1. Pick an **in-transit transfer** from the list (`list_in_transit_transfers_scoped`) — these are transfers destined for this location.
-2. Select one → cart pre-fills with its lines (SKU, product name, qty shipped)
-3. Staff adjusts the `received_qty` per line (partial receive supported by the existing domain)
-4. Tap **"Complete Receive"** → `receive_stock_transfer_scoped` with the received lines → stock lands here, transfer → `received`
+### 5.2 SEND (outbound — pick list + verify)
 
-**Design decisions:**
-- RECEIVE is **transfer-bound** (not free-form) — every receipt is tied to an originating send, keeping the audit trail intact.
-- Partial receive is supported: the cart shows shipped_qty as a readonly reference and a received_qty as the editable field.
+1. Pick a **destination** (store/warehouse from topology)
+2. Build the cart (scan or grid tap) — each line shows its **bin** (pick-from hint)
+3. **Pick-verify**: as items are picked, staff scans each one against the cart → line marks `picked` (new pick-list state)
+4. "Complete Send" → `create_stock_transfer` + `send_stock_transfer` (stock leaves, transfer → in_transit)
+5. Auto-print **packing slip**
 
-### STOCK tab (existing view, preserved)
+### 5.3 COUNT (cycle counting)
 
-Keeps the current location-scoped stock table (search/sort/filter/adjust) as a smaller tertiary tab — useful for quick checks and manual corrections but not the daily console.
+Reuses the `stock_counts` domain end-to-end:
+- Create count (full / cyclic / spot) → scan or type counted quantities per line → complete → adjustments posted
+- Warehouse console adds barcode-first counting UX on top of the existing `stock_counts` commands (existing StockCountsFlow screens stay for full management)
 
----
+### 5.4 STOCK (bin-level visibility)
 
-## 4. Data flow
+- Location-scoped stock table with **bin column** (`rack_location`) + search by SKU/name/barcode + sort + low-stock alerts
+- Manual ± adjust preserved (audit path) — same as current WarehouseScreen, kept as this tab
 
-```
-USE → picks mode + picks destination (SEND) or source transfer (RECEIVE)
-  ↓
-WarehouseCart (local React state) holds:
-  { lines: [{sku, productName, qty}],
-    mode: 'send' | 'receive',
-    sourceLocation?: string,
-    destLocation?: string,
-    transferId?: string }  // for receive mode
-  ↓  user clicks "Complete Send/Receive"
-  ↓
-if (mode === 'send') {
-  create_stock_transfer_scoped(sessionToken, ...)  ← creates draft
-  add_stock_transfer_line_scoped(sessionToken, ...) ← adds each line
-  send_stock_transfer_scoped(sessionToken, id)     ← set to in_transit, decrements stock
-} else if (mode === 'receive') {
-  receive_stock_transfer_scoped(sessionToken, id, [{lineId, receivedQty}]) ← increments stock
-}
-```
+### 5.5 PRINT
 
-**Important:** the Rust commands already exist and pass tests. The warehouse screen just calls them in the right sequence. No backend changes required.
+- **Product label**: single item → `print_receipt`-style ESC/POS payload (SKU, name, barcode)
+- **Packing slip**: send document → lines + qty + destination
+- **Receiving report**: receive document → lines + received/damaged/short
+- Reuses the printer abstraction; new payload builders in the warehouse feature
 
 ---
 
-## 5. Files to create
+## 6. Backend additions (minimal, only where workflows need new state)
+
+| Addition | Why | Where |
+|---|---|---|
+| PO line damage/short state | receive workflow must record quality per line | `purchase_order_lines` + `receive_purchase_order` extension or a `po_receive_lines` table |
+| Pick-list status on transfer lines | send workflow marks `picked` per line | `stock_transfer_lines.picked_qty` or status |
+| Scan-lookup command | resolve barcode → product at this location quickly | existing product lookup suffices — verify before adding |
+
+Everything else reuses existing commands — no backend change needed for the core send/receive/count flows.
+
+---
+
+## 7. Files to create (`ui/src/features/warehouse/` — all self-contained copies)
 
 ```
-ui/src/features/warehouse/
-├── WarehouseConsole.tsx      ← NEW: main screen (copied from PosScreen.tsx, edited)
-├── WarehouseProductGrid.tsx  ← NEW: product grid component (copied from POS grid)
-├── WarehouseCartPanel.tsx    ← NEW: cart panel (copied from POS cart, no pricing)
-├── warehouseUtils.ts         ← NEW: cart width clamp, helpers (copied from posScreenUtils.ts)
-├── useWarehouseCart.ts       ← NEW: cart state hook (copied from usePosState.ts, simplified)
-├── WarehouseScreen.tsx       ← DELETE (replaced by WarehouseConsole)
-├── WarehouseScreen.css       ← kept, expanded
-├── register.tsx              ← kept (re-register warehouse route)
-├── WarehouseSendDialog.tsx   ← NEW: destination picker modal for send
-├── WarehouseReceiveDialog.tsx ← NEW: in-transit transfer picker for receive
-├── WarehouseFnBar.tsx        ← NEW: F-key quick-menu toolbar (copied from RetailFnBar.tsx, edited)
-├── warehouseShortcuts.ts     ← NEW: F-key manifest (copied from retailShortcuts.ts, edited)
-├── warehouseShortcutParity.test.tsx ← NEW: manifest ⇄ FnBar ⇄ keydown parity test
-└── (Fluent keys live in the shared warehouse FTL — see §6)
+├── WarehouseConsole.tsx        ← main screen (copied from RetailPosScreen.tsx, edited)
+├── WarehouseScanInput.tsx      ← barcode-first input (copied from ProductLookupScreen/useBarcodeScanner)
+├── useWarehouseScanner.ts      ← copied from sales/useBarcodeScanner.ts
+├── WarehouseProductGrid.tsx    ← fallback grid with bin column (copied from RetailProductGrid.tsx)
+├── WarehouseSessionPanel.tsx   ← the "cart" — document + lines + qty (copied from RetailCartPanel.tsx)
+├── useWarehouseSession.ts      ← session state (copied from usePosState.ts / useRetail*, simplified)
+├── warehouseShortcuts.ts       ← F-key manifest (copied from retailShortcuts.ts)
+├── WarehouseFnBar.tsx          ← F-key bar (copied from RetailFnBar.tsx)
+├── warehouseShortcutParity.test.tsx
+├── receive/
+│   ├── WarehouseReceiveFlow.tsx    ← PO/transfer source picker + receive session
+│   └── WarehouseDamageDialog.tsx   ← per-line ok/damaged/short marking
+├── send/
+│   ├── WarehouseSendFlow.tsx       ← destination picker + pick-verify session
+│   └── WarehouseDestinationDialog.tsx
+├── count/
+│   └── WarehouseCountFlow.tsx      ← barcode-first counting (wraps stock_counts commands)
+├── stock/
+│   └── WarehouseStockTab.tsx       ← bin-level view (existing WarehouseScreen body)
+├── print/
+│   ├── labelPayload.ts             ← ESC/POS payload builders (label, packing slip, receiving)
+│   └── WarehousePrintDialog.tsx
+├── warehouseUtils.ts, warehouseTypes.ts, WarehouseScreen.css
+└── register.tsx (kept)
 ```
 
-## 6. FTL keys (en)
+**Retired:** the standalone `StockTransfersScreen` (form-based) is replaced by the warehouse SEND/RECEIVE console; the purchasing POs screen stays for PO creation, warehouse adds the receiving UX.
+
+---
+
+## 8. FTL keys (en — illustrative)
 
 ```
 warehouse-title = Warehouse
-warehouse-mode-send = Send
 warehouse-mode-receive = Receive
-warehouse-mode-stock = Stock View
+warehouse-mode-send = Send
+warehouse-mode-count = Count
+warehouse-mode-stock = Stock
+
+warehouse-scan-placeholder = Scan barcode or type SKU…
+warehouse-scan-no-match = No product matches that barcode
+warehouse-bin = Bin: { $bin }
+
+warehouse-receive-source-po = Receive from purchase order
+warehouse-receive-source-transfer = Receive from transfer
+warehouse-receive-expected = Expected
+warehouse-receive-received = Received
+warehouse-receive-damaged = Damaged
+warehouse-receive-short = Short
+warehouse-receive-complete = Complete Receive
 
 warehouse-send-destination = Send to…
-warehouse-receive-transfer = Receive from transfer
-warehouse-receive-no-transfers = No in-transit transfers
+warehouse-send-pick-verify = Scan to verify picked
+warehouse-send-complete = Complete Send
 
-warehouse-cart-complete-send = Complete Send
-warehouse-cart-complete-receive = Complete Receive
-warehouse-cart-item-count = { $count } item{ $count ->
-  [one] 
- *[other] s
-}
+warehouse-count-create = Start Count
+warehouse-count-scan = Scan to count
+warehouse-count-complete = Complete Count
 
-warehouse-cart-line-qty = Qty
-warehouse-send-confirmed = Sent! { $number } — { $count } items to { $destination }
-warehouse-receive-confirmed = Received! { $number } — { $count } items
+warehouse-print-label = Print Label
+warehouse-print-packing = Print Packing Slip
+warehouse-print-receiving = Print Receiving Report
 
 warehouse-fn-receive = Receive
 warehouse-fn-send = Send
+warehouse-fn-count = Count
+warehouse-fn-stock = Stock
+warehouse-fn-print = Print
 warehouse-fn-reserved = { $key }
 warehouse-fn-fullscreen = Fullscreen
 warehouse-fn-bar-aria = Function keys
+
 warehouse-popup-receive-title = Incoming session
 warehouse-popup-send-title = Outgoing session
-warehouse-popup-pin = Pin popup
+warehouse-popup-count-title = Count session
 warehouse-popup-close = Close
 ```
 
-Same keys in the ID bundle with Indonesian translations.
+(Same keys in the ID bundle with Indonesian translations.)
 
 ---
 
-## 7. Open decisions (to resolve during implementation)
+## 9. Phased delivery
 
-1. **One-click Send vs. two-click** (create draft + send in one step vs. create draft, review, send) — lean one-click for daily operations; draft is for the separate StockTransfersScreen.
-2. **Transfer number format** — reuse existing `transfer_number` from the domain or add a warehouse-specific prefix (e.g. `WBL-???`)? The domain already generates numbers.
-3. **Receive confirmation display** — toast + cart reset, or a full SuccessScreen-like confirmation? Lean toast.
-4. **Stock tab visibility** — header tab or a "View Stock" button inside the console? Lean tab.
-5. **Popup concurrency** — can F1 (incoming) and F2 (outgoing) popups be open simultaneously, or one overlay at a time? Lean simultaneous.
-6. **Popup hold/pin** — should popups be draggable and pinnable (stay open), or fixed position? Lean: fixed position, stays open until Esc/✕ (hold = just don't close it); pinning is a nice-to-have.
+| Phase | Scope | Depends on |
+|---|---|---|
+| **P1 — Console + SEND/RECEIVE core** | `warehouseShortcuts` + `WarehouseFnBar`, console shell, scan input, session panel; receive against **transfers** + send with pick-verify (existing commands only) | None (foundations exist) |
+| **P2 — PO receiving + damage marking** | receive against **purchase orders**, damage/short per line, receiving-report print | New backend: PO-line receive state |
+| **P3 — Count** | barcode-first counting popup wrapping `stock_counts` commands | P1 console |
+| **P4 — Print** | label + packing slip + receiving report payloads + dialog | P1 (ESC/POS exists) |
+| **P5 — Stock tab + polish** | bin-level stock view, low-stock, manual adjust | P1 |
+
+P1 alone delivers the "professional warehouse POS" daily flow for inter-warehouse movement; P2 adds supplier receiving; P3–P5 round it out.
 
 ---
 
-## 8. Test level
+## 10. Test level
 
-- Vitest: unit-test the state hook (`useWarehouseCart` — add line, remove line, change qty, switch mode)
-- Vitest: the two dialogs render and submit the right commands
-- Vitest: the console renders both modes
-- Vitest: F-key parity test — `warehouseShortcuts` manifest ⇄ `WarehouseFnBar` labels ⇄ keydown handler agree (KEY-02 pattern); F3–F10/F12 are placeholders (no keydown handlers), F11 is owned by the shell (asserted, not re-bound)
-- Vitest: F1/F2 open and dismiss popup sessions; Esc closes; re-press focuses instead of stacking
-- Rust: existing stock_transfer tests already cover send/receive — no Rust changes expected
+- Vitest: `useWarehouseSession` (add/remove line, qty, mode switch, pick-verify state)
+- Vitest: scan input resolves barcode → adds line; no-match shows toast
+- Vitest: receive flow against transfer + PO renders and submits correct commands
+- Vitest: damage dialog posts per-line state
+- Vitest: F-key parity (manifest ⇄ FnBar ⇄ keydown; placeholders have no handlers; F11 shell-owned)
+- Rust: new backend additions (PO receive state, picked_qty) get unit + integration tests; existing send/receive/count tests remain green
+
+---
+
+## 11. Open decisions
+
+1. **Popup concurrency** — F1+F2 simultaneous (lean: yes, interleaved day)
+2. **Damage handling** — mark per-line on receive vs. separate damage adjustment after; lean per-line on receive
+3. **Pick-verify strictness** — send blocked until every line `picked` vs. allow override; lean: warn but allow manager override
+4. **Receive confirmation** — toast + cart reset vs. full success screen; lean: toast + print offer
+5. **Transfer number prefix** — reuse domain `transfer_number` vs. warehouse prefix (`WBL-`); lean reuse
+6. **Grid vs scan-only** — keep fallback grid (lean: keep, for non-barcoded items)
