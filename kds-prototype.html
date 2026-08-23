@@ -356,8 +356,39 @@
     border: 1px solid var(--border); min-height: 0; height: fit-content;
     width: 100%; max-width: 100%;
     transition: border-color 0.2s; color: var(--text);
+    will-change: transform; /* FLIP moves animate on transform only */
   }
   .kds-card:hover { border-color: var(--border-strong); }
+
+  /* Card lifecycle animations (spawn / gone / move) via FLIP.
+     - .kds-card-spawn: new order scales+fades in
+     - .kds-card.leaving: completed card animates out IN PLACE first,
+       then the re-render triggers neighbours' FLIP into the gap
+     - .kds-moving: transform transition set inline by JS during FLIP */
+  @keyframes kds-card-in {
+    from { opacity: 0; transform: scale(0.92) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .kds-card-spawn { animation: kds-card-in 0.42s ease-out; }
+  /* leaving: the card itself animates out IN PLACE first; the re-render
+     (and the neighbours' FLIP up into the gap) happens only after it is
+     gone, so the sequence reads: card leaves → then others move. */
+  .kds-card.leaving {
+    pointer-events: none;
+    animation: kds-card-out 1s ease-in forwards;
+  }
+  @keyframes kds-card-out {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0.5; transform: scale(0); }
+  }
+  .kds-moving { transition: transform 0.45s cubic-bezier(0.33, 1, 0.68, 1) !important; }
+  /* reduced motion: system-level and our toggle both land here */
+  body.no-anim .kds-card-spawn, body.no-anim .kds-card.leaving { animation: none; }
+  body.no-anim .kds-moving { transition: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .kds-card-spawn, .kds-card.leaving { animation: none !important; }
+    .kds-moving { transition: none !important; }
+  }
 
   .kds-card-header {
     flex: 0 0 auto; display: flex; align-items: center; gap: 9px;
@@ -612,6 +643,10 @@
             <label for="toggle-ack">Auto-acknowledge</label>
             <button class="kds-switch" id="toggle-ack" role="switch" aria-checked="false" aria-label="Auto-acknowledge new orders"></button>
           </div>
+          <div class="kds-switch-row">
+            <label for="toggle-anim">Card animations</label>
+            <button class="kds-switch on" id="toggle-anim" role="switch" aria-checked="true" aria-label="Card spawn and move animations"></button>
+          </div>
         </div>
         <div class="kds-panel-section">
           <h3>Card Colours</h3>
@@ -862,8 +897,31 @@
     btn.setAttribute('aria-expanded', collapsedOrders.has(id) ? 'false' : 'true');
   }
   function complete(orderId) {
-    orders = orders.map(o => o.id === orderId ? { ...o, status: 'completed' } : o);
-    render();
+    const card = document.querySelector(`.kds-card[data-id="${orderId}"]`);
+    if (card && kitchen.anim !== false) {
+      /* animate the card out IN PLACE first. Two guards:
+         1) leaveLock: any render() during the animation is deferred
+         2) data is NOT marked completed until after the animation.
+        The animationend listener is filtered to the card itself
+        (bubbled events from child animations ignored). The timeout
+        at 1050ms is the primary trigger — animationend just accelerates
+        it slightly. */
+      leaveLock = true;
+      card.classList.add('leaving');
+      const finish = () => {
+        if (!leaveLock) return; // already ran
+        leaveLock = false;
+        orders = orders.map(o => o.id === orderId ? { ...o, status: 'completed' } : o);
+        render();
+      };
+      card.addEventListener('animationend', (e) => {
+        if (e.target === card) finish();
+      });
+      setTimeout(finish, 1050); // leave animation is 1s
+    } else {
+      orders = orders.map(o => o.id === orderId ? { ...o, status: 'completed' } : o);
+      render();
+    }
   }
   function reopen(orderId) {
     orders = orders.map(o => o.id === orderId ? { ...o, status: 'paused' } : o);
@@ -976,7 +1034,7 @@
     // 'new' and not all done → no button at all
 
     return `
-    <div class="kds-card${collapsedOrders.has(o.id) ? ' collapsed' : ''}">
+    <div class="kds-card${collapsedOrders.has(o.id) ? ' collapsed' : ''}" data-id="${o.id}" data-received="${o.received}">
       <button class="kds-card-header" style="background:${hdrBg};color:${hdrText}" onclick="toggleCardCollapsed('${o.id}', this)" aria-expanded="${collapsedOrders.has(o.id) ? 'false' : 'true'}">
         <div class="kds-card-header-icon">${o.dineIn ? DINE_ICON : TAKEAWAY_ICON}</div>
         <div class="kds-card-header-left">
@@ -1046,17 +1104,22 @@
     </div>`;
   }
 
+  let leaveLock = false;
   let prevTab = 'open';
   function render() {
+    if (leaveLock) return; // a card is mid-leave; defer until animationend
     const main = document.getElementById('main');
-    /* Smart positioning: RUSH/priority first, then oldest received first,
-       paused orders pinned to the end (they're waiting, not cooking). */
+    const savedScroll = main.scrollTop; // preserve scroll position across rebuild
+    const animOn = kitchen.anim !== false && tab === prevTab;
+
+    /* Static positioning — cards stay where they are once placed:
+       RUSH/priority first, then oldest received first (FIFO).
+       Paused orders do NOT move to the bottom: the ⏸ icon + amber
+       colour already mark them, and keeping them in place avoids
+       confusing card jumps on pause/resume. */
     const open = orders
       .filter(o => o.status !== 'completed' && (!filterCats || visibleCats(o).length > 0))
       .sort((a, b) => {
-        const aPaused = a.status === 'paused' ? 1 : 0;
-        const bPaused = b.status === 'paused' ? 1 : 0;
-        if (aPaused !== bPaused) return aPaused - bPaused;
         if (a.priority !== b.priority) return a.priority ? -1 : 1;
         return a.received - b.received; // oldest first
       });
@@ -1066,14 +1129,25 @@
 
     if (tab === 'open') {
       main.className = 'kds-main' + (open.length === 0 ? ' empty' : '') + (prevTab !== 'open' ? ' slide-right' : '');
+
+      /* ── FLIP: FIRST — record old card positions ── */
+      let oldPos = null;
+      if (animOn) {
+        oldPos = new Map();
+        main.querySelectorAll('.kds-card[data-id]').forEach(card => {
+          const r = card.getBoundingClientRect();
+          oldPos.set(card.dataset.id, {
+            left: r.left, top: r.top, width: r.width, height: r.height, el: card,
+          });
+        });
+      }
+
       main.innerHTML = '';
       if (open.length === 0) {
         main.innerHTML = '<div class="kds-empty">No active orders — kitchen is clear</div>';
       } else {
         /* JS masonry: create up to 4 equal columns, then append each
-           card to the shortest column so heights pack with no gaps.
-           Note: use firstElementChild — cardHTML starts with whitespace,
-           so firstChild would be a text node. */
+           card to the shortest column so heights pack with no gaps. */
         const nCols = Math.max(1, Math.min(4, Math.floor((main.clientWidth || 1200) / 312)));
         const cols = [];
         for (let c = 0; c < nCols; c++) {
@@ -1092,6 +1166,33 @@
           shortest.appendChild(card);
         });
       }
+
+      /* ── FLIP: LAST + INVERT + PLAY ──
+         Gone cards are handled by complete() (they animate out in place
+         BEFORE the re-render), so here we only FLIP survivors + spawn. */
+      if (animOn && oldPos && oldPos.size > 0) {
+        const newCards = main.querySelectorAll('.kds-card[data-id]');
+
+        /* FLIP: animate existing cards from old → new position */
+        newCards.forEach(card => {
+          const id = card.dataset.id;
+          const o = oldPos.get(id);
+          if (!o) {
+            card.classList.add('kds-card-spawn');
+            return;
+          }
+          const r = card.getBoundingClientRect();
+          const dx = o.left - r.left;
+          const dy = o.top - r.top;
+          if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return; // no move
+          card.classList.add('kds-moving');
+          card.style.transform = `translate(${dx}px, ${dy}px)`;
+          void card.offsetWidth; // force reflow → the inverted position is rendered
+          card.style.transform = '';
+          const end = () => { card.classList.remove('kds-moving'); card.removeEventListener('transitionend', end); };
+          card.addEventListener('transitionend', end);
+        });
+      }
     } else {
       main.className = 'kds-main completed-view' + (prevTab !== 'completed' ? ' slide-left' : '');
       main.innerHTML = done.length === 0
@@ -1099,6 +1200,9 @@
         : done.map(completedRowHTML).join('');
     }
     prevTab = tab;
+    /* restore scroll position — innerHTML = '' resets scrollTop to 0,
+       which would yank the kitchen back to the top on every interaction */
+    main.scrollTop = savedScroll;
   }
 
   function overrideComplete(orderId, remaining) {
@@ -1232,23 +1336,27 @@
   function loadKitchen() {
     try {
       const raw = localStorage.getItem(KITCHEN_KEY);
-      if (raw) return { sound: true, ack: false, ...JSON.parse(raw) };
+      if (raw) return { sound: true, ack: false, anim: true, ...JSON.parse(raw) };
     } catch {}
-    return { sound: true, ack: false };
+    return { sound: true, ack: false, anim: true };
   }
   function saveKitchen() { try { localStorage.setItem(KITCHEN_KEY, JSON.stringify(kitchen)); } catch {} }
   let kitchen = loadKitchen();
   function applyKitchen() {
-    ['sound', 'ack'].forEach(k => {
+    ['sound', 'ack', 'anim'].forEach(k => {
       const el = document.getElementById('toggle-' + k);
       if (!el) return;
       const on = kitchen[k] === true;
       el.classList.toggle('on', on);
       el.setAttribute('aria-checked', on);
     });
+    /* global reduced-motion class: kills all CSS animations/transitions */
+    document.body.classList.toggle('no-anim', kitchen.anim !== true);
   }
   document.getElementById('toggle-sound').addEventListener('click', () => { kitchen.sound = !kitchen.sound; saveKitchen(); applyKitchen(); });
   document.getElementById('toggle-ack').addEventListener('click', () => { kitchen.ack = !kitchen.ack; saveKitchen(); applyKitchen(); });
+  document.getElementById('toggle-anim').addEventListener('click', () => { kitchen.anim = !kitchen.anim; saveKitchen(); applyKitchen(); });
+  applyKitchen();
   applyKitchen();
 
   document.getElementById('reset-colors').addEventListener('click', () => {
@@ -1301,8 +1409,21 @@
   setInterval(tick, 1000);
   tick();
 
-  /* Re-render cards every 10s so durations stay live */
-  setInterval(render, 10000);
+  /* Live durations WITHOUT re-rendering: update the elapsed text on
+     each card in place. Re-rendering the whole board every N seconds
+     was destroying mid-animation cards (leaving/spawn/FLIP), so cards
+     must never be rebuilt just to refresh a timer. */
+  function tickCardTimers() {
+    const cards = document.querySelectorAll('.kds-card[data-received]');
+    const now = Date.now();
+    cards.forEach(card => {
+      const received = Number(card.dataset.received);
+      if (!received) return;
+      const el = card.querySelector('.customer .time');
+      if (el) el.textContent = '(' + fmtDuration(now - received) + ')';
+    });
+  }
+  setInterval(tickCardTimers, 1000);
   buildSwatches();
   Object.keys(SWATCHES).forEach(key => syncColorRow(key));
   render();
