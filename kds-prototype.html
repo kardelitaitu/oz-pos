@@ -191,12 +191,15 @@
   /* ── MAIN ───────────────────────────────────────── */
   .kds-main {
     flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0; padding: 14px;
-    display: flex; flex-wrap: wrap; align-content: flex-start;
+    /* JS masonry: .kds-col columns grow in height, so vertical scroll
+       works (CSS columns can't scroll inside a fixed-height box). */
+    display: flex; flex-direction: row; align-items: flex-start;
     gap: 12px;
   }
-  .kds-main > .kds-card { width: fit-content; min-width: 300px; max-width: 100%; }
-  .kds-main.completed-view { display: flex; flex-direction: column; gap: 8px; }
-  .kds-main.completed-view > .kds-card { margin-bottom: 0; }
+  .kds-main > .kds-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .kds-main > .kds-col > .kds-card { width: 100%; max-width: 100%; }
+  .kds-main.completed-view { display: block; }
+  .kds-main.completed-view > .kds-completed-card { margin-bottom: 8px; }
 
   /* Tab slide transition */
   @keyframes kds-slide-in-right { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
@@ -776,9 +779,32 @@
 
     if (tab === 'open') {
       main.className = 'kds-main' + (prevTab !== 'open' ? ' slide-right' : '');
-      main.innerHTML = open.length === 0
-        ? '<div class="kds-empty">No open orders</div>'
-        : open.map(cardHTML).join('');
+      main.innerHTML = '';
+      if (open.length === 0) {
+        main.innerHTML = '<div class="kds-empty">No open orders</div>';
+      } else {
+        /* JS masonry: create up to 4 equal columns, then append each
+           card to the shortest column so heights pack with no gaps.
+           Note: use firstElementChild — cardHTML starts with whitespace,
+           so firstChild would be a text node. */
+        const nCols = Math.max(1, Math.min(4, Math.floor((main.clientWidth || 1200) / 312)));
+        const cols = [];
+        for (let c = 0; c < nCols; c++) {
+          const el = document.createElement('div');
+          el.className = 'kds-col';
+          main.appendChild(el);
+          cols.push(el);
+        }
+        open.forEach(o => {
+          const wrap = document.createElement('div');
+          wrap.innerHTML = cardHTML(o);
+          const card = wrap.firstElementChild;
+          if (!card) return;
+          let shortest = cols[0];
+          cols.forEach(col => { if (col.offsetHeight < shortest.offsetHeight) shortest = col; });
+          shortest.appendChild(card);
+        });
+      }
     } else {
       main.className = 'kds-main completed-view' + (prevTab !== 'completed' ? ' slide-left' : '');
       main.innerHTML = done.length === 0
