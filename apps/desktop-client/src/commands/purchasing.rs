@@ -415,6 +415,37 @@ pub async fn receive_purchase_order(
     Ok(PurchaseOrderDto::from(po))
 }
 
+#[tauri::command]
+/// Receive a purchase order with per-line received/damaged quantities
+/// (warehouse Phase 2 — damage marking).
+pub async fn receive_purchase_order_with_lines(
+    id: String,
+    lines: Vec<ReceivePoLineDto>,
+    state: State<'_, AppState>,
+) -> Result<PurchaseOrderDto, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let input: Vec<ReceivePoLineInput> = lines
+        .into_iter()
+        .map(|l| ReceivePoLineInput {
+            line_id: l.line_id,
+            received_qty: l.received_qty,
+            damaged_qty: l.damaged_qty,
+        })
+        .collect();
+    let po = store.receive_purchase_order_with_lines(&id, &input)?;
+    drop(db);
+    Ok(PurchaseOrderDto::from(po))
+}
+
+/// Input for receiving one PO line with damage accounting (IPC DTO).
+#[derive(Debug, serde::Deserialize)]
+pub struct ReceivePoLineDto {
+    pub line_id: String,
+    pub received_qty: i64,
+    pub damaged_qty: i64,
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -66,6 +66,29 @@ pub struct PurchaseOrderLine {
     pub unit_cost_minor: i64,
     /// Line total in minor units (qty × unit_cost).
     pub line_total_minor: i64,
+    /// Quantity received in good condition (warehouse receive workflow).
+    /// Defaults to 0; set when the PO line is received (migration
+    /// `20260823_po_receive_state.sql`).
+    #[serde(default)]
+    pub received_qty: i64,
+    /// Quantity received but damaged/unsellable (warehouse receive
+    /// workflow). Defaults to 0. Damaged items are recorded on the line
+    /// for the receiving report; they are not added to sellable stock.
+    #[serde(default)]
+    pub damaged_qty: i64,
+}
+
+impl PurchaseOrderLine {
+    /// Short quantity = ordered − received − damaged.
+    pub fn short_qty(&self) -> i64 {
+        (self.qty - self.received_qty - self.damaged_qty).max(0)
+    }
+
+    /// Whether this line has been fully accounted for on receive
+    /// (received + damaged == ordered).
+    pub fn fully_accounted(&self) -> bool {
+        self.received_qty + self.damaged_qty >= self.qty
+    }
 }
 
 /// A [`PurchaseOrder`] enriched with its line items and supplier name.
@@ -123,6 +146,8 @@ impl PurchaseOrderLine {
             qty: 0,
             unit_cost_minor: 0,
             line_total_minor: 0,
+            received_qty: 0,
+            damaged_qty: 0,
         }
     }
 }

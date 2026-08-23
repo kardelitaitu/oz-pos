@@ -149,6 +149,8 @@ pub struct PgSyncSettingsDto {
     pub user: Option<String>,
     /// Whether a password is stored (never echoed back).
     pub has_password: bool,
+    /// Whether the transport requires a TLS connection to PostgreSQL.
+    pub require_tls: bool,
 }
 
 /// Get PG sync settings.
@@ -169,6 +171,7 @@ fn run_get_pg_sync_settings(conn: &Connection) -> Result<PgSyncSettingsDto, AppE
         dbname: Settings::get_pg_sync_dbname(conn)?.filter(|s| !s.is_empty()),
         user: Settings::get_pg_sync_user(conn)?.filter(|s| !s.is_empty()),
         has_password: Settings::get_pg_sync_password(conn)?.is_some_and(|s| !s.is_empty()),
+        require_tls: Settings::get_pg_sync_require_tls(conn)?,
     })
 }
 
@@ -190,6 +193,9 @@ pub struct UpdatePgSyncSettingsArgs {
     /// untouched field never blanks the stored secret (mirror of the
     /// HTTP sync API-key handling).
     pub password: Option<String>,
+    /// Whether the transport requires a TLS connection to PostgreSQL.
+    /// Written on every update (defaults to `false` when absent).
+    pub require_tls: Option<bool>,
 }
 
 /// Update PG sync settings.
@@ -224,6 +230,8 @@ pub fn update_pg_sync_settings_data(
     if let Some(ref password) = args.password {
         Settings::set_pg_sync_password(&tx, password)?;
     }
+    // Write require_tls on every update (defaults to false when absent).
+    Settings::set_pg_sync_require_tls(&tx, args.require_tls.unwrap_or(false))?;
     tx.commit()?;
     Ok(())
 }

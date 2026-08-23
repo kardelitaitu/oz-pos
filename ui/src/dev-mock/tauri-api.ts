@@ -2284,7 +2284,22 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // STOCK TRANSFERS
   // ═══════════════════════════════════════════════════════════════
 
-  'create_stock_transfer_scoped': () => null,
+  'create_stock_transfer_scoped': () => ({
+    id: `mock-trf-${Date.now()}`,
+    transfer_number: `TRF-${Date.now().toString(36).toUpperCase()}`,
+    status: 'draft',
+    source_location: 'Warehouse A',
+    destination_location: 'Store B',
+    source_terminal_id: null,
+    destination_terminal_id: null,
+    notes: '',
+    created_by: 'admin-1',
+    received_by: null,
+    created_at: new Date().toISOString(),
+    sent_at: null,
+    received_at: null,
+    updated_at: new Date().toISOString(),
+  }),
   'get_stock_transfer_scoped': () => null,
   'list_stock_transfers_scoped': () => [
     { id: 'st-1', transfer_number: 'ST-001', status: 'draft', source_location: 'Warehouse A', destination_location: 'Store B', source_terminal_id: null, destination_terminal_id: null, notes: '', created_by: 'admin-1', received_by: null, created_at: new Date().toISOString(), sent_at: null, received_at: null, updated_at: new Date().toISOString() },

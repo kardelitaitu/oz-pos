@@ -426,6 +426,23 @@ impl Settings {
         Self::set(conn, keys::PG_SYNC_PASSWORD, password)
     }
 
+    /// Get whether PG sync must connect over TLS.
+    pub fn get_pg_sync_require_tls(conn: &Connection) -> Result<bool, PlatformError> {
+        Ok(Self::get(conn, keys::PG_SYNC_REQUIRE_TLS)?.as_deref() == Some("1"))
+    }
+
+    /// Set whether PG sync must connect over TLS.
+    pub fn set_pg_sync_require_tls(
+        conn: &Connection,
+        require_tls: bool,
+    ) -> Result<(), PlatformError> {
+        Self::set(
+            conn,
+            keys::PG_SYNC_REQUIRE_TLS,
+            if require_tls { "1" } else { "0" },
+        )
+    }
+
     // ── Redis Cache ────────────────────────────────────────────────
 
     /// Get the Redis server URL.

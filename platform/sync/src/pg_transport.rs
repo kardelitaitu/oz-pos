@@ -118,10 +118,13 @@ impl std::fmt::Debug for PgTransport {
 }
 
 impl PgTransport {
-    /// Create a new PostgreSQL transport from connection parameters.
+    /// Create a new PostgreSQL transport from connection parameters (NoTls).
     ///
     /// `tenant_id` scopes every pull/snapshot/push query so the transport
     /// is safe to point at a shared multi-tenant database.
+    ///
+    /// Connection uses plaintext TCP (no TLS). For a TLS-required connection
+    /// use [`Self::new_with_tls`] with `require_tls: true`.
     pub fn new(
         host: &str,
         port: u16,
@@ -130,28 +133,68 @@ impl PgTransport {
         password: &str,
         tenant_id: &str,
     ) -> Result<Self, SyncError> {
+        Self::new_with_tls(host, port, dbname, user, password, tenant_id, false)
+    }
+
+    /// Create a PostgreSQL transport with optional TLS enforcement.
+    ///
+    /// When `require_tls` is `true`, the transport refuses to connect unless
+    /// the server offers an encrypted session (`sslmode=require`). The
+    /// connector uses rustls with the platform's native certificate roots
+    /// (matching the cloud server's `DbPool::connect_postgres`).
+    ///
+    /// When `false`, the connection uses plaintext TCP (`NoTls`), matching
+    /// the historical behaviour of [`Self::new`].
+    pub fn new_with_tls(
+        host: &str,
+        port: u16,
+        dbname: &str,
+        user: &str,
+        password: &str,
+        tenant_id: &str,
+        require_tls: bool,
+    ) -> Result<Self, SyncError> {
         let mut config = tokio_postgres::Config::new();
         config.host(host);
         config.port(port);
         config.dbname(dbname);
         config.user(user);
         config.password(password);
-        let manager = deadpool_postgres::Manager::new(config, NoTls);
-        let pool = deadpool_postgres::Pool::builder(manager)
-            .runtime(deadpool_postgres::Runtime::Tokio1)
-            .max_size(5)
-            // Bound the wait for a pool slot: deadpool defaults to an
-            // UNBOUNDED wait, so a stalled PG connection would hang the
-            // sync daemon's tick forever. Mirror the cloud server's bounds
-            // (apps/cloud-server/src/db.rs): fail fast after 5s instead.
-            .wait_timeout(Some(std::time::Duration::from_secs(5)))
-            // Bound connection establishment so a flaky remote PG cannot
-            // block the daemon cycle indefinitely.
-            .create_timeout(Some(std::time::Duration::from_secs(10)))
-            // Bound the recycle (is_closed) probe on a wedged connection.
-            .recycle_timeout(Some(std::time::Duration::from_secs(5)))
-            .build()
-            .map_err(|e| SyncError::Transport(format!("failed to create pg pool: {e}")))?;
+
+        let pool = if require_tls {
+            // Build a rustls connector with native certificate roots.
+            config.ssl_mode(tokio_postgres::config::SslMode::Require);
+            let mut roots = rustls::RootCertStore::empty();
+            let native = rustls_native_certs::load_native_certs();
+            for cert in native.certs {
+                roots
+                    .add(cert)
+                    .map_err(|e| SyncError::Transport(format!("failed to add root cert: {e}")))?;
+            }
+            let tls_config = rustls::ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            let tls = tokio_postgres_rustls::MakeRustlsConnect::new(tls_config);
+            let manager = deadpool_postgres::Manager::new(config, tls);
+            deadpool_postgres::Pool::builder(manager)
+                .runtime(deadpool_postgres::Runtime::Tokio1)
+                .max_size(5)
+                .wait_timeout(Some(std::time::Duration::from_secs(5)))
+                .create_timeout(Some(std::time::Duration::from_secs(10)))
+                .recycle_timeout(Some(std::time::Duration::from_secs(5)))
+                .build()
+                .map_err(|e| SyncError::Transport(format!("failed to create pg pool: {e}")))?
+        } else {
+            let manager = deadpool_postgres::Manager::new(config, NoTls);
+            deadpool_postgres::Pool::builder(manager)
+                .runtime(deadpool_postgres::Runtime::Tokio1)
+                .max_size(5)
+                .wait_timeout(Some(std::time::Duration::from_secs(5)))
+                .create_timeout(Some(std::time::Duration::from_secs(10)))
+                .recycle_timeout(Some(std::time::Duration::from_secs(5)))
+                .build()
+                .map_err(|e| SyncError::Transport(format!("failed to create pg pool: {e}")))?
+        };
 
         Ok(Self {
             pool,

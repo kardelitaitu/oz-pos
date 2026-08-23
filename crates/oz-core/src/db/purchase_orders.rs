@@ -50,7 +50,8 @@ impl Store<'_> {
         }
 
         let mut line_stmt = self.conn.prepare(
-            "SELECT id, po_id, sku, product_name, qty, unit_cost_minor, line_total_minor
+            "SELECT id, po_id, sku, product_name, qty, unit_cost_minor, line_total_minor,
+                    received_qty, damaged_qty
              FROM purchase_order_lines WHERE po_id = ?1 ORDER BY id",
         )?;
 
@@ -66,6 +67,8 @@ impl Store<'_> {
                         qty: row.get("qty")?,
                         unit_cost_minor: row.get("unit_cost_minor")?,
                         line_total_minor: row.get("line_total_minor")?,
+                        received_qty: row.get("received_qty")?,
+                        damaged_qty: row.get("damaged_qty")?,
                     })
                 })?
                 .map(|r| Ok(r?))
@@ -121,7 +124,8 @@ impl Store<'_> {
         };
 
         let mut line_stmt = self.conn.prepare(
-            "SELECT id, po_id, sku, product_name, qty, unit_cost_minor, line_total_minor
+            "SELECT id, po_id, sku, product_name, qty, unit_cost_minor, line_total_minor,
+                    received_qty, damaged_qty
              FROM purchase_order_lines WHERE po_id = ?1 ORDER BY id",
         )?;
         let lines: Vec<PurchaseOrderLine> = line_stmt
@@ -134,6 +138,8 @@ impl Store<'_> {
                     qty: row.get("qty")?,
                     unit_cost_minor: row.get("unit_cost_minor")?,
                     line_total_minor: row.get("line_total_minor")?,
+                    received_qty: row.get("received_qty")?,
+                    damaged_qty: row.get("damaged_qty")?,
                 })
             })?
             .map(|r| Ok(r?))
@@ -257,6 +263,8 @@ impl Store<'_> {
                 qty: line.qty,
                 unit_cost_minor: line.unit_cost_minor,
                 line_total_minor: line_total,
+                received_qty: 0,
+                damaged_qty: 0,
             });
         }
 
@@ -377,6 +385,119 @@ impl Store<'_> {
         po.order.updated_at = now;
         Ok(po)
     }
+
+    /// Receive a purchase order with per-line received/damaged quantities
+    /// (warehouse Phase 2).
+    ///
+    /// Each [`ReceivePoLineInput`] declares how many units of that line were
+    /// received in good condition and how many arrived damaged. Only the
+    /// good quantity is added to sellable stock; damaged units are recorded
+    /// on the line (for the receiving report / supplier claim) but never
+    /// enter stock. Short (ordered − received − damaged) is implied and
+    /// surfaced via [`PurchaseOrderLine::short_qty`].
+    ///
+    /// Validation:
+    /// - the PO must be `approved`
+    /// - every line must be accounted: `received + damaged <= qty`, both
+    ///   non-negative
+    /// - the input must cover every line (or exactly the lines given —
+    ///   uncovered lines are treated as fully short)
+    ///
+    /// Atomic: the status change, per-line writes, and all stock movements
+    /// commit in one transaction.
+    pub fn receive_purchase_order_with_lines(
+        &self,
+        id: &str,
+        lines: &[ReceivePoLineInput],
+    ) -> Result<PurchaseOrderWithLines, CoreError> {
+        let mut po = self.get_purchase_order(id)?.ok_or(CoreError::NotFound {
+            entity: "purchase_order",
+            id: id.to_owned(),
+        })?;
+
+        if po.order.status != "approved" {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: "only approved orders can be received".into(),
+            });
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let default_location = crate::inventory::LocationId::from(
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID.to_string(),
+        );
+
+        let tx = self.conn.unchecked_transaction()?;
+
+        tx.execute(
+            "UPDATE purchase_orders SET status='received', received_date=?1, updated_at=?2 WHERE id=?3",
+            params![now, now, id],
+        )?;
+
+        // Index the input by line id for O(1) lookup.
+        let by_line: std::collections::HashMap<&str, &ReceivePoLineInput> =
+            lines.iter().map(|l| (l.line_id.as_str(), l)).collect();
+
+        for line in &po.lines {
+            let input = by_line.get(line.id.as_str());
+            let received = input.map(|i| i.received_qty).unwrap_or(0);
+            let damaged = input.map(|i| i.damaged_qty).unwrap_or(0);
+
+            if received < 0 || damaged < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: "received/damaged quantities must not be negative".into(),
+                });
+            }
+            if received + damaged > line.qty {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!(
+                        "line '{}' received+damaged ({}+{}) exceeds ordered qty ({})",
+                        line.sku, received, damaged, line.qty
+                    ),
+                });
+            }
+
+            // Persist the receive state on the line.
+            tx.execute(
+                "UPDATE purchase_order_lines SET received_qty=?1, damaged_qty=?2 WHERE id=?3",
+                params![received, damaged, line.id],
+            )?;
+
+            // Only good received units enter sellable stock.
+            if received > 0 && !line.sku.is_empty() {
+                self.adjust_stock_at_location_with_reason(
+                    &tx,
+                    &line.sku,
+                    received,
+                    &default_location,
+                    Some("purchase_order_receive"),
+                    None,
+                    None,
+                    None,
+                )?;
+            }
+        }
+
+        tx.commit()?;
+
+        po.order.status = "received".into();
+        po.order.received_date = Some(now.clone());
+        po.order.updated_at = now;
+        Ok(po)
+    }
+}
+
+/// Input for receiving one purchase order line with damage accounting.
+#[derive(Debug, Clone)]
+pub struct ReceivePoLineInput {
+    /// The `purchase_order_lines.id` being received.
+    pub line_id: String,
+    /// Units received in good condition (added to stock).
+    pub received_qty: i64,
+    /// Units received but damaged (recorded, not added to stock).
+    pub damaged_qty: i64,
 }
 
 /// Input for creating a purchase order line item.
