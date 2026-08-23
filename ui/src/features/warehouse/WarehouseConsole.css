@@ -360,7 +360,7 @@
 }
 
 .warehouse-mode-tab {
-  padding: 0.5rem 1.25rem;
+  padding: var(--space-2, 0.5rem) var(--space-5, 1.25rem);
   border: 1px solid var(--color-border, #ccc);
   border-radius: var(--radius, 6px);
   background: var(--color-surface, #fff);
@@ -372,7 +372,7 @@
 .warehouse-mode-tab--active {
   background: var(--color-primary, #2563eb);
   border-color: var(--color-primary, #2563eb);
-  color: #fff;
+  color: var(--color-fg-on-primary, #fff);
 }
 
 .warehouse-scan-row {
@@ -383,7 +383,7 @@
 
 .warehouse-scan-input {
   flex: 1;
-  padding: 0.75rem 1rem;
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
   font-size: var(--text-lg, 1.125rem);
   border: 1px solid var(--color-border, #ccc);
   border-radius: var(--radius, 6px);
@@ -471,13 +471,13 @@
 .warehouse-session-remove {
   border: none;
   background: none;
-  font-size: 1.25rem;
+  font-size: var(--text-lg, 1.25rem);
   cursor: pointer;
   color: var(--color-danger, #dc2626);
 }
 
 .warehouse-session-empty { color: var(--color-muted, #666); padding: 0.5rem; }
-.warehouse-empty-panel { color: var(--color-muted, #666); padding: 2rem 0; }
+.warehouse-empty-panel { color: var(--color-muted, #666); padding: var(--space-6, 1.5rem) 0; }
 
 .warehouse-session-footer {
   display: flex;
@@ -527,7 +527,7 @@
 .warehouse-popup {
   position: fixed;
   right: var(--space-4, 1rem);
-  bottom: 4rem;
+  bottom: var(--space-8, 2rem);
   width: 420px;
   max-width: 90vw;
   max-height: 70vh;

@@ -1298,14 +1298,24 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
       expect(cartLine).toBeInTheDocument();
     });
 
-    // Click Close Shift button
+    // Click Close Shift button - aria-label is "Close current shift"
     const closeShiftBtn = screen.getByRole('button', { name: /close current shift/i });
-    
     await userEvent.click(closeShiftBtn);
 
-    // Error should appear (production FTL: 'Complete or clear the current sale before closing the shift.')
+    // Debug: check if error rendered - search for pos-shift-error
     await waitFor(() => {
-      expect(screen.getByText(/Complete or clear the current sale/i)).toBeInTheDocument();
+      const errorDiv = document.querySelector('.pos-shift-error');
+      console.log('Error div:', errorDiv);
+      if (errorDiv) {
+        console.log('Error div text:', errorDiv.textContent);
+      }
+      // Also check for shiftErrorExit state
+      console.log('closeShiftError in DOM:', document.body.innerHTML.includes('pos-shift-error'));
+    }, { timeout: 2000 });
+
+    // Error should appear (test FTL: 'Cart is not empty. Close or complete the sale first.')
+    await waitFor(() => {
+      expect(screen.getByText(/complete or clear the current sale/i)).toBeInTheDocument();
     });
   });
 

@@ -387,6 +387,7 @@
   .topology-issues-btn::after,
   .customer-mgmt-history::after,
   .panel::after,
+  .warehouse-popup::after,
   :global(.dark) .panel::after {
     content: '';
   position: absolute;
@@ -519,6 +520,7 @@
   .topology-issues-btn::after,
   .customer-mgmt-history::after,
   .panel::after,
+  .warehouse-popup::after,
   :global(.dark) .panel::after { display: none; }
 }
 
@@ -638,6 +640,7 @@
 .topology-issues-btn::after,
 .customer-mgmt-history::after,
 .panel::after,
+.warehouse-popup::after,
 :global(.dark) .panel::after { display: none; }
 }
 

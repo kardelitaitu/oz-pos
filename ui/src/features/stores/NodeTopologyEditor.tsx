@@ -5590,7 +5590,7 @@ export default function NodeTopologyEditor({
           {rackPanel && (
             <div className="rack-panel" role="group" aria-label={l10n.getString(`topology-rack-${rackPanel}-title`)}>
               <div className="rack-panel-header">
-                <h4 className="rack-panel-title"><Localized id={`topology-rack-${rackPanel}-title`}>{rackPanel}</Localized></h4>
+                <h3 className="rack-panel-title"><Localized id={`topology-rack-${rackPanel}-title`}>{rackPanel}</Localized></h3>
                 <button type="button" className="rack-panel-close" onClick={() => setRackPanel(null)} aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
               </div>
               {rackPanel === 'add' && (
