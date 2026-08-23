@@ -624,10 +624,6 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
 
     // Verify total in payment modal matches
     await waitFor(() => {
-      console.log('Payment modal body:', document.body.innerHTML?.slice(0, 10000));
-    }, { timeout: 2000 });
-
-    await waitFor(() => {
       expect(screen.getByText((content) => content.includes('$') && content.includes('10'))).toBeInTheDocument();
     });
   });
