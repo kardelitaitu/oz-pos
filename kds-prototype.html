@@ -363,16 +363,27 @@
     flex: 0 0 auto; display: flex; align-items: center; gap: 9px;
     padding: 9px 13px; font-size: 13px; font-weight: 600;
     transition: background 0.2s;
+    /* the whole header is a toggle button (minimize/restore the card) */
+    width: 100%; border: none; text-align: left; cursor: pointer;
+    font-family: inherit; font-weight: inherit; -webkit-tap-highlight-color: transparent;
     /* color set inline via contrastText(bg); children only vary opacity
        Layout: 3 flex children — icon | left column | right column.
        Left column stacks (order-no, order-id); right column stacks
        (customer, status) so the visual rows match the old design:
        row1: #12 ... customer, row2: id ... status */
   }
+  .kds-card-header:hover { filter: brightness(1.06); }
+  .kds-card.collapsed .kds-card-header { border-radius: 8px; } /* rounded bottom when minimized */
   .kds-card-header-icon { display: flex; align-items: center; flex-shrink: 0; }
   .kds-card-header-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .kds-card-header-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .kds-card-header-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .kds-card-chevron {
+    flex-shrink: 0; width: 14px; height: 14px; opacity: 0.5;
+    transition: transform 0.22s ease; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .kds-card.collapsed .kds-card-chevron { transform: rotate(180deg); }
+  .kds-card-chevron svg { width: 12px; height: 12px; }
   .kds-card-header .order-no { font-weight: 700; }
   .kds-card-header .customer { font-weight: 600; }
   .kds-card-header .time { opacity: 0.6; font-size: 12px; font-weight: 400; }
@@ -399,6 +410,18 @@
   }
 
   .kds-card-main { flex: 1 1 auto; min-height: 0; padding: 2px 0 0 0; }
+
+  /* Collapsible section: animates to any height via grid-template-rows.
+     The grid MUST have exactly ONE child — with two children the second
+     creates an implicit auto row that never collapses. So main + footer
+     are wrapped in a single .kds-card-collapsible-inner. */
+  .kds-card-collapsible {
+    flex: 1 1 auto; min-height: 0;
+    display: grid; grid-template-rows: 1fr;
+    transition: grid-template-rows 0.22s ease, opacity 0.2s ease;
+  }
+  .kds-card-collapsible-inner { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .kds-card.collapsed .kds-card-collapsible { grid-template-rows: 0fr; opacity: 0; }
 
   .kds-category { border-bottom: 1px solid var(--border); padding: 3px 0 2px 0; border-radius: 6px; transition: background 0.15s; }
   .kds-category:last-child { border-bottom: none; padding-bottom: 0; }
@@ -830,6 +853,14 @@
     });
     render();
   }
+  const collapsedOrders = new Set();
+  function toggleCardCollapsed(id, btn) {
+    if (collapsedOrders.has(id)) collapsedOrders.delete(id); else collapsedOrders.add(id);
+    /* toggle in place so the board keeps its scroll position */
+    const card = btn.closest('.kds-card');
+    card.classList.toggle('collapsed');
+    btn.setAttribute('aria-expanded', collapsedOrders.has(id) ? 'false' : 'true');
+  }
   function complete(orderId) {
     orders = orders.map(o => o.id === orderId ? { ...o, status: 'completed' } : o);
     render();
@@ -945,8 +976,8 @@
     // 'new' and not all done → no button at all
 
     return `
-    <div class="kds-card">
-      <div class="kds-card-header" style="background:${hdrBg};color:${hdrText}">
+    <div class="kds-card${collapsedOrders.has(o.id) ? ' collapsed' : ''}">
+      <button class="kds-card-header" style="background:${hdrBg};color:${hdrText}" onclick="toggleCardCollapsed('${o.id}', this)" aria-expanded="${collapsedOrders.has(o.id) ? 'false' : 'true'}">
         <div class="kds-card-header-icon">${o.dineIn ? DINE_ICON : TAKEAWAY_ICON}</div>
         <div class="kds-card-header-left">
           <div class="kds-card-header-row">
@@ -963,36 +994,41 @@
               ? `<span class="status processing">processing</span>`
               : `<span class="status" aria-hidden="true">&nbsp;</span>`}
         </div>
-      </div>
-      <div class="kds-card-main">
-        ${visibleCats(o).map((cat, ci) => {
-          const origIdx = cat._i !== undefined ? cat._i : ci;
-          return `
-          <div class="kds-category">
-            <button class="kds-category-header" onclick="toggleCatC('${o.id}', ${origIdx})">
-              <span class="kds-cat-label">${cat.items.filter(i => i.done).length}/${cat.items.length} ${plainName(cat.course)}</span>
-              <span class="kds-cat-check${cat.items.every(i => i.done) ? ' done' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:10px;height:10px"><path d="M4 12.5l5 5L20 6.5"/></svg></span>
-            </button>
-            ${cat.items.map((it, ii) => `
-              <div class="kds-item">
-                <button class="kds-item-row${it.done ? ' done' : ''}" onclick="toggleItemC('${o.id}', ${origIdx}, ${ii})">
-                  <span class="kds-item-row-inner">
-                    <span class="kds-item-left">
-                      <span class="kds-item-qty">${it.qty}×</span>
-                      <span class="kds-item-name">${it.name}</span>
+        <span class="kds-card-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+      </button>
+      <div class="kds-card-collapsible">
+        <div class="kds-card-collapsible-inner">
+        <div class="kds-card-main">
+          ${visibleCats(o).map((cat, ci) => {
+            const origIdx = cat._i !== undefined ? cat._i : ci;
+            return `
+            <div class="kds-category">
+              <button class="kds-category-header" onclick="toggleCatC('${o.id}', ${origIdx})">
+                <span class="kds-cat-label">${cat.items.filter(i => i.done).length}/${cat.items.length} ${plainName(cat.course)}</span>
+                <span class="kds-cat-check${cat.items.every(i => i.done) ? ' done' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:10px;height:10px"><path d="M4 12.5l5 5L20 6.5"/></svg></span>
+              </button>
+              ${cat.items.map((it, ii) => `
+                <div class="kds-item">
+                  <button class="kds-item-row${it.done ? ' done' : ''}" onclick="toggleItemC('${o.id}', ${origIdx}, ${ii})">
+                    <span class="kds-item-row-inner">
+                      <span class="kds-item-left">
+                        <span class="kds-item-qty">${it.qty}×</span>
+                        <span class="kds-item-name">${it.name}</span>
+                      </span>
+                      ${it.done && it.doneAt ? `<span class="kds-item-done-time">${fmtDuration(it.doneAt - o.received)}</span>` : ''}
                     </span>
-                    ${it.done && it.doneAt ? `<span class="kds-item-done-time">${fmtDuration(it.doneAt - o.received)}</span>` : ''}
-                  </span>
-                  ${it.note ? `<span class="kds-item-note">${it.note}</span>` : ''}
-                </button>
-              </div>
-            `).join('')}
-          </div>
-        `}).join('')}
-      </div>
-      <div class="kds-card-footer">
-        ${o.notes ? `<div class="kds-order-notes">Notes: "${o.notes}"</div>` : ''}
-        ${statusBtn ? statusBtn : ''}
+                    ${it.note ? `<span class="kds-item-note">${it.note}</span>` : ''}
+                  </button>
+                </div>
+              `).join('')}
+            </div>
+          `}).join('')}
+        </div>
+        <div class="kds-card-footer">
+          ${o.notes ? `<div class="kds-order-notes">Notes: "${o.notes}"</div>` : ''}
+          ${statusBtn ? statusBtn : ''}
+        </div>
+        </div>
       </div>
     </div>`;
   }
