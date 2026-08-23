@@ -496,6 +496,7 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260821_tender_currency.sql".to_string(),
             "20260822_kds_counter_store.sql".to_string(),
             "20260822_sale_charges.sql".to_string(),
+            "20260823_po_receive_state.sql".to_string(),
         ]
     );
 

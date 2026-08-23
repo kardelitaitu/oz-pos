@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::db::{Store, purchase_orders::CreatePoLineInput};
+use oz_core::db::{
+    Store,
+    purchase_orders::{CreatePoLineInput, ReceivePoLineInput},
+};
 use oz_core::{PurchaseOrderLine, PurchaseOrderWithLines, Supplier};
 
 use foundation::validate_not_empty;
@@ -431,8 +434,11 @@ pub async fn receive_purchase_order_with_lines(
 /// Input for receiving one PO line with damage accounting (IPC DTO).
 #[derive(Debug, serde::Deserialize)]
 pub struct ReceivePoLineDto {
+    /// PO line identifier.
     pub line_id: String,
+    /// Quantity physically received for this line.
     pub received_qty: i64,
+    /// Quantity received but damaged for this line.
     pub damaged_qty: i64,
 }
 

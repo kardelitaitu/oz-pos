@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act } from 'react';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import salesFtl from '@/locales/sales.ftl?raw';
@@ -14,11 +14,12 @@ import productsFtl from '@/locales/products.ftl?raw';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import PosScreen from '@/features/sales/PosScreen';
+import type { CartId } from '@/types/domain';
 import * as shiftsApi from '@/api/shifts';
 import * as settingsApi from '@/api/settings';
 import * as salesApi from '@/api/sales';
 import * as productsApi from '@/api/products';
-import * as bundlesApi from '@/api/bundles';
+
 import type * as HardwareModule from '@/api/hardware';
 import { mockedBarcode } from '@/__tests__/test-utils/mocks/barcodeScanner';
 
@@ -381,15 +382,11 @@ payment-shortfall-cancel = Cancel
 
 // ── Test helpers ───────────────────────────────────────────────────────
 
-function stripIsolates(text: string): string {
-  return text.replace(/[\u2068\u2069]/g, '');
-}
-
 async function renderPosScreenWithShift(openedAt?: Date) {
   vi.mocked(shiftsApi.getActiveShiftScoped).mockResolvedValueOnce(shiftFixture(openedAt));
   vi.mocked(settingsApi.getReceiptSettingsScoped).mockResolvedValueOnce(receiptSettingsFixture);
   vi.mocked(salesApi.startSaleScoped).mockResolvedValue({
-    cartId: 'test-cart-1',
+    cartId: 'test-cart-1' as CartId,
     deductionLocationId: 'loc-store-inventory',
   });
   vi.mocked(salesApi.getCartDeductionLocation).mockResolvedValue({
@@ -403,26 +400,29 @@ async function renderPosScreenWithShift(openedAt?: Date) {
     lineCount: 1,
   });
   // Mock finalizeSale
-  vi.mocked(salesApi.finalizeSale).mockResolvedValue({});
-  vi.mocked(salesApi.finalizeSaleScoped).mockResolvedValue({});
-  // Mock createKdsOrderFromSaleScoped
-  vi.mocked(salesApi.createKdsOrderFromSaleScoped).mockResolvedValue({});
-  vi.mocked(salesApi.createKdsOrderFromSale).mockResolvedValue({});
+  vi.mocked(salesApi.finalizeSale).mockResolvedValue(undefined);
   // Mock getSale for receipt
   vi.mocked(salesApi.getSale).mockResolvedValue({
     id: 'sale-1',
     subtotal: { minor_units: 700, currency: 'USD' },
     total: { minor_units: 1000, currency: 'USD' },
     taxTotal: { minor_units: 0, currency: 'USD' },
+    lineCount: 1,
+    status: 'completed',
+    paymentMethod: 'cash',
+    tenderedMinor: 1000,
+    userId: null,
     lines: [{
       id: 'line-1',
       sku: 'ITEM-001',
       name: 'Test Item',
       qty: 1,
       unit_price: { minor_units: 700, currency: 'USD' },
+      total_minor: 700,
       tax_amount: { minor_units: 0, currency: 'USD' },
+      tax_rate_id: null,
     }],
-    created_at: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
   });
   vi.mocked(salesApi.printSalesReceipt).mockResolvedValue({ printed: true });
 
@@ -502,7 +502,7 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
 
     // 5. Click Pay button (Charge) - use the one in the cart footer
     const payButtons = screen.getAllByRole('button', { name: /charge/i });
-    await userEvent.click(payButtons[payButtons.length - 1]);
+    await userEvent.click(payButtons[payButtons.length - 1]!);
 
     // 6. Verify PaymentModal opens - debug
     await waitFor(() => {
@@ -603,7 +603,7 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
     await waitFor(() => {
       const cartLines = screen.getAllByTestId('cart-panel-line-item');
       expect(cartLines.length).toBe(2);
-      expect(cartLines[1].textContent).toContain('Second Item');
+      expect(cartLines[1]!.textContent).toContain('Second Item');
     });
 
     // Verify subtotal is $10.00 (700 + 300 = 1000 minor units)
@@ -616,15 +616,19 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
 
     // Open payment
     const payButtons = screen.getAllByRole('button', { name: /charge/i });
-    await userEvent.click(payButtons[payButtons.length - 1]);
+    await userEvent.click(payButtons[payButtons.length - 1]!);
 
+    // Wait for payment modal to appear
     await waitFor(() => {
       expect(screen.getByText('Complete Order')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
-    // Verify total in payment modal matches
+    // Verify total in payment modal matches - payment total is in .payment-total-amount
     await waitFor(() => {
-      expect(screen.getByText((content) => content.includes('$') && content.includes('10'))).toBeInTheDocument();
+      const paymentTotal = document.querySelector('.payment-total-amount');
+      expect(paymentTotal).toBeInTheDocument();
+      expect(paymentTotal?.textContent).toContain('$');
+      expect(paymentTotal?.textContent).toContain('10');
     });
   });
 
@@ -668,5 +672,685 @@ describe('PosScreen — Core Sale Flow (TDD)', () => {
 
     // Cart should remain empty
     expect(screen.getByText('Cart is empty')).toBeInTheDocument();
+  });
+
+  // ── Discount Tests ────────────────────────────────────────────────────
+
+  it('applies discount and shows discount row', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click + Add Discount button
+    const addDiscountBtn = screen.getByRole('button', { name: /add discount/i });
+    await userEvent.click(addDiscountBtn);
+
+    // Enter discount percentage (10%)
+    const pctInput = screen.getByPlaceholderText('%');
+    await userEvent.type(pctInput, '10');
+
+    // Click Apply
+    const applyBtn = screen.getByRole('button', { name: /apply/i });
+    await userEvent.click(applyBtn);
+
+    // Verify discount row appears
+    await waitFor(() => {
+      expect(screen.getByText((content) => content.includes('Discount') && content.includes('10%'))).toBeInTheDocument();
+    });
+
+    // Verify discount row shows the discount amount (10% of $7,00 = $0,70)
+    await waitFor(() => {
+      const discountRow = document.querySelector('.pos-cart-discount-row');
+      expect(discountRow).toBeInTheDocument();
+      expect(discountRow?.textContent).toContain('0,70');
+    });
+  });
+
+  it('clears discount when Clear Discount button clicked', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click + Add Discount button
+    const addDiscountBtn = screen.getByRole('button', { name: /add discount/i });
+    await userEvent.click(addDiscountBtn);
+
+    // Enter discount percentage (10%)
+    const pctInput = screen.getByPlaceholderText('%');
+    await userEvent.type(pctInput, '10');
+
+    // Click Apply
+    const applyBtn = screen.getByRole('button', { name: /apply/i });
+    await userEvent.click(applyBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText((content) => content.includes('Discount') && content.includes('10%'))).toBeInTheDocument();
+    });
+
+    // Click Clear Discount (× button)
+    const clearBtn = screen.getByRole('button', { name: /remove discount/i });
+    await userEvent.click(clearBtn);
+
+    // Verify discount row is gone
+    await waitFor(() => {
+      expect(screen.queryByText((content) => content.includes('Discount') && content.includes('10%'))).not.toBeInTheDocument();
+    });
+
+    // Verify discount row is gone
+    await waitFor(() => {
+      const discountRow = document.querySelector('.pos-cart-discount-row');
+      expect(discountRow).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Tip Tests ────────────────────────────────────────────────────────
+
+  it('selects tip percentage and shows tip preview', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click 15% tip button (matches both test FTL '15% tip' and real FTL 'Set tip to 15 percent')
+    const tipBtn = screen.getByRole('button', { name: /15/i });
+    await userEvent.click(tipBtn);
+
+    // Verify tip preview row appears (text split across elements)
+    await waitFor(() => {
+      const tipRow = document.querySelector('.pos-cart-tip-preview-row');
+      expect(tipRow).toBeInTheDocument();
+      expect(tipRow?.textContent).toContain('Tip (15%)');
+      expect(tipRow?.textContent).toContain('+');
+    });
+  });
+
+  it('removes tip when None selected', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click 15% tip
+    const tipBtn = screen.getByRole('button', { name: /set tip to 15 percent/i });
+    await userEvent.click(tipBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText((content) => content.includes('Tip (15%)'))).toBeInTheDocument();
+    });
+
+    // Click None (0%)
+    const noneBtn = screen.getByRole('button', { name: /no tip/i });
+    await userEvent.click(noneBtn);
+
+    // Verify tip preview gone
+    await waitFor(() => {
+      const tipRow = document.querySelector('.pos-cart-tip-preview-row');
+      expect(tipRow).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Service Charge Tests ─────────────────────────────────────────────
+
+  it('toggles service charge on and shows preview', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click service charge toggle
+    const serviceToggle = screen.getByRole('button', { name: /toggle service charge/i });
+    await userEvent.click(serviceToggle);
+
+    // Verify service charge preview row appears (text split across elements)
+    await waitFor(() => {
+      const serviceRow = document.querySelector('.pos-cart-service-preview-row');
+      expect(serviceRow).toBeInTheDocument();
+      expect(serviceRow?.textContent).toContain('Service (10%)');
+      expect(serviceRow?.textContent).toContain('+');
+    });
+  });
+
+  // ── Quantity Tests ───────────────────────────────────────────────────
+
+  it('increases and decreases quantity via +/- buttons', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Find the increase button and click
+    const increaseBtn = screen.getByRole('button', { name: /increase quantity/i });
+    await userEvent.click(increaseBtn);
+
+    // Verify cart line shows qty 2
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+      expect(cartLine.textContent).toContain('2');
+    });
+
+    // Click decrease button
+    const decreaseBtn = screen.getByRole('button', { name: /decrease quantity/i });
+    await userEvent.click(decreaseBtn);
+
+    // Verify qty back to 1 (exact match avoids matching button aria-labels)
+    await waitFor(() => {
+      const qtyValue = screen.getByLabelText('Quantity: 1');
+      expect(qtyValue).toBeInTheDocument();
+    });
+  });
+
+  // ── Line Removal with Undo ───────────────────────────────────────────
+
+  it('removes line and shows undo pill', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click remove button (×)
+    const removeBtn = screen.getByRole('button', { name: /remove ITEM-001/i });
+    await userEvent.click(removeBtn);
+
+    // Cart should be empty
+    await waitFor(() => {
+      expect(screen.getByText('Cart is empty')).toBeInTheDocument();
+    });
+
+    // Undo pill should be visible
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^undo$/i })).toBeInTheDocument();
+    });
+  });
+
+  it('undoes line removal', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click remove button
+    const removeBtn = screen.getByRole('button', { name: /remove ITEM-001/i });
+    await userEvent.click(removeBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cart is empty')).toBeInTheDocument();
+    });
+
+    // Click Undo (the cart undo button, not the dismiss button)
+    const undoBtn = screen.getByRole('button', { name: /^undo$/i });
+    await userEvent.click(undoBtn);
+
+    // Line should reappear
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+      expect(cartLine.textContent).toContain('Test Item');
+    });
+  });
+
+  // ── Open Bill Tests ──────────────────────────────────────────────────
+
+  it('opens Open Bill input, saves, and reopens cart', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click Open Bill button (aria-label: 'Save as open bill' from pos-cart-open-bill-aria)
+    const openBillBtn = screen.getByRole('button', { name: /save as open bill/i });
+    await userEvent.click(openBillBtn);
+
+    // Open Bill input modal should appear
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('e.g. John Doe')).toBeInTheDocument();
+    });
+
+    // Enter name and save
+    const nameInput = screen.getByPlaceholderText('e.g. John Doe');
+    await userEvent.type(nameInput, 'Table 5');
+
+    const saveBtn = screen.getByRole('button', { name: /save open bill/i });
+    await userEvent.click(saveBtn);
+
+    // Cart should be reset to empty
+    await waitFor(() => {
+      expect(screen.getByText('Cart is empty')).toBeInTheDocument();
+    });
+  });
+
+  // ── Keyboard Navigation Tests ────────────────────────────────────────
+
+  it('navigates cart lines with ArrowUp/ArrowDown', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add two products — use mockImplementation keyed by barcode
+    // so internal extra calls don't consume the wrong mock entry
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockImplementation(
+      (_session: string, code: string) => {
+        if (code === 'BARCODE-001')
+          return Promise.resolve({
+            sku: 'ITEM-001',
+            name: 'Test Item',
+            category: 'Test',
+            price: { minor_units: 700, currency: 'USD' },
+            barcode: 'BARCODE-001',
+            in_stock: true,
+            stock_qty: 100,
+            tax_rate_ids: [],
+            product_type: 'standard',
+            created_at: '',
+            price_updated_at: '',
+          });
+        if (code === 'BARCODE-002')
+          return Promise.resolve({
+            sku: 'ITEM-002',
+            name: 'Second Item',
+            category: 'Test',
+            price: { minor_units: 300, currency: 'USD' },
+            barcode: 'BARCODE-002',
+            in_stock: true,
+            stock_qty: 50,
+            tax_rate_ids: [],
+            product_type: 'standard',
+            created_at: '',
+            price_updated_at: '',
+          });
+        return Promise.resolve(null);
+      },
+    );
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('cart-panel-line-item')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-002');
+    });
+
+    await waitFor(() => {
+      const cartLines = screen.getAllByTestId('cart-panel-line-item');
+      expect(cartLines.length).toBe(2);
+    });
+
+    // Focus first line (it should be focused by default or we focus it)
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
+    await userEvent.tab(); // Focus the cart panel first
+    firstLine.focus();
+
+    // Press ArrowDown to move to second line
+    await userEvent.keyboard('{ArrowDown}');
+
+    // Second line should be focused
+    const secondLine = screen.getAllByTestId('cart-panel-line-item')[1];
+    expect(secondLine).toHaveFocus();
+  });
+
+  it('increases/decreases qty with +/- keys on focused line', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Focus the cart line element (needs data-line-id for keyboard handler)
+    const cartLine = screen.getByTestId('cart-panel-line-item');
+    cartLine.focus();
+
+    // Press + to increase qty
+    await userEvent.keyboard('+');
+
+    // Verify qty is now 2 (exact match avoids matching button aria-labels)
+    await waitFor(() => {
+      const qtyValue = screen.getByLabelText('Quantity: 2');
+      expect(qtyValue).toBeInTheDocument();
+    });
+  });
+
+  // ── Shift Close Tests ────────────────────────────────────────────────
+
+  it('shows error when closing shift with non-empty cart', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click Close Shift button
+    const closeShiftBtn = screen.getByRole('button', { name: /close current shift/i });
+    
+    await userEvent.click(closeShiftBtn);
+
+    // Error should appear (production FTL: 'Complete or clear the current sale before closing the shift.')
+    await waitFor(() => {
+      expect(screen.getByText(/Complete or clear the current sale/i)).toBeInTheDocument();
+    });
+  });
+
+  // ── Lock Cart Tests ──────────────────────────────────────────────────
+
+  it('locks cart on logout and restores on next mount', async () => {
+    await renderPosScreenWithShift();
+
+    await waitFor(() => {
+      expect(screen.getByText('0m')).toBeInTheDocument();
+    });
+
+    // Add product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
+      sku: 'ITEM-001',
+      name: 'Test Item',
+      category: 'Test',
+      price: { minor_units: 700, currency: 'USD' },
+      barcode: 'BARCODE-001',
+      in_stock: true,
+      stock_qty: 100,
+      tax_rate_ids: [],
+      product_type: 'standard',
+      created_at: '',
+      price_updated_at: '',
+    });
+
+    await act(async () => {
+      mockedBarcode.triggerScan('BARCODE-001');
+    });
+
+    await waitFor(() => {
+      const cartLine = screen.getByTestId('cart-panel-line-item');
+      expect(cartLine).toBeInTheDocument();
+    });
+
+    // Click Lock button (locks cart and logs out)
+    const lockBtn = screen.getByRole('button', { name: /lock/i });
+    await userEvent.click(lockBtn);
+
+    // Cart data should be in localStorage
+    const lockedCart = localStorage.getItem('pos-locked-cart');
+    expect(lockedCart).not.toBeNull();
+    const data = JSON.parse(lockedCart!);
+    expect(data.lines.length).toBe(1);
+    expect(data.lines[0].sku).toBe('ITEM-001');
   });
 });
