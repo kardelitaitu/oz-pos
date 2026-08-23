@@ -801,3 +801,205 @@ fn receive_purchase_order_propagates_stock_adjust_failure_and_rolls_back() {
          when the receive fails atomically — got {stock_a}"
     );
 }
+
+// ── Phase 2: receive_purchase_order_with_lines (damage marking) ─────────
+
+/// Helper: create a one-line approved PO for SKU-001 qty 5 (inventory seed 10).
+fn seed_approved_po(conn: &Connection) -> (String, String) {
+    seed_supplier(conn);
+    seed_product(conn);
+    let lines = vec![CreatePoLineInput {
+        sku: "SKU-001".into(),
+        product_name: "Widget".into(),
+        qty: 5,
+        unit_cost_minor: 1000,
+    }];
+    let po = store(conn)
+        .create_purchase_order("PO-PH2", "sup-po", "", "", None, &lines)
+        .unwrap();
+    store(conn)
+        .update_po_status(&po.order.id, "approved")
+        .unwrap();
+    let line_id = po.lines[0].id.clone();
+    (po.order.id, line_id)
+}
+
+#[test]
+fn receive_po_with_lines_records_damage_and_good_stock() {
+    let conn = fresh();
+    let (po_id, line_id) = seed_approved_po(&conn);
+
+    // 3 good, 1 damaged of the 5 ordered → 1 short.
+    let received = store(&conn)
+        .receive_purchase_order_with_lines(
+            &po_id,
+            &[ReceivePoLineInput {
+                line_id: line_id.clone(),
+                received_qty: 3,
+                damaged_qty: 1,
+            }],
+        )
+        .unwrap();
+
+    assert_eq!(received.order.status, "received");
+    assert!(received.order.received_date.is_some());
+    let line = &received.lines[0];
+    assert_eq!(line.received_qty, 3);
+    assert_eq!(line.damaged_qty, 1);
+    assert_eq!(line.short_qty(), 1);
+    assert!(!line.fully_accounted());
+
+    // Only good qty enters stock: 10 + 3 = 13.
+    let stock: i64 = conn
+        .query_row(
+            "SELECT qty FROM inventory WHERE product_id='prod-po'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(stock, 13);
+
+    // The receive state must persist on the line row.
+    let persisted: (i64, i64) = conn
+        .query_row(
+            "SELECT received_qty, damaged_qty FROM purchase_order_lines WHERE id=?1",
+            [&line_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(persisted, (3, 1));
+}
+
+#[test]
+fn receive_po_with_lines_fully_accounted_no_short() {
+    let conn = fresh();
+    let (po_id, line_id) = seed_approved_po(&conn);
+
+    let received = store(&conn)
+        .receive_purchase_order_with_lines(
+            &po_id,
+            &[ReceivePoLineInput {
+                line_id: line_id.clone(),
+                received_qty: 4,
+                damaged_qty: 1,
+            }],
+        )
+        .unwrap();
+    let line = &received.lines[0];
+    assert_eq!(line.short_qty(), 0);
+    assert!(line.fully_accounted());
+}
+
+#[test]
+fn receive_po_with_lines_uncovered_line_treated_as_short() {
+    let conn = fresh();
+    let (po_id, _line_id) = seed_approved_po(&conn);
+
+    // Pass an empty input → every line treated as 0 received / 0 damaged.
+    let received = store(&conn)
+        .receive_purchase_order_with_lines(&po_id, &[])
+        .unwrap();
+    let line = &received.lines[0];
+    assert_eq!(line.received_qty, 0);
+    assert_eq!(line.damaged_qty, 0);
+    assert_eq!(line.short_qty(), 5);
+    // No stock movement: still 10.
+    let stock: i64 = conn
+        .query_row(
+            "SELECT qty FROM inventory WHERE product_id='prod-po'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(stock, 10);
+}
+
+#[test]
+fn receive_po_with_lines_over_account_rejected() {
+    let conn = fresh();
+    let (po_id, line_id) = seed_approved_po(&conn);
+
+    let err = store(&conn)
+        .receive_purchase_order_with_lines(
+            &po_id,
+            &[ReceivePoLineInput {
+                line_id: line_id.clone(),
+                received_qty: 4,
+                damaged_qty: 2, // 6 > 5 ordered
+            }],
+        )
+        .unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "qty"));
+
+    // Status must remain approved (atomic rollback).
+    let status: String = conn
+        .query_row(
+            "SELECT status FROM purchase_orders WHERE id=?1",
+            [&po_id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(status, "approved");
+}
+
+#[test]
+fn receive_po_with_lines_negative_qty_rejected() {
+    let conn = fresh();
+    let (po_id, line_id) = seed_approved_po(&conn);
+
+    let err = store(&conn)
+        .receive_purchase_order_with_lines(
+            &po_id,
+            &[ReceivePoLineInput {
+                line_id: line_id.clone(),
+                received_qty: -1,
+                damaged_qty: 0,
+            }],
+        )
+        .unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "qty"));
+}
+
+#[test]
+fn receive_po_with_lines_not_approved_rejected() {
+    let conn = fresh();
+    seed_supplier(&conn);
+    seed_product(&conn);
+    let lines = vec![CreatePoLineInput {
+        sku: "SKU-001".into(),
+        product_name: "Widget".into(),
+        qty: 5,
+        unit_cost_minor: 1000,
+    }];
+    let po = store(&conn)
+        .create_purchase_order("PO-PH2-DRAFT", "sup-po", "", "", None, &lines)
+        .unwrap(); // status stays 'draft'
+
+    let err = store(&conn)
+        .receive_purchase_order_with_lines(
+            &po.order.id,
+            &[ReceivePoLineInput {
+                line_id: po.lines[0].id.clone(),
+                received_qty: 5,
+                damaged_qty: 0,
+            }],
+        )
+        .unwrap_err();
+    assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+}
+
+#[test]
+fn receive_po_with_lines_nonexistent_po_errors() {
+    let conn = fresh();
+    let err = store(&conn)
+        .receive_purchase_order_with_lines(
+            "does-not-exist",
+            &[ReceivePoLineInput {
+                line_id: "x".into(),
+                received_qty: 1,
+                damaged_qty: 0,
+            }],
+        )
+        .unwrap_err();
+    assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "purchase_order"));
+}

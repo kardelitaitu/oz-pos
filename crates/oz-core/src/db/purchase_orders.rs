@@ -482,10 +482,12 @@ impl Store<'_> {
 
         tx.commit()?;
 
-        po.order.status = "received".into();
-        po.order.received_date = Some(now.clone());
-        po.order.updated_at = now;
-        Ok(po)
+        // Re-load so the returned lines carry the persisted receive state.
+        let updated = self.get_purchase_order(id)?.ok_or(CoreError::NotFound {
+            entity: "purchase_order",
+            id: id.to_owned(),
+        })?;
+        Ok(updated)
     }
 }
 
