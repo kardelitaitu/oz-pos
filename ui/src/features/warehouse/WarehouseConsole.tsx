@@ -34,6 +34,7 @@ import { useWarehouseSession, type WarehouseMode } from './useWarehouseSession';
 import { useWarehouseScanner } from './useWarehouseScanner';
 import WarehouseFnBar from './WarehouseFnBar';
 import { WAREHOUSE_SHORTCUTS, ACTIVE_SHORTCUT_ACTIONS } from './warehouseShortcuts';
+import { type PurchaseOrderDto } from '@/api/purchasing';
 import './WarehouseConsole.css';
 
 interface PendingTransferPick {
@@ -76,6 +77,11 @@ export default function WarehouseConsole() {
   const [transferListOpen, setTransferListOpen] = useState(false);
   const [inTransit, setInTransit] = useState<PendingTransferPick[]>([]);
   const [destinationOpen, setDestinationOpen] = useState(false);
+
+  // PO receive (Phase 2)
+  const [_pendingPo, _setPendingPo] = useState<PurchaseOrderDto | null>(null);
+  const [_poListOpen, _setPoListOpen] = useState(false);
+  const [_poList, _setPoList] = useState<PurchaseOrderDto[]>([]);
 
   // ── Products for the bound location ────────────────────────────────
   const loadProducts = useCallback(async () => {

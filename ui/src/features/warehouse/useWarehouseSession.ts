@@ -21,6 +21,10 @@ export interface WarehouseSessionLine {
   pickedQty: number;
   /** Receive mode: the real stock_transfer_line.id this line maps to. */
   transferLineId?: string;
+  /** Receive mode: the real purchase_order_lines.id this line maps to. */
+  poLineId?: string;
+  /** Receive mode (PO): how many of this line arrived damaged. */
+  damagedQty: number;
 }
 
 export interface WarehouseSessionState {
@@ -36,10 +40,12 @@ export interface WarehouseSessionState {
   setDestinationLocationId: (id: string | null) => void;
   setTransferId: (id: string | null) => void;
   setPoId: (id: string | null) => void;
-  addLine: (sku: string, productName: string, bin?: string | null, qty?: number, transferLineId?: string) => void;
+  addLine: (sku: string, productName: string, bin?: string | null, qty?: number, sourceLineId?: string, sourceType?: 'transfer' | 'po') => void;
   setQty: (lineId: string, qty: number) => void;
   /** Send mode: mark a line's pick-verify quantity. */
   pickLine: (lineId: string, pickedQty: number) => void;
+  /** Receive mode (PO): set how many units of a line arrived damaged. */
+  setDamagedQty: (lineId: string, damagedQty: number) => void;
   removeLine: (lineId: string) => void;
   clear: () => void;
   /** Total units across lines. */
@@ -66,7 +72,14 @@ export function useWarehouseSession(): WarehouseSessionState {
   linesRef.current = lines;
 
   const addLine = useCallback(
-    (sku: string, productName: string, bin?: string | null, qty = 1, transferLineId?: string) => {
+    (
+      sku: string,
+      productName: string,
+      bin?: string | null,
+      qty = 1,
+      sourceLineId?: string,
+      sourceType?: 'transfer' | 'po',
+    ) => {
       setLines((prev) => {
         const existing = prev.find((l) => l.sku === sku);
         if (existing) {
@@ -74,6 +87,12 @@ export function useWarehouseSession(): WarehouseSessionState {
             l.sku === sku ? { ...l, qty: l.qty + qty } : l,
           );
         }
+        const sourceRef =
+          sourceType === 'po'
+            ? { poLineId: sourceLineId }
+            : sourceType === 'transfer'
+              ? { transferLineId: sourceLineId }
+              : {};
         return [
           ...prev,
           {
@@ -83,8 +102,9 @@ export function useWarehouseSession(): WarehouseSessionState {
             bin: bin ?? null,
             qty,
             pickedQty: 0,
-            ...(transferLineId ? { transferLineId } : {}),
-          },
+            damagedQty: 0,
+            ...sourceRef,
+          } as WarehouseSessionLine,
         ];
       });
     },
@@ -101,6 +121,14 @@ export function useWarehouseSession(): WarehouseSessionState {
     setLines((prev) =>
       prev.map((l) =>
         l.id === lineId ? { ...l, pickedQty: Math.max(0, pickedQty) } : l,
+      ),
+    );
+  }, []);
+
+  const setDamagedQty = useCallback((lineId: string, damagedQty: number) => {
+    setLines((prev) =>
+      prev.map((l) =>
+        l.id === lineId ? { ...l, damagedQty: Math.max(0, damagedQty) } : l,
       ),
     );
   }, []);
@@ -141,6 +169,7 @@ export function useWarehouseSession(): WarehouseSessionState {
     addLine,
     setQty,
     pickLine,
+    setDamagedQty,
     removeLine,
     clear,
     itemCount,
