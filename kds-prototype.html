@@ -224,10 +224,12 @@
 /* Hamburger panel — same drop-in animation as the filter dropdown */
   .kds-hamburger-panel {
     position: absolute; top: calc(100% + 6px); right: 0; width: 280px;
+    max-height: calc(100vh - 80px); overflow-y: auto; overflow-x: hidden;
     background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 12px;
     padding: 12px 14px 14px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     animation: kds-drop-in 0.18s ease-out;
     transform-origin: top right;
+    scrollbar-width: thin;
   }
   .kds-panel-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -258,28 +260,18 @@
   .kds-color-chip { width: 26px; height: 18px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }
   .kds-color-hex { font-size: 10px; color: var(--text); opacity: 0.75; font-family: ui-monospace, monospace; }
 
-  /* colour picker popup */
-  .kds-color-popup {
-    position: absolute; top: 60px; right: 10px; width: 230px;
-    background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 12px;
-    padding: 12px; z-index: 200; box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-    animation: kds-drop-in 0.18s ease-out; transform-origin: top right;
-  }
-  .kds-popup-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .kds-popup-title { font-size: 12px; font-weight: 700; color: var(--text); opacity: 0.8; }
-  .kds-popup-native { width: 100%; height: 40px; border: none; border-radius: 8px; padding: 0; background: transparent; cursor: pointer; margin-bottom: 10px; }
-  .kds-popup-native::-webkit-color-swatch-wrapper { padding: 2px; }
-  .kds-popup-native::-webkit-color-swatch { border-radius: 7px; border: 1px solid var(--border-strong); }
-  .kds-popup-swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 10px; }
-  .kds-popup-swatches .kds-swatch { width: 100%; height: 22px; }
-  .kds-popup-hexrow { display: flex; }
-  .kds-popup-hexrow .kds-hex-input { width: 100%; }
-  /* shared swatch + hex-input primitives used inside the popup */
-  .kds-swatch { width: 22px; height: 22px; border-radius: 5px; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s; }
+  /* Inline colour swatches (in the hamburger panel) */
+  .kds-color-group { margin-bottom: 10px; }
+  .kds-color-group:last-child { margin-bottom: 0; }
+  .kds-color-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+  .kds-color-head label { font-size: 12px; color: var(--text); opacity: 0.85; }
+  .kds-swatches { display: flex; gap: 6px; }
+  /* made 25% bigger: 22px → 27px */
+  .kds-swatch { width: 27px; height: 27px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s; }
   .kds-swatch:hover { transform: scale(1.15); }
   .kds-swatch.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--bg-top) inset; }
   .kds-hex-input {
-    width: 62px; padding: 3px 6px; border-radius: 5px; font-size: 10px;
+    width: 66px; padding: 3px 6px; border-radius: 5px; font-size: 10px;
     border: 1px solid var(--border-strong); background: var(--bg-surface);
     color: var(--text); opacity: 0.8; text-align: center; font-family: ui-monospace, monospace;
     transition: all 0.15s;
@@ -301,6 +293,8 @@
     border: none; cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
+  /* light theme: darken the track so the slider is visible */
+  .kds-screen.light .kds-theme-toggle { background: rgba(0,0,0,0.08); }
   .kds-theme-indicator {
     position: absolute; top: 3px; left: 3px; bottom: 3px;
     background: #3b82f6; border-radius: 6px;
@@ -336,7 +330,9 @@
   }
   .kds-main > .kds-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
   .kds-main > .kds-col > .kds-card { width: 100%; max-width: 100%; }
-  .kds-main.completed-view { display: block; }
+  .kds-main.empty { align-items: center; justify-content: center; }
+  .kds-main.empty > .kds-empty { flex: initial; align-self: auto; }
+  .kds-main.completed-view { display: flex; flex-direction: column; }
   .kds-main.completed-view > .kds-completed-card { margin-bottom: 8px; }
 
   /* Tab slide transition */
@@ -345,8 +341,12 @@
   .kds-main.slide-right { animation: kds-slide-in-right 0.25s ease-out; }
   .kds-main.slide-left { animation: kds-slide-in-left 0.25s ease-out; }
   .kds-empty {
-    grid-column: 1 / -1; display: flex; align-items: center; justify-content: center;
-    color: var(--text); opacity: 0.35; font-size: 15px; padding: 60px 0;
+    /* absolutely centered in the middle of the main area (both axes).
+       Fills the whole main box: flex:1 grows on the main axis,
+       align-self:stretch fills the cross axis in row AND column layouts. */
+    display: flex; align-items: center; justify-content: center;
+    flex: 1; align-self: stretch;
+    color: var(--text); opacity: 0.35; font-size: 15px;
   }
 
   /* ── ORDER CARD: 3-flex ─────────────────────────── */
@@ -488,6 +488,9 @@
   }
   .kds-switch.on { background: #3b82f6; }
   .kds-switch.on::after { transform: translateX(18px); }
+  /* light theme: darken the switch track so it is visible on white */
+  .kds-screen.light .kds-switch { background: rgba(0,0,0,0.08); }
+  .kds-screen.light .kds-switch.on { background: #3b82f6; }
 </style>
 </head>
 <body>
@@ -551,43 +554,29 @@
         </div>
         <div class="kds-panel-section">
           <h3>Card Colours</h3>
-          <div class="kds-color-row">
-            <label for="hex-dinein">Dine-in</label>
-            <button class="kds-color-open" data-key="dinein" aria-haspopup="dialog">
-              <span class="kds-color-chip" id="chip-dinein" style="background:#1a3a2a"></span>
-              <span class="kds-color-hex" id="hex-dinein">#1a3a2a</span>
-            </button>
+          <div class="kds-color-group">
+            <div class="kds-color-head">
+              <label>Dine-in</label>
+              <input class="kds-hex-input" id="hex-dinein" data-key="dinein" spellcheck="false" aria-label="Dine-in header colour hex">
+            </div>
+            <div class="kds-swatches" data-key="dinein"></div>
           </div>
-          <div class="kds-color-row">
-            <label for="hex-takeaway">Takeaway</label>
-            <button class="kds-color-open" data-key="takeaway" aria-haspopup="dialog">
-              <span class="kds-color-chip" id="chip-takeaway" style="background:#2a2a35"></span>
-              <span class="kds-color-hex" id="hex-takeaway">#2a2a35</span>
-            </button>
+          <div class="kds-color-group">
+            <div class="kds-color-head">
+              <label>Takeaway</label>
+              <input class="kds-hex-input" id="hex-takeaway" data-key="takeaway" spellcheck="false" aria-label="Takeaway header colour hex">
+            </div>
+            <div class="kds-swatches" data-key="takeaway"></div>
           </div>
-          <div class="kds-color-row">
-            <label for="hex-rush">Rush badge</label>
-            <button class="kds-color-open" data-key="rush" aria-haspopup="dialog">
-              <span class="kds-color-chip" id="chip-rush" style="background:#ef4444"></span>
-              <span class="kds-color-hex" id="hex-rush">#ef4444</span>
-            </button>
+          <div class="kds-color-group">
+            <div class="kds-color-head">
+              <label>Rush badge</label>
+              <input class="kds-hex-input" id="hex-rush" data-key="rush" spellcheck="false" aria-label="Rush badge colour hex">
+            </div>
+            <div class="kds-swatches" data-key="rush"></div>
           </div>
         </div>
         <button class="kds-btn kds-btn--muted kds-reset-btn" id="reset-colors">Reset to defaults</button>
-      </div>
-      <!-- colour picker popup (sibling of the hamburger panel, inside topmenu-right) -->
-      <div class="kds-color-popup" id="color-popup" role="dialog" aria-label="Pick colour" style="display:none;">
-        <div class="kds-popup-head">
-          <span class="kds-popup-title" id="popup-title">Dine-in</span>
-          <button class="kds-panel-close" id="popup-close" aria-label="Close colour picker">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </button>
-        </div>
-        <input type="color" id="popup-native" class="kds-popup-native" aria-label="Choose exact colour">
-        <div class="kds-popup-swatches" id="popup-swatches"></div>
-        <div class="kds-popup-hexrow">
-          <input class="kds-hex-input" id="popup-hex" spellcheck="false" aria-label="Hex colour value">
-        </div>
       </div>
     </div>
   </div>
@@ -600,17 +589,19 @@
     <span>192.168.1.42</span><span class="sep">|</span>
     <span id="clock">14 Aug 14:55</span><span class="sep">|</span>
     <span>Last synced: 2s ago</span><span class="sep">|</span>
-    <span style="color:#4ade80">Connected</span>
+    <span>Connected</span>
   </div>
 </div>
 
 <script>
+  /* Same vivid, normal palette for all three: red, amber, blue,
+     violet, green, pink — instead of the old dark muted tints. */
   const SWATCHES = {
-    dinein: ['#1a3a2a', '#1a2a3a', '#3a2a1a', '#2a1a3a', '#1a2a2a', '#2a3a1a'],
-    takeaway: ['#2a2a35', '#353535', '#2a3035', '#352a2a', '#2a352a', '#303030'],
+    dinein: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
+    takeaway: ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
     rush: ['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#22c55e', '#ec4899'],
   };
-  const DEFAULT_COLORS = { dinein: '#1a3a2a', takeaway: '#2a2a35', rush: '#ef4444' };
+  const DEFAULT_COLORS = { dinein: '#22c55e', takeaway: '#3b82f6', rush: '#ef4444' };
   const LABELS = { dinein: 'Dine-in', takeaway: 'Takeaway', rush: 'Rush badge' };
   const COLORS_KEY = 'kds-proto-colors-v2';
 
@@ -1003,10 +994,10 @@
     document.getElementById('count-completed').textContent = done.length;
 
     if (tab === 'open') {
-      main.className = 'kds-main' + (prevTab !== 'open' ? ' slide-right' : '');
+      main.className = 'kds-main' + (open.length === 0 ? ' empty' : '') + (prevTab !== 'open' ? ' slide-right' : '');
       main.innerHTML = '';
       if (open.length === 0) {
-        main.innerHTML = '<div class="kds-empty">No open orders</div>';
+        main.innerHTML = '<div class="kds-empty">No active orders — kitchen is clear</div>';
       } else {
         /* JS masonry: create up to 4 equal columns, then append each
            card to the shortest column so heights pack with no gaps.
@@ -1068,75 +1059,42 @@
   });
   moveTabIndicator();
 
-  /* ── colour picker popup ────────────────────────── */
-  let colorKey = null; // which colour is being edited (dinein/takeaway/rush)
-
+  /* ── card colour swatches (inline in the panel) ──── */
+  function buildSwatches() {
+    Object.keys(SWATCHES).forEach(key => {
+      const el = document.querySelector(`.kds-swatches[data-key="${key}"]`);
+      el.innerHTML = SWATCHES[key].map(s =>
+        `<div class="kds-swatch${colors[key] === s ? ' active' : ''}" style="background:${s}" data-swatch="${s}" onclick="pickColor('${key}', '${s}')"></div>`
+      ).join('');
+    });
+  }
   function syncColorRow(key) {
     const hex = document.getElementById('hex-' + key);
-    const chip = document.getElementById('chip-' + key);
-    if (hex) hex.textContent = colors[key];
-    if (chip) chip.style.background = colors[key];
+    if (hex && document.activeElement !== hex) hex.value = colors[key];
   }
-  function openColorPopup(key) {
-    colorKey = key;
-    const popup = document.getElementById('color-popup');
-    document.getElementById('popup-title').textContent = key.charAt(0).toUpperCase() + key.slice(1);
-    document.getElementById('popup-native').value = colors[key];
-    document.getElementById('popup-hex').value = colors[key];
-    /* swatch grid for this key */
-    const grid = document.getElementById('popup-swatches');
-    grid.innerHTML = SWATCHES[key].map(s =>
-      `<div class="kds-swatch${colors[key] === s ? ' active' : ''}" style="background:${s}" data-swatch="${s}"></div>`
-    ).join('');
-    popup.style.display = 'block';
-  }
-  function closeColorPopup() { document.getElementById('color-popup').style.display = 'none'; }
-
-  document.querySelectorAll('.kds-color-open').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openColorPopup(btn.dataset.key);
-    });
-  });
-  document.getElementById('popup-close').addEventListener('click', () => closeColorPopup());
-  document.getElementById('popup-native').addEventListener('input', (e) => {
-    if (!colorKey) return;
-    colors = { ...colors, [colorKey]: e.target.value };
-    saveColors();
-    syncColorRow(colorKey);
-    render();
-    document.getElementById('popup-hex').value = e.target.value;
-    document.querySelectorAll('#popup-swatches .kds-swatch').forEach(s =>
-      s.classList.toggle('active', s.dataset.swatch === e.target.value));
-  });
-  document.getElementById('popup-swatches').addEventListener('click', (e) => {
-    const sw = e.target.closest('.kds-swatch');
-    if (!sw || !colorKey) return;
-    pickColor(colorKey, sw.dataset.swatch);
-    document.getElementById('popup-native').value = sw.dataset.swatch;
-    document.getElementById('popup-hex').value = sw.dataset.swatch;
-  });
-  document.getElementById('popup-hex').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
-  });
-  document.getElementById('popup-hex').addEventListener('blur', (e) => {
-    if (!colorKey) return;
-    const v = e.target.value.trim();
-    if (/^#?[0-9a-fA-F]{6}$/.test(v)) {
-      pickColor(colorKey, '#' + v.replace('#', '').toLowerCase());
-      document.getElementById('popup-native').value = colors[colorKey];
-      e.target.value = colors[colorKey];
-    } else {
-      e.target.value = colors[colorKey]; // revert invalid
-    }
-  });
-
   function pickColor(key, value) {
     colors = { ...colors, [key]: value };
     saveColors();
     syncColorRow(key);
+    buildSwatches();
     render();
   }
+  /* hex input: apply on Enter/blur if valid */
+  document.querySelectorAll('.kds-hex-input').forEach(input => {
+    const apply = () => {
+      const v = input.value.trim();
+      if (/^#?[0-9a-fA-F]{6}$/.test(v)) {
+        pickColor(input.dataset.key, '#' + v.replace('#', '').toLowerCase());
+      } else if (/^#?[0-9a-fA-F]{3}$/.test(v)) {
+        const h = v.replace('#', '').split('').map(c => c + c).join('');
+        pickColor(input.dataset.key, '#' + h.toLowerCase());
+      } else {
+        input.value = colors[input.dataset.key]; // revert invalid
+      }
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+    input.addEventListener('blur', apply);
+  });
 
   function toggleMenu(force) {
     const panel = document.getElementById('hamburger-panel');
@@ -1153,7 +1111,6 @@
     } else if (panel._lastFocus) {
       panel._lastFocus.focus();
       panel._lastFocus = null;
-      closeColorPopup(); // popup can't stay open without the panel
     }
   }
   document.getElementById('hamburger-btn').addEventListener('click', (e) => {
@@ -1275,6 +1232,7 @@
 
   /* Re-render cards every 10s so durations stay live */
   setInterval(render, 10000);
+  buildSwatches();
   Object.keys(SWATCHES).forEach(key => syncColorRow(key));
   render();
 </script>
