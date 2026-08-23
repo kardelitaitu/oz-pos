@@ -361,20 +361,24 @@
 
   .kds-card-header {
     flex: 0 0 auto; display: flex; align-items: center; gap: 9px;
-    padding: 7px 13px; font-size: 13px; font-weight: 600;
+    padding: 9px 13px; font-size: 13px; font-weight: 600;
     transition: background 0.2s;
-    /* color set inline via contrastText(bg); children only vary opacity */
+    /* color set inline via contrastText(bg); children only vary opacity
+       Layout: 3 flex children — icon | left column | right column.
+       Left column stacks (order-no, order-id); right column stacks
+       (customer, status) so the visual rows match the old design:
+       row1: #12 ... customer, row2: id ... status */
   }
   .kds-card-header-icon { display: flex; align-items: center; flex-shrink: 0; }
-  .kds-card-header-body { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
-  .kds-card-header-row { display: flex; align-items: center; justify-content: space-between; }
-  .kds-card-header-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
-  .kds-card-header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .kds-card-header-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .kds-card-header-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .kds-card-header-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
   .kds-card-header .order-no { font-weight: 700; }
   .kds-card-header .customer { font-weight: 600; }
   .kds-card-header .time { opacity: 0.6; font-size: 12px; font-weight: 400; }
   .kds-card-header .status {
     opacity: 0.55; font-size: 11px; font-weight: 400; font-style: italic;
+    min-height: 1.1em; display: inline-block;
   }
   .kds-card-header .status.paused { opacity: 0.9; font-style: normal; }
   .kds-card-header .status.processing {
@@ -382,7 +386,7 @@
     animation: kds-blink 2.5s ease-in-out infinite;
   }
   @keyframes kds-blink { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.2; } }
-  .kds-service-icon { width: 18px; height: 18px; flex-shrink: 0; }
+  .kds-service-icon { width: 22px; height: 22px; flex-shrink: 0; }
   .kds-order-id {
     font-size: 9px; opacity: 0.35; font-family: ui-monospace, monospace;
     letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -396,37 +400,63 @@
 
   .kds-card-main { flex: 1 1 auto; min-height: 0; padding: 2px 0; }
 
-  .kds-category { border-bottom: 1px solid var(--border); padding: 5px 0; }
+  .kds-category { border-bottom: 1px solid var(--border); padding: 3px 0 2px 0; }
   .kds-category:last-child { border-bottom: none; }
   .kds-category-header {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; gap: 8px;
     width: 100%; padding: 6px 13px; border: none; background: transparent;
     color: var(--text); opacity: 0.85; cursor: pointer; font-size: 12px; font-weight: 600;
     transition: background 0.1s; text-align: left;
+    /* fixed row height: identical whether checked or not */
+    min-height: 30px; line-height: 1.2;
   }
   .kds-category-header:hover { background: rgba(255,255,255,0.05); }
   .kds-category-header:active { background: rgba(255,255,255,0.09); }
-  .kds-cat-progress { opacity: 0.45; font-weight: 400; font-size: 11px; margin-left: 6px; }
-  .kds-cat-check { opacity: 0.9; margin-left: 4px; font-size: 12px; }
+  /* light theme: white hover is invisible on white cards → use dark */
+  .kds-screen.light .kds-category-header:hover { background: rgba(0,0,0,0.06); }
+  .kds-screen.light .kds-category-header:active { background: rgba(0,0,0,0.1); }
+  /* left area: the single "n/M CategoryName" label, pushed to the very right */
+  .kds-cat-label {
+    flex: 1; display: flex; justify-content: flex-end;
+    opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* right area: reserved check slot — always occupies width so the
+     header never shifts when the check appears/disappears */
+  .kds-cat-check {
+    flex-shrink: 0; width: 16px; height: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .kds-cat-check.done { opacity: 1; color: #22c55e; }
 
   .kds-item { padding: 0 6px; }
   .kds-item-row {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; flex-direction: column;  /* allows the note to live inside the button */
     width: 100%; padding: 4px 7px; border: none; background: transparent;
-    color: var(--text); opacity: 0.85; cursor: pointer; font-size: 12px; border-radius: 5px;
+    color: var(--text); opacity: 0.85; cursor: pointer; font-size: 13px; border-radius: 5px;
     transition: background 0.1s; text-align: left;
+    /* fixed row height: identical whether checked or not (the done-time
+       text appears/disappears without changing the row size) */
+    min-height: 28px; line-height: 1.3;
+  }
+  .kds-item-row-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    min-height: 20px; gap: 6px;
   }
   .kds-item-row:hover { background: rgba(255,255,255,0.05); }
   .kds-item-row:active { background: rgba(255,255,255,0.09); }
+  /* light theme: white hover is invisible on white cards → use dark */
+  .kds-screen.light .kds-item-row:hover { background: rgba(0,0,0,0.06); }
+  .kds-screen.light .kds-item-row:active { background: rgba(0,0,0,0.1); }
   .kds-item-row.done { opacity: 0.4; }
   .kds-item-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
-  .kds-item-qty { opacity: 0.6; font-size: 11px; }
+  .kds-item-qty { opacity: 0.6; font-size: 12px; }
   .kds-item-row.done .kds-item-qty { opacity: 0.6; }
   .kds-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .kds-item-done-time { opacity: 0.45; font-size: 10px; flex-shrink: 0; }
   .kds-item-note {
     opacity: 0.5; font-style: italic; font-size: 11px;
-    padding: 0 7px 4px 29px; overflow: hidden;
+    padding: 0 0 2px 22px; overflow: hidden; text-align: left;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   }
   .kds-order-notes {
@@ -434,7 +464,7 @@
     padding: 6px 13px; border-top: 1px solid var(--border);
   }
 
-  .kds-card-footer { flex: 0 0 auto; padding: 7px 10px; }
+  .kds-card-footer { flex: 0 0 auto; padding: 7px 10px; display: flex; flex-direction: column; gap: 6px; }
   .kds-status-btn {
     width: 100%; padding: 7px 0; border-radius: 7px; border: none;
     font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
@@ -910,24 +940,20 @@
     <div class="kds-card">
       <div class="kds-card-header" style="background:${hdrBg};color:${hdrText}">
         <div class="kds-card-header-icon">${o.dineIn ? DINE_ICON : TAKEAWAY_ICON}</div>
-        <div class="kds-card-header-body">
+        <div class="kds-card-header-left">
           <div class="kds-card-header-row">
-            <div class="kds-card-header-left">
-              <span class="order-no">#${o.table || o.display}</span>
-              ${o.priority ? `<span class="kds-rush-badge" style="background:${rushBg};color:${rushText}">RUSH</span>` : ''}
-            </div>
-            <div class="kds-card-header-right">
-              <span class="customer">${o.customer} <span class="time">(${fmtDuration(Date.now() - o.received)})</span></span>
-            </div>
+            <span class="order-no">#${o.table || o.display}</span>
+            ${o.priority ? `<span class="kds-rush-badge" style="background:${rushBg};color:${rushText}">RUSH</span>` : ''}
           </div>
-          <div class="kds-card-header-row">
-            <span class="kds-order-id">${o.id}</span>
-            ${o.status === 'paused'
-              ? `<span class="status paused">⏸ paused</span>`
-              : o.status === 'processing'
-                ? `<span class="status processing">processing</span>`
-                : ''}
-          </div>
+          <span class="kds-order-id">${o.id}</span>
+        </div>
+        <div class="kds-card-header-right">
+          <span class="customer">${o.customer} <span class="time">(${fmtDuration(Date.now() - o.received)})</span></span>
+          ${o.status === 'paused'
+            ? `<span class="status paused">⏸ paused</span>`
+            : o.status === 'processing'
+              ? `<span class="status processing">processing</span>`
+              : `<span class="status" aria-hidden="true">&nbsp;</span>`}
         </div>
       </div>
       <div class="kds-card-main">
@@ -936,29 +962,30 @@
           return `
           <div class="kds-category">
             <button class="kds-category-header" onclick="toggleCatC('${o.id}', ${origIdx})">
-              <span>${plainName(cat.course)}</span>
-              <span>
-                <span class="kds-cat-progress">${cat.items.filter(i => i.done).length}/${cat.items.length}</span>
-                ${cat.items.every(i => i.done) ? '<span class="kds-cat-check">✓</span>' : ''}
-              </span>
+              <span class="kds-cat-label">${cat.items.filter(i => i.done).length}/${cat.items.length} ${plainName(cat.course)}</span>
+              <span class="kds-cat-check${cat.items.every(i => i.done) ? ' done' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:10px;height:10px"><path d="M4 12.5l5 5L20 6.5"/></svg></span>
             </button>
             ${cat.items.map((it, ii) => `
               <div class="kds-item">
                 <button class="kds-item-row${it.done ? ' done' : ''}" onclick="toggleItemC('${o.id}', ${origIdx}, ${ii})">
-                  <span class="kds-item-left">
-                    <span class="kds-item-qty">${it.qty}×</span>
-                    <span class="kds-item-name">${it.name}</span>
+                  <span class="kds-item-row-inner">
+                    <span class="kds-item-left">
+                      <span class="kds-item-qty">${it.qty}×</span>
+                      <span class="kds-item-name">${it.name}</span>
+                    </span>
+                    ${it.done && it.doneAt ? `<span class="kds-item-done-time">${fmtDuration(it.doneAt - o.received)}</span>` : ''}
                   </span>
-                  ${it.done && it.doneAt ? `<span class="kds-item-done-time">${fmtDuration(it.doneAt - o.received)}</span>` : ''}
+                  ${it.note ? `<span class="kds-item-note">${it.note}</span>` : ''}
                 </button>
-                ${it.note ? `<div class="kds-item-note">${it.note}</div>` : ''}
               </div>
             `).join('')}
           </div>
         `}).join('')}
-        ${o.notes ? `<div class="kds-order-notes">Notes: "${o.notes}"</div>` : ''}
       </div>
-      ${statusBtn ? `<div class="kds-card-footer">${statusBtn}</div>` : ''}
+      <div class="kds-card-footer">
+        ${o.notes ? `<div class="kds-order-notes">Notes: "${o.notes}"</div>` : ''}
+        ${statusBtn ? statusBtn : ''}
+      </div>
     </div>`;
   }
 
