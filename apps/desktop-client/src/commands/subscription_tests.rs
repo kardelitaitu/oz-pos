@@ -21,13 +21,31 @@ fn caps(conn: &rusqlite::Connection) -> SubscriptionCapabilitiesDto {
 fn capabilities_reflect_free_tier_and_zero_usage() {
     let conn = fresh_db();
     let dto = caps(&conn);
-    assert_eq!(dto.tier, "free");
-    assert_eq!(dto.max_stores, Some(1));
-    assert_eq!(dto.max_staff_users, Some(1));
-    assert_eq!(dto.sales_history_days, Some(90)); // 3 months for Free tier
-    assert!(!dto.supports_qris);
-    assert!(!dto.supports_analytics);
-    assert!(!dto.supports_loyalty);
+    // In debug builds, load_capabilities upgrades Free -> Premium
+    // so all features are available during development.
+    #[cfg(debug_assertions)]
+    {
+        assert_eq!(
+            dto.tier, "premium",
+            "debug builds upgrade Free tier to Premium"
+        );
+        assert_eq!(dto.max_stores, Some(5));
+        assert_eq!(dto.max_staff_users, Some(50));
+        assert_eq!(dto.sales_history_days, None, "Premium = unlimited history");
+        assert!(dto.supports_qris);
+        assert!(dto.supports_analytics);
+        assert!(dto.supports_loyalty);
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        assert_eq!(dto.tier, "free");
+        assert_eq!(dto.max_stores, Some(1));
+        assert_eq!(dto.max_staff_users, Some(1));
+        assert_eq!(dto.sales_history_days, Some(90));
+        assert!(!dto.supports_qris);
+        assert!(!dto.supports_analytics);
+        assert!(!dto.supports_loyalty);
+    }
     assert_eq!(dto.store_count, 1, "fresh DB seeds the primary store");
     assert_eq!(dto.staff_count, 0);
     assert_eq!(dto.terminal_count, 0);

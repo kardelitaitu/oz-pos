@@ -363,7 +363,15 @@ async fn list_kds_orders_filters_by_status() {
         .build(tauri::generate_context!())
         .unwrap();
 
-    // Move order2 to "ready" via the status update command.
+    // Move order2 through the valid forward-only chain: pending -> preparing -> ready.
+    update_kds_status_scoped(
+        "tok".into(),
+        order2.id.clone(),
+        "preparing".into(),
+        app.state(),
+    )
+    .await
+    .unwrap();
     update_kds_status_scoped("tok".into(), order2.id.clone(), "ready".into(), app.state())
         .await
         .unwrap();
