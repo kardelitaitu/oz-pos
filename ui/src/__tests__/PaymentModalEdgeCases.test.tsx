@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { act } from 'react';
 import { renderInAct, actAsync } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
@@ -84,10 +84,7 @@ const { mockGetLoyaltyAccount, mockGetPointsValue, mockRedeemLoyaltyPoints } = v
   mockRedeemLoyaltyPoints: vi.fn(),
 }));
 
-// Mock getSubscriptionCapabilities for QRIS upgrade test
-const { mockGetSubscriptionCapabilities } = vi.hoisted(() => ({
-  mockGetSubscriptionCapabilities: vi.fn(),
-}));
+// (mockGetSubscriptionCapabilities removed — unused)
 
 vi.mock('@/hooks/useFeatures', () => ({
   useFeatures: () => ({
@@ -136,13 +133,8 @@ vi.mock('@/api/loyalty', () => ({
 }));
 
 import { listCustomers, listCustomersScoped } from '@/api/customers';
-import { getLoyaltyAccount, getPointsValue } from '@/api/loyalty';
-import { printSalesReceipt } from '@/api/sales';
 const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
 const mockListCustomersScoped = listCustomersScoped as ReturnType<typeof vi.fn>;
-const mockGetLoyaltyAccountImported = getLoyaltyAccount as ReturnType<typeof vi.fn>;
-const mockGetPointsValueImported = getPointsValue as ReturnType<typeof vi.fn>;
-const mockPrintSalesReceiptImported = printSalesReceipt as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   invokeMock.mockReset(); // reset calls AND implementation
@@ -636,7 +628,7 @@ describe('PaymentModal — edge cases', () => {
         <PaymentModal
           open
           sessionToken="mock-session-token"
-          selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' }}
+          selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com', notes: '', created_at: '', updated_at: '' }}
           lineItems={[lineItem()]}
           total={usd(700)}
           userId="test-user-id"
@@ -671,7 +663,7 @@ describe('PaymentModal — edge cases', () => {
         <PaymentModal
           open
           sessionToken="mock-session-token"
-          selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' }}
+          selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com', notes: '', created_at: '', updated_at: '' }}
           lineItems={[lineItem()]}
           total={usd(700)}
           userId="test-user-id"
@@ -707,7 +699,7 @@ describe('PaymentModal — edge cases', () => {
     }, { timeout: 5000 });
 
     // Click Cancel - this should reset the loyalty state
-    const cancelBtn = document.querySelector('.payment-loyalty-cancel-btn');
+    const cancelBtn = document.querySelector('.payment-loyalty-cancel-btn')!;
     await userEvent.click(cancelBtn);
 
     // Use Points button should reappear
@@ -762,7 +754,7 @@ describe('PaymentModal — edge cases', () => {
       <PaymentModal
         open
         sessionToken="mock-session-token"
-        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' }}
+        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com', notes: '', created_at: '', updated_at: '' }}
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
@@ -785,7 +777,7 @@ describe('PaymentModal — edge cases', () => {
     });
 
     // Click remove button (×)
-    const removeBtn = document.querySelector('.payment-customer-remove');
+    const removeBtn = document.querySelector('.payment-customer-remove')!;
     expect(removeBtn).toBeInTheDocument();
     await userEvent.click(removeBtn);
 
@@ -809,7 +801,7 @@ describe('PaymentModal — edge cases', () => {
       <PaymentModal
         open
         sessionToken="mock-session-token"
-        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' }}
+        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com', notes: '', created_at: '', updated_at: '' }}
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
@@ -826,7 +818,7 @@ describe('PaymentModal — edge cases', () => {
     });
 
     // Click Change button
-    const changeBtn = document.querySelector('.payment-customer-change');
+    const changeBtn = document.querySelector('.payment-customer-change')!;
     console.log('Change button:', changeBtn);
     expect(changeBtn).toBeInTheDocument();
     await userEvent.click(changeBtn);
@@ -843,9 +835,9 @@ describe('PaymentModal — edge cases', () => {
     });
 
     // Click Cancel in search modal to go back (use the one inside the search modal)
-    const searchModal = document.querySelector('.payment-customer-search-modal');
-    const cancelBtn = searchModal?.querySelector('.payment-customer-search-close');
-    await userEvent.click(cancelBtn!);
+    const searchModal = document.querySelector('.payment-customer-search-modal')!;
+    const cancelBtn = searchModal.querySelector('.payment-customer-search-close')!;
+    await userEvent.click(cancelBtn);
 
     // Customer badge should reappear
     await waitFor(() => {
@@ -866,7 +858,7 @@ describe('PaymentModal — edge cases', () => {
       <PaymentModal
         open
         sessionToken="mock-session-token"
-        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' }}
+        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com', notes: '', created_at: '', updated_at: '' }}
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
@@ -882,7 +874,7 @@ describe('PaymentModal — edge cases', () => {
     });
 
     // Click Change button to open search modal
-    const changeBtn = document.querySelector('.payment-customer-change');
+    const changeBtn = document.querySelector('.payment-customer-change')!;
     expect(changeBtn).toBeInTheDocument();
     await userEvent.click(changeBtn);
 
@@ -892,7 +884,7 @@ describe('PaymentModal — edge cases', () => {
     });
 
     // Click on the overlay (outside the modal) to close
-    const overlay = document.querySelector('.payment-customer-search-overlay');
+    const overlay = document.querySelector('.payment-customer-search-overlay')!;
     expect(overlay).toBeInTheDocument();
     await userEvent.click(overlay);
 
@@ -933,16 +925,16 @@ describe('PaymentModal — edge cases', () => {
     expect(cardRadios).toHaveLength(2);
 
     // Change split 1 method to card (click the second card radio)
-    await userEvent.click(cardRadios[0]);
+    await userEvent.click(cardRadios[0]!);
 
     // Change split 2 method to other - find the "other" radio by value
     const otherRadios = document.querySelectorAll('input[type="radio"][value="other"]');
     expect(otherRadios).toHaveLength(2);
-    await userEvent.click(otherRadios[1] as HTMLElement);
+    await userEvent.click(otherRadios[1] as unknown as HTMLElement);
 
     // Other input should be enabled for split 2
-    const otherInputs = screen.getAllByPlaceholderText(/other/i);
-    const otherInput = otherInputs[1];
+    const otherInputs = screen.getAllByPlaceholderText(/other/i) as HTMLInputElement[];
+    const otherInput = otherInputs[1]!;
     expect(otherInput).not.toBeDisabled();
 
     // Type in other input
@@ -965,7 +957,7 @@ describe('PaymentModal — edge cases', () => {
       <PaymentModal
         open
         sessionToken="mock-session-token"
-        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' }}
+        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com', notes: '', created_at: '', updated_at: '' }}
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
@@ -986,7 +978,7 @@ describe('PaymentModal — edge cases', () => {
       expect(input).toBeInTheDocument();
     });
 
-    const pointsInput = screen.getByRole('spinbutton', { name: /points/i });
+    const pointsInput = screen.getByRole('spinbutton', { name: /points/i }) as HTMLInputElement;
     console.log('Initial pointsInput value:', pointsInput.value);
 
     // Try to type fractional value - should be ignored
@@ -1018,7 +1010,7 @@ describe('PaymentModal — edge cases', () => {
       <PaymentModal
         open
         sessionToken="mock-session-token"
-        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' }}
+        selectedCustomer={{ id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com', notes: '', created_at: '', updated_at: '' }}
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
@@ -1039,7 +1031,7 @@ describe('PaymentModal — edge cases', () => {
       expect(input).toBeInTheDocument();
     });
 
-    const pointsInput = screen.getByRole('spinbutton', { name: /points/i });
+    const pointsInput = screen.getByRole('spinbutton', { name: /points/i }) as HTMLInputElement;
 
     // Try to type value exceeding max (500)
     await userEvent.clear(pointsInput);

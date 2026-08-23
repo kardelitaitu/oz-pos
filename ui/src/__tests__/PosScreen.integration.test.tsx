@@ -8,7 +8,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act } from 'react';
-import { screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import salesFtl from '@/locales/sales.ftl?raw';
@@ -647,8 +647,8 @@ describe('PosScreen — Keyboard navigation (↑/↓/+/-/Del/Enter)', () => {
     await renderPosScreenWithShift();
     const productCards = screen.getAllByTestId('product-card');
     expect(productCards.length).toBeGreaterThanOrEqual(2);
-    await userEvent.click(productCards[0]);
-    await userEvent.click(productCards[1]);
+    await userEvent.click(productCards[0]!);
+    await userEvent.click(productCards[1]!);
     await waitFor(() => {
       expect(screen.getAllByTestId('cart-panel-line-item')).toHaveLength(2);
     });
@@ -670,11 +670,10 @@ describe('PosScreen — Keyboard navigation (↑/↓/+/-/Del/Enter)', () => {
   it('ArrowDown does not throw when no line focused', async () => {
     await addTwoProducts();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
     // Fire keydown on cart panel targeting first line
-    fireEvent.keyDown(cartPanel, { key: 'ArrowDown' }, firstLine);
+    fireEvent.keyDown(firstLine, { key: 'ArrowDown' });
 
     // Handler should not throw
     expect(firstLine).toBeInTheDocument();
@@ -683,12 +682,11 @@ describe('PosScreen — Keyboard navigation (↑/↓/+/-/Del/Enter)', () => {
   it('+ key triggers handler on focused line', async () => {
     await addTwoProducts();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
     // Simulate + key press on cart panel with first line as target
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: '+' }, firstLine);
+      fireEvent.keyDown(firstLine, { key: '+' });
     });
 
     // Handler should not throw
@@ -698,11 +696,10 @@ describe('PosScreen — Keyboard navigation (↑/↓/+/-/Del/Enter)', () => {
   it('- key triggers handler on focused line', async () => {
     await addTwoProducts();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: '-' }, firstLine);
+      fireEvent.keyDown(firstLine, { key: '-' });
     });
 
     // Handler should not throw
@@ -712,42 +709,43 @@ describe('PosScreen — Keyboard navigation (↑/↓/+/-/Del/Enter)', () => {
   it('Delete key triggers remove line handler', async () => {
     await addTwoProducts();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
     // Press Delete
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: 'Delete' }, firstLine);
+      fireEvent.keyDown(firstLine, { key: 'Delete' });
     });
 
-    // Handler should not throw
-    expect(firstLine).toBeInTheDocument();
+    // Handler removes the line from cart
+    await waitFor(() => {
+      expect(firstLine).not.toBeInTheDocument();
+    });
   });
 
   it('Backspace key triggers remove line handler', async () => {
     await addTwoProducts();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
     // Press Backspace
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: 'Backspace' }, firstLine);
+      fireEvent.keyDown(firstLine, { key: 'Backspace' });
     });
 
-    // Handler should not throw
-    expect(firstLine).toBeInTheDocument();
+    // Handler removes the line from cart
+    await waitFor(() => {
+      expect(firstLine).not.toBeInTheDocument();
+    });
   });
 
   it('Enter key triggers payment handler when cart has total', async () => {
     await addTwoProducts();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
     // Press Enter
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: 'Enter' }, firstLine);
+      fireEvent.keyDown(firstLine, { key: 'Enter' });
     });
 
     // Handler should not throw (payment modal opening is tested separately)
@@ -784,7 +782,7 @@ describe('PosScreen — Discount input flow (apply/cancel/validation)', () => {
     await renderPosScreenWithShift();
     const productCards = screen.getAllByTestId('product-card');
     expect(productCards.length).toBeGreaterThanOrEqual(1);
-    await userEvent.click(productCards[0]);
+    await userEvent.click(productCards[0]!);
     await waitFor(() => {
       expect(screen.getByTestId('cart-panel-line-item')).toBeInTheDocument();
     });
@@ -895,7 +893,6 @@ describe('PosScreen — Discount input flow (apply/cancel/validation)', () => {
     const discountBtn = screen.getByRole('button', { name: /discount/i });
     await userEvent.click(discountBtn);
 
-    const pctInput = screen.getByPlaceholderText('%');
     // Leave empty
 
     const applyBtn = screen.getByRole('button', { name: /apply/i });
@@ -978,7 +975,7 @@ describe('PosScreen — Tip segments (0/15/18/20%)', () => {
     await renderPosScreenWithShift();
     const productCards = screen.getAllByTestId('product-card');
     expect(productCards.length).toBeGreaterThanOrEqual(1);
-    await userEvent.click(productCards[0]);
+    await userEvent.click(productCards[0]!);
     await waitFor(() => {
       expect(screen.getByTestId('cart-panel-line-item')).toBeInTheDocument();
     });
@@ -1094,7 +1091,7 @@ describe('PosScreen — Service charge toggle', () => {
     await renderPosScreenWithShift();
     const productCards = screen.getAllByTestId('product-card');
     expect(productCards.length).toBeGreaterThanOrEqual(1);
-    await userEvent.click(productCards[0]);
+    await userEvent.click(productCards[0]!);
     await waitFor(() => {
       expect(screen.getByTestId('cart-panel-line-item')).toBeInTheDocument();
     });
@@ -1185,7 +1182,7 @@ describe('PosScreen — Open bills (hold/resume)', () => {
     await renderPosScreenWithShift();
     const productCards = screen.getAllByTestId('product-card');
     expect(productCards.length).toBeGreaterThanOrEqual(1);
-    await userEvent.click(productCards[0]);
+    await userEvent.click(productCards[0]!);
     await waitFor(() => {
       expect(screen.getByTestId('cart-panel-line-item')).toBeInTheDocument();
     });
@@ -1395,7 +1392,7 @@ describe('PosScreen — Shift open/close flows', () => {
 
   // ── Open shift modal interactions ──
   it.skip('opens shift when confirm clicked in open shift modal', async () => {
-    const openShiftMock = vi.fn(() => Promise.resolve({ ...defaultShift, openingBalanceMinor: 100000 }));
+    const openShiftMock = vi.fn(() => Promise.resolve({ ...shiftFixture(), openingBalanceMinor: 100000 }));
     vi.mocked(shiftsApi.openShiftScoped).mockImplementation(openShiftMock);
 
     await renderWithShift(false);
@@ -1441,8 +1438,8 @@ describe('PosScreen — Shift open/close flows', () => {
 
   // ── Close shift modal interactions ──
   it('closes shift when confirm clicked with valid closing balance', async () => {
-    const closeShiftMock = vi.fn(() => Promise.resolve());
-    vi.mocked(shiftsApi.closeShiftScoped).mockImplementation(closeShiftMock);
+    const closeShiftMock = vi.fn(() => Promise.resolve(shiftFixture()) as Promise<ReturnType<typeof shiftsApi.closeShiftScoped>> extends Promise<infer R> ? R : never);
+    vi.mocked(shiftsApi.closeShiftScoped).mockImplementation(closeShiftMock as never);
 
     await renderWithShift(true);
 
@@ -1588,8 +1585,8 @@ describe('PosScreen — Undo stack (animated, max 5)', () => {
     await renderPosScreenWithShift();
     const productCards = screen.getAllByTestId('product-card');
     expect(productCards.length).toBeGreaterThanOrEqual(2);
-    await userEvent.click(productCards[0]);
-    await userEvent.click(productCards[1]);
+    await userEvent.click(productCards[0]!);
+    await userEvent.click(productCards[1]!);
     await waitFor(() => {
       expect(screen.getAllByTestId('cart-panel-line-item')).toHaveLength(2);
     });
@@ -1598,47 +1595,48 @@ describe('PosScreen — Undo stack (animated, max 5)', () => {
   it('has undo handler attached (push/pop/dismiss)', async () => {
     await setupCart();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
     // Trigger remove line (pushes to undo stack)
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: 'Delete' }, firstLine);
+      fireEvent.keyDown(firstLine, { key: 'Delete' });
     });
 
-    // Handler should not throw - undo stack operations work
-    expect(firstLine).toBeInTheDocument();
+    // Handler removes the line - undo stack operations work
+    await waitFor(() => {
+      expect(firstLine).not.toBeInTheDocument();
+    });
   });
 
   it('shows undo button when line removed (handler logic)', async () => {
     await setupCart();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
     // Trigger remove line
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: 'Delete' }, firstLine);
+      fireEvent.keyDown(firstLine, { key: 'Delete' });
     });
 
-    // In JSDOM the undo pill may not render immediately due to animation,
-    // but we verify the handler chain works (line removal is async)
-    // Just verify the handler doesn't throw
-    expect(firstLine).toBeInTheDocument();
+    // Handler removes the line from cart
+    await waitFor(() => {
+      expect(firstLine).not.toBeInTheDocument();
+    });
   });
 
   it('has dismiss undo handler', async () => {
     await setupCart();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: 'Delete' }, firstLine);
+      fireEvent.keyDown(firstLine, { key: 'Delete' });
     });
 
-    // The dismiss handler should be available (tested via keyboard handler)
-    expect(firstLine).toBeInTheDocument();
+    // Handler removes the line - confirms the dismiss handler works
+    await waitFor(() => {
+      expect(firstLine).not.toBeInTheDocument();
+    });
   });
 
   it('limits undo stack to max 5 items (source code logic)', async () => {
@@ -1651,22 +1649,27 @@ describe('PosScreen — Undo stack (animated, max 5)', () => {
   it('triggers undo on keyboard Delete/Backspace', async () => {
     await setupCart();
 
-    const cartPanel = screen.getByRole('region', { name: /cart/i });
-    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0];
+    const firstLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
 
-    // Test Delete key
+    // Test Delete key - removes first line
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: 'Delete' }, firstLine);
+      fireEvent.keyDown(firstLine, { key: 'Delete' });
+    });
+
+    await waitFor(() => {
+      expect(firstLine).not.toBeInTheDocument();
     });
 
     // Test Backspace key on second line
-    const secondLine = screen.getAllByTestId('cart-panel-line-item')[1];
+    const secondLine = screen.getAllByTestId('cart-panel-line-item')[0]!;
     await act(async () => {
-      fireEvent.keyDown(cartPanel, { key: 'Backspace' }, secondLine);
+      fireEvent.keyDown(secondLine, { key: 'Backspace' });
     });
 
     // Both should trigger without error
-    expect(screen.getAllByTestId('cart-panel-line-item')).toBeDefined();
+    await waitFor(() => {
+      expect(secondLine).not.toBeInTheDocument();
+    });
   });
 });
 
@@ -1681,7 +1684,7 @@ describe('PosScreen — Live tax preview (computeCartTax)', () => {
     await renderPosScreenWithShift();
     const productCards = screen.getAllByTestId('product-card');
     expect(productCards.length).toBeGreaterThanOrEqual(1);
-    await userEvent.click(productCards[0]);
+    await userEvent.click(productCards[0]!);
     await waitFor(() => {
       expect(screen.getByTestId('cart-panel-line-item')).toBeInTheDocument();
     });
@@ -1719,7 +1722,7 @@ describe('PosScreen — Live tax preview (computeCartTax)', () => {
     // Click Charge to open payment modal
     const chargeButtons = screen.getAllByRole('button', { name: /charge/i });
     expect(chargeButtons.length).toBeGreaterThan(0);
-    await userEvent.click(chargeButtons[0]);
+    await userEvent.click(chargeButtons[0]!);
 
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: /payment/i })).toBeInTheDocument();
