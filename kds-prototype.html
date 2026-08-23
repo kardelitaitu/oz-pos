@@ -398,10 +398,19 @@
     border-radius: 3px; letter-spacing: 0.5px;
   }
 
-  .kds-card-main { flex: 1 1 auto; min-height: 0; padding: 2px 0; }
+  .kds-card-main { flex: 1 1 auto; min-height: 0; padding: 2px 0 0 0; }
 
-  .kds-category { border-bottom: 1px solid var(--border); padding: 3px 0 2px 0; }
-  .kds-category:last-child { border-bottom: none; }
+  .kds-category { border-bottom: 1px solid var(--border); padding: 3px 0 2px 0; border-radius: 6px; transition: background 0.15s; }
+  .kds-category:last-child { border-bottom: none; padding-bottom: 0; }
+  /* Whole-section hover (station-level unit): when the header is hovered,
+     the ENTIRE category block lights up (header + its items), reinforcing
+     that a header tap checks off the whole group. Items alone do NOT
+     trigger it — they toggle individually. :has() is supported in the
+     Chromium/WebKit targets. The header itself has NO separate hover —
+     the section background covers the whole block evenly, so there is
+     no double-highlight on the header row. */
+  .kds-category:has(.kds-category-header:hover) { background: rgba(255,255,255,0.06); }
+  .kds-screen.light .kds-category:has(.kds-category-header:hover) { background: rgba(0,0,0,0.06); }
   .kds-category-header {
     display: flex; align-items: center; gap: 8px;
     width: 100%; padding: 6px 13px; border: none; background: transparent;
@@ -410,10 +419,9 @@
     /* fixed row height: identical whether checked or not */
     min-height: 30px; line-height: 1.2;
   }
-  .kds-category-header:hover { background: rgba(255,255,255,0.05); }
+  .kds-category-header:hover { background: transparent; }
   .kds-category-header:active { background: rgba(255,255,255,0.09); }
-  /* light theme: white hover is invisible on white cards → use dark */
-  .kds-screen.light .kds-category-header:hover { background: rgba(0,0,0,0.06); }
+  /* light theme: active uses dark; hover is handled by the section */
   .kds-screen.light .kds-category-header:active { background: rgba(0,0,0,0.1); }
   /* left area: the single "n/M CategoryName" label, pushed to the very right */
   .kds-cat-label {
@@ -464,7 +472,7 @@
     padding: 6px 13px; border-top: 1px solid var(--border);
   }
 
-  .kds-card-footer { flex: 0 0 auto; padding: 7px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .kds-card-footer { flex: 0 0 auto; padding: 0 10px 7px; display: flex; flex-direction: column; gap: 6px; }
   .kds-status-btn {
     width: 100%; padding: 7px 0; border-radius: 7px; border: none;
     font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
