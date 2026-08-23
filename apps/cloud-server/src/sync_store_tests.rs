@@ -1,7 +1,72 @@
 use super::*;
+use std::str::FromStr;
 
 fn fresh_db() -> Arc<Mutex<Connection>> {
     Arc::new(Mutex::new(oz_core::migrations::fresh_db()))
+}
+
+/// Create a throwaway PostgreSQL database, apply the full schema, and
+/// return `(pool, db_name)`. Each PG integration test gets its own
+/// isolated database to avoid AccessExclusiveLock deadlocks from
+/// concurrent PG_INIT DDL on the shared base DB.
+///
+/// Caller must clean up with `DROP DATABASE {db_name} WITH (FORCE)`.
+async fn throwaway_pool() -> Option<(deadpool_postgres::Pool, String)> {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let config = tokio_postgres::Config::from_str(&url).ok()?;
+    let admin_mgr = deadpool_postgres::Manager::new(config, tokio_postgres::NoTls);
+    let admin_pool = deadpool_postgres::Pool::builder(admin_mgr)
+        .max_size(2)
+        .build()
+        .ok()?;
+    let admin = admin_pool.get().await.ok()?;
+
+    // Clean up stale throwaway DBs from crashed runs.
+    let stale: Vec<String> = admin
+        .query(
+            "SELECT datname FROM pg_database WHERE datname LIKE 'oz_sync_test_%'",
+            &[],
+        )
+        .await
+        .ok()?
+        .iter()
+        .map(|r| r.get::<_, String>(0))
+        .collect();
+    for d in &stale {
+        let _ = admin
+            .batch_execute(&format!("DROP DATABASE IF EXISTS {d} WITH (FORCE);"))
+            .await;
+    }
+
+    let db_name = format!(
+        "oz_sync_test_{}_{}",
+        std::process::id(),
+        uuid::Uuid::now_v7()
+    );
+    admin
+        .execute(&format!("CREATE DATABASE {db_name}"), &[])
+        .await
+        .ok()?;
+    drop(admin);
+    drop(admin_pool);
+
+    // Connect to the new DB and apply schema.
+    let db_url = format!("postgres://postgres:postgres@localhost:15432/{db_name}");
+    let db_config = tokio_postgres::Config::from_str(&db_url).ok()?;
+    let mgr = deadpool_postgres::Manager::new(db_config, tokio_postgres::NoTls);
+    let pool = deadpool_postgres::Pool::builder(mgr)
+        .max_size(3)
+        .build()
+        .ok()?;
+    let client = pool.get().await.ok()?;
+    client
+        .batch_execute(oz_core::migrations::PG_INIT)
+        .await
+        .ok()?;
+    drop(client);
+
+    Some((pool, db_name))
 }
 
 fn sample_item(id: &str) -> OfflineQueueItem {
@@ -154,16 +219,9 @@ async fn store_push_batch_empty_returns_empty() {
 /// suite stays green on machines without a running Postgres.
 #[tokio::test]
 async fn pg_integration_push_pull_plan_snapshot_roundtrip() {
-    let url = std::env::var("OZ_TEST_PG_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-
-    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
-        Ok(crate::db::DbPool::Postgres(pool)) => pool,
-        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
-        Err(e) => {
-            eprintln!("PG sync-store integration test skipped: {e}");
-            return;
-        }
+    let Some((pool, db_name)) = throwaway_pool().await else {
+        eprintln!("PG sync-store integration test skipped: cannot create throwaway DB");
+        return;
     };
 
     let tenant = format!("pg-sync-store-test-{}", uuid::Uuid::now_v7());
@@ -291,19 +349,21 @@ async fn pg_integration_push_pull_plan_snapshot_roundtrip() {
             .execute("DELETE FROM roles WHERE id = $1", &[&role_id])
             .await
             .unwrap();
-        client
-            .execute("DELETE FROM tax_rates WHERE tenant_id = $1", &[&tenant])
-            .await
-            .unwrap();
-        client
-            .execute("DELETE FROM products WHERE tenant_id = $1", &[&tenant])
-            .await
-            .unwrap();
-        client
-            .execute("DELETE FROM tenant_plans WHERE tenant_id = $1", &[&tenant])
-            .await
-            .unwrap();
     }
+    // Cleanup: drop the throwaway database.
+    drop(pool);
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let config = tokio_postgres::Config::from_str(&url).unwrap();
+    let mgr = deadpool_postgres::Manager::new(config, tokio_postgres::NoTls);
+    let admin = deadpool_postgres::Pool::builder(mgr)
+        .max_size(1)
+        .build()
+        .unwrap();
+    let client = admin.get().await.unwrap();
+    let _ = client
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await;
 }
 
 /// The critical batch regression test: a duplicate id in the MIDDLE of a
@@ -316,15 +376,9 @@ async fn pg_integration_push_pull_plan_snapshot_roundtrip() {
 /// transaction is aborted".
 #[tokio::test]
 async fn pg_integration_push_batch_duplicate_in_middle_survives() {
-    let url = std::env::var("OZ_TEST_PG_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
-        Ok(crate::db::DbPool::Postgres(pool)) => pool,
-        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
-        Err(e) => {
-            eprintln!("PG push-batch integration test skipped: {e}");
-            return;
-        }
+    let Some((pool, db_name)) = throwaway_pool().await else {
+        eprintln!("PG push-batch integration test skipped: cannot create throwaway DB");
+        return;
     };
     let tenant = format!("pg-batch-{}", uuid::Uuid::now_v7());
     let store = SyncStore::postgres(pool.clone());
@@ -365,13 +419,20 @@ async fn pg_integration_push_batch_duplicate_in_middle_survives() {
         outcomes[2]
     );
 
-    // Cleanup.
-    pool.get()
-        .await
-        .unwrap()
-        .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
-        .await
+    // Cleanup: drop the throwaway database.
+    drop(pool);
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let config = tokio_postgres::Config::from_str(&url).unwrap();
+    let mgr = deadpool_postgres::Manager::new(config, tokio_postgres::NoTls);
+    let admin = deadpool_postgres::Pool::builder(mgr)
+        .max_size(1)
+        .build()
         .unwrap();
+    let client = admin.get().await.unwrap();
+    let _ = client
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await;
 }
 
 /// A committed batch must be durable and visible to a FRESH connection —
@@ -379,15 +440,9 @@ async fn pg_integration_push_batch_duplicate_in_middle_survives() {
 /// transaction but fail here.
 #[tokio::test]
 async fn pg_integration_push_batch_commit_visible_to_new_connection() {
-    let url = std::env::var("OZ_TEST_PG_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
-        Ok(crate::db::DbPool::Postgres(pool)) => pool,
-        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
-        Err(e) => {
-            eprintln!("PG push-batch integration test skipped: {e}");
-            return;
-        }
+    let Some((pool, db_name)) = throwaway_pool().await else {
+        eprintln!("PG push-batch commit test skipped: cannot create throwaway DB");
+        return;
     };
     let tenant = format!("pg-batch-commit-{}", uuid::Uuid::now_v7());
     let store = SyncStore::postgres(pool.clone());
@@ -417,11 +472,20 @@ async fn pg_integration_push_batch_commit_visible_to_new_connection() {
         "committed batch must be visible on a fresh connection"
     );
 
-    // Cleanup.
-    client
-        .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
-        .await
+    // Cleanup: drop the throwaway database.
+    drop(pool);
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let config = tokio_postgres::Config::from_str(&url).unwrap();
+    let mgr = deadpool_postgres::Manager::new(config, tokio_postgres::NoTls);
+    let admin = deadpool_postgres::Pool::builder(mgr)
+        .max_size(1)
+        .build()
         .unwrap();
+    let client = admin.get().await.unwrap();
+    let _ = client
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await;
 }
 
 /// RED (TDD): a per-item DATA error (not a UNIQUE conflict) in the middle
@@ -437,15 +501,9 @@ async fn pg_integration_push_batch_commit_visible_to_new_connection() {
 /// does NOT suppress.
 #[tokio::test]
 async fn pg_integration_push_batch_data_error_does_not_abort_batch() {
-    let url = std::env::var("OZ_TEST_PG_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
-        Ok(crate::db::DbPool::Postgres(pool)) => pool,
-        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
-        Err(e) => {
-            eprintln!("PG push-batch data-error integration test skipped: {e}");
-            return;
-        }
+    let Some((pool, db_name)) = throwaway_pool().await else {
+        eprintln!("PG push-batch data-error test skipped: cannot create throwaway DB");
+        return;
     };
     let tenant = format!("pg-batch-err-{}", uuid::Uuid::now_v7());
     let store = SyncStore::postgres(pool.clone());
@@ -525,16 +583,18 @@ async fn pg_integration_push_batch_data_error_does_not_abort_batch() {
         "exactly the two good items must be persisted, poison item dropped"
     );
 
-    // Cleanup: drop the trigger and the tenant's rows.
-    client
-        .batch_execute(&format!(
-            "DROP TRIGGER IF EXISTS {trigger} ON offline_queue;
-             DROP FUNCTION IF EXISTS {trigger_fn}();"
-        ))
-        .await
+    // Cleanup: drop the throwaway database.
+    drop(pool);
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let config = tokio_postgres::Config::from_str(&url).unwrap();
+    let mgr = deadpool_postgres::Manager::new(config, tokio_postgres::NoTls);
+    let admin = deadpool_postgres::Pool::builder(mgr)
+        .max_size(1)
+        .build()
         .unwrap();
-    client
-        .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
-        .await
-        .unwrap();
+    let client = admin.get().await.unwrap();
+    let _ = client
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await;
 }

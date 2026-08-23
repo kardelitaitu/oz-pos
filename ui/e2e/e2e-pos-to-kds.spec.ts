@@ -57,7 +57,6 @@ test.describe('Critical Path: POS → KDS', () => {
     const productName = (await productCards.first().locator('.restaurant-card-name').textContent())?.trim() || 'Unknown';
     console.log(`  Adding product: ${productName}`);
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Verify cart has 1 line item.
     const cartLines = page.locator('[data-testid="cart-panel-line-item"]');
@@ -79,7 +78,6 @@ test.describe('Critical Path: POS → KDS', () => {
     await expect(tenderedInput).toBeVisible({ timeout: 3_000 });
     await tenderedInput.click();
     await tenderedInput.pressSequentially('9999999', { delay: 30 });
-    await page.waitForTimeout(200);
 
     // Click the Complete Sale button by its label and wait for the modal to close.
     const completeBtn = page.getByRole('button', { name: /complete/i });
@@ -93,7 +91,6 @@ test.describe('Critical Path: POS → KDS', () => {
       const skipBtn = page.locator('button:has-text("Skip"), button:has-text("Lewati")');
       if (await skipBtn.isVisible().catch(() => false)) {
         await skipBtn.click();
-        await page.waitForTimeout(500);
       }
     }
 
