@@ -1375,7 +1375,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         // gates on permissions like the real backend.
         permissions: MOCK_ROLE_PERMISSIONS[staff.role] ?? [],
       },
-      // audit/06 parity: the real backend mints a short-lived picker
+      // audit-open-findings parity: the real backend mints a short-lived picker
       // ticket at login; without it the workspace picker never loads
       // (WorkspaceProvider bails when pickerTicket is null). The mock
       // must return one so browser dev previews work like the client.
@@ -1392,7 +1392,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         role_id: 'role-owner',
         permissions: MOCK_ROLE_PERMISSIONS['role-owner'] ?? [],
       },
-      // audit/06 parity: the first-owner flow also mints a picker ticket.
+      // audit-open-findings parity: the first-owner flow also mints a picker ticket.
       picker_ticket: `mock-picker-owner-1-${Date.now()}`,
     };
   },
