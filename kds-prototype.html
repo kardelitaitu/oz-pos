@@ -7,6 +7,17 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  /* Touch-screen modern scrollbar: thin, transparent, no visible track */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+  * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+  /* Light theme: darker thumb so it stays visible on light backgrounds */
+  .kds-screen.light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); }
+  .kds-screen.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.35); }
+  .kds-screen.light * { scrollbar-color: rgba(0,0,0,0.2) transparent; }
+
   body {
     font-family: system-ui, -apple-system, sans-serif;
     background: var(--bg);
@@ -69,24 +80,7 @@
   }
   .kds-topmenu-left { display: flex; align-items: center; gap: 10px; color: var(--text); justify-self: start; }
   .kds-topmenu-left .logo { font-size: 20px; }
-  .kds-back-btn {
-    width: 32px; height: 32px; border-radius: 7px; border: none;
-    background: transparent; color: var(--text); opacity: 0.7;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-  }
-  .kds-back-btn:hover { background: rgba(255,255,255,0.08); opacity: 1; }
   .kds-filter { position: relative; display: flex; align-items: center; }
-  .kds-filter-btn {
-    display: flex; align-items: center; gap: 6px;
-    padding: 5px 16px; border-radius: 6px; border: none;
-    background: rgba(255,255,255,0.06); color: var(--text); opacity: 0.8;
-    cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s;
-  }
-  .kds-filter-btn:hover { opacity: 1; background: rgba(255,255,255,0.08); }
-  .kds-filter-btn.open { background: rgba(255,255,255,0.14); opacity: 1; }
-  .kds-filter-btn .caret { opacity: 0.5; font-size: 10px; transition: transform 0.2s; }
-  .kds-filter-btn.open .caret { transform: rotate(180deg); }
   .kds-filter-panel {
     position: absolute; top: calc(100% + 6px); left: 0; min-width: 180px;
     background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 10px;
@@ -124,29 +118,108 @@
     background: transparent; color: var(--text); opacity: 0.5; cursor: pointer; font-size: 13px;
     font-weight: 600; /* constant weight → no text reflow on active */
     transition: opacity 0.15s;
+    /* flex: children (label + count) become flex items, so the
+       hover scale() animation actually applies (transforms don't
+       work on plain inline spans) */
+    display: inline-flex; align-items: center; gap: 5px;
+    /* ⚠ REMEMBER: any button whose children you scale() on hover must
+       be a flex/grid container (or children display:inline-block).
+       See the .kds-btn helper header for the same rule. */
   }
   .kds-tab:hover { opacity: 0.8; }
+  .kds-tab:hover > span { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
   .kds-tab.active { opacity: 1; color: #fff; }
   .kds-tab.active .kds-tab-count { opacity: 0.8; }
   .kds-tab-count { margin-left: 5px; opacity: 0.6; font-size: 11px; }
   .kds-tab.active .kds-tab-count { opacity: 0.8; }
   .kds-topmenu-right { display: flex; align-items: center; gap: 8px; position: relative; justify-self: end; }
-  .kds-online-dot { width: 9px; height: 9px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 6px #4ade80; }
-  .kds-icon-btn {
-    width: 32px; height: 32px; border-radius: 7px; border: none;
-    background: transparent; color: var(--text); opacity: 0.6; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 17px; transition: all 0.15s;
+
+  /* ── BUTTON HELPER (.kds-btn) ─────────────────────
+     State model:
+       default  → background: var(--btn-bg)
+       :hover   → background: var(--btn-hover)
+       :active  → background: var(--btn-active)  (pressed)
+       .is-active (state class, not :active) → var(--btn-state)
+     Variants set the tokens; the base class owns geometry + states only.
+     ⚠ IMPORTANT: inline-flex is required — transforms (scale pop)
+       do NOT work on plain inline children. The hover pop animation
+       targets direct children (> *), which must be flex/grid items
+       for the transform to render.
+     Modifiers:
+       --stack  → grid-stacked labels (width = widest label)
+       --icon   → square icon button (back, hamburger)
+       --filter → caret + 'all' blue state (category dropdown trigger)
+       --muted  → translucent (tabs, idle controls) */
+  .kds-btn {
+    --btn-bg: #3b82f6;        /* default colour */
+    --btn-fg: #fff;
+    --btn-hover: #2563eb;     /* normal hover (lighter blue) */
+    --btn-active: #1d4ed8;    /* pressed */
+    --btn-state: #3b82f6;     /* persistent .is-active state */
+    --btn-state-hover: #ef4444; /* hover while in state */
+    padding: 5px 16px; border-radius: 6px; border: none;
+    background: var(--btn-bg); color: var(--btn-fg); opacity: 1;
+    cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: background 0.15s, color 0.15s, transform 0.06s;
+    white-space: nowrap;
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px;
+    -webkit-tap-highlight-color: transparent;
   }
-  .kds-icon-btn:hover { background: rgba(255,255,255,0.08); opacity: 1; }
-  .kds-shift-btn {
-    padding: 4px 12px; border-radius: 7px; border: 1px solid var(--border-strong);
-    background: transparent; color: var(--text); opacity: 0.8;
-    cursor: pointer; font-size: 11px; font-weight: 500;
-    transition: all 0.15s; white-space: nowrap;
+  .kds-btn:hover { background: var(--btn-hover); }
+  .kds-btn:active { background: var(--btn-active); transform: translateY(1px); }
+  .kds-btn.is-active { background: var(--btn-state); }
+  .kds-btn.is-active:hover { background: var(--btn-state-hover); }
+  /* gentle hover pop on any direct text/icon child */
+  @keyframes kds-btn-pop {
+    0% { transform: scale(1); }
+    30% { transform: scale(0.95); }
+    55% { transform: scale(1.1); }
+    80% { transform: scale(0.97); }
+    100% { transform: scale(1); }
   }
-  .kds-shift-btn:hover { background: rgba(255,255,255,0.08); opacity: 1; }
-  .kds-shift-btn.active { background: #f59e0b; border-color: #f59e0b; color: #1a1a1a; opacity: 1; }
+  .kds-btn:hover > * { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
+
+  /* --stack: labels share one grid cell → width = widest label */
+  .kds-btn--stack { display: inline-grid; grid-template-areas: 'l'; align-items: center; justify-items: center; }
+  .kds-btn--stack > span { grid-area: l; opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+  .kds-btn--stack > span.visible { opacity: 1; }
+  .kds-btn--stack:hover > span.visible { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
+
+  /* --icon: square transparent icon button (back, hamburger, any SVG) */
+  .kds-btn--icon {
+    width: 32px; height: 32px; padding: 0;
+    background: transparent; color: var(--text); opacity: 0.7;
+  }
+  .kds-btn--icon:hover { background: rgba(255,255,255,0.08); opacity: 1; }
+  .kds-btn--icon:active { background: rgba(255,255,255,0.12); transform: translateY(1px); }
+  .kds-btn--icon svg { width: 18px; height: 18px; transform-box: fill-box; }
+
+  /* --filter: caret rotation + blue 'all' state */
+  .kds-btn--filter { --btn-bg: rgba(255,255,255,0.06); --btn-fg: var(--text); --btn-hover: rgba(255,255,255,0.08); --btn-active: rgba(255,255,255,0.12); }
+  .kds-btn--filter.all { background: #3b82f6; color: #fff; opacity: 1; }
+  .kds-btn--filter.all .caret { opacity: 0.7; }
+  .kds-btn--filter .caret { opacity: 0.5; font-size: 10px; transition: transform 0.2s; }
+  .kds-btn--filter.open .caret { transform: rotate(180deg); }
+
+  /* Variant: start/end shift — blue rest; GREEN hover when starting
+     (not in shift), RED hover when stopping (in shift, destructive).
+     The .is-active state decides which hover colour applies. */
+  .kds-btn--shift {
+    --btn-hover: #22c55e;      /* starting → green */
+    --btn-active: #16a34a;
+    --btn-state: #3b82f6;
+    --btn-state-hover: #ef4444; /* stopping → red */
+  }
+  /* Variant: plain/muted (tabs, filter when not active) */
+  .kds-btn--muted {
+    --btn-bg: rgba(255,255,255,0.06);
+    --btn-fg: var(--text);
+    --btn-hover: rgba(255,255,255,0.08);
+    --btn-active: rgba(255,255,255,0.12);
+    --btn-state: rgba(255,255,255,0.14);
+    --btn-state-hover: rgba(255,255,255,0.18);
+  }
 
   /* Hamburger panel */
   .kds-hamburger-panel {
@@ -340,23 +413,24 @@
   <!-- TOPMENU -->
   <div class="kds-topmenu">
     <div class="kds-topmenu-left">
-      <button class="kds-back-btn" id="back-btn" title="Back" aria-label="Back">
+      <button class="kds-btn kds-btn--icon" id="back-btn" title="Back" aria-label="Back">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:18px;height:18px"><path d="M15 19l-7-7 7-7"/></svg>
       </button>
       <div class="kds-filter">
-        <button class="kds-filter-btn" id="filter-btn" aria-haspopup="listbox" aria-expanded="false">All <span class="caret">▾</span></button>
+        <button class="kds-btn kds-btn--filter all" id="filter-btn" aria-haspopup="listbox" aria-expanded="false"><span>All Categories</span><span class="caret">▾</span></button>
         <div class="kds-filter-panel" id="filter-panel" role="listbox" aria-multiselectable="true" style="display:none"></div>
       </div>
     </div>
     <div class="kds-tabs" id="tabs">
       <span class="kds-tab-indicator" id="tab-indicator"></span>
-      <button class="kds-tab active" data-tab="open">Open<span class="kds-tab-count" id="count-open">0</span></button>
-      <button class="kds-tab" data-tab="completed">Completed<span class="kds-tab-count" id="count-completed">0</span></button>
+      <button class="kds-tab active" data-tab="open"><span>Open</span><span class="kds-tab-count" id="count-open">0</span></button>
+      <button class="kds-tab" data-tab="completed"><span>Completed</span><span class="kds-tab-count" id="count-completed">0</span></button>
     </div>
     <div class="kds-topmenu-right">
-      <span class="kds-online-dot" title="Connected"></span>
-      <button class="kds-shift-btn" id="shift-btn">Start Shift</button>
-      <button class="kds-icon-btn" id="hamburger-btn" title="Settings">☰</button>
+      <button class="kds-btn kds-btn--shift kds-btn--stack" id="shift-btn"><span class="visible">Start Shift</span><span>End Shift</span></button>
+      <button class="kds-btn kds-btn--icon" id="hamburger-btn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
       <div class="kds-hamburger-panel" id="hamburger-panel" style="display:none;">
         <div class="kds-theme-row">
           <span class="kds-theme-label">Theme</span>
@@ -630,9 +704,18 @@
   }
   function refreshFilterBtn() {
     const btn = document.getElementById('filter-btn');
-    if (!filterCats || filterCats.size === 0) { btn.innerHTML = 'All Categories <span class="caret">▾</span>'; }
-    else if (filterCats.size === 1) { btn.innerHTML = plainName(filterCats.values().next().value) + ' <span class="caret">▾</span>'; }
-    else { btn.innerHTML = filterCats.size + ' <span class="caret">▾</span>'; }
+    /* Button is blue whenever a filter is in effect — both the default
+       'All Categories' and any selected-category combination.
+       IMPORTANT: the label MUST be wrapped in a <span> so the hover
+       pop animation can target it (animations don't apply to text nodes). */
+    btn.classList.add('all');
+    if (!filterCats || filterCats.size === 0) {
+      btn.innerHTML = '<span>All Categories</span><span class="caret">▾</span>';
+    } else if (filterCats.size === 1) {
+      btn.innerHTML = '<span>' + plainName(filterCats.values().next().value) + '</span><span class="caret">▾</span>';
+    } else {
+      btn.innerHTML = '<span>' + filterCats.size + '</span><span class="caret">▾</span>';
+    }
   }
   function toggleFilterPanel(force) {
     const panel = document.getElementById('filter-panel');
@@ -875,8 +958,9 @@
   document.getElementById('shift-btn').addEventListener('click', (e) => {
     shiftOn = !shiftOn;
     const btn = document.getElementById('shift-btn');
-    btn.textContent = shiftOn ? 'End Shift' : 'Start Shift';
-    btn.classList.toggle('active', shiftOn);
+    /* swap which stacked label is visible — width stays the same */
+    btn.querySelectorAll('span').forEach((s, i) => s.classList.toggle('visible', shiftOn ? i === 1 : i === 0));
+    btn.classList.toggle('is-active', shiftOn);
   });
 
   /* ── theme toggle (light/dark) ──────────────────── */
