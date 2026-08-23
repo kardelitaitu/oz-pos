@@ -1,4 +1,5 @@
 # Test Efficiency Improvement — Plan & Journal (2026-08-22)
+(this is only temporary file)
 
 - **Document ID:** 20260822-tests-efficiency-improvement
 - **Status:** Active — A01–A17, A35, A36 done (nextest canonical; #1 strategy = cut delays/waits/samples/retries)
