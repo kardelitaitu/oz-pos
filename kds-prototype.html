@@ -221,45 +221,110 @@
     --btn-state-hover: rgba(255,255,255,0.18);
   }
 
-  /* Hamburger panel */
+/* Hamburger panel — same drop-in animation as the filter dropdown */
   .kds-hamburger-panel {
-    position: absolute; top: calc(100% + 6px); right: 0; width: 230px;
-    background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 10px;
-    padding: 14px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    position: absolute; top: calc(100% + 6px); right: 0; width: 280px;
+    background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 12px;
+    padding: 12px 14px 14px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    animation: kds-drop-in 0.18s ease-out;
+    transform-origin: top right;
   }
-  .kds-hamburger-panel h3 { font-size: 12px; font-weight: 600; color: var(--text); opacity: 0.7; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
-  .kds-color-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .kds-color-row label { font-size: 11px; color: var(--text); opacity: 0.55; }
-  .kds-swatches { display: flex; gap: 5px; }
+  .kds-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 10px; margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .kds-panel-title { font-size: 12px; font-weight: 700; color: var(--text); opacity: 0.8; text-transform: uppercase; letter-spacing: 0.08em; }
+  .kds-panel-close {
+    width: 24px; height: 24px; border-radius: 6px; border: none;
+    background: transparent; color: var(--text); opacity: 0.5;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .kds-panel-close:hover { background: rgba(255,255,255,0.1); opacity: 1; }
+  .kds-panel-close svg { width: 12px; height: 12px; }
+  .kds-panel-section { margin-bottom: 14px; }
+  .kds-panel-section:last-child { margin-bottom: 0; }
+  .kds-panel-section h3 { font-size: 10px; font-weight: 600; color: var(--text); opacity: 0.5; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .kds-color-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .kds-color-row:last-child { margin-bottom: 0; }
+  .kds-color-row label { font-size: 12px; color: var(--text); opacity: 0.85; }
+  .kds-color-open {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px 4px 4px; border-radius: 7px; border: 1px solid var(--border-strong);
+    background: var(--bg-surface); cursor: pointer; transition: all 0.15s;
+  }
+  .kds-color-open:hover { background: rgba(255,255,255,0.06); }
+  .kds-color-chip { width: 26px; height: 18px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }
+  .kds-color-hex { font-size: 10px; color: var(--text); opacity: 0.75; font-family: ui-monospace, monospace; }
+
+  /* colour picker popup */
+  .kds-color-popup {
+    position: absolute; top: 60px; right: 10px; width: 230px;
+    background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 12px;
+    padding: 12px; z-index: 200; box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    animation: kds-drop-in 0.18s ease-out; transform-origin: top right;
+  }
+  .kds-popup-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .kds-popup-title { font-size: 12px; font-weight: 700; color: var(--text); opacity: 0.8; }
+  .kds-popup-native { width: 100%; height: 40px; border: none; border-radius: 8px; padding: 0; background: transparent; cursor: pointer; margin-bottom: 10px; }
+  .kds-popup-native::-webkit-color-swatch-wrapper { padding: 2px; }
+  .kds-popup-native::-webkit-color-swatch { border-radius: 7px; border: 1px solid var(--border-strong); }
+  .kds-popup-swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 10px; }
+  .kds-popup-swatches .kds-swatch { width: 100%; height: 22px; }
+  .kds-popup-hexrow { display: flex; }
+  .kds-popup-hexrow .kds-hex-input { width: 100%; }
+  /* shared swatch + hex-input primitives used inside the popup */
   .kds-swatch { width: 22px; height: 22px; border-radius: 5px; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s; }
-  .kds-swatch:hover { transform: scale(1.1); }
-  .kds-swatch.active { border-color: var(--text); }
+  .kds-swatch:hover { transform: scale(1.15); }
+  .kds-swatch.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--bg-top) inset; }
+  .kds-hex-input {
+    width: 62px; padding: 3px 6px; border-radius: 5px; font-size: 10px;
+    border: 1px solid var(--border-strong); background: var(--bg-surface);
+    color: var(--text); opacity: 0.8; text-align: center; font-family: ui-monospace, monospace;
+    transition: all 0.15s;
+  }
+  .kds-hex-input:focus { outline: none; border-color: #3b82f6; opacity: 1; }
   .kds-reset-btn {
     width: 100%; padding: 6px; border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.15); background: transparent; color: var(--text); opacity: 0.6;
-    cursor: pointer; font-size: 11px; margin-top: 4px; transition: all 0.15s;
+    margin-top: 8px; font-size: 11px;
   }
   .kds-reset-btn:hover { background: rgba(255,255,255,0.08); opacity: 1; }
 
-  /* Theme toggle slider */
-  .kds-theme-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .kds-theme-label { font-size: 11px; color: var(--text); opacity: 0.55; text-transform: uppercase; letter-spacing: 0.06em; }
+  /* Theme toggle — same slider pattern as the Open/Completed tabs:
+   a blue pill indicator slides between Dark/Light with a
+   squash-and-stretch (scale) animation. */
+  .kds-theme-row { display: flex; align-items: center; margin-bottom: 0; }
   .kds-theme-toggle {
-    position: relative; width: 52px; height: 26px; border-radius: 13px;
-    border: none; cursor: pointer; background: rgba(255,255,255,0.12);
-    transition: background 0.25s; display: flex; align-items: center; padding: 0;
+    position: relative; display: flex; gap: 6px;
+    background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px;
+    border: none; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
-  .kds-screen.light .kds-theme-toggle { background: rgba(0,0,0,0.15); }
-  .kds-theme-thumb {
-    position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
-    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-    transition: transform 0.25s; display: flex; align-items: center; justify-content: center;
+  .kds-theme-indicator {
+    position: absolute; top: 3px; left: 3px; bottom: 3px;
+    background: #3b82f6; border-radius: 6px;
+    transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
+    pointer-events: none;
+    transform-origin: center;
   }
-  .kds-screen.light .kds-theme-thumb { transform: translateX(26px); background: #ffc94d; }
-  .kds-theme-thumb svg { width: 13px; height: 13px; }
-  .kds-theme-sun, .kds-theme-moon { position: absolute; width: 13px; height: 13px; color: #fff; opacity: 0.9; }
-  .kds-theme-sun { left: 5px; }
-  .kds-theme-moon { right: 5px; color: #ffc94d; }
+  .kds-theme-option {
+    position: relative; z-index: 1;
+    padding: 5px 16px; border-radius: 6px; border: none;
+    background: transparent; color: var(--text); opacity: 0.5;
+    font-size: 12px; font-weight: 600;
+    transition: opacity 0.15s;
+  }
+  .kds-theme-option:hover { opacity: 0.8; }
+  .kds-theme-option.on { opacity: 1; color: #fff; }
+
+  /* Zoom (display size) controls */
+  .kds-zoom-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .kds-zoom-btn { width: 32px; height: 32px; padding: 0; font-size: 16px; font-weight: 700; }
+  .kds-zoom-value {
+    min-width: 52px; text-align: center; font-size: 12px; font-weight: 600;
+    color: var(--text); opacity: 0.85;
+  }
 
   /* ── MAIN ───────────────────────────────────────── */
   .kds-main {
@@ -428,32 +493,73 @@
     </div>
     <div class="kds-topmenu-right">
       <button class="kds-btn kds-btn--shift kds-btn--stack" id="shift-btn"><span class="visible">Start Shift</span><span>End Shift</span></button>
-      <button class="kds-btn kds-btn--icon" id="hamburger-btn" title="Settings" aria-label="Settings">
+      <button class="kds-btn kds-btn--icon" id="hamburger-btn" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="kds-hamburger-panel" id="hamburger-panel" style="display:none;">
-        <div class="kds-theme-row">
-          <span class="kds-theme-label">Theme</span>
-          <button class="kds-theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light or dark theme">
-            <span class="kds-theme-sun"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="width:13px;height:13px"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span>
-            <span class="kds-theme-thumb"></span>
-            <span class="kds-theme-moon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:13px;height:13px"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span>
+        <div class="kds-panel-header">
+          <span class="kds-panel-title">Settings</span>
+          <button class="kds-panel-close" id="panel-close" title="Close" aria-label="Close settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
         </div>
-        <h3>Card Colours</h3>
-        <div class="kds-color-row">
-          <label>Dine-in</label>
-          <div class="kds-swatches" data-key="dinein"></div>
+        <div class="kds-panel-section">
+          <h3>Theme</h3>
+          <div class="kds-theme-row">
+            <button class="kds-theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light or dark theme">
+              <span class="kds-theme-indicator" id="theme-indicator"></span>
+              <span class="kds-theme-option on" data-theme="dark">Dark</span>
+              <span class="kds-theme-option" data-theme="light">Light</span>
+            </button>
+          </div>
         </div>
-        <div class="kds-color-row">
-          <label>Takeaway</label>
-          <div class="kds-swatches" data-key="takeaway"></div>
+        <div class="kds-panel-section">
+          <h3>Display Size</h3>
+          <div class="kds-zoom-row">
+            <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
+            <span class="kds-zoom-value" id="zoom-value">100%</span>
+            <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
+          </div>
         </div>
-        <div class="kds-color-row">
-          <label>Rush badge</label>
-          <div class="kds-swatches" data-key="rush"></div>
+        <div class="kds-panel-section">
+          <h3>Card Colours</h3>
+          <div class="kds-color-row">
+            <label for="hex-dinein">Dine-in</label>
+            <button class="kds-color-open" data-key="dinein" aria-haspopup="dialog">
+              <span class="kds-color-chip" id="chip-dinein" style="background:#1a3a2a"></span>
+              <span class="kds-color-hex" id="hex-dinein">#1a3a2a</span>
+            </button>
+          </div>
+          <div class="kds-color-row">
+            <label for="hex-takeaway">Takeaway</label>
+            <button class="kds-color-open" data-key="takeaway" aria-haspopup="dialog">
+              <span class="kds-color-chip" id="chip-takeaway" style="background:#2a2a35"></span>
+              <span class="kds-color-hex" id="hex-takeaway">#2a2a35</span>
+            </button>
+          </div>
+          <div class="kds-color-row">
+            <label for="hex-rush">Rush badge</label>
+            <button class="kds-color-open" data-key="rush" aria-haspopup="dialog">
+              <span class="kds-color-chip" id="chip-rush" style="background:#ef4444"></span>
+              <span class="kds-color-hex" id="hex-rush">#ef4444</span>
+            </button>
+          </div>
         </div>
-        <button class="kds-reset-btn" id="reset-colors">Reset to defaults</button>
+        <button class="kds-btn kds-btn--muted kds-reset-btn" id="reset-colors">Reset to defaults</button>
+      </div>
+      <!-- colour picker popup (sibling of the hamburger panel, inside topmenu-right) -->
+      <div class="kds-color-popup" id="color-popup" role="dialog" aria-label="Pick colour" style="display:none;">
+        <div class="kds-popup-head">
+          <span class="kds-popup-title" id="popup-title">Dine-in</span>
+          <button class="kds-panel-close" id="popup-close" aria-label="Close colour picker">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <input type="color" id="popup-native" class="kds-popup-native" aria-label="Choose exact colour">
+        <div class="kds-popup-swatches" id="popup-swatches"></div>
+        <div class="kds-popup-hexrow">
+          <input class="kds-hex-input" id="popup-hex" spellcheck="false" aria-label="Hex colour value">
+        </div>
       </div>
     </div>
   </div>
@@ -485,6 +591,14 @@
   let orders = initialOrders();
   /* Category filter: null = All, otherwise a Set of course names to show */
   let filterCats = null;
+  /* Display size: 75%–150%, persisted like colors */
+  const ZOOM_KEY = 'kds-proto-zoom';
+  let zoom = loadZoom();
+  function loadZoom() {
+    try { const v = parseInt(localStorage.getItem(ZOOM_KEY), 10); if (!isNaN(v)) return v; } catch {}
+    return 100;
+  }
+  function saveZoom() { try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch {} }
 
   function loadColors() {
     try { const raw = localStorage.getItem(COLORS_KEY); if (raw) return { ...DEFAULT_COLORS, ...JSON.parse(raw) }; } catch {}
@@ -926,30 +1040,140 @@
   });
   moveTabIndicator();
 
-  /* ── hamburger colour panel ─────────────────────── */
-  function buildSwatches() {
-    Object.keys(SWATCHES).forEach(key => {
-      const el = document.querySelector(`.kds-swatches[data-key="${key}"]`);
-      el.innerHTML = SWATCHES[key].map(s =>
-        `<div class="kds-swatch${colors[key] === s ? ' active' : ''}" style="background:${s}" onclick="pickColor('${key}', '${s}')"></div>`
-      ).join('');
-    });
+  /* ── colour picker popup ────────────────────────── */
+  let colorKey = null; // which colour is being edited (dinein/takeaway/rush)
+
+  function syncColorRow(key) {
+    const hex = document.getElementById('hex-' + key);
+    const chip = document.getElementById('chip-' + key);
+    if (hex) hex.textContent = colors[key];
+    if (chip) chip.style.background = colors[key];
   }
+  function openColorPopup(key) {
+    colorKey = key;
+    const popup = document.getElementById('color-popup');
+    document.getElementById('popup-title').textContent = key.charAt(0).toUpperCase() + key.slice(1);
+    document.getElementById('popup-native').value = colors[key];
+    document.getElementById('popup-hex').value = colors[key];
+    /* swatch grid for this key */
+    const grid = document.getElementById('popup-swatches');
+    grid.innerHTML = SWATCHES[key].map(s =>
+      `<div class="kds-swatch${colors[key] === s ? ' active' : ''}" style="background:${s}" data-swatch="${s}"></div>`
+    ).join('');
+    popup.style.display = 'block';
+  }
+  function closeColorPopup() { document.getElementById('color-popup').style.display = 'none'; }
+
+  document.querySelectorAll('.kds-color-open').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openColorPopup(btn.dataset.key);
+    });
+  });
+  document.getElementById('popup-close').addEventListener('click', () => closeColorPopup());
+  document.getElementById('popup-native').addEventListener('input', (e) => {
+    if (!colorKey) return;
+    colors = { ...colors, [colorKey]: e.target.value };
+    saveColors();
+    syncColorRow(colorKey);
+    render();
+    document.getElementById('popup-hex').value = e.target.value;
+    document.querySelectorAll('#popup-swatches .kds-swatch').forEach(s =>
+      s.classList.toggle('active', s.dataset.swatch === e.target.value));
+  });
+  document.getElementById('popup-swatches').addEventListener('click', (e) => {
+    const sw = e.target.closest('.kds-swatch');
+    if (!sw || !colorKey) return;
+    pickColor(colorKey, sw.dataset.swatch);
+    document.getElementById('popup-native').value = sw.dataset.swatch;
+    document.getElementById('popup-hex').value = sw.dataset.swatch;
+  });
+  document.getElementById('popup-hex').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+  });
+  document.getElementById('popup-hex').addEventListener('blur', (e) => {
+    if (!colorKey) return;
+    const v = e.target.value.trim();
+    if (/^#?[0-9a-fA-F]{6}$/.test(v)) {
+      pickColor(colorKey, '#' + v.replace('#', '').toLowerCase());
+      document.getElementById('popup-native').value = colors[colorKey];
+      e.target.value = colors[colorKey];
+    } else {
+      e.target.value = colors[colorKey]; // revert invalid
+    }
+  });
+
   function pickColor(key, value) {
     colors = { ...colors, [key]: value };
     saveColors();
-    buildSwatches();
+    syncColorRow(key);
     render();
   }
-  function toggleMenu() {
+
+  function toggleMenu(force) {
     const panel = document.getElementById('hamburger-panel');
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    const btn = document.getElementById('hamburger-btn');
+    const showing = force !== undefined ? force : panel.style.display !== 'block';
+    panel.style.display = showing ? 'block' : 'none';
+    btn.setAttribute('aria-expanded', showing);
+    if (showing) {
+      /* focus trap: keep Tab cycling inside the panel */
+      panel._lastFocus = document.activeElement;
+      panel.querySelector('.kds-panel-close').focus();
+      /* indicator offsets are only valid once the panel is visible */
+      moveThemeIndicator();
+    } else if (panel._lastFocus) {
+      panel._lastFocus.focus();
+      panel._lastFocus = null;
+      closeColorPopup(); // popup can't stay open without the panel
+    }
   }
-  document.getElementById('hamburger-btn').addEventListener('click', toggleMenu);
+  document.getElementById('hamburger-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMenu();
+  });
+  /* close hamburger on outside click */
+  document.addEventListener('click', (e) => {
+    const panel = document.getElementById('hamburger-panel');
+    const btn = document.getElementById('hamburger-btn');
+    if (!panel.contains(e.target) && !btn.contains(e.target)) toggleMenu(false);
+  });
+  /* close hamburger + filter on Escape */
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      toggleMenu(false);
+      toggleFilterPanel(false);
+      return;
+    }
+    /* Tab focus trap while the hamburger panel is open */
+    const panel = document.getElementById('hamburger-panel');
+    if (e.key === 'Tab' && panel.style.display === 'block') {
+      const focusables = panel.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"])');
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
+  document.getElementById('panel-close').addEventListener('click', () => toggleMenu(false));
+
+  /* ── zoom (display size) ─────────────────────────── */
+  function applyZoom() {
+    document.getElementById('main').style.zoom = zoom / 100;
+    document.getElementById('zoom-value').textContent = zoom + '%';
+  }
+  document.getElementById('zoom-out').addEventListener('click', () => {
+    zoom = Math.max(75, zoom - 10); saveZoom(); applyZoom();
+  });
+  document.getElementById('zoom-in').addEventListener('click', () => {
+    zoom = Math.min(150, zoom + 10); saveZoom(); applyZoom();
+  });
+  applyZoom();
   document.getElementById('reset-colors').addEventListener('click', () => {
     colors = { ...DEFAULT_COLORS };
     saveColors();
-    buildSwatches();
+    Object.keys(SWATCHES).forEach(key => syncColorRow(key));
     render();
   });
 
@@ -964,9 +1188,27 @@
   });
 
   /* ── theme toggle (light/dark) ──────────────────── */
+  function moveThemeIndicator() {
+    const on = document.querySelector('.kds-theme-option.on');
+    const ind = document.getElementById('theme-indicator');
+    if (!on || !ind) return;
+    ind.style.left = on.offsetLeft + 'px';
+    ind.style.width = on.offsetWidth + 'px';
+    /* same squash-and-stretch as the tab slider */
+    ind.animate([
+      { transform: 'scale(1, 1)' },
+      { transform: 'scale(0.82, 0.85)', offset: 0.45 },
+      { transform: 'scale(1.08, 1.18)', offset: 0.85 },
+      { transform: 'scale(1, 1)' },
+    ], { duration: 340, easing: 'ease-in-out' });
+  }
   document.getElementById('theme-toggle').addEventListener('click', () => {
-    document.getElementById('screen').classList.toggle('light');
+    const isLight = document.getElementById('screen').classList.toggle('light');
+    document.querySelectorAll('.kds-theme-option').forEach(o =>
+      o.classList.toggle('on', o.dataset.theme === (isLight ? 'light' : 'dark')));
+    moveThemeIndicator();
   });
+  moveThemeIndicator();
 
   /* ── live clock in footer ───────────────────────── */
   function tick() {
@@ -980,7 +1222,7 @@
 
   /* Re-render cards every 10s so durations stay live */
   setInterval(render, 10000);
-  buildSwatches();
+  Object.keys(SWATCHES).forEach(key => syncColorRow(key));
   render();
 </script>
 </body>
