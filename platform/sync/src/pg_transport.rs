@@ -4,7 +4,7 @@
 //! This transport bypasses the HTTP sync server and writes directly to a
 //! cloud PostgreSQL database (AWS RDS, Azure Database for PostgreSQL, etc.).
 
-use deadpool_postgres::{Config, Pool, Runtime};
+use deadpool_postgres::Pool;
 use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus};
 use tokio_postgres::{NoTls, types::ToSql};
 
@@ -130,15 +130,27 @@ impl PgTransport {
         password: &str,
         tenant_id: &str,
     ) -> Result<Self, SyncError> {
-        let mut cfg = Config::new();
-        cfg.host = Some(host.to_owned());
-        cfg.port = Some(port);
-        cfg.dbname = Some(dbname.to_owned());
-        cfg.user = Some(user.to_owned());
-        cfg.password = Some(password.to_owned());
-
-        let pool = cfg
-            .create_pool(Some(Runtime::Tokio1), NoTls)
+        let mut config = tokio_postgres::Config::new();
+        config.host(host);
+        config.port(port);
+        config.dbname(dbname);
+        config.user(user);
+        config.password(password);
+        let manager = deadpool_postgres::Manager::new(config, NoTls);
+        let pool = deadpool_postgres::Pool::builder(manager)
+            .runtime(deadpool_postgres::Runtime::Tokio1)
+            .max_size(5)
+            // Bound the wait for a pool slot: deadpool defaults to an
+            // UNBOUNDED wait, so a stalled PG connection would hang the
+            // sync daemon's tick forever. Mirror the cloud server's bounds
+            // (apps/cloud-server/src/db.rs): fail fast after 5s instead.
+            .wait_timeout(Some(std::time::Duration::from_secs(5)))
+            // Bound connection establishment so a flaky remote PG cannot
+            // block the daemon cycle indefinitely.
+            .create_timeout(Some(std::time::Duration::from_secs(10)))
+            // Bound the recycle (is_closed) probe on a wedged connection.
+            .recycle_timeout(Some(std::time::Duration::from_secs(5)))
+            .build()
             .map_err(|e| SyncError::Transport(format!("failed to create pg pool: {e}")))?;
 
         Ok(Self {
@@ -248,11 +260,14 @@ impl PgTransport {
             }
         }
 
-        // Commit: applies the inserts and resets the LOCAL GUC.
-        let _ = tx
-            .commit()
+        // Commit: applies the inserts and resets the LOCAL GUC. A failed
+        // COMMIT must surface as `Err` — swallowing it (the previous `let
+        // _ =`) let every item report `Accepted` while the remote never
+        // received them, and the daemon would then mark them `synced`
+        // locally: offline items silently lost.
+        tx.commit()
             .await
-            .map_err(|e| SyncError::Transport(format!("pg commit failed: {e}")));
+            .map_err(|e| SyncError::Transport(format!("pg commit failed: {e}")))?;
 
         Ok(outcomes)
     }
@@ -401,27 +416,6 @@ impl PgTransport {
             .await
             .map_err(|e| SyncError::Transport(format!("pg connection failed: {e}")))?;
 
-        // Mirror the HTTP server's P-1 retention contract. A cursor already
-        // identifies an exact resume point, so only the first page checks
-        // whether the durable anchor predates the oldest retained row. The
-        // MIN is tenant-scoped: another tenant's rows must not gate this
-        // terminal's anchor.
-        if since.is_some() && cursor.is_none() {
-            let oldest_available: Option<String> = client
-                .query_one(
-                    "SELECT MIN(created_at)::TEXT FROM offline_queue WHERE tenant_id = $1",
-                    &[&self.tenant_id],
-                )
-                .await
-                .map_err(|e| SyncError::Transport(format!("pg anchor query failed: {e}")))?
-                .try_get(0)
-                .map_err(|e| SyncError::Transport(format!("pg anchor decode failed: {e}")))?;
-            if let Some(error) = classify_anchor_expiry(since, cursor, oldest_available.as_deref())
-            {
-                return Err(error);
-            }
-        }
-
         let (cursor_ts, cursor_id) = decode_pull_cursor(cursor);
         let limit = PG_PULL_FETCH_LIMIT;
         let tenant = self.tenant_id.clone();
@@ -436,6 +430,29 @@ impl PgTransport {
         tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
             .await
             .map_err(|e| SyncError::Transport(format!("pg set tenant failed: {e}")))?;
+
+        // Mirror the HTTP server's P-1 retention contract. A cursor already
+        // identifies an exact resume point, so only the first page checks
+        // whether the durable anchor predates the oldest retained row. The
+        // MIN is tenant-scoped AND runs inside the tenant transaction: a
+        // bare-client query would see zero rows under FORCEd RLS (the
+        // `oz.tenant_id` GUC is only set in the tx) and the expiry guard
+        // would silently no-op.
+        if since.is_some() && cursor.is_none() {
+            let oldest_available: Option<String> = tx
+                .query_one(
+                    "SELECT MIN(created_at)::TEXT FROM offline_queue WHERE tenant_id = $1",
+                    &[&tenant],
+                )
+                .await
+                .map_err(|e| SyncError::Transport(format!("pg anchor query failed: {e}")))?
+                .try_get(0)
+                .map_err(|e| SyncError::Transport(format!("pg anchor decode failed: {e}")))?;
+            if let Some(error) = classify_anchor_expiry(since, cursor, oldest_available.as_deref())
+            {
+                return Err(error);
+            }
+        }
 
         let rows = if let (Some(ts), Some(cid)) = (&cursor_ts, &cursor_id) {
             if let Some(since) = since {
