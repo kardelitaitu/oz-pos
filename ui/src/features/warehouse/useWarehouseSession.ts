@@ -19,6 +19,8 @@ export interface WarehouseSessionLine {
   qty: number;
   /** Send mode: how many have been scan-verified as picked. */
   pickedQty: number;
+  /** Receive mode: the real stock_transfer_line.id this line maps to. */
+  transferLineId?: string;
 }
 
 export interface WarehouseSessionState {
@@ -34,7 +36,7 @@ export interface WarehouseSessionState {
   setDestinationLocationId: (id: string | null) => void;
   setTransferId: (id: string | null) => void;
   setPoId: (id: string | null) => void;
-  addLine: (sku: string, productName: string, bin?: string | null, qty?: number) => void;
+  addLine: (sku: string, productName: string, bin?: string | null, qty?: number, transferLineId?: string) => void;
   setQty: (lineId: string, qty: number) => void;
   /** Send mode: mark a line's pick-verify quantity. */
   pickLine: (lineId: string, pickedQty: number) => void;
@@ -64,7 +66,7 @@ export function useWarehouseSession(): WarehouseSessionState {
   linesRef.current = lines;
 
   const addLine = useCallback(
-    (sku: string, productName: string, bin?: string | null, qty = 1) => {
+    (sku: string, productName: string, bin?: string | null, qty = 1, transferLineId?: string) => {
       setLines((prev) => {
         const existing = prev.find((l) => l.sku === sku);
         if (existing) {
@@ -74,7 +76,15 @@ export function useWarehouseSession(): WarehouseSessionState {
         }
         return [
           ...prev,
-          { id: newLineId(), sku, productName, bin: bin ?? null, qty, pickedQty: 0 },
+          {
+            id: newLineId(),
+            sku,
+            productName,
+            bin: bin ?? null,
+            qty,
+            pickedQty: 0,
+            ...(transferLineId ? { transferLineId } : {}),
+          },
         ];
       });
     },

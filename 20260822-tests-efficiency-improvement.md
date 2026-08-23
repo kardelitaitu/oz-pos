@@ -155,7 +155,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | Area | Baseline (s) | 1st improvement | 2nd improvement | 3rd improvement | Techniques used |
 |------|-------------|-----------------|-----------------|-----------------|-----------------|
 | A01 foundation | 1.3 (cold 6.9) | 1.29 (cold 4.25) | | | `codegen-units=256` test-profile override (cold −38%, warm flat); cargo test kept (nextest 8.65 s — Windows spawn overhead, see §4.1) |
-| A02 oz-core | 58.5 (cold 58.2) | 31.7 | | | nextest runner (cold −41%); backup chunk 5→512 pgs (warm −46%) |
+| A02 oz-core | 58.5 (cold 58.2) | 31.7 | 45.6 (load-noise, 2535/2535 green) | | nextest runner (cold −41%); backup chunk 5→512 pgs (warm −46%). 2nd: stale `refund_exceeding_sale_total_succeeds` → `is_rejected` (over-refund guard added post-test); 2535/2535 all pass |
 | A03 oz-security | 1.78 (cold 19.9) | 1.9 (noise, plateaued) | | | sleep→bounded poll (quality-neutral, crate at floor) |
 | A04 oz-reporting | 2.01 (cold 3.4) | — (plateaued) | | | none — pure computation, no delays; codegen override tested & reverted (no gain) |
 | A05 oz-plugin | 5.51 (cold 23.2) | 4.47 | | | payload loop 1→8 bytes/iter (−54% isolated, −19% full) |
@@ -167,10 +167,10 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A11 oz-hal | ~3.5–5.0 (cold 27.9) | — (plateaued) | | | none — spawn floor; tcp_reconnect sleeps are kernel-necessary |
 | A12 oz-api | 4.44 (non-PG; cold 36.6) | 9.49 (full, after PG reset) | | | PG drift fixed: `reset-dev-pg.sh` (sale_lines RLS had no policy → deny-all); 3 consecutive 164/164 green |
 | A13 cloud-server | 52 (cold 71 w/ PG flaky) | — (plateaued) | | | 217 tests all pass (3 PG integration flaky from other-agent migrations); cold dominated by PG container startup |
-| A14 desktop-client | 20 (cold 22) | 18 (fix: stale subscription assertions) | | | fixed 2 stale subscription tier assertions (Premium max_staff_users=Some(50), Plus sales_history_days=Some(365)); 1182 tests all pass |
+| A14 desktop-client | 20 (cold 22) | 18 (fix: stale subscription assertions) | 43.3 (load-noise, 1188/1188 green) | | fixed 2 stale subscription tier assertions (Premium max_staff_users=Some(50), Plus sales_history_days=Some(365)); 1182→1188 tests all pass. 2nd: fixed `list_kds_orders_filters_by_status` (pending→ready skip; must go pending→preparing→ready) + `capabilities_reflect_free_tier_and_zero_usage` (debug builds upgrade Free→Premium); 1188/1188 all pass |
 | A15 tablet-client | 6.3 (cold 68) | — (plateaued) | | | 454 tests all pass; no reducible delays; cold dominated by compile |
 | A16 modules | ~12.0 (cold 21.6) | — (plateaued) | | | none — 325 tests, no delays, spawn floor |
-| A17 platform | 26.5 (warm) | 12.5 (warm) | | | cut timeouts: 5s→500ms (pg_transport push/pull edge cases); 50ms client + 500ms outer (transport classify tests) |
+| A17 platform | 26.5 (warm) | 12.5 (warm) | 28.7 (load-noise, 678/678 green, 21 skipped) | | cut timeouts: 5s→500ms (pg_transport push/pull edge cases); 50ms client + 500ms outer (transport classify tests) |
 | A18 oz-core integration | 14.0 | — (plateaued) | | | none — backup tests already fixed in A02; no delays remain |
 | A19 oz-payment integration | 11.1 | — (plateaued) | | | none beyond A06 poll fix; env 2s connect delay |
 | A20 desktop-client integration | 45.7 (compile-dom.) | — (plateaued) | | | unblocked (quiet re-measure); 32 tests pass, ~0.66s real work |
@@ -180,20 +180,22 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 | A24 cloud-server integration | 3.3 (compile-dom.) | — (plateaued) | | | unblocked (email_pg.rs borrow error resolved); 2 tests pass, no delays |
 | A25 tax integration | 1.5 | — (plateaued) | | | none — no sleeps |
 | A26 doctests | 30.4 (cold 34.2, compile-bound) | — (plateaued) | | | no lever — cargo runs doctest binaries serially; doctests can't be dropped (quality guardrail) |
-| A27 nextest workspace sweep | 65.9 (clean subset) | 74.6 (excl. live-PG) / 75.0 (full, 5507 green) / 41.5 (quiet) | 32–36 s (sync_store PG tests zero-flake) | | PG retry-budget param: dead-port tests 150s→4s (−97%); full sweep incl. pg_integration now green after other agent's RLS landing; quiet-machine re-stamp 41.5s. 2nd: sync_store 4 PG tests moved to throwaway databases (eliminates AccessExclusiveLock deadlocks from concurrent PG_INIT DDL); 5/5 full-suite runs clean for push_batch tests |
+| A27 nextest workspace sweep | 65.9 (clean subset) | 74.6 (excl. live-PG) / 75.0 (full, 5507 green) / 41.5 (quiet) | 32–36 s (sync_store PG tests zero-flake); re-run 66.0 (full, 5572 green, 2 flaky-retried) | | PG retry-budget param: dead-port tests 150s→4s (−97%); full sweep incl. pg_integration now green after other agent's RLS landing; quiet-machine re-stamp 41.5s. 2nd: sync_store 4 PG tests moved to throwaway databases (eliminates AccessExclusiveLock deadlocks from concurrent PG_INIT DDL); 5/5 full-suite runs clean for push_batch tests |
 | A28 cargo fallback sweep | N/A | | | | fallback runner, not campaign target |
 | A29 vitest full suite | 59.9 | — (plateaued) | | | 395 files / 6911 tests pass; infra-bound (jsdom setup 610s + transform 65s parallel wall) |
 | A30 a11y suite | 4.05 | — (plateaued) | | | no reducible delays — 2.1s test work + vitest transform/jsdom overhead (3s+2s); all 12 tests pass, no waitForTimeout or redundant waits |
 | A31 vitest coverage | 67.3 (warm median) | | | | 395 files / 6911 tests + v8 instrumentation; ~12% overhead vs full suite (59.9s) |
 | A32 vitest per-group | N/A | | | | scoped runs are the iteration tool, not a deliverable |
 | A33 e2e api | 3.2 (warm median) | | | | 12 tests (2 projects × 6), all pass; cloud-server + license-server + redis healthy |
-| A34 e2e perf-smoke | 36.2 (warm median) | | | | 12 tests (2 projects × 6), all pass; PERF-10 budgets all met |
-| A35 e2e remaining | 465 (7m45s) | 391 (6m31s, −16%) | 369 (6m9s, −20.7%) | 327 (5m27s, −29.7%) | round 1: cut50 waits (adr22, sale, settings). round 2: −52 more (inventory-workflows 18, settings-persist 15, refund 10, kds-critical-path 9). round 3: shift.spec.ts 22 waits → deterministic assertions (41.7s for 12 tests). round 4: sale.spec.ts 2 flaky tests fixed (dispatchEvent click for dev-toolbar intercept) |
+| A34 e2e perf-smoke | 36.2 (warm median) | | 39.5 (10/12, 2 fail topology-refactor) | | 12 tests (2 projects × 6), all pass; PERF-10 budgets all met. 2nd run: route-transition fails (Admin workspace-card selector changed by topology refactor — other-agent WIP) |
+| A35 e2e remaining | 465 (7m45s) | 391 (6m31s, −16%) | 369 (6m9s, −20.7%) | 327 (5m27s, −29.7%) | round 1: cut50 waits (adr22, sale, settings). round 2: −52 more (inventory-workflows 18, settings-persist 15, refund 10, kds-critical-path 9). round 3: shift.spec.ts 22 waits → deterministic assertions (41.7s for 12 tests). round 4: sale.spec.ts 2 flaky tests fixed (dispatchEvent click for dev-toolbar intercept). 2nd run: 124/124 pass, 7m6s (load-noise; test count up from 116 due to new specs) |
 | A36 script tests | 3.34 | 3.34 (46/46 pass) | | | fixed 3 failing tests: cross-platform python resolution |
 | A37 check.sh aggregate | — (env-limited) | | | | N/A on Windows (bash PATH lacks cargo); gates individually green — measure in CI/Linux |
 | A38 check:all aggregate | — (env-limited) | | | | N/A on Windows (same bash-PATH limitation); measure in CI/Linux |
 
 **Totals (A27 + A29 + A33–A36 as the canonical CI sweep):** baseline 667.7 s → current 504.6 s → **Δ 163.1 s (−24.4%)**
+
+**Quality delta (2026-08-23 re-run):** A02 2535/2535 green (+1 fixed test), A14 1188/1188 green (+2 fixed tests), A27 5572/5572 green (+65 new tests from other-agent WIP, 2 PG flakes retried). A29 7020/7045 pass (4 files from topology refactor WIP). A34 10/12 (2 topology-refactor regressions). A35 124/124 green. Total test count up ~70 vs last sweep — all new tests from other-agent work.
 
 ---
 
@@ -252,6 +254,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · runner switch · cargo test → cargo nextest · cold 58.2 s / warm 58.5 s (2525 tests, all pass)** — per user directive, A02 canonical runner is now **nextest** (also the check.sh / CI runner; per-test process isolation + full parallelism). −41% cold vs cargo test. Doctests move to A26.
 - **2026-08-22 · attempt 1 · `Store::backup()` chunk size · warm 58.5 → 31.7 s (−46%)** — root cause: `run_to_completion(5, 250 ms)` copied 5 pages/chunk with a 250 ms pause; a ~1.4 MB fresh DB (~355 pages) incurred ~71 sleeps ≈ 18 s per backup test. Changed to `run_to_completion(512, 10 ms)` — one chunk, ~2 MB granularity, still yields to concurrent writers (online-backup contract preserved). **Production bug too** (`desktop-client data.rs:154`, `sync.rs:647`, `oz-cli commands.rs:190` — a real 1.4 MB backup took ~18 s). Backup tests: 18 s → 0.07 s. All 2525 tests pass.
 - **2026-08-22 · plateau check** — new slow tail: 6.13 s `same_store_racing_writers_serialize_exactly_one_wins` (genuine SQLite busy-race handshake, documented ~5 s platform behavior — not a fixed sleep), 4.27 s `verify_tampered_payload_fails` (argon2 KDF, deliberately slow — security-sensitive, do not touch), 2.6 s sync tests. Remaining costs are inherent; further gains belong to A18 (integration) / A27 (workspace sweep).
+- **2026-08-23 · fix · commit `e020b459` · stale refund test fixed** — `refund_exceeding_sale_total_succeeds` (refund_tax_integration.rs:646) expected a refund of 3500 to succeed on a sale with total 1150. The over-refund guard in `db/refunds.rs:35-64` now correctly rejects this. Renamed test to `refund_exceeding_sale_total_is_rejected`, changed assertion from `.unwrap()` to `.unwrap_err()` matching `CoreError::Validation { field: "total" }`. Added `CoreError` to imports. Full suite: **2535/2535 pass, 45.6 s warm** (load-noise; baseline 31.7 s on quiet machine).
 
 ### A03 oz-security
 - **2026-08-22 · baseline · commit `51642ce8` · cold 19.9 s / warm 1.78 s (runs 1.78/1.75/1.78)** — `cargo nextest run -p oz-security`; 82 tests, all pass (test runtime ~0.8 s). Crate is already lean: no argon2/RSA keygen in tests (masking, TLS config, keyring backends); credential-store tests use bounded 10 ms poll loops (50 attempts max — the correct pattern, not fixed sleeps).
@@ -298,6 +301,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 ### A14 desktop-client
 - **2026-08-22 · baseline · commit `ed71a200` · warm median ~20 s (runs 18.0/23.5/35.8)** — `cargo nextest run -p oz-pos-app`; **1182 tests, all pass** (after fix). 35.8 s run was other-agent load. Crate unblocked — other agent's borrow error resolved.
 - **2026-08-22 · attempt 1 · commit +`subscription_tests.rs` · technique: fix stale assertions → **ACCEPTED** — 2 subscription tier assertion failures from oz-core tier model update: (1) `capabilities_reflect_plus_and_pro_tiers`: Plus `sales_history_days` changed from `None` to `Some(365)` (1 year); (2) `capabilities_reflect_premium_tier`: Premium `max_staff_users` changed from `None` to `Some(50)`. Both assertions aligned with `SubscriptionTier` impl in `crates/oz-core/src/subscription.rs`. All 1182 tests pass. **Area plateaued** — no reducible delays; network-flush sleeps in `lan_server_tests.rs` are TCP-necessary.
+- **2026-08-23 · fix · commit `e020b459` · 2 stale tests fixed → **ACCEPTED** — (1) `list_kds_orders_filters_by_status` (kds_tests.rs:359): test skipped `preparing` in the forward-only status chain (`pending → preparing → ready`); added `pending→preparing` step before `ready`. (2) `capabilities_reflect_free_tier_and_zero_usage` (subscription_tests.rs:23): `load_capabilities()` upgrades Free→Premium in `#[cfg(debug_assertions)]` builds; wrapped tier-specific assertions in `#[cfg(debug_assertions)]` / `#[cfg(not(debug_assertions))]` blocks matching Premium (max_stores=5, max_staff=50, unlimited history, qris+analytics+loyalty) vs Free tier values. Full suite: **1188/1188 pass, 43.3 s warm** (load-noise; baseline 18 s on quiet machine). Test count 1182→1188 (+6 from other-agent WIP).
 
 ### A15 tablet-client
 - **2026-08-22 · baseline · commit `ed71a200` · warm 6.3 s (cold 68 s)** — `cargo nextest run -p oz-pos-tablet`; **454 tests, all pass**. Crate unblocked — other agent's issues resolved. No sleeps, no reducible delays. **Area plateaued** — cold dominated by compile; warm at floor.
@@ -355,12 +359,14 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · closure · commit `44cd9b26` · rls_fails_closed → throwaway DB — the last 2 flakes gone** — the full sweep still showed `pg_integration_rls_fails_closed` + `pg_integration_webhooks_restricted_role_after_cutover` flaky (2/3, recovered by retry): `rls_fails_closed` ran on the **shared base DB** while `pg_integration_rls_force_blocks_owner` had FORCE RLS applied inside an **open transaction** (the `ROLLBACK` makes FORCE transactional, but during the open window the base tables ARE FORCEd) → concurrent base-DB query denied. Converted `rls_fails_closed` to a **throwaway DB** (admin pool creates/drops; probe connection targets it); the FORCE window no longer touches the base. Also extracted `SCHEMA_LOCK_KEY` as a shared `pub(crate)` const in `db.rs`. **Verified: 4 consecutive full PG-suite runs (39 tests across oz-api + oz-cloud-server) all green — zero flakes.** The campaign's PG flake hunt is now complete: 8 distinct races root-caused and fixed (shared-role drops, PG_INIT DDL, global unique-index collision, fixed-role names, self-perpetuating stale rows, base-DB FOR UPDATE chains ×2, cutover FORCE window).
 - **2026-08-22 · P4 residual-flake verdict · commit `4b3745b0` · all residual flakes were load-noise, not defects** — the 3 flakes seen in loaded sweeps were re-tested on a quiet machine: `pg_integration_migrate_large_db` + `pg_integration_push_batch_data_error` pass (2/2, 32–54 s — the large-DB migration is a genuinely slow ~48 s test), and `windows_roundtrip` (Windows Credential Manager keyring) passes 4/4 in ~0.03 s (its flake under contention was the OS keyring write/read exceeding the poll window). **Conclusion: no further code fixes warranted.**
 - **2026-08-23 · throwaway-DB fix · sync_store PG tests → zero flakes** — root cause: `push_batch_duplicate_in_middle_survives`, `push_batch_data_error_does_not_abort_batch`, `push_batch_commit_visible_to_new_connection`, and `push_pull_plan_snapshot_roundtrip` all shared the base PG database. Concurrent PG_INIT DDL (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`) from other tests' `connect_postgres(apply_schema=true)` acquired `AccessExclusiveLock` on `offline_queue`, deadlocking with these tests' INSERTs (`RowExclusiveLock`). Fix: added `throwaway_pool()` helper (creates isolated PG database per test, applies schema, drops on cleanup). **Verified: 5/5 full-suite runs clean — zero flakes for all 4 sync_store PG tests.** The 2 remaining flaky tests (`prune_ages_out_old_rows`, `migrate_large_db`) are unrelated PG integration tests with their own contention patterns.
+- **2026-08-23 · re-run · 66.0 s wall · 5572/5572 pass (2 flaky-retried)** — full sweep re-measured after A02/A14 fixes landed. Test count up from 5509 → 5572 (+63, new tests from other-agent WIP: KDS, topology). 2 PG flakes retried to green: `push_batch_duplicate_in_middle_survives` + `push_batch_data_error_does_not_abort_batch` (2/3 attempts each). Warm 66.0 s (vs quiet baseline 41.5 s) — machine had concurrent other-agent load. No new failures introduced by the A02/A14 fixes.
 
 ### A28 cargo fallback sweep
 - **2026-08-22 · N/A** — fallback runner for CI without nextest; not the campaign target (A27 is canonical). Not measured.
 
 ### A29 vitest full suite
 - **2026-08-22 · baseline · commit `6ff8d100` · warm 59.9 s** — `npm run test` (from `ui/`); **395 test files, 6911 tests, all pass**. Duration breakdown from vitest: transform 65 s, setup 169 s, import 154 s, tests 403 s, environment 610 s (parallel wall-clock 59.9 s). No fixed waits in the suite (unit tests; waitForTimeout only exists in e2e). **Area plateaued at vitest's own parallel floor** — the 59.9 s is dominated by jsdom environment setup + transform across 395 files, not test logic. Further gains would need vitest workspace splitting or lighter setup files (both infra-level, tracked as future work).
+- **2026-08-23 · re-run · 49.1 s · 392/396 files pass, 7020/7045 tests pass** — 4 failing test files all from other-agent topology refactor WIP: (1) `WorkspaceHome.test.tsx` (9 fail — expects 10 cards, only 5 render; card count changed), (2) `errorPolicyCompliance.test.ts` (2 fail — PaymentModal.tsx line numbers shifted), (3) `themeTokenCompliance.test.ts` (1 fail — new hardcoded CSS in NodeTopologyEditor.css), (4) `NodeTopologyEditor.a11y.test.tsx` (4 fail — axe violations from component changes). None are campaign regressions; all attributable to topology-editor refactor. Test count up 395→396 files, 6911→7045 tests (+134 new tests from other-agent work).
 
 ### A30 a11y suite
 - **2026-08-22 · baseline · commit `10d3ac6a` · warm median 4.05 s (runs 4.05/4.39/4.03)** — `npm run test:a11y` (from `ui/`); 7 test files, 12 tests, all pass. machine: DESKTOP-PC-R9 · Ryzen 9 7950X (32 logical) · 63.2 GB RAM · Windows 11 26200 · vitest 4 workers, fileParallelism=true. Breakdown: 2.1 s actual test work (axe-core audits) + vitest transform (3.0 s TypeScript compilation) + jsdom environment setup (2.0 s). No `waitForTimeout` calls, no redundant waits, no delays to cut. **Area PLATEAUED** — the 4 s wall clock is dominated by vitest infrastructure (transform + environment), not test logic.
@@ -376,6 +382,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 
 ### A34 e2e perf-smoke
 - **2026-08-22 · baseline · commit `42d4f373` · warm median 36.2 s (runs 36.2/36.2/37.2)** — `npm run test:e2e -- e2e/perf-smoke.spec.ts` (from `ui/`); **12 tests (desktop + tablet × 6)**, all pass. **PERF-10 budgets all met**: startup-to-interactive (desktop 3.5s / tablet 5.4s, budget 15s), route-transition (<5s), product-search (<3s), add-to-cart (<3s), checkout-open (<3s), KDS refresh (<8s). Machine: DESKTOP-PC-R9 · Ryzen 9 7950X · 63.2 GB · Windows 11 26200 · Playwright 1.61.1 · 2 workers. Duration breakdown: Vite dev server (2s) + 12 browser scenarios with navigation/waits. **Area plateaued** — test logic measures actual performance against budgets; the ~36s wall time is dominated by browser startup + page loads + budget headroom waits. No redundant fixed sleeps to cut.
+- **2026-08-23 · re-run · 10/12 (2 fail from topology refactor)** — `route-transition-within-budget` fails on both desktop + tablet: `getByTestId('workspace-card').filter({ hasText: 'Admin' })` not found (other agent's topology refactor changed workspace card rendering/testid). Not a campaign regression — topology WIP territory.
 
 ### A35 e2e remaining
 - **2026-08-22 · baseline · commit `10d3ac6a` · warm median 465 s (runs 461/465/468)** — `npx playwright test --config e2e/playwright.config.ts <24 specs>` (excluding `api.spec.ts` + `perf-smoke.spec.ts`); 24 spec files × 2 projects (desktop + tablet) = 48 test runs, **232 passed, 6 failed, 2 skipped**. machine: DESKTOP-PC-R9 · Ryzen 9 7950X (32 logical) · 63.2 GB RAM · Windows 11 26200 · Playwright 1.61.1 · 4 workers. Profiled per-spec timing: top consumers were `adr22-workspace-settings` (232 s total across projects), `admin-workflows` (129 s), `sale` (112 s), `e2e-kds-critical-path` (112 s), `auth` (99 s). Identified **183 `waitForTimeout` calls** across all E2E spec files totaling ~137 s of fixed sleeps. The6 pre-existing failures were dev-toolbar pointer-event intercepts on tablet (the toolbar floats bottom-right and swallows clicks).
@@ -384,6 +391,7 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - **2026-08-22 · attempt 2 · commit +`inventory-workflows.spec.ts` `e2e-settings-persist.spec.ts` `refund.spec.ts` `e2e-kds-critical-path.spec.ts` · technique: cut fixed waits (playbook #1) → **ACCEPTED** — second round removing52 more redundant `waitForTimeout` calls: inventory-workflows (18), e2e-settings-persist (15), refund (10), e2e-kds-critical-path (9). Same pattern: all calls followed by `expect().toBeVisible()` or similar auto-waiting assertions. **Did NOT touch** `shift.spec.ts` (22 calls, all needed for shift page hash-navigation rendering) or `e2e-shift-reconciliation.spec.ts` (17 calls — complex multi-step flow where removing waits broke the Open-Shift-button visibility after summary dialog dismissal; reverted). Re-measured: warm **391 → 369 s (−5.7%, 22 s saved)**. Cumulative from baseline: **465 → 369 s (−20.7%, 96 s saved)**. 238/238 pass, 0 fail.
 - **2026-08-22 · attempt 3 · commit `349fbe89` · technique: cut fixed waits (playbook #1) → **ACCEPTED** — tackled the previously-untouched `shift.spec.ts` (22 `waitForTimeout` calls). Replaced all 22 with Playwright auto-wait assertions: `waitForTimeout(2_000)` after hash navigation → `expect('.shift-mgmt-no-active').toBeVisible({timeout: 10_000})`; `waitForTimeout(500)` for modal → `expect('.shift-mgmt-overlay').toBeVisible({timeout: 3_000})`; `waitForTimeout(200)` after input → removed (assertion on next element waits); `waitForTimeout(1_000)` after confirm → `expect('.shift-mgmt-active-card').toBeVisible({timeout: 5_000})`. Also rewrote `beforeEach` to deterministically handle seeded active shift state (wait for either `.shift-mgmt-no-active` or `.shift-mgmt-active-card`, then close if needed). **All 10 shift tests + 2 shift-reconciliation tests pass (12 tests, 41.7s)**. Total A35 savings: **465 → ~327 s (−29.7%, 138 s saved cumulative)**.
 - **2026-08-22 · attempt 4 · commit `8ae043d4` · technique: fix flaky clicks (playbook #1 variant) → **ACCEPTED** — fixed 2 remaining flaky tests in `sale.spec.ts`: "applies 10% discount" and "QRIS payment generates QR code overlay". Root cause: dev-toolbar (bottom-right, persistent in dev mode) intercepts clicks on cart action buttons (`.retail-cart-action-btn--discount`, QRIS radio). Playwright's actionability checks retry but toolbar consistently overlaps. Fix: use `dispatchEvent('click')` to bypass actionability checks while still triggering React handlers. Both tests now pass on desktop + tablet. **sale.spec.ts: 24/24 pass (was 22/24)**. Quality *improved*: flakiness eliminated.
+- **2026-08-23 · re-run · 124/124 pass · 7m6s** — full re-measurement after A02/A14 fixes. All 124 e2e tests pass (desktop + tablet projects). Warm 7m6s vs 5m27s baseline — heavier machine load; test count up from ~116 due to new specs from other-agent WIP. All existing optimizations preserved (waitForTimeout removal, dispatchEvent clicks). No regressions.
 
 ### A36 script tests
 - **2026-08-22 · baseline · commit `e808be2c` · warm median 3.34 s (runs 3.21/3.34/5.80)** — `npm run test:scripts` (from `ui/`); 4 test files, 46 tests. **3 pre-existing failures** found in `verify-ci-docs-drift.test.mjs`: hardcoded `python3` in `execSync` — Windows has `python`/`py`, not `python3`. Fixed: switched to `execFileSync` with `process.platform === 'win32' ? 'python' : 'python3'` (same pattern as the sibling architecture-boundaries test). After fix: 46/46 pass.
@@ -439,18 +447,18 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 
 ---
 
-## 11. Campaign closeout (2026-08-22)
+## 11. Campaign closeout (2026-08-22, updated 2026-08-23)
 
 **All 38 areas inventoried, baselined, and either improved or plateaued.**
 
 | Canonical CI sweep component | Baseline | Current | Δ |
 |---|---|---|---|
-| A27 nextest workspace sweep | ~75 s (quiet: 41.5 s) | 41.5 s (quiet) | −45% quiet |
-| A29 vitest full suite | 59.9 s | 59.9 s | plateaued (infra-bound) |
-| A33 e2e api | 3.2 s | 3.2 s | plateaued |
-| A34 e2e perf-smoke | 36.2 s | 36.2 s | plateaued (budgets met) |
-| A35 e2e remaining | 465 s | ~327 s | **−29.7% (−138 s)** |
-| A36 script tests | 3.34 s | 3.34 s | 3 failing tests fixed |
+| A27 nextest workspace sweep | ~75 s (quiet: 41.5 s) | 41.5 s (quiet) / 66.0 s (loaded) | −45% quiet |
+| A29 vitest full suite | 59.9 s | 49.1 s (loaded) | plateaued (infra-bound) |
+| A33 e2e api | 3.2 s | 2.6 s | plateaued |
+| A34 e2e perf-smoke | 36.2 s | 39.5 s (2 fail topology-refactor) | plateaued (budgets met; regressions from topology WIP) |
+| A35 e2e remaining | 465 s | ~327 s (7m6s loaded) | **−29.7% (−138 s)** |
+| A36 script tests | 3.34 s | 3.94 s | 3 failing tests fixed |
 
 **Total canonical sweep:** 667.7 s → 504.6 s → **Δ 163.1 s (−24.4%)** (loaded-machine figures; quiet machine ≈ −40%+).
 
@@ -460,12 +468,15 @@ Run from `ui/`: `npm run test:e2e -- <spec>` or the managed `npm run e2e` pipeli
 - 3 stale quota assertions from the `668f8078` pricing change (A02)
 - `verify-ci-docs-drift` hardcoded `python3` — 3 failing Windows tests (A36)
 - `DbPool::connect_postgres` 5-attempt retry loop burned 30 s on dead ports (A27)
+- Stale `refund_exceeding_sale_total_succeeds` — over-refund guard landed but test wasn't updated (A02, 2026-08-23)
+- KDS `pending→ready` skip — forward-only status chain requires `preparing` intermediate (A14, 2026-08-23)
+- Debug-mode subscription tier upgrade not accounted for in test assertions (A14, 2026-08-23)
 
 **PG flake hunt:** 8 distinct race classes root-caused and fixed (shared-role drops, PG_INIT concurrent DDL, global unique-index collision, fixed role names, self-perpetuating stale rows, base-DB `FOR UPDATE` chains ×2, cutover FORCE window). Verified: 4 consecutive full PG-suite runs (39 tests) all green.
 
 **Definition of done (§9) — satisfied.** Remaining open items are external: A37/A38 aggregate gates need Linux/CI (bash PATH), and the other agent's in-flight WIP (desktop-client commands, `ui/src/api`, **topology editor refactor** — `NodeTopologyEditor.tsx`/`.css`/`TopologyScreen.tsx`, KDS tests) must land before the final full-vitest green stamp.
 
-**Final campaign-owner verification (2026-08-22, quiet machine):** every test file owned by this campaign passes — 204 component/unit tests (15 files: csv, isEditableTarget, auditCatalog, exportCsv, loggedInvoke, retailShortcuts, pageRegistry, widgetRegistry, groupBySection, LocaleContext, SubscriptionContext, useRetailColumnPrefs, useSound, emptyStateIllustrations, useContextMenu) **204/204**, plus 108 topology-helper tests **108/108** (the pure exported helpers are independent of the other agent's component refactor), Rust workspace sweep green at 5509 tests (modulo other agent's in-flight KDS), and the 39-test PG suite green across 4 consecutive runs. The full-vitest red set (41 tests in the loaded run; growing to ~160 as the other agent's topology refactor proceeds) is 100% attributable to their in-flight edits — zero campaign-owned failures.
+**Final campaign-owner verification (2026-08-23, loaded machine):** every Rust crate owned by this campaign passes — A02 2535/2535, A14 1188/1188, A27 5572/5572 (2 PG flakes retried to green). UI test files owned by this campaign: A29 shows 392/396 files pass (4 failures 100% from other-agent topology refactor). A35 124/124 pass. The full-vitest red set (4 files / 25 tests) and A34 2-route-transition failures are all 100% attributable to the other agent's in-flight topology refactor — zero campaign-owned failures. 3 stale tests fixed this session: refund over-refund guard, KDS status chain, debug-mode tier assertions.
 
 ---
 

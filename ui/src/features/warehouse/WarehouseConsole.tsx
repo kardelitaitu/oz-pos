@@ -194,10 +194,12 @@ export default function WarehouseConsole() {
   const completeReceive = useCallback(async () => {
     if (!sessionToken || session.isEmpty || !session.transferId) return;
     try {
-      const receivedLines: ReceivedLineInput[] = session.lines.map((l) => ({
-        line_id: l.id,
-        received_qty: l.qty,
-      }));
+      const receivedLines: ReceivedLineInput[] = session.lines
+        .filter((l) => l.transferLineId)
+        .map((l) => ({
+          line_id: l.transferLineId!,
+          received_qty: l.qty,
+        }));
       const received = await receiveStockTransfer(sessionToken, session.transferId, receivedLines);
       addToast({
         type: 'success',
@@ -285,7 +287,7 @@ export default function WarehouseConsole() {
     (t: PendingTransferPick) => {
       session.clear();
       for (const line of t.lines) {
-        session.addLine(line.sku, line.product_name, null, line.qty);
+        session.addLine(line.sku, line.product_name, null, line.qty, line.id);
       }
       session.setTransferId(t.id);
       setPendingTransfer(t);

@@ -1,6 +1,6 @@
 # Warehouse POS — Professional Operations Console
 
-> **Status:** Proposed · **Area:** inventory, warehouse · **Version:** 2.0 (expanded to professional warehouse POS)
+> **Status:** Approved — decisions locked · **Area:** inventory, warehouse · **Version:** 2.0 (professional warehouse POS)
 
 **Architecture rule:** each workspace type is independently evolvable. The warehouse workspace **copies** its UI structure from the retail POS (`features/retail/`) rather than sharing components — no imports from `features/retail/*` or `features/sales/*`. This keeps warehouse and retail-pos free to diverge without coupling.
 
@@ -238,11 +238,13 @@ P1 alone delivers the "professional warehouse POS" daily flow for inter-warehous
 
 ---
 
-## 11. Open decisions
+## 11. Resolved decisions
 
-1. **Popup concurrency** — F1+F2 simultaneous (lean: yes, interleaved day)
-2. **Damage handling** — mark per-line on receive vs. separate damage adjustment after; lean per-line on receive
-3. **Pick-verify strictness** — send blocked until every line `picked` vs. allow override; lean: warn but allow manager override
-4. **Receive confirmation** — toast + cart reset vs. full success screen; lean: toast + print offer
-5. **Transfer number prefix** — reuse domain `transfer_number` vs. warehouse prefix (`WBL-`); lean reuse
-6. **Grid vs scan-only** — keep fallback grid (lean: keep, for non-barcoded items)
+All six design decisions are **resolved** (2026-08-23) and locked into this spec:
+
+1. **Popup concurrency — simultaneous.** F1 (Receive) and F2 (Send) popup sessions can be open at the same time, each holding independent session state; re-pressing a key focuses the existing popup instead of stacking. Interleaved inbound/outbound day is the normal warehouse workflow.
+2. **Damage handling — inline per line, during receive.** Each received line records `ok / damaged / short` while scanning; good qty hits stock via the existing command, damaged/short quantities persist on the PO line (small backend addition: PO-line receive state) and optionally auto-generate a stock adjustment. Damage is captured at the dock, not afterwards.
+3. **Pick-verify strictness — warn + manager override.** Complete Send stays disabled until `picked == qty` on every line (the daily discipline); a manager can override with a confirmation dialog that records who overrode and why. Not a hard block.
+4. **Receive confirmation — toast + cart reset + print offer.** On complete: success toast with the document number, cart clears, and a non-blocking "Print packing slip? [Yes]/[No]" offer appears. No blocking success screen (matches retail's `retail-toast-sale-complete` pattern).
+5. **Transfer number format — reuse existing `TRF-` numbers.** One document, one number across workspaces; the UI shows status + source columns for type visibility instead of encoding the workspace in the prefix.
+6. **Grid vs scan-only — keep the fallback grid.** Scan input is primary and always focused; the searchable grid (name/SKU/barcode) sits below as the manual path for non-barcoded or unreadable items. Tap = same "add to session" as a scan.
