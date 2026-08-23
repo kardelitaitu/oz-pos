@@ -471,6 +471,23 @@
     border-top: 1px solid var(--border); pointer-events: none;
   }
   .kds-screen-footer .sep { opacity: 0.5; }
+
+  /* Reusable switch (used for sound, auto-acknowledge) */
+  .kds-switch-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .kds-switch-row:last-child { margin-bottom: 0; }
+  .kds-switch-row label { font-size: 12px; color: var(--text); opacity: 0.85; }
+  .kds-switch {
+    position: relative; width: 40px; height: 22px; border-radius: 11px; border: none;
+    background: rgba(255,255,255,0.12); cursor: pointer; transition: background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .kds-switch::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    transition: transform 0.2s;
+  }
+  .kds-switch.on { background: #3b82f6; }
+  .kds-switch.on::after { transform: translateX(18px); }
 </style>
 </head>
 <body>
@@ -519,6 +536,17 @@
             <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
             <span class="kds-zoom-value" id="zoom-value">100%</span>
             <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+        <div class="kds-panel-section">
+          <h3>Kitchen</h3>
+          <div class="kds-switch-row">
+            <label for="toggle-sound">New order sound</label>
+            <button class="kds-switch on" id="toggle-sound" role="switch" aria-checked="true" aria-label="New order sound"></button>
+          </div>
+          <div class="kds-switch-row">
+            <label for="toggle-ack">Auto-acknowledge</label>
+            <button class="kds-switch" id="toggle-ack" role="switch" aria-checked="false" aria-label="Auto-acknowledge new orders"></button>
           </div>
         </div>
         <div class="kds-panel-section">
@@ -1170,6 +1198,31 @@
     zoom = Math.min(150, zoom + 10); saveZoom(); applyZoom();
   });
   applyZoom();
+
+  /* ── kitchen switches (sound / auto-acknowledge) ── */
+  const KITCHEN_KEY = 'kds-proto-kitchen';
+  function loadKitchen() {
+    try {
+      const raw = localStorage.getItem(KITCHEN_KEY);
+      if (raw) return { sound: true, ack: false, ...JSON.parse(raw) };
+    } catch {}
+    return { sound: true, ack: false };
+  }
+  function saveKitchen() { try { localStorage.setItem(KITCHEN_KEY, JSON.stringify(kitchen)); } catch {} }
+  let kitchen = loadKitchen();
+  function applyKitchen() {
+    ['sound', 'ack'].forEach(k => {
+      const el = document.getElementById('toggle-' + k);
+      if (!el) return;
+      const on = kitchen[k] === true;
+      el.classList.toggle('on', on);
+      el.setAttribute('aria-checked', on);
+    });
+  }
+  document.getElementById('toggle-sound').addEventListener('click', () => { kitchen.sound = !kitchen.sound; saveKitchen(); applyKitchen(); });
+  document.getElementById('toggle-ack').addEventListener('click', () => { kitchen.ack = !kitchen.ack; saveKitchen(); applyKitchen(); });
+  applyKitchen();
+
   document.getElementById('reset-colors').addEventListener('click', () => {
     colors = { ...DEFAULT_COLORS };
     saveColors();
