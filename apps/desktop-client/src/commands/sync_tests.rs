@@ -509,6 +509,7 @@ fn pg_sync_settings_dto_serialize_camel_case() {
         dbname: Some("oz_sync".into()),
         user: Some("sync_user".into()),
         has_password: true,
+        require_tls: true,
     };
     let json = serde_json::to_value(&dto).unwrap();
     assert_eq!(json["enabled"], true);
@@ -517,11 +518,12 @@ fn pg_sync_settings_dto_serialize_camel_case() {
     assert_eq!(json["dbname"], "oz_sync");
     assert_eq!(json["user"], "sync_user");
     assert_eq!(json["hasPassword"], true);
+    assert_eq!(json["requireTls"], true);
 }
 
 #[test]
 fn update_pg_sync_settings_args_deserialize() {
-    let json = r#"{"enabled":true,"host":"db.example.com","port":"5432","dbname":"oz_sync","user":"sync_user","password":"secret"}"#;
+    let json = r#"{"enabled":true,"host":"db.example.com","port":"5432","dbname":"oz_sync","user":"sync_user","password":"secret","requireTls":true}"#;
     let args: UpdatePgSyncSettingsArgs = serde_json::from_str(json).unwrap();
     assert!(args.enabled);
     assert_eq!(args.host.as_deref(), Some("db.example.com"));
@@ -529,6 +531,7 @@ fn update_pg_sync_settings_args_deserialize() {
     assert_eq!(args.dbname.as_deref(), Some("oz_sync"));
     assert_eq!(args.user.as_deref(), Some("sync_user"));
     assert_eq!(args.password.as_deref(), Some("secret"));
+    assert_eq!(args.require_tls, Some(true));
 }
 
 #[test]
@@ -541,6 +544,7 @@ fn update_pg_sync_settings_data_roundtrip() {
         dbname: Some("oz_sync".into()),
         user: Some("sync_user".into()),
         password: Some("secret".into()),
+        require_tls: Some(true),
     };
     update_pg_sync_settings_data(&conn, &args).unwrap();
 
@@ -551,6 +555,7 @@ fn update_pg_sync_settings_data_roundtrip() {
     assert_eq!(dto.dbname.as_deref(), Some("oz_sync"));
     assert_eq!(dto.user.as_deref(), Some("sync_user"));
     assert!(dto.has_password);
+    assert!(dto.require_tls);
 }
 
 #[test]
@@ -563,6 +568,8 @@ fn update_pg_sync_settings_data_disabled_default() {
     assert!(dto.dbname.is_none());
     assert!(dto.user.is_none());
     assert!(!dto.has_password);
+    // TLS defaults to off, matching the historical NoTls transport.
+    assert!(!dto.require_tls);
 }
 
 #[test]
@@ -577,6 +584,7 @@ fn update_pg_sync_settings_data_none_clears_optional_fields() {
             dbname: Some("oz_sync".into()),
             user: Some("sync_user".into()),
             password: None,
+            require_tls: Some(true),
         },
     )
     .unwrap();
@@ -591,6 +599,7 @@ fn update_pg_sync_settings_data_none_clears_optional_fields() {
             dbname: None,
             user: None,
             password: None,
+            require_tls: None,
         },
     )
     .unwrap();
@@ -601,6 +610,9 @@ fn update_pg_sync_settings_data_none_clears_optional_fields() {
     assert!(dto.port.is_none());
     assert!(dto.dbname.is_none());
     assert!(dto.user.is_none());
+    // require_tls is written on every update; the second save's None
+    // defaults to false.
+    assert!(!dto.require_tls);
 }
 
 #[test]
@@ -615,6 +627,7 @@ fn update_pg_sync_settings_data_password_preserved_when_none() {
             dbname: None,
             user: None,
             password: Some("secret".into()),
+            require_tls: None,
         },
     )
     .unwrap();
@@ -630,12 +643,14 @@ fn update_pg_sync_settings_data_password_preserved_when_none() {
             dbname: None,
             user: None,
             password: None,
+            require_tls: Some(true),
         },
     )
     .unwrap();
 
     let dto = run_get_pg_sync_settings(&conn).unwrap();
     assert!(dto.has_password);
+    assert!(dto.require_tls);
 }
 
 #[tokio::test]
@@ -654,6 +669,7 @@ async fn pg_sync_settings_command_roundtrip() {
             dbname: Some("oz_sync".into()),
             user: None,
             password: Some("secret".into()),
+            require_tls: Some(true),
         },
         app.state(),
     )
@@ -665,6 +681,7 @@ async fn pg_sync_settings_command_roundtrip() {
     assert_eq!(dto.host.as_deref(), Some("db.example.com"));
     assert_eq!(dto.dbname.as_deref(), Some("oz_sync"));
     assert!(dto.has_password);
+    assert!(dto.require_tls);
 }
 
 #[tokio::test]
