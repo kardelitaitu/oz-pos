@@ -12,6 +12,38 @@ Replace the current WarehouseScreen (stock-view + manual adjust table) with a **
 
 ---
 
+## 1b. Quick menu (function keys) — popup sessions
+
+The console has a **function-key quick menu** for fast daily operations, mirroring the retail workspace's F-key bar pattern (retail uses `retailShortcuts.ts` manifest + `RetailFnBar.tsx`; warehouse gets its own **copy** — `warehouseShortcuts.ts` + `WarehouseFnBar.tsx`, no shared imports, KEY-02 single-source rule applies).
+
+| Key | Action | Opens |
+|---|---|---|
+| **F1** | `receive-popup` | **Incoming popup session** — receive popup |
+| **F2** | `send-popup` | **Outgoing popup session** — send popup |
+
+### Popup session behavior
+
+- **F1 / F2** toggle a **persistent popup session** (a floating overlay, not a full navigation) that **stays open until explicitly dismissed** — "can be held open as needed".
+- The popup is a **mini console**: product grid + cart inside the overlay, sized to be usable while the main screen stays visible behind it.
+- It can be **held** (left open) while the operator does something else (checks the stock tab, another popup), and **dismissed** with Esc or the ✕ button.
+- Multiple sessions: F1 and F2 can be open **simultaneously** (incoming + outgoing at the same time), each a separate overlay — or one at a time if a single-overlay constraint is preferred (open decision).
+- Opening the same popup again (F1 while F1 is open) **focuses/brings it to front** instead of stacking duplicates.
+- Draggable/pinnable (open decision): a pinned popup stays attached; unpinned ones can be moved.
+
+### Why popups instead of tabs-only
+
+- Operators often process **interleaved** send and receive actions during a day (a truck arrives while outgoing picks are being packed). Popups let them switch instantly with two keys instead of tab-switching.
+- The **SEND / RECEIVE / STOCK tabs remain** in the main console for full-screen workflows; the F-keys are the fast path.
+
+### Implementation notes
+
+- Manifest: `warehouseShortcuts.ts` exports `WAREHOUSE_SHORTCUTS` (key, action, labelId, scope, editableGuard) + `getWarehouseShortcut()` — the FnBar, help overlay, and keydown handler all read from it (KEY-02 parity test included).
+- Keydown handler: `e.key === 'F1'` / `'F2'` with `editableGuard: true` (suppressed while typing in an input).
+- Help overlay: `?` opens a shortcut list rendered from the same manifest.
+- `WarehouseFnBar.tsx`: bottom toolbar showing `F1 Receive` / `F2 Send` (plus future F-keys), pure presentational with callbacks wired in the console.
+
+
+
 ## 2. UI layout (copied from POS, edited)
 
 ```
@@ -126,6 +158,9 @@ ui/src/features/warehouse/
 ├── register.tsx              ← kept (re-register warehouse route)
 ├── WarehouseSendDialog.tsx   ← NEW: destination picker modal for send
 ├── WarehouseReceiveDialog.tsx ← NEW: in-transit transfer picker for receive
+├── WarehouseFnBar.tsx        ← NEW: F-key quick-menu toolbar (copied from RetailFnBar.tsx, edited)
+├── warehouseShortcuts.ts     ← NEW: F-key manifest (copied from retailShortcuts.ts, edited)
+├── warehouseShortcutParity.test.tsx ← NEW: manifest ⇄ FnBar ⇄ keydown parity test
 └── (Fluent keys live in the shared warehouse FTL — see §6)
 ```
 
@@ -151,6 +186,14 @@ warehouse-cart-item-count = { $count } item{ $count ->
 warehouse-cart-line-qty = Qty
 warehouse-send-confirmed = Sent! { $number } — { $count } items to { $destination }
 warehouse-receive-confirmed = Received! { $number } — { $count } items
+
+warehouse-fn-receive = Receive
+warehouse-fn-send = Send
+warehouse-fn-bar-aria = Function keys
+warehouse-popup-receive-title = Incoming session
+warehouse-popup-send-title = Outgoing session
+warehouse-popup-pin = Pin popup
+warehouse-popup-close = Close
 ```
 
 Same keys in the ID bundle with Indonesian translations.
@@ -163,6 +206,8 @@ Same keys in the ID bundle with Indonesian translations.
 2. **Transfer number format** — reuse existing `transfer_number` from the domain or add a warehouse-specific prefix (e.g. `WBL-???`)? The domain already generates numbers.
 3. **Receive confirmation display** — toast + cart reset, or a full SuccessScreen-like confirmation? Lean toast.
 4. **Stock tab visibility** — header tab or a "View Stock" button inside the console? Lean tab.
+5. **Popup concurrency** — can F1 (incoming) and F2 (outgoing) popups be open simultaneously, or one overlay at a time? Lean simultaneous.
+6. **Popup hold/pin** — should popups be draggable and pinnable (stay open), or fixed position? Lean: fixed position, stays open until Esc/✕ (hold = just don't close it); pinning is a nice-to-have.
 
 ---
 
@@ -171,4 +216,6 @@ Same keys in the ID bundle with Indonesian translations.
 - Vitest: unit-test the state hook (`useWarehouseCart` — add line, remove line, change qty, switch mode)
 - Vitest: the two dialogs render and submit the right commands
 - Vitest: the console renders both modes
+- Vitest: F-key parity test — `warehouseShortcuts` manifest ⇄ `WarehouseFnBar` labels ⇄ keydown handler agree (KEY-02 pattern)
+- Vitest: F1/F2 open and dismiss popup sessions; Esc closes; re-press focuses instead of stacking
 - Rust: existing stock_transfer tests already cover send/receive — no Rust changes expected
