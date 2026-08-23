@@ -1,3 +1,11 @@
+// ── ARCHIVED ─────────────────────────────────────────────────────
+// This screen has been replaced by WarehouseScreen (features/warehouse/)
+// which provides location-scoped stock management via the topology
+// editor's warehouse workspace binding. ProductManagementScreen was
+// the old global inventory page — kept for reference only.
+// The 'inventory' route is no longer registered.
+// ─────────────────────────────────────────────────────────────────
+
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';

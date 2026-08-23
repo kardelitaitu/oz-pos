@@ -233,6 +233,32 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// List inventory-tracked products with stock at a specific location.
+    ///
+    /// Like [`list_warehouse_products`] but reads `stock_summary.qty` for
+    /// the given `location_id` instead of summing across all locations.
+    /// Returns 0 for products with no stock row at this location.
+    pub fn list_warehouse_products_at_location(
+        &self,
+        location_id: &str,
+    ) -> Result<Vec<ProductWithDetails>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type, p.version,
+                     p.cost_minor, p.brand, p.rack_location, p.notes, p.unit,
+                     p.is_active, p.default_supplier_id, p.popularity_score,
+                     c.name AS category_name,
+                     COALESCE((SELECT ss.qty FROM stock_summary ss WHERE ss.item_id = p.id AND ss.location_id = ?1), 0) AS stock_qty
+             FROM products p
+             LEFT JOIN categories c ON p.category_id = c.id
+             WHERE p.product_type != 'service'
+             ORDER BY p.name",
+        )?;
+        let rows = stmt.query_map(params![location_id], row_to_product_with_details)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
     /// Look up a single product by SKU, including category and stock.
     ///
     /// Checks the cache first; on cache miss, queries the database and

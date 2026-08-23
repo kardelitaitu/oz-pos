@@ -3,7 +3,6 @@ import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
 const ProductLookupScreen = lazy(() => import('./ProductLookupScreen'));
-const ProductManagementScreen = lazy(() => import('./ProductManagementScreen'));
 const BundleManagementScreen = lazy(() => import('./BundleManagementScreen'));
 
 export function registerProductsFeature() {
@@ -16,16 +15,11 @@ export function registerProductsFeature() {
     icon: icon('M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'),
   });
 
-  registerPage({ route: 'inventory', component: ProductManagementScreen, label: 'Inventory', requiredRole: 'manager', requiredPermission: 'products:read' });
-  registerNavItem({
-    route: 'inventory',
-    label: 'Inventory',
-    requiredRole: 'manager',
-    requiredPermission: 'products:read',
-    i18nKey: 'nav-inventory',
-    section: 'products',
-    icon: icon('M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2', <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />, <line x1="8" y1="12" x2="16" y2="12" />, <line x1="8" y1="16" x2="14" y2="16" />),
-  });
+  // ── ARCHIVED: 'inventory' route ────────────────────────────────
+  // ProductManagementScreen was the old global inventory page.
+  // Replaced by WarehouseScreen (features/warehouse/) which provides
+  // location-scoped stock management. Files kept in features/products/
+  // for reference but no longer registered as a navigable route.
 
   registerPage({ route: 'bundles', component: BundleManagementScreen, label: 'Bundles', requiredRole: 'manager' });
   registerNavItem({

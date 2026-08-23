@@ -23,6 +23,7 @@ import { registerTablesFeature } from './tables/register';
 import { registerPromotionsFeature } from './promotions/register';
 import { registerPurchasingFeature } from './purchasing/register';
 import { registerStockTransfersFeature } from './stock-transfers/register';
+import { registerWarehouseFeature } from './warehouse/register';
 
 /**
  * Register all UI features, pages, navigation items, and widgets.
@@ -68,4 +69,5 @@ export function registerAllFeatures() {
   registerPromotionsFeature();
   registerPurchasingFeature();
   registerStockTransfersFeature();
+  registerWarehouseFeature();
 }
