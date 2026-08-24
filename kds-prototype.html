@@ -443,8 +443,6 @@
   .kds-main > .kds-col > .kds-card { width: 100%; max-width: 100%; }
   .kds-main.empty { align-items: center; justify-content: center; }
   .kds-main.empty > .kds-empty { flex: initial; align-self: auto; }
-  .kds-main.completed-view { display: flex; flex-direction: column; }
-  .kds-main.completed-view > .kds-completed-group { margin-bottom: 4px; }
 
   /* Tab slide transition */
   @keyframes kds-slide-in-right { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
@@ -610,6 +608,8 @@
     min-height: 30px; line-height: 1.2;
   }
   .kds-category-header:hover { background: transparent; }
+  /* non-interactive header (completed-card recall view) */
+  .kds-category-header.static { cursor: default; }
   /* pressed state is the whole section (see :has rules above), not just
      the header — keep the header itself transparent so the section
      highlight reads as one unit */
@@ -679,33 +679,24 @@
   }
   .kds-status-btn.finish:hover { opacity: 1; background: var(--border); }
 
-  /* ── Completed tab — recall surface (dense, scannable) ── */
-  .kds-completed-card {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 9px 14px; background: var(--bg-surface); border-radius: 12px;
-    border: 1px solid var(--border-strong); color: var(--text);
-  }
-  .kds-completed-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .kds-completed-row1 {
-    display: flex; align-items: center; gap: 7px; font-size: 12px;
-    min-width: 0; flex-wrap: wrap;
-  }
-  /* service-type dot: same configurable colours as the open-card headers */
-  .kds-completed-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .kds-completed-identity { font-weight: 600; white-space: nowrap; }
-  .kds-completed-meta { opacity: 0.6; white-space: nowrap; }
-  .kds-completed-sla { font-weight: 600; }
-  .kds-completed-summary { font-size: 11px; opacity: 0.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* sticky hour group header: the tab reads as a timeline */
-  .kds-completed-group-head {
-    position: sticky; top: 0; z-index: 5;
-    display: flex; align-items: center; gap: 8px;
+  /* ── Completed tab — same card language as Open, in time-bucket
+     columns (Kanban: Recent / 1h / 6h / 24h). Cards are minimized by
+     default; expanding shows the full ticket. */
+  .kds-main.completed-view { display: flex; flex-direction: row; align-items: flex-start; gap: 12px; }
+  .kds-main.completed-view > .kds-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .kds-main.completed-view > .kds-col > .kds-card { width: 100%; max-width: 100%; }
+  .kds-completed-col-head {
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-    color: var(--text); opacity: 0.55;
-    padding: 8px 2px 6px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
+    color: var(--text); opacity: 0.55; padding: 0 2px;
+    display: flex; align-items: center; justify-content: space-between;
   }
+  .kds-completed-col-count { opacity: 0.6; font-weight: 600; }
+  /* reopen: full-width card footer button, muted (secondary action) */
+  .kds-status-btn.reopen {
+    background: transparent; border: 1px solid var(--border-strong);
+    color: var(--text); opacity: 0.65; font-size: 11px;
+  }
+  .kds-status-btn.reopen:hover { opacity: 1; background: var(--border); }
   .kds-reopen-btn {
     padding: 4px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
     background: transparent; color: var(--text); opacity: 0.7; cursor: pointer; font-size: 11px;
@@ -1309,6 +1300,8 @@
   function complete(orderId) {
     const order = orders.find(o => o.id === orderId);
     if (order) announce('Order #' + (order.table || order.display) + ' completed.');
+    /* completed cards render minimized by default */
+    collapsedOrders.add(orderId);
     const card = document.querySelector(`.kds-card[data-id="${orderId}"]`);
     if (card && kitchen.anim !== false) {
       /* animate the card out IN PLACE first. Two guards:
@@ -1340,6 +1333,7 @@
   function reopen(orderId) {
     const order = orders.find(o => o.id === orderId);
     if (order) announce('Order #' + (order.table || order.display) + ' reopened.');
+    collapsedOrders.delete(orderId); // back in the open tab expanded
     orders = orders.map(o => o.id === orderId ? { ...o, status: 'paused', completedAt: null } : o);
     render();
   }
@@ -1578,23 +1572,64 @@
     </div>`;
   }
 
-  function completedRowHTML(o) {
-    /* duration is FROZEN at completed_at — it must not keep ticking */
+  function completedCardHTML(o) {
+    const hdrBg = o.dineIn ? colors.dinein : colors.takeaway;
+    const hdrText = contrastText(hdrBg);
+    const rushBg = colors.rush, rushText = contrastText(rushBg);
     const at = o.completedAt || o.received;
     const dur = Math.max(0, at - o.received);
-    const summary = o.categories.map(c => (courseEmoji(c.course) || '·') + ' ' + c.items.length).join('  ');
-    return `
-    <div class="kds-completed-card">
-      <div class="kds-completed-main">
-        <div class="kds-completed-row1">
-          <span class="kds-completed-dot" style="background:${o.dineIn ? colors.dinein : colors.takeaway}"></span>
-          <span class="kds-completed-identity">#${o.display}${o.table ? ' · ' + o.table : ''} · ${o.customer}</span>
-          ${o.priority ? `<span class="kds-rush-badge" style="background:${colors.rush};color:${contrastText(colors.rush)}">RUSH</span>` : ''}
-          <span class="kds-completed-meta">${new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · <span class="kds-completed-sla" style="color:${slaColor(dur)}">${fmtDurationLong(dur)}</span></span>
+    const collapsed = collapsedOrders.has(o.id);
+    const catRows = o.categories.map(cat => `
+      <div class="kds-category">
+        <div class="kds-category-header static">
+          <span class="kds-cat-label">${cat.items.filter(i => i.done).length}/${cat.items.length} ${plainName(cat.course)}</span>
+          <span class="kds-cat-check done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:10px;height:10px"><path d="M4 12.5l5 5L20 6.5"/></svg></span>
         </div>
-        <div class="kds-completed-summary">${summary}</div>
+        ${cat.items.map(it => `
+          <div class="kds-item">
+            <div class="kds-item-row done">
+              <span class="kds-item-row-inner">
+                <span class="kds-item-left">
+                  <span class="kds-item-qty">${it.qty}×</span>
+                  <span class="kds-item-name">${it.name}</span>
+                </span>
+                ${it.doneAt ? `<span class="kds-item-done-time">${fmtDuration(it.doneAt - o.received)}</span>` : ''}
+              </span>
+              ${it.note ? `<span class="kds-item-note">${it.note}</span>` : ''}
+            </div>
+          </div>
+        `).join('')}
       </div>
-      <button class="kds-reopen-btn" onclick="reopen('${o.id}')">Reopen</button>
+    `).join('');
+    return `
+    <div class="kds-card${collapsed ? ' collapsed' : ''}" data-id="${o.id}" data-received="${o.received}">
+      <button class="kds-card-header" style="background:${hdrBg};color:${hdrText}" onclick="toggleCardCollapsed('${o.id}', this)" aria-expanded="${collapsed ? 'false' : 'true'}">
+        <div class="kds-card-header-icon">${o.dineIn ? DINE_ICON : TAKEAWAY_ICON}</div>
+        <div class="kds-card-header-left">
+          <div class="kds-card-header-row">
+            <span class="order-no">#${o.table || o.display}</span>
+            ${o.priority ? `<span class="kds-rush-badge" style="background:${rushBg};color:${rushText}">RUSH</span>` : ''}
+          </div>
+        </div>
+        <div class="kds-card-header-right">
+          <span class="customer">${o.customer}</span>
+          <div class="kds-card-header-meta">
+            <span class="time">${new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · <span style="color:${slaColor(dur)}">${fmtDurationLong(dur)}</span></span>
+            <span class="status prepared" style="background:${colors.prepared};color:${contrastText(colors.prepared)}">✓ prepared</span>
+          </div>
+        </div>
+        <span class="kds-card-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+      </button>
+      <div class="kds-card-collapsible">
+        <div class="kds-card-collapsible-inner">
+          <div class="kds-card-main">${catRows}</div>
+          <div class="kds-card-footer">
+            <div class="kds-footer-actions">
+              <button class="kds-status-btn reopen" onclick="reopen('${o.id}')">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Reopen</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>`;
   }
 
@@ -1745,27 +1780,26 @@
       if (done.length === 0) {
         main.innerHTML = '<div class="kds-empty">No completed orders yet</div>';
       } else {
-        /* Timeline: group by completion hour (newest hour first), newest
-           first within each hour. Sticky headers make the tab scannable
-           at shift-end volumes (spec: 24h auto-clear, so hour groups
-           are naturally bounded). */
-        const groups = new Map();
-        done.forEach(o => {
-          const d = new Date(o.completedAt || o.received);
-          const h = d.getHours();
-          if (!groups.has(h)) groups.set(h, []);
-          groups.get(h).push(o);
-        });
-        const hours = [...groups.keys()].sort((a, b) => b - a);
-        main.innerHTML = hours.map(h => `
-          <div class="kds-completed-group">
-            <div class="kds-completed-group-head">${String(h).padStart(2, '0')}:00 · ${groups.get(h).length} order${groups.get(h).length === 1 ? '' : 's'}</div>
-            ${groups.get(h)
-              .sort((a, b) => (b.completedAt || b.received) - (a.completedAt || a.received))
-              .map(completedRowHTML).join('')}
-          </div>`).join('');
+        /* Kanban-style time-bucket columns: the tab mirrors the open
+           tab's card grid, but with minimized cards sorted by age. */
+        const now = Date.now();
+        const buckets = [
+          { key: 'recent', label: 'Recent',  test: (at) => at >= now - 3600000 },
+          { key: '1h',     label: '1h ago',  test: (at) => at >= now - 6 * 3600000 && at < now - 3600000 },
+          { key: '6h',     label: '6h ago',  test: (at) => at >= now - 24 * 3600000 && at < now - 6 * 3600000 },
+          { key: '24h',    label: '24h ago', test: (at) => at < now - 24 * 3600000 },
+        ];
+        main.innerHTML = buckets.map(b => {
+          const list = done.filter(o => b.test(o.completedAt || o.received))
+            .sort((a, b2) => (b2.completedAt || b2.received) - (a.completedAt || a.received));
+          return `
+            <div class="kds-col">
+              <div class="kds-completed-col-head"><span>${b.label}</span><span class="kds-completed-col-count">${list.length}</span></div>
+              ${list.map(completedCardHTML).join('')}
+            </div>`;
+        }).join('');
       }
-      main.scrollTop = savedScroll; // completed rows: keep the position too
+      main.scrollTop = savedScroll;
     }
     prevTab = tab;
   }
