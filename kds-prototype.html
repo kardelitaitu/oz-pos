@@ -28,6 +28,16 @@
     min-height: 100vh;
     padding: 0;
     margin: 0;
+    /* page zoom > 100% scales the screen beyond the viewport — without
+       this, the body grows and spawns a page scrollbar. The screen
+       itself already clips (overflow:hidden); the body must too. */
+    overflow: hidden;
+    /* text rendering: hint the engine to prefer legibility. -webkit-font-
+       smoothing only applies on macOS; on Windows the key fix is not
+       compositing cards (see .kds-card) so ClearType stays enabled. */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   /* ── THEME (dark default, light override via .light class) ── */
@@ -104,10 +114,12 @@
   .kds-filter-option.all { width: fit-content; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 4px; padding-bottom: 8px; border-radius: 6px 6px 0 0; }
   /* Up to 3 columns; each button is only as wide as its label (max-content) */
   .kds-filter-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 3px; justify-content: start; }
-  .kds-tabs { position: relative; display: flex; gap: 6px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px; justify-self: center; }
+  .kds-tabs { position: relative; display: flex; gap: 4px; background: rgba(255,255,255,0.06); border-radius: 7px; padding: 2px; justify-self: center; }
+  /* light theme: white track is invisible on the white topmenu → darken */
+  .kds-screen.light .kds-tabs { background: rgba(0,0,0,0.1); }
   .kds-tab-indicator {
-    position: absolute; top: 3px; left: 3px; bottom: 3px;
-    background: #3b82f6; border-radius: 6px;
+    position: absolute; top: 2px; left: 2px; bottom: 2px;
+    background: #3b82f6; border-radius: 5px;
     transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
     pointer-events: none;
     transform-origin: center;
@@ -117,6 +129,10 @@
     padding: 5px 16px; border-radius: 6px; border: none;
     background: transparent; color: var(--text); opacity: 0.5; cursor: pointer; font-size: 13px;
     font-weight: 600; /* constant weight → no text reflow on active */
+    line-height: 18px; /* fixed line-height — text (13px) and count (12px)
+       share the same box height, so align-items: center aligns both
+       perfectly; without this the default line-heights differ and the
+       baselines drift */
     transition: opacity 0.15s;
     /* flex: children (label + count) become flex items, so the
        hover scale() animation actually applies (transforms don't
@@ -130,7 +146,7 @@
   .kds-tab:hover > span { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
   .kds-tab.active { opacity: 1; color: #fff; }
   .kds-tab.active .kds-tab-count { opacity: 0.8; }
-  .kds-tab-count { margin-left: 5px; opacity: 0.6; font-size: 11px; }
+  .kds-tab-count { opacity: 0.6; font-size: 13px; }
   .kds-tab.active .kds-tab-count { opacity: 0.8; }
   .kds-topmenu-right { display: flex; align-items: center; gap: 8px; position: relative; justify-self: end; }
 
@@ -165,6 +181,9 @@
     display: inline-flex; align-items: center; justify-content: center;
     gap: 6px;
     -webkit-tap-highlight-color: transparent;
+    /* fixed height across all variants: icon (32px) and text buttons
+       (5px padding top/bottom + 22px content = 32px) match exactly */
+    min-height: 22px;
   }
   .kds-btn:hover { background: var(--btn-hover); }
   .kds-btn:active { background: var(--btn-active); transform: translateY(1px); }
@@ -223,7 +242,7 @@
 
 /* Hamburger panel — same drop-in animation as the filter dropdown */
   .kds-hamburger-panel {
-    position: absolute; top: calc(100% + 6px); right: 0; width: 280px;
+    position: absolute; top: calc(100% + 6px); right: 0; width: 300px;
     max-height: calc(100vh - 80px); overflow-y: auto; overflow-x: hidden;
     background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 12px;
     padding: 12px 14px 14px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
@@ -248,6 +267,14 @@
   .kds-panel-section { margin-bottom: 14px; }
   .kds-panel-section:last-child { margin-bottom: 0; }
   .kds-panel-section h3 { font-size: 10px; font-weight: 600; color: var(--text); opacity: 0.5; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+  /* setting card: boxed wrapper for a heading + its control */
+  .kds-setting-card {
+    padding: 10px 12px; border-radius: 10px;
+    background: var(--bg-surface); border: 1px solid var(--border);
+  }
+  .kds-setting-card h3 { margin-bottom: 8px; }
+  .kds-setting-card .kds-theme-row,
+  .kds-setting-card .kds-zoom-row { margin: 0; }
   .kds-color-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .kds-color-row:last-child { margin-bottom: 0; }
   .kds-color-row label { font-size: 12px; color: var(--text); opacity: 0.85; }
@@ -261,20 +288,32 @@
   .kds-color-hex { font-size: 10px; color: var(--text); opacity: 0.75; font-family: ui-monospace, monospace; }
 
   /* Inline colour swatches (in the hamburger panel) */
+  .kds-color-group-head {
+    font-size: 10px; font-weight: 600; color: var(--text); opacity: 0.5;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+  }
+  .kds-color-group-head:first-child { margin-top: 0; }
   .kds-color-group { margin-bottom: 10px; }
   .kds-color-group:last-child { margin-bottom: 0; }
-  .kds-color-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
-  .kds-color-head label { font-size: 12px; color: var(--text); opacity: 0.85; }
-  .kds-swatches { display: flex; gap: 6px; }
-  /* made 25% bigger: 22px → 27px */
-  .kds-swatch { width: 27px; height: 27px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s; }
+  .kds-color-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+  .kds-color-head label { font-size: 12px; color: var(--text); opacity: 0.85; flex: 1; min-width: 0; }
+  /* native colour picker chip: shows the current colour, click → OS picker */
+  .kds-native {
+    width: 26px; height: 22px; padding: 0; border: 1px solid var(--border-strong);
+    border-radius: 5px; background: transparent; cursor: pointer; flex-shrink: 0;
+  }
+  .kds-native::-webkit-color-swatch-wrapper { padding: 2px; }
+  .kds-native::-webkit-color-swatch { border-radius: 3px; border: none; }
+  .kds-swatches { display: flex; gap: 5px; flex-wrap: wrap; }
+  .kds-swatch { width: 22px; height: 22px; border-radius: 5px; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s; }
   .kds-swatch:hover { transform: scale(1.15); }
   .kds-swatch.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--bg-top) inset; }
   .kds-hex-input {
-    width: 66px; padding: 3px 6px; border-radius: 5px; font-size: 10px;
+    width: 62px; padding: 3px 6px; border-radius: 5px; font-size: 10px;
     border: 1px solid var(--border-strong); background: var(--bg-surface);
     color: var(--text); opacity: 0.8; text-align: center; font-family: ui-monospace, monospace;
-    transition: all 0.15s;
+    transition: all 0.15s; flex-shrink: 0;
   }
   .kds-hex-input:focus { outline: none; border-color: #3b82f6; opacity: 1; }
   .kds-reset-btn {
@@ -312,13 +351,22 @@
   .kds-theme-option:hover { opacity: 0.8; }
   .kds-theme-option.on { opacity: 1; color: #fff; }
 
-  /* Zoom (display size) controls */
-  .kds-zoom-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
-  .kds-zoom-btn { width: 32px; height: 32px; padding: 0; font-size: 16px; font-weight: 700; }
-  .kds-zoom-value {
-    min-width: 52px; text-align: center; font-size: 12px; font-weight: 600;
-    color: var(--text); opacity: 0.85;
+  /* Zoom (global page) + Card Size controls — two groups side by side */
+  .kds-zoom-pair { display: flex; gap: 14px; }
+  .kds-zoom-group { flex: 1; min-width: 0; }
+  .kds-zoom-label {
+    display: block; font-size: 10px; font-weight: 600; color: var(--text);
+    opacity: 0.5; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
   }
+  .kds-zoom-row { display: flex; align-items: center; gap: 4px; }
+  .kds-zoom-btn { width: 24px; height: 24px; padding: 0; font-size: 12px; font-weight: 600; border-radius: 5px; }
+  /* the value is a clickable reset-to-100% button — same font as the theme slider */
+  .kds-zoom-value {
+    flex: 1; height: 24px; padding: 0 4px; text-align: center;
+    font-size: 12px; font-weight: 600; color: var(--text); opacity: 0.85;
+    cursor: pointer; border-radius: 5px; min-width: 0;
+  }
+  .kds-zoom-value:hover { opacity: 1; background: rgba(255,255,255,0.06); }
 
   /* ── MAIN ───────────────────────────────────────── */
   .kds-main {
@@ -356,7 +404,10 @@
     border: 1px solid var(--border); min-height: 0; height: fit-content;
     width: 100%; max-width: 100%;
     transition: border-color 0.2s; color: var(--text);
-    will-change: transform; /* FLIP moves animate on transform only */
+    /* NOTE: no will-change:transform here — promoting every card to its
+       own compositor layer permanently disables subpixel (ClearType)
+       antialiasing on Windows, making text look thin/blurry. It is only
+       applied during FLIP moves (.kds-moving) when actually animating. */
   }
   .kds-card:hover { border-color: var(--border-strong); }
 
@@ -381,7 +432,7 @@
     from { opacity: 1; transform: scale(1) translateY(0); }
     to { opacity: 0; transform: scale(0.85) translateY(10px); }
   }
-  .kds-moving { transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important; }
+  .kds-moving { will-change: transform; transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important; }
   /* reduced motion: the in-app toggle (body.no-anim) is the single
      control. NO prefers-reduced-motion media query here — an OS-level
      setting was silently killing the animations even when the user
@@ -423,8 +474,16 @@
   }
   .kds-card-header .status.paused { opacity: 0.9; font-style: normal; }
   .kds-card-header .status.processing {
-    opacity: 0.9; font-style: normal;
+    opacity: 1; font-style: normal;
     animation: kds-blink 2.5s ease-in-out infinite;
+    padding: 2px 8px; border-radius: 5px; font-weight: 600;
+    display: inline-flex; align-items: center;
+  }
+  /* prepared: everything is done, awaiting Mark Finish — pill (bg inline) */
+  .kds-card-header .status.prepared {
+    background: #22c55e; color: #fff; opacity: 1; font-style: normal;
+    padding: 2px 8px; border-radius: 5px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 3px;
   }
   @keyframes kds-blink { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.2; } }
   .kds-service-icon { width: 22px; height: 22px; flex-shrink: 0; }
@@ -530,15 +589,10 @@
     width: 100%; padding: 7px 0; border-radius: 7px; border: none;
     font-size: 12px; font-weight: 600; line-height: 1; cursor: pointer; transition: all 0.15s;
     display: flex; align-items: center; justify-content: center; gap: 7px;
-    /* color set inline via contrastText(bg); hover just shifts opacity */
+    /* background + color set inline via colors.* + contrastText; hover shifts opacity */
   }
   .kds-status-btn svg { display: block; }
-  .kds-status-btn.pause { background: #f59e0b; }
-  .kds-status-btn.pause:hover { opacity: 0.85; }
-  .kds-status-btn.resume { background: #3b82f6; }
-  .kds-status-btn.resume:hover { opacity: 0.85; }
-  .kds-status-btn.complete { background: #4ade80; }
-  .kds-status-btn.complete:hover { opacity: 0.85; }
+  .kds-status-btn:hover { opacity: 0.85; }
   .kds-status-btn.blocked { background: rgba(255,255,255,0.08); opacity: 0.45; cursor: not-allowed; }
 
   /* ── Completed tab ──────────────────────────────── */
@@ -564,7 +618,7 @@
   }
   .kds-screen-footer .sep { opacity: 0.5; }
 
-  /* Reusable switch (used for sound, auto-acknowledge) */
+  /* Reusable switch (used for sound, auto-accept) */
   .kds-switch-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .kds-switch-row:last-child { margin-bottom: 0; }
   .kds-switch-row label { font-size: 12px; color: var(--text); opacity: 0.85; }
@@ -616,21 +670,35 @@
           </button>
         </div>
         <div class="kds-panel-section">
-          <h3>Theme</h3>
-          <div class="kds-theme-row">
-            <button class="kds-theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light or dark theme">
-              <span class="kds-theme-indicator" id="theme-indicator"></span>
-              <span class="kds-theme-option on" data-theme="dark">Dark</span>
-              <span class="kds-theme-option" data-theme="light">Light</span>
-            </button>
+          <div class="kds-setting-card">
+            <h3>Theme</h3>
+            <div class="kds-theme-row">
+              <button class="kds-theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light or dark theme">
+                <span class="kds-theme-indicator" id="theme-indicator"></span>
+                <span class="kds-theme-option on" data-theme="dark">Dark</span>
+                <span class="kds-theme-option" data-theme="light">Light</span>
+              </button>
+            </div>
           </div>
         </div>
         <div class="kds-panel-section">
-          <h3>Display Size</h3>
-          <div class="kds-zoom-row">
-            <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
-            <span class="kds-zoom-value" id="zoom-value">100%</span>
-            <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
+          <div class="kds-zoom-pair">
+            <div class="kds-zoom-group">
+              <span class="kds-zoom-label">Zoom</span>
+              <div class="kds-zoom-row">
+                <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-out" aria-label="Zoom out">−</button>
+                <button class="kds-btn kds-btn--muted kds-zoom-value" id="pagezoom-value" title="Reset to 100%" aria-label="Reset page zoom to 100%">100%</button>
+                <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-in" aria-label="Zoom in">+</button>
+              </div>
+            </div>
+            <div class="kds-zoom-group">
+              <span class="kds-zoom-label">Card Size</span>
+              <div class="kds-zoom-row">
+                <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
+                <button class="kds-btn kds-btn--muted kds-zoom-value" id="zoom-value" title="Reset to 100%" aria-label="Reset card size to 100%">100%</button>
+                <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="kds-panel-section">
@@ -640,8 +708,8 @@
             <button class="kds-switch on" id="toggle-sound" role="switch" aria-checked="true" aria-label="New order sound"></button>
           </div>
           <div class="kds-switch-row">
-            <label for="toggle-ack">Auto-acknowledge</label>
-            <button class="kds-switch" id="toggle-ack" role="switch" aria-checked="false" aria-label="Auto-acknowledge new orders"></button>
+            <label for="toggle-ack">Auto-accept</label>
+            <button class="kds-switch" id="toggle-ack" role="switch" aria-checked="false" aria-label="Auto-accept new orders"></button>
           </div>
           <div class="kds-switch-row">
             <label for="toggle-anim">Card animations</label>
@@ -650,27 +718,7 @@
         </div>
         <div class="kds-panel-section">
           <h3>Card Colours</h3>
-          <div class="kds-color-group">
-            <div class="kds-color-head">
-              <label>Dine-in</label>
-              <input class="kds-hex-input" id="hex-dinein" data-key="dinein" spellcheck="false" aria-label="Dine-in header colour hex">
-            </div>
-            <div class="kds-swatches" data-key="dinein"></div>
-          </div>
-          <div class="kds-color-group">
-            <div class="kds-color-head">
-              <label>Takeaway</label>
-              <input class="kds-hex-input" id="hex-takeaway" data-key="takeaway" spellcheck="false" aria-label="Takeaway header colour hex">
-            </div>
-            <div class="kds-swatches" data-key="takeaway"></div>
-          </div>
-          <div class="kds-color-group">
-            <div class="kds-color-head">
-              <label>Rush badge</label>
-              <input class="kds-hex-input" id="hex-rush" data-key="rush" spellcheck="false" aria-label="Rush badge colour hex">
-            </div>
-            <div class="kds-swatches" data-key="rush"></div>
-          </div>
+          <div id="color-panel"></div>
         </div>
         <button class="kds-btn kds-btn--muted kds-reset-btn" id="reset-colors">Reset to defaults</button>
       </div>
@@ -690,17 +738,34 @@
 </div>
 
 <script>
-  /* Same vivid, normal palette for all three: red, amber, blue,
-     violet, green, pink — instead of the old dark muted tints. */
-  const SWATCHES = {
-    dinein: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
-    takeaway: ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
-    rush: ['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#22c55e', '#ec4899'],
+  /* Colour system: 8 configurable colours in 3 semantic groups.
+     Every coloured element on a card is driven by these — kitchens
+     colour-code differently, so all of them are user-controllable.
+     The swatch palette is shared: a kitchen assigns MEANING to a
+     colour, so the preset set is identical for every slot. */
+  const PALETTE = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+  const COLOR_GROUPS = [
+    { title: 'Service Types', keys: [
+      { key: 'dinein', label: 'Dine-in' },
+      { key: 'takeaway', label: 'Takeaway' },
+    ]},
+    { title: 'Badges', keys: [
+      { key: 'rush', label: 'Rush badge' },
+      { key: 'processing', label: 'Processing badge' },
+      { key: 'prepared', label: 'Prepared badge' },
+    ]},
+    { title: 'Action Buttons', keys: [
+      { key: 'pause', label: 'Pause button' },
+      { key: 'resume', label: 'Resume button' },
+      { key: 'complete', label: 'Complete button' },
+    ]},
+  ];
+  const DEFAULT_COLORS = {
+    dinein: '#22c55e', takeaway: '#3b82f6',
+    rush: '#ef4444', processing: '#f59e0b', prepared: '#22c55e',
+    pause: '#f59e0b', resume: '#3b82f6', complete: '#4ade80',
   };
-  const DEFAULT_COLORS = { dinein: '#22c55e', takeaway: '#3b82f6', rush: '#ef4444' };
-  const LABELS = { dinein: 'Dine-in', takeaway: 'Takeaway', rush: 'Rush badge' };
   const COLORS_KEY = 'kds-proto-colors-v2';
-
   let colors = loadColors();
   let tab = 'open';
   let orders = initialOrders();
@@ -822,6 +887,7 @@
     const lum = 0.299 * r + 0.587 * g + 0.114 * b;
     return lum > 0.55 ? '#1a1a1a' : '#e6e6e6';
   }
+
 
   /* Dine-in icon: spoon + fork (minimal line, Lucide "utensils" style) */
   const DINE_ICON = '<svg class="kds-service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>';
@@ -1022,14 +1088,14 @@
     let statusBtn = '';
     let btnBg = '', btnText = '';
     if (allDone) {
-      btnBg = '#4ade80'; btnText = contrastText(btnBg);
-      statusBtn = `<button class="kds-status-btn complete" style="color:${btnText}" onclick="complete('${o.id}')">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Mark Finish</button>`;
+      btnBg = colors.complete; btnText = contrastText(btnBg);
+      statusBtn = `<button class="kds-status-btn complete" style="background:${btnBg};color:${btnText}" onclick="complete('${o.id}')">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Mark Finish</button>`;
     } else if (o.status === 'paused') {
-      btnBg = '#3b82f6'; btnText = contrastText(btnBg);
-      statusBtn = `<button class="kds-status-btn resume" style="color:${btnText}" onclick="advanceC('${o.id}')">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Resume</button>`;
+      btnBg = colors.resume; btnText = contrastText(btnBg);
+      statusBtn = `<button class="kds-status-btn resume" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Resume</button>`;
     } else if (o.status === 'processing') {
-      btnBg = '#f59e0b'; btnText = contrastText(btnBg);
-      statusBtn = `<button class="kds-status-btn pause" style="color:${btnText}" onclick="advanceC('${o.id}')">${PAUSE_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Pause</button>`;
+      btnBg = colors.pause; btnText = contrastText(btnBg);
+      statusBtn = `<button class="kds-status-btn pause" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${PAUSE_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Pause</button>`;
     }
     // 'new' and not all done → no button at all
 
@@ -1046,11 +1112,13 @@
         </div>
         <div class="kds-card-header-right">
           <span class="customer"><span class="time">(${fmtDuration(Date.now() - o.received)})</span> ${o.customer}</span>
-          ${o.status === 'paused'
-            ? `<span class="status paused">⏸ paused</span>`
-            : o.status === 'processing'
-              ? `<span class="status processing">processing</span>`
-              : `<span class="status" aria-hidden="true">&nbsp;</span>`}
+          ${allDone
+            ? `<span class="status prepared" style="background:${colors.prepared};color:${contrastText(colors.prepared)}">✓ prepared</span>`
+            : o.status === 'paused'
+              ? `<span class="status paused">⏸ paused</span>`
+              : o.status === 'processing'
+                ? `<span class="status processing" style="background:${colors.processing};color:${contrastText(colors.processing)}">processing</span>`
+                : `<span class="status" aria-hidden="true">&nbsp;</span>`}
         </div>
         <span class="kds-card-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
       </button>
@@ -1239,18 +1307,57 @@
   });
   moveTabIndicator();
 
-  /* ── card colour swatches (inline in the panel) ──── */
-  function buildSwatches() {
-    Object.keys(SWATCHES).forEach(key => {
-      const el = document.querySelector(`.kds-swatches[data-key="${key}"]`);
-      el.innerHTML = SWATCHES[key].map(s =>
-        `<div class="kds-swatch${colors[key] === s ? ' active' : ''}" style="background:${s}" data-swatch="${s}" onclick="pickColor('${key}', '${s}')"></div>`
-      ).join('');
+  /* ── card colour panel (generated from COLOR_GROUPS + PALETTE) ── */
+  function buildColorPanel() {
+    const root = document.getElementById('color-panel');
+    root.innerHTML = COLOR_GROUPS.map(g => `
+      <div class="kds-color-group-head">${g.title}</div>
+      ${g.keys.map(k => `
+        <div class="kds-color-group">
+          <div class="kds-color-head">
+            <label for="hex-${k.key}">${k.label}</label>
+            <input type="color" class="kds-native" id="native-${k.key}" data-key="${k.key}" value="${colors[k.key]}" aria-label="${k.label} colour picker">
+            <input class="kds-hex-input" id="hex-${k.key}" data-key="${k.key}" spellcheck="false" aria-label="${k.label} hex">
+          </div>
+          <div class="kds-swatches" data-key="${k.key}"></div>
+        </div>
+      `).join('')}
+    `).join('');
+    /* hex inputs: apply on Enter/blur if valid */
+    root.querySelectorAll('.kds-hex-input').forEach(input => {
+      const apply = () => {
+        const v = input.value.trim();
+        if (/^#?[0-9a-fA-F]{6}$/.test(v)) {
+          pickColor(input.dataset.key, '#' + v.replace('#', '').toLowerCase());
+        } else if (/^#?[0-9a-fA-F]{3}$/.test(v)) {
+          const h = v.replace('#', '').split('').map(c => c + c).join('');
+          pickColor(input.dataset.key, '#' + h.toLowerCase());
+        } else {
+          input.value = colors[input.dataset.key]; // revert invalid
+        }
+      };
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+      input.addEventListener('blur', apply);
     });
+    /* native colour picker: live update on input */
+    root.querySelectorAll('.kds-native').forEach(native => {
+      native.addEventListener('input', (e) => pickColor(e.target.dataset.key, e.target.value));
+    });
+  }
+  function buildSwatches() {
+    COLOR_GROUPS.forEach(g => g.keys.forEach(k => {
+      const el = document.querySelector(`.kds-swatches[data-key="${k.key}"]`);
+      if (!el) return;
+      el.innerHTML = PALETTE.map(s =>
+        `<div class="kds-swatch${colors[k.key] === s ? ' active' : ''}" style="background:${s}" data-swatch="${s}" onclick="pickColor('${k.key}', '${s}')"></div>`
+      ).join('');
+    }));
   }
   function syncColorRow(key) {
     const hex = document.getElementById('hex-' + key);
     if (hex && document.activeElement !== hex) hex.value = colors[key];
+    const native = document.getElementById('native-' + key);
+    if (native) native.value = colors[key];
   }
   function pickColor(key, value) {
     colors = { ...colors, [key]: value };
@@ -1259,22 +1366,6 @@
     buildSwatches();
     render();
   }
-  /* hex input: apply on Enter/blur if valid */
-  document.querySelectorAll('.kds-hex-input').forEach(input => {
-    const apply = () => {
-      const v = input.value.trim();
-      if (/^#?[0-9a-fA-F]{6}$/.test(v)) {
-        pickColor(input.dataset.key, '#' + v.replace('#', '').toLowerCase());
-      } else if (/^#?[0-9a-fA-F]{3}$/.test(v)) {
-        const h = v.replace('#', '').split('').map(c => c + c).join('');
-        pickColor(input.dataset.key, '#' + h.toLowerCase());
-      } else {
-        input.value = colors[input.dataset.key]; // revert invalid
-      }
-    };
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
-    input.addEventListener('blur', apply);
-  });
 
   function toggleMenu(force) {
     const panel = document.getElementById('hamburger-panel');
@@ -1297,11 +1388,18 @@
     e.stopPropagation();
     toggleMenu();
   });
-  /* close hamburger on outside click */
+  /* close hamburger on outside click.
+     Use composedPath(), not panel.contains(e.target): clicking a swatch
+     calls pickColor() → buildSwatches() which REPLACES the swatch DOM
+     mid-click, detaching e.target from the panel. contains() then
+     returns false and the menu wrongly closes. composedPath() captures
+     the ancestor chain at dispatch time, before any DOM mutation. */
   document.addEventListener('click', (e) => {
     const panel = document.getElementById('hamburger-panel');
     const btn = document.getElementById('hamburger-btn');
-    if (!panel.contains(e.target) && !btn.contains(e.target)) toggleMenu(false);
+    const path = e.composedPath ? e.composedPath() : [];
+    const inside = path.includes(panel) || path.includes(btn);
+    if (!inside) toggleMenu(false);
   });
   /* close hamburger + filter on Escape */
   document.addEventListener('keydown', (e) => {
@@ -1323,9 +1421,33 @@
   });
   document.getElementById('panel-close').addEventListener('click', () => toggleMenu(false));
 
-  /* ── zoom (display size) ─────────────────────────── */
+  /* ── page zoom (global, like Ctrl+/Ctrl-) ─────── */
+  const PAGEZOOM_KEY = 'kds-proto-pagezoom';
+  let pageZoom = loadPageZoom();
+  function loadPageZoom() {
+    try { const v = parseInt(localStorage.getItem(PAGEZOOM_KEY), 10); if (!isNaN(v)) return v; } catch {}
+    return 100;
+  }
+  function savePageZoom() { try { localStorage.setItem(PAGEZOOM_KEY, String(pageZoom)); } catch {} }
+  function applyPageZoom() {
+    /* zoom the whole screen — behaves like browser Ctrl+/- */
+    document.getElementById('screen').style.zoom = pageZoom === 100 ? '' : pageZoom / 100;
+    document.getElementById('pagezoom-value').textContent = pageZoom + '%';
+  }
+  document.getElementById('pagezoom-out').addEventListener('click', () => {
+    pageZoom = Math.max(75, pageZoom - 10); savePageZoom(); applyPageZoom();
+  });
+  document.getElementById('pagezoom-in').addEventListener('click', () => {
+    pageZoom = Math.min(150, pageZoom + 10); savePageZoom(); applyPageZoom();
+  });
+  document.getElementById('pagezoom-value').addEventListener('click', () => {
+    pageZoom = 100; savePageZoom(); applyPageZoom();
+  });
+  applyPageZoom();
+
+  /* ── card size zoom (cards only) ──────────────── */
   function applyZoom() {
-    document.getElementById('main').style.zoom = zoom / 100;
+    document.getElementById('main').style.zoom = zoom === 100 ? '' : zoom / 100;
     document.getElementById('zoom-value').textContent = zoom + '%';
   }
   document.getElementById('zoom-out').addEventListener('click', () => {
@@ -1334,9 +1456,13 @@
   document.getElementById('zoom-in').addEventListener('click', () => {
     zoom = Math.min(150, zoom + 10); saveZoom(); applyZoom();
   });
+  /* clicking the % value resets to 100% */
+  document.getElementById('zoom-value').addEventListener('click', () => {
+    zoom = 100; saveZoom(); applyZoom();
+  });
   applyZoom();
 
-  /* ── kitchen switches (sound / auto-acknowledge) ── */
+  /* ── kitchen switches (sound / auto-accept) ── */
   const KITCHEN_KEY = 'kds-proto-kitchen';
   function loadKitchen() {
     try {
@@ -1367,7 +1493,8 @@
   document.getElementById('reset-colors').addEventListener('click', () => {
     colors = { ...DEFAULT_COLORS };
     saveColors();
-    Object.keys(SWATCHES).forEach(key => syncColorRow(key));
+    COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
+    buildSwatches();
     render();
   });
 
@@ -1429,8 +1556,9 @@
     });
   }
   setInterval(tickCardTimers, 1000);
+  buildColorPanel();
   buildSwatches();
-  Object.keys(SWATCHES).forEach(key => syncColorRow(key));
+  COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
   render();
 
   /* Recompute columns when the window resizes — the column count is
