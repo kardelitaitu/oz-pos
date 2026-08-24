@@ -7,15 +7,11 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
-  /* Apple-style superellipse corners on EVERYTHING with a corner.
-     corner-shape needs a non-zero border-radius as its size boundary,
-     so elements with radius 0 are unaffected. Progressive enhancement:
-     Chrome/WebView ≥ 140 renders squircles, older engines fall back to
-     the round border-radius. True circles (50%) are exempted below —
-     a superellipse at 50% radius would turn the close button and the
-     switch knob into squirclish blobs. */
-  * { corner-shape: squircle; }
-  .kds-panel-close, .kds-switch, .kds-switch::after { corner-shape: round; }
+  /* Apple-style superellipse corners — gated by body class so old
+     hardware can fall back to round corners (Graphics setting in the
+     hamburger). True circles (50%) are exempted below. */
+  body.graphics-high * { corner-shape: squircle; }
+  body.graphics-high .kds-panel-close, body.graphics-high .kds-switch, body.graphics-high .kds-switch::after { corner-shape: round; }
 
   /* Touch-screen modern scrollbar: thin, transparent, no visible track */
   ::-webkit-scrollbar { width: 4px; }
@@ -698,6 +694,12 @@
   .kds-main.completed-view { display: flex; flex-direction: row; align-items: flex-start; gap: 12px; }
   .kds-main.completed-view > .kds-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
   .kds-main.completed-view > .kds-col > .kds-card { width: 100%; max-width: 100%; }
+  /* Old-hardware perf: skip layout/paint of completed cards below the
+     fold — the browser renders only what's near the viewport. The
+     intrinsic size keeps the scrollbar stable while they're skipped.
+     Individual/column toggles still work: off-screen cards simply
+     appear at their new state when scrolled into view. */
+  .kds-main.completed-view .kds-card { content-visibility: auto; contain-intrinsic-size: 60px; }
   .kds-completed-col-head {
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text); opacity: 0.55; padding: 4px 6px;
@@ -893,6 +895,21 @@
               </div>
             </div>
           </div>
+          <!-- GRAPHICS: corner quality — High = superellipse (squircle),
+               Normal = round (old-hardware friendly) -->
+          <div class="kds-panel-section">
+            <h3>Graphics</h3>
+            <div class="kds-setting-card">
+              <div class="kds-setting-row">
+                <span class="kds-setting-label">Quality</span>
+                <button class="kds-theme-toggle" id="graphics-toggle" title="Toggle corner quality" aria-label="Toggle graphics quality">
+                  <span class="kds-theme-indicator" id="graphics-indicator"></span>
+                  <span class="kds-theme-option on" data-gfx="high">High</span>
+                  <span class="kds-theme-option" data-gfx="normal">Normal</span>
+                </button>
+              </div>
+            </div>
+          </div>
           <!-- CARD COLOURS: per-theme config, accordion groups + scoped reset -->
           <div class="kds-panel-section">
             <div class="kds-section-head">
@@ -982,6 +999,15 @@
     document.querySelectorAll('.kds-theme-option').forEach(o =>
       o.classList.toggle('on', o.dataset.theme === 'light'));
   }
+
+  /* Graphics quality: High = superellipse corners, Normal = round
+     (old-hardware friendly). Persisted like the other settings. */
+  const GFX_KEY = 'kds-proto-graphics';
+  let graphicsQuality = 'high';
+  try { if (localStorage.getItem(GFX_KEY) === 'normal') graphicsQuality = 'normal'; } catch {}
+  document.body.classList.toggle('graphics-high', graphicsQuality === 'high');
+  document.querySelectorAll('#graphics-toggle .kds-theme-option').forEach(o =>
+    o.classList.toggle('on', o.dataset.gfx === graphicsQuality));
 
   /* Per-theme colour configs — one set for dark, one for light, so the
      kitchen tunes colours against each theme independently. The ACTIVE
@@ -1172,7 +1198,15 @@
     orders.push(o);
     if (kitchen.sound === true) playArrivalSound();
     announce('New order #' + (o.table || o.display) + (o.priority ? ' — RUSH' : '') + ' received.');
-    render();
+    if (tab === 'completed') {
+      /* on the recall surface — don't rebuild its ~120-card DOM for an
+         order that isn't even completed. The open count badge is the
+         only visible thing that changes (filter is an Open-tab concern;
+         switching back to Open re-renders properly anyway). */
+      document.getElementById('count-open').textContent = orders.filter(o2 => o2.status !== 'completed').length;
+    } else {
+      render();
+    }
   }, 30000);
 
   /* ── Completed-tab mock: ~5 orders per hour over the last 24h ── */
@@ -2279,6 +2313,31 @@
   });
   moveThemeIndicator();
   updateThemeTag();
+
+  /* ── graphics quality slider (High / Normal) ─────── */
+  function moveGfxIndicator() {
+    const toggle = document.getElementById('graphics-toggle');
+    const on = toggle ? toggle.querySelector('.kds-theme-option.on') : null;
+    const ind = document.getElementById('graphics-indicator');
+    if (!on || !ind) return;
+    ind.style.left = on.offsetLeft + 'px';
+    ind.style.width = on.offsetWidth + 'px';
+    ind.animate([
+      { transform: 'scale(1, 1)' },
+      { transform: 'scale(0.82, 0.85)', offset: 0.45 },
+      { transform: 'scale(1.08, 1.18)', offset: 0.85 },
+      { transform: 'scale(1, 1)' },
+    ], { duration: 340, easing: 'ease-in-out' });
+  }
+  document.getElementById('graphics-toggle').addEventListener('click', () => {
+    graphicsQuality = graphicsQuality === 'high' ? 'normal' : 'high';
+    try { localStorage.setItem(GFX_KEY, graphicsQuality); } catch {}
+    document.body.classList.toggle('graphics-high', graphicsQuality === 'high');
+    document.querySelectorAll('#graphics-toggle .kds-theme-option').forEach(o =>
+      o.classList.toggle('on', o.dataset.gfx === graphicsQuality));
+    moveGfxIndicator();
+  });
+  moveGfxIndicator();
 
   /* ── live clock in footer ───────────────────────── */
   function tick() {
