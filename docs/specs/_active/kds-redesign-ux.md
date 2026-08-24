@@ -451,6 +451,136 @@ All KDS terminals in the same store see the same board. The sync model:
 
 6. **Partial-quantity lines.** ✅ **Decided: all-or-nothing for v1.** A single tap marks the whole line done. The kitchen can split a large line into multiple line items (e.g. `2× Steak` → `1× Steak` + `1× Steak`) if per-item tracking matters. Partial-quantity checkoff (`3/4 done`) is deferred to a future version.
 
+7. **Force-complete is a bypass, never a fake checkoff.** ✅ **Decided.** Force-completing an order does **not** mark its unchecked items as done — the items stay unchecked and the order leaves the board. The audit log records one `force_complete` event with the remaining count (and per-category breakdown). This keeps item/production analytics truthful and makes skipping behaviour directly measurable (§10). Falsifying `done_at` on skipped items would pollute prep-time and per-item stats and make lazy behaviour invisible.
+
+---
+
+## 10. Audit logging
+
+Every user-initiated state change on any KDS terminal is appended to a single **append-only, tamper-evident audit log**. The log is the source of truth for staff-behaviour analysis; order/item state is derived from it. This implements Decision §8.5 ("everything is logged, who clicked what").
+
+### 10.1 Principles
+
+- **Append-only & immutable** — no `UPDATE` / `DELETE` on the log, ever.
+- **Fully attributed** — every event carries user, terminal, shift, session, and store context.
+- **Tamper-evident** — rows are hash-chained; a gap in the monotonic sequence or a broken chain is a tampering signal.
+- **Truthful** — `force_complete` records what actually happened (a bypass); it never fabricates item `done_at` values (Decision §8.7).
+- **Event-sourced** — behaviour analysis reads the log; the KDS board is a projection of it.
+
+### 10.2 Event envelope (shared by every event)
+
+| Field | Type | Notes |
+|---|---|---|
+| `v` | int | Schema version (1) |
+| `event_id` | ULID | Globally unique + time-sortable; survives DB restores |
+| `event` | string | Event type (see §10.3) |
+| `ts` | ISO-8601 UTC, ms | Wall clock at capture |
+| `mono_ms` | int | Boot-relative monotonic ms — detects clock skew / backwards jumps |
+| `actor.user_id` | string | Who (operator login) |
+| `actor.username` | string | Display name |
+| `actor.terminal_id` | string | Which physical KDS screen |
+| `actor.terminal_role` | string | `kitchen` \| `juice` \| `grill` \| `waiter` (configurable) |
+| `context.order_id` | string | Business order id |
+| `context.order_display` | string | `#12` |
+| `context.table` | string \| null | `T5`; null for takeaway |
+| `context.service_type` | string | `dine_in` \| `takeaway` |
+| `context.shift_id` | string | Active shift at capture (null outside shift) |
+| `context.session_id` | string | Login session |
+| `payload` | object | Event-specific (see §10.4) |
+
+### 10.3 Capture surface
+
+| Event | Payload highlights |
+|---|---|
+| `order_received` | Backend-emitted; no actor |
+| `item_check` / `item_uncheck` | `item_id`, `course`, `qty` |
+| `category_check` | `course`, `items_affected` (bulk fast-path, still attributed) |
+| `pause` / `resume` | — |
+| `mark_completed` | `remaining: 0` (the honest path) |
+| `force_complete` | see §10.4 |
+| `reopen` | — |
+| `shift_start` / `shift_end` | terminal, user |
+| `settings_change` | theme, colours, toggles — cheap "who clicked what" |
+
+### 10.4 `force_complete` payload
+
+```json
+"payload": {
+  "total_items": 12,
+  "checked_before": 6,                          // legitimately done before the bypass
+  "remaining": 6,                               // skipped by this action
+  "remaining_by_category": { "Mains": 4, "Juice": 2 },  // skip-pattern analysis
+  "elapsed_since_received_ms": 1482000,          // wait time at the moment of forcing
+  "reason": null                                 // optional free-text (future modal)
+}
+```
+
+`remaining_by_category` is what turns "lazy" into a **diagnosable pattern** — a terminal that always force-completes the same category is actionable; a flat count is not.
+
+### 10.5 Storage schema (SQLite via rusqlite, single write transaction)
+
+```sql
+CREATE TABLE kds_audit_log (
+  seq           INTEGER PRIMARY KEY AUTOINCREMENT,  -- monotonic; a gap = tampering signal
+  event_id      TEXT NOT NULL UNIQUE,               -- ULID
+  event_type    TEXT NOT NULL,
+  ts_utc_ms     INTEGER NOT NULL,
+  mono_ms       INTEGER NOT NULL,
+  user_id       TEXT NOT NULL,
+  username      TEXT NOT NULL,
+  terminal_id   TEXT NOT NULL,
+  terminal_role TEXT NOT NULL DEFAULT 'kitchen',
+  shift_id      TEXT,
+  order_id      TEXT,
+  order_display TEXT,
+  payload       TEXT NOT NULL,                      -- JSON; normalize hot fields if needed
+  prev_hash     TEXT NOT NULL,                      -- sha256 of previous row's row_hash
+  row_hash      TEXT NOT NULL                       -- sha256(canonical(row) + prev_hash)
+);
+CREATE INDEX idx_audit_event_ts ON kds_audit_log (event_type, ts_utc_ms);
+CREATE INDEX idx_audit_user     ON kds_audit_log (user_id, event_type);
+CREATE INDEX idx_audit_order    ON kds_audit_log (order_id, seq);
+CREATE INDEX idx_audit_shift    ON kds_audit_log (shift_id, event_type);
+```
+
+- Insert = **one transaction** (project rule); WAL mode for concurrent terminals.
+- `row_hash` = sha256 over the canonicalized row (sorted-key JSON) **plus** `prev_hash` → hash chain.
+- All terminals write to the **same table** — it is also the multi-screen sync authority: the backend appends, screens replay.
+
+### 10.6 Ingestion flow
+
+```
+tap on a KDS screen
+  → event queued locally (rapid checkoffs batch ~50 events / 200 ms flush)
+  → IPC to backend via a new Tauri command appendKdsAuditEvents
+  → validated (actor, session, shift) → one transaction append
+     (server assigns seq + hashes)
+  → ack → UI confirms
+```
+
+Clients render optimistically; the backend is the source of truth. `seq` is server-assigned so no screen can forge ordering.
+
+### 10.7 Retention
+
+The **24 h auto-clear (§8.3) applies to the on-screen Completed list only** — the audit log is long-lived (it is the staff-behaviour dataset). Only display projections expire; `kds_audit_log` does not.
+
+### 10.8 Analysis queries
+
+```sql
+-- force-complete rate per user, per shift
+SELECT username, COUNT(*) FROM kds_audit_log
+WHERE event_type = 'force_complete' AND shift_id = ?
+GROUP BY user_id ORDER BY 2 DESC;
+
+-- skip severity by terminal
+SELECT terminal_id, AVG(remaining), SUM(remaining)
+FROM kds_audit_log WHERE event_type = 'force_complete' GROUP BY terminal_id;
+
+-- chain verification (tampering)
+SELECT seq FROM kds_audit_log a
+WHERE a.row_hash != sha256(canonical(a) || (SELECT row_hash FROM kds_audit_log WHERE seq = a.seq - 1));
+```
+
 ---
 
 ## 9. Visual design tokens
