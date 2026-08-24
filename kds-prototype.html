@@ -108,7 +108,10 @@
     white-space: nowrap;
     /* no icon, no count — just the category name */
   }
-  .kds-filter-option:hover { background: rgba(255,255,255,0.07); }
+  /* hover bg only on unselected options — an ACTIVE (blue) option keeps
+     its colour; hover there is just the gentle pop on the label */
+  .kds-filter-option:not(.checked):hover { background: rgba(255,255,255,0.07); }
+  .kds-filter-option:hover > span { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
   .kds-filter-option.checked { background: #3b82f6; color: #fff; opacity: 1; }
   /* view-mode row (All / Processed) above the category grid */
   .kds-filter-modes { display: flex; gap: 4px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
@@ -716,7 +719,7 @@
   /* light theme: hover overlays that were dark-only white (P1) */
   .kds-screen.light .kds-btn--icon:hover { background: rgba(0,0,0,0.08); opacity: 1; }
   .kds-screen.light .kds-btn--icon:active { background: rgba(0,0,0,0.12); }
-  .kds-screen.light .kds-filter-option:hover { background: rgba(0,0,0,0.07); }
+  .kds-screen.light .kds-filter-option:not(.checked):hover { background: rgba(0,0,0,0.07); }
   .kds-screen.light .kds-reopen-btn:hover { background: rgba(0,0,0,0.08); opacity: 1; }
 
   /* ── Confirm modal (P4: styled replacement for window.confirm) ── */
