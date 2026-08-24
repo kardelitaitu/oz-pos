@@ -110,6 +110,9 @@
     padding: 10px 18px;
     background: var(--bg-top);
     border-bottom: 1px solid var(--border);
+    /* Apple SF fonts for the top menu — resolves to SF Pro on iPhone/
+       iPad, falls back to Segoe UI (Windows) / Roboto (Android) */
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
     gap: 12px;
   }
   .kds-topmenu-left { display: flex; align-items: center; gap: 10px; color: var(--text); justify-self: start; }
