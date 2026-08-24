@@ -110,7 +110,8 @@
   }
   .kds-filter-option:hover { background: rgba(255,255,255,0.07); }
   .kds-filter-option.checked { background: #3b82f6; color: #fff; opacity: 1; }
-  .kds-filter-option.all { width: fit-content; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 4px; padding-bottom: 8px; border-radius: 8px 8px 0 0; }
+  /* view-mode row (All / Processed) above the category grid */
+  .kds-filter-modes { display: flex; gap: 4px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
   /* Up to 3 columns; each button is only as wide as its label (max-content) */
   .kds-filter-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 3px; justify-content: start; }
   .kds-tabs { position: relative; display: flex; gap: 4px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 2px; justify-self: center; }
@@ -951,6 +952,10 @@
   let orders = initialOrders();
   /* Category filter: null = All, otherwise a Set of course names to show */
   let filterCats = null;
+  /* Waiter view: 'processed' shows only orders whose items are ALL done
+     (the kitchen finished; a waiter team closes them out). Mutually
+     exclusive with category filtering — picking a category clears it. */
+  let filterMode = 'all';
   /* Display size: 75%–150%, persisted like colors */
   const ZOOM_KEY = 'kds-proto-zoom';
   let zoom = loadZoom();
@@ -1208,10 +1213,11 @@
     return all.filter(c => filterCats.has(c.course));
   }
   /* ── Category filter (dropdown) ────────────────────
-     Options are plain text rows — no icons (emoji stripped),
-     no counts. Selected = blue pill (matches the tab indicator).
-     'All' sits above a divider; picking any category clears it,
-     picking it again resets to show everything. */
+     Top row: two view modes — 'All' (everything) and 'Processed'
+     (kitchen done, waiter team closes out). Below: category options
+     (plain text, emoji stripped, no counts). Selected = blue pill
+     (matches the tab indicator). Modes and categories are mutually
+     exclusive: picking a category clears 'Processed' and vice versa. */
   /* Strip emoji from a course name for display (e.g. '🥗 Appetizers' → 'Appetizers') */
   function plainName(name) {
     return name.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu, '').trim();
@@ -1219,27 +1225,34 @@
   function buildFilterPanel() {
     const panel = document.getElementById('filter-panel');
     const cats = allCategories();
-    const allChecked = !filterCats || filterCats.size === 0;
+    const allActive = filterMode !== 'processed' && (!filterCats || filterCats.size === 0);
+    const procActive = filterMode === 'processed';
     const rows = cats.map(c => `
       <div class="kds-filter-option${filterCats && filterCats.has(c) ? ' checked' : ''}" data-cat="${c}" role="option" tabindex="-1" aria-selected="${filterCats && filterCats.has(c)}">
         <span>${plainName(c)}</span>
       </div>`).join('');
     panel.innerHTML = `
-      <div class="kds-filter-option all${allChecked ? ' checked' : ''}" data-cat="__all__" role="option" tabindex="-1" aria-selected="${allChecked}">
-        <span>All Categories</span>
+      <div class="kds-filter-modes">
+        <div class="kds-filter-option mode${allActive ? ' checked' : ''}" data-mode="all" role="option" tabindex="-1" aria-selected="${allActive}">
+          <span>All</span>
+        </div>
+        <div class="kds-filter-option mode${procActive ? ' checked' : ''}" data-mode="processed" role="option" tabindex="-1" aria-selected="${procActive}">
+          <span>Processed</span>
+        </div>
       </div>
       <div class="kds-filter-grid">${rows}</div>`;
   }
   function refreshFilterBtn() {
     const btn = document.getElementById('filter-btn');
-    /* Button is blue whenever a filter is in effect — both the default
-       'All Categories' and any selected-category combination.
+    /* Button is blue whenever a filter is in effect — default 'All
+       Categories', 'Processed', or any selected-category combination.
        Children are built via DOM: the label MUST be an element (not a
        raw text node) for the hover pop animation, and textContent keeps
        category names safe from HTML injection. */
     btn.classList.add('all');
     let label;
-    if (!filterCats || filterCats.size === 0) label = 'All Categories';
+    if (filterMode === 'processed') label = 'Processed';
+    else if (!filterCats || filterCats.size === 0) label = 'All Categories';
     else if (filterCats.size === 1) label = plainName(filterCats.values().next().value);
     else label = filterCats.size + ' selected';
     btn.textContent = '';
@@ -1267,10 +1280,15 @@
     e.stopPropagation();
     const opt = e.target.closest('.kds-filter-option');
     if (!opt) return;
-    const cat = opt.dataset.cat;
-    if (cat === '__all__') {
-      filterCats = null;
+    if (opt.dataset.mode) {
+      /* view modes: All (everything) vs Processed (kitchen done) —
+         both clear any category selection */
+      if (opt.dataset.mode === 'processed') { filterMode = 'processed'; filterCats = null; }
+      else { filterMode = 'all'; filterCats = null; }
     } else {
+      /* category toggle — switching to category mode clears 'Processed' */
+      const cat = opt.dataset.cat;
+      filterMode = 'all';
       /* Start from an empty set (not all categories) so clicking a
          category selects ONLY it — otherwise the toggle would delete it. */
       if (!filterCats) filterCats = new Set();
@@ -1442,7 +1460,11 @@
        colour already mark them, and keeping them in place avoids
        confusing card jumps on pause/resume. */
     const open = orders
-      .filter(o => o.status !== 'completed' && (!filterCats || visibleCats(o).length > 0))
+      .filter(o =>
+        o.status !== 'completed'
+        /* waiter view: only orders where the kitchen finished everything */
+        && (filterMode !== 'processed' || o.categories.every(c => c.items.every(i => i.done)))
+        && (!filterCats || visibleCats(o).length > 0))
       .sort((a, b) => {
         if (a.priority !== b.priority) return a.priority ? -1 : 1;
         return a.received - b.received; // oldest first
@@ -1468,7 +1490,13 @@
 
       main.innerHTML = '';
       if (open.length === 0) {
-        main.innerHTML = '<div class="kds-empty">No active orders — kitchen is clear</div>';
+        main.innerHTML = '<div class="kds-empty">' +
+          (filterMode === 'processed'
+            ? 'No processed orders — kitchen still cooking'
+            : filterCats && filterCats.size > 0
+              ? 'No open orders in the selected categories'
+              : 'No active orders — kitchen is clear') +
+          '</div>';
       } else {
         /* JS masonry: equal columns, each card to the shortest column so
            heights pack with no gaps. Min card width 380px — tuned so the
