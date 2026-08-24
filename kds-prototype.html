@@ -590,7 +590,10 @@
   .kds-card.collapsed .kds-card-collapsible-inner { transform: scaleY(0.85); }
 
   .kds-category { border-bottom: 1px solid var(--border); padding: 3px 0 2px 0; transition: background 0.15s; }
-  .kds-category:last-child { border-bottom: none; padding-bottom: 0; }
+  /* last category keeps its divider — the footer separator is the
+     category's own bottom border, so it stays present even when the
+     order has no notes */
+  .kds-category:last-child { padding-bottom: 2px; }
   /* Whole-section hover + press (station-level unit): when the header is
      hovered OR pressed, the ENTIRE category block lights up (header +
      its items). Items alone do NOT trigger it — they toggle individually. */
@@ -658,7 +661,8 @@
   }
   .kds-order-notes {
     opacity: 0.55; font-style: italic; font-size: 11px;
-    padding: 6px 13px; border-top: 1px solid var(--border);
+    padding: 6px 13px; /* no border-top — the divider lives on the last
+       category, so a note-less order still gets the separation */
   }
 
   .kds-card-footer { flex: 0 0 auto; padding: 0 10px 7px; display: flex; flex-direction: column; gap: 6px; }
