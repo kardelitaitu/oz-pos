@@ -1853,13 +1853,15 @@
           '</div>';
       } else {
         /* JS masonry: equal columns, each card to the shortest column so
-           heights pack with no gaps. Min card width 380px — tuned so the
-           minimum supported screen (1280x720) gets exactly 3 columns;
-           4 columns only appear at 1600px+. Formula accounts for the
-           12px inter-column gaps and the 14px main padding. */
+           heights pack with no gaps. Responsive card width: 380px on
+           kitchen displays (1280px → exactly 3 columns; 1600px+ → 4),
+           shrinking to ~240px on narrow phone viewports so the board
+           still shows 3–4 columns. Formula accounts for the 12px
+           inter-column gaps and the 14px main padding. */
         const gap = 12, pad = 14;
         const avail = (main.clientWidth || 1200) - pad * 2;
-        const nCols = Math.max(1, Math.min(4, Math.floor((avail + gap) / (380 + gap))));
+        const minW = Math.max(240, Math.min(380, Math.round(avail / 3.4)));
+        const nCols = Math.max(1, Math.min(4, Math.floor((avail + gap) / (minW + gap))));
         const cols = [];
         for (let c = 0; c < nCols; c++) {
           const el = document.createElement('div');
