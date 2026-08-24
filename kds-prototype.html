@@ -7,6 +7,16 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  /* Apple-style superellipse corners on EVERYTHING with a corner.
+     corner-shape needs a non-zero border-radius as its size boundary,
+     so elements with radius 0 are unaffected. Progressive enhancement:
+     Chrome/WebView ≥ 140 renders squircles, older engines fall back to
+     the round border-radius. True circles (50%) are exempted below —
+     a superellipse at 50% radius would turn the close button and the
+     switch knob into squirclish blobs. */
+  * { corner-shape: squircle; }
+  .kds-panel-close, .kds-switch, .kds-switch::after { corner-shape: round; }
+
   /* Touch-screen modern scrollbar: thin, transparent, no visible track */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -666,14 +676,6 @@
     color: var(--text); opacity: 0.55; font-size: 11px;
   }
   .kds-status-btn.finish:hover { opacity: 1; background: var(--border); }
-  /* Experimental geometry (A/B): squircle = Apple-style superellipse(2)
-     corner — smoother than a plain circular arc. corner-shape uses the
-     existing border-radius as its SIZE boundary. Applied ONLY to the
-     Pause button so it can be compared side-by-side with the round
-     corners of Resume / Finish / Mark Finish.
-     Requires Chrome 140+; unsupported browsers fall back to the round
-     border-radius (graceful). */
-  .kds-status-btn.pause { corner-shape: squircle; }
 
   /* ── Completed tab ──────────────────────────────── */
   .kds-completed-card {
