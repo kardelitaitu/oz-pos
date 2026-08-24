@@ -1392,7 +1392,6 @@
       moveTabIndicator();
     });
   });
-  moveTabIndicator();
 
   /* ── card colour panel (generated from COLOR_GROUPS + PALETTE) ──
      Accordion groups: each group is a toggle head + collapsible body.
@@ -1672,6 +1671,11 @@
   buildSwatches();
   COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
   render();
+  /* measure the tab pill AFTER the first render: the count badge starts
+     as '0' in the static HTML, so measuring earlier would lock the blue
+     pill to the too-narrow pre-render width (only corrected by a later
+     tab switch). */
+  moveTabIndicator();
 
   /* Recompute columns when the window resizes — the column count is
      derived from width, so a resize (e.g. 1024px → different columns)
