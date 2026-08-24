@@ -181,9 +181,9 @@
     display: inline-flex; align-items: center; justify-content: center;
     gap: 6px;
     -webkit-tap-highlight-color: transparent;
-    /* fixed height across all variants: icon (28px) and text buttons
-       (3px padding top/bottom + 22px content = 28px) match exactly —
-       the tab slider pill is also 28px, so the whole topmenu row aligns */
+    /* Heights are border-box (see * rule): min-height 22px → 22px total.
+       Text buttons sit at 22px; icon buttons are 32×32; the shift
+       variant overrides min-height to 28px to match the tab pill. */
     min-height: 22px;
   }
   .kds-btn:hover { background: var(--btn-hover); }
@@ -226,8 +226,12 @@
 
   /* Variant: start/end shift — blue rest; GREEN hover when starting
      (not in shift), RED hover when stopping (in shift, destructive).
-     The .is-active state decides which hover colour applies. */
+     The .is-active state decides which hover colour applies.
+     min-height: 28px — the blue backdrop matches the Open/Completed
+     tab slider pill (28px). Everything is border-box, so this IS the
+     final height (22px base + this override). */
   .kds-btn--shift {
+    min-height: 28px;
     --btn-hover: #22c55e;      /* starting → green */
     --btn-active: #16a34a;
     --btn-state: #3b82f6;
