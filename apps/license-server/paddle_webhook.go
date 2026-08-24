@@ -513,7 +513,7 @@ func sendReceiptEmailSMTP(to, licenseKey, tier, expiresAt string) error {
 	password := os.Getenv("OZ_SMTP_PASSWORD")
 	from := strings.TrimSpace(os.Getenv("OZ_SMTP_FROM"))
 	if from == "" {
-		from = "no-reply@oz-pos.com"
+		from = "no-reply@ozpos.my.id"
 	}
 
 	msg := buildReceiptEmail(from, to, licenseKey, tier, expiresAt)

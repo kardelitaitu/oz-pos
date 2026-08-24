@@ -39,7 +39,7 @@ var trialMilestones = []trialEmailMilestone{
 			"• Revenue: %s\n\n" +
 			"You're on a 14-day Plus trial, which includes the Daily Sales Dashboard, QRIS payments, and cloud sync.\n\n" +
 			"Keep using OZ-POS — your trial continues for %d more days.\n\n" +
-			"Questions? Reply to this email or visit https://oz-pos.com/support\n\n" +
+			"Questions? Reply to this email or visit https://ozpos.my.id/support\n\n" +
 			"— The OZ-POS Team",
 		BodyID: "Halo,\n\n" +
 			"Anda sudah menggunakan OZ-POS selama seminggu. Berikut ringkasan aktivitas Anda:\n\n" +
@@ -47,7 +47,7 @@ var trialMilestones = []trialEmailMilestone{
 			"• Pendapatan: %s\n\n" +
 			"Anda berada di percobaan Plus 14 hari, yang mencakup Dasbor Penjualan Harian, pembayaran QRIS, dan sinkronisasi cloud.\n\n" +
 			"Terus gunakan OZ-POS — percobaan Anda berlanjut selama %d hari lagi.\n\n" +
-			"Pertanyaan? Balas email ini atau kunjungi https://oz-pos.com/support\n\n" +
+			"Pertanyaan? Balas email ini atau kunjungi https://ozpos.my.id/support\n\n" +
 			"— Tim OZ-POS",
 	},
 	{
@@ -62,7 +62,7 @@ var trialMilestones = []trialEmailMilestone{
 			"• Cloud sync will stop\n" +
 			"• Your sales history will be limited to 30 days\n\n" +
 			"To keep all these features, upgrade to Plus now:\n" +
-			"https://oz-pos.com/pricing\n\n" +
+			"https://ozpos.my.id/pricing\n\n" +
 			"Upgrade ke Plus untuk tetap melihat riwayat penjualan Anda.\n\n" +
 			"— The OZ-POS Team",
 		BodyID: "Halo,\n\n" +
@@ -72,7 +72,7 @@ var trialMilestones = []trialEmailMilestone{
 			"• Sinkronisasi cloud akan berhenti\n" +
 			"• Riwayat penjualan Anda dibatasi 30 hari\n\n" +
 			"Untuk mempertahankan semua fitur ini, upgrade ke Plus sekarang:\n" +
-			"https://oz-pos.com/pricing\n\n" +
+			"https://ozpos.my.id/pricing\n\n" +
 			"Upgrade ke Plus untuk tetap melihat riwayat penjualan Anda.\n\n" +
 			"— Tim OZ-POS",
 	},
@@ -88,7 +88,7 @@ var trialMilestones = []trialEmailMilestone{
 			"• Revenue: %s\n\n" +
 			"Your Pro trial includes KDS, analytics, and multi-terminal support.\n\n" +
 			"You have %d days left in your trial.\n\n" +
-			"Questions? Reply to this email or visit https://oz-pos.com/support\n\n" +
+			"Questions? Reply to this email or visit https://ozpos.my.id/support\n\n" +
 			"— The OZ-POS Team",
 		BodyID: "Halo,\n\n" +
 			"Anda sudah menggunakan OZ-POS Pro dengan KDS (Tampilan Dapur) selama seminggu. Berikut ringkasannya:\n\n" +
@@ -96,7 +96,7 @@ var trialMilestones = []trialEmailMilestone{
 			"• Pendapatan: %s\n\n" +
 			"Percobaan Pro Anda mencakup KDS, analytics, dan dukungan multi-terminal.\n\n" +
 			"Anda memiliki %d hari lagi dalam percobaan.\n\n" +
-			"Pertanyaan? Balas email ini atau kunjungi https://oz-pos.com/support\n\n" +
+			"Pertanyaan? Balas email ini atau kunjungi https://ozpos.my.id/support\n\n" +
 			"— Tim OZ-POS",
 	},
 	{
@@ -110,7 +110,7 @@ var trialMilestones = []trialEmailMilestone{
 			"• Analytics and reports will be locked\n" +
 			"• Multi-terminal support will be limited to 1 register\n\n" +
 			"To keep these features, upgrade to Pro now:\n" +
-			"https://oz-pos.com/pricing#pro\n\n" +
+			"https://ozpos.my.id/pricing#pro\n\n" +
 			"KDS akan dinonaktifkan. Upgrade ke Pro untuk melanjutkan.\n\n" +
 			"— The OZ-POS Team",
 		BodyID: "Halo,\n\n" +
@@ -119,7 +119,7 @@ var trialMilestones = []trialEmailMilestone{
 			"• Analytics dan laporan akan dikunci\n" +
 			"• Dukungan multi-terminal dibatasi 1 register\n\n" +
 			"Untuk mempertahankan fitur ini, upgrade ke Pro sekarang:\n" +
-			"https://oz-pos.com/pricing#pro\n\n" +
+			"https://ozpos.my.id/pricing#pro\n\n" +
 			"KDS akan dinonaktifkan. Upgrade ke Pro untuk melanjutkan.\n\n" +
 			"— Tim OZ-POS",
 	},
@@ -321,7 +321,7 @@ func sendTrialEmail(to, subject, body string) error {
 	password := os.Getenv("OZ_SMTP_PASSWORD")
 	from := strings.TrimSpace(os.Getenv("OZ_SMTP_FROM"))
 	if from == "" {
-		from = "no-reply@oz-pos.com"
+		from = "no-reply@ozpos.my.id"
 	}
 
 	msg := buildTrialEmail(from, to, subject, body)
@@ -393,13 +393,13 @@ var winBackMilestones = []struct {
 		BodyEN: "Hi there,\n\n" +
 			"We noticed your OZ-POS subscription has ended. We'd love to have you back!\n\n" +
 			"As a welcome-back offer, here's 20%% off for the next 3 months:\n" +
-			"https://oz-pos.com/pricing?offer=winback20\n\n" +
+			"https://ozpos.my.id/pricing?offer=winback20\n\n" +
 			"Your data is still safe — upgrade now and pick up right where you left off.\n\n" +
 			"— The OZ-POS Team",
 		BodyID: "Halo,\n\n" +
 			"Kami perhatikan langganan OZ-POS Anda sudah berakhir. Kami ingin Anda kembali!\n\n" +
 			"Sebagai penawaran kembali, berikut diskon 20%% untuk 3 bulan ke depan:\n" +
-			"https://oz-pos.com/pricing?offer=winback20\n\n" +
+			"https://ozpos.my.id/pricing?offer=winback20\n\n" +
 			"Data Anda masih aman — upgrade sekarang dan lanjutkan dari mana Anda berhenti.\n\n" +
 			"— Tim OZ-POS",
 	},
@@ -411,13 +411,13 @@ var winBackMilestones = []struct {
 		BodyEN: "Hi there,\n\n" +
 			"It's been a month since your OZ-POS subscription ended. This is our final offer.\n\n" +
 			"Upgrade now with 30%% off for 3 months:\n" +
-			"https://oz-pos.com/pricing?offer=winback30\n\n" +
+			"https://ozpos.my.id/pricing?offer=winback30\n\n" +
 			"After this, your data will be permanently deleted per our retention policy.\n\n" +
 			"— The OZ-POS Team",
 		BodyID: "Halo,\n\n" +
 			"Sudah sebulan sejak langganan OZ-POS Anda berakhir. Ini penawaran terakhir kami.\n\n" +
 			"Upgrade sekarang dengan diskon 30%% untuk 3 bulan:\n" +
-			"https://oz-pos.com/pricing?offer=winback30\n\n" +
+			"https://ozpos.my.id/pricing?offer=winback30\n\n" +
 			"Setelah ini, data Anda akan dihapus permanen sesuai kebijakan retensi kami.\n\n" +
 			"— Tim OZ-POS",
 	},

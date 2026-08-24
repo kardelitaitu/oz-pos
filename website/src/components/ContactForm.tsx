@@ -12,7 +12,7 @@ import { t } from '../i18n';
  * entered fields pre-filled, so the UI stays fully usable.
  */
 const API = import.meta.env.PUBLIC_CONTACT_ENDPOINT as string | undefined;
-const SUPPORT_EMAIL = 'support@oz-pos.com';
+const SUPPORT_EMAIL = 'support@ozpos.my.id';
 
 interface Props {
   locale: string;

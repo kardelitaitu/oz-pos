@@ -815,11 +815,11 @@ func TestWebSessionTTL_InvalidEnvFallsBack(t *testing.T) {
 
 func TestWebAllowedOrigins_Default(t *testing.T) {
 	origins := webAllowedOrigins()
-	if len(origins) != 3 {
-		t.Fatalf("expected 3 default origins, got %d", len(origins))
+	if len(origins) != 2 {
+		t.Fatalf("expected 2 default origins, got %d", len(origins))
 	}
-	if !strings.Contains(strings.Join(origins, ","), "oz-pos.adikaradwiatmaja.workers.dev") {
-		t.Errorf("expected workers.dev origin in defaults, got %v", origins)
+	if !strings.Contains(strings.Join(origins, ","), "ozpos.my.id") {
+		t.Errorf("expected ozpos.my.id origin in defaults, got %v", origins)
 	}
 }
 

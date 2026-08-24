@@ -62,8 +62,8 @@ const smtpProbeTimeout = 5 * time.Second
 
 // smtpDefaultFrom is the fallback the senders use when OZ_SMTP_FROM is
 // unset. It is deliberately treated as unconfigured by verifySMTPConfig:
-// no-reply@oz-pos.com is not a domain we own, so relays reject or flag it.
-const smtpDefaultFrom = "no-reply@oz-pos.com"
+// no-reply@ozpos.my.id is not a domain we own, so relays reject or flag it.
+const smtpDefaultFrom = "no-reply@ozpos.my.id"
 
 // verifySMTPConfig is the boot-time sender-identity gate (called from
 // main before the server starts serving). It fails fast when email

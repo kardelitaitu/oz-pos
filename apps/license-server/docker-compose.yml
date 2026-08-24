@@ -4,7 +4,7 @@
 #   1. Generate keys:  .\scripts\generate-license-keys.ps1  (PowerShell)
 #   2. Start server:   docker compose -f apps/license-server/docker-compose.yml up -d
 #   3. Create admin:   docker compose -f apps/license-server/docker-compose.yml exec license-server \
-#                        /pb/pocketbase superuser upsert admin@oz-pos.com password123
+#                        /pb/pocketbase superuser upsert admin@ozpos.my.id password123
 #   4. Open admin UI:  http://localhost:8080/_/
 #   5. Test activate:  curl -X POST http://localhost:8080/api/v1/license/activate \
 #                        -H "Content-Type: application/json" \

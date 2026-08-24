@@ -137,11 +137,11 @@ website/
 
 | URL | Locale | Content |
 |-----|--------|---------|
-| `oz-pos.com/` | Auto-detect → redirect | Detects country or browser lang |
-| `oz-pos.com/en/` | English | Global pricing (USD) |
-| `oz-pos.com/id/` | Bahasa Indonesia | Indonesia pricing (IDR) |
-| `oz-pos.com/en/pricing` | English pricing | USD price cards |
-| `oz-pos.com/id/pricing` | Indonesian pricing | IDR price cards |
+| `ozpos.my.id/` | Auto-detect → redirect | Detects country or browser lang |
+| `ozpos.my.id/en/` | English | Global pricing (USD) |
+| `ozpos.my.id/id/` | Bahasa Indonesia | Indonesia pricing (IDR) |
+| `ozpos.my.id/en/pricing` | English pricing | USD price cards |
+| `ozpos.my.id/id/pricing` | Indonesian pricing | IDR price cards |
 
 ### Locale Detection
 
@@ -249,7 +249,7 @@ sends via **Brevo** (`smtp-relay.brevo.com`: 587 STARTTLS, or 465 implicit
 TLS — both supported), authenticated with the Brevo SMTP login id + key.
 `code.run` / `workers.dev` aren't domains you can add DNS to, so the sender
 must be **verified in Brevo Sender Identity** and set as `OZ_SMTP_FROM`
-explicitly (the code default `no-reply@oz-pos.com` is an unowned domain);
+explicitly (the code default `no-reply@ozpos.my.id` is an unowned domain);
 the server fails fast at boot when `OZ_SMTP_FROM` is missing. SPF/DKIM/DMARC
 on the owned domain is the real inbox-not-spam fix — see
 `apps/license-server/DEPLOY.md` step 5.
@@ -395,7 +395,7 @@ Cloudflare Worker would only add a hop. (This supersedes any earlier
 Paddle webhook
     │
     ▼
-https://license.oz-pos.com/api/v1/paddle/webhook        (new server work)
+https://license.ozpos.my.id/api/v1/paddle/webhook        (new server work)
     │
     ├── Verify Paddle signature (v1 public key / v2 webhook secret)
     ├── Dedup by event_id (Paddle retries — replays must be no-ops)
@@ -522,7 +522,7 @@ on the pricing page via the `#plus` / `#pro` / `#premium` card anchors:
 
 ### Cloudflare Workers (static assets)
 
-Live at `https://oz-pos.adikaradwiatmaja.workers.dev` until the custom domain is bought.
+Live at `https://ozpos.my.id` until the custom domain is bought.
 
 | Setting | Value |
 |---------|-------|
@@ -543,9 +543,9 @@ Live at `https://oz-pos.adikaradwiatmaja.workers.dev` until the custom domain is
 
 | Domain | Locale |
 |--------|--------|
-| `oz-pos.com` | Root → auto-redirect |
-| `oz-pos.com/en` | English (global) |
-| `oz-pos.com/id` | Bahasa Indonesia |
+| `ozpos.my.id` | Root → auto-redirect |
+| `ozpos.my.id/en` | English (global) |
+| `ozpos.my.id/id` | Bahasa Indonesia |
 
 ### Environment Variables
 
@@ -553,10 +553,10 @@ Live at `https://oz-pos.adikaradwiatmaja.workers.dev` until the custom domain is
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `PUBLIC_LICENSE_API_URL` | `https://license.oz-pos.com` | Web auth + license API (replaces any direct PocketBase URL). Build-time fallback only: the Worker serves the runtime override from the `LICENSE_API_URL` [vars] binding in wrangler.toml, so a backend move needs no rebuild |
+| `PUBLIC_LICENSE_API_URL` | `https://license.ozpos.my.id` | Web auth + license API (replaces any direct PocketBase URL). Build-time fallback only: the Worker serves the runtime override from the `LICENSE_API_URL` [vars] binding in wrangler.toml, so a backend move needs no rebuild |
 | `PUBLIC_PADDLE_CLIENT_TOKEN` | `xxxxx` | Paddle.js v2 client token (`Paddle.Checkout`, `custom_data.email`). Empty = checkout buttons degrade to the mailto fallback |
 | `PUBLIC_PADDLE_ENVIRONMENT` | `sandbox` | Paddle SDK env: `sandbox` or `production` (defaults to `production` when unset — set `sandbox` until real price ids ship) |
-| `PUBLIC_CONTACT_ENDPOINT` | `https://license.oz-pos.com/api/v1/web/contact` | Support contact-form target; empty = mailto fallback |
+| `PUBLIC_CONTACT_ENDPOINT` | `https://license.ozpos.my.id/api/v1/web/contact` | Support contact-form target; empty = mailto fallback |
 
 **Northflank (license server, new):**
 
@@ -567,7 +567,7 @@ Live at `https://oz-pos.adikaradwiatmaja.workers.dev` until the custom domain is
 | `PADDLE_API_KEY` | optional | Server-side Paddle API key — fallback via `GET /customers/{id}` when `custom_data.email` is absent (the checkout now passes it, so this is rarely needed) |
 | `OZ_SMTP_HOST` / `OZ_SMTP_PORT` / `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` / `OZ_SMTP_FROM` | relay creds | OTP + license-key receipt emails. Port 465 = implicit TLS, anything else = STARTTLS (`net/smtp`). `OZ_SMTP_FROM` **required at boot** when SMTP is configured (sender must be verified with the relay) |
 | `OZ_DISCORD_WEBHOOK` | optional | Support-contact target for `/api/v1/web/contact`; unset → `503` + mailto fallback |
-| `OZ_WEB_ALLOWED_ORIGINS` | `https://oz-pos.com,https://oz-pos.adikaradwiatmaja.workers.dev,http://localhost:4321` | Web API CORS allowlist |
+| `OZ_WEB_ALLOWED_ORIGINS` | `https://ozpos.my.id,https://ozpos.my.id,http://localhost:4321` | Web API CORS allowlist |
 | `OZ_WEB_SESSION_TTL` | `24h` | Web session lifetime (Go duration) |
 
 **Shipped web endpoints** (all rate-limited per plan §11, CORS allow-listed):
@@ -605,14 +605,14 @@ a registered CI gate (`unified-healthcheck`).
 
 ### CORS (on the license server, not PocketBase)
 
-The website only talks to `https://license.oz-pos.com`. The Go router sets
+The website only talks to `https://license.ozpos.my.id`. The Go router sets
 CORS for the allow-listed origins; **PocketBase stays internal** — its admin
 UI and `/api/collections/*` surface are never reachable from the browser.
 
 ```json
 // License server CORS allowlist — OZ_WEB_ALLOWED_ORIGINS env var
 // (comma-separated). Default when unset:
-{ "allowedOrigins": ["https://oz-pos.adikaradwiatmaja.workers.dev", "https://oz-pos.com", "http://localhost:4321"] }
+{ "allowedOrigins": ["https://ozpos.my.id", "https://ozpos.my.id", "http://localhost:4321"] }
 ```
 
 ### Content Security Policy
@@ -621,7 +621,7 @@ Cloudflare Pages `_headers` file to allow Paddle.js iframe:
 
 ```
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.paddle.com; frame-src https://*.paddle.com; connect-src 'self' https://license.oz-pos.com https://*.paddle.com; style-src 'self' 'unsafe-inline'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.paddle.com; frame-src https://*.paddle.com; connect-src 'self' https://license.ozpos.my.id https://*.paddle.com; style-src 'self' 'unsafe-inline'
 ```
 
 ### Token Storage (v1 decision)

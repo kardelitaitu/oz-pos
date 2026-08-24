@@ -50,7 +50,7 @@ webhook delivery work the moment the new image is up.
 
 1. **Set the default payment link** — Paddle (sandbox) → **Checkout → Checkout settings →
    Default payment link** heading → enter a URL (the site homepage, e.g.
-   `https://oz-pos.adikaradwiatmaja.workers.dev`) → Save. This is a **URL input field**,
+   `https://ozpos.my.id`) → Save. This is a **URL input field**,
    NOT a product picker. Without it the checkout service rejects every transaction with
    `transaction_default_checkout_url_not_set` and the overlay dies with
    **"Something went wrong"** before Paddle even opens. `https://localhost/` is also
@@ -58,7 +58,7 @@ webhook delivery work the moment the new image is up.
 2. **Webhook destination — DONE (verified 2026-08-17 via the Paddle API):**
    `ntfset_01m05htpgfq0qmcvb0er6byrsx` now posts to
    `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook` (was the unowned
-   `license.oz-pos.com`). If it ever regresses: Paddle (sandbox) → **Developer tools →
+   `license.ozpos.my.id`). If it ever regresses: Paddle (sandbox) → **Developer tools →
    Notifications** → edit destination `ntfset_01m05htpgfq0qmcvb0er6byrsx` → **Endpoint
    URL** → the `code.run` URL → Save. While in that same edit screen, copy the
    **Endpoint secret** into §1 #3 — it is shown once and never returned by any API.
@@ -180,7 +180,7 @@ a broken relay or rotated secret pages someone.
   `PUBLIC_PADDLE_ENVIRONMENT=sandbox`. The runtime override lives in `website/wrangler.toml` → `[vars] LICENSE_API_URL` — update it there (or the Worker dashboard) when the host changes; no rebuild needed.
 - **Paddle sandbox checkout** is unblocked by the **default payment link** — now a
   checklist step in §1b #1 (do it before the §3 deploy).
-- **Domain + SPF/DKIM/DMARC** is the real inbox-not-spam fix once `oz-pos.com` is owned
+- **Domain + SPF/DKIM/DMARC** is the real inbox-not-spam fix once `ozpos.my.id` is owned
   (see `DEPLOY.md` §7).
 - **Auto-deploy wiring** — backend deploys are manual (Redeploy button) until
   `deploy.yml` is wired: set GitHub secret `NORTHFLANK_API_TOKEN` + vars

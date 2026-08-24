@@ -86,10 +86,10 @@ describe('upgradePricingUrl (C2.2)', () => {
     const targets: UpgradeTarget[] = ['plus', 'pro', 'premium'];
     for (const target of targets) {
       expect(upgradePricingUrl('id', target)).toBe(
-        `https://oz-pos.adikaradwiatmaja.workers.dev/id/pricing/#${target}`,
+        `https://ozpos.my.id/id/pricing/#${target}`,
       );
       expect(upgradePricingUrl('en', target)).toBe(
-        `https://oz-pos.adikaradwiatmaja.workers.dev/en/pricing/#${target}`,
+        `https://ozpos.my.id/en/pricing/#${target}`,
       );
     }
   });

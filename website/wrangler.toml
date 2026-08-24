@@ -1,9 +1,8 @@
 # OZ-POS Website — Cloudflare Workers (static assets)
 #
-# The site is a pure static build (Astro outputs dist/), served from a
-# workers.dev URL until the oz-pos.com domain is bought. Workers static
-# assets honors public/_headers (CSP) and public/_redirects (301s) exactly
-# like Pages does.
+# The site is a pure static build (Astro outputs dist/), served at
+# https://ozpos.my.id. Workers static assets honors public/_headers (CSP)
+# and public/_redirects (301s) exactly like Pages does.
 #
 # Deploy (from website/):   npm run build && npx wrangler deploy
 # Or via CI:                .github/workflows/website.yml

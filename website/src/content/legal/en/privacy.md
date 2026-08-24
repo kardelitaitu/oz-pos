@@ -14,8 +14,8 @@ By creating an account or using the Service, you agree to the practices describe
 
 OZ-POS operates the Service and is the data controller responsible for the personal data described in this policy. You can contact us at any time:
 
-- **Email:** support@oz-pos.com
-- **Sales:** sales@oz-pos.com
+- **Email:** support@ozpos.my.id
+- **Sales:** sales@ozpos.my.id
 
 We are committed to processing personal data lawfully, fairly, and transparently in accordance with applicable law, including the EU General Data Protection Regulation (GDPR) where it applies and Indonesia's Law No. 27 of 2022 on Personal Data Protection (UU PDP) where it applies.
 
@@ -93,7 +93,7 @@ We apply reasonable technical and organizational measures to protect your data, 
 - Access controls and logging on production systems;
 - Restricted access to production data for our team and providers.
 
-No method of transmission or storage is completely secure. You also have a role: use a strong, unique password for your account and do not share it. If you believe your account has been compromised, contact us immediately at support@oz-pos.com.
+No method of transmission or storage is completely secure. You also have a role: use a strong, unique password for your account and do not share it. If you believe your account has been compromised, contact us immediately at support@ozpos.my.id.
 
 ## 9. Cookies and tracking
 
@@ -115,7 +115,7 @@ Depending on where you live, you may have the following rights over your persona
 - **Withdrawal of consent** — where processing is based on consent;
 - **Complaint** — lodge a complaint with your local data-protection authority (for example, in the EU/EEA) or with Indonesia's data-protection authority.
 
-To exercise any of these rights, email **support@oz-pos.com** from the email address on your account. We will verify your identity and respond within 30 days. We may need to keep certain data to comply with legal obligations or to protect our legitimate interests, and we will tell you when that is the case.
+To exercise any of these rights, email **support@ozpos.my.id** from the email address on your account. We will verify your identity and respond within 30 days. We may need to keep certain data to comply with legal obligations or to protect our legitimate interests, and we will tell you when that is the case.
 
 ## 11. Children
 
@@ -129,7 +129,7 @@ We may update this Privacy Policy from time to time. Material changes will be an
 
 Questions, requests, or complaints about this policy or your data:
 
-- **Email:** support@oz-pos.com
+- **Email:** support@ozpos.my.id
 - **Subject line:** "Privacy request"
 
 We aim to respond to every privacy request within 30 days.

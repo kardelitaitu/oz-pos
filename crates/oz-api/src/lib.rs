@@ -100,9 +100,8 @@ pub struct AppState {
 /// on macOS/Linux, `http://tauri.localhost` on Windows (WebView2) — both are
 /// listed so the unified cloud server's `/api/health` answers the activation
 /// screen's direct webview fetch on every OS.
-pub const DEFAULT_CORS_ORIGINS: [&str; 5] = [
-    "https://oz-pos.com",
-    "https://id.oz-pos.com",
+pub const DEFAULT_CORS_ORIGINS: [&str; 4] = [
+    "https://ozpos.my.id",
     "http://localhost:4321",
     "tauri://localhost",
     "http://tauri.localhost",

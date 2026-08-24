@@ -8,7 +8,7 @@ export type UpgradeTarget = 'plus' | 'pro' | 'premium';
 
 /** Website pricing URL for the given locale + tier anchor. */
 export function upgradePricingUrl(locale: string, target: UpgradeTarget): string {
-  return `https://oz-pos.adikaradwiatmaja.workers.dev/${locale}/pricing/#${target}`;
+  return `https://ozpos.my.id/${locale}/pricing/#${target}`;
 }
 
 /** Open the pricing page for an upgrade target in a new tab. */

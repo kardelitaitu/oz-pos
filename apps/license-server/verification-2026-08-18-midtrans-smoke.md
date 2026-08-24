@@ -36,7 +36,7 @@ inline per step; the boot env mirrors `DEPLOY.md` §7.1 step 8 with a sandbox-sh
 **Boot log (observed):**
 
 ```
-2026/08/18 14:40:17 SMTP sender identity verified: verify@oz-pos.com via 127.0.0.1:2525
+2026/08/18 14:40:17 SMTP sender identity verified: verify@ozpos.my.id via 127.0.0.1:2525
 2026/08/18 14:40:17 Paddle webhook config verified: 3 price→tier mapping(s)
 2026/08/18 14:40:17 Midtrans webhook config verified: 8 amount→tier mapping(s)
 ```
@@ -208,9 +208,9 @@ checks minted nothing.
 - [ ] Run §11.7 against the **real Midtrans sandbox**: set `MIDTRANS_SERVER_KEY` to a real
   `SB-Mid-server-…` and `MIDTRANS_SNAP_URL=https://app.sandbox.midtrans.com` in Northflank
   (§7.1 step 8), point the sandbox webhook URL at
-  `https://license.oz-pos.com/api/v1/midtrans/webhook` (§7.6), and pay with the sandbox
+  `https://license.ozpos.my.id/api/v1/midtrans/webhook` (§7.6), and pay with the sandbox
   QRIS app so the charge settles through Midtrans's own API (the one leg simulated here).
 - [ ] Verify the **website worker binding** (`LICENSE_API_URL` → the license server) so the
   id-locale `CheckoutButton` hits the deployed snap endpoint (§11.7 pre-flight).
 - [ ] Confirm the §12 keyword monitor (`"server_key_configured":false` /
-  `"price_tiers_configured":false`) is live on `https://license.oz-pos.com/api/health`.
+  `"price_tiers_configured":false`) is live on `https://license.ozpos.my.id/api/health`.

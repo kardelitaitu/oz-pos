@@ -33,7 +33,7 @@ Before starting, ensure you have:
 - [ ] A **Northflank account** — [Sign up at northflank.com](https://northflank.com/)
 - [ ] **Docker** installed locally — [Get Docker](https://docs.docker.com/get-docker/)
 - [ ] A **GitHub account** (or any container registry) to store the Docker image
-- [ ] A **domain** (optional, e.g., `license.oz-pos.com`) for a custom URL
+- [ ] A **domain** (optional, e.g., `license.ozpos.my.id`) for a custom URL
 - [ ] **Go 1.25+** and **OpenSSL** installed locally (for key generation and testing)
 
 ---
@@ -221,7 +221,7 @@ The license server requires the RSA private key as an environment variable. **Ne
    - **Key:** `OZ_SMTP_HOST` — your relay's hostname
    - **Key:** `OZ_SMTP_PORT` — default `587` (TLS/STARTTLS) if unset
    - **Key:** `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` — credentials for the relay (omit for unauthenticated relays)
-   - **Key:** `OZ_SMTP_FROM` — sender address. **Must be set explicitly and verified with your relay** — the code defaults to `no-reply@oz-pos.com`, which relays will reject or flag until that domain is yours. **Boot gate:** when `OZ_SMTP_HOST` is set, the server runs a sender-identity probe at startup (auth + `MAIL FROM` only — nothing is ever queued) and **fails fast** if `OZ_SMTP_FROM` is unset, is still the unowned default, or the relay permanently rejects it (e.g. Brevo `550 Sender address is not verified`). A transient relay outage only logs a warning, so a brief hiccup can't block a deploy. Unset `OZ_SMTP_HOST` skips the gate entirely (the endpoint answers 503 by design then).
+   - **Key:** `OZ_SMTP_FROM` — sender address. **Must be set explicitly and verified with your relay** — the code defaults to `no-reply@ozpos.my.id`, which relays will reject or flag until that domain is yours. **Boot gate:** when `OZ_SMTP_HOST` is set, the server runs a sender-identity probe at startup (auth + `MAIL FROM` only — nothing is ever queued) and **fails fast** if `OZ_SMTP_FROM` is unset, is still the unowned default, or the relay permanently rejects it (e.g. Brevo `550 Sender address is not verified`). A transient relay outage only logs a warning, so a brief hiccup can't block a deploy. Unset `OZ_SMTP_HOST` skips the gate entirely (the endpoint answers 503 by design then).
 
    **No custom domain yet?** Northflank does **not** provide SMTP/email to apps — you need a third-party transactional relay, and `code.run` / `workers.dev` are not domains you can add DNS records to (no SPF/DKIM there). Until you own a domain, use a provider that works with a **verified sender email** instead:
 
@@ -238,7 +238,7 @@ The license server requires the RSA private key as an environment variable. **Ne
 
    > **Deliverability honesty:** without your own domain + SPF/DKIM/DMARC, inbox placement is best-effort — codes may land in spam. Once you own a domain: set `OZ_SMTP_FROM=noreply@<domain>`, add the provider's SPF include + DKIM records (and a DMARC policy), then the verified-sender fallback is no longer needed. This is the actual fix for "signup codes never land in spam".
 6. (Optional) Web API CORS allowlist override:
-   - **Key:** `OZ_WEB_ALLOWED_ORIGINS` — comma-separated origins allowed to call the web endpoints. **Defaults are already correct** for the current setup (`https://oz-pos.adikaradwiatmaja.workers.dev`, `https://oz-pos.com`, `http://localhost:4321`); only set this if you deploy the website to a different origin.
+   - **Key:** `OZ_WEB_ALLOWED_ORIGINS` — comma-separated origins allowed to call the web endpoints. **Defaults are already correct** for the current setup (`https://ozpos.my.id`, `http://localhost:4321`); only set this if you deploy the website to a different origin.
 7. (Optional) Session lifetime override:
    - **Key:** `OZ_WEB_SESSION_TTL` — Go duration, default `24h` (e.g. `72h` to extend dashboard sessions).
 8. Add the **billing webhook** secrets (required for the checkout → provisioning flow — Paddle for global, Midtrans for Indonesia, ADR #39):
@@ -271,10 +271,10 @@ The license server requires the RSA private key as an environment variable. **Ne
 
 ### 7.2 CORS for the website
 
-The website is currently served from `https://oz-pos.adikaradwiatmaja.workers.dev` (until the `oz-pos.com` domain is bought) and calls the web endpoints (`/api/v1/web/contact`, `request-otp`, `verify-otp`, `/me`, `logout`) cross-origin.
+The website is served from `https://ozpos.my.id` and calls the web endpoints (`/api/v1/web/contact`, `request-otp`, `verify-otp`, `/me`, `logout`) cross-origin.
 
-- **Web OTP endpoints** enforce an **in-handler CORS allowlist** read from `OZ_WEB_ALLOWED_ORIGINS` (Step 6 above). Its default already includes the workers.dev origin, `oz-pos.com`, and `http://localhost:4321`, so **no configuration is needed** — just don't set the variable to an empty string, or the allowlist falls back to the default.
-- **`/api/v1/web/contact`** relies on PocketBase's global CORS middleware, which allows all origins by default (stateless, no cookies). No configuration needed for the contact form to work. For hardening, restrict origins by adding the `--origins` flag to the `serve` command in the Dockerfile `CMD` (e.g. `--origins=https://oz-pos.adikaradwiatmaja.workers.dev,https://oz-pos.com,http://localhost:4321`).
+- **Web OTP endpoints** enforce an **in-handler CORS allowlist** read from `OZ_WEB_ALLOWED_ORIGINS` (Step 6 above). Its default already includes `ozpos.my.id` and `http://localhost:4321`, so **no configuration is needed** — just don't set the variable to an empty string, or the allowlist falls back to the default.
+- **`/api/v1/web/contact`** relies on PocketBase's global CORS middleware, which allows all origins by default (stateless, no cookies). No configuration needed for the contact form to work. For hardening, restrict origins by adding the `--origins` flag to the `serve` command in the Dockerfile `CMD` (e.g. `--origins=https://ozpos.my.id,http://localhost:4321`).
 
 ### 7.3 Attach to the service
 
@@ -291,7 +291,7 @@ Click **Redeploy** on the service. After deployment, the service should start wi
 
 In the Paddle dashboard (**Developer tools → Notifications**):
 
-1. Create a notification destination of type **URL (webhook)** pointing at `https://license.oz-pos.com/api/v1/paddle/webhook`.
+1. Create a notification destination of type **URL (webhook)** pointing at `https://license.ozpos.my.id/api/v1/paddle/webhook`.
 2. Subscribe to the **Subscription** events: `subscription.created`, `subscription.activated`, `subscription.trialing`, `subscription.updated`, `subscription.canceled`, `subscription.paused`, `subscription.resumed`, `subscription.past_due` — plus `transaction.completed` / `transaction.payment_failed` (currently acknowledged and logged; one-time purchases only provision once a lifetime tier ships).
 3. Copy the **endpoint secret key** into the `PADDLE_WEBHOOK_SECRET` secret (Step 8 in §7.1).
 4. **Signature verification:** every request carries a `Paddle-Signature` header (`ts=<unix>;h1=<hex>`). The server verifies HMAC-SHA256 over `ts:rawBody` with the endpoint secret and rejects timestamps older than 5 minutes. Nothing else is trusted.
@@ -302,7 +302,7 @@ In the Paddle dashboard (**Developer tools → Notifications**):
 
 In the Midtrans dashboard (**Settings → Configuration → Webhook Notification URL**):
 
-1. Set the payment notification URL to `https://license.oz-pos.com/api/v1/midtrans/webhook` (or your service's public URL — the same host as the Paddle webhook).
+1. Set the payment notification URL to `https://license.ozpos.my.id/api/v1/midtrans/webhook` (or your service's public URL — the same host as the Paddle webhook).
 2. Enable the **Payment** notification type (`payment.status`/transaction notifications). Midtrans subscription (`subscription.status`) notifications are acknowledged but provisioning is keyed on settled transaction charges — see `midtrans_webhook.go`.
 3. **Signature verification:** every notification carries `signature_key`; the server recomputes `SHA512(order_id + status_code + gross_amount + serverkey)` with the `MIDTRANS_SERVER_KEY` secret and compares constant-time. Nothing else is trusted — an unsigned or mismatched request answers **401** and provisions nothing.
 4. **Idempotency:** Midtrans retries non-2xx responses; the server dedups by `transaction_id` (in-memory) and upserts on `midtrans_sub_id` / `midtrans_order_id`, so replays are no-ops.
@@ -350,7 +350,7 @@ The PocketBase admin UI at `/_/` requires at least one superuser account. Create
 ### 9.2 Create the superuser
 
 ```bash
-/pb/pocketbase superuser upsert admin@oz-pos.com YOUR_STRONG_PASSWORD
+/pb/pocketbase superuser upsert admin@ozpos.my.id YOUR_STRONG_PASSWORD
 ```
 
 > ⚠️ **Use a strong, unique password.** This account has full admin access to all license key data.
@@ -358,7 +358,7 @@ The PocketBase admin UI at `/_/` requires at least one superuser account. Create
 ### 9.3 Verify
 
 1. Navigate to `https://<your-service>.code.run/_/`.
-2. Log in with `admin@oz-pos.com` and your password.
+2. Log in with `admin@ozpos.my.id` and your password.
 3. You should see the PocketBase admin dashboard.
 
 ---
@@ -371,7 +371,7 @@ Northflank provides a free `*.code.run` subdomain with auto-provisioned TLS. For
 
 1. Go to your service → **Networking**.
 2. Under **Custom Domains**, click **Add**.
-3. Enter your domain: `license.oz-pos.com`.
+3. Enter your domain: `license.ozpos.my.id`.
 4. Northflank provides the DNS target (a `code.run` subdomain).
 
 ### 10.2 Configure DNS
@@ -404,7 +404,7 @@ Northflank automatically provisions a Let's Encrypt TLS certificate within a few
 ### 11.2 Test the activation endpoint
 
 ```bash
-curl -X POST https://license.oz-pos.com/api/v1/license/activate \
+curl -X POST https://license.ozpos.my.id/api/v1/license/activate \
   -H "Content-Type: application/json" \
   -d '{
     "key": "OZ-PRO-TEST-ABCD-EFGH-IJKL",
@@ -431,7 +431,7 @@ curl -X POST https://license.oz-pos.com/api/v1/license/activate \
 `/status` is a **POST** endpoint authenticated with `Authorization: Bearer <api_key>` (the credential never appears in URLs, so it can't leak to access logs or Referer headers). Use the `api_key` returned by the activation call in §11.2:
 
 ```bash
-curl -X POST https://license.oz-pos.com/api/v1/license/status \
+curl -X POST https://license.ozpos.my.id/api/v1/license/status \
   -H "Authorization: Bearer <api_key_from_activation>" \
   -H "Content-Type: application/json" \
   -d '{"tenant_id": "test-tenant-001"}'
@@ -464,7 +464,7 @@ Send 3 invalid key attempts. The 4th should return **429 Too Many Requests** wit
 Send a **signed** `subscription.created` event (compute `Paddle-Signature: ts=<now>;h1=<hex HMAC-SHA256 of "ts:body" with the endpoint secret>`):
 
 ```bash
-curl -X POST https://license.oz-pos.com/api/v1/paddle/webhook \
+curl -X POST https://license.ozpos.my.id/api/v1/paddle/webhook \
   -H "Paddle-Signature: ts=$(date +%s);h1=..." \
   -H "Content-Type: application/json" \
   -d '{"event_id":"evt_test_1","event_type":"subscription.created","data":{"id":"sub_test_1","status":"active","customer_id":"cus_test_1","custom_data":{"email":"buyer@test.com"},"items":[{"price":{"id":"<your_price_id>","product_id":"pro_1"},"quantity":1}],"current_billing_period":{"starts_at":"2026-08-16T00:00:00Z","ends_at":"2027-08-16T00:00:00Z"}}}'
@@ -517,7 +517,7 @@ The browser walk in §11.7 step 3 is the happy path; this section reproduces the
 **Step 1 — session token (register-or-login).** The 6-digit code arrives by email; the response is the same whether the account existed or not (no enumeration):
 
 ```bash
-curl -X POST https://license.oz-pos.com/api/v1/web/request-otp \
+curl -X POST https://license.ozpos.my.id/api/v1/web/request-otp \
   -H "Content-Type: application/json" \
   -d '{"email":"buyer@test.com"}'
 ```
@@ -526,7 +526,7 @@ curl -X POST https://license.oz-pos.com/api/v1/web/request-otp \
 
 ```bash
 # 1b. Exchange the emailed code for a session token
-curl -X POST https://license.oz-pos.com/api/v1/web/verify-otp \
+curl -X POST https://license.ozpos.my.id/api/v1/web/verify-otp \
   -H "Content-Type: application/json" \
   -d '{"email":"buyer@test.com","code":"123456"}'
 ```
@@ -536,7 +536,7 @@ curl -X POST https://license.oz-pos.com/api/v1/web/verify-otp \
 **Step 2 — create the Snap charge (the checkout leg):**
 
 ```bash
-curl -X POST https://license.oz-pos.com/api/v1/midtrans/snap \
+curl -X POST https://license.ozpos.my.id/api/v1/midtrans/snap \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token from step 1b>" \
   -d '{"tier_key":"plus","period":"yearly"}'
@@ -558,7 +558,7 @@ curl -X POST https://license.oz-pos.com/api/v1/midtrans/snap \
 **Bundle variant** (only if the bundle entry is in the map, C3.2):
 
 ```bash
-curl -X POST https://license.oz-pos.com/api/v1/midtrans/snap \
+curl -X POST https://license.ozpos.my.id/api/v1/midtrans/snap \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
   -d '{"tier_key":"plus","period":"yearly","bundle":"restaurant_starter"}'
@@ -628,7 +628,7 @@ Alternatively, export manually from the admin UI (`/_/` → **Settings** → **E
 
 - **Northflank Dashboard:** CPU, memory, and request logs are available in the service overview.
 - **PocketBase Logs:** Viewable via the Shell (`less /pb/pb_data/logs.db`) or the admin UI.
-- **Uptime Monitoring:** Add a health check endpoint monitor (e.g., UptimeRobot on `https://license.oz-pos.com/api/health`, which returns `{"status":"ok"}`). The payload also includes per-gate status objects: `smtp` (`configured`/`verified`/`error` — runtime sender-identity probe, re-run at most every 60s so monitors don't hammer the relay), `paddle` (`secret_configured`/`price_tiers_configured`/`price_tiers_mappings`/`error`), `rsa` (`configured`), and `discord` (`configured`). These are status, not liveness — only a DB outage fails the check. **Copy-paste monitor config (including the keyword monitor that alerts when `smtp.verified` flips to false): see [`uptime-monitor.md`](./uptime-monitor.md).**
+- **Uptime Monitoring:** Add a health check endpoint monitor (e.g., UptimeRobot on `https://license.ozpos.my.id/api/health`, which returns `{"status":"ok"}`). The payload also includes per-gate status objects: `smtp` (`configured`/`verified`/`error` — runtime sender-identity probe, re-run at most every 60s so monitors don't hammer the relay), `paddle` (`secret_configured`/`price_tiers_configured`/`price_tiers_mappings`/`error`), `rsa` (`configured`), and `discord` (`configured`). These are status, not liveness — only a DB outage fails the check. **Copy-paste monitor config (including the keyword monitor that alerts when `smtp.verified` flips to false): see [`uptime-monitor.md`](./uptime-monitor.md).**
 - **Midtrans (C3.1):** `/api/health` now exposes a `midtrans` gate object — `server_key_configured` / `price_tiers_configured` / `price_tiers_mappings` / `error` — mirroring the boot-time `verifyMidtransConfig` (a missing or rotated `MIDTRANS_SERVER_KEY` flips `server_key_configured` to false; a dropped/malformed `MIDTRANS_PRICE_TIERS` flips `price_tiers_configured` to false and surfaces the parse error). **Keyword monitor:** alert on `"server_key_configured":false` or `"price_tiers_configured":false` (copy-paste row in [`uptime-monitor.md`](./uptime-monitor.md)). These are status, not liveness — a broken Midtrans config never fails the HTTP check, so the keyword monitor is what catches it. Also still watch the service logs for `Midtrans webhook config verified: 6 amount→tier mapping(s)` after every deploy, and alert on webhook **5xx** (a 500 on a settled charge means provisioning failed and Midtrans is retrying — the payload says which `order_id`).
 
 ### Updating the service

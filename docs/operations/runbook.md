@@ -532,7 +532,7 @@ invisible in GitHub Actions; `deploy.yml` is the preferred, auditable path.
 ## 9. Website Deploy Token (Cloudflare) — lifecycle & rotation
 
 The marketing site (Astro, `website/`) deploys to Cloudflare Workers static assets
-(`oz-pos` worker → `https://oz-pos.adikaradwiatmaja.workers.dev`) via
+(`oz-pos` worker → `https://ozpos.my.id`) via
 `.github/workflows/website.yml` → `npx wrangler deploy`. The deploy authenticates
 with the **`CLOUDFLARE_API_TOKEN`** GitHub Actions repo secret; `CLOUDFLARE_ACCOUNT_ID`
 (the sibling secret) is not a credential — it is the account id shown in the Cloudflare
@@ -587,7 +587,7 @@ curl "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/token
 # 3. Is the LIVE site carrying the latest portal? The 4-card docs hub ships only via a
 #    successful deploy — a 404 here while CI is green means the deploy is silently stale.
 curl -sf -o /dev/null -w '%{http_code}\n' \
-  https://oz-pos.adikaradwiatmaja.workers.dev/docs-portal/intro.html   # want 200
+  https://ozpos.my.id/docs-portal/intro.html   # want 200
 ```
 
 GitHub's secret store exposes no expiry/rotation metadata, so rely on these three

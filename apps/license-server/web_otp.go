@@ -334,15 +334,14 @@ func constantTimeHashEq(a, b string) bool {
 
 // webAllowedOrigins returns the comma-separated OZ_WEB_ALLOWED_ORIGINS
 // allowlist, defaulting to the current workers.dev origin, the future
-// oz-pos.com domain, and the local dev origin. Requests without an
+// ozpos.my.id domain, and the local dev origin. Requests without an
 // Origin header (curl, POS clients, server-to-server) are always allowed
 // — CORS only governs browsers.
 func webAllowedOrigins() []string {
 	v := strings.TrimSpace(os.Getenv("OZ_WEB_ALLOWED_ORIGINS"))
 	if v == "" {
 		return []string{
-			"https://oz-pos.adikaradwiatmaja.workers.dev",
-			"https://oz-pos.com",
+			"https://ozpos.my.id",
 			"http://localhost:4321",
 		}
 	}
@@ -387,7 +386,7 @@ var sendOTPEmail = sendOTPEmailSMTP
 //	OZ_SMTP_PORT     (default 587)
 //	OZ_SMTP_USER     (optional; some relays send unauthenticated)
 //	OZ_SMTP_PASSWORD (optional)
-//	OZ_SMTP_FROM     (default "no-reply@oz-pos.com")
+//	OZ_SMTP_FROM     (default "no-reply@ozpos.my.id")
 //
 // Config is read per call so tests can t.Setenv and ops can fix a relay
 // with a redeploy. Env values are never echoed in responses or logs.
@@ -404,7 +403,7 @@ func sendOTPEmailSMTP(to, code string) error {
 	password := os.Getenv("OZ_SMTP_PASSWORD")
 	from := strings.TrimSpace(os.Getenv("OZ_SMTP_FROM"))
 	if from == "" {
-		from = "no-reply@oz-pos.com"
+		from = "no-reply@ozpos.my.id"
 	}
 
 	msg := buildOtpEmail(from, to, code)
