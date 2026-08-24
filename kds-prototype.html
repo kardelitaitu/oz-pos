@@ -991,6 +991,10 @@
      (the kitchen finished; a waiter team closes them out). Mutually
      exclusive with category filtering — picking a category clears it. */
   let filterMode = 'all';
+  /* Stable columns: every order is born into a column ONCE and never
+     moves sideways — only up as cards above it complete. RUSH → column
+     0 (top-left). Others → the shortest column at birth. */
+  const orderCols = new Map();
   /* Display size: 75%–150%, persisted like colors */
   const ZOOM_KEY = 'kds-proto-zoom';
   let zoom = loadZoom();
@@ -1551,14 +1555,45 @@
           main.appendChild(el);
           cols.push(el);
         }
+        /* Stable columns (no more masonry re-packing):
+           - Every order is born into a column ONCE (orderCols) and never
+             moves sideways — it only slides up as cards above complete.
+             This kills the 'jumping around' feel.
+           - Birth placement: RUSH → column 0 top-left (attention origin);
+             every other order → the SHORTEST column (fewest cards) so the
+             board stays packed without ever re-balancing sideways.
+           - Within a column: RUSH first, then oldest-first (FIFO) — the
+             per-column sort re-derives this, so existing cards never
+             re-order among themselves; a fresh RUSH slots to the top
+             (the one accepted downward push) and a fresh normal order
+             lands at the bottom. */
+        const lists = Array.from({ length: nCols }, () => []);
+        const fresh = [];
         open.forEach(o => {
-          const wrap = document.createElement('div');
-          wrap.innerHTML = cardHTML(o);
-          const card = wrap.firstElementChild;
-          if (!card) return;
-          let shortest = cols[0];
-          cols.forEach(col => { if (col.offsetHeight < shortest.offsetHeight) shortest = col; });
-          shortest.appendChild(card);
+          if (orderCols.has(o.id)) lists[Math.min(orderCols.get(o.id), nCols - 1)].push(o);
+          else fresh.push(o);
+        });
+        fresh.forEach(o => {
+          let ci = 0;
+          if (!o.priority) {
+            let best = 0, bestLen = Infinity;
+            lists.forEach((l, i) => { if (l.length < bestLen) { bestLen = l.length; best = i; } });
+            ci = best;
+          }
+          orderCols.set(o.id, ci);
+          lists[ci].push(o);
+        });
+        lists.forEach(list => list.sort((a, b) => {
+          if (a.priority !== b.priority) return a.priority ? -1 : 1;
+          return a.received - b.received; // oldest first
+        }));
+        lists.forEach((list, ci) => {
+          list.forEach(o => {
+            const wrap = document.createElement('div');
+            wrap.innerHTML = cardHTML(o);
+            const card = wrap.firstElementChild;
+            if (card) cols[ci].appendChild(card);
+          });
         });
       }
       /* restore the scroll position BEFORE any FLIP measurement —
