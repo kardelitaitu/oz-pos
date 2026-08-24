@@ -173,7 +173,7 @@
     --btn-active: #1d4ed8;    /* pressed */
     --btn-state: #3b82f6;     /* persistent .is-active state */
     --btn-state-hover: #ef4444; /* hover while in state */
-    padding: 5px 16px; border-radius: 6px; border: none;
+    padding: 3px 16px; border-radius: 6px; border: none;
     background: var(--btn-bg); color: var(--btn-fg); opacity: 1;
     cursor: pointer; font-size: 13px; font-weight: 600;
     transition: background 0.15s, color 0.15s, transform 0.06s;
@@ -181,8 +181,9 @@
     display: inline-flex; align-items: center; justify-content: center;
     gap: 6px;
     -webkit-tap-highlight-color: transparent;
-    /* fixed height across all variants: icon (32px) and text buttons
-       (5px padding top/bottom + 22px content = 32px) match exactly */
+    /* fixed height across all variants: icon (28px) and text buttons
+       (3px padding top/bottom + 22px content = 28px) match exactly —
+       the tab slider pill is also 28px, so the whole topmenu row aligns */
     min-height: 22px;
   }
   .kds-btn:hover { background: var(--btn-hover); }
@@ -207,12 +208,12 @@
 
   /* --icon: square transparent icon button (back, hamburger, any SVG) */
   .kds-btn--icon {
-    width: 32px; height: 32px; padding: 0;
+    width: 28px; height: 28px; padding: 0;
     background: transparent; color: var(--text); opacity: 0.7;
   }
   .kds-btn--icon:hover { background: rgba(255,255,255,0.08); opacity: 1; }
   .kds-btn--icon:active { background: rgba(255,255,255,0.12); transform: translateY(1px); }
-  .kds-btn--icon svg { width: 18px; height: 18px; transform-box: fill-box; }
+  .kds-btn--icon svg { width: 16px; height: 16px; transform-box: fill-box; }
 
   /* --filter: caret rotation + blue 'all' state */
   .kds-btn--filter { --btn-bg: rgba(255,255,255,0.06); --btn-fg: var(--text); --btn-hover: rgba(255,255,255,0.08); --btn-active: rgba(255,255,255,0.12); }
