@@ -1324,11 +1324,16 @@
     const expanding = card.classList.contains('collapsed'); // currently collapsed → will expand
     /* directional SOTA curves:
        expanding → decelerate (fast start, soft settle, unfolds)
-       collapsing → accelerate (slow start, fast finish, tucks away) */
+       collapsing → accelerate (slow start, fast finish, tucks away)
+       Completed tab = recall surface: the unfold is 200ms (same as the
+       tuck) so the animation never competes with scanning; the open
+       tab keeps the work-surface 340ms unfold. */
     const coll = card.querySelector('.kds-card-collapsible');
     if (coll) {
+      const inCompleted = !!card.closest('.kds-main.completed-view');
+      const unfold = inCompleted ? 0.2 : 0.34;
       coll.style.transition = expanding
-        ? 'grid-template-rows 0.34s cubic-bezier(0.05, 0.7, 0.1, 1), opacity 0.24s ease'
+        ? 'grid-template-rows ' + unfold + 's cubic-bezier(0.05, 0.7, 0.1, 1), opacity 0.2s ease'
         : 'grid-template-rows 0.2s cubic-bezier(0.4, 0, 0.8, 0.15), opacity 0.18s ease';
     }
     if (collapsedOrders.has(id)) collapsedOrders.delete(id); else collapsedOrders.add(id);
