@@ -456,7 +456,7 @@
     background: var(--bg-surface); border-radius: 8px; overflow: hidden;
     border: 1px solid var(--border); min-height: 0; height: fit-content;
     width: 100%; max-width: 100%;
-    transition: border-color 0.2s; color: var(--text);
+    transition: border-color 0.2s, filter 0.18s ease; color: var(--text);
     /* NOTE: no will-change:transform here — promoting every card to its
        own compositor layer permanently disables subpixel (ClearType)
        antialiasing on Windows, making text look thin/blurry. It is only
@@ -730,11 +730,22 @@
     animation: kds-drop-in 0.18s ease-out;
   }
   .kds-modal-backdrop[hidden] { display: none; }
+  /* anchor wrapper: default transparent (flex centering passes through);
+     anchored mode pins it at the order card's centre */
+  .kds-modal-anchor { display: contents; }
+  .kds-modal-anchor.anchored { display: block; position: fixed; z-index: 301; transform: translate(-50%, -50%); }
   .kds-modal {
     width: min(360px, calc(100vw - 48px));
     background: var(--bg-top); border: 1px solid var(--border-strong);
     border-radius: 16px; padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   }
+  /* CPU/GPU-efficient card blur for the anchored confirm: blurs ONE small
+     card layer (single compositor pass, small radius) instead of a
+     full-screen backdrop-filter, which re-samples the whole backing
+     store every frame and is far more expensive. No will-change — the
+     layer promotes only while the class is applied, so text stays
+     ClearType-crisp when idle. */
+  .kds-card.blurred { filter: blur(5px); pointer-events: none; }
   .kds-modal-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
   .kds-modal-msg { font-size: 12px; color: var(--text); opacity: 0.7; line-height: 1.5; margin-bottom: 16px; }
   .kds-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -867,14 +878,19 @@
     <span>Connected</span>
   </div>
 
-  <!-- Confirm modal — styled replacement for window.confirm (P4) -->
+  <!-- Confirm modal — styled replacement for window.confirm (P4).
+       The anchor wrapper lets it sit centered on a specific order card
+       (force-finish) instead of the screen middle; default display:
+       contents keeps the old flex-centered behaviour. -->
   <div class="kds-modal-backdrop" id="confirm-backdrop" hidden>
-    <div class="kds-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
-      <h2 class="kds-modal-title" id="confirm-title"></h2>
-      <p class="kds-modal-msg" id="confirm-msg"></p>
-      <div class="kds-modal-actions">
-        <button class="kds-btn kds-btn--muted" id="confirm-cancel" type="button">Cancel</button>
-        <button class="kds-btn" id="confirm-ok" type="button">Confirm</button>
+    <div class="kds-modal-anchor" id="confirm-anchor">
+      <div class="kds-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
+        <h2 class="kds-modal-title" id="confirm-title"></h2>
+        <p class="kds-modal-msg" id="confirm-msg"></p>
+        <div class="kds-modal-actions">
+          <button class="kds-btn kds-btn--muted" id="confirm-cancel" type="button">Cancel</button>
+          <button class="kds-btn" id="confirm-ok" type="button">Confirm</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1369,7 +1385,7 @@
         statusBtn = `<button class="kds-status-btn pause" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${PAUSE_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Pause</button>`;
       }
       /* Force Finish is always paired with the status action while in progress */
-      statusBtn += `<button class="kds-status-btn finish" onclick="overrideComplete('${o.id}', ${remaining})">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Force Finish</button>`;
+      statusBtn += `<button class="kds-status-btn finish" onclick="overrideComplete('${o.id}', ${remaining}, this)">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Force Finish</button>`;
     }
     const footerActions = statusBtn ? `<div class="kds-footer-actions">${statusBtn}</div>` : '';
 
@@ -1569,24 +1585,45 @@
     prevTab = tab;
   }
 
-  function overrideComplete(orderId, remaining) {
+  function overrideComplete(orderId, remaining, btn) {
+    /* anchor the confirm on the order card + blur it (dedicated-waiter
+       flow: the modal belongs to the card, not the screen) */
+    const anchor = btn ? btn.closest('.kds-card') : null;
     confirmModal(
       'Force Finish this order? ' + remaining + ' item(s) still unchecked.',
       'Force Finish',
       () => complete(orderId),
-      true
+      true,
+      anchor
     );
   }
 
   /* ── confirm modal (P4: styled replacement for window.confirm) ── */
   let _confirmOk = null;
-  function confirmModal(message, okLabel, onOk, danger) {
+  let _confirmAnchor = null;
+  function confirmModal(message, okLabel, onOk, danger, anchorEl) {
     const backdrop = document.getElementById('confirm-backdrop');
+    const anchor = document.getElementById('confirm-anchor');
     document.getElementById('confirm-msg').textContent = message;
     const ok = document.getElementById('confirm-ok');
     ok.textContent = okLabel || 'Confirm';
     ok.classList.toggle('danger', !!danger);
     _confirmOk = onOk;
+    /* anchor positioning + card blur (force-finish mode) */
+    anchor.classList.toggle('anchored', !!anchorEl);
+    if (anchorEl) {
+      const r = anchorEl.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      let x = r.left + r.width / 2, y = r.top + r.height / 2;
+      x = Math.max(200, Math.min(vw - 200, x));
+      y = Math.max(120, Math.min(vh - 120, y));
+      anchor.style.left = x + 'px';
+      anchor.style.top = y + 'px';
+      anchorEl.classList.add('blurred');
+      _confirmAnchor = anchorEl;
+    } else {
+      _confirmAnchor = null;
+    }
     backdrop.hidden = false;
     ok.focus();
   }
@@ -1594,7 +1631,11 @@
     const backdrop = document.getElementById('confirm-backdrop');
     if (backdrop.hidden) return;
     backdrop.hidden = true;
+    /* remove the card blur */
+    if (_confirmAnchor) _confirmAnchor.classList.remove('blurred');
+    _confirmAnchor = null;
     _confirmOk = null;
+    document.getElementById('confirm-anchor').classList.remove('anchored');
   }
   document.getElementById('confirm-ok').addEventListener('click', () => {
     const fn = _confirmOk;
