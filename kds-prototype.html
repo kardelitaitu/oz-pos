@@ -1575,7 +1575,6 @@
   function completedCardHTML(o) {
     const hdrBg = o.dineIn ? colors.dinein : colors.takeaway;
     const hdrText = contrastText(hdrBg);
-    const rushBg = colors.rush, rushText = contrastText(rushBg);
     const at = o.completedAt || o.received;
     const dur = Math.max(0, at - o.received);
     const collapsed = collapsedOrders.has(o.id);
@@ -1608,14 +1607,12 @@
         <div class="kds-card-header-left">
           <div class="kds-card-header-row">
             <span class="order-no">#${o.table || o.display}</span>
-            ${o.priority ? `<span class="kds-rush-badge" style="background:${rushBg};color:${rushText}">RUSH</span>` : ''}
           </div>
         </div>
         <div class="kds-card-header-right">
           <span class="customer">${o.customer}</span>
           <div class="kds-card-header-meta">
             <span class="time">${new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · <span style="color:${slaColor(dur)}">${fmtDurationLong(dur)}</span></span>
-            <span class="status prepared" style="background:${colors.prepared};color:${contrastText(colors.prepared)}">✓ prepared</span>
           </div>
         </div>
         <span class="kds-card-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
