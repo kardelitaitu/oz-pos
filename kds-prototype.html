@@ -111,6 +111,19 @@
     from { opacity: 0; transform: translateY(-6px) scaleY(0.95); }
     to { opacity: 1; transform: translateY(0) scaleY(1); }
   }
+  /* Generic button hide/show — directional SOTA motion:
+     show decelerates (fast start, soft settle — arrives),
+     hide accelerates (slow start, fast finish — leaves). */
+  .kds-anim-showing { animation: kds-in 0.25s cubic-bezier(0.2, 0, 0, 1); }
+  .kds-anim-hiding { animation: kds-out 0.18s cubic-bezier(0.4, 0, 1, 1) forwards; pointer-events: none; }
+  @keyframes kds-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.92); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes kds-out {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(4px) scale(0.92); }
+  }
   .kds-filter-option {
     display: flex; align-items: center; gap: 6px;
     padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px;
@@ -799,7 +812,7 @@
       <button class="kds-btn kds-btn--icon" id="back-btn" title="Back" aria-label="Back">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:18px;height:18px"><path d="M15 19l-7-7 7-7"/></svg>
       </button>
-      <div class="kds-filter">
+      <div class="kds-filter" id="filter-wrap">
         <button class="kds-btn kds-btn--filter all" id="filter-btn" aria-haspopup="listbox" aria-expanded="false"><span>All Categories</span><span class="caret"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 9h12l-6 7z"/></svg></span></button>
         <div class="kds-filter-panel" id="filter-panel" role="listbox" aria-multiselectable="true" style="display:none"></div>
       </div>
@@ -1326,6 +1339,33 @@
     if (coll) setTimeout(() => { coll.style.transition = ''; }, 500);
   }
   /* P4: screen-reader announcements for meaningful order transitions */
+  /* ── Button hide/show animation helper ────────────────
+   Reusable: animateHide(el) plays the leave animation then hides the
+   element; animateShow(el) plays the enter animation. Timer-driven
+   (like the card leave logic) so animationend flakiness can't strand
+   the element; a pending hide is cancelled by a show — rapid tab
+   switching never leaves the control stuck hidden. */
+  function animateHide(el) {
+    if (!el) return;
+    if (el._hideTimer) clearTimeout(el._hideTimer);
+    el.classList.remove('kds-anim-showing');
+    el.classList.add('kds-anim-hiding');
+    el._hideTimer = setTimeout(() => {
+      el.classList.remove('kds-anim-hiding');
+      el.style.display = 'none';
+      el._hideTimer = null;
+    }, 200); // out-anim is 0.18s — a little headroom
+  }
+  function animateShow(el) {
+    if (!el) return;
+    if (el._hideTimer) { clearTimeout(el._hideTimer); el._hideTimer = null; }
+    el.classList.remove('kds-anim-hiding');
+    el.style.display = '';
+    el.classList.remove('kds-anim-showing');
+    void el.offsetWidth; // reflow so the enter animation restarts
+    el.classList.add('kds-anim-showing');
+  }
+
   function announce(msg) {
     const el = document.getElementById('screen-announcer');
     if (el && msg) el.textContent = msg;
@@ -1947,6 +1987,15 @@
     btn.addEventListener('click', () => {
       tab = btn.dataset.tab;
       document.querySelectorAll('.kds-tab').forEach(b => b.classList.toggle('active', b === btn));
+      /* category filter belongs to the Open work surface — hide it on
+         the Completed tab (with the leave animation), restore on Open */
+      const filterWrap = document.getElementById('filter-wrap');
+      if (tab === 'completed') {
+        toggleFilterPanel(false); // close any open dropdown first
+        animateHide(filterWrap);
+      } else {
+        animateShow(filterWrap);
+      }
       render();
       moveTabIndicator();
     });
