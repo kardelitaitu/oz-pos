@@ -130,16 +130,18 @@
   }
   /* Generic button hide/show — directional SOTA motion:
      show decelerates (fast start, soft settle — arrives),
-     hide accelerates (slow start, fast finish — leaves). */
+     hide accelerates (slow start, fast finish — leaves).
+     NO scale on these: they wrap text (the filter button), and scaling
+     text re-rasterizes it in a new layer (font-type flash). */
   .kds-anim-showing { animation: kds-in 0.25s cubic-bezier(0.2, 0, 0, 1); }
   .kds-anim-hiding { animation: kds-out 0.18s cubic-bezier(0.4, 0, 1, 1) forwards; pointer-events: none; }
   @keyframes kds-in {
-    from { opacity: 0; transform: translateY(-4px) scale(0.92); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
   @keyframes kds-out {
-    from { opacity: 1; transform: translateY(0) scale(1); }
-    to   { opacity: 0; transform: translateY(4px) scale(0.92); }
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(4px); }
   }
   .kds-filter-option {
     display: flex; align-items: center; gap: 6px;
@@ -151,7 +153,6 @@
   /* hover bg only on unselected options — an ACTIVE (blue) option keeps
      its colour; hover there is just the gentle pop on the label */
   .kds-filter-option:not(.checked):hover { background: rgba(255,255,255,0.07); }
-  .kds-filter-option:hover > span { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
   .kds-filter-option.checked { background: #3b82f6; color: #fff; opacity: 1; }
   /* view-mode row (All / Prepared) above the category grid */
   .kds-filter-modes { display: flex; gap: 4px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
@@ -186,7 +187,6 @@
        See the .kds-btn helper header for the same rule. */
   }
   .kds-tab:hover { opacity: 0.8; }
-  .kds-tab:hover > span { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
   .kds-tab.active { opacity: 1; color: #fff; }
   .kds-tab.active .kds-tab-count { opacity: 0.8; }
   .kds-tab-count { opacity: 0.6; font-size: 13px; }
@@ -233,9 +233,12 @@
   .kds-btn:active { background: var(--btn-active); transform: translateY(1px); }
   .kds-btn.is-active { background: var(--btn-state); }
   .kds-btn.is-active:hover { background: var(--btn-state-hover); }
-  /* gentle hover pop on any direct text/icon child — reduced amplitude
-     for SF Pro crispness: the old 95→110→97→100 pushes text into sub-
-     pixel rasterization (~14.3px), making it temporarily blurry/soft */
+  /* Hover feedback: the pop is applied ONLY to vector icons (SVGs raster
+     crisply at any scale). TEXT is never transformed — a transform on a
+     text element makes Chrome re-rasterize it in a new compositor layer
+     and the glyphs momentarily render with the default/fallback font
+     (text visibly 'changes font type' mid-animation). Text buttons get
+     their feedback from the background/opacity hover instead. */
   @keyframes kds-btn-pop {
     0% { transform: scale(1); }
     30% { transform: scale(0.97); }
@@ -243,13 +246,12 @@
     80% { transform: scale(0.99); }
     100% { transform: scale(1); }
   }
-  .kds-btn:hover > * { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
+  .kds-btn:hover > svg { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
 
   /* --stack: labels share one grid cell → width = widest label */
   .kds-btn--stack { display: inline-grid; grid-template-areas: 'l'; align-items: center; justify-items: center; }
   .kds-btn--stack > span { grid-area: l; opacity: 0; pointer-events: none; transition: opacity 0.1s; }
   .kds-btn--stack > span.visible { opacity: 1; }
-  .kds-btn--stack:hover > span.visible { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
 
   /* --icon: square transparent icon button (back, hamburger, any SVG).
      Stays 32×32 — bigger tap target; text buttons match the 28px tab
