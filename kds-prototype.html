@@ -13,7 +13,7 @@
      hardware can fall back to round corners (Graphics setting in the
      hamburger). True circles (50%) are exempted below. */
   body.graphics-high * { corner-shape: squircle; }
-  body.graphics-high .kds-panel-close, body.graphics-high .kds-switch, body.graphics-high .kds-switch::after { corner-shape: round; }
+  body.graphics-high .kds-switch, body.graphics-high .kds-switch::after { corner-shape: round; }
 
   /* Touch-screen modern scrollbar: thin, transparent, no visible track */
   ::-webkit-scrollbar { width: 4px; }
@@ -299,18 +299,6 @@
     padding: 14px;
     scrollbar-width: thin;
   }
-  /* floating dismiss button — sits in the top-right corner, overlapping
-     the eyebrow band. The panel's border-radius keeps it contained. */
-  .kds-panel-close {
-    position: absolute; top: 6px; right: 8px; z-index: 10;
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid var(--border);
-    background: var(--bg-surface); color: var(--text); opacity: 0.8;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-  }
-  .kds-panel-close:hover { background: var(--border); opacity: 1; }
-  .kds-panel-close svg { width: 13px; height: 13px; }
   .kds-panel-section { margin-bottom: 14px; }
   .kds-panel-section:last-child { margin-bottom: 0; }
   .kds-panel-section h3 { font-size: 10px; font-weight: 600; color: var(--text); opacity: 0.5; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -842,9 +830,6 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="kds-hamburger-panel" id="hamburger-panel" role="dialog" aria-label="Settings" aria-hidden="true" style="display:none;">
-        <button class="kds-panel-close" id="panel-close" title="Close" aria-label="Close settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
         <div class="kds-panel-body">
           <!-- DISPLAY: theme + scale -->
           <div class="kds-panel-section">
@@ -2211,9 +2196,11 @@
     panel.setAttribute('aria-hidden', String(!showing));
     btn.setAttribute('aria-expanded', showing);
     if (showing) {
-      /* focus trap: keep Tab cycling inside the panel */
+      /* focus trap: keep Tab cycling inside the panel — focus the first
+         control (no close button; outside-click/Escape close it) */
       panel._lastFocus = document.activeElement;
-      panel.querySelector('.kds-panel-close').focus();
+      const first = panel.querySelector('button, input, [tabindex]:not([tabindex="-1"])');
+      if (first) first.focus();
       /* indicator offsets are only valid once the panel is visible */
       moveThemeIndicator();
     } else if (panel._lastFocus) {
@@ -2256,7 +2243,6 @@
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
   });
-  document.getElementById('panel-close').addEventListener('click', () => toggleMenu(false));
 
   /* ── page zoom (global, like Ctrl+/Ctrl-) ─────── */
   const PAGEZOOM_KEY = 'kds-proto-pagezoom';
