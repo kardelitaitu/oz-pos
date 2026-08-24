@@ -1335,8 +1335,11 @@
       statusBtn = `<button class="kds-status-btn complete" style="background:${btnBg};color:${btnText}" onclick="complete('${o.id}')">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Mark Finish</button>`;
     } else {
       /* In-progress orders show the status action (Pause/Resume) plus a
-         Finish button — a kitchen that's mid-way can push the order out
-         even with unchecked items. Finish confirms with the count. */
+         Force Finish button — for restaurants WITHOUT a dedicated waiter:
+         the kitchen can push the order out even with unchecked items.
+         Force Finish always confirms with the count.
+         Distinct from 'Mark Finish' above, which only appears when every
+         item is done (the order is prepared). */
       if (o.status === 'paused') {
         btnBg = colors.resume; btnText = contrastText(btnBg);
         statusBtn = `<button class="kds-status-btn resume" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Resume</button>`;
@@ -1344,8 +1347,8 @@
         btnBg = colors.pause; btnText = contrastText(btnBg);
         statusBtn = `<button class="kds-status-btn pause" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${PAUSE_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Pause</button>`;
       }
-      /* Finish is always paired with the status action while in progress */
-      statusBtn += `<button class="kds-status-btn finish" onclick="overrideComplete('${o.id}', ${remaining})">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Finish</button>`;
+      /* Force Finish is always paired with the status action while in progress */
+      statusBtn += `<button class="kds-status-btn finish" onclick="overrideComplete('${o.id}', ${remaining})">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Force Finish</button>`;
     }
     const footerActions = statusBtn ? `<div class="kds-footer-actions">${statusBtn}</div>` : '';
 
@@ -1537,8 +1540,8 @@
 
   function overrideComplete(orderId, remaining) {
     confirmModal(
-      'Finish this order? ' + remaining + ' item(s) still unchecked.',
-      'Finish',
+      'Force Finish this order? ' + remaining + ' item(s) still unchecked.',
+      'Force Finish',
       () => complete(orderId),
       true
     );
