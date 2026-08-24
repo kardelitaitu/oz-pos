@@ -875,6 +875,15 @@
                   <button class="kds-btn kds-btn--muted kds-zoom-btn" id="cols-in" aria-label="More columns">+</button>
                 </div>
               </div>
+              <div class="kds-setting-row">
+                <span class="kds-setting-label">Orientation</span>
+                <button class="kds-theme-toggle" id="orient-toggle" title="Screen orientation" aria-label="Screen orientation">
+                  <span class="kds-theme-indicator" id="orient-indicator"></span>
+                  <span class="kds-theme-option on" data-orient="auto">Auto</span>
+                  <span class="kds-theme-option" data-orient="landscape">Landscape</span>
+                  <span class="kds-theme-option" data-orient="portrait">Portrait</span>
+                </button>
+              </div>
             </div>
           </div>
           <!-- BEHAVIOUR: kitchen toggles -->
@@ -2414,6 +2423,61 @@
     moveGfxIndicator();
   });
   moveGfxIndicator();
+
+  /* ── orientation (Auto / Landscape / Portrait) ────── */
+  const ORIENT_KEY = 'kds-proto-orientation';
+  let orientMode = 'auto';
+  try { const o = localStorage.getItem(ORIENT_KEY); if (o === 'landscape' || o === 'portrait') orientMode = o; } catch {}
+  function moveOrientIndicator() {
+    const toggle = document.getElementById('orient-toggle');
+    const on = toggle ? toggle.querySelector('.kds-theme-option.on') : null;
+    const ind = document.getElementById('orient-indicator');
+    if (!on || !ind) return;
+    ind.style.left = on.offsetLeft + 'px';
+    ind.style.width = on.offsetWidth + 'px';
+    ind.animate([
+      { transform: 'scale(1, 1)' },
+      { transform: 'scale(0.82, 0.85)', offset: 0.45 },
+      { transform: 'scale(1.08, 1.18)', offset: 0.85 },
+      { transform: 'scale(1, 1)' },
+    ], { duration: 340, easing: 'ease-in-out' });
+  }
+  async function applyOrientation() {
+    const s = screen.orientation;
+    if (!s || !s.lock) return; // unsupported webview — pill still persists
+    try {
+      if (orientMode === 'auto') {
+        await s.unlock();
+      } else {
+        try {
+          await s.lock(orientMode);
+        } catch (e) {
+          /* lock needs fullscreen or an installed PWA — this click IS a
+             user gesture, so request fullscreen first, then lock */
+          if (document.documentElement.requestFullscreen) {
+            await document.documentElement.requestFullscreen();
+            await s.lock(orientMode);
+          } else throw e;
+        }
+      }
+    } catch (err) {
+      console.warn('Orientation lock unavailable:', err);
+    }
+  }
+  function syncOrientOptions() {
+    document.querySelectorAll('#orient-toggle .kds-theme-option').forEach(o =>
+      o.classList.toggle('on', o.dataset.orient === orientMode));
+  }
+  syncOrientOptions();
+  document.getElementById('orient-toggle').addEventListener('click', () => {
+    const order = ['auto', 'landscape', 'portrait'];
+    orientMode = order[(order.indexOf(orientMode) + 1) % order.length];
+    try { localStorage.setItem(ORIENT_KEY, orientMode); } catch {}
+    syncOrientOptions();
+    moveOrientIndicator();
+    applyOrientation();
+  });
+  moveOrientIndicator();
 
   /* ── live clock in footer ───────────────────────── */
   function tick() {
