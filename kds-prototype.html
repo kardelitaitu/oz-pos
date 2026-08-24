@@ -284,6 +284,14 @@
   .kds-panel-section { margin-bottom: 14px; }
   .kds-panel-section:last-child { margin-bottom: 0; }
   .kds-panel-section h3 { font-size: 10px; font-weight: 600; color: var(--text); opacity: 0.5; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+  /* section head row: eyebrow + theme tag (which config is being edited) */
+  .kds-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .kds-section-head h3 { margin-bottom: 0; }
+  .kds-theme-tag {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text); opacity: 0.45;
+    padding: 2px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface);
+  }
   /* setting card: one boxed group; rows inside are separated by hairline
      dividers. ONE architecture for every group — Display, Behaviour,
      Card Colours all use it. */
@@ -783,9 +791,12 @@
               </div>
             </div>
           </div>
-          <!-- CARD COLOURS: accordion groups + scoped reset -->
+          <!-- CARD COLOURS: per-theme config, accordion groups + scoped reset -->
           <div class="kds-panel-section">
-            <h3>Card Colours</h3>
+            <div class="kds-section-head">
+              <h3>Card Colours</h3>
+              <span class="kds-theme-tag" id="theme-tag">dark</span>
+            </div>
             <div class="kds-setting-card">
               <div id="color-panel"></div>
               <button class="kds-reset-btn" id="reset-colors">
@@ -839,8 +850,46 @@
     rush: '#ef4444', processing: '#f59e0b', prepared: '#22c55e',
     pause: '#f59e0b', resume: '#3b82f6', complete: '#4ade80',
   };
-  const COLORS_KEY = 'kds-proto-colors-v2';
-  let colors = loadColors();
+  /* Theme choice is persisted so colour experiments survive a reload —
+     with per-theme colour configs, the theme you're tuning has to stick. */
+  const THEME_KEY = 'kds-proto-theme';
+  let theme = 'dark';
+  try { if (localStorage.getItem(THEME_KEY) === 'light') theme = 'light'; } catch {}
+  if (theme === 'light') {
+    document.getElementById('screen').classList.add('light');
+    document.querySelectorAll('.kds-theme-option').forEach(o =>
+      o.classList.toggle('on', o.dataset.theme === 'light'));
+  }
+
+  /* Per-theme colour configs — one set for dark, one for light, so the
+     kitchen tunes colours against each theme independently. The ACTIVE
+     config is the current theme's. Prototype-only persistence (per-user
+     storage comes with the real backend). */
+  const COLORS_KEY = 'kds-proto-colors-v2'; // legacy flat config — migrated once
+  const THEME_COLORS_KEY = 'kds-proto-colors-v3';
+  function loadColorConfigs() {
+    let cfg = { dark: { ...DEFAULT_COLORS }, light: { ...DEFAULT_COLORS } };
+    try {
+      const raw = localStorage.getItem(THEME_COLORS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.dark) cfg.dark = { ...cfg.dark, ...parsed.dark };
+        if (parsed.light) cfg.light = { ...cfg.light, ...parsed.light };
+        return cfg;
+      }
+      /* migrate the legacy flat config into BOTH themes once */
+      const legacy = localStorage.getItem(COLORS_KEY);
+      if (legacy) {
+        const old = JSON.parse(legacy);
+        cfg = { dark: { ...DEFAULT_COLORS, ...old }, light: { ...DEFAULT_COLORS, ...old } };
+      }
+    } catch {}
+    return cfg;
+  }
+  function saveColorConfigs() { try { localStorage.setItem(THEME_COLORS_KEY, JSON.stringify(colorConfigs)); } catch {} }
+  function currentTheme() { return document.getElementById('screen').classList.contains('light') ? 'light' : 'dark'; }
+  let colorConfigs = loadColorConfigs();
+  let colors = colorConfigs[currentTheme()];
   let tab = 'open';
   let orders = initialOrders();
   /* Category filter: null = All, otherwise a Set of course names to show */
@@ -853,12 +902,6 @@
     return 100;
   }
   function saveZoom() { try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch {} }
-
-  function loadColors() {
-    try { const raw = localStorage.getItem(COLORS_KEY); if (raw) return { ...DEFAULT_COLORS, ...JSON.parse(raw) }; } catch {}
-    return { ...DEFAULT_COLORS };
-  }
-  function saveColors() { try { localStorage.setItem(COLORS_KEY, JSON.stringify(colors)); } catch {} }
 
   /* ── Mock data: 12 active orders ───────────────────
      Deterministic generator: mixes statuses (new/processing/paused),
@@ -1451,6 +1494,9 @@
     root.querySelectorAll('.kds-native').forEach(native => {
       native.addEventListener('input', (e) => pickColor(e.target.dataset.key, e.target.value));
     });
+    /* sync hex/native inputs to the active config — buildColorPanel can
+       run on a theme switch, where every input is created fresh */
+    COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
   }
   function buildSwatches() {
     COLOR_GROUPS.forEach(g => g.keys.forEach(k => {
@@ -1469,7 +1515,8 @@
   }
   function pickColor(key, value) {
     colors = { ...colors, [key]: value };
-    saveColors();
+    colorConfigs[currentTheme()] = colors; // write back to THIS theme's slot
+    saveColorConfigs();
     syncColorRow(key);
     buildSwatches();
     render();
@@ -1598,12 +1645,14 @@
   document.getElementById('toggle-anim').addEventListener('click', () => { kitchen.anim = !kitchen.anim; saveKitchen(); applyKitchen(); });
   applyKitchen();
 
-  /* scoped reset — colours only, with a confirm since it is the one
-     irreversible-ish action in the panel */
+  /* scoped reset — colours only, for the CURRENT theme, with a confirm
+     since it is the one irreversible-ish action in the panel */
   document.getElementById('reset-colors').addEventListener('click', () => {
-    if (!window.confirm('Reset all card colours to the defaults?')) return;
+    const th = currentTheme();
+    if (!window.confirm('Reset ' + th + ' theme card colours to the defaults?')) return;
     colors = { ...DEFAULT_COLORS };
-    saveColors();
+    colorConfigs[th] = colors;
+    saveColorConfigs();
     COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
     buildSwatches();
     render();
@@ -1634,13 +1683,25 @@
       { transform: 'scale(1, 1)' },
     ], { duration: 340, easing: 'ease-in-out' });
   }
+  function updateThemeTag() {
+    const tag = document.getElementById('theme-tag');
+    if (tag) tag.textContent = currentTheme();
+  }
   document.getElementById('theme-toggle').addEventListener('click', () => {
     const isLight = document.getElementById('screen').classList.toggle('light');
+    try { localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark'); } catch {}
     document.querySelectorAll('.kds-theme-option').forEach(o =>
       o.classList.toggle('on', o.dataset.theme === (isLight ? 'light' : 'dark')));
     moveThemeIndicator();
+    /* per-theme colours: swap to the other config, refresh panel + board */
+    colors = colorConfigs[currentTheme()];
+    updateThemeTag();
+    buildColorPanel();
+    buildSwatches();
+    render();
   });
   moveThemeIndicator();
+  updateThemeTag();
 
   /* ── live clock in footer ───────────────────────── */
   function tick() {
@@ -1669,7 +1730,6 @@
   setInterval(tickCardTimers, 1000);
   buildColorPanel();
   buildSwatches();
-  COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
   render();
   /* measure the tab pill AFTER the first render: the count badge starts
      as '0' in the static HTML, so measuring earlier would lock the blue
