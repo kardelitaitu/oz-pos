@@ -1164,14 +1164,6 @@
     if (r === 0) return m + 'm';
     return m + 'm ' + r + 's';
   }
-  /* SLA tint for the completed duration — same thresholds as the open
-     board (spec §3.4): <5m fast/green, 5–10m ok/amber, >10m slow/red */
-  function slaColor(ms) {
-    const m = ms / 60000;
-    if (m < 5) return '#22c55e';
-    if (m < 10) return '#f59e0b';
-    return '#ef4444';
-  }
   /* first emoji of a course name for the compact summary (🥗 Appetizers → 🥗) */
   function courseEmoji(name) {
     const m = name.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu);
@@ -1603,7 +1595,7 @@
         <div class="kds-card-header-right">
           <span class="customer">${o.customer}</span>
           <div class="kds-card-header-meta">
-            <span class="time">${new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · <span style="color:${slaColor(dur)}">in ${fmtDuration(dur)}</span></span>
+            <span class="time">${new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · in ${fmtDuration(dur)}</span>
           </div>
         </div>
         <span class="kds-card-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
