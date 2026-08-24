@@ -89,11 +89,10 @@
     gap: 12px;
   }
   .kds-topmenu-left { display: flex; align-items: center; gap: 10px; color: var(--text); justify-self: start; }
-  .kds-topmenu-left .logo { font-size: 20px; }
   .kds-filter { position: relative; display: flex; align-items: center; }
   .kds-filter-panel {
     position: absolute; top: calc(100% + 6px); left: 0; min-width: 180px;
-    background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 10px;
+    background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 12px;
     padding: 6px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     animation: kds-drop-in 0.18s ease-out;
     transform-origin: top center;
@@ -104,29 +103,29 @@
   }
   .kds-filter-option {
     display: flex; align-items: center; gap: 6px;
-    padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px;
     color: var(--text); opacity: 0.85; transition: all 0.1s;
     white-space: nowrap;
     /* no icon, no count — just the category name */
   }
   .kds-filter-option:hover { background: rgba(255,255,255,0.07); }
   .kds-filter-option.checked { background: #3b82f6; color: #fff; opacity: 1; }
-  .kds-filter-option.all { width: fit-content; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 4px; padding-bottom: 8px; border-radius: 6px 6px 0 0; }
+  .kds-filter-option.all { width: fit-content; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 4px; padding-bottom: 8px; border-radius: 8px 8px 0 0; }
   /* Up to 3 columns; each button is only as wide as its label (max-content) */
   .kds-filter-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 3px; justify-content: start; }
-  .kds-tabs { position: relative; display: flex; gap: 4px; background: rgba(255,255,255,0.06); border-radius: 7px; padding: 2px; justify-self: center; }
+  .kds-tabs { position: relative; display: flex; gap: 4px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 2px; justify-self: center; }
   /* light theme: white track is invisible on the white topmenu → darken */
   .kds-screen.light .kds-tabs { background: rgba(0,0,0,0.1); }
   .kds-tab-indicator {
     position: absolute; top: 2px; left: 2px; bottom: 2px;
-    background: #3b82f6; border-radius: 5px;
+    background: #3b82f6; border-radius: 8px;
     transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
     pointer-events: none;
     transform-origin: center;
   }
   .kds-tab {
     position: relative; z-index: 1;
-    padding: 5px 16px; border-radius: 6px; border: none;
+    padding: 5px 16px; border-radius: 8px; border: none;
     background: transparent; color: var(--text); opacity: 0.5; cursor: pointer; font-size: 13px;
     font-weight: 600; /* constant weight → no text reflow on active */
     line-height: 18px; /* fixed line-height — text (13px) and count (12px)
@@ -173,7 +172,7 @@
     --btn-active: #1d4ed8;    /* pressed */
     --btn-state: #3b82f6;     /* persistent .is-active state */
     --btn-state-hover: #ef4444; /* hover while in state */
-    padding: 3px 16px; border-radius: 6px; border: none;
+    padding: 3px 16px; border-radius: 8px; border: none;
     background: var(--btn-bg); color: var(--btn-fg); opacity: 1;
     cursor: pointer; font-size: 13px; font-weight: 600;
     transition: background 0.15s, color 0.15s, transform 0.06s;
@@ -314,6 +313,13 @@
   .kds-panel-body button:focus-visible {
     outline: 2px solid #3b82f6; outline-offset: 1px;
   }
+  /* P4: visible keyboard focus across the whole screen (tabs, item
+     rows, category headers, status buttons, filter options, inputs) */
+  .kds-screen button:focus-visible,
+  .kds-screen [role="option"]:focus-visible,
+  .kds-screen input:focus-visible {
+    outline: 2px solid #3b82f6; outline-offset: 1px;
+  }
 
   /* Inline colour swatches (in the hamburger panel) —
      accordion groups: head toggles, body collapses. One open at a time. */
@@ -432,9 +438,9 @@
   .kds-main.slide-right { animation: kds-slide-in-right 0.25s ease-out; }
   .kds-main.slide-left { animation: kds-slide-in-left 0.25s ease-out; }
   .kds-empty {
-    /* absolutely centered in the middle of the main area (both axes).
-       Fills the whole main box: flex:1 grows on the main axis,
-       align-self:stretch fills the cross axis in row AND column layouts. */
+    /* centered in the middle of the main area (both axes): flex:1 grows
+       on the main axis, align-self:stretch fills the cross axis in row
+       AND column layouts */
     display: flex; align-items: center; justify-content: center;
     flex: 1; align-self: stretch;
     color: var(--text); opacity: 0.35; font-size: 15px;
@@ -482,6 +488,8 @@
      explicitly turned them on in the hamburger. */
   body.no-anim .kds-card-spawn, body.no-anim .kds-card.leaving { animation: none; }
   body.no-anim .kds-moving { transition: none; }
+  /* P1: tab slide animation also gated by the in-app toggle */
+  body.no-anim .kds-main.slide-right, body.no-anim .kds-main.slide-left { animation: none; }
 
   .kds-card-header {
     flex: 0 0 auto; display: flex; align-items: center; gap: 9px;
@@ -510,7 +518,10 @@
   .kds-card-chevron svg { width: 12px; height: 12px; }
   .kds-card-header .order-no { font-weight: 700; }
   .kds-card-header .customer { font-weight: 600; }
-  .kds-card-header .time { opacity: 0.6; font-size: 12px; font-weight: 400; }
+  .kds-card-header .time { opacity: 0.6; font-size: 11px; font-weight: 400; white-space: nowrap; }
+  /* meta row: received HH:MM · live elapsed, then the fixed-height status
+     slot — both vertically centered on one line (P2: spec HH:MM restored) */
+  .kds-card-header-meta { display: flex; align-items: center; gap: 8px; min-height: 22px; }
   .kds-card-header .status {
     opacity: 0.55; font-size: 11px; font-weight: 400; font-style: italic;
     /* fixed height for ALL states: the blank placeholder, the text-only
@@ -537,15 +548,10 @@
   }
   @keyframes kds-blink { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.2; } }
   .kds-service-icon { width: 22px; height: 22px; flex-shrink: 0; }
-  .kds-order-id {
-    font-size: 9px; opacity: 0.35; font-family: ui-monospace, monospace;
-    letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    max-width: 110px;
-  }
   .kds-rush-badge {
     /* color set inline via contrastText(rush) */
-    font-size: 9px; font-weight: 700; padding: 2px 6px;
-    border-radius: 3px; letter-spacing: 0.5px;
+    font-size: 10px; font-weight: 700; padding: 2px 6px;
+    border-radius: 4px; letter-spacing: 0.5px;
   }
 
   .kds-card-main { flex: 1 1 auto; min-height: 0; padding: 0; position: relative; }
@@ -609,7 +615,7 @@
   .kds-item-row {
     display: flex; flex-direction: column;  /* allows the note to live inside the button */
     width: 100%; padding: 4px 7px; border: none; background: transparent;
-    color: var(--text); opacity: 0.85; cursor: pointer; font-size: 13px; border-radius: 5px;
+    color: var(--text); opacity: 0.85; cursor: pointer; font-size: 13px; border-radius: 8px;
     transition: background 0.1s; text-align: left;
     /* fixed row height: identical whether checked or not (the done-time
        text appears/disappears without changing the row size) */
@@ -632,7 +638,7 @@
   .kds-item-done-time { opacity: 0.45; font-size: 10px; flex-shrink: 0; }
   .kds-item-note {
     opacity: 0.5; font-style: italic; font-size: 11px;
-    padding: 0 0 2px 22px; overflow: hidden; text-align: left;
+    padding: 0 0 2px 7px; overflow: hidden; text-align: left;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   }
   .kds-order-notes {
@@ -642,25 +648,29 @@
 
   .kds-card-footer { flex: 0 0 auto; padding: 0 10px 7px; display: flex; flex-direction: column; gap: 6px; }
   .kds-status-btn {
-    width: 100%; padding: 7px 0; border-radius: 7px; border: none;
+    width: 100%; padding: 7px 0; border-radius: 8px; border: none;
     font-size: 12px; font-weight: 600; line-height: 1; cursor: pointer; transition: all 0.15s;
     display: flex; align-items: center; justify-content: center; gap: 7px;
     /* background + color set inline via colors.* + contrastText; hover shifts opacity */
   }
   .kds-status-btn svg { display: block; }
   .kds-status-btn:hover { opacity: 0.85; }
-  .kds-status-btn.blocked { background: rgba(255,255,255,0.08); opacity: 0.45; cursor: not-allowed; }
+  .kds-status-btn.force {
+    background: transparent; border: 1px solid var(--border-strong);
+    color: var(--text); opacity: 0.55; margin-top: 4px; font-size: 11px;
+  }
+  .kds-status-btn.force:hover { opacity: 1; background: var(--border); }
 
   /* ── Completed tab ──────────────────────────────── */
   .kds-completed-card {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px; background: var(--bg-surface); border-radius: 8px;
-    border: 1px solid #2a2a35; font-size: 12px; color: var(--text);
+    padding: 10px 14px; background: var(--bg-surface); border-radius: 12px;
+    border: 1px solid var(--border-strong); font-size: 12px; color: var(--text);
   }
   .kds-completed-left { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
   .kds-completed-time { opacity: 0.5; }
   .kds-reopen-btn {
-    padding: 4px 12px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.15);
+    padding: 4px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
     background: transparent; color: var(--text); opacity: 0.7; cursor: pointer; font-size: 11px;
     transition: all 0.15s; flex-shrink: 0;
   }
@@ -699,6 +709,36 @@
     --btn-active: rgba(0,0,0,0.12);
     --btn-state: rgba(0,0,0,0.1);
     --btn-state-hover: rgba(0,0,0,0.14);
+  }
+  /* light theme: hover overlays that were dark-only white (P1) */
+  .kds-screen.light .kds-btn--icon:hover { background: rgba(0,0,0,0.08); opacity: 1; }
+  .kds-screen.light .kds-btn--icon:active { background: rgba(0,0,0,0.12); }
+  .kds-screen.light .kds-filter-option:hover { background: rgba(0,0,0,0.07); }
+  .kds-screen.light .kds-reopen-btn:hover { background: rgba(0,0,0,0.08); opacity: 1; }
+
+  /* ── Confirm modal (P4: styled replacement for window.confirm) ── */
+  .kds-modal-backdrop {
+    position: fixed; inset: 0; z-index: 300;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.55);
+    animation: kds-drop-in 0.18s ease-out;
+  }
+  .kds-modal-backdrop[hidden] { display: none; }
+  .kds-modal {
+    width: min(360px, calc(100vw - 48px));
+    background: var(--bg-top); border: 1px solid var(--border-strong);
+    border-radius: 16px; padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .kds-modal-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .kds-modal-msg { font-size: 12px; color: var(--text); opacity: 0.7; line-height: 1.5; margin-bottom: 16px; }
+  .kds-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .kds-modal-actions .kds-btn { min-height: 28px; }
+  .kds-modal-actions .kds-btn.danger { --btn-bg: #ef4444; --btn-hover: #dc2626; --btn-active: #b91c1c; }
+
+  /* Visually-hidden live region (P4: aria-live) */
+  .kds-visually-hidden {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
   }
 </style>
 </head>
@@ -820,6 +860,21 @@
     <span>Last synced: 2s ago</span><span class="sep">|</span>
     <span>Connected</span>
   </div>
+
+  <!-- Confirm modal — styled replacement for window.confirm (P4) -->
+  <div class="kds-modal-backdrop" id="confirm-backdrop" hidden>
+    <div class="kds-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
+      <h2 class="kds-modal-title" id="confirm-title"></h2>
+      <p class="kds-modal-msg" id="confirm-msg"></p>
+      <div class="kds-modal-actions">
+        <button class="kds-btn kds-btn--muted" id="confirm-cancel" type="button">Cancel</button>
+        <button class="kds-btn" id="confirm-ok" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visually-hidden live region: announces order state to screen readers -->
+  <div class="kds-visually-hidden" id="screen-announcer" aria-live="polite"></div>
 </div>
 
 <script>
@@ -1098,7 +1153,14 @@
        use the CSS fallback again */
     if (coll) setTimeout(() => { coll.style.transition = ''; }, 500);
   }
+  /* P4: screen-reader announcements for meaningful order transitions */
+  function announce(msg) {
+    const el = document.getElementById('screen-announcer');
+    if (el && msg) el.textContent = msg;
+  }
   function complete(orderId) {
+    const order = orders.find(o => o.id === orderId);
+    if (order) announce('Order #' + (order.table || order.display) + ' completed.');
     const card = document.querySelector(`.kds-card[data-id="${orderId}"]`);
     if (card && kitchen.anim !== false) {
       /* animate the card out IN PLACE first. Two guards:
@@ -1126,6 +1188,8 @@
     }
   }
   function reopen(orderId) {
+    const order = orders.find(o => o.id === orderId);
+    if (order) announce('Order #' + (order.table || order.display) + ' reopened.');
     orders = orders.map(o => o.id === orderId ? { ...o, status: 'paused' } : o);
     render();
   }
@@ -1155,11 +1219,11 @@
     const cats = allCategories();
     const allChecked = !filterCats || filterCats.size === 0;
     const rows = cats.map(c => `
-      <div class="kds-filter-option${filterCats && filterCats.has(c) ? ' checked' : ''}" data-cat="${c}" role="option" aria-selected="${filterCats && filterCats.has(c)}">
+      <div class="kds-filter-option${filterCats && filterCats.has(c) ? ' checked' : ''}" data-cat="${c}" role="option" tabindex="-1" aria-selected="${filterCats && filterCats.has(c)}">
         <span>${plainName(c)}</span>
       </div>`).join('');
     panel.innerHTML = `
-      <div class="kds-filter-option all${allChecked ? ' checked' : ''}" data-cat="__all__" role="option" aria-selected="${allChecked}">
+      <div class="kds-filter-option all${allChecked ? ' checked' : ''}" data-cat="__all__" role="option" tabindex="-1" aria-selected="${allChecked}">
         <span>All Categories</span>
       </div>
       <div class="kds-filter-grid">${rows}</div>`;
@@ -1217,9 +1281,45 @@
   });
   document.addEventListener('click', () => toggleFilterPanel(false));
 
+  /* P4: keyboard navigation for the category listbox —
+     ArrowDown/Up move roving focus among options, Enter/Space select,
+     Home/End jump, Escape closes and returns to the trigger. */
+  function filterOptions() { return Array.from(document.querySelectorAll('#filter-panel .kds-filter-option')); }
+  function filterMoveFocus(dir) {
+    const opts = filterOptions();
+    if (!opts.length) return;
+    let idx = opts.indexOf(document.activeElement);
+    /* no option focused yet: ArrowDown starts at the FIRST option,
+       ArrowUp at the LAST (standard listbox behaviour) */
+    if (idx === -1) idx = dir > 0 ? -1 : 0;
+    idx = (idx + dir + opts.length) % opts.length;
+    opts[idx].focus();
+  }
+  document.getElementById('filter-btn').addEventListener('keydown', (e) => {
+    const open = document.getElementById('filter-panel').style.display === 'block';
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!open) toggleFilterPanel(true);
+      filterMoveFocus(e.key === 'ArrowDown' ? 1 : -1);
+      e.preventDefault();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      if (!open) { e.preventDefault(); toggleFilterPanel(); }
+    }
+  });
+  document.getElementById('filter-panel').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { filterMoveFocus(e.key === 'ArrowDown' ? 1 : -1); e.preventDefault(); }
+    else if (e.key === 'Home') { const o = filterOptions(); if (o.length) { o[0].focus(); e.preventDefault(); } }
+    else if (e.key === 'End') { const o = filterOptions(); if (o.length) { o[o.length - 1].focus(); e.preventDefault(); } }
+    else if (e.key === 'Enter' || e.key === ' ') {
+      const a = document.activeElement;
+      if (a && a.classList && a.classList.contains('kds-filter-option')) { e.preventDefault(); a.click(); }
+    }
+    else if (e.key === 'Escape') { toggleFilterPanel(false); document.getElementById('filter-btn').focus(); }
+  });
+
   function cardHTML(o) {
     const vis = visibleCats(o);
     const allDone = vis.every(c => c.items.every(i => i.done));
+    const doneCount = vis.reduce((s, c) => s + c.items.filter(i => i.done).length, 0);
     const remaining = vis.reduce((s, c) => s + c.items.filter(i => !i.done).length, 0);
     const hdrBg = o.dineIn ? colors.dinein : colors.takeaway;
     const hdrText = contrastText(hdrBg);
@@ -1238,7 +1338,14 @@
       btnBg = colors.pause; btnText = contrastText(btnBg);
       statusBtn = `<button class="kds-status-btn pause" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${PAUSE_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Pause</button>`;
     }
-    // 'new' and not all done → no button at all
+    // 'new' and not all done → no primary button at all
+    /* Force-finish escape hatch: once the kitchen has made progress on an
+       order (≥1 item done) but items remain unchecked, offer a muted
+       secondary 'Force Finish' — e.g. a guest cancels the rest. Always
+       confirms with the count of unchecked items. */
+    if (!allDone && doneCount > 0) {
+      statusBtn += `<button class="kds-status-btn force" onclick="overrideComplete('${o.id}', ${remaining})">Force Finish</button>`;
+    }
 
     return `
     <div class="kds-card${collapsedOrders.has(o.id) ? ' collapsed' : ''}" data-id="${o.id}" data-received="${o.received}">
@@ -1249,17 +1356,19 @@
             <span class="order-no">#${o.table || o.display}</span>
             ${o.priority ? `<span class="kds-rush-badge" style="background:${rushBg};color:${rushText}">RUSH</span>` : ''}
           </div>
-          <span class="kds-order-id">${o.id}</span>
         </div>
         <div class="kds-card-header-right">
-          <span class="customer"><span class="time">(${fmtDuration(Date.now() - o.received)})</span> ${o.customer}</span>
-          ${allDone
-            ? `<span class="status prepared" style="background:${colors.prepared};color:${contrastText(colors.prepared)}">✓ prepared</span>`
-            : o.status === 'paused'
-              ? `<span class="status paused">⏸ paused</span>`
-              : o.status === 'processing'
-                ? `<span class="status processing" style="background:${colors.processing};color:${contrastText(colors.processing)}">processing</span>`
-                : `<span class="status" aria-hidden="true">&nbsp;</span>`}
+          <span class="customer">${o.customer}</span>
+          <div class="kds-card-header-meta">
+            <span class="time">${new Date(o.received).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · ${fmtDuration(Date.now() - o.received)}</span>
+            ${allDone
+              ? `<span class="status prepared" style="background:${colors.prepared};color:${contrastText(colors.prepared)}">✓ prepared</span>`
+              : o.status === 'paused'
+                ? `<span class="status paused">⏸ paused</span>`
+                : o.status === 'processing'
+                  ? `<span class="status processing" style="background:${colors.processing};color:${contrastText(colors.processing)}">processing</span>`
+                  : `<span class="status" aria-hidden="true">&nbsp;</span>`}
+          </div>
         </div>
         <span class="kds-card-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
       </button>
@@ -1381,6 +1490,12 @@
           shortest.appendChild(card);
         });
       }
+      /* restore the scroll position BEFORE any FLIP measurement —
+         innerHTML = '' resets scrollTop to 0, which would both yank the
+         kitchen back to the top and, worse, make the FLIP rects be read
+         in a different coordinate space than the old positions (the
+         classic scrolled-FLIP glitch: cards jump while animating). */
+      main.scrollTop = savedScroll;
 
       /* ── FLIP: LAST + INVERT + PLAY ──
          Gone cards are handled by complete() (they animate out in place
@@ -1413,16 +1528,60 @@
       main.innerHTML = done.length === 0
         ? '<div class="kds-empty">No completed orders yet</div>'
         : done.map(completedRowHTML).join('');
+      main.scrollTop = savedScroll; // completed rows: keep the position too
     }
     prevTab = tab;
-    /* restore scroll position — innerHTML = '' resets scrollTop to 0,
-       which would yank the kitchen back to the top on every interaction */
-    main.scrollTop = savedScroll;
   }
 
   function overrideComplete(orderId, remaining) {
-    if (window.confirm(remaining + ' items still unchecked — override?')) complete(orderId);
+    confirmModal(
+      'Force finish this order? ' + remaining + ' item(s) still unchecked.',
+      'Force Finish',
+      () => complete(orderId),
+      true
+    );
   }
+
+  /* ── confirm modal (P4: styled replacement for window.confirm) ── */
+  let _confirmOk = null;
+  function confirmModal(message, okLabel, onOk, danger) {
+    const backdrop = document.getElementById('confirm-backdrop');
+    document.getElementById('confirm-msg').textContent = message;
+    const ok = document.getElementById('confirm-ok');
+    ok.textContent = okLabel || 'Confirm';
+    ok.classList.toggle('danger', !!danger);
+    _confirmOk = onOk;
+    backdrop.hidden = false;
+    ok.focus();
+  }
+  function closeConfirm() {
+    const backdrop = document.getElementById('confirm-backdrop');
+    if (backdrop.hidden) return;
+    backdrop.hidden = true;
+    _confirmOk = null;
+  }
+  document.getElementById('confirm-ok').addEventListener('click', () => {
+    const fn = _confirmOk;
+    closeConfirm();
+    if (fn) fn();
+  });
+  document.getElementById('confirm-cancel').addEventListener('click', closeConfirm);
+  document.getElementById('confirm-backdrop').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('confirm-backdrop')) closeConfirm(); // click outside
+  });
+  document.addEventListener('keydown', (e) => {
+    const backdrop = document.getElementById('confirm-backdrop');
+    if (backdrop.hidden) return;
+    if (e.key === 'Escape') { closeConfirm(); return; }
+    if (e.key === 'Enter' && !e.repeat) { e.preventDefault(); document.getElementById('confirm-ok').click(); return; }
+    if (e.key === 'Tab') { // trap focus between the two buttons
+      const btns = backdrop.querySelectorAll('button');
+      if (btns.length < 2) return;
+      const first = btns[0], last = btns[btns.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
 
   /* ── tabs ───────────────────────────────────────── */
   function moveTabIndicator() {
@@ -1598,7 +1757,9 @@
   }
   function savePageZoom() { try { localStorage.setItem(PAGEZOOM_KEY, String(pageZoom)); } catch {} }
   function applyPageZoom() {
-    /* zoom the whole screen — behaves like browser Ctrl+/- */
+    /* zoom the whole screen — behaves like browser Ctrl+/-
+       NOTE: the CSS `zoom` property is Chrome/Safari-only; acceptable
+       for the KDS tablet target (see review P5). */
     document.getElementById('screen').style.zoom = pageZoom === 100 ? '' : pageZoom / 100;
     document.getElementById('pagezoom-value').textContent = pageZoom + '%';
   }
@@ -1630,7 +1791,10 @@
   });
   applyZoom();
 
-  /* ── kitchen switches (sound / auto-accept) ── */
+  /* ── kitchen switches (sound / auto-accept / animations) ──
+     sound + ack persist the preference but have no observable effect
+     yet: the prototype has no live order-arrival simulation to act on
+     (deferred — see review P5). */
   const KITCHEN_KEY = 'kds-proto-kitchen';
   function loadKitchen() {
     try {
@@ -1657,17 +1821,18 @@
   document.getElementById('toggle-anim').addEventListener('click', () => { kitchen.anim = !kitchen.anim; saveKitchen(); applyKitchen(); });
   applyKitchen();
 
-  /* scoped reset — colours only, for the CURRENT theme, with a confirm
-     since it is the one irreversible-ish action in the panel */
+  /* scoped reset — colours only, for the CURRENT theme, with a styled
+     confirm modal since it is the one irreversible-ish action in the panel */
   document.getElementById('reset-colors').addEventListener('click', () => {
     const th = currentTheme();
-    if (!window.confirm('Reset ' + th + ' theme card colours to the defaults?')) return;
-    colors = { ...DEFAULT_COLORS };
-    colorConfigs[th] = colors;
-    saveColorConfigs();
-    COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
-    buildSwatches();
-    render();
+    confirmModal('Reset ' + th + ' theme card colours to the defaults?', 'Reset', () => {
+      colors = { ...DEFAULT_COLORS };
+      colorConfigs[th] = colors;
+      saveColorConfigs();
+      COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
+      buildSwatches();
+      render();
+    }, true);
   });
 
   /* ── shift toggle ───────────────────────────────── */
@@ -1735,8 +1900,10 @@
     cards.forEach(card => {
       const received = Number(card.dataset.received);
       if (!received) return;
-      const el = card.querySelector('.customer .time');
-      if (el) el.textContent = '(' + fmtDuration(now - received) + ')';
+      const el = card.querySelector('.kds-card-header-meta .time');
+      if (el) el.textContent =
+        new Date(received).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) +
+        ' · ' + fmtDuration(now - received);
     });
   }
   setInterval(tickCardTimers, 1000);
