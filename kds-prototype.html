@@ -29,9 +29,8 @@
   body {
     font-family: system-ui, -apple-system, sans-serif;
     background: var(--bg);
-    color: #e0e0e0;
-    display: flex;
-    align-items: center;
+    color: #e6e6e6; /* dark default; light override via :has below */
+    display: flex;    align-items: center;
     justify-content: center;
     min-height: 100vh;
     padding: 0;
@@ -47,6 +46,8 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
+  /* light theme: body text colour should match the screen's --text */
+  body:has(.kds-screen.light) { color: #1a1a1a; }
 
   /* ── THEME (dark default, light override via .light class) ── */
   .kds-screen {
@@ -438,7 +439,7 @@
 
   /* ── MAIN ───────────────────────────────────────── */
   .kds-main {
-    flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0; padding: 14px;
+    flex: 1 1 auto; overflow-y: auto; overflow-x: auto; min-height: 0; padding: 14px;
     /* JS masonry: .kds-col columns grow in height, so vertical scroll
        works (CSS columns can't scroll inside a fixed-height box). */
     display: flex; flex-direction: row; align-items: flex-start;
@@ -685,8 +686,11 @@
   /* ── Completed tab — same card language as Open, in time-bucket
      columns (Kanban: Recent / 1h / 6h / 24h). Cards are minimized by
      default; expanding shows the full ticket. */
-  .kds-main.completed-view { display: flex; flex-direction: row; align-items: flex-start; gap: 12px; }
-  .kds-main.completed-view > .kds-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .kds-main.completed-view { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+  /* Completed buckets flow responsively: 4-up on kitchen displays
+     (each ~310px), wrapping to 2×2 on tablets and a single column on
+     narrow phones — same philosophy as the open grid */
+  .kds-main.completed-view > .kds-col { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
   .kds-main.completed-view > .kds-col > .kds-card { width: 100%; max-width: 100%; }
   /* Old-hardware perf: skip layout/paint of completed cards below the
      fold — the browser renders only what's near the viewport. The
@@ -694,6 +698,10 @@
      Individual/column toggles still work: off-screen cards simply
      appear at their new state when scrolled into view. */
   .kds-main.completed-view .kds-card { content-visibility: auto; contain-intrinsic-size: 60px; }
+  /* Completed buckets flow responsively: 4-up on kitchen displays
+     (each ~310px), wrapping to 2×2 on tablets and a single column on
+     narrow phones — same philosophy as the open grid */
+  .kds-main.completed-view > .kds-col { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
   /* Completed tab = recall surface: every item is done, so the 'done'
      dimming would grey out the whole menu. Full-opacity menu text. */
   .kds-main.completed-view .kds-category-header,
