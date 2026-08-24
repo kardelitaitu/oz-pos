@@ -540,3 +540,16 @@ warehouse-receive-expected = Expected
 warehouse-receive-received = Received
 warehouse-receive-damaged = Damaged
 warehouse-receive-short = Short
+
+warehouse-count-create = Start Count
+warehouse-count-type = Count type
+warehouse-count-notes = Notes
+warehouse-count-start = Start
+warehouse-count-open = Open counts
+warehouse-count-history = History
+warehouse-count-lines = lines
+warehouse-count-empty = No lines yet — scan a barcode to start counting
+warehouse-count-back = Back
+warehouse-count-complete = Complete Count
+warehouse-count-complete-success = Count complete — { $count } adjustments posted
+warehouse-count-error = Count failed

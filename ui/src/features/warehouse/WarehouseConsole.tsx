@@ -35,6 +35,7 @@ import { useWarehouseScanner } from './useWarehouseScanner';
 import WarehouseFnBar from './WarehouseFnBar';
 import { WAREHOUSE_SHORTCUTS, ACTIVE_SHORTCUT_ACTIONS } from './warehouseShortcuts';
 import { listPurchaseOrders, receivePurchaseOrderWithLines, type PurchaseOrderDto } from '@/api/purchasing';
+import WarehouseCountFlow from './WarehouseCountFlow';
 import './WarehouseConsole.css';
 
 interface PendingTransferPick {
@@ -431,9 +432,11 @@ export default function WarehouseConsole() {
                 {requiredLocalized(l10n, 'warehouse-mode-stock-desc')} — Phase 1 shell
               </div>
             ) : mode === 'count' ? (
-              <div className="warehouse-empty-panel">
-                {requiredLocalized(l10n, 'warehouse-mode-count-desc')} — Phase 3
-              </div>
+              <WarehouseCountFlow
+                sessionToken={sessionToken}
+                locationId={locationId}
+                onCompleted={() => setRefreshKey((k) => k + 1)}
+              />
             ) : loading ? (
               <>
                 <Skeleton variant="block" width="100%" height="2.5rem" />

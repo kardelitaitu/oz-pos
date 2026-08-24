@@ -534,3 +534,16 @@ warehouse-receive-expected = Diharapkan
 warehouse-receive-received = Diterima
 warehouse-receive-damaged = Rusak
 warehouse-receive-short = Kurang
+
+warehouse-count-create = Mulai Hitung
+warehouse-count-type = Tipe hitung
+warehouse-count-notes = Catatan
+warehouse-count-start = Mulai
+warehouse-count-open = Hitungan terbuka
+warehouse-count-history = Riwayat
+warehouse-count-lines = baris
+warehouse-count-empty = Belum ada baris — pindai barcode untuk mulai menghitung
+warehouse-count-back = Kembali
+warehouse-count-complete = Selesaikan Hitung
+warehouse-count-complete-success = Hitung selesai — { $count } penyesuaian diposting
+warehouse-count-error = Hitung gagal
