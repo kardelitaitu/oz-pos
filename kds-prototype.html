@@ -2214,8 +2214,12 @@
       panel._lastFocus = document.activeElement;
       const first = panel.querySelector('button, input, [tabindex]:not([tabindex="-1"])');
       if (first) first.focus();
-      /* indicator offsets are only valid once the panel is visible */
+      /* indicator offsets are only valid once the panel is visible —
+         re-measure ALL the slider pills (theme, graphics, orientation);
+         they are zero-width while the panel is display:none at init */
       moveThemeIndicator();
+      if (typeof moveGfxIndicator === 'function') moveGfxIndicator();
+      if (typeof moveOrientIndicator === 'function') moveOrientIndicator();
     } else if (panel._lastFocus) {
       panel._lastFocus.focus();
       panel._lastFocus = null;
