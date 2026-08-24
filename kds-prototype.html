@@ -206,14 +206,16 @@
   .kds-btn--stack > span.visible { opacity: 1; }
   .kds-btn--stack:hover > span.visible { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
 
-  /* --icon: square transparent icon button (back, hamburger, any SVG) */
+  /* --icon: square transparent icon button (back, hamburger, any SVG).
+     Stays 32×32 — bigger tap target; text buttons match the 28px tab
+     slider instead. */
   .kds-btn--icon {
-    width: 28px; height: 28px; padding: 0;
+    width: 32px; height: 32px; padding: 0;
     background: transparent; color: var(--text); opacity: 0.7;
   }
   .kds-btn--icon:hover { background: rgba(255,255,255,0.08); opacity: 1; }
   .kds-btn--icon:active { background: rgba(255,255,255,0.12); transform: translateY(1px); }
-  .kds-btn--icon svg { width: 16px; height: 16px; transform-box: fill-box; }
+  .kds-btn--icon svg { width: 18px; height: 18px; transform-box: fill-box; }
 
   /* --filter: caret rotation + blue 'all' state */
   .kds-btn--filter { --btn-bg: rgba(255,255,255,0.06); --btn-fg: var(--text); --btn-hover: rgba(255,255,255,0.08); --btn-active: rgba(255,255,255,0.12); }
