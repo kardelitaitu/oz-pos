@@ -444,7 +444,7 @@
   .kds-main.empty { align-items: center; justify-content: center; }
   .kds-main.empty > .kds-empty { flex: initial; align-self: auto; }
   .kds-main.completed-view { display: flex; flex-direction: column; }
-  .kds-main.completed-view > .kds-completed-card { margin-bottom: 8px; }
+  .kds-main.completed-view > .kds-completed-group { margin-bottom: 4px; }
 
   /* Tab slide transition */
   @keyframes kds-slide-in-right { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
@@ -679,14 +679,33 @@
   }
   .kds-status-btn.finish:hover { opacity: 1; background: var(--border); }
 
-  /* ── Completed tab ──────────────────────────────── */
+  /* ── Completed tab — recall surface (dense, scannable) ── */
   .kds-completed-card {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px; background: var(--bg-surface); border-radius: 12px;
-    border: 1px solid var(--border-strong); font-size: 12px; color: var(--text);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 9px 14px; background: var(--bg-surface); border-radius: 12px;
+    border: 1px solid var(--border-strong); color: var(--text);
   }
-  .kds-completed-left { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-  .kds-completed-time { opacity: 0.5; }
+  .kds-completed-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .kds-completed-row1 {
+    display: flex; align-items: center; gap: 7px; font-size: 12px;
+    min-width: 0; flex-wrap: wrap;
+  }
+  /* service-type dot: same configurable colours as the open-card headers */
+  .kds-completed-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .kds-completed-identity { font-weight: 600; white-space: nowrap; }
+  .kds-completed-meta { opacity: 0.6; white-space: nowrap; }
+  .kds-completed-sla { font-weight: 600; }
+  .kds-completed-summary { font-size: 11px; opacity: 0.55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* sticky hour group header: the tab reads as a timeline */
+  .kds-completed-group-head {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text); opacity: 0.55;
+    padding: 8px 2px 6px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
   .kds-reopen-btn {
     padding: 4px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
     background: transparent; color: var(--text); opacity: 0.7; cursor: pointer; font-size: 11px;
@@ -1154,6 +1173,28 @@
     if (r === 0) return m + 'm';
     return m + 'm ' + r + 's';
   }
+  /* Completed-tab format: 'in 12 min 25s' — spec §2.3 */
+  function fmtDurationLong(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    if (m === 0) return 'in ' + r + 's';
+    if (r === 0) return 'in ' + m + ' min';
+    return 'in ' + m + ' min ' + r + 's';
+  }
+  /* SLA tint for the completed duration — same thresholds as the open
+     board (spec §3.4): <5m fast/green, 5–10m ok/amber, >10m slow/red */
+  function slaColor(ms) {
+    const m = ms / 60000;
+    if (m < 5) return '#22c55e';
+    if (m < 10) return '#f59e0b';
+    return '#ef4444';
+  }
+  /* first emoji of a course name for the compact summary (🥗 Appetizers → 🥗) */
+  function courseEmoji(name) {
+    const m = name.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu);
+    return m ? m[0] : '';
+  }
 
   /* Smart text colour: white on dark backgrounds, black on light ones.
      Only opacity is defined per element — the hue is always ~90% white
@@ -1282,7 +1323,8 @@
       const finish = () => {
         if (!leaveLock) return; // already ran
         leaveLock = false;
-        orders = orders.map(o => o.id === orderId ? { ...o, status: 'completed' } : o);
+        const now = Date.now();
+        orders = orders.map(o => o.id === orderId ? { ...o, status: 'completed', completedAt: now } : o);
         render();
       };
       card.addEventListener('animationend', (e) => {
@@ -1290,14 +1332,15 @@
       });
       setTimeout(finish, 400); // leave animation is 0.25s
     } else {
-      orders = orders.map(o => o.id === orderId ? { ...o, status: 'completed' } : o);
+      const now = Date.now();
+      orders = orders.map(o => o.id === orderId ? { ...o, status: 'completed', completedAt: now } : o);
       render();
     }
   }
   function reopen(orderId) {
     const order = orders.find(o => o.id === orderId);
     if (order) announce('Order #' + (order.table || order.display) + ' reopened.');
-    orders = orders.map(o => o.id === orderId ? { ...o, status: 'paused' } : o);
+    orders = orders.map(o => o.id === orderId ? { ...o, status: 'paused', completedAt: null } : o);
     render();
   }
 
@@ -1536,13 +1579,20 @@
   }
 
   function completedRowHTML(o) {
+    /* duration is FROZEN at completed_at — it must not keep ticking */
+    const at = o.completedAt || o.received;
+    const dur = Math.max(0, at - o.received);
+    const summary = o.categories.map(c => (courseEmoji(c.course) || '·') + ' ' + c.items.length).join('  ');
     return `
     <div class="kds-completed-card">
-      <div class="kds-completed-left">
-        <span style="font-weight:600">#${o.display}</span>
-        ${o.table ? `<span style="opacity:0.5">· ${o.table}</span>` : ''}
-        <span>· ${o.customer}</span>
-        <span class="kds-completed-time">${new Date(o.received).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · in ${fmtDuration(Date.now() - o.received)}</span>
+      <div class="kds-completed-main">
+        <div class="kds-completed-row1">
+          <span class="kds-completed-dot" style="background:${o.dineIn ? colors.dinein : colors.takeaway}"></span>
+          <span class="kds-completed-identity">#${o.display}${o.table ? ' · ' + o.table : ''} · ${o.customer}</span>
+          ${o.priority ? `<span class="kds-rush-badge" style="background:${colors.rush};color:${contrastText(colors.rush)}">RUSH</span>` : ''}
+          <span class="kds-completed-meta">${new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · <span class="kds-completed-sla" style="color:${slaColor(dur)}">${fmtDurationLong(dur)}</span></span>
+        </div>
+        <div class="kds-completed-summary">${summary}</div>
       </div>
       <button class="kds-reopen-btn" onclick="reopen('${o.id}')">Reopen</button>
     </div>`;
@@ -1692,9 +1742,29 @@
       }
     } else {
       main.className = 'kds-main completed-view' + (prevTab !== 'completed' ? ' slide-left' : '');
-      main.innerHTML = done.length === 0
-        ? '<div class="kds-empty">No completed orders yet</div>'
-        : done.map(completedRowHTML).join('');
+      if (done.length === 0) {
+        main.innerHTML = '<div class="kds-empty">No completed orders yet</div>';
+      } else {
+        /* Timeline: group by completion hour (newest hour first), newest
+           first within each hour. Sticky headers make the tab scannable
+           at shift-end volumes (spec: 24h auto-clear, so hour groups
+           are naturally bounded). */
+        const groups = new Map();
+        done.forEach(o => {
+          const d = new Date(o.completedAt || o.received);
+          const h = d.getHours();
+          if (!groups.has(h)) groups.set(h, []);
+          groups.get(h).push(o);
+        });
+        const hours = [...groups.keys()].sort((a, b) => b - a);
+        main.innerHTML = hours.map(h => `
+          <div class="kds-completed-group">
+            <div class="kds-completed-group-head">${String(h).padStart(2, '0')}:00 · ${groups.get(h).length} order${groups.get(h).length === 1 ? '' : 's'}</div>
+            ${groups.get(h)
+              .sort((a, b) => (b.completedAt || b.received) - (a.completedAt || a.received))
+              .map(completedRowHTML).join('')}
+          </div>`).join('');
+      }
       main.scrollTop = savedScroll; // completed rows: keep the position too
     }
     prevTab = tab;
