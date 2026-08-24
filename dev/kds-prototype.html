@@ -2023,23 +2023,32 @@
     anchor.classList.toggle('anchored', !!anchorEl);
     if (anchorEl) {
       const r = anchorEl.getBoundingClientRect();
-      const vw = window.innerWidth, vh = window.innerHeight;
-      let x = r.left + r.width / 2, y = r.top + r.height / 2;
-      x = Math.max(200, Math.min(vw - 200, x));
-      y = Math.max(120, Math.min(vh - 120, y));
-      anchor.style.left = x + 'px';
-      anchor.style.top = y + 'px';
-      /* cap the modal width to the card so it never overflows it */
       const modal = document.getElementById('confirm-modal');
       if (modal) modal.style.maxWidth = Math.max(220, Math.min(360, r.width - 16)) + 'px';
       anchorEl.classList.add('blurred');
       _confirmAnchor = anchorEl;
+      backdrop.hidden = false;
+      /* The anchored backdrop is transparent, so it is safe to show the
+         modal first, MEASURE it, then position it on the card's centre.
+         The old fixed 200/120 clamps pushed the modal off-centre whenever
+         the card sat near a viewport edge; now it clamps only when the
+         actual modal would leave the viewport (12px margin). */
+      requestAnimationFrame(() => {
+        const mw = modal ? modal.offsetWidth : 320;
+        const mh = modal ? modal.offsetHeight : 150;
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const margin = 12;
+        const x = Math.max(margin + mw / 2, Math.min(vw - margin - mw / 2, r.left + r.width / 2));
+        const y = Math.max(margin + mh / 2, Math.min(vh - margin - mh / 2, r.top + r.height / 2));
+        anchor.style.left = x + 'px';
+        anchor.style.top = y + 'px';
+      });
     } else {
       _confirmAnchor = null;
       const modal = document.getElementById('confirm-modal');
       if (modal) modal.style.maxWidth = ''; // fall back to CSS
+      backdrop.hidden = false;
     }
-    backdrop.hidden = false;
     ok.focus();
   }
   function closeConfirm() {
