@@ -1002,10 +1002,17 @@
       { key: 'complete', label: 'Complete button' },
     ]},
   ];
-  const DEFAULT_COLORS = {
+  const DEFAULT_COLORS_DARK = {
     dinein: '#22c55e', takeaway: '#3b82f6',
     rush: '#ef4444', processing: '#f59e0b', prepared: '#22c55e',
     pause: '#f59e0b', resume: '#3b82f6', complete: '#4ade80',
+  };
+  /* Light theme defaults — tuned for white surfaces (muted, desaturated
+     headers; dark prepared/complete for contrast on light cards) */
+  const DEFAULT_COLORS_LIGHT = {
+    dinein: '#89a1c8', takeaway: '#9484b8',
+    rush: '#f04242', processing: '#89a1c8', prepared: '#242424',
+    pause: '#dcdfe5', resume: '#3b4972', complete: '#a72525',
   };
   /* Theme choice is persisted so colour experiments survive a reload —
      with per-theme colour configs, the theme you're tuning has to stick.
@@ -1034,7 +1041,7 @@
   const COLORS_KEY = 'kds-proto-colors-v2'; // legacy flat config — migrated once
   const THEME_COLORS_KEY = 'kds-proto-colors-v3';
   function loadColorConfigs() {
-    let cfg = { dark: { ...DEFAULT_COLORS }, light: { ...DEFAULT_COLORS } };
+    let cfg = { dark: { ...DEFAULT_COLORS_DARK }, light: { ...DEFAULT_COLORS_LIGHT } };
     try {
       const raw = localStorage.getItem(THEME_COLORS_KEY);
       if (raw) {
@@ -1047,7 +1054,7 @@
       const legacy = localStorage.getItem(COLORS_KEY);
       if (legacy) {
         const old = JSON.parse(legacy);
-        cfg = { dark: { ...DEFAULT_COLORS, ...old }, light: { ...DEFAULT_COLORS, ...old } };
+        cfg = { dark: { ...DEFAULT_COLORS_DARK, ...old }, light: { ...DEFAULT_COLORS_LIGHT, ...old } };
       }
     } catch {}
     return cfg;
@@ -2292,7 +2299,7 @@
   document.getElementById('reset-colors').addEventListener('click', () => {
     const th = currentTheme();
     confirmModal('Reset ' + th + ' theme card colours to the defaults?', 'Reset', () => {
-      colors = { ...DEFAULT_COLORS };
+      colors = { ...(th === 'light' ? DEFAULT_COLORS_LIGHT : DEFAULT_COLORS_DARK) };
       colorConfigs[th] = colors;
       saveColorConfigs();
       COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
