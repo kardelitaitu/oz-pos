@@ -700,6 +700,11 @@
      Individual/column toggles still work: off-screen cards simply
      appear at their new state when scrolled into view. */
   .kds-main.completed-view .kds-card { content-visibility: auto; contain-intrinsic-size: 60px; }
+  /* Completed tab = recall surface: every item is done, so the 'done'
+     dimming would grey out the whole menu. Full-opacity menu text. */
+  .kds-main.completed-view .kds-category-header,
+  .kds-main.completed-view .kds-item-row,
+  .kds-main.completed-view .kds-item-row.done { opacity: 1; }
   .kds-completed-col-head {
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text); opacity: 0.55; padding: 4px 6px;
