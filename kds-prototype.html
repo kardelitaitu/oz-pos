@@ -1064,6 +1064,12 @@
   let colorConfigs = loadColorConfigs();
   let colors = colorConfigs[currentTheme()];
   let tab = 'open';
+  /* Active tab persists so reloads land where you were testing */
+  const TAB_KEY = 'kds-proto-tab';
+  try { if (localStorage.getItem(TAB_KEY) === 'completed') tab = 'completed'; } catch {}
+  if (tab === 'completed') {
+    document.querySelectorAll('.kds-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'completed'));
+  }
 
   /* ── Mock data pools — shared by the initial board and the live
      arrival simulation, so new orders match the existing style.
@@ -2065,6 +2071,7 @@
   document.querySelectorAll('.kds-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       tab = btn.dataset.tab;
+      try { localStorage.setItem(TAB_KEY, tab); } catch {}
       document.querySelectorAll('.kds-tab').forEach(b => b.classList.toggle('active', b === btn));
       /* category filter belongs to the Open work surface — hide it on
          the Completed tab (with the leave animation), restore on Open */
@@ -2308,14 +2315,24 @@
     }, true);
   });
 
-  /* ── shift toggle ───────────────────────────────── */
+  /* ── shift toggle (persisted across reloads) ─────── */
+  const SHIFT_KEY = 'kds-proto-shift';
   let shiftOn = false;
+  try { shiftOn = localStorage.getItem(SHIFT_KEY) === '1'; } catch {}
+  {
+    const btn = document.getElementById('shift-btn');
+    if (shiftOn) {
+      btn.querySelectorAll('span').forEach((s, i) => s.classList.toggle('visible', i === 1));
+      btn.classList.add('is-active');
+    }
+  }
   document.getElementById('shift-btn').addEventListener('click', (e) => {
     shiftOn = !shiftOn;
     const btn = document.getElementById('shift-btn');
     /* swap which stacked label is visible — width stays the same */
     btn.querySelectorAll('span').forEach((s, i) => s.classList.toggle('visible', shiftOn ? i === 1 : i === 0));
     btn.classList.toggle('is-active', shiftOn);
+    try { localStorage.setItem(SHIFT_KEY, shiftOn ? '1' : '0'); } catch {}
   });
 
   /* ── theme toggle (light/dark) ──────────────────── */
