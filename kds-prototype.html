@@ -240,11 +240,13 @@
     --btn-state-hover: rgba(255,255,255,0.18);
   }
 
-/* Hamburger panel — same drop-in animation as the filter dropdown */
+/* Hamburger panel — same drop-in animation as the filter dropdown.
+   Radius scale (4-based): panel 16 · cards 12 · controls 8 — one
+   consistent rhythm across the whole panel. */
   .kds-hamburger-panel {
     position: absolute; top: calc(100% + 6px); right: 0; width: 375px;
     overflow: hidden;
-    background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 12px;
+    background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 16px;
     padding: 0; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     animation: kds-drop-in 0.18s ease-out;
     transform-origin: top right;
@@ -270,67 +272,88 @@
   .kds-panel-section { margin-bottom: 14px; }
   .kds-panel-section:last-child { margin-bottom: 0; }
   .kds-panel-section h3 { font-size: 10px; font-weight: 600; color: var(--text); opacity: 0.5; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
-  /* setting card: boxed wrapper for a heading + its control */
+  /* setting card: one boxed group; rows inside are separated by hairline
+     dividers. ONE architecture for every group — Display, Behaviour,
+     Card Colours all use it. */
   .kds-setting-card {
-    padding: 10px 12px; border-radius: 10px;
-    background: var(--bg-surface); border: 1px solid var(--border);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
   }
-  .kds-setting-card h3 { margin-bottom: 8px; }
-  .kds-setting-card .kds-theme-row,
-  .kds-setting-card .kds-zoom-row { margin: 0; }
-  .kds-color-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .kds-color-row:last-child { margin-bottom: 0; }
-  .kds-color-row label { font-size: 12px; color: var(--text); opacity: 0.85; }
-  .kds-color-open {
-    display: flex; align-items: center; gap: 8px;
-    padding: 4px 8px 4px 4px; border-radius: 7px; border: 1px solid var(--border-strong);
-    background: var(--bg-surface); cursor: pointer; transition: all 0.15s;
+  .kds-setting-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 10px 12px;
   }
-  .kds-color-open:hover { background: rgba(255,255,255,0.06); }
-  .kds-color-chip { width: 26px; height: 18px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }
-  .kds-color-hex { font-size: 10px; color: var(--text); opacity: 0.75; font-family: ui-monospace, monospace; }
+  .kds-setting-row + .kds-setting-row { border-top: 1px solid var(--border); }
+  .kds-setting-label { font-size: 12px; font-weight: 600; color: var(--text); opacity: 0.85; }
+  .kds-setting-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .kds-setting-caption { font-size: 10px; color: var(--text); opacity: 0.45; }
+  /* visible keyboard focus anywhere inside the panel — buttons only,
+     the hex/native inputs have their own focus treatment */
+  .kds-panel-body button:focus-visible {
+    outline: 2px solid #3b82f6; outline-offset: 1px;
+  }
 
-  /* Inline colour swatches (in the hamburger panel) */
-  .kds-color-group-head {
-    font-size: 10px; font-weight: 600; color: var(--text); opacity: 0.5;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+  /* Inline colour swatches (in the hamburger panel) —
+     accordion groups: head toggles, body collapses. One open at a time. */
+  .kds-acc-head {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 11px 12px;
+    background: transparent; border: none; cursor: pointer;
+    font-size: 12px; font-weight: 600; color: var(--text); opacity: 0.85;
+    font-family: inherit;
+    transition: background 0.15s;
+    -webkit-tap-highlight-color: transparent;
   }
-  .kds-color-group-head:first-child { margin-top: 0; }
-  .kds-color-group { margin-bottom: 10px; }
+  .kds-acc-head:hover { background: var(--border); }
+  .kds-acc-head:not(:first-child) { border-top: 1px solid var(--border); }
+  .kds-acc-head svg { width: 12px; height: 12px; opacity: 0.5; transition: transform 0.2s; }
+  .kds-acc-head[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .kds-acc-body { padding: 6px 12px 12px; }
+  .kds-color-group { margin-bottom: 12px; }
   .kds-color-group:last-child { margin-bottom: 0; }
-  .kds-color-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+  .kds-color-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .kds-color-head label { font-size: 12px; color: var(--text); opacity: 0.85; flex: 1; min-width: 0; }
   /* native colour picker chip: shows the current colour, click → OS picker */
   .kds-native {
-    width: 26px; height: 22px; padding: 0; border: 1px solid var(--border-strong);
-    border-radius: 5px; background: transparent; cursor: pointer; flex-shrink: 0;
+    width: 32px; height: 32px; padding: 0; border: 1px solid var(--border-strong);
+    border-radius: 8px; background: transparent; cursor: pointer; flex-shrink: 0;
   }
-  .kds-native::-webkit-color-swatch-wrapper { padding: 2px; }
-  .kds-native::-webkit-color-swatch { border-radius: 3px; border: none; }
-  .kds-swatches { display: flex; gap: 5px; flex-wrap: wrap; }
-  .kds-swatch { width: 22px; height: 22px; border-radius: 5px; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s; }
-  .kds-swatch:hover { transform: scale(1.15); }
+  .kds-native::-webkit-color-swatch-wrapper { padding: 3px; }
+  .kds-native::-webkit-color-swatch { border-radius: 5px; border: none; }
+  .kds-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .kds-swatch {
+    width: 32px; height: 32px; padding: 0; appearance: none;
+    border-radius: 8px; border: 2px solid transparent; cursor: pointer;
+    transition: transform 0.1s, border-color 0.1s;
+  }
+  .kds-swatch:hover { transform: scale(1.12); }
   .kds-swatch.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--bg-top) inset; }
   .kds-hex-input {
-    width: 62px; padding: 3px 6px; border-radius: 5px; font-size: 10px;
+    width: 60px; height: 32px; padding: 0 8px; border-radius: 8px; font-size: 11px;
     border: 1px solid var(--border-strong); background: var(--bg-surface);
     color: var(--text); opacity: 0.8; text-align: center; font-family: ui-monospace, monospace;
     transition: all 0.15s; flex-shrink: 0;
   }
   .kds-hex-input:focus { outline: none; border-color: #3b82f6; opacity: 1; }
+  /* footer action inside the Card Colours card — scoped, labelled, theme-aware */
   .kds-reset-btn {
-    width: 100%; padding: 6px; border-radius: 6px;
-    margin-top: 8px; font-size: 11px;
+    width: 100%; padding: 10px 12px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: transparent; border: none; border-top: 1px solid var(--border);
+    color: var(--text); opacity: 0.65; font-size: 11px; font-weight: 600;
+    font-family: inherit;
+    cursor: pointer; transition: all 0.15s;
   }
-  .kds-reset-btn:hover { background: rgba(255,255,255,0.08); opacity: 1; }
+  .kds-reset-btn:hover { background: var(--border); opacity: 1; }
+  .kds-reset-btn svg { width: 12px; height: 12px; opacity: 0.6; }
 
   /* Theme toggle — same slider pattern as the Open/Completed tabs:
    a blue pill indicator slides between Dark/Light with a
-   squash-and-stretch (scale) animation. */
-  .kds-theme-row { display: flex; align-items: center; margin-bottom: 0; }
+   squash-and-stretch (scale) animation. Options are sun/moon glyphs. */
   .kds-theme-toggle {
-    position: relative; display: flex; gap: 6px;
+    position: relative; display: flex; gap: 4px;
     background: rgba(255,255,255,0.06); border-radius: 8px; padding: 3px;
     border: none; cursor: pointer;
     -webkit-tap-highlight-color: transparent;
@@ -346,30 +369,27 @@
   }
   .kds-theme-option {
     position: relative; z-index: 1;
-    padding: 5px 16px; border-radius: 6px; border: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 5px 9px; border-radius: 6px; border: none;
     background: transparent; color: var(--text); opacity: 0.5;
-    font-size: 12px; font-weight: 600;
     transition: opacity 0.15s;
   }
+  .kds-theme-option svg { width: 14px; height: 14px; }
   .kds-theme-option:hover { opacity: 0.8; }
   .kds-theme-option.on { opacity: 1; color: #fff; }
 
-  /* Zoom (global page) + Card Size controls — two groups side by side */
-  .kds-zoom-pair { display: flex; gap: 14px; }
-  .kds-zoom-group { flex: 1; min-width: 0; }
-  .kds-zoom-label {
-    display: block; font-size: 10px; font-weight: 600; color: var(--text);
-    opacity: 0.5; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
-  }
+  /* Display scale (global page) + Card size — each a row inside the
+     Display card: label left, − / value / + stepper right. */
   .kds-zoom-row { display: flex; align-items: center; gap: 4px; }
-  .kds-zoom-btn { width: 24px; height: 24px; padding: 0; font-size: 12px; font-weight: 600; border-radius: 5px; }
-  /* the value is a clickable reset-to-100% button — same font as the theme slider */
+  .kds-zoom-btn { width: 32px; height: 32px; padding: 0; font-size: 14px; font-weight: 600; border-radius: 8px; }
+  /* the value is a clickable reset-to-100% button — underline on hover
+     makes the reset affordance discoverable without a tooltip */
   .kds-zoom-value {
-    flex: 1; height: 24px; padding: 0 4px; text-align: center;
+    flex: 1; height: 32px; padding: 0 8px; text-align: center;
     font-size: 12px; font-weight: 600; color: var(--text); opacity: 0.85;
-    cursor: pointer; border-radius: 5px; min-width: 0;
+    cursor: pointer; border-radius: 8px; min-width: 44px;
   }
-  .kds-zoom-value:hover { opacity: 1; background: rgba(255,255,255,0.06); }
+  .kds-zoom-value:hover { opacity: 1; background: var(--border); text-decoration: underline; text-underline-offset: 3px; }
 
   /* ── MAIN ───────────────────────────────────────── */
   .kds-main {
@@ -634,10 +654,8 @@
   }
   .kds-screen-footer .sep { opacity: 0.5; }
 
-  /* Reusable switch (used for sound, auto-accept) */
-  .kds-switch-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .kds-switch-row:last-child { margin-bottom: 0; }
-  .kds-switch-row label { font-size: 12px; color: var(--text); opacity: 0.85; }
+  /* Reusable switch (used for sound, auto-accept) — rows come from
+     .kds-setting-row in the panel, not a dedicated row class */
   .kds-switch {
     position: relative; width: 40px; height: 22px; border-radius: 11px; border: none;
     background: rgba(255,255,255,0.12); cursor: pointer; transition: background 0.2s;
@@ -653,6 +671,15 @@
   /* light theme: darken the switch track so it is visible on white */
   .kds-screen.light .kds-switch { background: rgba(0,0,0,0.08); }
   .kds-screen.light .kds-switch.on { background: #3b82f6; }
+  /* light theme: muted helper buttons (zoom steppers, filter idle) need
+     dark overlays — the dark-theme white tokens vanish on white cards */
+  .kds-screen.light .kds-btn--muted {
+    --btn-bg: rgba(0,0,0,0.05);
+    --btn-hover: rgba(0,0,0,0.09);
+    --btn-active: rgba(0,0,0,0.12);
+    --btn-state: rgba(0,0,0,0.1);
+    --btn-state-hover: rgba(0,0,0,0.14);
+  }
 </style>
 </head>
 <body>
@@ -678,63 +705,83 @@
       <button class="kds-btn kds-btn--icon" id="hamburger-btn" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
-      <div class="kds-hamburger-panel" id="hamburger-panel" style="display:none;">
+      <div class="kds-hamburger-panel" id="hamburger-panel" role="dialog" aria-label="Settings" aria-hidden="true" style="display:none;">
         <button class="kds-panel-close" id="panel-close" title="Close" aria-label="Close settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
         <div class="kds-panel-body">
+          <!-- DISPLAY: theme + scale -->
           <div class="kds-panel-section">
+            <h3>Display</h3>
             <div class="kds-setting-card">
-              <h3>Theme</h3>
-            <div class="kds-theme-row">
-              <button class="kds-theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light or dark theme">
-                <span class="kds-theme-indicator" id="theme-indicator"></span>
-                <span class="kds-theme-option on" data-theme="dark">Dark</span>
-                <span class="kds-theme-option" data-theme="light">Light</span>
+              <div class="kds-setting-row">
+                <span class="kds-setting-label">Theme</span>
+                <button class="kds-theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light or dark theme">
+                  <span class="kds-theme-indicator" id="theme-indicator"></span>
+                  <span class="kds-theme-option on" data-theme="dark" aria-label="Dark theme">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
+                  </span>
+                  <span class="kds-theme-option" data-theme="light" aria-label="Light theme">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+                  </span>
+                </button>
+              </div>
+              <div class="kds-setting-row">
+                <span class="kds-setting-label">Display scale</span>
+                <div class="kds-zoom-row">
+                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-out" aria-label="Zoom out">−</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-value" id="pagezoom-value" title="Reset to 100%" aria-label="Reset page zoom to 100%">100%</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-in" aria-label="Zoom in">+</button>
+                </div>
+              </div>
+              <div class="kds-setting-row">
+                <span class="kds-setting-label">Card size</span>
+                <div class="kds-zoom-row">
+                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-value" id="zoom-value" title="Reset to 100%" aria-label="Reset card size to 100%">100%</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- BEHAVIOUR: kitchen toggles -->
+          <div class="kds-panel-section">
+            <h3>Behaviour</h3>
+            <div class="kds-setting-card">
+              <div class="kds-setting-row">
+                <div class="kds-setting-text">
+                  <span class="kds-setting-label">New order sound</span>
+                  <span class="kds-setting-caption">Chime when an order arrives</span>
+                </div>
+                <button class="kds-switch on" id="toggle-sound" role="switch" aria-checked="true" aria-label="New order sound"></button>
+              </div>
+              <div class="kds-setting-row">
+                <div class="kds-setting-text">
+                  <span class="kds-setting-label">Auto-accept</span>
+                  <span class="kds-setting-caption">New orders appear without tapping Accept</span>
+                </div>
+                <button class="kds-switch" id="toggle-ack" role="switch" aria-checked="false" aria-label="Auto-accept new orders"></button>
+              </div>
+              <div class="kds-setting-row">
+                <div class="kds-setting-text">
+                  <span class="kds-setting-label">Card animations</span>
+                  <span class="kds-setting-caption">Spawn and reorder effects</span>
+                </div>
+                <button class="kds-switch on" id="toggle-anim" role="switch" aria-checked="true" aria-label="Card spawn and move animations"></button>
+              </div>
+            </div>
+          </div>
+          <!-- CARD COLOURS: accordion groups + scoped reset -->
+          <div class="kds-panel-section">
+            <h3>Card Colours</h3>
+            <div class="kds-setting-card">
+              <div id="color-panel"></div>
+              <button class="kds-reset-btn" id="reset-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                Reset colours
               </button>
             </div>
           </div>
-        </div>
-        <div class="kds-panel-section">
-          <div class="kds-zoom-pair">
-            <div class="kds-zoom-group">
-              <span class="kds-zoom-label">Zoom</span>
-              <div class="kds-zoom-row">
-                <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-out" aria-label="Zoom out">−</button>
-                <button class="kds-btn kds-btn--muted kds-zoom-value" id="pagezoom-value" title="Reset to 100%" aria-label="Reset page zoom to 100%">100%</button>
-                <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-in" aria-label="Zoom in">+</button>
-              </div>
-            </div>
-            <div class="kds-zoom-group">
-              <span class="kds-zoom-label">Card Size</span>
-              <div class="kds-zoom-row">
-                <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
-                <button class="kds-btn kds-btn--muted kds-zoom-value" id="zoom-value" title="Reset to 100%" aria-label="Reset card size to 100%">100%</button>
-                <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="kds-panel-section">
-          <h3>Kitchen</h3>
-          <div class="kds-switch-row">
-            <label for="toggle-sound">New order sound</label>
-            <button class="kds-switch on" id="toggle-sound" role="switch" aria-checked="true" aria-label="New order sound"></button>
-          </div>
-          <div class="kds-switch-row">
-            <label for="toggle-ack">Auto-accept</label>
-            <button class="kds-switch" id="toggle-ack" role="switch" aria-checked="false" aria-label="Auto-accept new orders"></button>
-          </div>
-          <div class="kds-switch-row">
-            <label for="toggle-anim">Card animations</label>
-            <button class="kds-switch on" id="toggle-anim" role="switch" aria-checked="true" aria-label="Card spawn and move animations"></button>
-          </div>
-        </div>
-        <div class="kds-panel-section">
-          <h3>Card Colours</h3>
-          <div id="color-panel"></div>
-        </div>
-        <button class="kds-btn kds-btn--muted kds-reset-btn" id="reset-colors">Reset to defaults</button>
         </div>
       </div>
     </div>
@@ -1335,22 +1382,44 @@
   });
   moveTabIndicator();
 
-  /* ── card colour panel (generated from COLOR_GROUPS + PALETTE) ── */
+  /* ── card colour panel (generated from COLOR_GROUPS + PALETTE) ──
+     Accordion groups: each group is a toggle head + collapsible body.
+     One group open at a time — the full 8-colour editor stays reachable
+     without the wall of controls the panel used to show. */
   function buildColorPanel() {
     const root = document.getElementById('color-panel');
     root.innerHTML = COLOR_GROUPS.map(g => `
-      <div class="kds-color-group-head">${g.title}</div>
-      ${g.keys.map(k => `
-        <div class="kds-color-group">
-          <div class="kds-color-head">
-            <label for="hex-${k.key}">${k.label}</label>
-            <input type="color" class="kds-native" id="native-${k.key}" data-key="${k.key}" value="${colors[k.key]}" aria-label="${k.label} colour picker">
-            <input class="kds-hex-input" id="hex-${k.key}" data-key="${k.key}" spellcheck="false" aria-label="${k.label} hex">
+      <button type="button" class="kds-acc-head" aria-expanded="false">
+        <span>${g.title}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="kds-acc-body" hidden>
+        ${g.keys.map(k => `
+          <div class="kds-color-group">
+            <div class="kds-color-head">
+              <label for="hex-${k.key}">${k.label}</label>
+              <input type="color" class="kds-native" id="native-${k.key}" data-key="${k.key}" value="${colors[k.key]}" aria-label="${k.label} colour picker">
+              <input class="kds-hex-input" id="hex-${k.key}" data-key="${k.key}" spellcheck="false" aria-label="${k.label} hex">
+            </div>
+            <div class="kds-swatches" data-key="${k.key}"></div>
           </div>
-          <div class="kds-swatches" data-key="${k.key}"></div>
-        </div>
-      `).join('')}
+        `).join('')}
+      </div>
     `).join('');
+    /* accordion: opening one group closes the others */
+    root.querySelectorAll('.kds-acc-head').forEach(head => {
+      head.addEventListener('click', () => {
+        const wasOpen = head.getAttribute('aria-expanded') === 'true';
+        root.querySelectorAll('.kds-acc-head').forEach(h => {
+          h.setAttribute('aria-expanded', 'false');
+          h.nextElementSibling.hidden = true;
+        });
+        if (!wasOpen) {
+          head.setAttribute('aria-expanded', 'true');
+          head.nextElementSibling.hidden = false;
+        }
+      });
+    });
     /* hex inputs: apply on Enter/blur if valid */
     root.querySelectorAll('.kds-hex-input').forEach(input => {
       const apply = () => {
@@ -1377,7 +1446,7 @@
       const el = document.querySelector(`.kds-swatches[data-key="${k.key}"]`);
       if (!el) return;
       el.innerHTML = PALETTE.map(s =>
-        `<div class="kds-swatch${colors[k.key] === s ? ' active' : ''}" style="background:${s}" data-swatch="${s}" onclick="pickColor('${k.key}', '${s}')"></div>`
+        `<button type="button" class="kds-swatch${colors[k.key] === s ? ' active' : ''}" style="background:${s}" data-swatch="${s}" title="${s}" aria-label="${k.label}: ${s}" onclick="pickColor('${k.key}', '${s}')"></button>`
       ).join('');
     }));
   }
@@ -1400,6 +1469,7 @@
     const btn = document.getElementById('hamburger-btn');
     const showing = force !== undefined ? force : panel.style.display !== 'block';
     panel.style.display = showing ? 'block' : 'none';
+    panel.setAttribute('aria-hidden', String(!showing));
     btn.setAttribute('aria-expanded', showing);
     if (showing) {
       /* focus trap: keep Tab cycling inside the panel */
@@ -1516,9 +1586,11 @@
   document.getElementById('toggle-ack').addEventListener('click', () => { kitchen.ack = !kitchen.ack; saveKitchen(); applyKitchen(); });
   document.getElementById('toggle-anim').addEventListener('click', () => { kitchen.anim = !kitchen.anim; saveKitchen(); applyKitchen(); });
   applyKitchen();
-  applyKitchen();
 
+  /* scoped reset — colours only, with a confirm since it is the one
+     irreversible-ish action in the panel */
   document.getElementById('reset-colors').addEventListener('click', () => {
+    if (!window.confirm('Reset all card colours to the defaults?')) return;
     colors = { ...DEFAULT_COLORS };
     saveColors();
     COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
