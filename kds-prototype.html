@@ -647,6 +647,8 @@
   }
 
   .kds-card-footer { flex: 0 0 auto; padding: 0 10px 7px; display: flex; flex-direction: column; gap: 6px; }
+  .kds-footer-actions { display: flex; gap: 6px; }
+  .kds-footer-actions .kds-status-btn { flex: 1; }
   .kds-status-btn {
     width: 100%; padding: 7px 0; border-radius: 8px; border: none;
     font-size: 12px; font-weight: 600; line-height: 1; cursor: pointer; transition: all 0.15s;
@@ -655,11 +657,13 @@
   }
   .kds-status-btn svg { display: block; }
   .kds-status-btn:hover { opacity: 0.85; }
-  .kds-status-btn.force {
+  .kds-status-btn.force,
+  .kds-status-btn.finish {
     background: transparent; border: 1px solid var(--border-strong);
-    color: var(--text); opacity: 0.55; margin-top: 4px; font-size: 11px;
+    color: var(--text); opacity: 0.55; font-size: 11px;
   }
-  .kds-status-btn.force:hover { opacity: 1; background: var(--border); }
+  .kds-status-btn.force:hover,
+  .kds-status-btn.finish:hover { opacity: 1; background: var(--border); }
 
   /* ── Completed tab ──────────────────────────────── */
   .kds-completed-card {
@@ -1331,21 +1335,21 @@
     if (allDone) {
       btnBg = colors.complete; btnText = contrastText(btnBg);
       statusBtn = `<button class="kds-status-btn complete" style="background:${btnBg};color:${btnText}" onclick="complete('${o.id}')">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Mark Finish</button>`;
-    } else if (o.status === 'paused') {
-      btnBg = colors.resume; btnText = contrastText(btnBg);
-      statusBtn = `<button class="kds-status-btn resume" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Resume</button>`;
-    } else if (o.status === 'processing') {
-      btnBg = colors.pause; btnText = contrastText(btnBg);
-      statusBtn = `<button class="kds-status-btn pause" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${PAUSE_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Pause</button>`;
+    } else {
+      /* In-progress orders show the status action (Pause/Resume) plus a
+         Finish button — a kitchen that's mid-way can push the order out
+         even with unchecked items. Finish confirms with the count. */
+      if (o.status === 'paused') {
+        btnBg = colors.resume; btnText = contrastText(btnBg);
+        statusBtn = `<button class="kds-status-btn resume" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Resume</button>`;
+      } else if (o.status === 'processing') {
+        btnBg = colors.pause; btnText = contrastText(btnBg);
+        statusBtn = `<button class="kds-status-btn pause" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${PAUSE_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Pause</button>`;
+      }
+      /* Finish is always paired with the status action while in progress */
+      statusBtn += `<button class="kds-status-btn finish" onclick="overrideComplete('${o.id}', ${remaining})">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Finish</button>`;
     }
-    // 'new' and not all done → no primary button at all
-    /* Force-finish escape hatch: once the kitchen has made progress on an
-       order (≥1 item done) but items remain unchecked, offer a muted
-       secondary 'Force Finish' — e.g. a guest cancels the rest. Always
-       confirms with the count of unchecked items. */
-    if (!allDone && doneCount > 0) {
-      statusBtn += `<button class="kds-status-btn force" onclick="overrideComplete('${o.id}', ${remaining})">Force Finish</button>`;
-    }
+    const footerActions = statusBtn ? `<div class="kds-footer-actions">${statusBtn}</div>` : '';
 
     return `
     <div class="kds-card${collapsedOrders.has(o.id) ? ' collapsed' : ''}" data-id="${o.id}" data-received="${o.received}">
@@ -1402,7 +1406,7 @@
         </div>
         <div class="kds-card-footer">
           ${o.notes ? `<div class="kds-order-notes">Notes: "${o.notes}"</div>` : ''}
-          ${statusBtn ? statusBtn : ''}
+          ${footerActions}
         </div>
         </div>
       </div>
@@ -1535,8 +1539,8 @@
 
   function overrideComplete(orderId, remaining) {
     confirmModal(
-      'Force finish this order? ' + remaining + ' item(s) still unchecked.',
-      'Force Finish',
+      'Finish this order? ' + remaining + ' item(s) still unchecked.',
+      'Finish',
       () => complete(orderId),
       true
     );
