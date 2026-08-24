@@ -666,6 +666,14 @@
     color: var(--text); opacity: 0.55; font-size: 11px;
   }
   .kds-status-btn.finish:hover { opacity: 1; background: var(--border); }
+  /* Experimental geometry (A/B): squircle = Apple-style superellipse(2)
+     corner — smoother than a plain circular arc. corner-shape uses the
+     existing border-radius as its SIZE boundary. Applied ONLY to the
+     Pause button so it can be compared side-by-side with the round
+     corners of Resume / Finish / Mark Finish.
+     Requires Chrome 140+; unsupported browsers fall back to the round
+     border-radius (graceful). */
+  .kds-status-btn.pause { corner-shape: squircle; }
 
   /* ── Completed tab ──────────────────────────────── */
   .kds-completed-card {
