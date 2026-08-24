@@ -470,7 +470,14 @@
   .kds-card-header .time { opacity: 0.6; font-size: 12px; font-weight: 400; }
   .kds-card-header .status {
     opacity: 0.55; font-size: 11px; font-weight: 400; font-style: italic;
-    min-height: 1.1em; display: inline-block;
+    /* fixed height for ALL states: the blank placeholder, the text-only
+       paused, and the pill variants (processing/prepared, which add
+       padding) must occupy the same box so the header never changes
+       height when the status appears/disappears. border-box makes the
+       pill padding fit inside the fixed height. */
+    box-sizing: border-box;
+    height: 22px; line-height: 18px;
+    display: inline-flex; align-items: center;
   }
   .kds-card-header .status.paused { opacity: 0.9; font-style: normal; }
   .kds-card-header .status.processing {
@@ -498,7 +505,7 @@
     border-radius: 3px; letter-spacing: 0.5px;
   }
 
-  .kds-card-main { flex: 1 1 auto; min-height: 0; padding: 2px 0 0 0; }
+  .kds-card-main { flex: 1 1 auto; min-height: 0; padding: 0; position: relative; }
 
   /* Collapsible section: animates to any height via grid-template-rows.
      The grid MUST have exactly ONE child — with two children the second
@@ -512,15 +519,11 @@
   .kds-card-collapsible-inner { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
   .kds-card.collapsed .kds-card-collapsible { grid-template-rows: 0fr; opacity: 0; }
 
-  .kds-category { border-bottom: 1px solid var(--border); padding: 3px 0 2px 0; border-radius: 6px; transition: background 0.15s; }
+  .kds-category { border-bottom: 1px solid var(--border); padding: 3px 0 2px 0; transition: background 0.15s; }
   .kds-category:last-child { border-bottom: none; padding-bottom: 0; }
   /* Whole-section hover (station-level unit): when the header is hovered,
-     the ENTIRE category block lights up (header + its items), reinforcing
-     that a header tap checks off the whole group. Items alone do NOT
-     trigger it — they toggle individually. :has() is supported in the
-     Chromium/WebKit targets. The header itself has NO separate hover —
-     the section background covers the whole block evenly, so there is
-     no double-highlight on the header row. */
+     the ENTIRE category block lights up (header + its items). Items alone
+     do NOT trigger it — they toggle individually. */
   .kds-category:has(.kds-category-header:hover) { background: rgba(255,255,255,0.06); }
   .kds-screen.light .kds-category:has(.kds-category-header:hover) { background: rgba(0,0,0,0.06); }
   .kds-category-header {
@@ -1174,6 +1177,7 @@
 
   let leaveLock = false;
   let prevTab = 'open';
+
   function render() {
     if (leaveLock) return; // a card is mid-leave; defer until animationend
     const main = document.getElementById('main');
