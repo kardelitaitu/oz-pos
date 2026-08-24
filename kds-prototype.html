@@ -1374,11 +1374,13 @@
     if (allDone) {
       btnBg = colors.complete; btnText = contrastText(btnBg);
       statusBtn = `<button class="kds-status-btn complete" style="background:${btnBg};color:${btnText}" onclick="complete('${o.id}')">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Mark Finish</button>`;
-    } else {
+    } else if (o.status === 'processing' || o.status === 'paused') {
       /* In-progress orders show the status action (Pause/Resume) plus a
          Force Finish button — for restaurants WITHOUT a dedicated waiter:
          the kitchen can push the order out even with unchecked items.
-         Force Finish always confirms with the count.
+         Force Finish always confirms with the count, and only appears
+         once work has started (processing or paused) — never on a fresh
+         'new' order with nothing clicked.
          Distinct from 'Mark Finish' above, which only appears when every
          item is done (the order is prepared). */
       if (o.status === 'paused') {
@@ -1391,6 +1393,7 @@
       /* Force Finish is always paired with the status action while in progress */
       statusBtn += `<button class="kds-status-btn finish" onclick="overrideComplete('${o.id}', ${remaining}, this)">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Force Finish</button>`;
     }
+    // 'new' status (nothing clicked) → no buttons at all
     const footerActions = statusBtn ? `<div class="kds-footer-actions">${statusBtn}</div>` : '';
 
     return `
