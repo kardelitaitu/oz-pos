@@ -855,16 +855,8 @@
                 <span class="kds-setting-label">Display scale</span>
                 <div class="kds-zoom-row">
                   <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-out" aria-label="Zoom out">−</button>
-                  <button class="kds-btn kds-btn--muted kds-zoom-value" id="pagezoom-value" title="Reset to 100%" aria-label="Reset page zoom to 100%">100%</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-value" id="pagezoom-value" title="Reset to 100%" aria-label="Reset zoom to 100%">100%</button>
                   <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-in" aria-label="Zoom in">+</button>
-                </div>
-              </div>
-              <div class="kds-setting-row">
-                <span class="kds-setting-label">Card size</span>
-                <div class="kds-zoom-row">
-                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
-                  <button class="kds-btn kds-btn--muted kds-zoom-value" id="zoom-value" title="Reset to 100%" aria-label="Reset card size to 100%">100%</button>
-                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
                 </div>
               </div>
               <div class="kds-setting-row">
@@ -1092,14 +1084,6 @@
      moves sideways — only up as cards above it complete. RUSH → column
      0 (top-left). Others → the shortest column at birth. */
   const orderCols = new Map();
-  /* Display size: 75%–150%, persisted like colors */
-  const ZOOM_KEY = 'kds-proto-zoom';
-  let zoom = loadZoom();
-  function loadZoom() {
-    try { const v = parseInt(localStorage.getItem(ZOOM_KEY), 10); if (!isNaN(v)) return v; } catch {}
-    return 100;
-  }
-  function saveZoom() { try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch {} }
 
   /* Column count: 0 = auto (responsive), 1–4 = manual override.
      Persisted; 'Auto' is the default and the value button resets to it. */
@@ -2251,7 +2235,7 @@
     }
   });
 
-  /* ── page zoom (global, like Ctrl+/Ctrl-) ─────── */
+  /* ── display scale (board only — chrome stays proportional) ── */
   const PAGEZOOM_KEY = 'kds-proto-pagezoom';
   let pageZoom = loadPageZoom();
   function loadPageZoom() {
@@ -2260,10 +2244,11 @@
   }
   function savePageZoom() { try { localStorage.setItem(PAGEZOOM_KEY, String(pageZoom)); } catch {} }
   function applyPageZoom() {
-    /* zoom the whole screen — behaves like browser Ctrl+/-
-       NOTE: the CSS `zoom` property is Chrome/Safari-only; acceptable
-       for the KDS tablet target (see review P5). */
-    document.getElementById('screen').style.zoom = pageZoom === 100 ? '' : pageZoom / 100;
+    /* zoom ONLY the main board area — the topmenu and footer keep their
+       size (proportional chrome); the flex layout gives the board the
+       remaining space. NOTE: CSS `zoom` is Chrome/Safari-only;
+       acceptable for the KDS tablet target (see review P5). */
+    document.getElementById('main').style.zoom = pageZoom === 100 ? '' : pageZoom / 100;
     document.getElementById('pagezoom-value').textContent = pageZoom + '%';
   }
   document.getElementById('pagezoom-out').addEventListener('click', () => {
@@ -2276,23 +2261,6 @@
     pageZoom = 100; savePageZoom(); applyPageZoom();
   });
   applyPageZoom();
-
-  /* ── card size zoom (cards only) ──────────────── */
-  function applyZoom() {
-    document.getElementById('main').style.zoom = zoom === 100 ? '' : zoom / 100;
-    document.getElementById('zoom-value').textContent = zoom + '%';
-  }
-  document.getElementById('zoom-out').addEventListener('click', () => {
-    zoom = Math.max(75, zoom - 10); saveZoom(); applyZoom();
-  });
-  document.getElementById('zoom-in').addEventListener('click', () => {
-    zoom = Math.min(150, zoom + 10); saveZoom(); applyZoom();
-  });
-  /* clicking the % value resets to 100% */
-  document.getElementById('zoom-value').addEventListener('click', () => {
-    zoom = 100; saveZoom(); applyZoom();
-  });
-  applyZoom();
 
   /* ── kitchen switches (sound / auto-accept / animations) ──
      sound + ack persist the preference but have no observable effect
