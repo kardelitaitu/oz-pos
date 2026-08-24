@@ -984,6 +984,26 @@
   let colorConfigs = loadColorConfigs();
   let colors = colorConfigs[currentTheme()];
   let tab = 'open';
+
+  /* ── Mock data pools — shared by the initial board and the live
+     arrival simulation, so new orders match the existing style.
+     MUST sit before `let orders = initialOrders()` (const/let are in
+     the temporal dead zone until here — function declarations hoist,
+     these do not). ── */
+  const mockCustomers = ['John Smith', 'Jane Doe', 'Alice Wang', 'Bob Lee', 'Maria Garcia', 'Tom Harris', 'Emma Wilson', 'Liam Brown', 'Sofia Rossi', 'Noah Kim', 'Olivia Chen', 'Lucas Meier'];
+  const mockTables = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'];
+  const mockNotes = ['', '', '', '', 'no garlic', 'extra spicy', 'medium rare', 'no onions', 'gluten free', 'well done'];
+  const mockCatSpecs = [
+    { course: '🥗 Appetizers', pool: ['Calamari', 'Bruschetta', 'Garlic Bread', 'Spring Rolls', 'Dumplings', 'Caesar Salad', 'Soup'] },
+    { course: '🥩 Mains', pool: ['Steak A', 'Grilled Chicken', 'Beef Noodles', 'Spaghetti', 'Salmon', 'Pork Chop', 'Ribeye', 'Lamb Curry'] },
+    { course: '🧃 Juice', pool: ['Orange Juice', 'Apple Juice', 'Lemonade', 'Watermelon Juice'] },
+    { course: '☕ Hot Drinks', pool: ['Coffee', 'Tea', 'Hot Chocolate', 'Espresso'] },
+    { course: '🧊 Cold Drinks', pool: ['Iced Tea', 'Soda', 'Milkshake', 'Iced Latte'] },
+  ];
+  let mockSeed = 12345; // fixed seed → same board every load; arrivals continue the sequence
+  const mockRand = () => (mockSeed = (mockSeed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const mockPick = (arr) => arr[Math.floor(mockRand() * arr.length)];
+
   let orders = initialOrders();
   /* Category filter: null = All, otherwise a Set of course names to show */
   let filterCats = null;
@@ -1004,86 +1024,127 @@
   }
   function saveZoom() { try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch {} }
 
-  /* ── Mock data: 12 active orders ───────────────────
+  /* ── Mock board: 12 active orders ───────────────────
      Deterministic generator: mixes statuses (new/processing/paused),
      dine-in vs takeaway, priorities, category combinations, notes.
      doneAt is a timestamp so elapsed durations compute live. */
   function initialOrders() {
     const now = Date.now();
     const minAgo = (m) => now - m * 60000;
-    let seed = 12345; // fixed seed → same board every load
-    const rand = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-    const pick = (arr) => arr[Math.floor(rand() * arr.length)];
     const seq = (n) => '20260202-' + (12520 + n);
-
-    const customers = ['John Smith', 'Jane Doe', 'Alice Wang', 'Bob Lee', 'Maria Garcia', 'Tom Harris', 'Emma Wilson', 'Liam Brown', 'Sofia Rossi', 'Noah Kim', 'Olivia Chen', 'Lucas Meier'];
-    const tables = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'];
-    const mains = ['Steak A', 'Grilled Chicken', 'Beef Noodles', 'Spaghetti', 'Salmon', 'Pork Chop', 'Ribeye', 'Lamb Curry'];
-    const apps = ['Calamari', 'Bruschetta', 'Garlic Bread', 'Spring Rolls', 'Dumplings', 'Caesar Salad', 'Soup'];
-    const juices = ['Orange Juice', 'Apple Juice', 'Lemonade', 'Watermelon Juice'];
-    const hot = ['Coffee', 'Tea', 'Hot Chocolate', 'Espresso'];
-    const cold = ['Iced Tea', 'Soda', 'Milkshake', 'Iced Latte'];
-    const notes = ['', '', '', '', 'no garlic', 'extra spicy', 'medium rare', 'no onions', 'gluten free', 'well done'];
-
-    const catSpecs = [
-      { course: '🥗 Appetizers', pool: apps },
-      { course: '🥩 Mains', pool: mains },
-      { course: '🧃 Juice', pool: juices },
-      { course: '☕ Hot Drinks', pool: hot },
-      { course: '🧊 Cold Drinks', pool: cold },
-    ];
-
     const orders = [];
     for (let n = 0; n < 12; n++) {
       const id = seq(n);
-      const minAge = 3 + Math.floor(rand() * 22);      // received 3–25 min ago
+      const minAge = 3 + Math.floor(mockRand() * 22);      // received 3–25 min ago
       const received = minAgo(minAge);
-      const dineIn = rand() < 0.7;                      // 70% dine-in
-      const nCats = 1 + Math.floor(rand() * 3);         // 1–3 categories
+      const dineIn = mockRand() < 0.7;                     // 70% dine-in
+      const nCats = 1 + Math.floor(mockRand() * 3);        // 1–3 categories
       const pickedCats = [];
-      const pool = [...catSpecs];
+      const pool = [...mockCatSpecs];
       for (let c = 0; c < nCats && pool.length; c++) {
-        pickedCats.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+        pickedCats.push(pool.splice(Math.floor(mockRand() * pool.length), 1)[0]);
       }
       // Status: new orders have nothing done (they transition on first tap);
       // processing has a mix; paused is mostly done
       const status = n % 6 === 5 ? 'paused' : n % 3 === 0 ? 'new' : 'processing';
 
       const categories = pickedCats.map((cs, ci) => {
-        const nItems = 1 + Math.floor(rand() * 3);      // 1–3 items per category
+        const nItems = 1 + Math.floor(mockRand() * 3);     // 1–3 items per category
         const used = new Set();
         const items = [];
         for (let i = 0; i < nItems; i++) {
-          let name = pick(cs.pool);
+          let name = mockPick(cs.pool);
           let guard = 0;
-          while (used.has(name) && guard++ < 10) name = pick(cs.pool);
+          while (used.has(name) && guard++ < 10) name = mockPick(cs.pool);
           used.add(name);
-          const qty = 1 + Math.floor(rand() * 4);
+          const qty = 1 + Math.floor(mockRand() * 4);
           // Done probability depends on status: processing more items done,
           // paused many done, new none (so it can transition on first tap)
           let done;
           if (status === 'new') done = false;
-          else done = rand() < (status === 'paused' ? 0.9 : 0.55);
+          else done = mockRand() < (status === 'paused' ? 0.9 : 0.55);
           items.push({
             id: id + '-i' + ci + '-' + i,
             name, qty,
             done,
-            doneAt: done ? minAgo(minAge - Math.floor(rand() * Math.max(1, minAge - 1))) : null,
-            note: pick(notes),
+            doneAt: done ? minAgo(minAge - Math.floor(mockRand() * Math.max(1, minAge - 1))) : null,
+            note: mockPick(mockNotes),
           });
         }
         return { course: cs.course, items };
       });
 
       orders.push({
-        id, display: String(8 + n), table: dineIn ? pick(tables) : null,
-        customer: pick(customers), received,
-        priority: rand() < 0.15, dineIn, status, notes: pick(notes),
+        id, display: String(8 + n), table: dineIn ? mockPick(mockTables) : null,
+        customer: mockPick(mockCustomers), received,
+        priority: mockRand() < 0.15, dineIn, status, notes: mockPick(mockNotes),
         categories,
       });
     }
     return orders;
   }
+
+  /* ── Live arrival simulation ────────────────────────
+     One fresh order every 30 s, 20% chance of RUSH. Feeds the spawn
+     animation, count badge, aria-live announcer and (when enabled) the
+     arrival sound — the 'New order sound' kitchen toggle finally acts. */
+  let mockArrivalN = 0;
+  function mockNewOrder() {
+    const n = mockArrivalN++;
+    const id = '20260202-' + (12532 + n);           // continue after the 12 initial ids
+    const now = Date.now();
+    const dineIn = mockRand() < 0.7;
+    const nCats = 1 + Math.floor(mockRand() * 3);
+    const pool = [...mockCatSpecs];
+    const pickedCats = [];
+    for (let c = 0; c < nCats && pool.length; c++) {
+      pickedCats.push(pool.splice(Math.floor(mockRand() * pool.length), 1)[0]);
+    }
+    const categories = pickedCats.map((cs, ci) => {
+      const nItems = 1 + Math.floor(mockRand() * 3);
+      const used = new Set();
+      const items = [];
+      for (let i = 0; i < nItems; i++) {
+        let name = mockPick(cs.pool);
+        let guard = 0;
+        while (used.has(name) && guard++ < 10) name = mockPick(cs.pool);
+        used.add(name);
+        items.push({
+          id: id + '-i' + ci + '-' + i,
+          name, qty: 1 + Math.floor(mockRand() * 4),
+          done: false, doneAt: null,               // fresh order, nothing started
+          note: mockPick(mockNotes),
+        });
+      }
+      return { course: cs.course, items };
+    });
+    return {
+      id, display: String(20 + n), table: dineIn ? mockPick(mockTables) : null,
+      customer: mockPick(mockCustomers), received: now,
+      priority: mockRand() < 0.2,                  // 20% RUSH
+      dineIn, status: 'new', notes: mockPick(mockNotes),
+      categories,
+    };
+  }
+  function playArrivalSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.25);
+    } catch { /* no audio context (jsdom / blocked) — silent */ }
+  }
+  setInterval(() => {
+    const o = mockNewOrder();
+    orders.push(o);
+    if (kitchen.sound === true) playArrivalSound();
+    announce('New order #' + (o.table || o.display) + (o.priority ? ' — RUSH' : '') + ' received.');
+    render();
+  }, 30000);
 
   function fmtDuration(ms) {
     const s = Math.max(0, Math.round(ms / 1000));
