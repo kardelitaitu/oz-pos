@@ -687,10 +687,16 @@
   .kds-main.completed-view > .kds-col > .kds-card { width: 100%; max-width: 100%; }
   .kds-completed-col-head {
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-    color: var(--text); opacity: 0.55; padding: 0 2px;
-    display: flex; align-items: center; justify-content: space-between;
+    color: var(--text); opacity: 0.55; padding: 4px 6px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: transparent; border: none; border-radius: 8px; cursor: pointer;
+    font-family: inherit; width: 100%; text-align: left;
+    transition: background 0.15s, opacity 0.15s;
   }
+  .kds-completed-col-head:hover { background: var(--bg-hover); opacity: 0.8; }
   .kds-completed-col-count { opacity: 0.6; font-weight: 600; }
+  .kds-completed-col-chev { opacity: 0.5; transition: transform 0.2s; flex-shrink: 0; }
+  .kds-completed-col-head[aria-expanded="true"] .kds-completed-col-chev { transform: rotate(180deg); }
   /* reopen: full-width card footer button, muted (secondary action) */
   .kds-status-btn.reopen {
     background: transparent; border: 1px solid var(--border-strong);
@@ -1555,6 +1561,18 @@
     </div>`;
   }
 
+  /* Completed-tab column toggle: clicking a bucket header expands or
+     minimizes ALL cards in that column at once (same collapsedOrders
+     set the per-card toggle uses, so the two stay consistent). */
+  let completedBucketIds = {};
+  function toggleCol(key) {
+    const ids = completedBucketIds[key] || [];
+    if (!ids.length) return;
+    const allCollapsed = ids.every(id => collapsedOrders.has(id));
+    ids.forEach(id => { if (allCollapsed) collapsedOrders.delete(id); else collapsedOrders.add(id); });
+    render();
+  }
+
   function completedCardHTML(o) {
     const hdrBg = o.dineIn ? colors.dinein : colors.takeaway;
     const hdrText = contrastText(hdrBg);
@@ -1772,9 +1790,14 @@
         main.innerHTML = buckets.map(b => {
           const list = done.filter(o => b.test(o.completedAt || o.received))
             .sort((a, b2) => (b2.completedAt || b2.received) - (a.completedAt || a.received));
+          completedBucketIds[b.key] = list.map(o => o.id);
+          const allCollapsed = list.every(o => collapsedOrders.has(o.id));
           return `
             <div class="kds-col">
-              <div class="kds-completed-col-head"><span>${b.label}</span><span class="kds-completed-col-count">${list.length}</span></div>
+              <button class="kds-completed-col-head" onclick="toggleCol('${b.key}')" aria-expanded="${allCollapsed ? 'false' : 'true'}" aria-label="Expand or minimize ${b.label} orders">
+                <span>${b.label}</span><span class="kds-completed-col-count">${list.length}</span>
+                <span class="kds-completed-col-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:10px;height:10px"><path d="M6 9l6 6 6-6"/></svg></span>
+              </button>
               ${list.map(completedCardHTML).join('')}
             </div>`;
         }).join('');
