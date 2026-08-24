@@ -5,12 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0f0f14">
 <link rel="manifest" href="manifest.json">
-<!-- Poppins: 400 body · 500 emphasis · 600 subheadings · 700 headings -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>KDS v2 — Kitchen Display Prototype</title>
 <style>
+  /* Poppins — self-hosted latin subsets. No Google Fonts dependency:
+     the css2 API was returning an empty stylesheet on this network
+     (WARP/proxy), so the font silently never loaded. Weights map to
+     the ladder: 400 body · 500 emphasis · 600 subheadings · 700
+     headings. */
+  @font-face { font-family: 'Poppins'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/poppins-400.woff2) format('woff2'); }
+  @font-face { font-family: 'Poppins'; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/poppins-500.woff2) format('woff2'); }
+  @font-face { font-family: 'Poppins'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/poppins-600.woff2) format('woff2'); }
+  @font-face { font-family: 'Poppins'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/poppins-700.woff2) format('woff2'); }
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   /* Apple-style superellipse corners — gated by body class so old
