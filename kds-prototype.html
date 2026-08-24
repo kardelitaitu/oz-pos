@@ -556,7 +556,7 @@
     height: 22px; line-height: 18px;
     display: inline-flex; align-items: center;
   }
-  .kds-card-header .status.paused { opacity: 0.9; font-style: normal; }
+  .kds-card-header .status.paused { opacity: 0.9; font-style: normal; display: inline-flex; align-items: center; gap: 3px; }
   .kds-card-header .status.processing {
     opacity: 1; font-style: normal;
     animation: kds-blink 2.5s ease-in-out infinite;
@@ -1706,7 +1706,7 @@
             ${allDone
               ? `<span class="status prepared" style="background:${colors.prepared};color:${contrastText(colors.prepared)}">✓ prepared</span>`
               : o.status === 'paused'
-                ? `<span class="status paused">⏸ paused</span>`
+                ? `<span class="status paused">${PAUSE_ICON.replace('<svg', '<svg style="width:11px;height:11px"')}paused</span>`
                 : o.status === 'processing'
                   ? `<span class="status processing" style="background:${colors.processing};color:${contrastText(colors.processing)}">processing</span>`
                   : `<span class="status" aria-hidden="true">&nbsp;</span>`}
