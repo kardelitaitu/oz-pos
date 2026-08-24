@@ -1871,10 +1871,11 @@
            tab's card grid, but with minimized cards sorted by age. */
         const now = Date.now();
         const buckets = [
-          { key: 'recent', label: 'Recent',  test: (at) => at >= now - 3600000 },
-          { key: '1h',     label: '1h ago',  test: (at) => at >= now - 6 * 3600000 && at < now - 3600000 },
-          { key: '6h',     label: '6h ago',  test: (at) => at >= now - 24 * 3600000 && at < now - 6 * 3600000 },
-          { key: '24h',    label: '24h ago', test: (at) => at < now - 24 * 3600000 },
+          { key: 'recent', label: 'Recent', test: (at) => at >= now - 3600000 },
+          { key: '1h',     label: '1h',     test: (at) => at >= now - 3 * 3600000 && at < now - 3600000 },
+          { key: '3h',     label: '3h',     test: (at) => at >= now - 6 * 3600000 && at < now - 3 * 3600000 },
+          /* 6h bucket runs to the 24h auto-clear boundary */
+          { key: '6h',     label: '6h',     test: (at) => at >= now - 24 * 3600000 && at < now - 6 * 3600000 },
         ];
         main.innerHTML = buckets.map(b => {
           const list = done.filter(o => b.test(o.completedAt || o.received))
