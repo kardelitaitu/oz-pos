@@ -1020,7 +1020,7 @@
   const mockRand = () => (mockSeed = (mockSeed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   const mockPick = (arr) => arr[Math.floor(mockRand() * arr.length)];
 
-  let orders = initialOrders();
+  let orders = initialOrders().concat(mockCompletedOrders());
   /* Category filter: null = All, otherwise a Set of course names to show */
   let filterCats = null;
   /* Waiter view: 'prepared' shows only orders whose items are ALL done
@@ -1162,6 +1162,48 @@
     render();
   }, 30000);
 
+  /* ── Completed-tab mock: ~5 orders per hour over the last 24h ── */
+  function mockCompletedOrders() {
+    const list = [];
+    const now = Date.now();
+    let idx = 0;
+    for (let h = 0; h < 24; h++) {
+      for (let i = 0; i < 5; i++) {
+        const completedAt = now - (h * 3600000 + Math.floor(mockRand() * 3600000));
+        const prepMin = 3 + Math.floor(mockRand() * 22);
+        const received = completedAt - prepMin * 60000;
+        const id = '20260202-' + (12000 + idx);
+        const dineIn = mockRand() < 0.7;
+        const nCats = 1 + Math.floor(mockRand() * 3);
+        const pool = [...mockCatSpecs];
+        const pickedCats = [];
+        for (let c = 0; c < nCats && pool.length; c++) pickedCats.push(pool.splice(Math.floor(mockRand() * pool.length), 1)[0]);
+        const categories = pickedCats.map((cs, ci) => {
+          const nItems = 1 + Math.floor(mockRand() * 3);
+          const used = new Set();
+          const items = [];
+          for (let j = 0; j < nItems; j++) {
+            let name = mockPick(cs.pool);
+            let guard = 0;
+            while (used.has(name) && guard++ < 10) name = mockPick(cs.pool);
+            used.add(name);
+            const doneAt = received + Math.floor(mockRand() * (completedAt - received));
+            items.push({ id: id + '-i' + ci + '-' + j, name, qty: 1 + Math.floor(mockRand() * 4), done: true, doneAt, note: mockPick(mockNotes) });
+          }
+          return { course: cs.course, items };
+        });
+        list.push({
+          id, display: String(500 + idx), table: dineIn ? mockPick(mockTables) : null,
+          customer: mockPick(mockCustomers), received,
+          priority: mockRand() < 0.15, dineIn, status: 'completed', completedAt,
+          notes: mockPick(mockNotes), categories,
+        });
+        idx++;
+      }
+    }
+    return list;
+  }
+
   function fmtDuration(ms) {
     const s = Math.max(0, Math.round(ms / 1000));
     const m = Math.floor(s / 60);
@@ -1262,6 +1304,8 @@
     render();
   }
   const collapsedOrders = new Set();
+  /* pre-made completed mocks start minimized */
+  orders.forEach(o => { if (o.status === 'completed') collapsedOrders.add(o.id); });
   function toggleCardCollapsed(id, btn) {
     const card = btn.closest('.kds-card');
     const expanding = card.classList.contains('collapsed'); // currently collapsed → will expand
