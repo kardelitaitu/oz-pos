@@ -233,20 +233,16 @@
   .kds-btn:active { background: var(--btn-active); transform: translateY(1px); }
   .kds-btn.is-active { background: var(--btn-state); }
   .kds-btn.is-active:hover { background: var(--btn-state-hover); }
-  /* Hover feedback: the pop is applied ONLY to vector icons (SVGs raster
-     crisply at any scale). TEXT is never transformed — a transform on a
-     text element makes Chrome re-rasterize it in a new compositor layer
-     and the glyphs momentarily render with the default/fallback font
-     (text visibly 'changes font type' mid-animation). Text buttons get
-     their feedback from the background/opacity hover instead. */
-  @keyframes kds-btn-pop {
-    0% { transform: scale(1); }
-    30% { transform: scale(0.97); }
-    55% { transform: scale(1.04); }
-    80% { transform: scale(0.99); }
-    100% { transform: scale(1); }
-  }
-  .kds-btn:hover > svg { animation: kds-btn-pop 0.45s ease-out; transform-origin: center; }
+  /* Hover feedback: scale the WHOLE button layer, pre-promoted with
+     will-change. The layer is created BEFORE the interaction, so the
+     text texture is rasterized once with the correct font; the hover
+     pop then GPU-transforms that texture — no one-frame font flash.
+     This is the production text-animation strategy (vs the old
+     transform-on-text, which re-rasterized glyphs mid-flight and
+     flashed the fallback font). */
+  .kds-btn { will-change: transform; }
+  .kds-btn:hover { transform: scale(1.04); }
+  .kds-btn:active { background: var(--btn-active); transform: translateY(1px); }
 
   /* --stack: labels share one grid cell → width = widest label */
   .kds-btn--stack { display: inline-grid; grid-template-areas: 'l'; align-items: center; justify-items: center; }
