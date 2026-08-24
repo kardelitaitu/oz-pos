@@ -1459,6 +1459,20 @@
     orders = orders.map(o => o.id === orderId ? { ...o, status: 'paused', completedAt: null } : o);
     render();
   }
+  /* Reopen from the Completed tab is confirm-gated — same anchored modal
+     as Force Finish (card-centred + blurred) so an accidental tap can't
+     yank an order back into the kitchen queue. */
+  function confirmReopen(orderId, btn) {
+    const order = orders.find(o => o.id === orderId);
+    const anchor = btn ? btn.closest('.kds-card') : null;
+    confirmModal(
+      'Reopen order #' + (order ? (order.table || order.display) : orderId) + '? It returns to the Open tab as paused.',
+      'Reopen',
+      () => reopen(orderId),
+      false, // not destructive — blue confirm, not red
+      anchor
+    );
+  }
 
   /* ── render ─────────────────────────────────────── */
   function allCategories() {
@@ -1756,7 +1770,7 @@
           <div class="kds-card-main">${catRows}</div>
           <div class="kds-card-footer">
             <div class="kds-footer-actions">
-              <button class="kds-status-btn reopen" onclick="reopen('${o.id}')">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Reopen</button>
+              <button class="kds-status-btn reopen" onclick="confirmReopen('${o.id}', this)">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Reopen</button>
             </div>
           </div>
         </div>
