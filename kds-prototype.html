@@ -730,6 +730,10 @@
     animation: kds-drop-in 0.18s ease-out;
   }
   .kds-modal-backdrop[hidden] { display: none; }
+  /* anchored mode (force-finish): NO page-wide veil — the blurred card
+     is the focus cue. The backdrop stays transparent but still catches
+     outside-clicks to cancel. */
+  .kds-modal-backdrop.anchored { background: transparent; }
   /* anchor wrapper: default transparent (flex centering passes through);
      anchored mode pins it at the order card's centre */
   .kds-modal-anchor { display: contents; }
@@ -1609,7 +1613,8 @@
     ok.textContent = okLabel || 'Confirm';
     ok.classList.toggle('danger', !!danger);
     _confirmOk = onOk;
-    /* anchor positioning + card blur (force-finish mode) */
+    /* anchored mode: card-centred modal + card blur, no page veil */
+    backdrop.classList.toggle('anchored', !!anchorEl);
     anchor.classList.toggle('anchored', !!anchorEl);
     if (anchorEl) {
       const r = anchorEl.getBoundingClientRect();
@@ -1631,11 +1636,12 @@
     const backdrop = document.getElementById('confirm-backdrop');
     if (backdrop.hidden) return;
     backdrop.hidden = true;
-    /* remove the card blur */
+    /* remove the card blur + anchored states */
     if (_confirmAnchor) _confirmAnchor.classList.remove('blurred');
     _confirmAnchor = null;
     _confirmOk = null;
     document.getElementById('confirm-anchor').classList.remove('anchored');
+    backdrop.classList.remove('anchored');
   }
   document.getElementById('confirm-ok').addEventListener('click', () => {
     const fn = _confirmOk;
