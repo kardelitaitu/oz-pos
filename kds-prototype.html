@@ -705,6 +705,11 @@
   .kds-main.completed-view .kds-category-header,
   .kds-main.completed-view .kds-item-row,
   .kds-main.completed-view .kds-item-row.done { opacity: 1; }
+  /* Prepared (waiter) filter on the open tab: only fully-done orders are
+     shown, so the done-dimmed menu reads at full opacity too */
+  .kds-main.prepared-filter .kds-category-header,
+  .kds-main.prepared-filter .kds-item-row,
+  .kds-main.prepared-filter .kds-item-row.done { opacity: 1; }
   .kds-completed-col-head {
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text); opacity: 0.55; padding: 4px 6px;
@@ -1788,7 +1793,7 @@
     document.getElementById('count-completed').textContent = done.length;
 
     if (tab === 'open') {
-      main.className = 'kds-main' + (open.length === 0 ? ' empty' : '') + (prevTab !== 'open' ? ' slide-right' : '');
+      main.className = 'kds-main' + (open.length === 0 ? ' empty' : '') + (prevTab !== 'open' ? ' slide-right' : '') + (filterMode === 'prepared' ? ' prepared-filter' : '');
 
       /* ── FLIP: FIRST — record old card positions ── */
       let oldPos = null;
