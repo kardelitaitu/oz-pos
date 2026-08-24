@@ -243,27 +243,30 @@
 /* Hamburger panel — same drop-in animation as the filter dropdown */
   .kds-hamburger-panel {
     position: absolute; top: calc(100% + 6px); right: 0; width: 375px;
-    max-height: calc(100vh - 80px); overflow-y: auto; overflow-x: hidden;
+    overflow: hidden;
     background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: 12px;
-    padding: 12px 14px 14px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    padding: 0; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     animation: kds-drop-in 0.18s ease-out;
     transform-origin: top right;
+  }
+  /* scrollable body — the floating close stays pinned while this scrolls */
+  .kds-panel-body {
+    max-height: calc(100vh - 80px);
+    overflow-y: auto; overflow-x: hidden;
+    padding: 44px 14px 14px;
     scrollbar-width: thin;
   }
-  .kds-panel-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding-bottom: 10px; margin-bottom: 10px;
-    border-bottom: 1px solid var(--border);
-  }
-  .kds-panel-title { font-size: 12px; font-weight: 700; color: var(--text); opacity: 0.8; text-transform: uppercase; letter-spacing: 0.08em; }
+  /* floating dismiss button — hovers in the corner, no header row */
   .kds-panel-close {
-    width: 24px; height: 24px; border-radius: 6px; border: none;
-    background: transparent; color: var(--text); opacity: 0.5;
+    position: absolute; top: 10px; right: 10px;
+    width: 28px; height: 28px; border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-surface); color: var(--text); opacity: 0.8;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
     transition: all 0.15s;
   }
-  .kds-panel-close:hover { background: rgba(255,255,255,0.1); opacity: 1; }
-  .kds-panel-close svg { width: 12px; height: 12px; }
+  .kds-panel-close:hover { background: var(--border); opacity: 1; }
+  .kds-panel-close svg { width: 13px; height: 13px; }
   .kds-panel-section { margin-bottom: 14px; }
   .kds-panel-section:last-child { margin-bottom: 0; }
   .kds-panel-section h3 { font-size: 10px; font-weight: 600; color: var(--text); opacity: 0.5; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -676,15 +679,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="kds-hamburger-panel" id="hamburger-panel" style="display:none;">
-        <div class="kds-panel-header">
-          <span class="kds-panel-title">Settings</span>
-          <button class="kds-panel-close" id="panel-close" title="Close" aria-label="Close settings">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </button>
-        </div>
-        <div class="kds-panel-section">
-          <div class="kds-setting-card">
-            <h3>Theme</h3>
+        <button class="kds-panel-close" id="panel-close" title="Close" aria-label="Close settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <div class="kds-panel-body">
+          <div class="kds-panel-section">
+            <div class="kds-setting-card">
+              <h3>Theme</h3>
             <div class="kds-theme-row">
               <button class="kds-theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light or dark theme">
                 <span class="kds-theme-indicator" id="theme-indicator"></span>
@@ -734,6 +735,7 @@
           <div id="color-panel"></div>
         </div>
         <button class="kds-btn kds-btn--muted kds-reset-btn" id="reset-colors">Reset to defaults</button>
+        </div>
       </div>
     </div>
   </div>
