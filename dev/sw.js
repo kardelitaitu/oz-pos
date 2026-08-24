@@ -11,10 +11,6 @@ self.addEventListener('install', (e) => {
         'kds-prototype.html',
         'kds-pwa/icon-192.png',
         'kds-pwa/icon-512.png',
-        'fonts/poppins-400.woff2',
-        'fonts/poppins-500.woff2',
-        'fonts/poppins-600.woff2',
-        'fonts/poppins-700.woff2',
       ]))
       .then(() => self.skipWaiting())
   );

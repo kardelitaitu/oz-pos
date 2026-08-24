@@ -7,15 +7,12 @@
 <link rel="manifest" href="manifest.json">
 <title>KDS v2 — Kitchen Display Prototype</title>
 <style>
-  /* Poppins — self-hosted latin subsets. No Google Fonts dependency:
-     the css2 API was returning an empty stylesheet on this network
-     (WARP/proxy), so the font silently never loaded. Weights map to
-     the ladder: 400 body · 500 emphasis · 600 subheadings · 700
-     headings. */
-  @font-face { font-family: 'Poppins'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/poppins-400.woff2) format('woff2'); }
-  @font-face { font-family: 'Poppins'; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/poppins-500.woff2) format('woff2'); }
-  @font-face { font-family: 'Poppins'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/poppins-600.woff2) format('woff2'); }
-  @font-face { font-family: 'Poppins'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/poppins-700.woff2) format('woff2'); }
+  /* Apple SF fonts across the whole UI — system fonts only, no webfont
+     dependency. -apple-system → SF Pro on iPhone/iPad, Segoe UI on
+     Windows, Roboto on Android. Weight ladder: 400 body · 500 emphasis
+     600 subheadings · 700 headings (on Windows, Segoe UI synthesizes
+     the Medium 500). System fonts are compositor-native, so text
+     transforms never flash a fallback font. */
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   /* Apple-style superellipse corners — gated by body class so old
@@ -36,7 +33,7 @@
   .kds-screen.light * { scrollbar-color: rgba(0,0,0,0.2) transparent; }
 
   body {
-    font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
     background: var(--bg);
     color: #e6e6e6; /* dark default; light override via :has below */
     display: flex;    align-items: center;
@@ -110,9 +107,6 @@
     padding: 10px 18px;
     background: var(--bg-top);
     border-bottom: 1px solid var(--border);
-    /* Apple SF fonts for the top menu — resolves to SF Pro on iPhone/
-       iPad, falls back to Segoe UI (Windows) / Roboto (Android) */
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
     gap: 12px;
   }
   .kds-topmenu-left { display: flex; align-items: center; gap: 10px; color: var(--text); justify-self: start; }
@@ -523,7 +517,7 @@
 
   .kds-card-header {
     flex: 0 0 auto; display: flex; align-items: center; gap: 9px;
-    padding: 9px 13px; font-size: 13px; font-weight: 500; /* Poppins Medium — emphasis */
+    padding: 9px 13px; font-size: 13px; font-weight: 500; /* SF Medium — emphasis */
     transition: background 0.2s;
     /* the whole header is a toggle button (minimize/restore the card) */
     width: 100%; border: none; text-align: left; cursor: pointer;
@@ -540,8 +534,8 @@
   .kds-card-header-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .kds-card-header-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .kds-card-header-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-  .kds-card-header .order-no { font-weight: 700; } /* Poppins Bold — heading */
-  .kds-card-header .customer { font-weight: 500; } /* Poppins Medium — emphasis */
+  .kds-card-header .order-no { font-weight: 700; } /* SF Bold — heading */
+  .kds-card-header .customer { font-weight: 500; } /* SF Medium — emphasis */
   .kds-card-header .time { opacity: 0.6; font-size: 11px; font-weight: 400; white-space: nowrap; }
   /* meta row: received HH:MM · live elapsed, then the fixed-height status
      slot — both vertically centered on one line (P2: spec HH:MM restored) */
@@ -665,7 +659,7 @@
   .kds-item-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .kds-item-qty { opacity: 0.6; font-size: 13px; }
   .kds-item-row.done .kds-item-qty { opacity: 0.6; }
-  .kds-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; } /* Poppins Medium — emphasis word of each menu row */
+  .kds-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; } /* SF Medium — emphasis word of each menu row */
   .kds-item-done-time { opacity: 0.45; font-size: 11px; flex-shrink: 0; }
   .kds-item-note {
     opacity: 0.5; font-style: italic; font-size: 11px;
