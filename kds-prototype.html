@@ -1164,15 +1164,6 @@
     if (r === 0) return m + 'm';
     return m + 'm ' + r + 's';
   }
-  /* Completed-tab format: 'in 12 min 25s' — spec §2.3 */
-  function fmtDurationLong(ms) {
-    const s = Math.max(0, Math.round(ms / 1000));
-    const m = Math.floor(s / 60);
-    const r = s % 60;
-    if (m === 0) return 'in ' + r + 's';
-    if (r === 0) return 'in ' + m + ' min';
-    return 'in ' + m + ' min ' + r + 's';
-  }
   /* SLA tint for the completed duration — same thresholds as the open
      board (spec §3.4): <5m fast/green, 5–10m ok/amber, >10m slow/red */
   function slaColor(ms) {
@@ -1612,7 +1603,7 @@
         <div class="kds-card-header-right">
           <span class="customer">${o.customer}</span>
           <div class="kds-card-header-meta">
-            <span class="time">${new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · <span style="color:${slaColor(dur)}">${fmtDurationLong(dur)}</span></span>
+            <span class="time">${new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · <span style="color:${slaColor(dur)}">in ${fmtDuration(dur)}</span></span>
           </div>
         </div>
         <span class="kds-card-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
@@ -2191,8 +2182,11 @@
      must never be rebuilt just to refresh a timer. */
   function tickCardTimers() {
     const cards = document.querySelectorAll('.kds-card[data-received]');
+    if (cards.length === 0) return;
     const now = Date.now();
     cards.forEach(card => {
+      /* skip completed cards — their time is frozen at completed_at */
+      if (card.closest('.kds-main.completed-view')) return;
       const received = Number(card.dataset.received);
       if (!received) return;
       const el = card.querySelector('.kds-card-header-meta .time');
