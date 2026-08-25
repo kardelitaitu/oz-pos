@@ -15,6 +15,7 @@
     --border: #dfe1e6;
     --text: #1a1d23;
     --text-muted: #8E8E93;
+    --text-on-color: #ffffff;
     --tooltip-bg: #1a1d23;
     --tooltip-arrow: #1a1d23;
     --tooltip-border: transparent;
@@ -79,6 +80,7 @@
     --border: #2a2e39;
     --text: #e8eaef;
     --text-muted: #8b93a3;
+    --text-on-color: #ffffff;
     --tooltip-bg: #3a3f4c;
     --tooltip-arrow: #3a3f4c;
     --tooltip-border: rgba(255,255,255,0.08);
@@ -122,7 +124,7 @@
   input.validate:focus, textarea.validate:focus, select.validate:focus,
   input.validate:focus-visible, textarea.validate:focus-visible, select.validate:focus-visible {
     outline: none;
-    box-shadow: none;
+    box-shadow: 0 0 0 2px var(--primary);
   }
 
   /* ── Top bar ──────────────────────────────────── */
@@ -882,6 +884,15 @@
     color: #fff;
     border-color: transparent;
   }
+
+  /* ── Reduced motion ─────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -1077,7 +1088,7 @@
           <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#262a34; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#262A34</div>
           <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--chip-bg</div>
           <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#e8e9ec; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#E8E9EC</div>
-          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#e8e9ec; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#E8E9EC <span style="color:var(--text-muted); font-size:10px">(same)</span></div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#e8e9ec; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#2a2e39; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#2A2E39</div>
           <div style="padding:8px 14px; font-family:var(--font-mono); font-size:11px">--border</div>
           <div style="padding:8px 14px; border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#dfe1e6; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#DFE1E6</div>
           <div style="padding:8px 14px; border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#2a2e39; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#2A2E39</div>
@@ -2136,8 +2147,8 @@
             <!-- Default card -->
             <div style="flex:1; min-width:220px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-sm); padding:1.25rem">
               <div style="display:flex; align-items:center; gap:8px; margin-bottom:0.75rem">
-                <div style="width:32px; height:32px; background:var(--primary); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                <div style="width:32px; height:32px; background:var(--primary); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center; color:#fff">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
                 </div>
                 <div>
                   <div style="font-size:14px; font-weight:700; color:var(--text)">Order #1234</div>
@@ -2483,10 +2494,10 @@ input[role="switch"]:checked ~ .toggle-knob {
           <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text)">
             <p style="font-weight:600; color:var(--text); margin-bottom:6px">Validation States CSS Rule &amp; Explanation:</p>
             <pre style="background:var(--ghost-bg); padding:8px 10px; border-radius:var(--r-sm); font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:11px; color:var(--text); overflow-x:auto; margin-bottom:6px"><code>input.validate { border-width: 2px; }
-input.validate:focus { outline: none; box-shadow: none; }</code></pre>
+input.validate:focus { outline: none; box-shadow: 0 0 0 2px var(--primary); }</code></pre>
             <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:4px; color:var(--text-muted); font-size:11px; line-height:1.4">
               <li><code>border-width: 2px</code> — Uses 2px solid semantic colors (danger red, success green, warning yellow).</li>
-              <li><code>input.validate:focus</code> — Suppresses default focus ring glow so semantic status border remains dominant.</li>
+              <li><code>input.validate:focus</code> — Suppresses default outline but keeps a 2px Primary Blue box-shadow ring so keyboard users retain a visible focus indicator alongside the semantic border.</li>
             </ul>
           </div>
         </div>
@@ -3188,17 +3199,17 @@ await expect(page.getByTestId(&#39;<span class="cb-testid">dl-comp-start-order</
           <p class="note" style="margin-top:0; margin-bottom:12px">A filter group on the order list. The id encodes the <em>semantic value</em>, not the position. Click a filter.</p>
           <div class="audit-demo">
             <div style="display:flex; gap:8px; flex-wrap:wrap">
-              <button class="audit-filter active" type="button" data-testid="filter-all">All</button>
-              <button class="audit-filter" type="button" data-testid="filter-dine-in">Dine-in</button>
-              <button class="audit-filter" type="button" data-testid="filter-takeaway">Takeaway</button>
+              <button class="audit-filter active" type="button" data-testid="dl-orderlist-filter-all">All</button>
+              <button class="audit-filter" type="button" data-testid="dl-orderlist-filter-dine-in">Dine-in</button>
+              <button class="audit-filter" type="button" data-testid="dl-orderlist-filter-takeaway">Takeaway</button>
             </div>
-            <span class="audit-caption">[filter-all · filter-dine-in · filter-takeaway]</span>
+            <span class="audit-caption">[dl-orderlist-filter-all · dl-orderlist-filter-dine-in · dl-orderlist-filter-takeaway]</span>
           </div>
-          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">filter-all</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter active"</span><span class="cb-punc">&gt;</span>All<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span>
-<span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">filter-dine-in</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter"</span><span class="cb-punc">&gt;</span>Dine-in<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span>
-<span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">filter-takeaway</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter"</span><span class="cb-punc">&gt;</span>Takeaway<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span></code></pre>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-orderlist-filter-all</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter active"</span><span class="cb-punc">&gt;</span>All<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span>
+<span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-orderlist-filter-dine-in</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter"</span><span class="cb-punc">&gt;</span>Dine-in<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span>
+<span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-orderlist-filter-takeaway</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter"</span><span class="cb-punc">&gt;</span>Takeaway<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span></code></pre>
           <div class="audit-why">
-            <strong>Why <code>filter-dine-in</code> (not <code>filter-tab-2</code>)?</strong> The testid carries the <em>meaning</em> of the choice. Reorder the tabs, add a new one at index 0, or translate the labels — <code>filter-dine-in</code> still selects the right control. Position-based ids (<code>tab-1</code>, <code>tab-2</code>) silently break on the first layout change; semantic ids survive refactors. A test can also assert the default state: <code>expect(getByTestId('filter-all')).toHaveClass('active')</code>.
+            <strong>Why <code>dl-orderlist-filter-dine-in</code> (not <code>filter-tab-2</code>)?</strong> The testid carries the <em>meaning</em> of the choice. Reorder the tabs, add a new one at index 0, or translate the labels — <code>dl-orderlist-filter-dine-in</code> still selects the right control. Position-based ids (<code>tab-1</code>, <code>tab-2</code>) silently break on the first layout change; semantic ids survive refactors. A test can also assert the default state: <code>expect(getByTestId('dl-orderlist-filter-all')).toHaveClass('active')</code>.
           </div>
         </div>
       </section>
@@ -3297,10 +3308,31 @@ await expect(page.getByTestId(&#39;<span class="cb-testid">dl-comp-start-order</
   const panels = document.querySelectorAll('.tab-panel');
   const validTabs = [...tabs].map(t => t.dataset.tab);
 
+  // Add ARIA attributes on init
+  tabs.forEach(t => {
+    t.id = 'tab-' + t.dataset.tab;
+    t.setAttribute('aria-selected', t.classList.contains('active') ? 'true' : 'false');
+    t.setAttribute('aria-controls', 'panel-' + t.dataset.tab);
+  });
+  panels.forEach(p => {
+    const tabName = p.id.replace('panel-', '');
+    p.setAttribute('role', 'tabpanel');
+    p.setAttribute('aria-labelledby', 'tab-' + tabName);
+    p.setAttribute('aria-hidden', p.classList.contains('active') ? 'false' : 'true');
+  });
+
   function activateTab(name) {
     if (!validTabs.includes(name)) return;
-    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-    panels.forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+    tabs.forEach(t => {
+      const isActive = t.dataset.tab === name;
+      t.classList.toggle('active', isActive);
+      t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    panels.forEach(p => {
+      const isActive = p.id === 'panel-' + name;
+      p.classList.toggle('active', isActive);
+      p.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+    });
   }
 
   // Deep link — #forms opens the Forms tab
