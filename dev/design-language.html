@@ -2564,13 +2564,18 @@
           </div>
           <p class="note">Same border, radius, and font as text inputs. Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">resize: vertical</code> to let users adjust height.</p>
           <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border); font-size:13px; color:var(--text)">
-            <p style="font-weight:600; color:var(--text); margin-bottom:8px">How to properly apply focus effects on form inputs &amp; textareas:</p>
+            <p style="font-weight:600; color:var(--text); margin-bottom:8px">Proper Focus Ring CSS Rule &amp; Explanation:</p>
+            <pre style="background:var(--ghost-bg); padding:10px 12px; border-radius:var(--r-sm); font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:12px; color:var(--text); overflow-x:auto; margin-bottom:12px"><code>input:focus, textarea:focus, select:focus,
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary);
+}</code></pre>
             <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:6px; color:var(--text-muted); font-size:12px; line-height:1.5">
-              <li><strong>Suppress native rectangular outline:</strong> Use <code>outline: none</code> (or <code>outline: 2px solid transparent</code> for high-contrast accessibility mode) to eliminate the browser's harsh rectangular outline and 1px gap.</li>
-              <li><strong>Transition the border color:</strong> Change <code>border-color</code> to <code>var(--primary)</code> (or semantic state color) so the element border seamlessly turns into the active focus state.</li>
-              <li><strong>Use box-shadow for the outer ring:</strong> Apply <code>box-shadow: 0 0 0 2px var(--primary)</code> for a 2px solid Primary Blue focus ring. Unlike <code>outline</code>, <code>box-shadow</code> perfectly matches and clips to the element's <code>border-radius</code> (e.g. 8px) with zero opacity gap.</li>
-              <li><strong>Smooth transition:</strong> Add <code>transition: border-color 0.15s, box-shadow 0.15s</code> to the base input/textarea element for smooth focus/blur visual feedback.</li>
-              <li><strong>Target both :focus and :focus-visible:</strong> Ensure both keyboard and click/touch interactions render the consistent focus ring across browsers.</li>
+              <li><code>input:focus, textarea:focus, select:focus, input:focus-visible...</code> — Targets form inputs, textareas, and select dropdowns for both keyboard navigation and pointer click interactions across all browsers.</li>
+              <li><code>outline: none;</code> — Suppresses the browser's native rectangular focus ring and eliminates pixel offset gaps around rounded corners.</li>
+              <li><code>border-color: var(--primary);</code> — Transitions the inner 1px border color to Primary Blue (<code>#147EFB</code>) for seamless active focus state feedback.</li>
+              <li><code>box-shadow: 0 0 0 2px var(--primary);</code> — Projects a crisp 2px solid Primary Blue ring around the element, perfectly conforming to its <code>border-radius</code> (8px) without any alpha/transparency gap.</li>
             </ul>
           </div>
         </div>
