@@ -108,12 +108,14 @@
   }
 
   /* ── Global focus ring ───────────────────────── */
+  input:focus, textarea:focus, select:focus,
   input:focus-visible, textarea:focus-visible, select:focus-visible {
-    outline: 2px solid var(--primary);
-    outline-offset: 1px;
-    box-shadow: 0 0 0 3px rgba(20,126,251,0.15);
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(20, 126, 251, 0.2);
   }
-  input.validate:focus-visible {
+  input.validate:focus, textarea.validate:focus, select.validate:focus,
+  input.validate:focus-visible, textarea.validate:focus-visible, select.validate:focus-visible {
     outline: none;
     box-shadow: none;
   }
@@ -2558,9 +2560,19 @@
         <div class="card">
           <div style="max-width:400px">
             <label for="dl-textarea-notes" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Notes</label>
-            <textarea id="dl-textarea-notes" placeholder="Add any notes here..." rows="3" data-testid="dl-textarea-notes" style="width:100%; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; resize:vertical; line-height:1.5; transition:border-color 0.15s"></textarea>
+            <textarea id="dl-textarea-notes" placeholder="Add any notes here..." rows="3" data-testid="dl-textarea-notes" style="width:100%; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; resize:vertical; line-height:1.5; transition:border-color 0.15s, box-shadow 0.15s"></textarea>
           </div>
           <p class="note">Same border, radius, and font as text inputs. Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">resize: vertical</code> to let users adjust height.</p>
+          <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border); font-size:13px; color:var(--text)">
+            <p style="font-weight:600; color:var(--text); margin-bottom:8px">How to properly apply focus effects on form inputs &amp; textareas:</p>
+            <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:6px; color:var(--text-muted); font-size:12px; line-height:1.5">
+              <li><strong>Suppress native rectangular outline:</strong> Use <code>outline: none</code> (or <code>outline: 2px solid transparent</code> for high-contrast accessibility mode) to eliminate the browser's harsh rectangular outline and 1px gap.</li>
+              <li><strong>Transition the border color:</strong> Change <code>border-color</code> to <code>var(--primary)</code> (or semantic state color) so the element border seamlessly turns into the active focus state.</li>
+              <li><strong>Use box-shadow for the outer ring:</strong> Apply <code>box-shadow: 0 0 0 3px rgba(20, 126, 251, 0.2)</code> (or <code>rgba(var(--primary-rgb), 0.2)</code>). Unlike <code>outline</code>, <code>box-shadow</code> perfectly matches and clips to the element's <code>border-radius</code> (e.g. 8px).</li>
+              <li><strong>Smooth transition:</strong> Add <code>transition: border-color 0.15s, box-shadow 0.15s</code> to the base input/textarea element for smooth focus/blur visual feedback.</li>
+              <li><strong>Target both :focus and :focus-visible:</strong> Ensure both keyboard and click/touch interactions render the consistent focus ring across browsers.</li>
+            </ul>
+          </div>
         </div>
       </section>
     </div>
