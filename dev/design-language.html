@@ -114,6 +114,11 @@
     border-color: var(--primary);
     box-shadow: 0 0 0 2px var(--primary);
   }
+  input[type="checkbox"]:focus, input[type="radio"]:focus,
+  input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
   input.validate:focus, textarea.validate:focus, select.validate:focus,
   input.validate:focus-visible, textarea.validate:focus-visible, select.validate:focus-visible {
     outline: none;
@@ -2520,6 +2525,15 @@
             </div>
           </div>
           <p class="note">Use native <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">accent-color: var(--primary)</code> for consistent brand colouring.</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text)">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">No Outer Focus Ring on Checkbox &amp; Radio:</p>
+            <pre style="background:var(--ghost-bg); padding:8px 10px; border-radius:var(--r-sm); font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:11px; color:var(--text); overflow-x:auto; margin-bottom:6px"><code>input[type="checkbox"]:focus, input[type="radio"]:focus,
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}</code></pre>
+            <p style="color:var(--text-muted); line-height:1.4">Checkboxes and radio inputs rely solely on native <code>accent-color</code> and must suppress outer text-input focus ring glow boxes (<code>outline: none; box-shadow: none</code>).</p>
+          </div>
         </div>
       </section>
 
