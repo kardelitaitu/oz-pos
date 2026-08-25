@@ -1841,6 +1841,49 @@
         </div>
       </section>
 
+      <!-- Example — Dine-in (Fork & Spoon) -->
+      <section>
+        <h3>Example — Dine-in (Fork &amp; Spoon)</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">The dine-in signal: one 24-grid, two glyphs — a fork and a spoon sharing the same stroke weight and axis. Drawn with primitives only (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">line</code>s + one <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">&lt;ellipse&gt;</code>).</p>
+          <div class="audit-demo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Fork and spoon, dine-in"><path d="M5.5 2v5M8.5 2v5M11.5 2v5M8.5 7v14"/><ellipse cx="16.5" cy="5.5" rx="3.3" ry="4.5"/><path d="M16.5 10v11"/></svg>
+            <span class="audit-caption">24px · currentColor · stroke 2</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">svg</span> <span class="cb-attr">viewBox</span><span class="cb-punc">=</span><span class="cb-val">"0 0 24 24"</span> <span class="cb-attr">stroke</span><span class="cb-punc">=</span><span class="cb-val">"currentColor"</span> <span class="cb-attr">stroke-width</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">fork</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M5.5 2v5M8.5 2v5M11.5 2v5M8.5 7v14"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">spoon</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">ellipse</span> <span class="cb-attr">cx</span><span class="cb-punc">=</span><span class="cb-val">"16.5"</span> <span class="cb-attr">cy</span><span class="cb-punc">=</span><span class="cb-val">"5.5"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"3.3"</span> <span class="cb-attr">ry</span><span class="cb-punc">=</span><span class="cb-val">"4.5"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M16.5 10v11"</span><span class="cb-punc">/&gt;</span>
+<span class="cb-punc">&lt;/</span><span class="cb-tag">svg</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>How it's drawn.</strong> The fork is three prongs (<code>M5.5/M8.5/M11.5</code> from y2 to y7) meeting a single handle at x8.5 — <code>stroke-linecap="round"</code> turns the tines into soft, rounded ends. The spoon is an ellipse bowl (<code>rx 3.3, ry 4.5</code>) plus a stem on the same axis. The pair stays optically balanced: fork centre x8.5, spoon centre x16.5 — midpoint 12.5, almost dead-centre on the grid. Meaning lives in the shape; the label "Dine-in" lives next to it (fallback rule: never the glyph alone).
+          </div>
+        </div>
+      </section>
+
+      <!-- Example — Takeout (Bag) -->
+      <section>
+        <h3>Example — Takeout (Bag)</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">The takeout signal: a paper-bag silhouette with a loop handle. Body is one closed path; handle is one arch. No fills — the outline carries the whole shape.</p>
+          <div class="audit-demo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Takeout bag"><path d="M4.5 9h15l-1.4 10.5a2.5 2.5 0 0 1-2.5 1.5H8.4a2.5 2.5 0 0 1-2.5-1.5L4.5 9z"/><path d="M8.5 9V6.75a3.5 3.5 0 0 1 7 0V9"/></svg>
+            <span class="audit-caption">24px · currentColor · stroke 2</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">svg</span> <span class="cb-attr">viewBox</span><span class="cb-punc">=</span><span class="cb-val">"0 0 24 24"</span> <span class="cb-attr">stroke</span><span class="cb-punc">=</span><span class="cb-val">"currentColor"</span> <span class="cb-attr">stroke-width</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">bag</span> <span class="cb-tag">body</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M4.5 9h15l-1.4 10.5a2.5 2.5 0 0 1-2.5 1.5H8.4a2.5 2.5 0 0 1-2.5-1.5L4.5 9z"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">handle</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M8.5 9V6.75a3.5 3.5 0 0 1 7 0V9"</span><span class="cb-punc">/&gt;</span>
+<span class="cb-punc">&lt;/</span><span class="cb-tag">svg</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>How it's drawn.</strong> The body is a paper-bag silhouette: a 15-unit top edge (y9) whose sides flare out 1.4 units over a 10.5-unit drop, closed with 2.5-radius corners. The handle is a single arch from the top edge up to y3.25 (<code>M8.5 9V6.75</code>, 3.5-radius sweep, back down). Together they read as "package it to go" at any size. Pair with the label "Takeout" — and never invert the pair: dine-in and takeout use different shapes so they never get confused by colour alone.
+          </div>
+        </div>
+      </section>
+
       <!-- Fallback & Accessibility -->
       <section>
         <h3>Fallback &amp; Accessibility</h3>
