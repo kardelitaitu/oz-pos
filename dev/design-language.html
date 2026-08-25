@@ -112,6 +112,10 @@
     outline-offset: 1px;
     box-shadow: 0 0 0 3px rgba(20,126,251,0.15);
   }
+  input.validate:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
 
   /* ── Top bar ──────────────────────────────────── */
   .site-header {
@@ -884,7 +888,7 @@
         <h1>Design Language</h1>
       </div>
       <div class="topbar-actions">
-        <button class="theme-toggle" id="theme-toggle" type="button">
+        <button class="theme-toggle" id="theme-toggle" type="button" data-testid="design-language-theme-toggle">
           <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
           <svg class="icon-moon" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           <span id="theme-label">Dark</span>
@@ -895,16 +899,16 @@
 
   <div class="tabbar">
     <div class="tabbar-inner" role="tablist">
-      <button class="tab active" role="tab" data-tab="colors" type="button">Color Palette</button>
-      <button class="tab" role="tab" data-tab="buttons" type="button">Buttons</button>
-      <button class="tab" role="tab" data-tab="typography" type="button">Typography</button>
-      <button class="tab" role="tab" data-tab="spacing" type="button">Spacing &amp; Layout</button>
-      <button class="tab" role="tab" data-tab="icons" type="button">Icons</button>
-      <button class="tab" role="tab" data-tab="elements" type="button">Elements</button>
-      <button class="tab" role="tab" data-tab="components" type="button">Components</button>
-      <button class="tab" role="tab" data-tab="feedback" type="button">Feedback</button>
-      <button class="tab" role="tab" data-tab="forms" type="button">Forms</button>
-      <button class="tab" role="tab" data-tab="audit" type="button">Audit</button>
+      <button class="tab active" role="tab" data-tab="colors" type="button" data-testid="nav-tab-colors">Color Palette</button>
+      <button class="tab" role="tab" data-tab="buttons" type="button" data-testid="nav-tab-buttons">Buttons</button>
+      <button class="tab" role="tab" data-tab="typography" type="button" data-testid="nav-tab-typography">Typography</button>
+      <button class="tab" role="tab" data-tab="spacing" type="button" data-testid="nav-tab-spacing">Spacing &amp; Layout</button>
+      <button class="tab" role="tab" data-tab="icons" type="button" data-testid="nav-tab-icons">Icons</button>
+      <button class="tab" role="tab" data-tab="elements" type="button" data-testid="nav-tab-elements">Elements</button>
+      <button class="tab" role="tab" data-tab="components" type="button" data-testid="nav-tab-components">Components</button>
+      <button class="tab" role="tab" data-tab="feedback" type="button" data-testid="nav-tab-feedback">Feedback</button>
+      <button class="tab" role="tab" data-tab="forms" type="button" data-testid="nav-tab-forms">Forms</button>
+      <button class="tab" role="tab" data-tab="audit" type="button" data-testid="nav-tab-audit">Audit</button>
     </div>
   </div>
   </div><!-- .site-header -->
@@ -1139,6 +1143,16 @@
         <p>Complete button system — sizes, variants, icon combos, and interactive states.</p>
       </div>
 
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px"><strong>Why three sizes?</strong> Size is hierarchy, and hierarchy must be obvious at a glance. <strong>Large</strong> (48px) is the minimum comfortable touch target and marks the one action a screen is about. <strong>Medium</strong> (42px) is the default for any inline action. <strong>Small</strong> (34px) is for dense rows, toolbars, and confirm dialogs — never the primary action.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Why so many variants?</strong> They form an <em>emphasis ladder</em> — how loudly a button asks for attention: <strong>primary</strong> (loudest, the main action) → <strong>secondary</strong> (the alternative) → <strong>ghost</strong> (quiet, row-level actions) → <strong>danger / success</strong> (meaning, not volume) → <strong>chip</strong> (selectable options, not actions).</p>
+          <p class="note" style="margin-bottom:0"><strong>One primary per view.</strong> A screen gets exactly one <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">btn--primary</code>; everything else drops down the ladder. Two primaries compete and neither wins.</p>
+        </div>
+      </section>
+
       <section>
         <h3>Sizes — Large / Medium / Small</h3>
         <div class="grid">
@@ -1146,20 +1160,22 @@
           <button class="btn btn--primary btn--md" type="button">Medium button</button>
           <button class="btn btn--primary btn--sm" type="button">Small button</button>
         </div>
+        <p class="note">Large is for the screen's primary CTA and full-width actions. Medium is the default — use it unless there's a reason not to. Small is for compact rows and dialogs; if a view's only action is small, it should probably be medium.</p>
       </section>
 
       <section>
         <h3>Semantic Variants</h3>
         <div class="grid">
-          <button class="btn btn--danger btn--md" type="button">
+          <button class="btn btn--danger btn--md" type="button" data-testid="dl-btn-delete">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             Delete
           </button>
-          <button class="btn btn--success btn--md" type="button">
+          <button class="btn btn--success btn--md" type="button" data-testid="dl-btn-upload">
             Upload
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           </button>
         </div>
+        <p class="note">The emphasis ladder in practice: one <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">primary</code> per view; <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">secondary</code> for the escape-hatch action; <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">ghost</code> for row-level edits; <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">danger</code> only for destructive work (delete, disconnect, cancel-forever); <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">success</code> only as a settled confirmation (Saved ✓), never as the resting state of a CTA.</p>
       </section>
 
       <section>
@@ -1259,6 +1275,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
+        <p class="note">Icon-only buttons are <strong>always</strong> paired with an <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">aria-label</code> (already on these demos) — otherwise screen readers announce an unnamed button. In dense UIs add a tooltip for sighted users who don't recognise the icon. Hit area stays 40px (large enough for a fingertip).</p>
       </section>
 
       <section>
@@ -1289,7 +1306,7 @@
           <button class="btn btn--ghost btn--md" type="button" disabled>Ghost</button>
           <button class="btn btn--danger btn--md" type="button" disabled>Danger</button>
         </div>
-        <p class="note">Disabled buttons use 45% opacity and disable pointer events.</p>
+        <p class="note">Disabled = 45% opacity + <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">pointer-events: none</code> (no hover, no click). Use the native <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">disabled</code> attribute for controls that must be skipped by keyboard too. If a button is unavailable <em>temporarily</em> and users need to know why (e.g. "save requires an order"), use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">aria-disabled="true"</code> instead — it stays focusable and lets you explain the reason.</p>
       </section>
 
       <!-- ── Menu Sliders ────────────────────────── -->
@@ -1303,8 +1320,8 @@
               <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Tab Switcher</div>
               <div class="ms-track" style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
                 <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
-                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Open</button>
-                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Completed</button>
+                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit" data-testid="dl-ms-tab-open">Open</button>
+                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit" data-testid="dl-ms-tab-completed">Completed</button>
               </div>
             </div>
             <!-- 2-tab: Dark / Light -->
@@ -1312,10 +1329,10 @@
               <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Theme Toggle</div>
               <div class="ms-track" data-active="1" style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
                 <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
-                <button style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
+                <button aria-label="Light mode" style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
                 </button>
-                <button style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
+                <button aria-label="Dark mode" style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
                 </button>
               </div>
@@ -1325,12 +1342,13 @@
               <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Action Toggle (Start / Stop)</div>
               <div class="ms-track" data-colors="#22c55e,#22c55e" style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
                 <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:#22c55e; border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
-                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Start</button>
-                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Stop</button>
+                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit" data-testid="dl-ms-shift-start">Start</button>
+                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit" data-testid="dl-ms-shift-stop">Stop</button>
               </div>
             </div>
           </div>
           <p class="note">Track: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">padding: 3px</code>, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">background: var(--ghost-bg)</code>. Indicator: absolute, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">top/bottom: 3px</code>, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">background: var(--primary)</code>. Slide easing: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(0.33, 1, 0.68, 1)</code>.</p>
+          <p class="note" style="margin-top:10px"><strong>When to use:</strong> a menu slider is for one-of-N mutually exclusive choices — exactly 2–3 options, all visible, with short labels. For 4+ options, long labels, or dynamic content, use tabs or a select instead. <strong>Fallback:</strong> on narrow screens the track wraps or scrolls — keep labels short enough to fit one row (13px, ≤12 chars).</p>
         </div>
       </section>
 
@@ -1371,6 +1389,36 @@
             </div>
           </div>
           <p class="note">Indicator width: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">calc(100% / N - gap)</code>. Active tab: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">opacity: 1; color: #fff</code>. Inactive: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">opacity: 0.5</code>. The indicator can use any semantic colour (primary, danger, etc.).</p>
+          <p class="note" style="margin-top:10px"><strong>Fallback:</strong> the indicator width is <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">track/N</code> — if one label is much longer than the others, that option's label clips. Keep option labels roughly equal length, and cap the track's max-width so three long labels never blow the row.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>48px minimum hit target</h4><p>The large size is the floor for anything a finger might tap. Small (34px) is only for mouse/toolbar contexts — never for the key action on a screen.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>One primary per view</h4><p>Exactly one <code>btn--primary</code>. If two actions feel equally primary, the design has a hierarchy problem — resolve it before adding a second primary.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Meaning is never colour alone</h4><p>Danger vs. success is red vs. green — the classic colour-blind pair. Pair every variant with its icon (trash for delete, check for success) and a clear label.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Icon-only is never unnamed</h4><p>Every icon-only button carries an <code>aria-label</code>. No exceptions — a silent round button is a mystery to screen-reader users.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Busy buttons must not double-fire</h4><p>While an action is in flight, disable the button and show feedback (see the Feedback tab's Busy → Done). Otherwise a double-tap triggers the action twice.</p></div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -2001,7 +2049,7 @@
             <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; background:var(--ghost-bg); border-radius:var(--r-sm)">
               <span style="font-size:13px; font-weight:600; color:var(--text)">Dark mode</span>
               <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
-                <input type="checkbox" role="switch" id="demo-toggle-1" style="opacity:0; width:0; height:0; position:absolute">
+                <input type="checkbox" role="switch" id="demo-toggle-1" data-testid="dl-toggle-dark-mode" style="opacity:0; width:0; height:0; position:absolute">
                 <label for="demo-toggle-1" class="toggle-track" style="position:absolute; inset:0; border-radius:999px; cursor:pointer; transition:background 0.2s"></label>
                 <label for="demo-toggle-1" class="toggle-knob" style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s"></label>
               </span>
@@ -2010,7 +2058,7 @@
             <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; background:var(--ghost-bg); border-radius:var(--r-sm)">
               <span style="font-size:13px; font-weight:600; color:var(--text)">Sound enabled</span>
               <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
-                <input type="checkbox" role="switch" id="demo-toggle-2" checked style="opacity:0; width:0; height:0; position:absolute">
+                <input type="checkbox" role="switch" id="demo-toggle-2" data-testid="dl-toggle-sound" checked style="opacity:0; width:0; height:0; position:absolute">
                 <label for="demo-toggle-2" class="toggle-track" style="position:absolute; inset:0; border-radius:999px; cursor:pointer; transition:background 0.2s"></label>
                 <label for="demo-toggle-2" class="toggle-knob" style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s"></label>
               </span>
@@ -2034,16 +2082,16 @@
         <div class="card">
           <div style="display:flex; flex-direction:column; gap:14px; max-width:400px">
             <div>
-              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Store name</label>
-              <input type="text" placeholder="Enter store name" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; transition:border-color 0.15s, box-shadow 0.15s">
+              <label for="dl-input-store-name" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Store name</label>
+              <input type="text" id="dl-input-store-name" placeholder="Enter store name" data-testid="dl-input-store-name" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; transition:border-color 0.15s, box-shadow 0.15s">
             </div>
             <div>
-              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Email address</label>
-              <input type="email" placeholder="you@example.com" value="dika@example.com" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; transition:border-color 0.15s, box-shadow 0.15s">
+              <label for="dl-input-email" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Email address</label>
+              <input type="email" id="dl-input-email" placeholder="you@example.com" value="dika@example.com" data-testid="dl-input-email" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; transition:border-color 0.15s, box-shadow 0.15s">
             </div>
             <div>
-              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Disabled input</label>
-              <input type="text" value="Read only" disabled style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--ghost-bg); color:var(--text); font:inherit; font-size:13px; opacity:0.5; cursor:not-allowed">
+              <label for="dl-input-disabled" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Disabled input</label>
+              <input type="text" id="dl-input-disabled" value="Read only" disabled data-testid="dl-input-disabled" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--ghost-bg); color:var(--text); font:inherit; font-size:13px; opacity:0.5; cursor:not-allowed">
             </div>
           </div>
           <p class="note">Height: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">36px</code> (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">2.25rem</code>), padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">0 0.75rem</code>, radius: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--r-sm)</code> (8px).</p>
@@ -2057,20 +2105,20 @@
           <div style="display:flex; flex-direction:column; gap:14px; max-width:400px">
             <!-- Error -->
             <div>
-              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Port number</label>
-              <input type="text" value="abc" style="width:100%; height:36px; padding:0 0.75rem; border:2px solid var(--danger); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px">
+              <label for="dl-input-port-error" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Port number</label>
+              <input type="text" id="dl-input-port-error" value="abc" class="validate" data-testid="dl-input-port-error" style="width:100%; height:36px; padding:0 0.75rem; border:2px solid var(--danger); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px">
               <span style="display:block; font-size:11px; color:var(--danger); margin-top:4px; font-weight:500">Must be a number between 1–65535</span>
             </div>
             <!-- Success -->
             <div>
-              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">IP address</label>
-              <input type="text" value="192.168.1.100" style="width:100%; height:36px; padding:0 0.75rem; border:2px solid var(--success); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px">
+              <label for="dl-input-ip-success" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">IP address</label>
+              <input type="text" id="dl-input-ip-success" value="192.168.1.100" class="validate" data-testid="dl-input-ip-success" style="width:100%; height:36px; padding:0 0.75rem; border:2px solid var(--success); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px">
               <span style="display:block; font-size:11px; color:var(--success); margin-top:4px; font-weight:500">Connection successful</span>
             </div>
             <!-- Warning -->
             <div>
-              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">SLA threshold</label>
-              <input type="text" value="14" style="width:100%; height:36px; padding:0 0.75rem; border:2px solid var(--warning); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px">
+              <label for="dl-input-sla-warning" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">SLA threshold</label>
+              <input type="text" id="dl-input-sla-warning" value="14" class="validate" data-testid="dl-input-sla-warning" style="width:100%; height:36px; padding:0 0.75rem; border:2px solid var(--warning); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px">
               <span style="display:block; font-size:11px; color:var(--warning); margin-top:4px; font-weight:500">Above recommended maximum (12 min)</span>
             </div>
           </div>
@@ -2084,16 +2132,16 @@
         <div class="card">
           <div style="display:flex; flex-direction:column; gap:14px; max-width:400px">
             <div>
-              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Theme</label>
-              <select style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:2rem">
+              <label for="dl-select-theme" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Theme</label>
+              <select id="dl-select-theme" data-testid="dl-select-theme" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:2rem">
                 <option>Dark</option>
                 <option>Light</option>
                 <option>System</option>
               </select>
             </div>
             <div>
-              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Language</label>
-              <select style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:2rem">
+              <label for="dl-select-language" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Language</label>
+              <select id="dl-select-language" data-testid="dl-select-language" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:2rem">
                 <option>English</option>
                 <option>Indonesian</option>
               </select>
@@ -2156,24 +2204,24 @@
           <div style="display:flex; flex-direction:column; gap:18px; max-width:400px">
             <div>
               <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
-                <label style="font-size:12px; font-weight:600; color:var(--text)">Sound volume</label>
+                <label for="dl-slider-sound" style="font-size:12px; font-weight:600; color:var(--text)">Sound volume</label>
                 <span style="font-size:12px; font-weight:600; color:var(--primary)">80%</span>
               </div>
-              <input type="range" min="0" max="100" value="80" style="width:100%">
+              <input type="range" id="dl-slider-sound" min="0" max="100" value="80" data-testid="dl-slider-sound" style="width:100%">
             </div>
             <div>
               <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
-                <label style="font-size:12px; font-weight:600; color:var(--text)">Yellow threshold</label>
+                <label for="dl-slider-yellow" style="font-size:12px; font-weight:600; color:var(--text)">Yellow threshold</label>
                 <span style="font-size:12px; font-weight:600; color:var(--warning)">7 min</span>
               </div>
-              <input type="range" min="1" max="15" value="7" class="slider-warning" style="width:100%">
+              <input type="range" id="dl-slider-yellow" min="1" max="15" value="7" class="slider-warning" data-testid="dl-slider-yellow" style="width:100%">
             </div>
             <div>
               <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
-                <label style="font-size:12px; font-weight:600; color:var(--text)">Red threshold</label>
+                <label for="dl-slider-red" style="font-size:12px; font-weight:600; color:var(--text)">Red threshold</label>
                 <span style="font-size:12px; font-weight:600; color:var(--danger)">12 min</span>
               </div>
-              <input type="range" min="9" max="15" value="12" class="slider-danger" style="width:100%">
+              <input type="range" id="dl-slider-red" min="9" max="15" value="12" class="slider-danger" data-testid="dl-slider-red" style="width:100%">
             </div>
           </div>
           <p class="note">Track: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">6px</code> height, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">border-radius: 999px</code>. Fill uses <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">linear-gradient</code> with semantic colour for filled portion.</p>
@@ -2185,8 +2233,8 @@
         <h3>Textarea</h3>
         <div class="card">
           <div style="max-width:400px">
-            <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Notes</label>
-            <textarea placeholder="Add any notes here..." rows="3" style="width:100%; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; resize:vertical; line-height:1.5; transition:border-color 0.15s"></textarea>
+            <label for="dl-textarea-notes" style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Notes</label>
+            <textarea id="dl-textarea-notes" placeholder="Add any notes here..." rows="3" data-testid="dl-textarea-notes" style="width:100%; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; resize:vertical; line-height:1.5; transition:border-color 0.15s"></textarea>
           </div>
           <p class="note">Same border, radius, and font as text inputs. Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">resize: vertical</code> to let users adjust height.</p>
         </div>
@@ -2386,7 +2434,7 @@
             <div class="ease-track"><span class="ease-label">Exit</span><div class="ease-dot ease-exit"></div></div>
           </div>
           <div style="margin-top:14px">
-            <button class="btn btn--ghost btn--md" type="button" id="ease-play">Play all</button>
+            <button class="btn btn--ghost btn--md" type="button" id="ease-play" data-testid="dl-fb-ease-play">Play all</button>
           </div>
           <p class="note">Standard <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(.2, 0, 0, 1)</code> for entrances · Bounce <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(.34, 1.56, .64, 1)</code> for playful knobs · Exit <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(.4, 0, 1, 1)</code> for removals.</p>
         </div>
@@ -2401,7 +2449,7 @@
           <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Busy → Done</h4>
           <p class="note" style="margin-top:0; margin-bottom:14px">The workhorse: press gives immediate feedback, work happens, then a green confirmation pops in.</p>
           <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
-            <button class="btn btn--primary btn--md fb-btn" type="button" id="demo-save" data-state="idle">
+            <button class="btn btn--primary btn--md fb-btn" type="button" id="demo-save" data-testid="dl-fb-save" data-state="idle">
               <span class="fb-icon"></span>
               <span class="fb-label">Save</span>
             </button>
@@ -2414,8 +2462,8 @@
           <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Error Feedback — Shake</h4>
           <p class="note" style="margin-top:0; margin-bottom:14px">Invalid actions shake the control and flag it red. The shake is the <em>feedback</em>; the red state is the <em>after</em>.</p>
           <div style="display:flex; flex-direction:column; gap:10px; max-width:400px">
-            <input type="text" id="demo-error-input" placeholder="Type 'ok' to succeed" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; transition:border-color 0.15s">
-            <button class="btn btn--primary btn--md" type="button" id="demo-error-btn" style="align-self:flex-start">Validate</button>
+            <input type="text" id="demo-error-input" placeholder="Type 'ok' to succeed" data-testid="dl-fb-error-input" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; transition:border-color 0.15s">
+            <button class="btn btn--primary btn--md" type="button" id="demo-error-btn" data-testid="dl-fb-validate" style="align-self:flex-start">Validate</button>
           </div>
         </div>
 
@@ -2602,24 +2650,24 @@
                 <div style="font-size:11px; color:var(--text-muted)">3 items · $42.50</div>
               </div>
             </div>
-            <button class="btn btn--primary btn--md fb-btn" type="button" data-testid="order-card-start" id="audit-start">
+            <button class="btn btn--primary btn--md fb-btn" type="button" data-testid="dl-comp-start-order" id="audit-start">
               Start order
             </button>
-            <span class="audit-caption">[order-card-start]</span>
+            <span class="audit-caption">[dl-comp-start-order]</span>
           </div>
           <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">button</span>
   <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"btn btn--primary btn--md"</span>
-  <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">order-card-start</span><span class="cb-val">"</span>
+  <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-comp-start-order</span><span class="cb-val">"</span>
 <span class="cb-punc">&gt;</span>Start order<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span></code></pre>
           <p class="note" style="margin-top:0; margin-bottom:12px">The rendered demo adds <code>id="audit-start"</code> and <code>fb-btn</code> only to power this page's click demo — real code carries just <code>data-testid</code> + styling classes.</p>
           <div class="audit-why">
-            <strong>Why <code>order-card-start</code>?</strong> The name is <code>feature + element + action</code>: <code>order-card</code> scopes it to the KDS order card (unique on the page), <code>start</code> is the exact action. When the label is translated to Indonesian — <em>"Mulai"</em> — the testid never changes, so tests keep working without touching a selector. No positional info: the button can move to a different column and <code>getByTestId('order-card-start')</code> still finds it.
+            <strong>Why <code>dl-comp-start-order</code>?</strong> The name is <code>feature + element + action</code>: <code>dl</code> scopes it to this design-language page, <code>comp</code> is the Components section, <code>start-order</code> is the exact action. When the label is translated to Indonesian — <em>"Mulai"</em> — the testid never changes, so tests keep working without touching a selector. No positional info: the button can move to a different column and <code>getByTestId('dl-comp-start-order')</code> still finds it.
           </div>
           <div style="margin-top:14px">
             <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted)">In tests — Playwright</span>
-            <pre class="codeblock" style="margin-top:8px; margin-bottom:0"><code><span class="cb-punc">//</span> order-card.spec.ts
-await page.getByTestId(&#39;<span class="cb-testid">order-card-start</span>&#39;).click();
-await expect(page.getByTestId(&#39;<span class="cb-testid">order-card-start</span>&#39;)).toBeDisabled();</code></pre>
+            <pre class="codeblock" style="margin-top:8px; margin-bottom:0"><code><span class="cb-punc">//</span> comp-start-order.spec.ts
+await page.getByTestId(&#39;<span class="cb-testid">dl-comp-start-order</span>&#39;).click();
+await expect(page.getByTestId(&#39;<span class="cb-testid">dl-comp-start-order</span>&#39;)).toBeDisabled();</code></pre>
           </div>
         </div>
       </section>
@@ -2633,23 +2681,23 @@ await expect(page.getByTestId(&#39;<span class="cb-testid">order-card-start</spa
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex:1; max-width:320px; padding:0.75rem 1rem; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-sm)">
               <span style="font-size:13px; font-weight:600; color:var(--text)">Sound enabled</span>
               <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
-                <input type="checkbox" role="switch" id="audit-sound" data-testid="settings-sound-toggle" style="opacity:0; width:0; height:0; position:absolute">
+                <input type="checkbox" role="switch" id="audit-sound" data-testid="dl-toggle-sound" style="opacity:0; width:0; height:0; position:absolute">
                 <label for="audit-sound" class="toggle-track" style="position:absolute; inset:0; border-radius:999px; cursor:pointer; transition:background 0.2s"></label>
                 <label for="audit-sound" class="toggle-knob" style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s"></label>
               </span>
             </div>
-            <span class="audit-caption">[settings-sound-toggle]</span>
+            <span class="audit-caption">[dl-toggle-sound]</span>
           </div>
           <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">span</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"settings-toggle-slider"</span><span class="cb-punc">&gt;</span>
   <span class="cb-punc">&lt;</span><span class="cb-tag">input</span>
     <span class="cb-attr">type</span><span class="cb-punc">=</span><span class="cb-val">"checkbox"</span>
     <span class="cb-attr">role</span><span class="cb-punc">=</span><span class="cb-val">"switch"</span>
-    <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">settings-sound-toggle</span><span class="cb-val">"</span>
+    <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-toggle-sound</span><span class="cb-val">"</span>
   <span class="cb-punc">/&gt;</span>
   <span class="cb-punc">&lt;</span><span class="cb-tag">label</span> <span class="cb-attr">for</span><span class="cb-punc">=</span><span class="cb-val">"audit-sound"</span><span class="cb-punc">&gt;</span><span class="cb-punc">&lt;/</span><span class="cb-tag">label</span><span class="cb-punc">&gt;</span>
 <span class="cb-punc">&lt;/</span><span class="cb-tag">span</span><span class="cb-punc">&gt;</span></code></pre>
           <div class="audit-why">
-            <strong>Why <code>settings-sound-toggle</code>?</strong> <code>settings-</code> is the screen scope, <code>sound-</code> the specific setting, <code>-toggle</code> the control type — mirroring the <code>settings-toggle-slider</code> component. A settings screen holds many toggles; each gets its own stable id (<code>settings-print-toggle</code>, <code>settings-autoprint-toggle</code>…). Tests can assert <em>"sound is off by default"</em> with <code>expect(getByTestId('settings-sound-toggle')).not.toBeChecked()</code>.
+            <strong>Why <code>dl-toggle-sound</code>?</strong> <code>dl</code> scopes it to this design-language page, <code>toggle</code> is the control type, <code>sound</code> is the specific setting. When this same component appears in the real Settings screen, it becomes <code>settings-sound-toggle</code> — each screen owns its own prefix. Tests can assert <em>"sound is off by default"</em> with <code>expect(getByTestId('dl-toggle-sound')).not.toBeChecked()</code>.
           </div>
         </div>
       </section>
@@ -2925,7 +2973,7 @@ await expect(page.getByTestId(&#39;<span class="cb-testid">order-card-start</spa
   updateScrollIndicator();
 
   /* ── Audit demos ────────────────────────────────── */
-  // Example 1 — Start order (data-testid="order-card-start")
+  // Example 1 — Start order (data-testid="dl-comp-start-order")
   const auditStart = document.getElementById('audit-start');
   if (auditStart) {
     auditStart.addEventListener('click', () => {
