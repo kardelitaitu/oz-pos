@@ -2404,6 +2404,19 @@
             </div>
           </div>
           <p class="note">Spec: track <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">2.5rem × 1.375rem</code>, knob <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">1.125rem</code>, translate <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">1.125rem</code> on toggle, bounce ease <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(0.34, 1.56, 0.64, 1)</code>.</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text)">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Toggle Switch CSS Rule &amp; Explanation:</p>
+            <pre style="background:var(--ghost-bg); padding:8px 10px; border-radius:var(--r-sm); font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:11px; color:var(--text); overflow-x:auto; margin-bottom:6px"><code>input[role="switch"]:checked ~ .toggle-track {
+  background: var(--primary);
+}
+input[role="switch"]:checked ~ .toggle-knob {
+  transform: translateX(1.125rem);
+}</code></pre>
+            <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:4px; color:var(--text-muted); font-size:11px; line-height:1.4">
+              <li><code>input[role="switch"]:checked ~ .toggle-track</code> — Sets track background to Primary Blue (<code>#147EFB</code>) when toggled ON.</li>
+              <li><code>transform: translateX(1.125rem)</code> — Translates knob across track with <code>cubic-bezier(0.34, 1.56, 0.64, 1)</code> spring bounce easing.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -2426,6 +2439,19 @@
             </div>
           </div>
           <p class="note">Height: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">36px</code> (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">2.25rem</code>), padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">0 0.75rem</code>, radius: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--r-sm)</code> (8px).</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text)">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Text Input Focus CSS Rule &amp; Explanation:</p>
+            <pre style="background:var(--ghost-bg); padding:8px 10px; border-radius:var(--r-sm); font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:11px; color:var(--text); overflow-x:auto; margin-bottom:6px"><code>input:focus, input:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary);
+}</code></pre>
+            <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:4px; color:var(--text-muted); font-size:11px; line-height:1.4">
+              <li><code>outline: none;</code> — Eliminates standard rectangular browser focus outline and 1px offset gap.</li>
+              <li><code>border-color: var(--primary);</code> — Switches border to Primary Blue (<code>#147EFB</code>).</li>
+              <li><code>box-shadow: 0 0 0 2px var(--primary);</code> — Projects a 2px solid Primary Blue ring conforming smoothly to <code>border-radius: var(--r-sm)</code> (8px).</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -2454,6 +2480,15 @@
             </div>
           </div>
           <p class="note">Border switches to the semantic colour (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">2px solid</code>), with a matching caption below.</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text)">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Validation States CSS Rule &amp; Explanation:</p>
+            <pre style="background:var(--ghost-bg); padding:8px 10px; border-radius:var(--r-sm); font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:11px; color:var(--text); overflow-x:auto; margin-bottom:6px"><code>input.validate { border-width: 2px; }
+input.validate:focus { outline: none; box-shadow: none; }</code></pre>
+            <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:4px; color:var(--text-muted); font-size:11px; line-height:1.4">
+              <li><code>border-width: 2px</code> — Uses 2px solid semantic colors (danger red, success green, warning yellow).</li>
+              <li><code>input.validate:focus</code> — Suppresses default focus ring glow so semantic status border remains dominant.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -2479,6 +2514,18 @@
             </div>
           </div>
           <p class="note">Same dimensions as text input. Custom chevron via <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">appearance: none</code> + <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">background-image</code> SVG.</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text)">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Select Dropdown Focus CSS Rule &amp; Explanation:</p>
+            <pre style="background:var(--ghost-bg); padding:8px 10px; border-radius:var(--r-sm); font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:11px; color:var(--text); overflow-x:auto; margin-bottom:6px"><code>select:focus, select:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary);
+}</code></pre>
+            <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:4px; color:var(--text-muted); font-size:11px; line-height:1.4">
+              <li><code>appearance: none</code> — Suppresses native OS dropdown arrow in favor of custom SVG chevron.</li>
+              <li><code>select:focus</code> — Applies 2px solid Primary Blue focus ring matching standard text inputs.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -2565,6 +2612,19 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
             </div>
           </div>
           <p class="note">Track: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">6px</code> height, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">border-radius: 999px</code>. Fill uses <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">linear-gradient</code> with semantic colour for filled portion.</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; color:var(--text)">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Range Slider CSS Rule &amp; Explanation:</p>
+            <pre style="background:var(--ghost-bg); padding:8px 10px; border-radius:var(--r-sm); font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:11px; color:var(--text); overflow-x:auto; margin-bottom:6px"><code>input[type="range"] {
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+}
+input[type="range"]:focus { outline: none; box-shadow: none; }</code></pre>
+            <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:4px; color:var(--text-muted); font-size:11px; line-height:1.4">
+              <li><code>height: 6px; border-radius: 999px;</code> — Custom pill track styling across WebKit and Gecko engines.</li>
+              <li><code>outline: none; box-shadow: none;</code> — Range slider thumb handles active states natively without outer box distortion.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
