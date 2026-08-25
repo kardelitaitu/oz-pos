@@ -1,0 +1,1791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design Language — UX Guidelines</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ── Design tokens ──────────────────────────────── */
+  :root {
+    --bg: #f4f5f7;
+    --bg-surface: #ffffff;
+    --border: #dfe1e6;
+    --text: #1a1d23;
+    --text-muted: #8E8E93;
+
+    /* Brand palette */
+    --blue: #147EFB;
+    --sky: #5FC9F8;
+    --yellow: #FECB2E;
+    --orange: #FD9426;
+    --pink: #FC3158;
+    --green: #53D769;
+    --red: #FC3D39;
+    --gray: #8E8E93;
+
+    /* Semantic — mapped from brand */
+    --primary: #147EFB;
+    --primary-hover: #1168D4;
+    --primary-active: #0D52AD;
+    --danger: #FC3D39;
+    --danger-hover: #E0332F;
+    --success: #53D769;
+    --success-hover: #42B857;
+    --warning: #FD9426;
+    --info: #5FC9F8;
+
+    /* Ghost / action */
+    --ghost-bg: #f0f1f3;
+    --ghost-bg-hover: #e4e5e9;
+
+    /* Chip / secondary */
+    --chip-bg: #e8e9ec;
+    --chip-bg-hover: #dcdde2;
+
+    /* Radii */
+    --r-sm: 8px;
+    --r-md: 10px;
+    --r-lg: 12px;
+    --r-pill: 999px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1);
+    --shadow-md: 0 4px 6px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.06);
+
+    /* Font */
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
+  }
+
+  [data-theme="dark"] {
+    --bg: #12141a;
+    --bg-surface: #1c1f27;
+    --border: #2a2e39;
+    --text: #e8eaef;
+    --text-muted: #8b93a3;
+    --primary: #3A9AFF;
+    --primary-hover: #147EFB;
+    --primary-active: #1168D4;
+    --danger: #FF6B68;
+    --danger-hover: #FC3D39;
+    --success: #6FE884;
+    --success-hover: #53D769;
+    --warning: #FFA94D;
+    --info: #7DD6FB;
+    --ghost-bg: #262a34;
+    --ghost-bg-hover: #2e333f;
+    --chip-bg: #2a2e39;
+    --chip-bg-hover: #323745;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── Top bar ──────────────────────────────────── */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .topbar-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    height: 56px;
+  }
+  .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .topbar-brand svg {
+    width: 24px;
+    height: 24px;
+    color: var(--primary);
+  }
+  .topbar-brand h1 {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .theme-toggle {
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text);
+    border-radius: var(--r-sm);
+    padding: 6px 14px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: border-color .15s;
+  }
+  .theme-toggle:hover { border-color: var(--text-muted); }
+  .theme-toggle svg { width: 14px; height: 14px; }
+
+  /* ── Tab bar ──────────────────────────────────── */
+  .tabbar {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .tabbar-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    display: flex;
+    gap: 0;
+    padding: 0 32px;
+    overflow-x: auto;
+  }
+  .tabbar-inner::-webkit-scrollbar { display: none; }
+  .tab {
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    border: none;
+    background: none;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: color .15s, border-color .15s;
+    font-family: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+
+  /* ── Page content ─────────────────────────────── */
+  .page-content {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 32px 32px 80px;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .tab-header {
+    margin-bottom: 28px;
+  }
+  .tab-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .tab-header p {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+
+  section {
+    margin-bottom: 40px;
+  }
+  section > h3 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+  .grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
+    margin-bottom: 12px;
+  }
+  .note { font-size: 12px; color: var(--text-muted); margin-top: 10px; line-height: 1.5; max-width: 640px; }
+
+  /* ── Color swatches ───────────────────────────── */
+  .swatch-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .swatch-color {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border);
+  }
+  .swatch-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .swatch-hex {
+    font-size: 10px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-muted);
+  }
+
+  /* ── Button base ──────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid transparent;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, box-shadow .15s, transform .06s;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .45; pointer-events: none; }
+  .btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* Sizes */
+  .btn--lg { padding: 12px 24px; font-size: 15px; border-radius: var(--r-md); min-height: 48px; }
+  .btn--lg svg { width: 18px; height: 18px; }
+  .btn--md { padding: 10px 20px; font-size: 14px; border-radius: var(--r-md); min-height: 42px; }
+  .btn--sm { padding: 7px 14px; font-size: 13px; border-radius: var(--r-sm); min-height: 34px; }
+  .btn--sm svg { width: 14px; height: 14px; }
+
+  /* Variants */
+  .btn--primary { background: var(--primary); color: #fff; }
+  .btn--primary:hover { background: var(--primary-hover); }
+  .btn--secondary { background: var(--bg-surface); color: var(--primary); border-color: var(--primary); }
+  .btn--secondary:hover { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+  .btn--ghost { background: var(--ghost-bg); color: var(--text); border-color: transparent; }
+  .btn--ghost:hover { background: var(--ghost-bg-hover); }
+  .btn--danger { background: var(--danger); color: #fff; border-color: transparent; }
+  .btn--danger:hover { background: var(--danger-hover); }
+  .btn--success { background: var(--success); color: #fff; border-color: transparent; }
+  .btn--success:hover { background: var(--success-hover); }
+  .btn--chip { background: var(--chip-bg); color: var(--text); border-color: transparent; border-radius: var(--r-sm); }
+  .btn--chip:hover { background: var(--chip-bg-hover); }
+  .btn--outline-neutral { background: var(--bg-surface); color: var(--text); border-color: var(--border); }
+  .btn--outline-neutral:hover { border-color: var(--text-muted); }
+  .btn--pill { border-radius: var(--r-pill); }
+  .btn--icon-only { padding: 0; width: 40px; height: 40px; border-radius: 50%; background: transparent; color: var(--text); border-color: transparent; }
+  .btn--icon-only:hover { background: var(--ghost-bg); }
+  .btn--icon-only.btn--primary { background: var(--primary); color: #fff; }
+  .btn--icon-only.btn--primary:hover { background: var(--primary-hover); }
+  .btn--icon-only.btn--outlined { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn--icon-only.btn--outlined:hover { border-color: var(--text-muted); }
+  .btn--icon-only--sm { width: 32px; height: 32px; padding: 0; }
+  .btn--icon-only--sm svg { width: 16px; height: 16px; }
+  .btn--trailing-badge { padding-right: 6px; }
+  .btn--trailing-badge .btn-badge { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.25); margin-left: 4px; }
+  .btn--trailing-badge .btn-badge svg { width: 16px; height: 16px; }
+  .btn--price { min-width: 56px; justify-content: center; }
+  .btn--wide { width: 100%; max-width: 320px; border-radius: var(--r-pill); }
+
+  /* ── Typography demo ──────────────────────────── */
+  .type-scale { display: flex; flex-direction: column; gap: 16px; }
+  .type-row {
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .type-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    min-width: 100px;
+    flex-shrink: 0;
+  }
+  .type-sample { line-height: 1.3; }
+
+  /* ── Spacing demo ─────────────────────────────── */
+  .spacing-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+  }
+  .spacing-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .spacing-bar {
+    background: var(--primary);
+    border-radius: 3px;
+    opacity: 0.7;
+  }
+  .spacing-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .spacing-value {
+    font-size: 10px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-muted);
+  }
+
+  /* ── Radius demo ──────────────────────────────── */
+  .radius-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+  }
+  .radius-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .radius-box {
+    width: 64px;
+    height: 64px;
+    background: var(--primary);
+    opacity: 0.7;
+  }
+  .radius-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  /* ── Shadow demo ──────────────────────────────── */
+  .shadow-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+  }
+  .shadow-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .shadow-box {
+    width: 100px;
+    height: 64px;
+    background: var(--bg-surface);
+    border-radius: var(--r-md);
+  }
+  .shadow-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  /* ── Placeholder tab ──────────────────────────── */
+  .placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 320px;
+    border: 2px dashed var(--border);
+    border-radius: var(--r-lg);
+    color: var(--text-muted);
+    text-align: center;
+    padding: 40px;
+  }
+  .placeholder svg { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.4; }
+  .placeholder h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+  .placeholder p { font-size: 13px; line-height: 1.5; }
+
+  /* ── Range slider ──────────────────────────────── */
+  input[type='range'] {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 6px;
+    border-radius: 999px;
+    outline: none;
+    cursor: pointer;
+    /* fill colour — JS updates the gradient live */
+    --fill: var(--primary);
+    background: linear-gradient(to right, var(--fill) 0%, var(--chip-bg) 0%);
+  }
+  input[type='range']::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    border: 2px solid var(--fill);
+    box-shadow: 0 1px 3px rgba(0,0,0,.15);
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  input[type='range']::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+    box-shadow: 0 2px 6px rgba(0,0,0,.2);
+  }
+  input[type='range']::-webkit-slider-thumb:active {
+    transform: scale(1.05);
+  }
+  input[type='range']::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    border: 2px solid var(--fill);
+    box-shadow: 0 1px 3px rgba(0,0,0,.15);
+    cursor: pointer;
+  }
+  input[type='range'].slider-warning { --fill: var(--warning); }
+  input[type='range'].slider-danger  { --fill: var(--danger); }
+
+  /* Dark mode: lighter thumb + stronger shadow for contrast */
+  [data-theme='dark'] input[type='range']::-webkit-slider-thumb {
+    background: #3a3f4c;
+    border: 2.5px solid var(--fill);
+    box-shadow: 0 1px 4px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.06);
+  }
+  [data-theme='dark'] input[type='range']::-webkit-slider-thumb:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.08);
+  }
+  [data-theme='dark'] input[type='range']::-moz-range-thumb {
+    background: #3a3f4c;
+    border: 2.5px solid var(--fill);
+    box-shadow: 0 1px 4px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.06);
+  }
+
+  /* ── Toggle switch live state ──────────────────── */
+  .toggle-track { background: var(--gray); }
+  input[type='checkbox']:checked ~ .toggle-track { background: var(--primary); }
+  .toggle-knob { transform: none; }
+  input[type='checkbox']:checked ~ .toggle-knob { transform: translateX(1.125rem); }
+</style>
+</head>
+<body>
+
+  <!-- ── TOP BAR ─────────────────────────────────── -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <h1>Design Language</h1>
+      </div>
+      <div class="topbar-actions">
+        <button class="theme-toggle" id="theme-toggle" type="button">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon-moon" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <span id="theme-label">Dark</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TAB BAR ─────────────────────────────────── -->
+  <div class="tabbar">
+    <div class="tabbar-inner" role="tablist">
+      <button class="tab active" role="tab" data-tab="colors" type="button">Color Palette</button>
+      <button class="tab" role="tab" data-tab="buttons" type="button">Buttons</button>
+      <button class="tab" role="tab" data-tab="typography" type="button">Typography</button>
+      <button class="tab" role="tab" data-tab="spacing" type="button">Spacing &amp; Layout</button>
+      <button class="tab" role="tab" data-tab="icons" type="button">Icons</button>
+      <button class="tab" role="tab" data-tab="elements" type="button">Elements</button>
+      <button class="tab" role="tab" data-tab="components" type="button">Components</button>
+      <button class="tab" role="tab" data-tab="forms" type="button">Forms</button>
+    </div>
+  </div>
+
+  <!-- ── PAGE CONTENT ────────────────────────────── -->
+  <div class="page-content">
+
+    <!-- ════ COLOR PALETTE ════════════════════════════ -->
+    <div class="tab-panel active" id="panel-colors">
+      <div class="tab-header">
+        <h2>Color Palette</h2>
+        <p>Core tokens for backgrounds, text, borders, and semantic states. All values are defined as CSS custom properties for easy theming.</p>
+      </div>
+
+      <section>
+        <h3>Brand Colors</h3>
+        <div class="swatch-grid">
+          <div class="swatch">
+            <div class="swatch-color" style="background:#147EFB"></div>
+            <span class="swatch-label">Blue</span>
+            <span class="swatch-hex">#147EFB</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#5FC9F8"></div>
+            <span class="swatch-label">Sky</span>
+            <span class="swatch-hex">#5FC9F8</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FECB2E"></div>
+            <span class="swatch-label">Yellow</span>
+            <span class="swatch-hex">#FECB2E</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FD9426"></div>
+            <span class="swatch-label">Orange</span>
+            <span class="swatch-hex">#FD9426</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FC3158"></div>
+            <span class="swatch-label">Pink</span>
+            <span class="swatch-hex">#FC3158</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#53D769"></div>
+            <span class="swatch-label">Green</span>
+            <span class="swatch-hex">#53D769</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FC3D39"></div>
+            <span class="swatch-label">Red</span>
+            <span class="swatch-hex">#FC3D39</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#8E8E93"></div>
+            <span class="swatch-label">Gray</span>
+            <span class="swatch-hex">#8E8E93</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Semantic Mapping</h3>
+        <div class="swatch-grid">
+          <div class="swatch">
+            <div class="swatch-color" style="background:#147EFB"></div>
+            <span class="swatch-label">Primary</span>
+            <span class="swatch-hex">→ Blue</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#53D769"></div>
+            <span class="swatch-label">Success</span>
+            <span class="swatch-hex">→ Green</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FC3D39"></div>
+            <span class="swatch-label">Danger</span>
+            <span class="swatch-hex">→ Red</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FC3158"></div>
+            <span class="swatch-label">Alert</span>
+            <span class="swatch-hex">→ Pink</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FD9426"></div>
+            <span class="swatch-label">Warning</span>
+            <span class="swatch-hex">→ Orange</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#5FC9F8"></div>
+            <span class="swatch-label">Info</span>
+            <span class="swatch-hex">→ Sky</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FECB2E"></div>
+            <span class="swatch-label">Accent</span>
+            <span class="swatch-hex">→ Yellow</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Surfaces &amp; Backgrounds</h3>
+        <div class="swatch-grid">
+          <div class="swatch">
+            <div class="swatch-color" style="background:#f4f5f7"></div>
+            <span class="swatch-label">Page BG</span>
+            <span class="swatch-hex">#F4F5F7</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#ffffff; border:1px solid #dfe1e6"></div>
+            <span class="swatch-label">Surface</span>
+            <span class="swatch-hex">#FFFFFF</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#f0f1f3"></div>
+            <span class="swatch-label">Ghost BG</span>
+            <span class="swatch-hex">#F0F1F3</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#e8e9ec"></div>
+            <span class="swatch-label">Chip BG</span>
+            <span class="swatch-hex">#E8E9EC</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#dfe1e6"></div>
+            <span class="swatch-label">Border</span>
+            <span class="swatch-hex">#DFE1E6</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Text</h3>
+        <div class="swatch-grid">
+          <div class="swatch">
+            <div class="swatch-color" style="background:#1a1d23"></div>
+            <span class="swatch-label">Text</span>
+            <span class="swatch-hex">#1A1D23</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#7a8190"></div>
+            <span class="swatch-label">Text Muted</span>
+            <span class="swatch-hex">#8E8E93</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#ffffff"></div>
+            <span class="swatch-label">Text on Color</span>
+            <span class="swatch-hex">#FFFFFF</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ BUTTONS ═══════════════════════════════════ -->
+    <div class="tab-panel" id="panel-buttons">
+      <div class="tab-header">
+        <h2>Buttons</h2>
+        <p>Complete button system — sizes, variants, icon combos, and interactive states.</p>
+      </div>
+
+      <section>
+        <h3>Sizes — Large / Medium / Small</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--lg" type="button">Large button</button>
+          <button class="btn btn--primary btn--md" type="button">Medium button</button>
+          <button class="btn btn--primary btn--sm" type="button">Small button</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Semantic Variants</h3>
+        <div class="grid">
+          <button class="btn btn--danger btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Delete
+          </button>
+          <button class="btn btn--success btn--md" type="button">
+            Upload
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Leading Icon</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--lg" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Large button
+          </button>
+          <button class="btn btn--primary btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Medium button
+          </button>
+          <button class="btn btn--primary btn--sm" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Small button
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Outline &amp; Link Actions</h3>
+        <div class="grid">
+          <button class="btn btn--outline-neutral btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Add a link
+          </button>
+          <button class="btn btn--outline-neutral btn--md" type="button">
+            Share
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Pill Buttons &amp; Badges</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--pill btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Play
+            <span style="opacity:.7; font-weight:500; margin-left:4px">2:42</span>
+          </button>
+          <button class="btn btn--primary btn--pill btn--md" type="button">Primary button</button>
+          <button class="btn btn--secondary btn--pill btn--md" type="button">Secondary button</button>
+          <button class="btn btn--ghost btn--pill btn--md" type="button">Action button</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Ghost &amp; Icon Combos</h3>
+        <div class="grid">
+          <button class="btn btn--ghost btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+            Like
+          </button>
+          <button class="btn btn--ghost btn--md" type="button">
+            Duplicate
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="btn btn--ghost btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
+            Filter
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Trailing Icon</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--pill btn--md" type="button">
+            Download
+            <span class="btn-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </span>
+          </button>
+          <button class="btn btn--secondary btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            Add to cart
+          </button>
+          <button class="btn btn--primary btn--pill btn--md" type="button">
+            Get started
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Icon-Only Buttons</h3>
+        <div class="grid">
+          <button class="btn btn--icon-only" type="button" aria-label="Add">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="btn btn--icon-only btn--outlined" type="button" aria-label="Add outlined">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="btn btn--icon-only btn--primary" type="button" aria-label="Add primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Chip &amp; Price Buttons</h3>
+        <div class="grid">
+          <button class="btn btn--chip btn--sm btn--price" type="button">$10</button>
+          <button class="btn btn--chip btn--sm btn--price" type="button">$20</button>
+          <button class="btn btn--chip btn--sm btn--price" type="button">$50</button>
+          <button class="btn btn--chip btn--sm btn--price" type="button">$100</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Wide Button</h3>
+        <div class="grid" style="max-width: 340px;">
+          <button class="btn btn--outline-neutral btn--md btn--wide" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Lock
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Disabled State</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--md" type="button" disabled>Primary</button>
+          <button class="btn btn--secondary btn--md" type="button" disabled>Secondary</button>
+          <button class="btn btn--ghost btn--md" type="button" disabled>Ghost</button>
+          <button class="btn btn--danger btn--md" type="button" disabled>Danger</button>
+        </div>
+        <p class="note">Disabled buttons use 45% opacity and disable pointer events.</p>
+      </section>
+
+      <!-- ── Menu Sliders ────────────────────────── -->
+      <section>
+        <h3>Menu Slider — 2 Options</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:14px">A blue pill indicator slides between options. From the KDS topmenu — used for Open/Completed tabs, Dark/Light theme toggle, and shift start/stop.</p>
+          <div style="display:flex; flex-direction:column; gap:16px; align-items:flex-start">
+            <!-- 2-tab: Open / Completed -->
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Tab Switcher</div>
+              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div style="position:absolute; top:3px; left:3px; bottom:3px; width:calc(50% - 5px); background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Open</button>
+                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Completed</button>
+              </div>
+            </div>
+            <!-- 2-tab: Dark / Light -->
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Theme Toggle</div>
+              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div style="position:absolute; top:3px; left:calc(50% + 2px); bottom:3px; width:calc(50% - 5px); background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+                <button style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                </button>
+                <button style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+              </div>
+            </div>
+            <!-- 2-tab: Start / Stop shift -->
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Action Toggle (Start / Stop)</div>
+              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div style="position:absolute; top:3px; left:3px; bottom:3px; width:calc(50% - 5px); background:#22c55e; border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
+                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Start</button>
+                <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Stop</button>
+              </div>
+            </div>
+          </div>
+          <p class="note">Track: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">padding: 3px</code>, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">background: var(--ghost-bg)</code>. Indicator: absolute, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">top/bottom: 3px</code>, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">background: var(--primary)</code>. Slide easing: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(0.33, 1, 0.68, 1)</code>.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Menu Slider — 3 Options</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:14px">Same pattern with 3 tabs. The indicator width auto-adjusts. Used for view modes (All / Prepared / Archived) and quality selectors.</p>
+          <div style="display:flex; flex-direction:column; gap:16px; align-items:flex-start">
+            <!-- 3-tab: View mode -->
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">View Mode</div>
+              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div style="position:absolute; top:3px; left:3px; bottom:3px; width:calc(33.333% - 3.67px); background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+                <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">All</button>
+                <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Prepared</button>
+                <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Archived</button>
+              </div>
+            </div>
+            <!-- 3-tab: Quality -->
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Quality / Density</div>
+              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div style="position:absolute; top:3px; left:calc(33.333% + 0.33px); bottom:3px; width:calc(33.333% - 3.67px); background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+                <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Compact</button>
+                <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Normal</button>
+                <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Comfortable</button>
+              </div>
+            </div>
+            <!-- 3-tab: Order status filter -->
+            <div>
+              <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Order Filter</div>
+              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div style="position:absolute; top:3px; left:calc(66.666% + 1.67px); bottom:3px; width:calc(33.333% - 3.67px); background:var(--danger); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+                <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Active</button>
+                <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Ready</button>
+                <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Overdue</button>
+              </div>
+            </div>
+          </div>
+          <p class="note">Indicator width: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">calc(100% / N - gap)</code>. Active tab: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">opacity: 1; color: #fff</code>. Inactive: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">opacity: 0.5</code>. The indicator can use any semantic colour (primary, danger, etc.).</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ TYPOGRAPHY ═══════════════════════════════ -->
+    <div class="tab-panel" id="panel-typography">
+      <div class="tab-header">
+        <h2>Typography</h2>
+        <p>Type scale, weights, and usage guidelines for the design system.</p>
+      </div>
+
+      <section>
+        <h3>Type Scale</h3>
+        <div class="card">
+          <div class="type-scale">
+            <div class="type-row">
+              <span class="type-label">Display</span>
+              <span class="type-sample" style="font-size:32px; font-weight:800; letter-spacing:-0.03em">The quick brown fox</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">H1</span>
+              <span class="type-sample" style="font-size:24px; font-weight:700; letter-spacing:-0.02em">The quick brown fox</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">H2</span>
+              <span class="type-sample" style="font-size:20px; font-weight:700; letter-spacing:-0.01em">The quick brown fox</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">H3</span>
+              <span class="type-sample" style="font-size:16px; font-weight:600">The quick brown fox</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">Body</span>
+              <span class="type-sample" style="font-size:14px; font-weight:400">The quick brown fox jumps over the lazy dog. This is standard body text used for paragraphs and content.</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">Small</span>
+              <span class="type-sample" style="font-size:12px; font-weight:400; color:var(--text-muted)">The quick brown fox jumps over the lazy dog. Used for captions and metadata.</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">Label</span>
+              <span class="type-sample" style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted)">SECTION HEADING</span>
+            </div>
+            <div class="type-row" style="border-bottom:none">
+              <span class="type-label">Mono</span>
+              <span class="type-sample" style="font-size:13px; font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; color:var(--text-muted)">const token = '#147EFB';</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Font Stack</h3>
+        <div class="card">
+          <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:16px">
+            <div style="flex:1; min-width:200px; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md)">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:8px">Primary — Inter</div>
+              <div style="font-family:'Inter',sans-serif; font-size:20px; font-weight:700; color:var(--text); margin-bottom:4px">Aa Bb Cc 123</div>
+              <div style="font-family:'Inter',sans-serif; font-size:13px; color:var(--text-muted)">UI, body text, headings, labels</div>
+            </div>
+            <div style="flex:1; min-width:200px; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md)">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:8px">Mono — JetBrains Mono</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:700; color:var(--text); margin-bottom:4px">Aa Bb 0O 1l</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-muted)">Code, receipts, hex values, IPs</div>
+            </div>
+          </div>
+          <p class="note" style="margin-top:0; font-size:12px; color:var(--text)">
+            <strong style="color:var(--primary)">--font:</strong> <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif</code>
+          </p>
+          <p class="note" style="font-size:12px; color:var(--text)">
+            <strong style="color:var(--primary)">--font-mono:</strong> <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace</code>
+          </p>
+          <p class="note" style="margin-top:12px">Inter is bundled as a variable WOFF2 (~95KB). JetBrains Mono bundled as WOFF2 (~100KB). System fonts serve as fallback only.</p>
+        </div>
+      </section>
+
+      <!-- ── Anti-Aliasing ────────────────────────── -->
+      <section>
+        <h3>Anti-Aliasing</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:14px">Always render text at the highest quality. The body applies subpixel antialiasing on all platforms for crisp, consistent text.</p>
+          <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px">
+            <div style="flex:1; min-width:220px; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); text-align:center">
+              <div style="font-size:28px; font-weight:700; color:var(--text); margin-bottom:4px; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale">Aa</div>
+              <div style="font-size:11px; font-weight:600; color:var(--success)">✓ Antialiased</div>
+              <div style="font-size:10px; color:var(--text-muted); margin-top:2px">Smooth, consistent rendering</div>
+            </div>
+            <div style="flex:1; min-width:220px; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); text-align:center">
+              <div style="font-size:28px; font-weight:700; color:var(--text); margin-bottom:4px; -webkit-font-smoothing:auto">Aa</div>
+              <div style="font-size:11px; font-weight:600; color:var(--danger)">✗ Auto (default)</div>
+              <div style="font-size:10px; color:var(--text-muted); margin-top:2px">Platform-dependent, inconsistent</div>
+            </div>
+          </div>
+          <p class="note" style="font-size:12px; color:var(--text)">
+            <strong style="color:var(--primary)">Applied on body:</strong> <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;</code>
+          </p>
+          <p class="note" style="margin-top:8px">This ensures Inter and JetBrains Mono render with consistent weight and clarity across Windows, macOS, Linux, iOS, and Android — no bold/thin surprises between platforms.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ SPACING & LAYOUT ═════════════════════════ -->
+    <div class="tab-panel" id="panel-spacing">
+      <div class="tab-header">
+        <h2>Spacing &amp; Layout</h2>
+        <p>Consistent spacing scale, border radii, and elevation tokens.</p>
+      </div>
+
+      <section>
+        <h3>Spacing Scale (px)</h3>
+        <div class="card">
+          <div class="spacing-grid">
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:4px"></div>
+              <span class="spacing-label">4</span>
+              <span class="spacing-value">4px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:8px"></div>
+              <span class="spacing-label">8</span>
+              <span class="spacing-value">8px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:12px"></div>
+              <span class="spacing-label">12</span>
+              <span class="spacing-value">12px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:16px"></div>
+              <span class="spacing-label">16</span>
+              <span class="spacing-value">16px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:20px"></div>
+              <span class="spacing-label">20</span>
+              <span class="spacing-value">20px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:24px"></div>
+              <span class="spacing-label">24</span>
+              <span class="spacing-value">24px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:32px"></div>
+              <span class="spacing-label">32</span>
+              <span class="spacing-value">32px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:40px"></div>
+              <span class="spacing-label">40</span>
+              <span class="spacing-value">40px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:48px"></div>
+              <span class="spacing-label">48</span>
+              <span class="spacing-value">48px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:64px"></div>
+              <span class="spacing-label">64</span>
+              <span class="spacing-value">64px</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Border Radius</h3>
+        <div class="card">
+          <div class="radius-grid">
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:4px"></div>
+              <span class="radius-label">4px — Small</span>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:8px"></div>
+              <span class="radius-label">8px — Medium</span>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:12px"></div>
+              <span class="radius-label">12px — Large</span>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:16px"></div>
+              <span class="radius-label">16px — XL</span>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:999px"></div>
+              <span class="radius-label">Pill</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Elevation / Shadows</h3>
+        <div class="card">
+          <div class="shadow-grid">
+            <div class="shadow-item">
+              <div class="shadow-box" style="box-shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1)"></div>
+              <span class="shadow-label">Shadow SM</span>
+            </div>
+            <div class="shadow-item">
+              <div class="shadow-box" style="box-shadow: 0 4px 6px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.06)"></div>
+              <span class="shadow-label">Shadow MD</span>
+            </div>
+            <div class="shadow-item">
+              <div class="shadow-box" style="box-shadow: 0 10px 15px rgba(16,24,40,.08), 0 4px 6px rgba(16,24,40,.05)"></div>
+              <span class="shadow-label">Shadow LG</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ ICONS ═════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-icons">
+      <div class="tab-header">
+        <h2>Icons</h2>
+        <p>Icon system guidelines — sizes, stroke weights, and usage patterns.</p>
+      </div>
+
+      <section>
+        <h3>Icon Sizes</h3>
+        <div class="card">
+          <div class="grid" style="gap:24px; align-items:flex-end">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">14px — Small</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">16px — Default</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">18px — Large</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">24px — XL</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Stroke Weights</h3>
+        <div class="card">
+          <div class="grid" style="gap:24px; align-items:flex-end">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">1.5 — Light</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">2 — Default</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">2.5 — Bold</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ ELEMENTS ═══════════════════════════════════ -->
+    <div class="tab-panel" id="panel-elements">
+      <div class="tab-header">
+        <h2>Elements</h2>
+        <p>How to wrap element groups using modern flex layouts, rem-based padding, and percentage-based widths.</p>
+      </div>
+
+      <!-- Flex Row -->
+      <section>
+        <h3>Flex Row — Horizontal Group</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">display: flex</code> with <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">gap</code> and <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">padding: 1rem</code> to group related items horizontally.</p>
+          <div style="display:flex; gap:0.75rem; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); border:1px dashed var(--border)">
+            <div style="flex:1; background:var(--primary); color:#fff; padding:0.75rem 1rem; border-radius:var(--r-sm); text-align:center; font-size:13px; font-weight:600">Item A</div>
+            <div style="flex:1; background:var(--primary); color:#fff; padding:0.75rem 1rem; border-radius:var(--r-sm); text-align:center; font-size:13px; font-weight:600">Item B</div>
+            <div style="flex:1; background:var(--primary); color:#fff; padding:0.75rem 1rem; border-radius:var(--r-sm); text-align:center; font-size:13px; font-weight:600">Item C</div>
+          </div>
+          <p class="note"><code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">display: flex; gap: 0.75rem; padding: 1rem;</code></p>
+        </div>
+      </section>
+
+      <!-- Flex Column -->
+      <section>
+        <h3>Flex Column — Vertical Stack</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">Stack elements vertically with <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">flex-direction: column</code>. Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">gap</code> for consistent spacing between rows.</p>
+          <div style="display:flex; flex-direction:column; gap:0.5rem; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); border:1px dashed var(--border); max-width:320px">
+            <div style="background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600">Row 1 — 0.5rem gap</div>
+            <div style="background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600">Row 2</div>
+            <div style="background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600">Row 3</div>
+          </div>
+          <p class="note"><code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem;</code></p>
+        </div>
+      </section>
+
+      <!-- Flex Wrap -->
+      <section>
+        <h3>Flex Wrap — Auto-Wrapping Grid</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">Add <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">flex-wrap: wrap</code> so children flow to the next line when space runs out.</p>
+          <div style="display:flex; flex-wrap:wrap; gap:0.5rem; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); border:1px dashed var(--border)">
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 1</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 2</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 3</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 4</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 5</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 6</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 7</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 8</div>
+          </div>
+          <p class="note"><code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem;</code></p>
+        </div>
+      </section>
+
+      <!-- rem Padding -->
+      <section>
+        <h3>rem Padding Scale</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:14px">Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">rem</code> units for padding so spacing scales with the root font size.</p>
+          <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <div style="width:64px; height:32px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">0.25rem</span></div>
+              <span class="spacing-label">4px</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <div style="width:64px; height:40px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">0.5rem</span></div>
+              <span class="spacing-label">8px</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <div style="width:64px; height:48px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">0.75rem</span></div>
+              <span class="spacing-label">12px</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <div style="width:64px; height:56px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">1rem</span></div>
+              <span class="spacing-label">16px</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <div style="width:64px; height:64px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">1.5rem</span></div>
+              <span class="spacing-label">24px</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <div style="width:64px; height:80px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">2rem</span></div>
+              <span class="spacing-label">32px</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- % Width -->
+      <section>
+        <h3>Percentage Widths</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">%</code> widths for fluid, responsive containers that adapt to their parent.</p>
+
+          <div style="margin-bottom:12px">
+            <p class="note" style="margin-top:0; margin-bottom:6px"><strong>100% width</strong> — full container</p>
+            <div style="width:100%; background:var(--pink); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600">width: 100%</div>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; margin-bottom:12px">
+            <div style="width:50%; background:var(--blue); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">50%</div>
+            <div style="width:50%; background:var(--blue); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">50%</div>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; margin-bottom:12px">
+            <div style="width:33.333%; background:var(--yellow); color:var(--text); padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">33%</div>
+            <div style="width:33.333%; background:var(--yellow); color:var(--text); padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">33%</div>
+            <div style="width:33.333%; background:var(--yellow); color:var(--text); padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">33%</div>
+          </div>
+
+          <div style="display:flex; gap:0.5rem">
+            <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
+            <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
+            <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
+            <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Flex + % Combo -->
+      <section>
+        <h3>Combo — Flex + % + rem</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">Combine all three: flex for layout direction, % for widths, rem for internal padding.</p>
+          <div style="display:flex; gap:1rem; padding:1.25rem; background:var(--ghost-bg); border-radius:var(--r-lg); border:1px dashed var(--border)">
+            <div style="width:60%; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-md); padding:1.25rem; box-shadow:var(--shadow-sm)">
+              <div style="font-size:14px; font-weight:700; margin-bottom:0.5rem">Main Content — 60%</div>
+              <div style="font-size:12px; color:var(--text-muted); line-height:1.5">padding: 1.25rem inside a flex container. Width is percentage-based, padding is rem-based.</div>
+            </div>
+            <div style="width:40%; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-md); padding:1.25rem; box-shadow:var(--shadow-sm)">
+              <div style="font-size:14px; font-weight:700; margin-bottom:0.5rem">Sidebar — 40%</div>
+              <div style="font-size:12px; color:var(--text-muted); line-height:1.5">Same pattern: flex row with gap, percentage widths, rem padding inside each card.</div>
+            </div>
+          </div>
+          <p class="note"><code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">display: flex; gap: 1rem; padding: 1.25rem;</code> — children use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">width: 60%</code> / <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">40%</code> with <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">padding: 1.25rem</code></p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ COMPONENTS ════════════════════════════════ -->
+    <div class="tab-panel" id="panel-components">
+      <div class="tab-header">
+        <h2>Components</h2>
+        <p>Reusable UI patterns — cards, modals, tooltips, alerts, and badges built on the brand token system.</p>
+      </div>
+
+      <!-- ── Cards ───────────────────────────────── -->
+      <section>
+        <h3>Cards</h3>
+        <div class="card">
+          <div style="display:flex; flex-wrap:wrap; gap:16px">
+            <!-- Default card -->
+            <div style="flex:1; min-width:220px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-sm); padding:1.25rem">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:0.75rem">
+                <div style="width:32px; height:32px; background:var(--primary); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                </div>
+                <div>
+                  <div style="font-size:14px; font-weight:700; color:var(--text)">Order #1234</div>
+                  <div style="font-size:11px; color:var(--text-muted)">2 items · $45.00</div>
+                </div>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted); line-height:1.5; margin:0">Standard card with shadow, border, and padding. Use for grouping related content.</p>
+            </div>
+            <!-- Highlight card -->
+            <div style="flex:1; min-width:220px; background:var(--primary); color:#fff; border-radius:var(--r-lg); box-shadow:var(--shadow-md); padding:1.25rem">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; opacity:0.7; margin-bottom:0.5rem">Featured</div>
+              <div style="font-size:16px; font-weight:700; margin-bottom:0.5rem">Premium Plan</div>
+              <p style="font-size:12px; opacity:0.85; line-height:1.5; margin:0">Brand-colored card for emphasis. Use sparingly for CTAs or highlights.</p>
+            </div>
+            <!-- Ghost card -->
+            <div style="flex:1; min-width:220px; background:var(--ghost-bg); border-radius:var(--r-lg); padding:1.25rem">
+              <div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:0.5rem">Ghost Card</div>
+              <p style="font-size:12px; color:var(--text-muted); line-height:1.5; margin:0">No border or shadow. Use for subtle grouping within an already elevated surface.</p>
+            </div>
+          </div>
+          <p class="note">Radius: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--r-lg)</code> (12px). Shadow: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--shadow-sm)</code>. Padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">1.25rem</code>.</p>
+        </div>
+      </section>
+
+      <!-- ── Card Variants ────────────────────────── -->
+      <section>
+        <h3>Card Colour Variants</h3>
+        <div class="card">
+          <div style="display:flex; flex-wrap:wrap; gap:12px">
+            <div style="flex:1; min-width:140px; background:rgba(20,126,251,0.08); border:1px solid rgba(20,126,251,0.2); border-radius:var(--r-md); padding:1rem; text-align:center">
+              <div style="font-size:24px; font-weight:800; color:var(--primary)">142</div>
+              <div style="font-size:11px; font-weight:600; color:var(--primary); opacity:0.7">Orders Today</div>
+            </div>
+            <div style="flex:1; min-width:140px; background:rgba(83,215,105,0.1); border:1px solid rgba(83,215,105,0.2); border-radius:var(--r-md); padding:1rem; text-align:center">
+              <div style="font-size:24px; font-weight:800; color:var(--success)">98%</div>
+              <div style="font-size:11px; font-weight:600; color:var(--success); opacity:0.7">Completion</div>
+            </div>
+            <div style="flex:1; min-width:140px; background:rgba(252,61,57,0.08); border:1px solid rgba(252,61,57,0.2); border-radius:var(--r-md); padding:1rem; text-align:center">
+              <div style="font-size:24px; font-weight:800; color:var(--danger)">5</div>
+              <div style="font-size:11px; font-weight:600; color:var(--danger); opacity:0.7">Overdue</div>
+            </div>
+            <div style="flex:1; min-width:140px; background:rgba(253,148,38,0.1); border:1px solid rgba(253,148,38,0.2); border-radius:var(--r-md); padding:1rem; text-align:center">
+              <div style="font-size:24px; font-weight:800; color:var(--warning)">12</div>
+              <div style="font-size:11px; font-weight:600; color:var(--warning); opacity:0.7">Pending</div>
+            </div>
+          </div>
+          <p class="note">Stat cards use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">8–10%</code> opacity background + <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">20%</code> opacity border in the semantic colour.</p>
+        </div>
+      </section>
+
+      <!-- ── Modals ───────────────────────────────── -->
+      <section>
+        <h3>Modals</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:14px">Modal dialogs use a dimmed overlay, centred surface card, and action buttons at the bottom.</p>
+          <div style="position:relative; background:rgba(0,0,0,0.4); border-radius:var(--r-lg); padding:24px; overflow:hidden; min-height:280px; display:flex; align-items:center; justify-content:center">
+            <div style="background:var(--bg-surface); border-radius:var(--r-lg); box-shadow:var(--shadow-md); width:100%; max-width:380px; overflow:hidden">
+              <!-- Modal header -->
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem 0">
+                <div style="font-size:16px; font-weight:700; color:var(--text)">Delete order?</div>
+                <button style="width:28px; height:28px; border-radius:50%; border:none; background:var(--ghost-bg); color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1">✕</button>
+              </div>
+              <!-- Modal body -->
+              <div style="padding:0.75rem 1.25rem 1rem">
+                <p style="font-size:13px; color:var(--text-muted); line-height:1.5; margin:0">This will permanently remove order #1234 and all associated items. This action cannot be undone.</p>
+              </div>
+              <!-- Modal footer -->
+              <div style="display:flex; gap:8px; padding:0.75rem 1.25rem; border-top:1px solid var(--border); justify-content:flex-end">
+                <button class="btn btn--ghost btn--sm" type="button">Cancel</button>
+                <button class="btn btn--danger btn--sm" type="button">Delete</button>
+              </div>
+            </div>
+          </div>
+          <p class="note">Overlay: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">rgba(0,0,0,0.4)</code>. Surface uses <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">shadow-md</code>. Close button: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">28px</code> circle. Footer has hairline border-top.</p>
+        </div>
+      </section>
+
+      <!-- ── Tooltips ─────────────────────────────── -->
+      <section>
+        <h3>Tooltips</h3>
+        <div class="card">
+          <div style="display:flex; flex-wrap:wrap; gap:32px; align-items:center; justify-content:center; padding:2rem 1rem">
+            <!-- Top tooltip -->
+            <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
+              <div style="background:var(--text); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative">
+                Tooltip top
+                <div style="position:absolute; top:100%; left:50%; transform:translateX(-50%); width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:5px solid var(--text)"></div>
+              </div>
+              <span style="font-size:11px; color:var(--text-muted)">↑ top</span>
+            </div>
+            <!-- Bottom tooltip -->
+            <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
+              <span style="font-size:11px; color:var(--text-muted)">↓ bottom</span>
+              <div style="background:var(--text); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative">
+                <div style="position:absolute; bottom:100%; left:50%; transform:translateX(-50%); width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:5px solid var(--text)"></div>
+                Tooltip bottom
+              </div>
+            </div>
+            <!-- Left tooltip -->
+            <div style="display:flex; align-items:center; gap:8px">
+              <div style="background:var(--text); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative">
+                <div style="position:absolute; right:100%; top:50%; transform:translateY(-50%); width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-right:5px solid var(--text)"></div>
+                Tooltip left
+              </div>
+              <span style="font-size:11px; color:var(--text-muted)">← left</span>
+            </div>
+            <!-- Right tooltip -->
+            <div style="display:flex; align-items:center; gap:8px">
+              <span style="font-size:11px; color:var(--text-muted)">right →</span>
+              <div style="background:var(--text); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative">
+                Tooltip right
+                <div style="position:absolute; left:100%; top:50%; transform:translateY(-50%); width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:5px solid var(--text)"></div>
+              </div>
+            </div>
+          </div>
+          <p class="note">Background: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--text)</code>. Text: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">#fff</code>. Font: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">11px / 600</code>. Padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">4px 10px</code>, radius: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--r-sm)</code>. Arrow: 5px CSS triangle.</p>
+        </div>
+      </section>
+
+      <!-- ── Alerts / Banners ─────────────────────── -->
+      <section>
+        <h3>Alerts</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:10px">
+            <!-- Info -->
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:0.75rem 1rem; background:rgba(95,201,248,0.1); border:1px solid rgba(95,201,248,0.25); border-radius:var(--r-sm)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text)">Printer connected</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px">Epson TM-T88VI on USB001 is ready.</div>
+              </div>
+            </div>
+            <!-- Success -->
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:0.75rem 1rem; background:rgba(83,215,105,0.1); border:1px solid rgba(83,215,105,0.25); border-radius:var(--r-sm)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text)">Sync complete</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px">All 24 items uploaded to the cloud.</div>
+              </div>
+            </div>
+            <!-- Warning -->
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:0.75rem 1rem; background:rgba(253,148,38,0.1); border:1px solid rgba(253,148,38,0.25); border-radius:var(--r-sm)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text)">Low paper warning</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px">Receipt printer paper is running low.</div>
+              </div>
+            </div>
+            <!-- Danger -->
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:0.75rem 1rem; background:rgba(252,61,57,0.08); border:1px solid rgba(252,61,57,0.2); border-radius:var(--r-sm)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text)">Connection lost</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px">Unable to reach the KDS server. Retrying...</div>
+              </div>
+            </div>
+          </div>
+          <p class="note">Pattern: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">10%</code> bg + <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">20–25%</code> border in semantic colour. Icon: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">16px</code>. Padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">0.75rem 1rem</code>.</p>
+        </div>
+      </section>
+
+      <!-- ── Badges ───────────────────────────────── -->
+      <section>
+        <h3>Badges</h3>
+        <div class="card">
+          <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center">
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(20,126,251,0.12); color:var(--primary)">New</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(83,215,105,0.15); color:var(--success)">Completed</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(253,148,38,0.15); color:var(--warning)">Pending</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(252,61,57,0.12); color:var(--danger)">Overdue</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(95,201,248,0.15); color:var(--info)">Info</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:var(--chip-bg); color:var(--text-muted)">Draft</span>
+          </div>
+          <p class="note" style="margin-top:12px">Count badges (numbers):</p>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:8px">
+            <span style="display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--danger); color:#fff; font-size:10px; font-weight:700">3</span>
+            <span style="display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--primary); color:#fff; font-size:10px; font-weight:700">12</span>
+            <span style="display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--gray); color:#fff; font-size:10px; font-weight:700">99+</span>
+          </div>
+          <p class="note" style="margin-top:12px">Dot indicators:</p>
+          <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:8px">
+            <div style="display:flex; align-items:center; gap:6px"><div style="width:8px; height:8px; border-radius:50%; background:var(--success)"></div><span style="font-size:11px; color:var(--text-muted)">Online</span></div>
+            <div style="display:flex; align-items:center; gap:6px"><div style="width:8px; height:8px; border-radius:50%; background:var(--warning)"></div><span style="font-size:11px; color:var(--text-muted)">Away</span></div>
+            <div style="display:flex; align-items:center; gap:6px"><div style="width:8px; height:8px; border-radius:50%; background:var(--danger)"></div><span style="font-size:11px; color:var(--text-muted)">Offline</span></div>
+          </div>
+          <p class="note">Status labels: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">10–11px</code>, pill radius, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">10–15%</code> bg tint. Count badges: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">20px</code> height, solid fill. Dots: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">8px</code> circles.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ FORMS ═════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-forms">
+      <div class="tab-header">
+        <h2>Forms</h2>
+        <p>Form element guidelines — toggle switches, inputs, selects, checkboxes, sliders, and validation states.</p>
+      </div>
+
+      <!-- ── Toggle Switch ──────────────────────── -->
+      <section>
+        <h3>Toggle Switch (settings-toggle-slider)</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:14px">Small toggle switch used across all settings screens. Track: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">2.5rem × 1.375rem</code>, knob: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">1.125rem</code> circle with bounce easing.</p>
+          <div style="display:flex; flex-direction:column; gap:12px; max-width:360px">
+            <!-- OFF state -->
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; background:var(--ghost-bg); border-radius:var(--r-sm)">
+              <span style="font-size:13px; font-weight:600; color:var(--text)">Dark mode</span>
+              <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
+                <input type="checkbox" role="switch" id="demo-toggle-1" style="opacity:0; width:0; height:0; position:absolute">
+                <label for="demo-toggle-1" class="toggle-track" style="position:absolute; inset:0; border-radius:999px; cursor:pointer; transition:background 0.2s"></label>
+                <label for="demo-toggle-1" class="toggle-knob" style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s"></label>
+              </span>
+            </div>
+            <!-- ON state (forced) -->
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; background:var(--ghost-bg); border-radius:var(--r-sm)">
+              <span style="font-size:13px; font-weight:600; color:var(--text)">Sound enabled</span>
+              <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
+                <input type="checkbox" role="switch" id="demo-toggle-2" checked style="opacity:0; width:0; height:0; position:absolute">
+                <label for="demo-toggle-2" class="toggle-track" style="position:absolute; inset:0; border-radius:999px; cursor:pointer; transition:background 0.2s"></label>
+                <label for="demo-toggle-2" class="toggle-knob" style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s"></label>
+              </span>
+            </div>
+            <!-- Disabled -->
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; background:var(--ghost-bg); border-radius:var(--r-sm); opacity:0.45; pointer-events:none">
+              <span style="font-size:13px; font-weight:600; color:var(--text)">Hardware accel (disabled)</span>
+              <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
+                <span style="position:absolute; inset:0; background:var(--gray); border-radius:999px"></span>
+                <span style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; box-shadow:var(--shadow-sm)"></span>
+              </span>
+            </div>
+          </div>
+          <p class="note">Spec: track <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">2.5rem × 1.375rem</code>, knob <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">1.125rem</code>, translate <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">1.125rem</code> on toggle, bounce ease <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(0.34, 1.56, 0.64, 1)</code>.</p>
+        </div>
+      </section>
+
+      <!-- ── Text Input ─────────────────────────── -->
+      <section>
+        <h3>Text Input</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:14px; max-width:400px">
+            <div>
+              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Store name</label>
+              <input type="text" placeholder="Enter store name" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; transition:border-color 0.15s, box-shadow 0.15s">
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Email address</label>
+              <input type="email" placeholder="you@example.com" value="dika@example.com" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; transition:border-color 0.15s, box-shadow 0.15s">
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Disabled input</label>
+              <input type="text" value="Read only" disabled style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--ghost-bg); color:var(--text); font:inherit; font-size:13px; opacity:0.5; cursor:not-allowed">
+            </div>
+          </div>
+          <p class="note">Height: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">36px</code> (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">2.25rem</code>), padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">0 0.75rem</code>, radius: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--r-sm)</code> (8px).</p>
+        </div>
+      </section>
+
+      <!-- ── Validation States ───────────────────── -->
+      <section>
+        <h3>Validation States</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:14px; max-width:400px">
+            <!-- Error -->
+            <div>
+              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Port number</label>
+              <input type="text" value="abc" style="width:100%; height:36px; padding:0 0.75rem; border:2px solid var(--danger); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px">
+              <span style="display:block; font-size:11px; color:var(--danger); margin-top:4px; font-weight:500">Must be a number between 1–65535</span>
+            </div>
+            <!-- Success -->
+            <div>
+              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">IP address</label>
+              <input type="text" value="192.168.1.100" style="width:100%; height:36px; padding:0 0.75rem; border:2px solid var(--success); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px">
+              <span style="display:block; font-size:11px; color:var(--success); margin-top:4px; font-weight:500">Connection successful</span>
+            </div>
+            <!-- Warning -->
+            <div>
+              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">SLA threshold</label>
+              <input type="text" value="14" style="width:100%; height:36px; padding:0 0.75rem; border:2px solid var(--warning); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px">
+              <span style="display:block; font-size:11px; color:var(--warning); margin-top:4px; font-weight:500">Above recommended maximum (12 min)</span>
+            </div>
+          </div>
+          <p class="note">Border switches to the semantic colour (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">2px solid</code>), with a matching caption below.</p>
+        </div>
+      </section>
+
+      <!-- ── Select ──────────────────────────────── -->
+      <section>
+        <h3>Select Dropdown</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:14px; max-width:400px">
+            <div>
+              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Theme</label>
+              <select style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:2rem">
+                <option>Dark</option>
+                <option>Light</option>
+                <option>System</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Language</label>
+              <select style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:2rem">
+                <option>English</option>
+                <option>Indonesian</option>
+              </select>
+            </div>
+          </div>
+          <p class="note">Same dimensions as text input. Custom chevron via <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">appearance: none</code> + <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">background-image</code> SVG.</p>
+        </div>
+      </section>
+
+      <!-- ── Checkbox & Radio ────────────────────── -->
+      <section>
+        <h3>Checkbox &amp; Radio</h3>
+        <div class="card">
+          <div style="display:flex; gap:48px">
+            <!-- Checkboxes -->
+            <div>
+              <p style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:10px">Checkboxes</p>
+              <div style="display:flex; flex-direction:column; gap:10px">
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer">
+                  <input type="checkbox" checked style="width:16px; height:16px; accent-color:var(--primary)">
+                  Show currency
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer">
+                  <input type="checkbox" style="width:16px; height:16px; accent-color:var(--primary)">
+                  Show tax
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer; opacity:0.45">
+                  <input type="checkbox" disabled style="width:16px; height:16px; accent-color:var(--primary)">
+                  Disabled option
+                </label>
+              </div>
+            </div>
+            <!-- Radio -->
+            <div>
+              <p style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:10px">Radio</p>
+              <div style="display:flex; flex-direction:column; gap:10px">
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer">
+                  <input type="radio" name="demo-radio" checked style="width:16px; height:16px; accent-color:var(--primary)">
+                  High quality
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer">
+                  <input type="radio" name="demo-radio" style="width:16px; height:16px; accent-color:var(--primary)">
+                  Normal
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer; opacity:0.45">
+                  <input type="radio" name="demo-radio" disabled style="width:16px; height:16px; accent-color:var(--primary)">
+                  Disabled
+                </label>
+              </div>
+            </div>
+          </div>
+          <p class="note">Use native <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">accent-color: var(--primary)</code> for consistent brand colouring.</p>
+        </div>
+      </section>
+
+      <!-- ── Range Slider ────────────────────────── -->
+      <section>
+        <h3>Range Slider</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:18px; max-width:400px">
+            <div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
+                <label style="font-size:12px; font-weight:600; color:var(--text)">Sound volume</label>
+                <span style="font-size:12px; font-weight:600; color:var(--primary)">80%</span>
+              </div>
+              <input type="range" min="0" max="100" value="80" style="width:100%">
+            </div>
+            <div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
+                <label style="font-size:12px; font-weight:600; color:var(--text)">Yellow threshold</label>
+                <span style="font-size:12px; font-weight:600; color:var(--warning)">7 min</span>
+              </div>
+              <input type="range" min="1" max="15" value="7" class="slider-warning" style="width:100%">
+            </div>
+            <div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
+                <label style="font-size:12px; font-weight:600; color:var(--text)">Red threshold</label>
+                <span style="font-size:12px; font-weight:600; color:var(--danger)">12 min</span>
+              </div>
+              <input type="range" min="9" max="15" value="12" class="slider-danger" style="width:100%">
+            </div>
+          </div>
+          <p class="note">Track: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">6px</code> height, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">border-radius: 999px</code>. Fill uses <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">linear-gradient</code> with semantic colour for filled portion.</p>
+        </div>
+      </section>
+
+      <!-- ── Textarea ────────────────────────────── -->
+      <section>
+        <h3>Textarea</h3>
+        <div class="card">
+          <div style="max-width:400px">
+            <label style="display:block; font-size:12px; font-weight:600; color:var(--text); margin-bottom:6px">Notes</label>
+            <textarea placeholder="Add any notes here..." rows="3" style="width:100%; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; resize:vertical; line-height:1.5; transition:border-color 0.15s"></textarea>
+          </div>
+          <p class="note">Same border, radius, and font as text inputs. Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">resize: vertical</code> to let users adjust height.</p>
+        </div>
+      </section>
+    </div>
+
+  </div>
+
+<script>
+  /* ── Theme toggle ─────────────────────────────── */
+  const toggle = document.getElementById('theme-toggle');
+  const label = document.getElementById('theme-label');
+  const iconSun = toggle.querySelector('.icon-sun');
+  const iconMoon = toggle.querySelector('.icon-moon');
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    if (theme === 'dark') {
+      iconSun.style.display = 'none';
+      iconMoon.style.display = '';
+      label.textContent = 'Light';
+    } else {
+      iconSun.style.display = '';
+      iconMoon.style.display = 'none';
+      label.textContent = 'Dark';
+    }
+  }
+
+  toggle.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+  });
+
+  /* ── Range slider live fill ──────────────────── */
+  function syncSliderFill(slider) {
+    const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
+    slider.style.background = `linear-gradient(to right, var(--fill) ${pct}%, var(--chip-bg) ${pct}%)`;
+  }
+  document.querySelectorAll('input[type=range]').forEach(s => {
+    syncSliderFill(s);
+    s.addEventListener('input', () => syncSliderFill(s));
+  });
+
+  /* ── Tab switching ────────────────────────────── */
+  const tabs = document.querySelectorAll('.tab');
+  const panels = document.querySelectorAll('.tab-panel');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      panels.forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>
