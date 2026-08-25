@@ -58,6 +58,15 @@
     /* Font */
     --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
+
+    /* Motion */
+    --dur-instant: 0ms;
+    --dur-fast: 120ms;
+    --dur-base: 200ms;
+    --dur-slow: 350ms;
+    --ease-standard: cubic-bezier(.2, 0, 0, 1);
+    --ease-bounce: cubic-bezier(.34, 1.56, .64, 1);
+    --ease-exit: cubic-bezier(.4, 0, 1, 1);
   }
 
   [data-theme="dark"] {
@@ -491,6 +500,190 @@
   input[type='checkbox']:checked ~ .toggle-track { background: var(--primary); }
   .toggle-knob { transform: none; }
   input[type='checkbox']:checked ~ .toggle-knob { transform: translateX(1.125rem); }
+
+  /* ── Motion tokens ─────────────────────────────── */
+  .motion-tokens {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .motion-token {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+    background: var(--ghost-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    min-width: 120px;
+  }
+  .motion-token .mt-name {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+  }
+  .motion-token .mt-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    font-family: 'JetBrains Mono','SF Mono','Fira Code',monospace;
+  }
+  .motion-token .mt-use {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  /* ── Phase flow (Before · Feedback · After) ────── */
+  .phase-flow {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .phase {
+    flex: 1;
+    min-width: 200px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--bg-surface);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .phase .phase-tag {
+    align-self: flex-start;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .phase--before .phase-tag { background: var(--chip-bg); color: var(--text-muted); }
+  .phase--feedback .phase-tag { background: rgba(20,126,251,.12); color: var(--primary); }
+  .phase--after .phase-tag { background: rgba(83,215,105,.15); color: var(--success); }
+  .phase h4 { font-size: 14px; font-weight: 700; color: var(--text); }
+  .phase p { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .phase .phase-demo {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 64px;
+    background: var(--ghost-bg);
+    border-radius: var(--r-md);
+    padding: 10px;
+  }
+  .phase-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  /* ── State pills row ───────────────────────────── */
+  .state-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .state-cell {
+    flex: 1;
+    min-width: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 10px;
+    background: var(--ghost-bg);
+    border-radius: var(--r-md);
+  }
+  .state-cell .state-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .state-cell .state-spec {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono','SF Mono','Fira Code',monospace;
+    text-align: center;
+  }
+
+  /* ── Live feedback demos ───────────────────────── */
+  .fb-btn {
+    min-width: 132px;
+    justify-content: center;
+  }
+  .fb-btn .fb-icon { display: inline-flex; align-items: center; }
+  .fb-btn .fb-icon svg { width: 16px; height: 16px; }
+  .fb-btn.is-busy { opacity: .8; pointer-events: none; }
+  .fb-btn.is-done { background: var(--success) !important; border-color: transparent !important; }
+
+  @keyframes kds-spin { to { transform: rotate(360deg); } }
+  .kds-spin { animation: kds-spin .7s linear infinite; }
+
+  @keyframes kds-pop {
+    0%   { transform: scale(.3); opacity: 0; }
+    60%  { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .kds-pop { animation: kds-pop .3s var(--ease-bounce, cubic-bezier(.34,1.56,.64,1)) both; }
+
+  @keyframes kds-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+  .kds-shake { animation: kds-shake .35s ease; }
+
+  /* ── Easing comparison demo ────────────────────── */
+  .ease-demo {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ease-track {
+    position: relative;
+    height: 40px;
+    background: var(--ghost-bg);
+    border-radius: var(--r-md);
+    border: 1px dashed var(--border);
+    overflow: hidden;
+  }
+  .ease-track .ease-label {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+    z-index: 1;
+  }
+  .ease-dot {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    margin-top: -8px;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: var(--shadow-sm);
+  }
+  .ease-dot.running { transition: left .9s; }
+  .ease-dot.ease-standard { transition-timing-function: cubic-bezier(.2, 0, 0, 1); }
+  .ease-dot.ease-bounce   { transition-timing-function: cubic-bezier(.34, 1.56, .64, 1); }
+  .ease-dot.ease-exit     { transition-timing-function: cubic-bezier(.4, 0, 1, 1); }
 </style>
 </head>
 <body>
@@ -523,6 +716,7 @@
       <button class="tab" role="tab" data-tab="elements" type="button">Elements</button>
       <button class="tab" role="tab" data-tab="components" type="button">Components</button>
       <button class="tab" role="tab" data-tab="forms" type="button">Forms</button>
+      <button class="tab" role="tab" data-tab="motion" type="button">Motion &amp; Feedback</button>
     </div>
   </div>
 
@@ -1735,6 +1929,161 @@
           <p class="note">Same border, radius, and font as text inputs. Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">resize: vertical</code> to let users adjust height.</p>
         </div>
       </section>
+    <!-- ════ MOTION & FEEDBACK ══════════════════════════ -->
+    <div class="tab-panel" id="panel-motion">
+      <div class="tab-header">
+        <h2>Motion &amp; Feedback</h2>
+        <p>Universal interaction rule: every action has a <strong>before</strong>, a <strong>feedback</strong>, and an <strong>after</strong> — so every action is confirmable by the visuals alone.</p>
+      </div>
+
+      <!-- The Rule -->
+      <section>
+        <h3>The Rule — Before · Feedback · After</h3>
+        <div class="phase-flow">
+          <div class="phase phase--before">
+            <span class="phase-tag">Before</span>
+            <h4>Resting state</h4>
+            <p>The control shows what it is and what it does. The user hasn't touched it yet — nothing has happened.</p>
+            <div class="phase-demo">
+              <button class="btn btn--primary btn--md" type="button">Save changes</button>
+            </div>
+          </div>
+          <div class="phase-arrow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="phase phase--feedback">
+            <span class="phase-tag">Feedback</span>
+            <h4>While pressing</h4>
+            <p>Immediate tactile response — press, hover, focus. This happens in under 150ms, before the work is done.</p>
+            <div class="phase-demo">
+              <button class="btn btn--primary btn--md" type="button" style="transform: scale(.97)">Save changes</button>
+            </div>
+          </div>
+          <div class="phase-arrow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="phase phase--after">
+            <span class="phase-tag">After</span>
+            <h4>Confirmation</h4>
+            <p>The settled state that proves the action landed — checkmark, state change, or disabled. Never leave the user guessing.</p>
+            <div class="phase-demo">
+              <button class="btn btn--success btn--md fb-btn" type="button">
+                <span class="fb-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
+                Saved
+              </button>
+            </div>
+          </div>
+        </div>
+        <p class="note">Rule of thumb: if the user can't tell from the pixels alone whether their action worked, the feedback is missing.</p>
+      </section>
+
+      <!-- Interaction States -->
+      <section>
+        <h3>Interaction States</h3>
+        <div class="state-row">
+          <div class="state-cell">
+            <span class="state-name">Resting</span>
+            <button class="btn btn--primary btn--md" type="button">Hover me</button>
+            <span class="state-spec">default</span>
+          </div>
+          <div class="state-cell">
+            <span class="state-name">Hovered</span>
+            <button class="btn btn--primary btn--md" type="button" style="background:var(--primary-hover)">Hovered</button>
+            <span class="state-spec">bg → primary-hover</span>
+          </div>
+          <div class="state-cell">
+            <span class="state-name">Pressed</span>
+            <button class="btn btn--primary btn--md" type="button" style="background:var(--primary-active); transform:scale(.97)">Pressed</button>
+            <span class="state-spec">scale .97 · darker</span>
+          </div>
+          <div class="state-cell">
+            <span class="state-name">Focused</span>
+            <button class="btn btn--primary btn--md" type="button" style="box-shadow:0 0 0 3px rgba(20,126,251,.35)">Focused</button>
+            <span class="state-spec">focus ring</span>
+          </div>
+          <div class="state-cell">
+            <span class="state-name">Disabled</span>
+            <button class="btn btn--primary btn--md" type="button" disabled>Disabled</button>
+            <span class="state-spec">opacity .45</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Motion Tokens -->
+      <section>
+        <h3>Motion Tokens</h3>
+        <div class="card">
+          <div class="motion-tokens">
+            <div class="motion-token">
+              <span class="mt-name">Instant</span>
+              <span class="mt-value">0ms</span>
+              <span class="mt-use">Immediate state flips — no animation</span>
+            </div>
+            <div class="motion-token">
+              <span class="mt-name">Fast</span>
+              <span class="mt-value">120ms</span>
+              <span class="mt-use">Press / hover feedback</span>
+            </div>
+            <div class="motion-token">
+              <span class="mt-name">Base</span>
+              <span class="mt-value">200ms</span>
+              <span class="mt-use">State transitions, toggles, chips</span>
+            </div>
+            <div class="motion-token">
+              <span class="mt-name">Slow</span>
+              <span class="mt-value">350ms</span>
+              <span class="mt-use">Entrances, larger movement</span>
+            </div>
+          </div>
+          <p class="note">Rules: <strong>feedback is always faster than the action's work</strong> — respond in ≤120ms, then let the work take as long as it needs. Never animate anything that should be instant (state flips like theme, filters, selected tabs).</p>
+        </div>
+      </section>
+
+      <!-- Easing Comparison -->
+      <section>
+        <h3>Easing Comparison</h3>
+        <div class="card">
+          <div class="ease-demo">
+            <div class="ease-track"><span class="ease-label">Standard</span><div class="ease-dot ease-standard"></div></div>
+            <div class="ease-track"><span class="ease-label">Bounce</span><div class="ease-dot ease-bounce"></div></div>
+            <div class="ease-track"><span class="ease-label">Exit</span><div class="ease-dot ease-exit"></div></div>
+          </div>
+          <div style="margin-top:14px">
+            <button class="btn btn--ghost btn--md" type="button" id="ease-play">Play all</button>
+          </div>
+          <p class="note">Standard <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(.2, 0, 0, 1)</code> for entrances · Bounce <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(.34, 1.56, .64, 1)</code> for playful knobs · Exit <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">cubic-bezier(.4, 0, 1, 1)</code> for removals.</p>
+        </div>
+      </section>
+
+      <!-- Feedback Patterns -->
+      <section>
+        <h3>Feedback Patterns</h3>
+
+        <!-- Busy -> Done -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Busy → Done</h4>
+          <p class="note" style="margin-top:0; margin-bottom:14px">The workhorse: press gives immediate feedback, work happens, then a green confirmation pops in.</p>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+            <button class="btn btn--primary btn--md fb-btn" type="button" id="demo-save" data-state="idle">
+              <span class="fb-icon"></span>
+              <span class="fb-label">Save</span>
+            </button>
+            <span class="note" style="margin:0" id="demo-save-hint">Click to run the full before → feedback → after cycle.</span>
+          </div>
+        </div>
+
+        <!-- Error Shake -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Error Feedback — Shake</h4>
+          <p class="note" style="margin-top:0; margin-bottom:14px">Invalid actions shake the control and flag it red. The shake is the <em>feedback</em>; the red state is the <em>after</em>.</p>
+          <div style="display:flex; flex-direction:column; gap:10px; max-width:400px">
+            <input type="text" id="demo-error-input" placeholder="Type 'ok' to succeed" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; transition:border-color 0.15s">
+            <button class="btn btn--primary btn--md" type="button" id="demo-error-btn" style="align-self:flex-start">Validate</button>
+          </div>
+        </div>
+      </section>
     </div>
 
   </div>
@@ -1786,6 +2135,88 @@
       document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
     });
   });
+
+  /* ── Motion & Feedback demos ──────────────────── */
+  const ICON_BUSY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>';
+  const ICON_DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  // Busy → Done
+  const saveBtn = document.getElementById('demo-save');
+  const saveHint = document.getElementById('demo-save-hint');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      if (saveBtn.dataset.state === 'busy') return;
+      saveBtn.dataset.state = 'busy';
+      saveBtn.classList.add('is-busy');
+      saveBtn.querySelector('.fb-icon').innerHTML = ICON_BUSY;
+      saveBtn.querySelector('.fb-icon').classList.add('kds-spin');
+      saveBtn.querySelector('.fb-label').textContent = 'Saving';
+      saveHint.textContent = 'Feedback: spinner starts instantly, work happens behind it…';
+      setTimeout(() => {
+        saveBtn.classList.remove('is-busy');
+        saveBtn.classList.add('is-done');
+        saveBtn.querySelector('.fb-icon').innerHTML = ICON_DONE;
+        saveBtn.querySelector('.fb-icon').classList.remove('kds-spin');
+        saveBtn.querySelector('.fb-icon').classList.add('kds-pop');
+        saveBtn.querySelector('.fb-label').textContent = 'Saved';
+        saveHint.textContent = 'After: green confirmation. The action is confirmed by visuals alone.';
+        setTimeout(() => {
+          saveBtn.classList.remove('is-done');
+          saveBtn.querySelector('.fb-icon').innerHTML = '';
+          saveBtn.querySelector('.fb-icon').classList.remove('kds-pop');
+          saveBtn.querySelector('.fb-label').textContent = 'Save';
+          saveHint.textContent = 'Click to run the full before → feedback → after cycle.';
+          saveBtn.dataset.state = 'idle';
+        }, 2000);
+      }, 1200);
+    });
+  }
+
+  // Error shake
+  const errInput = document.getElementById('demo-error-input');
+  const errBtn = document.getElementById('demo-error-btn');
+  if (errBtn && errInput) {
+    const shake = () => {
+      errInput.classList.remove('kds-shake');
+      void errInput.offsetWidth; // restart animation
+      errInput.classList.add('kds-shake');
+      errInput.style.border = '2px solid var(--danger)';
+    };
+    errBtn.addEventListener('click', () => {
+      const ok = errInput.value.trim().toLowerCase() === 'ok';
+      if (ok) {
+        errInput.style.border = '2px solid var(--success)';
+        errBtn.textContent = 'Valid';
+        setTimeout(() => {
+          errInput.style.border = '1px solid var(--border)';
+          errBtn.textContent = 'Validate';
+        }, 1600);
+      } else {
+        shake();
+        errBtn.textContent = 'Invalid';
+        setTimeout(() => { errBtn.textContent = 'Validate'; }, 1000);
+      }
+    });
+  }
+
+  // Easing comparison
+  const easePlay = document.getElementById('ease-play');
+  const easeDots = document.querySelectorAll('.ease-dot');
+  if (easePlay) {
+    easePlay.addEventListener('click', () => {
+      const track = document.querySelector('.ease-track');
+      const travel = (track ? track.clientWidth : 300) - 24;
+      easeDots.forEach(d => {
+        d.classList.remove('running');
+        d.style.left = '8px';
+      });
+      void document.body.offsetWidth; // reflow before animating
+      easeDots.forEach(d => {
+        d.classList.add('running');
+        d.style.left = travel + 'px';
+      });
+    });
+  }
 </script>
 </body>
 </html>
