@@ -662,15 +662,16 @@
   }
   .ease-track .ease-label {
     position: absolute;
-    left: 10px;
+    left: 50%;
     top: 50%;
-    transform: translateY(-50%);
+    transform: translate(-50%, -50%);
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .06em;
     color: var(--text-muted);
     z-index: 1;
+    pointer-events: none;
   }
   .ease-dot {
     position: absolute;
@@ -2348,7 +2349,7 @@
             <div class="phase phase--feedback">
               <span class="phase-tag">Process</span>
               <h4>Confirming</h4>
-              <div class="phase-demo" style="gap:6px">
+              <div class="phase-demo" style="gap:6px; flex-direction:row-reverse; justify-content:flex-start">
                 <button class="btn btn--danger btn--sm" type="button" style="font-size:11px; padding:5px 10px">Confirm?</button>
                 <button class="btn btn--ghost btn--sm" type="button" style="font-size:11px; padding:5px 10px">Cancel</button>
               </div>
@@ -2524,8 +2525,15 @@
   <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"btn btn--primary btn--md"</span>
   <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">order-card-start</span><span class="cb-val">"</span>
 <span class="cb-punc">&gt;</span>Start order<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span></code></pre>
+          <p class="note" style="margin-top:0; margin-bottom:12px">The rendered demo adds <code>id="audit-start"</code> and <code>fb-btn</code> only to power this page's click demo — real code carries just <code>data-testid</code> + styling classes.</p>
           <div class="audit-why">
             <strong>Why <code>order-card-start</code>?</strong> The name is <code>feature + element + action</code>: <code>order-card</code> scopes it to the KDS order card (unique on the page), <code>start</code> is the exact action. When the label is translated to Indonesian — <em>"Mulai"</em> — the testid never changes, so tests keep working without touching a selector. No positional info: the button can move to a different column and <code>getByTestId('order-card-start')</code> still finds it.
+          </div>
+          <div style="margin-top:14px">
+            <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted)">In tests — Playwright</span>
+            <pre class="codeblock" style="margin-top:8px; margin-bottom:0"><code><span class="cb-punc">//</span> order-card.spec.ts
+await page.getByTestId(&#39;<span class="cb-testid">order-card-start</span>&#39;).click();
+await expect(page.getByTestId(&#39;<span class="cb-testid">order-card-start</span>&#39;)).toBeDisabled();</code></pre>
           </div>
         </div>
       </section>
