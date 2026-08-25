@@ -1755,6 +1755,16 @@
         <p>Icon system guidelines — sizes, stroke weights, and usage patterns.</p>
       </div>
 
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px"><strong>One drawing grid.</strong> Every icon is drawn on a 24×24 viewBox and rendered with <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">stroke="currentColor"</code> — it inherits the surrounding text colour, so an icon never needs its own colour decision. The size shown is just the render size; the artwork never changes.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Outlines, not fills.</strong> UI icons are stroke-based. Filled icons are louder and reserved for status (the play triangle, the dot indicators) — mixing one filled icon into a row of outlines breaks the optical rhythm.</p>
+          <p class="note" style="margin-bottom:0"><strong>Placement strategy.</strong> A <em>leading</em> icon carries the verb (add, save, delete). A <em>trailing</em> icon signals navigation or disclosure (chevron, arrow, download-after). Never put two icons on one button unless the second is a badge. If an icon needs explaining, it's the wrong icon — not a missing tooltip.</p>
+        </div>
+      </section>
+
       <section>
         <h3>Icon Sizes</h3>
         <div class="card">
@@ -1777,6 +1787,7 @@
             </div>
           </div>
         </div>
+        <p class="note" style="margin-top:14px"><strong>Where each size lives:</strong> <strong>14px</strong> — inline micro (badge icons, tiny captions, compact rows). <strong>16px</strong> — default (buttons, list rows, toggles, table cells). <strong>18px</strong> — large (toolbar icons, empty-state illustrations, alerts). <strong>24px</strong> — XL (standalone, graphic headers, no nearby text). At 14px the stroke must be 2.5 or the icon becomes a smudge; at 24px, 1.5 is fine for a delicate look.</p>
       </section>
 
       <section>
@@ -1794,6 +1805,36 @@
             <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               <span class="spacing-label">2.5 — Bold</span>
+            </div>
+          </div>
+        </div>
+        <p class="note" style="margin-top:14px"><strong>Which stroke where:</strong> <strong>1.5</strong> — light, for 24px+ decorative icons (never below 18px). <strong>2</strong> — the default; use unless there's a reason not to. <strong>2.5</strong> — bold, for small sizes (14px), emphasis, and the "plus" icons on buttons. Never mix stroke weights within one view — mixed weights read as inconsistent system state.</p>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Icon-only is never unnamed</h4><p>Every icon-only button carries an <code>aria-label</code> (see Buttons). The label is the meaning; the icon is the decoration — if the icon fails to render, the button still has a name.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Meaning never lives in the icon alone</h4><p>Status icons pair with colour and text (Feedback Rules 05/06). An icon that only a sighted user can interpret is not confirmation.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>currentColor only</h4><p>Icons inherit colour via <code>stroke="currentColor"</code> — never hardcode a fill or stroke. Otherwise the icon breaks dark mode and disabled states.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Scale uniformly</h4><p>Resize icons with equal width/height only. Non-uniform scaling distorts the 24×24 grid and makes strokes uneven — a squashed icon reads as broken UI.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Small sizes need heavy strokes</h4><p>Below 16px, a 2.0 stroke blurs on low-DPI POS screens. Go 2.5 at 14px, or increase the size — don't let the icon degrade into a smudge.</p></div>
             </div>
           </div>
         </div>
