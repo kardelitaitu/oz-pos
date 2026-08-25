@@ -1170,11 +1170,15 @@
   height: 14px;
   flex-shrink: 0;
   color: var(--color-fg-tertiary);
-  opacity: 0.6;
+  /* calmer idle: a faint hint that brightens on card hover (the card
+     itself is draggable everywhere, so the grip is a secondary cue) */
+  opacity: 0.25;
   cursor: move;
   margin-left: var(--space-1);
+  transition: opacity 0.15s ease;
 }
 
+.topology-node:hover .node-grip,
 .node-grip:hover {
   opacity: 1;
 }
@@ -2215,11 +2219,11 @@
    canvas top for graph-level problems (branch roots, wire integrity).
    The banner is a sibling of the pannable viewport, so it stays put. */
 .node-validation-note {
-  position: absolute;
-  bottom: var(--space-11);
-  left: 8px;
-  right: 8px;
-  z-index: 2;
+  /* in-flow (not absolute) so it can never overlay the subtitle/badges;
+     margin-top:auto pins it to the bottom of the body above the rail
+     clearance when there is spare room, and pushes content up when not */
+  margin-top: auto;
+  order: 1; /* below the stock hint */
   display: flex;
   align-items: flex-start;
   gap: var(--space-1);
@@ -2272,13 +2276,10 @@
 }
 
 /* One-click "add stock wire" guidance chip (round 80) — info-styled,
-   stacked above the warning note so the two never overlap. */
+   stacked ABOVE the warning note (flex order) so the two never overlap. */
 .node-stock-wire-hint {
-  position: absolute;
-  bottom: calc(var(--space-11) + var(--space-10));
-  left: var(--space-2);
-  right: var(--space-2);
-  z-index: 2;
+  margin-top: var(--space-1);
+  order: 0; /* above the validation note */
   display: flex;
   align-items: flex-start;
   gap: var(--space-1);
