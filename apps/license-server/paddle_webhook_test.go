@@ -1468,3 +1468,63 @@ func TestPaddleWebhook_BundleTamperRejected(t *testing.T) {
 		t.Fatal("expected NO license key minted for a bundle-claim tamper")
 	}
 }
+
+// ── Receipt email builder tests ──────────────────────────────────────
+
+func TestBuildReceiptEmail_RFC5322Headers(t *testing.T) {
+	msg := buildReceiptEmail(
+		"no-reply@ozpos.my.id", "buyer@example.com",
+		"OZ-PRO-XXXX-YYYY-ZZZZ", "pro", "2027-01-01T00:00:00Z",
+	)
+	s := string(msg)
+
+	for _, want := range []string{
+		"From: OZ-POS <no-reply@ozpos.my.id>",
+		"To: buyer@example.com",
+		"Subject: Your OZ-POS license key",
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain; charset=utf-8",
+		"Date:",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing header %q in receipt email", want)
+		}
+	}
+}
+
+func TestBuildReceiptEmail_ContainsLicenseKey(t *testing.T) {
+	key := "OZ-PLUS-AAAA-BBBB-CCCC-DDDD"
+	msg := buildReceiptEmail("from@test.com", "to@test.com", key, "plus", "2027-06-01T00:00:00Z")
+	s := string(msg)
+
+	if !strings.Contains(s, key) {
+		t.Error("receipt email must contain the license key")
+	}
+}
+
+func TestBuildReceiptEmail_ContainsTierAndExpiry(t *testing.T) {
+	msg := buildReceiptEmail("from@test.com", "to@test.com", "KEY", "premium", "2028-12-31T23:59:59Z")
+	s := string(msg)
+
+	if !strings.Contains(s, "premium") {
+		t.Error("receipt email must mention the tier name")
+	}
+	if !strings.Contains(s, "2028-12-31T23:59:59Z") {
+		t.Error("receipt email must contain the expiry date")
+	}
+}
+
+func TestBuildReceiptEmail_RFC5322LineEndings(t *testing.T) {
+	msg := buildReceiptEmail("from@test.com", "to@test.com", "KEY", "plus", "2027-01-01")
+	s := string(msg)
+
+	// RFC 5322 requires \r\n line endings in headers.
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "From:") || strings.HasPrefix(line, "To:") || strings.HasPrefix(line, "Subject:") {
+			if i > 0 && !strings.HasSuffix(lines[i-1], "\r") {
+				t.Errorf("header at line %d missing \r before \n (RFC 5322 requires CRLF)", i)
+			}
+		}
+	}
+}

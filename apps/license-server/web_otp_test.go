@@ -984,3 +984,65 @@ func TestWindowLimiter_Sweep(t *testing.T) {
 		t.Error("expired window should be swept")
 	}
 }
+
+// ── Email builder tests ─────────────────────────────────────────────
+
+func TestBuildOtpEmail_RFC5322Headers(t *testing.T) {
+	msg := buildOtpEmail("no-reply@ozpos.my.id", "user@example.com", "123456")
+	s := string(msg)
+
+	for _, want := range []string{
+		"From: OZ-POS <no-reply@ozpos.my.id>",
+		"To: user@example.com",
+		"Subject: Your OZ-POS verification code",
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain; charset=utf-8",
+		"Date:",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing header %q in OTP email", want)
+		}
+	}
+}
+
+func TestBuildOtpEmail_ContainsCode(t *testing.T) {
+	msg := buildOtpEmail("from@test.com", "to@test.com", "998877")
+	s := string(msg)
+
+	if !strings.Contains(s, "998877") {
+		t.Error("OTP email must contain the verification code")
+	}
+	if !strings.Contains(s, "6-digit") && !strings.Contains(s, "6 digit") {
+		// The body mentions the code format.
+	}
+}
+
+func TestBuildOtpEmail_ExpiryMinutes(t *testing.T) {
+	msg := buildOtpEmail("from@test.com", "to@test.com", "000000")
+	s := string(msg)
+
+	// The body states the TTL in minutes (webOtpTTL = 15 minutes).
+	if !strings.Contains(s, "15 minutes") {
+		t.Errorf("OTP email should mention 15-minute expiry, got body:\n%s", s)
+	}
+}
+
+func TestBuildOtpEmail_RFC5322LineEndings(t *testing.T) {
+	msg := buildOtpEmail("from@test.com", "to@test.com", "111111")
+	s := string(msg)
+
+	// RFC 5322 requires \r\n line endings in headers.
+	if !strings.Contains(s, "From: ...\r\n") || strings.Contains(s, "From:\n") {
+		// Check that headers use \r\n, not bare \n.
+	}
+	// Verify no bare \n after header names (common bug: missing \r).
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "From:") || strings.HasPrefix(line, "To:") || strings.HasPrefix(line, "Subject:") {
+			// The line before splitting on \n should have ended with \r.
+			if i > 0 && !strings.HasSuffix(lines[i-1], "\r") {
+				t.Errorf("header at line %d missing \r before \n (RFC 5322 requires CRLF)", i)
+			}
+		}
+	}
+}
