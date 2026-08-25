@@ -57,6 +57,7 @@
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1);
     --shadow-md: 0 4px 6px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.06);
+    --shadow-lg: 0 10px 15px rgba(16,24,40,.08), 0 4px 6px rgba(16,24,40,.05);
 
     /* Font */
     --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
@@ -81,8 +82,8 @@
     --tooltip-bg: #3a3f4c;
     --tooltip-arrow: #3a3f4c;
     --tooltip-border: rgba(255,255,255,0.08);
-    --primary: #3A9AFF;
-    --primary-hover: #147EFB;
+    --primary: #147EFB;
+    --primary-hover: #1A8FFF;
     --primary-active: #1168D4;
     --danger: #FF6B68;
     --danger-hover: #FC3D39;
@@ -1054,56 +1055,85 @@
 
       <section>
         <h3>Surfaces &amp; Backgrounds</h3>
-        <div class="swatch-grid">
-          <div class="swatch">
-            <div class="swatch-color" style="background:#f4f5f7"></div>
-            <span class="swatch-label">Page BG</span>
-            <span class="swatch-hex">#F4F5F7</span>
-          </div>
-          <div class="swatch">
-            <div class="swatch-color" style="background:#ffffff; border:1px solid #dfe1e6"></div>
-            <span class="swatch-label">Surface</span>
-            <span class="swatch-hex">#FFFFFF</span>
-          </div>
-          <div class="swatch">
-            <div class="swatch-color" style="background:#f0f1f3"></div>
-            <span class="swatch-label">Ghost BG</span>
-            <span class="swatch-hex">#F0F1F3</span>
-          </div>
-          <div class="swatch">
-            <div class="swatch-color" style="background:#e8e9ec"></div>
-            <span class="swatch-label">Chip BG</span>
-            <span class="swatch-hex">#E8E9EC</span>
-          </div>
-          <div class="swatch">
-            <div class="swatch-color" style="background:#dfe1e6"></div>
-            <span class="swatch-label">Border</span>
-            <span class="swatch-hex">#DFE1E6</span>
-          </div>
+        <div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:0; border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; font-size:12px">
+          <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border)">Token</div>
+          <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">Light</div>
+          <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">Dark</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--bg</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#f4f5f7; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#F4F5F7</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#12141a; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#12141A</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--bg-surface</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#fff; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#FFFFFF</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#1c1f27; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#1C1F27</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--ghost-bg</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#f0f1f3; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#F0F1F3</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#262a34; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#262A34</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--chip-bg</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#e8e9ec; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#E8E9EC</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#e8e9ec; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#E8E9EC <span style="color:var(--text-muted); font-size:10px">(same)</span></div>
+          <div style="padding:8px 14px; font-family:var(--font-mono); font-size:11px">--border</div>
+          <div style="padding:8px 14px; border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#dfe1e6; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#DFE1E6</div>
+          <div style="padding:8px 14px; border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#2a2e39; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#2A2E39</div>
         </div>
-        <p class="note" style="margin-top:14px">The neutral ladder, lightest to darkest: <strong>Page BG</strong> (the canvas) → <strong>Surface</strong> (cards, dialogs — always sits on Page BG) → <strong>Ghost BG</strong> (hover fills, input wells) → <strong>Chip BG</strong> (pills, tags, pressable chips) → <strong>Border</strong> (hairlines, outlines). Dark mode inverts the ladder — surfaces get <em>lighter</em> than the page, never darker. That inversion is what keeps depth readable after the theme flip.</p>
+        <p class="note" style="margin-top:14px">The neutral ladder, lightest to darkest: <strong>Page BG</strong> (the canvas) → <strong>Surface</strong> (cards, dialogs) → <strong>Ghost BG</strong> (hover fills, input wells) → <strong>Chip BG</strong> (pills, tags) → <strong>Border</strong> (hairlines). Dark mode inverts the ladder — surfaces get <em>lighter</em> than the page, never darker. That inversion keeps depth readable after the theme flip.</p>
       </section>
 
       <section>
         <h3>Text</h3>
-        <div class="swatch-grid">
-          <div class="swatch">
-            <div class="swatch-color" style="background:#1a1d23"></div>
-            <span class="swatch-label">Text</span>
-            <span class="swatch-hex">#1A1D23</span>
-          </div>
-          <div class="swatch">
-            <div class="swatch-color" style="background:#7a8190"></div>
-            <span class="swatch-label">Text Muted</span>
-            <span class="swatch-hex">#8E8E93</span>
-          </div>
-          <div class="swatch">
-            <div class="swatch-color" style="background:#ffffff"></div>
-            <span class="swatch-label">Text on Color</span>
-            <span class="swatch-hex">#FFFFFF</span>
-          </div>
+        <div style="display:grid; grid-template-columns:auto 1fr 1fr; gap:0; border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; font-size:12px">
+          <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border)">Token</div>
+          <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">Light</div>
+          <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">Dark</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--text</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#1a1d23; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#1A1D23</div>
+          <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#e8eaef; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#E8EAEF</div>
+          <div style="padding:8px 14px; font-family:var(--font-mono); font-size:11px">--text-muted</div>
+          <div style="padding:8px 14px; border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#8e8e93; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#8E8E93</div>
+          <div style="padding:8px 14px; border-left:1px solid var(--border)"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#8b93a3; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#8B93A3</div>
         </div>
-        <p class="note" style="margin-top:14px">Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text</code> for anything that must be read. <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text-muted</code> is decorative-only: it sits below the 4.5:1 AA contrast floor on white, so never use it for essential information — timestamps and captions are fine, error messages are not. <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text-on-color</code> (#fff) is for text drawn on primary / danger fills.</p>
+        <p class="note" style="margin-top:14px">Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text</code> for anything that must be read. <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text-muted</code> is decorative-only: it sits below the 4.5:1 AA contrast floor on white, so never use it for essential information. <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text-on-color</code> (#fff) is always white for text drawn on primary / danger fills.</p>
+      </section>
+
+      <section>
+        <h3>Theme Tokens — Light vs Dark</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:14px">These tokens change between themes. Brand colors (<code style="font-family:'JetBrains Mono',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--blue</code>, <code style="font-family:'JetBrains Mono',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--green</code>, etc.) stay the same — semantic roles may shift to maintain contrast.</p>
+          <div style="display:grid; grid-template-columns:auto 1fr 1fr 1fr; gap:0; border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; font-size:12px">
+            <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border)">Token</div>
+            <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">Light</div>
+            <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">Dark</div>
+            <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">Shift</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--primary</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#147EFB; vertical-align:middle; margin-right:4px"></span>#147EFB</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#147EFB; vertical-align:middle; margin-right:4px"></span>#147EFB</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); color:var(--text-muted); font-size:10px">Same — brand consistency</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--primary-hover</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#1168D4; vertical-align:middle; margin-right:4px"></span>#1168D4</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#1A8FFF; vertical-align:middle; margin-right:4px"></span>#1A8FFF</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); color:var(--text-muted); font-size:10px">Brighter for contrast</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--danger</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#FC3D39; vertical-align:middle; margin-right:4px"></span>#FC3D39</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#FF6B68; vertical-align:middle; margin-right:4px"></span>#FF6B68</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); color:var(--text-muted); font-size:10px">Brighter red</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--success</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#53D769; vertical-align:middle; margin-right:4px"></span>#53D769</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#6FE884; vertical-align:middle; margin-right:4px"></span>#6FE884</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); color:var(--text-muted); font-size:10px">Brighter green</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--warning</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#FD9426; vertical-align:middle; margin-right:4px"></span>#FD9426</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#FFA94D; vertical-align:middle; margin-right:4px"></span>#FFA94D</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); color:var(--text-muted); font-size:10px">Brighter orange</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--info</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#5FC9F8; vertical-align:middle; margin-right:4px"></span>#5FC9F8</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#7DD6FB; vertical-align:middle; margin-right:4px"></span>#7DD6FB</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); color:var(--text-muted); font-size:10px">Brighter sky</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11px">--tooltip-bg</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#1a1d23; border:1px solid var(--border); vertical-align:middle; margin-right:4px"></span>#1A1D23</div>
+            <div style="padding:6px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#3a3f4c; border:1px solid var(--border); vertical-align:middle; margin-right:4px"></span>#3A3F4C</div>
+            <div style="padding:6px 14px; border-left:1px solid var(--border); color:var(--text-muted); font-size:10px">Lighter to contrast dark bg</div>
+          </div>
+          <p class="note" style="margin-top:14px">The dark theme rule: <strong>push semantic colors brighter</strong> so they maintain AA contrast on dark surfaces. The primary hover chain shifts too — dark hover uses light primary, dark active uses light primary-hover. This creates a natural depth ladder in both directions.</p>
+        </div>
       </section>
 
       <!-- Fallback & Accessibility -->
@@ -1568,6 +1598,16 @@
         <p>Consistent spacing scale, border radii, and elevation tokens.</p>
       </div>
 
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px"><strong>Why a 4px base?</strong> Every value on the scale is a multiple of 4 — the tightest grid that still divides evenly into 8 and 12. It gives enough granularity for dense POS screens without pixel-fiddling, and because everything is a multiple of 4, components slot together with no magic numbers.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Gap and padding, never margins.</strong> Layout spacing comes from <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">gap</code> on flex/grid containers and <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">padding</code> on surfaces. Margins on shared components leak into every context that embeds them; gap and padding belong to the container and stay predictable.</p>
+          <p class="note" style="margin-bottom:0"><strong>Strategy by size.</strong> <strong>4</strong> — micro gaps (icon-to-text, dot-to-label). <strong>8</strong> — the default gap between related controls. <strong>12</strong> — gap between groups. <strong>16</strong> — card padding. <strong>24</strong> — separation between sections. <strong>32+</strong> — page-level rhythm. Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">rem</code> for padding that should scale with the user's font size, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">px</code> for hairline borders.</p>
+        </div>
+      </section>
+
       <section>
         <h3>Spacing Scale (px)</h3>
         <div class="card">
@@ -1623,6 +1663,7 @@
               <span class="spacing-value">64px</span>
             </div>
           </div>
+          <p class="note" style="margin-top:14px"><strong>Where each step lands:</strong> <strong>4</strong> icon↔text · <strong>8</strong> default control gap · <strong>12</strong> between groups · <strong>16</strong> card padding · <strong>20–24</strong> section separation · <strong>32+</strong> page rhythm. Pick the step, not a value in between — if 8 feels tight and 12 feels loose, the layout, not the number, is wrong.</p>
         </div>
       </section>
 
@@ -1632,25 +1673,26 @@
           <div class="radius-grid">
             <div class="radius-item">
               <div class="radius-box" style="border-radius:4px"></div>
-              <span class="radius-label">4px — Small</span>
+              <span class="radius-label">4px — Micro</span>
             </div>
             <div class="radius-item">
               <div class="radius-box" style="border-radius:8px"></div>
-              <span class="radius-label">8px — Medium</span>
+              <span class="radius-label">8px — <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:10px">--r-sm</code></span>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:10px"></div>
+              <span class="radius-label">10px — <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:10px">--r-md</code></span>
             </div>
             <div class="radius-item">
               <div class="radius-box" style="border-radius:12px"></div>
-              <span class="radius-label">12px — Large</span>
-            </div>
-            <div class="radius-item">
-              <div class="radius-box" style="border-radius:16px"></div>
-              <span class="radius-label">16px — XL</span>
+              <span class="radius-label">12px — <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:10px">--r-lg</code></span>
             </div>
             <div class="radius-item">
               <div class="radius-box" style="border-radius:999px"></div>
-              <span class="radius-label">Pill</span>
+              <span class="radius-label">Pill — <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:10px">--r-pill</code></span>
             </div>
           </div>
+          <p class="note" style="margin-top:14px"><strong>Which radius where:</strong> <strong>4px</strong> — dots, check marks, tiny badges (reference, no token). <strong>8px</strong> <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--r-sm</code> — inputs, buttons, pills. <strong>10px</strong> <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--r-md</code> — panels, table rows, dropdowns. <strong>12px</strong> <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--r-lg</code> — cards, dialogs, modals. <strong>Pill</strong> — toggles, chips, status badges. The corner never exceeds half the element's smaller dimension — otherwise it reads as a pill by accident.</p>
         </div>
       </section>
 
@@ -1669,6 +1711,37 @@
             <div class="shadow-item">
               <div class="shadow-box" style="box-shadow: 0 10px 15px rgba(16,24,40,.08), 0 4px 6px rgba(16,24,40,.05)"></div>
               <span class="shadow-label">Shadow LG</span>
+            </div>
+          </div>
+          <p class="note" style="margin-top:14px"><strong>Elevation ladder:</strong> <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--shadow-sm</code> — resting cards and rows on the page. <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--shadow-md</code> — floating layers: modals, dropdowns, tooltips. <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--shadow-lg</code> — full-screen overlays and command palettes (rare). Shadow is a <em>closeness</em> signal: more shadow = closer to the user's eye. If you need a fourth level, the layout is the problem, not the token.</p>
+          <p class="note" style="margin-top:10px"><strong>Dark-mode fallback:</strong> shadows barely read on dark backgrounds — the tint is nearly invisible. In dark mode, elevation is carried by surface tone (lighter surface) + a hairline border instead. Keep shadows in code, but don't rely on them for separation in dark themes.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>No margins for layout</h4><p>Spacing between elements comes from <code>gap</code> or container <code>padding</code> — never from margins on shared components. Margins make an element impossible to embed safely.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>8px minimum between touch targets</h4><p>Adjacent buttons and tappable rows keep at least 8px between hit areas — below that, mis-taps climb sharply on a POS used at speed.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Three elevation levels max</h4><p>Page → card → modal. More levels blur what's actually on top. If something needs to float above a modal, restructure instead.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Dark mode: tone + border, not shadow</h4><p>On dark surfaces shadows are invisible — elevate with a lighter surface fill and a hairline border. Test every layer in both themes.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Narrow screens degrade gracefully</h4><p>The 1120px container keeps 32px gutters; below ~640px, gutters drop to 16px and flex grids wrap. Never let content overflow — wrap or stack before clipping.</p></div>
             </div>
           </div>
         </div>
@@ -2524,9 +2597,9 @@
             <div class="phase phase--feedback">
               <span class="phase-tag">Process</span>
               <h4>Confirming</h4>
-              <div class="phase-demo" style="gap:6px; justify-content:flex-end">
-                <button class="btn btn--danger btn--sm" type="button" style="font-size:11px; padding:5px 10px">Confirm?</button>
+              <div class="phase-demo" style="gap:6px; justify-content:center">
                 <button class="btn btn--ghost btn--sm" type="button" style="font-size:11px; padding:5px 10px">Cancel</button>
+                <button class="btn btn--danger btn--sm" type="button" style="font-size:11px; padding:5px 10px">Confirm?</button>
               </div>
             </div>
             <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
@@ -2589,15 +2662,15 @@
             <div class="phase phase--feedback">
               <span class="phase-tag">Process</span>
               <h4>Sliding out</h4>
-              <div class="phase-demo">
-                <div style="padding:8px 14px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-sm); font-size:12px; font-weight:600; opacity:0.5; transform:translateX(20px); box-shadow:var(--shadow-sm)">Order #5678</div>
+              <div class="phase-demo" style="overflow:hidden">
+                <div style="padding:8px 14px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-sm); font-size:12px; font-weight:600; opacity:0.25; transform:translateX(40px) scale(0.95); box-shadow:var(--shadow-sm); transition:all 0.28s ease">Order #5678</div>
               </div>
             </div>
             <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
             <div class="phase phase--after">
               <span class="phase-tag">After</span>
               <h4>Gone</h4>
-              <div class="phase-demo">
+              <div class="phase-demo" style="background:transparent; border:1px dashed var(--border)">
                 <span style="font-size:11px; color:var(--text-muted); font-style:italic">No items</span>
               </div>
             </div>
