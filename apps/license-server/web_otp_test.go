@@ -831,6 +831,109 @@ func TestWebAllowedOrigins_EnvOverride(t *testing.T) {
 	}
 }
 
+func TestWebAllowedOrigins_CorsOriginsMerged(t *testing.T) {
+	// OZ_CORS_ORIGINS should be merged into the allowlist alongside
+	// the primary OZ_WEB_ALLOWED_ORIGINS (or its defaults).
+	t.Setenv("OZ_CORS_ORIGINS", "https://extra.com, https://also-extra.com")
+	origins := webAllowedOrigins()
+	found := map[string]bool{}
+	for _, o := range origins {
+		found[o] = true
+	}
+	// Default origins still present.
+	if !found["https://ozpos.my.id"] {
+		t.Error("default ozpos.my.id origin missing after OZ_CORS_ORIGINS merge")
+	}
+	if !found["http://localhost:4321"] {
+		t.Error("default localhost origin missing after OZ_CORS_ORIGINS merge")
+	}
+	// Extra origins merged in.
+	if !found["https://extra.com"] {
+		t.Error("OZ_CORS_ORIGINS extra origin https://extra.com not merged")
+	}
+	if !found["https://also-extra.com"] {
+		t.Error("OZ_CORS_ORIGINS extra origin https://also-extra.com not merged")
+	}
+}
+
+func TestWebAllowedOrigins_CorsOriginsWithCustomPrimary(t *testing.T) {
+	// Both env vars set: primary + extra should all be present.
+	t.Setenv("OZ_WEB_ALLOWED_ORIGINS", "https://primary.com")
+	t.Setenv("OZ_CORS_ORIGINS", "https://extra.com")
+	origins := webAllowedOrigins()
+	found := map[string]bool{}
+	for _, o := range origins {
+		found[o] = true
+	}
+	if !found["https://primary.com"] {
+		t.Error("primary origin missing")
+	}
+	if !found["https://extra.com"] {
+		t.Error("extra origin missing")
+	}
+	// Default ozpos.my.id should NOT be present (overridden by primary).
+	if found["https://ozpos.my.id"] {
+		t.Error("default origin should not appear when OZ_WEB_ALLOWED_ORIGINS is set")
+	}
+}
+
+func TestWebAllowedOrigins_CorsOriginsEmpty(t *testing.T) {
+	// Empty OZ_CORS_ORIGINS should not add anything.
+	t.Setenv("OZ_CORS_ORIGINS", "")
+	origins := webAllowedOrigins()
+	if len(origins) != 2 {
+		t.Errorf("expected 2 default origins with empty OZ_CORS_ORIGINS, got %d: %v", len(origins), origins)
+	}
+}
+
+func TestWebAllowedOrigins_CorsOriginsWhitespace(t *testing.T) {
+	// Whitespace-only and comma-only entries should be silently skipped.
+	t.Setenv("OZ_CORS_ORIGINS", " , https://valid.com , ")
+	origins := webAllowedOrigins()
+	found := map[string]bool{}
+	for _, o := range origins {
+		found[o] = true
+	}
+	if !found["https://valid.com"] {
+		t.Error("valid origin from OZ_CORS_ORIGINS not found")
+	}
+	// Should not have empty-string entries.
+	for _, o := range origins {
+		if o == "" {
+			t.Error("empty string origin in allowlist")
+		}
+	}
+}
+
+func TestWebOriginAllowed_AcceptsCorsOrigin(t *testing.T) {
+	// A request from an origin listed in OZ_CORS_ORIGINS must be allowed.
+	t.Setenv("OZ_CORS_ORIGINS", "https://cors-extra.com")
+	e := &core.RequestEvent{}
+	// Simulate an Origin header.
+	e.Request = &http.Request{Header: http.Header{"Origin": {"https://cors-extra.com"}}}
+	if !webOriginAllowed(e) {
+		t.Error("origin from OZ_CORS_ORIGINS should be allowed")
+	}
+}
+
+func TestWebOriginAllowed_RejectsUnknownOrigin(t *testing.T) {
+	// An origin not in any allowlist must be rejected.
+	e := &core.RequestEvent{}
+	e.Request = &http.Request{Header: http.Header{"Origin": {"https://evil.com"}}}
+	if webOriginAllowed(e) {
+		t.Error("unknown origin should be rejected")
+	}
+}
+
+func TestWebOriginAllowed_NoOriginHeaderAllowed(t *testing.T) {
+	// Non-browser callers (curl, server-to-server) have no Origin — always allowed.
+	e := &core.RequestEvent{}
+	e.Request = &http.Request{Header: http.Header{}}
+	if !webOriginAllowed(e) {
+		t.Error("request without Origin header should be allowed")
+	}
+}
+
 func TestOTPStore_SweepRemovesExpired(t *testing.T) {
 	store := &otpStore{
 		codes:    make(map[string]*otpCode),
