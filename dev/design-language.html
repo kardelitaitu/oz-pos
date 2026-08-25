@@ -1759,8 +1759,8 @@
       <section>
         <h3>Logic &amp; Strategy</h3>
         <div class="card">
-          <p class="note" style="margin-top:0; margin-bottom:12px"><strong>One drawing grid — or three.</strong> Simple icons draw on a 24×24 viewBox. Complex glyphs draw at double resolution on 48×48, and realistic silhouettes (see the dine-in fork &amp; spoon) draw on 96×96. Either way the artwork inherits the surrounding text colour via <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">currentColor</code> — stroke or fill, an icon never makes its own colour decision. The grid is drawing resolution, not size: all three grids render at 14–32px. The size shown is just the render size; the artwork never changes.</p>
-          <p class="note" style="margin-bottom:12px"><strong>Outlines for simple, silhouettes for realistic.</strong> Most UI icons are stroke-based — lighter next to text, and filled icons in a row of outlines break the rhythm. But a glyph that must <em>resemble a real object</em> (cutlery, a printer, a payment terminal) reads far better as a filled silhouette on the 96-grid. Pick one style per icon; never half-and-half.</p>
+          <p class="note" style="margin-top:0; margin-bottom:12px"><strong>One drawing grid — or more.</strong> Simple icons draw on a 24×24 viewBox. Curves and several parts use 48×48 or 96×96 for double/triple resolution. The dine-in fork &amp; spoon push further to 256×256 for precision line art — the grid is drawing resolution, not size: all these grids render at 14–32px. The artwork inherits the surrounding text colour via <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">currentColor</code> — stroke or fill, an icon never makes its own colour decision. The size shown is just the render size; the artwork never changes.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Outlines for simple, line art for detailed.</strong> Most UI icons are stroke-based — lighter next to text. A detailed glyph (like the fork) uses a higher grid and thicker stroke so fine lines (tines, curves) stay crisp at small render sizes. The same <code>currentColor</code> inheritance applies; pick one style per icon and never mix strokes and fills in the same glyph.</p>
           <p class="note" style="margin-bottom:0"><strong>Placement strategy.</strong> A <em>leading</em> icon carries the verb (add, save, delete). A <em>trailing</em> icon signals navigation or disclosure (chevron, arrow, download-after). Never put two icons on one button unless the second is a badge. If an icon needs explaining, it's the wrong icon — not a missing tooltip.</p>
         </div>
       </section>
@@ -1845,25 +1845,26 @@
       <section>
         <h3>Example — Dine-in (Fork &amp; Spoon)</h3>
         <div class="card">
-          <p class="note" style="margin-top:0; margin-bottom:12px">The dine-in signal: a realistic fork and spoon drawn as <strong>filled silhouettes</strong> on the <strong>96-grid</strong> — the resolution real cutlery needs. The spoon bowl is a teardrop, not a circle.</p>
+          <p class="note" style="margin-top:0; margin-bottom:12px">The dine-in signal: a precision line-art fork and spoon drawn on the <strong>256-grid</strong> — clean, balanced, and perfectly proportioned with flat bases and open tines.</p>
           <div class="audit-demo">
-            <svg width="24" height="24" viewBox="0 0 96 96" fill="currentColor" aria-label="Fork and spoon, dine-in" role="img"><path d="M12 6A3 3 0 0 1 18 6L18.5 50L11.5 50Z"/><path d="M21 6A3 3 0 0 1 27 6L27.5 50L20.5 50Z"/><path d="M30 6A3 3 0 0 1 36 6L36.5 50L29.5 50Z"/><path d="M11.5 50L36.5 50L31 57L17 57Z"/><rect x="17" y="57" width="14" height="4" rx="1.5"/><rect x="18.5" y="61" width="11" height="27" rx="2"/><path d="M72 4C78 6 84 12 83.5 20C83 28 76 34 74.5 36L69.5 36C68 34 61 28 60.5 20C60 12 66 6 72 4Z"/><path d="M69.5 36L74.5 36L75 88A1.5 1.5 0 0 1 73.5 89.5L70.5 89.5A1.5 1.5 0 0 1 69 88Z"/></svg>
-            <span class="audit-caption">96-grid · filled silhouette · rendered 24px</span>
+            <svg width="32" height="32" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="butt" stroke-linejoin="round" aria-label="Fork and spoon, dine-in" role="img">
+              <path d="M 60,24 V 80 C 60,96 74,102 74,112 L 72,232 H 92 L 90,112 C 90,102 104,96 104,80 V 24" />
+              <line x1="74.6" y1="24" x2="74.6" y2="76" />
+              <line x1="89.3" y1="24" x2="89.3" y2="76" />
+              <path d="M 166,24 C 142,24 136,44 136,64 C 136,84 158,96 158,112 L 156,232 H 176 L 174,112 C 174,96 196,84 196,64 C 196,44 190,24 166,24 Z" />
+            </svg>
+            <span class="audit-caption">256-grid · outline line art · rendered 32px</span>
           </div>
-          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">svg</span> <span class="cb-attr">viewBox</span><span class="cb-punc">=</span><span class="cb-val">"0 0 96 96"</span> <span class="cb-attr">fill</span><span class="cb-punc">=</span><span class="cb-val">"currentColor"</span><span class="cb-punc">&gt;</span>
-  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">fork</span> <span class="cb-punc">--&gt;</span>
-  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M12 6A3 3 0 0 1 18 6L18.5 50L11.5 50Z"</span><span class="cb-punc">/&gt;</span>   <span class="cb-punc">&lt;!--</span> <span class="cb-tag">tine</span> 1 <span class="cb-punc">--&gt;</span>
-  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M21 6A3 3 0 0 1 27 6L27.5 50L20.5 50Z"</span><span class="cb-punc">/&gt;</span>   <span class="cb-punc">&lt;!--</span> <span class="cb-tag">tine</span> 2 <span class="cb-punc">--&gt;</span>
-  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M30 6A3 3 0 0 1 36 6L36.5 50L29.5 50Z"</span><span class="cb-punc">/&gt;</span>   <span class="cb-punc">&lt;!--</span> <span class="cb-tag">tine</span> 3 <span class="cb-punc">--&gt;</span>
-  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M11.5 50L36.5 50L31 57L17 57Z"</span><span class="cb-punc">/&gt;</span>        <span class="cb-punc">&lt;!--</span> <span class="cb-tag">neck</span> <span class="cb-punc">--&gt;</span>
-  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"17"</span> <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"57"</span> <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"14"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"4"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"1.5"</span><span class="cb-punc">/&gt;</span> <span class="cb-punc">&lt;!--</span> <span class="cb-tag">bolster</span> <span class="cb-punc">--&gt;</span>
-  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"18.5"</span> <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"61"</span> <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"11"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"27"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">/&gt;</span>  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">handle</span> <span class="cb-punc">--&gt;</span>
-  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">spoon</span> <span class="cb-punc">--&gt;</span>
-  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M72 4C78 6 84 12 83.5 20C83 28 76 34 74.5 36L69.5 36C68 34 61 28 60.5 20C60 12 66 6 72 4Z"</span><span class="cb-punc">/&gt;</span>  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">teardrop</span> <span class="cb-tag">bowl</span> <span class="cb-punc">--&gt;</span>
-  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M69.5 36L74.5 36L75 88A1.5 1.5 0 0 1 73.5 89.5L70.5 89.5A1.5 1.5 0 0 1 69 88Z"</span><span class="cb-punc">/&gt;</span>  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">stem</span> <span class="cb-punc">+</span> <span class="cb-tag">handle</span> <span class="cb-punc">--&gt;</span>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">svg</span> <span class="cb-attr">viewBox</span><span class="cb-punc">=</span><span class="cb-val">"0 0 256 256"</span> <span class="cb-attr">fill</span><span class="cb-punc">=</span><span class="cb-val">"none"</span> <span class="cb-attr">stroke</span><span class="cb-punc">=</span><span class="cb-val">"currentColor"</span> <span class="cb-attr">stroke-width</span><span class="cb-punc">=</span><span class="cb-val">"7"</span> <span class="cb-attr">stroke-linecap</span><span class="cb-punc">=</span><span class="cb-val">"butt"</span> <span class="cb-attr">stroke-linejoin</span><span class="cb-punc">=</span><span class="cb-val">"round"</span><span class="cb-punc">&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">fork</span> <span class="cb-punc">(left)</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M 60,24 V 80 C 60,96 74,102 74,112 L 72,232 H 92 L 90,112 C 90,102 104,96 104,80 V 24"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">line</span> <span class="cb-attr">x1</span><span class="cb-punc">=</span><span class="cb-val">"74.6"</span> <span class="cb-attr">y1</span><span class="cb-punc">=</span><span class="cb-val">"24"</span> <span class="cb-attr">x2</span><span class="cb-punc">=</span><span class="cb-val">"74.6"</span> <span class="cb-attr">y2</span><span class="cb-punc">=</span><span class="cb-val">"76"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">line</span> <span class="cb-attr">x1</span><span class="cb-punc">=</span><span class="cb-val">"89.3"</span> <span class="cb-attr">y1</span><span class="cb-punc">=</span><span class="cb-val">"24"</span> <span class="cb-attr">x2</span><span class="cb-punc">=</span><span class="cb-val">"89.3"</span> <span class="cb-attr">y2</span><span class="cb-punc">=</span><span class="cb-val">"76"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">spoon</span> <span class="cb-punc">(right)</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M 166,24 C 142,24 136,44 136,64 C 136,84 158,96 158,112 L 156,232 H 176 L 174,112 C 174,96 196,84 196,64 C 196,44 190,24 166,24 Z"</span><span class="cb-punc">/&gt;</span>
 <span class="cb-punc">&lt;/</span><span class="cb-tag">svg</span><span class="cb-punc">&gt;</span></code></pre>
           <div class="audit-why">
-            <strong>Why the 96-grid + fills?</strong> A realistic fork can't be drawn as strokes — it needs volume, and volume needs resolution. On the 96-grid every part lands on a whole number. <strong>The anatomy:</strong> three tapered tines (tips rounded with a 3-unit arc, bases 1 unit wider) stay separated by 2-unit gaps until they merge into the neck; the neck narrows from the full 25-unit tine base to a 14-unit bolster, then an 11-unit handle with a rounded end. The spoon is a teardrop, not a circle: the bowl is widest at the lip (23 units, at y20) and tapers to a 5-unit stem that widens back out into the handle. Filled <code>currentColor</code> — same theming as strokes, no extra rules. Fork centre x24, spoon centre x72, midpoint 48 — dead-centre on the grid. The label "Dine-in" always sits beside the glyph (fallback rule: never the glyph alone).
+            <strong>How it's drawn.</strong> Drawn on a 256-grid with stroke-based line precision. <strong>Fork on the left</strong> with 4 open tines and a 32px gap to the <strong>Spoon on the right</strong>. Both handles feature flat horizontal bases. Inherits <code>currentColor</code> with <code>stroke-width="7"</code> to theme seamlessly across light and dark modes.
           </div>
         </div>
       </section>
@@ -1926,6 +1927,16 @@
         <p>How to wrap element groups using modern flex layouts, rem-based padding, and percentage-based widths.</p>
       </div>
 
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px"><strong>Why flex?</strong> Most UI is one-axis flow — a row of actions, a stack of settings, a row of order cards. Flex lays out along one axis and lets children size themselves, so rows of variable content (labels, prices, buttons) fit naturally. Grid is for true 2D layouts only — a fixed table of cards — and is rare in this system.</p>
+          <p class="note" style="margin-bottom:12px"><strong>The mental model.</strong> The <em>container</em> decides direction (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">row</code> / <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">column</code>), spacing (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">gap</code>) and wrapping; the <em>children</em> decide their own size (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">flex</code>, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">width</code>). Don't let children fight the container — no margins on shared children, no width on the container's axis unless you mean it.</p>
+          <p class="note" style="margin-bottom:0"><strong>When each pattern:</strong> <strong>row</strong> — action groups, toolbars, label+value lines, order-card footers. <strong>column</strong> — settings stacks, form fields, card bodies. <strong>wrap</strong> — anything with an unknown count (tags, chips, payment buttons). Fixed equal count → <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">flex: 1</code>; exact proportions (60/40 split) → % widths — see the gap trap below.</p>
+        </div>
+      </section>
+
       <!-- Flex Row -->
       <section>
         <h3>Flex Row — Horizontal Group</h3>
@@ -1937,6 +1948,7 @@
             <div style="flex:1; background:var(--primary); color:#fff; padding:0.75rem 1rem; border-radius:var(--r-sm); text-align:center; font-size:13px; font-weight:600">Item C</div>
           </div>
           <p class="note"><code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">display: flex; gap: 0.75rem; padding: 1rem;</code></p>
+          <p class="note" style="margin-top:10px"><strong>When:</strong> toolbars, action rows, label+value pairs, order-card footers. Items read left-to-right and share one baseline — the spacing lives in <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">gap</code>, never in margins on the items.</p>
         </div>
       </section>
 
@@ -1951,6 +1963,7 @@
             <div style="background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600">Row 3</div>
           </div>
           <p class="note"><code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem;</code></p>
+          <p class="note" style="margin-top:10px"><strong>When:</strong> settings lists, stacked form fields, card bodies, action menus. Rows relate vertically — keep <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">gap</code> tight (0.5–0.75rem) so the stack reads as one unit, and use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">margin-top: auto</code> sparingly to pin a footer to the bottom.</p>
         </div>
       </section>
 
@@ -1970,6 +1983,7 @@
             <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 8</div>
           </div>
           <p class="note"><code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem;</code></p>
+          <p class="note" style="margin-top:10px"><strong>When:</strong> anything with an unknown or changing count — tags, chips, price buttons, payment options. The container grows downward instead of overflowing sideways. Rule: <em>wrap before clip</em> — a row that can't fit must wrap, never overflow.</p>
         </div>
       </section>
 
@@ -2004,6 +2018,7 @@
               <span class="spacing-label">32px</span>
             </div>
           </div>
+          <p class="note" style="margin-top:14px">The rem scale is the Spacing tab's 4→32px ladder expressed in <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">rem</code>: <strong>0.25rem</strong> = 4px · <strong>0.5rem</strong> = 8px · <strong>0.75rem</strong> = 12px · <strong>1rem</strong> = 16px · <strong>1.5rem</strong> = 24px · <strong>2rem</strong> = 32px. Padding in rem scales with the root font size (user zoom, accessibility settings). Border hairlines and shadows stay in px.</p>
         </div>
       </section>
 
@@ -2011,7 +2026,7 @@
       <section>
         <h3>Percentage Widths</h3>
         <div class="card">
-          <p class="note" style="margin-top:0; margin-bottom:12px">Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">%</code> widths for fluid, responsive containers that adapt to their parent.</p>
+          <p class="note" style="margin-top:0; margin-bottom:12px">Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">%</code> widths for fluid, parent-relative sizing — the layout adapts with no breakpoints. The page resets <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">box-sizing: border-box</code> globally, so % widths include padding and never overflow their own box.</p>
 
           <div style="margin-bottom:12px">
             <p class="note" style="margin-top:0; margin-bottom:6px"><strong>100% width</strong> — full container</p>
@@ -2035,6 +2050,7 @@
             <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
             <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
           </div>
+          <p class="note" style="margin-top:14px">⚠️ <strong>The gap trap.</strong> N × (100/N)% <em>plus</em> gaps always overflows: 50% + 50% + a 0.5rem gap is more than 100%. The rows above stay inside only because <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">flex-shrink</code> silently squeezes them — the "50%" labels are approximate. For exact proportions with gaps, use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">flex-basis: calc(100% / N - gap × (N-1) / N)</code>; if the columns should be equal anyway, just use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">flex: 1</code>.</p>
         </div>
       </section>
 
@@ -2054,6 +2070,36 @@
             </div>
           </div>
           <p class="note"><code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">display: flex; gap: 1rem; padding: 1.25rem;</code> — children use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">width: 60%</code> / <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">40%</code> with <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">padding: 1.25rem</code></p>
+          <p class="note" style="margin-top:10px">Children in a fixed split also need <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">min-width: 0</code> — otherwise a long label or <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">nowrap</code> text forces the column wider than its %.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>min-width: 0 on content children</h4><p>A flex child with long or nowrap text refuses to shrink below its content width. Add <code>min-width: 0</code> to any child that can hold a long label; pair with ellipsis where the label must truncate.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>The % + gap trap</h4><p>Equal % widths plus gaps overflow the container. Use <code>flex-basis: calc(100% / N - gap × (N-1) / N)</code> for exact columns, or <code>flex: 1</code> when equal distribution is fine.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Wrap before clip</h4><p>Unknown counts (tags, chips, options) get <code>flex-wrap: wrap</code>. A row that overflows its container is a layout bug, not a style choice.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>border-box is assumed</h4><p>The reset sets <code>box-sizing: border-box</code> everywhere — % widths include padding and borders. Don't fight it with <code>content-box</code>; the arithmetic breaks.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Truncate with a title</h4><p>When a label must stay on one line (buttons, pills, table cells), use <code>white-space: nowrap; overflow: hidden; text-overflow: ellipsis</code> and keep the full text in the <code>title</code> attribute for hover + screen readers.</p></div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
