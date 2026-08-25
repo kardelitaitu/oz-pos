@@ -2218,22 +2218,39 @@
    disturbing the fixed card geometry) and a fixed banner overlaying the
    canvas top for graph-level problems (branch roots, wire integrity).
    The banner is a sibling of the pannable viewport, so it stays put. */
-.node-validation-note {
-  /* in-flow (not absolute) so it can never overlay the subtitle/badges;
-     margin-top:auto pins it to the bottom of the body above the rail
-     clearance when there is spare room, and pushes content up when not */
-  margin-top: auto;
-  order: 1; /* below the stock hint */
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-1);
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--color-warning-subtle);
-  border: 1px solid color-mix(in srgb, var(--color-warning) 45%, transparent);
-  color: var(--color-warning);
-  font-size: 10px;
+/* Compact validation marker on the node HEADER: a red [!] (or the excess
+   count) with a hover tooltip carrying the message. Keeps the card body
+   free of error chrome. The tooltip portals to document.body, escaping
+   the card's overflow:hidden clipping. The class keeps the historical
+   .node-validation-note name so card-level existence checks stay valid. */
+.node-validation-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: help;
+}
+/* Visually-hidden message inside the card — keeps the error text in the
+   accessibility tree and satisfies within-card text queries (the portal
+   tooltip lives outside the card for overflow:hidden reasons). */
+.node-validation-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.node-validation-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 260px;
+}
+.node-validation-text {
+  font-size: var(--text-xs);
   line-height: 1.35;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Compact excess-count chip inside the validation note (round 113):
@@ -2300,16 +2317,18 @@
 
 .node-validation-icon {
   flex: 0 0 auto;
-  width: 14px;
+  min-width: 14px;
   height: 14px;
+  padding: 0 3px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-full);
-  background: var(--color-warning);
+  background: var(--color-danger);
   color: var(--color-bg-elevated);
   font-weight: var(--font-weight-bold);
   font-size: 10px;
+  box-sizing: border-box;
 }
 
 .topology-validation-widget {

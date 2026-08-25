@@ -1532,7 +1532,9 @@ describe('NodeTopologyEditor Component', () => {
     } as never);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(3));
-    expect(screen.getByText('Keep exactly one Branch Location node in this graph.')).toBeInTheDocument();
+    // Node-scoped error (never a banner): the message rides the card's
+    // sr span + portal tooltip — tolerate both copies.
+    expect(screen.getAllByText('Keep exactly one Branch Location node in this graph.').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows a canvas banner when no Branch Location root exists', async () => {
@@ -1565,16 +1567,16 @@ describe('NodeTopologyEditor Component', () => {
     } as never);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(3));
-    expect(screen.getByText('Keep exactly one Branch Location node in this graph.')).toBeInTheDocument();
+    expect(screen.getAllByText('Keep exactly one Branch Location node in this graph.').length).toBeGreaterThanOrEqual(1);
 
     // Branch Location nodes are permanent anchors — the Delete action is a
-    // no-op for them, so the graph stays invalid and the banner persists.
+    // no-op for them, so the graph stays invalid and the error persists.
     fireEvent.mouseDown(nodeAt(1), { button: 0 });
     openRackPanel('edit'); fireEvent.click(screen.getByText('Delete Selected Element'));
     expect(getNodeCount()).toBe(3);
 
-    // The banner stays live — the extra branch cannot be deleted away.
-    expect(screen.queryByText('Keep exactly one Branch Location node in this graph.')).not.toBeNull();
+    // The error stays live — the extra branch cannot be deleted away.
+    expect(screen.queryAllByText('Keep exactly one Branch Location node in this graph.').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows a canvas banner for a wire referencing a ghost node', async () => {
@@ -2038,7 +2040,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor();
       await waitFor(() => expect(getNodeCount()).toBe(4));
 
-      expect(screen.getByText('Multiple Warehouses require a Pro Tier license.')).toBeInTheDocument();
+      expect(screen.getAllByText('Multiple Warehouses require a Pro Tier license.').length).toBeGreaterThanOrEqual(1);
     });
 
     it('blocks Apply for two warehouses on standard tier without calling onSave', async () => {
@@ -4887,7 +4889,9 @@ describe('NodeTopologyEditor — warehouse capacity validation', () => {
   };
 
   const warehouseNote = () =>
-    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note');
+    /* the card's visually-hidden message span carries the error text;
+       the header chip itself only shows the red ! marker */
+    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-sr') ?? null;
 
   it('flags the Warehouse card when stock is at capacity', async () => {
     await renderStockedGraph(1000, 1000);
@@ -4946,7 +4950,9 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
   };
 
   const warehouseNote = () =>
-    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note');
+    /* the card's visually-hidden message span carries the error text;
+       the header chip itself only shows the red ! marker */
+    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-sr') ?? null;
 
   it('prompts to route stock in when a warehouse with room has no stock wire', async () => {
     await renderUnwiredWarehouse({ stock: 500, capacity: 1000 });
@@ -5196,7 +5202,9 @@ describe('NodeTopologyEditor — missing-stock-routing dismiss', () => {
   };
 
   const noteDismiss = () =>
-    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note-dismiss') as HTMLElement | null;
+    /* the dismiss lives inside the portal tooltip (document.body) — the
+       card's overflow:hidden would clip an in-card tooltip */
+    document.querySelector('.node-validation-note-dismiss') as HTMLElement | null;
 
   it('renders a dismiss action on the missing-stock-routing card note', async () => {
     await renderUnwired();
@@ -11282,7 +11290,9 @@ describe('NodeTopologyEditor — tier-limit error node scoping', () => {
     await waitFor(() => expect(getNodeCount()).toBe(4));
 
     const wh2Card = document.querySelector('.topology-node[data-node-id="wh-2"]')!;
-    expect(wh2Card.querySelector('.node-validation-count-badge')?.textContent).toBe(
+    expect(wh2Card.querySelector('.node-validation-note')).not.toBeNull();
+    // The excess-count badge rides the header tooltip (portal to body)
+    expect(document.querySelector('.node-validation-tip .node-validation-count-badge')?.textContent).toBe(
       '2 Warehouses — 1 allowed',
     );
   });
@@ -11356,7 +11366,8 @@ describe('NodeTopologyEditor — extra-branch error node scoping', () => {
     await waitFor(() => expect(getNodeCount()).toBe(3));
 
     const branchBCard = document.querySelector('.topology-node[data-node-id="store-2"]')!;
-    expect(branchBCard.querySelector('.node-validation-count-badge')?.textContent).toBe(
+    expect(branchBCard.querySelector('.node-validation-note')).not.toBeNull();
+    expect(document.querySelector('.node-validation-tip .node-validation-count-badge')?.textContent).toBe(
       '2 Branch Locations — 1 allowed',
     );
   });

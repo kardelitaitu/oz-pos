@@ -21,6 +21,7 @@ import {
   topologyUiString,
   visiblePortsForNode,
 } from './topologyCard';
+import Tooltip from '../../frontend/shell/Tooltip';
 
 interface TelemetryBadge {
   badge: string;
@@ -189,6 +190,43 @@ function TopologyNodeCardImpl({
             <span className="node-title">{node.name}</span>
           )}
         </div>
+        {nodeErrors && nodeErrors.length > 0 && (
+          <>
+            <Tooltip
+              content={(
+                <span className="node-validation-tip">
+                <span className="node-validation-text">{l10n.getString(nodeErrors[0]!.messageId)}</span>
+                {countBadge && <span className="node-validation-count-badge">{countBadge}</span>}
+                {nodeErrors[0]!.code === 'warehouse-missing-stock-routing' && onDismissNodeIssue && (
+                  <button
+                    type="button"
+                    className="node-validation-note-dismiss"
+                    aria-label={topologyUiString(l10n, 'topology-validation-dismiss', null)}
+                    title={topologyUiString(l10n, 'topology-validation-dismiss', null)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => onDismissNodeIssue(node.id, nodeErrors[0]!.messageId)}
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                )}
+              </span>
+            )}
+            position="bottom"
+            portal
+            showDelay={300}
+          >
+            <span
+              className="node-validation-note node-validation-chip"
+              role="status"
+              title={nodeErrors.map((e) => l10n.getString(e.messageId)).join('\n')}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <span className="node-validation-icon" aria-hidden="true">!</span>
+            </span>
+            </Tooltip>
+            <span className="node-validation-sr">{l10n.getString(nodeErrors[0]!.messageId)}</span>
+          </>
+        )}
       </div>
 
       <div className="node-body">
@@ -283,33 +321,6 @@ function TopologyNodeCardImpl({
         )}
       </div>
 
-      {nodeErrors && nodeErrors.length > 0 && (
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- stopPropagation keeps a click on the note from starting a node drag
-        <div
-          className="node-validation-note"
-          role="status"
-          title={nodeErrors.map((e) => l10n.getString(e.messageId)).join('\n')}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <span className="node-validation-icon" aria-hidden="true">!</span>
-          <span className="node-validation-text">
-            {l10n.getString(nodeErrors[0]!.messageId)}
-          </span>
-          {countBadge && <span className="node-validation-count-badge">{countBadge}</span>}
-          {nodeErrors[0]!.code === 'warehouse-missing-stock-routing' && onDismissNodeIssue && (
-            <button
-              type="button"
-              className="node-validation-note-dismiss"
-              aria-label={topologyUiString(l10n, 'topology-validation-dismiss', null)}
-              title={topologyUiString(l10n, 'topology-validation-dismiss', null)}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => onDismissNodeIssue(node.id, nodeErrors[0]!.messageId)}
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          )}
-        </div>
-      )}
       {stockWireHint && (
         <div className="node-stock-wire-hint" role="status">
           <span className="node-stock-wire-hint-icon" aria-hidden="true">→</span>
