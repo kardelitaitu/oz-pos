@@ -112,7 +112,7 @@
   input:focus-visible, textarea:focus-visible, select:focus-visible {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 1px var(--primary);
+    box-shadow: 0 0 0 2px var(--primary);
   }
   input.validate:focus, textarea.validate:focus, select.validate:focus,
   input.validate:focus-visible, textarea.validate:focus-visible, select.validate:focus-visible {
@@ -2568,7 +2568,7 @@
             <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:6px; color:var(--text-muted); font-size:12px; line-height:1.5">
               <li><strong>Suppress native rectangular outline:</strong> Use <code>outline: none</code> (or <code>outline: 2px solid transparent</code> for high-contrast accessibility mode) to eliminate the browser's harsh rectangular outline and 1px gap.</li>
               <li><strong>Transition the border color:</strong> Change <code>border-color</code> to <code>var(--primary)</code> (or semantic state color) so the element border seamlessly turns into the active focus state.</li>
-              <li><strong>Use box-shadow for the outer ring:</strong> Apply <code>box-shadow: 0 0 0 1px var(--primary)</code> for a solid Primary Blue focus ring. Unlike <code>outline</code>, <code>box-shadow</code> perfectly matches and clips to the element's <code>border-radius</code> (e.g. 8px) with zero opacity gap.</li>
+              <li><strong>Use box-shadow for the outer ring:</strong> Apply <code>box-shadow: 0 0 0 2px var(--primary)</code> for a 2px solid Primary Blue focus ring. Unlike <code>outline</code>, <code>box-shadow</code> perfectly matches and clips to the element's <code>border-radius</code> (e.g. 8px) with zero opacity gap.</li>
               <li><strong>Smooth transition:</strong> Add <code>transition: border-color 0.15s, box-shadow 0.15s</code> to the base input/textarea element for smooth focus/blur visual feedback.</li>
               <li><strong>Target both :focus and :focus-visible:</strong> Ensure both keyboard and click/touch interactions render the consistent focus ring across browsers.</li>
             </ul>
