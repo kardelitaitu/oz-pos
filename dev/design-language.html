@@ -2686,6 +2686,40 @@
         <p class="note">If a rule conflicts with another, <strong>the after-state wins</strong> — confirmation beats polish, every time.</p>
       </section>
 
+      <!-- Pick Your Feedback -->
+      <section>
+        <h3>Pick Your Feedback</h3>
+        <div class="card">
+          <div style="display:grid; grid-template-columns:1.2fr 2fr 1fr; gap:0; border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; font-size:12px">
+            <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border)">Action</div>
+            <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">Feedback</div>
+            <div style="background:var(--ghost-bg); font-weight:700; padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">Token</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Press</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">scale(.97) + darker bg</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">fast · 120ms</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Busy work</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">spinner inside the button, disabled</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">slow · 350ms+</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Success</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">green + checkmark pop</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">base · 200ms</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Error</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">shake + red border + caption</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">fast · 120ms</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Remove</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">slide out + height collapse</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">slow · 350ms</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Toggle</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border)">knob travel, bounce</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">base · 200ms</div>
+            <div style="padding:8px 14px; font-weight:600">Instant flip</div>
+            <div style="padding:8px 14px; border-left:1px solid var(--border)">nothing — the state flips now</div>
+            <div style="padding:8px 14px; border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">instant · 0ms</div>
+          </div>
+          <p class="note" style="margin-top:14px">If you're unsure which feedback an action deserves, match it to the nearest row — every pattern below is built from these seven.</p>
+        </div>
+      </section>
+
       <!-- Interaction States -->
       <section>
         <h3>Interaction States</h3>
@@ -2745,6 +2779,7 @@
             </div>
           </div>
           <p class="note">Rules: <strong>feedback is always faster than the action's work</strong> — respond in ≤120ms, then let the work take as long as it needs. Never animate anything that should be instant (state flips like theme, filters, selected tabs).</p>
+          <p class="note" style="margin-top:10px"><strong>Implementation:</strong> animate <em>only</em> <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">transform</code> and <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">opacity</code>. The compositor runs those on the GPU without touching layout, which keeps even an old i3-2100 at 60fps. Never animate <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">width</code>, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">height</code>, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">top</code>, or <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">margin</code> — each frame re-lays-out the page.</p>
         </div>
       </section>
 
@@ -2924,6 +2959,35 @@
             </div>
           </div>
           <p class="note">Spinner: <code style="font-family:'JetBrains Mono',monospace">stroke-dasharray</code> circle, <code style="font-family:'JetBrains Mono',monospace">0.7s linear infinite</code>. Success: swap to green + checkmark after <code style="font-family:'JetBrains Mono',monospace">300ms</code> hold.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Honor reduced motion for real</h4><p>Rule 09 made concrete: <code>@media (prefers-reduced-motion: reduce)</code> collapses every duration to <code>0ms</code> and skips entrance/spin/shake — but the <em>after-state never disappears</em>. The checkmark, the red border, the removed row all stay.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Old hardware is the baseline</h4><p>POS terminals can be a decade old (an i3-2100 is the floor). Animations are <code>transform</code>/<code>opacity</code> only, never layout properties; long lists use <code>content-visibility</code>; no blur or heavy shadow animations. If it stutters there, it's too heavy everywhere.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Long work keeps the spinner</h4><p>If an action runs past ~10s, keep the indeterminate spinner — never fake a progress bar. The contract is the after-state, not the elapsed time. Offer a cancel path for genuinely long operations.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Busy buttons must not double-fire</h4><p>While feedback is in flight the control is disabled (see Buttons' rule 5). A second tap that restarts the cycle is the fastest way to break the before → feedback → after contract.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>The state confirms, not the animation</h4><p>When an animation ends, the after-state must persist — if the only thing left is the memory of motion, it was decoration (Rule 07), and the confirmation is missing.</p></div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
