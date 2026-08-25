@@ -101,13 +101,14 @@
   }
 
   /* ── Top bar ──────────────────────────────────── */
-  .topbar {
+  .site-header {
     position: sticky;
     top: 0;
     z-index: 100;
     background: var(--bg-surface);
+  }
+  .topbar {
     border-bottom: 1px solid var(--border);
-    box-shadow: var(--shadow-sm);
   }
   .topbar-inner {
     max-width: 1120px;
@@ -158,9 +159,6 @@
 
   /* ── Tab bar ──────────────────────────────────── */
   .tabbar {
-    position: sticky;
-    top: 56px;
-    z-index: 99;
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border);
     box-shadow: var(--shadow-sm);
@@ -176,8 +174,8 @@
   }
   .tabbar-inner::-webkit-scrollbar { display: none; }
   .tab {
-    padding: 12px 20px;
-    font-size: 13px;
+    padding: 10px 14px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--text-muted);
     border: none;
@@ -717,12 +715,154 @@
     transition: opacity .2s;
   }
   #scroll-indicator.visible #scroll-thumb { opacity: .5; }
+
+  /* ── Feedback rules ────────────────────────────── */
+  .rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .rule {
+    display: flex;
+    gap: 14px;
+    padding: 14px 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-sm);
+  }
+  .rule-num {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    background: var(--chip-bg);
+    color: var(--text-muted);
+  }
+  .rule-body h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .rule-body p {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.55;
+    margin: 0;
+  }
+  .rule-body code {
+    font-family: var(--font-mono);
+    background: var(--ghost-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+
+  /* ── Audit tab ────────────────────────────────── */
+  .testid-pattern {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--chip-bg);
+    border-radius: var(--r-md);
+    padding: 8px 14px;
+    margin-bottom: 12px;
+  }
+  .testid-pattern .tp-fixed { color: var(--text-muted); }
+  .testid-pattern .tp-part { font-weight: 700; }
+  .testid-pattern .tp-part--feature { color: var(--primary); }
+  .testid-pattern .tp-part--element { color: var(--success); }
+  .testid-pattern .tp-part--action { color: var(--warning); }
+
+  .audit-demo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 14px 16px;
+    background: var(--ghost-bg);
+    border: 1px dashed var(--border);
+    border-radius: var(--r-md);
+    margin-bottom: 12px;
+  }
+  .audit-demo .audit-caption {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .codeblock {
+    background: #0e1116;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.7;
+    color: #d7dce5;
+    margin: 0 0 12px;
+    white-space: pre;
+  }
+  .codeblock .cb-tag  { color: #7dd3fc; }
+  .codeblock .cb-attr { color: #fbbf24; }
+  .codeblock .cb-val  { color: #86efac; }
+  .codeblock .cb-punc { color: #8b93a3; }
+  .codeblock .cb-testid { color: #f472b6; font-weight: 700; }
+
+  .audit-why {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    padding: 12px 14px;
+    background: rgba(20,126,251,.06);
+    border-left: 3px solid var(--primary);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  }
+  .audit-why strong { color: var(--text); }
+  .audit-why code {
+    font-family: var(--font-mono);
+    color: var(--primary);
+    font-size: 11px;
+    background: rgba(20,126,251,.1);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .audit-filter {
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text);
+    border-radius: var(--r-sm);
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font: inherit;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .audit-filter:hover { border-color: var(--text-muted); }
+  .audit-filter.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: transparent;
+  }
 </style>
 </head>
 <body>
 <div id="scroll-indicator" aria-hidden="true"><div id="scroll-thumb"></div></div>
 
-  <!-- ── TOP BAR ─────────────────────────────────── -->
+  <!-- ── SITE HEADER (sticky topbar + tabbar) ─── -->
+  <div class="site-header">
   <div class="topbar">
     <div class="topbar-inner">
       <div class="topbar-brand">
@@ -739,7 +879,6 @@
     </div>
   </div>
 
-  <!-- ── TAB BAR ─────────────────────────────────── -->
   <div class="tabbar">
     <div class="tabbar-inner" role="tablist">
       <button class="tab active" role="tab" data-tab="colors" type="button">Color Palette</button>
@@ -751,8 +890,10 @@
       <button class="tab" role="tab" data-tab="components" type="button">Components</button>
       <button class="tab" role="tab" data-tab="feedback" type="button">Feedback</button>
       <button class="tab" role="tab" data-tab="forms" type="button">Forms</button>
+      <button class="tab" role="tab" data-tab="audit" type="button">Audit</button>
     </div>
   </div>
+  </div><!-- .site-header -->
 
   <!-- ── PAGE CONTENT ────────────────────────────── -->
   <div class="page-content">
@@ -1073,8 +1214,8 @@
             <!-- 2-tab: Open / Completed -->
             <div>
               <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Tab Switcher</div>
-              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
-                <div style="position:absolute; top:3px; left:3px; bottom:3px; width:calc(50% - 5px); background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+              <div class="ms-track" style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
                 <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Open</button>
                 <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Completed</button>
               </div>
@@ -1082,8 +1223,8 @@
             <!-- 2-tab: Dark / Light -->
             <div>
               <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Theme Toggle</div>
-              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
-                <div style="position:absolute; top:3px; left:calc(50% + 2px); bottom:3px; width:calc(50% - 5px); background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+              <div class="ms-track" data-active="1" style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
                 <button style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
                 </button>
@@ -1095,8 +1236,8 @@
             <!-- 2-tab: Start / Stop shift -->
             <div>
               <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Action Toggle (Start / Stop)</div>
-              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
-                <div style="position:absolute; top:3px; left:3px; bottom:3px; width:calc(50% - 5px); background:#22c55e; border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
+              <div class="ms-track" data-colors="#22c55e,#22c55e" style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:#22c55e; border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
                 <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Start</button>
                 <button style="position:relative; z-index:1; padding:5px 16px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit">Stop</button>
               </div>
@@ -1114,8 +1255,8 @@
             <!-- 3-tab: View mode -->
             <div>
               <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">View Mode</div>
-              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
-                <div style="position:absolute; top:3px; left:3px; bottom:3px; width:calc(33.333% - 3.67px); background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+              <div class="ms-track" style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
                 <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">All</button>
                 <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Prepared</button>
                 <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Archived</button>
@@ -1124,8 +1265,8 @@
             <!-- 3-tab: Quality -->
             <div>
               <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Quality / Density</div>
-              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
-                <div style="position:absolute; top:3px; left:calc(33.333% + 0.33px); bottom:3px; width:calc(33.333% - 3.67px); background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+              <div class="ms-track" data-active="1" style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:var(--primary); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
                 <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Compact</button>
                 <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Normal</button>
                 <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Comfortable</button>
@@ -1134,8 +1275,8 @@
             <!-- 3-tab: Order status filter -->
             <div>
               <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Order Filter</div>
-              <div style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
-                <div style="position:absolute; top:3px; left:calc(66.666% + 1.67px); bottom:3px; width:calc(33.333% - 3.67px); background:var(--danger); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1)"></div>
+              <div class="ms-track" data-active="2" data-colors="var(--primary),var(--primary),var(--danger)" style="position:relative; display:inline-flex; gap:4px; background:var(--ghost-bg); border-radius:var(--r-sm); padding:3px">
+                <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:var(--danger); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
                 <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Active</button>
                 <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Ready</button>
                 <button style="position:relative; z-index:1; padding:5px 14px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; font-family:inherit">Overdue</button>
@@ -1963,6 +2104,8 @@
           <p class="note">Same border, radius, and font as text inputs. Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">resize: vertical</code> to let users adjust height.</p>
         </div>
       </section>
+    </div>
+
     <!-- ════ MOTION & FEEDBACK ══════════════════════════ -->
     <div class="tab-panel" id="panel-feedback">
       <div class="tab-header">
@@ -2011,6 +2154,77 @@
           </div>
         </div>
         <p class="note">Rule of thumb: if the user can't tell from the pixels alone whether their action worked, the feedback is missing.</p>
+      </section>
+
+      <!-- The Rules -->
+      <section>
+        <h3>The Rules</h3>
+        <div class="rules-list">
+          <div class="rule">
+            <span class="rule-num">01</span>
+            <div class="rule-body">
+              <h4>Confirm by visuals alone</h4>
+              <p>Every action must be verifiable from the pixels — state, colour, icon, motion. If the user has to wonder whether it worked, the feedback is missing.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">02</span>
+            <div class="rule-body">
+              <h4>Feedback before work</h4>
+              <p>Respond within <code>120ms</code> (fast token). The heavy work may take seconds — the press response must never wait for it.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">03</span>
+            <div class="rule-body">
+              <h4>The after-state must differ from the before</h4>
+              <p>A click that changes nothing is indistinguishable from a click that never registered. Flip the state: button → disabled + checkmark, tab → selected, toggle → slid.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">04</span>
+            <div class="rule-body">
+              <h4>Never animate instant flips</h4>
+              <p>Theme, filters, selected tabs, counts — these are state flips, not transitions. Use <code>0ms</code> (instant token). Animate only what moves in space.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">05</span>
+            <div class="rule-body">
+              <h4>Error is motion + colour + text</h4>
+              <p>Shake + red border + caption. Never red alone (invisible to colour-blind users), never a caption alone (missed by fast eyes).</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">06</span>
+            <div class="rule-body">
+              <h4>Success is a checkmark, not just green</h4>
+              <p>Green alone can read as decoration. Pair it with the icon and a real state flip — disabled button, removed row, updated value.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">07</span>
+            <div class="rule-body">
+              <h4>Motion is communication, not decoration</h4>
+              <p>Every animation answers a question: did it work? what changed? where did it go? If it communicates nothing, cut it. Never loop idle animation — spinners only while genuinely busy.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">08</span>
+            <div class="rule-body">
+              <h4>Least motion that confirms</h4>
+              <p>Use the smallest duration and amplitude that reads clearly. When in doubt, a <code>120ms</code> scale/translate micro-interaction beats a fancy <code>500ms</code> entrance.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">09</span>
+            <div class="rule-body">
+              <h4>Respect reduced motion</h4>
+              <p>Honor <code>prefers-reduced-motion</code> — swap motion feedback for instant state change. The after-state must still confirm.</p>
+            </div>
+          </div>
+        </div>
+        <p class="note">If a rule conflicts with another, <strong>the after-state wins</strong> — confirmation beats polish, every time.</p>
       </section>
 
       <!-- Interaction States -->
@@ -2117,6 +2331,255 @@
             <button class="btn btn--primary btn--md" type="button" id="demo-error-btn" style="align-self:flex-start">Validate</button>
           </div>
         </div>
+
+        <!-- Delete Confirmation -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Delete — Before · Process · After</h4>
+          <p class="note" style="margin-top:0; margin-bottom:14px">Destructive actions need confirmation. The button flips to a two-step pattern: click → confirm → done.</p>
+          <div class="phase-flow" style="margin-bottom:14px">
+            <div class="phase phase--before">
+              <span class="phase-tag">Before</span>
+              <h4>Active item</h4>
+              <div class="phase-demo">
+                <button class="btn btn--danger btn--sm" type="button">Delete</button>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--feedback">
+              <span class="phase-tag">Process</span>
+              <h4>Confirming</h4>
+              <div class="phase-demo" style="gap:6px">
+                <button class="btn btn--danger btn--sm" type="button" style="font-size:11px; padding:5px 10px">Confirm?</button>
+                <button class="btn btn--ghost btn--sm" type="button" style="font-size:11px; padding:5px 10px">Cancel</button>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--after">
+              <span class="phase-tag">After</span>
+              <h4>Removed</h4>
+              <div class="phase-demo">
+                <span style="font-size:12px; color:var(--text-muted); text-decoration:line-through">Order #1234</span>
+              </div>
+            </div>
+          </div>
+          <p class="note">Timeline: <code style="font-family:'JetBrains Mono',monospace">0ms</code> button flips → <code style="font-family:'JetBrains Mono',monospace">200ms</code> confirm appears → <code style="font-family:'JetBrains Mono',monospace">350ms</code> row slides out.</p>
+        </div>
+
+        <!-- Toggle Switch -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Toggle — Before · Process · After</h4>
+          <p class="note" style="margin-top:0; margin-bottom:14px">Toggles slide the knob while the work happens. The knob movement IS the feedback — no spinner needed.</p>
+          <div class="phase-flow" style="margin-bottom:14px">
+            <div class="phase phase--before">
+              <span class="phase-tag">Before</span>
+              <h4>Off</h4>
+              <div class="phase-demo">
+                <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem"><span style="position:absolute; inset:0; background:var(--gray); border-radius:999px"></span><span style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; box-shadow:var(--shadow-sm)"></span></span>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--feedback">
+              <span class="phase-tag">Process</span>
+              <h4>Sliding</h4>
+              <div class="phase-demo">
+                <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem"><span style="position:absolute; inset:0; background:var(--primary); border-radius:999px"></span><span style="position:absolute; width:1.125rem; height:1.125rem; left:calc(50% - 0.5625rem); bottom:0.125rem; background:#fff; border-radius:50%; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1)"></span></span>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--after">
+              <span class="phase-tag">After</span>
+              <h4>On</h4>
+              <div class="phase-demo">
+                <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem"><span style="position:absolute; inset:0; background:var(--primary); border-radius:999px"></span><span style="position:absolute; width:1.125rem; height:1.125rem; left:1.125rem; bottom:0.125rem; background:#fff; border-radius:50%; box-shadow:var(--shadow-sm)"></span></span>
+              </div>
+            </div>
+          </div>
+          <p class="note">Knob translation: <code style="font-family:'JetBrains Mono',monospace">1.125rem</code>. Easing: <code style="font-family:'JetBrains Mono',monospace">cubic-bezier(0.34, 1.56, 0.64, 1)</code> (bounce). Duration: <code style="font-family:'JetBrains Mono',monospace">200ms</code>.</p>
+        </div>
+
+        <!-- Card Remove -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Card — Before · Process · After</h4>
+          <p class="note" style="margin-top:0; margin-bottom:14px">Items leaving a list slide out and collapse. The empty space closing proves it's gone.</p>
+          <div class="phase-flow" style="margin-bottom:14px">
+            <div class="phase phase--before">
+              <span class="phase-tag">Before</span>
+              <h4>Present</h4>
+              <div class="phase-demo">
+                <div style="padding:8px 14px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-sm); font-size:12px; font-weight:600; box-shadow:var(--shadow-sm)">Order #5678</div>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--feedback">
+              <span class="phase-tag">Process</span>
+              <h4>Sliding out</h4>
+              <div class="phase-demo">
+                <div style="padding:8px 14px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-sm); font-size:12px; font-weight:600; opacity:0.5; transform:translateX(20px); box-shadow:var(--shadow-sm)">Order #5678</div>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--after">
+              <span class="phase-tag">After</span>
+              <h4>Gone</h4>
+              <div class="phase-demo">
+                <span style="font-size:11px; color:var(--text-muted); font-style:italic">No items</span>
+              </div>
+            </div>
+          </div>
+          <p class="note">Exit animation: <code style="font-family:'JetBrains Mono',monospace">translateX(20px) + opacity 0</code> over <code style="font-family:'JetBrains Mono',monospace">280ms</code>. Container height collapses with <code style="font-family:'JetBrains Mono',monospace">grid-template-rows: 0fr</code> transition.</p>
+        </div>
+
+        <!-- Form Submit -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Form Submit — Before · Process · After</h4>
+          <p class="note" style="margin-top:0; margin-bottom:14px">The button becomes the progress indicator. No extra spinner — the button label and icon tell the whole story.</p>
+          <div class="phase-flow" style="margin-bottom:14px">
+            <div class="phase phase--before">
+              <span class="phase-tag">Before</span>
+              <h4>Ready</h4>
+              <div class="phase-demo">
+                <button class="btn btn--primary btn--sm" type="button">Submit</button>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--feedback">
+              <span class="phase-tag">Process</span>
+              <h4>Submitting</h4>
+              <div class="phase-demo">
+                <button class="btn btn--primary btn--sm" type="button" style="opacity:.8; pointer-events:none">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:kds-spin .7s linear infinite"><circle cx="12" cy="12" r="10" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
+                  Submitting…
+                </button>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--after">
+              <span class="phase-tag">After</span>
+              <h4>Done</h4>
+              <div class="phase-demo">
+                <button class="btn btn--success btn--sm" type="button" style="pointer-events:none">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Submitted
+                </button>
+              </div>
+            </div>
+          </div>
+          <p class="note">Spinner: <code style="font-family:'JetBrains Mono',monospace">stroke-dasharray</code> circle, <code style="font-family:'JetBrains Mono',monospace">0.7s linear infinite</code>. Success: swap to green + checkmark after <code style="font-family:'JetBrains Mono',monospace">300ms</code> hold.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ AUDIT ═══════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-audit">
+      <div class="tab-header">
+        <h2>Audit</h2>
+        <p>Every interactive element carries a <code style="font-family:var(--font-mono); color:var(--primary)">data-testid</code> with an easy-to-understand name — the contract between the UI and automated tests.</p>
+      </div>
+
+      <!-- The Convention -->
+      <section>
+        <h3>The Convention</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:14px">Tests (Playwright, Testing Library) select elements by <code style="font-family:var(--font-mono)">data-testid</code> — <strong>never</strong> by CSS class, DOM position, or visible text. Visible text gets translated; classes get refactored; the testid is the only stable handle.</p>
+          <div class="testid-pattern">
+            <span class="tp-fixed">data-testid="</span>
+            <span class="tp-part tp-part--feature">feature</span>
+            <span class="tp-fixed">-</span>
+            <span class="tp-part tp-part--element">element</span>
+            <span class="tp-fixed">[-</span>
+            <span class="tp-part tp-part--action">action</span>
+            <span class="tp-fixed">]"</span>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px">
+            <span class="spacing-label" style="background:var(--chip-bg); padding:4px 10px; border-radius:999px; color:var(--text)">kebab-case, lowercase</span>
+            <span class="spacing-label" style="background:var(--chip-bg); padding:4px 10px; border-radius:999px; color:var(--text)">feature scope first</span>
+            <span class="spacing-label" style="background:var(--chip-bg); padding:4px 10px; border-radius:999px; color:var(--text)">describes what it is / does</span>
+            <span class="spacing-label" style="background:var(--chip-bg); padding:4px 10px; border-radius:999px; color:var(--text)">never position (no button-3)</span>
+            <span class="spacing-label" style="background:var(--chip-bg); padding:4px 10px; border-radius:999px; color:var(--text)">stable across locales</span>
+            <span class="spacing-label" style="background:var(--chip-bg); padding:4px 10px; border-radius:999px; color:var(--text)">unique per screen</span>
+          </div>
+          <p class="note">One id per control, everywhere that control appears. If the same button exists in two features, prefix it with each feature — the id must be unique on the page.</p>
+        </div>
+      </section>
+
+      <!-- Example 1 -->
+      <section>
+        <h3>Example 1 — Start an order</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">The KDS order card's primary action. Click it — the button itself is the test target.</p>
+          <div class="audit-demo">
+            <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:200px">
+              <div style="width:32px; height:32px; border-radius:var(--r-sm); background:var(--primary); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:12px">#1042</div>
+              <div>
+                <div style="font-size:13px; font-weight:700; color:var(--text)">Order #1042</div>
+                <div style="font-size:11px; color:var(--text-muted)">3 items · $42.50</div>
+              </div>
+            </div>
+            <button class="btn btn--primary btn--md fb-btn" type="button" data-testid="order-card-start" id="audit-start">
+              Start order
+            </button>
+            <span class="audit-caption">[order-card-start]</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">button</span>
+  <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"btn btn--primary btn--md"</span>
+  <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">order-card-start</span><span class="cb-val">"</span>
+<span class="cb-punc">&gt;</span>Start order<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>Why <code>order-card-start</code>?</strong> The name is <code>feature + element + action</code>: <code>order-card</code> scopes it to the KDS order card (unique on the page), <code>start</code> is the exact action. When the label is translated to Indonesian — <em>"Mulai"</em> — the testid never changes, so tests keep working without touching a selector. No positional info: the button can move to a different column and <code>getByTestId('order-card-start')</code> still finds it.
+          </div>
+        </div>
+      </section>
+
+      <!-- Example 2 -->
+      <section>
+        <h3>Example 2 — Sound toggle</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">A settings-toggle-slider from the Forms tab. The id lives on the real <code style="font-family:var(--font-mono)">&lt;input&gt;</code>, not the decorative labels. Click it.</p>
+          <div class="audit-demo">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex:1; max-width:320px; padding:0.75rem 1rem; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-sm)">
+              <span style="font-size:13px; font-weight:600; color:var(--text)">Sound enabled</span>
+              <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
+                <input type="checkbox" role="switch" id="audit-sound" data-testid="settings-sound-toggle" style="opacity:0; width:0; height:0; position:absolute">
+                <label for="audit-sound" class="toggle-track" style="position:absolute; inset:0; border-radius:999px; cursor:pointer; transition:background 0.2s"></label>
+                <label for="audit-sound" class="toggle-knob" style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s"></label>
+              </span>
+            </div>
+            <span class="audit-caption">[settings-sound-toggle]</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">span</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"settings-toggle-slider"</span><span class="cb-punc">&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">input</span>
+    <span class="cb-attr">type</span><span class="cb-punc">=</span><span class="cb-val">"checkbox"</span>
+    <span class="cb-attr">role</span><span class="cb-punc">=</span><span class="cb-val">"switch"</span>
+    <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">settings-sound-toggle</span><span class="cb-val">"</span>
+  <span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">label</span> <span class="cb-attr">for</span><span class="cb-punc">=</span><span class="cb-val">"audit-sound"</span><span class="cb-punc">&gt;</span><span class="cb-punc">&lt;/</span><span class="cb-tag">label</span><span class="cb-punc">&gt;</span>
+<span class="cb-punc">&lt;/</span><span class="cb-tag">span</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>Why <code>settings-sound-toggle</code>?</strong> <code>settings-</code> is the screen scope, <code>sound-</code> the specific setting, <code>-toggle</code> the control type — mirroring the <code>settings-toggle-slider</code> component. A settings screen holds many toggles; each gets its own stable id (<code>settings-print-toggle</code>, <code>settings-autoprint-toggle</code>…). Tests can assert <em>"sound is off by default"</em> with <code>expect(getByTestId('settings-sound-toggle')).not.toBeChecked()</code>.
+          </div>
+        </div>
+      </section>
+
+      <!-- Example 3 -->
+      <section>
+        <h3>Example 3 — Filter tabs</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">A filter group on the order list. The id encodes the <em>semantic value</em>, not the position. Click a filter.</p>
+          <div class="audit-demo">
+            <div style="display:flex; gap:8px; flex-wrap:wrap">
+              <button class="audit-filter active" type="button" data-testid="filter-all">All</button>
+              <button class="audit-filter" type="button" data-testid="filter-dine-in">Dine-in</button>
+              <button class="audit-filter" type="button" data-testid="filter-takeaway">Takeaway</button>
+            </div>
+            <span class="audit-caption">[filter-all · filter-dine-in · filter-takeaway]</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">filter-all</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter active"</span><span class="cb-punc">&gt;</span>All<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span>
+<span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">filter-dine-in</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter"</span><span class="cb-punc">&gt;</span>Dine-in<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span>
+<span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">filter-takeaway</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter"</span><span class="cb-punc">&gt;</span>Takeaway<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>Why <code>filter-dine-in</code> (not <code>filter-tab-2</code>)?</strong> The testid carries the <em>meaning</em> of the choice. Reorder the tabs, add a new one at index 0, or translate the labels — <code>filter-dine-in</code> still selects the right control. Position-based ids (<code>tab-1</code>, <code>tab-2</code>) silently break on the first layout change; semantic ids survive refactors. A test can also assert the default state: <code>expect(getByTestId('filter-all')).toHaveClass('active')</code>.
+          </div>
+        </div>
       </section>
     </div>
 
@@ -2157,6 +2620,57 @@
     s.addEventListener('input', () => syncSliderFill(s));
   });
 
+  /* ── Menu sliders (interactive) ─────────── */
+  // Store state per track so we can re-position after tab switch
+  var msStates = [];
+  function initMenuSliders() {
+    document.querySelectorAll('.ms-track').forEach(function(track, ti) {
+      var btns = track.querySelectorAll('button');
+      var indicator = track.querySelector('.ms-indicator');
+      var colors = track.dataset.colors ? track.dataset.colors.split(',') : null;
+      // Only create state once
+      if (!msStates[ti]) {
+        msStates[ti] = {
+          track: track,
+          btns: btns,
+          indicator: indicator,
+          colors: colors,
+          active: parseInt(track.dataset.active || '0', 10)
+        };
+        // Attach click handlers once
+        btns.forEach(function(btn, i) {
+          btn.addEventListener('click', function() {
+            msStates[ti].active = i;
+            positionIndicator(msStates[ti]);
+          });
+        });
+      }
+    });
+  }
+  function positionIndicator(state) {
+    var btn = state.btns[state.active];
+    if (!btn || !btn.offsetWidth) return; // panel hidden, skip
+    state.indicator.style.left = btn.offsetLeft + 'px';
+    state.indicator.style.width = btn.offsetWidth + 'px';
+    if (state.colors && state.colors[state.active]) {
+      state.indicator.style.background = state.colors[state.active];
+    }
+    state.btns.forEach(function(b, i) {
+      if (i === state.active) {
+        b.style.color = '#fff';
+        b.style.opacity = '1';
+      } else {
+        b.style.color = '';
+        b.style.opacity = '0.5';
+      }
+    });
+  }
+  function positionAllSliders() {
+    msStates.forEach(function(s) { positionIndicator(s); });
+  }
+  // Set up click handlers (can run even if hidden)
+  initMenuSliders();
+
   /* ── Tab switching ────────────────────────────── */
   const tabs = document.querySelectorAll('.tab');
   const panels = document.querySelectorAll('.tab-panel');
@@ -2175,18 +2689,33 @@
   }
 
   const initial = tabFromHash();
-  if (initial) activateTab(initial);
+  if (initial) {
+    activateTab(initial);
+    // Position sliders after layout when buttons tab is initially visible
+    if (initial === 'buttons') requestAnimationFrame(positionAllSliders);
+  }
 
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       activateTab(tab.dataset.tab);
       history.replaceState(null, '', '#' + tab.dataset.tab);
+      // Position sliders after the panel becomes visible
+      if (tab.dataset.tab === 'buttons') requestAnimationFrame(positionAllSliders);
     });
   });
 
   window.addEventListener('hashchange', () => {
     const h = tabFromHash();
-    if (h) activateTab(h);
+    if (h) {
+      activateTab(h);
+      if (h === 'buttons') requestAnimationFrame(positionAllSliders);
+    }
+  });
+  window.addEventListener('resize', positionAllSliders);
+
+  /* Menu slider button transitions */
+  document.querySelectorAll('.ms-track button').forEach(function(b) {
+    b.style.transition = 'color 0.28s cubic-bezier(0.33,1,0.68,1), opacity 0.28s cubic-bezier(0.33,1,0.68,1)';
   });
 
   /* ── Motion & Feedback demos ──────────────────── */
@@ -2300,6 +2829,28 @@
   window.addEventListener('resize', updateScrollIndicator);
   window.addEventListener('load', updateScrollIndicator);
   updateScrollIndicator();
+
+  /* ── Audit demos ────────────────────────────────── */
+  // Example 1 — Start order (data-testid="order-card-start")
+  const auditStart = document.getElementById('audit-start');
+  if (auditStart) {
+    auditStart.addEventListener('click', () => {
+      if (auditStart.dataset.state === 'done') return;
+      auditStart.dataset.state = 'done';
+      auditStart.classList.add('is-done');
+      auditStart.disabled = true;
+      auditStart.textContent = 'Started ✓';
+    });
+  }
+
+  // Example 3 — Filter tabs
+  const auditFilters = document.querySelectorAll('.audit-filter');
+  auditFilters.forEach(btn => {
+    btn.addEventListener('click', () => {
+      auditFilters.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
 </script>
 </body>
 </html>
