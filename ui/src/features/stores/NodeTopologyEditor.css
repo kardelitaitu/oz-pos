@@ -978,13 +978,19 @@
   width: 240px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md), 0 1px 3px rgba(0,0,0,0.08);
   user-select: none;
   height: 240px;
   box-sizing: border-box;
-  overflow: visible;
+  /* flex column — header / body / rail. The rail stays an absolutely
+     positioned strip at the bottom (its geometry is the wire-endpoint
+     contract); overflow hidden clips the header tint and the rail to
+     the card's rounded corners. */
+  overflow: hidden;
   cursor: move;
+  display: flex;
+  flex-direction: column;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -1104,14 +1110,15 @@
 
 .node-header {
   display: flex;
-  height: 48px;
+  flex-shrink: 0; /* the header never compresses — body absorbs */
   box-sizing: border-box;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
+  min-height: 48px;
   background-color: var(--color-bg-subtle);
   border-bottom: 1px solid var(--color-border);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   position: relative;
   overflow: hidden;
 }
@@ -1176,13 +1183,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  color: var(--color-fg-secondary);
 }
+/* Type-tinted icon chip — the accent colour moved from the flat 3px bar
+   to the icon background, giving each type a distinct visual anchor. */
+.node-type-store .node-type-icon { background: color-mix(in srgb, var(--color-info) 15%, transparent); color: var(--color-info); }
+.node-type-workspace .node-type-icon { background: color-mix(in srgb, var(--color-accent) 15%, transparent); color: var(--color-accent); }
+.node-type-warehouse .node-type-icon { background: color-mix(in srgb, var(--color-success) 15%, transparent); color: var(--color-success); }
+.node-type-hardware .node-type-icon { background: color-mix(in srgb, var(--color-warning) 15%, transparent); color: var(--color-warning); }
 
 .node-type-icon svg {
-  color: var(--color-fg-secondary);
+  color: currentColor;
 }
 
 .node-anchor-chip {
@@ -1342,7 +1358,10 @@
 }
 
 .node-body {
-  height: 152px;
+  /* flex-driven: the body fills the space between the fixed header and
+     the 48px rail clearance instead of a hardcoded 152px */
+  flex: 1 1 auto;
+  min-height: 0;
   box-sizing: border-box;
   padding: var(--space-3) var(--space-3) 48px;
   display: flex;
@@ -1367,7 +1386,7 @@
   width: 3px;
   min-height: 2.4em;
   flex: 0 0 3px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full); /* refined pill accent */
 }
 
 .node-body-meta .node-grip {
@@ -1381,9 +1400,16 @@
 .node-body-status {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* badges wrap onto their own line instead of colliding with the
+     rename button on narrow content */
+  flex-wrap: wrap;
+  justify-content: flex-start;
   min-height: 24px;
   gap: var(--space-2);
+}
+/* pin the rename action to the right edge; wrapped badges flow left */
+.node-body-status .node-card-rename-btn {
+  margin-left: auto;
 }
 
 /* Compact, frontend-only configuration controls. These are intentionally
