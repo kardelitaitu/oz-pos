@@ -1430,6 +1430,16 @@
         <p>Type scale, weights, and usage guidelines for the design system.</p>
       </div>
 
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px"><strong>Why Inter?</strong> A tall x-height keeps glyphs legible at 14px and below — exactly the sizes a POS screen runs at. It's also a variable font: one ~95KB WOFF2 carries every weight from 400 to 800, so bold never "fakes" itself from a single file.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Why JetBrains Mono?</strong> Monospace is for data that must align and compare: code, hex values, IPs, receipt totals. Fixed-width digits make columns line up; the fallback chain keeps it available on every platform.</p>
+          <p class="note" style="margin-bottom:0"><strong>Strategy.</strong> The scale is a strict ladder — 32/24/20/16/14/12/11 — climb it one rung at a time, never skip. Weight follows role: 800 for Display only, 700 for headings and buttons, 600 for subheads, 400 for body. Letter-spacing tightens as size grows (−0.03em at 32px, down to 0 at body size).</p>
+        </div>
+      </section>
+
       <section>
         <h3>Type Scale</h3>
         <div class="card">
@@ -1467,6 +1477,7 @@
               <span class="type-sample" style="font-size:13px; font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; color:var(--text-muted)">const token = '#147EFB';</span>
             </div>
           </div>
+          <p class="note" style="margin-top:14px"><strong>Where each size lives:</strong> <strong>Display</strong> — screen titles / splash, never paragraphs. <strong>H1</strong> — page titles. <strong>H2</strong> — section titles within a page. <strong>H3</strong> — card and dialog titles. <strong>Body</strong> — default text everywhere. <strong>Small</strong> — captions, metadata, timestamps (never essential info). <strong>Label</strong> — uppercase section labels, table headers. <strong>Mono</strong> — code, hex, IPs, prices in receipts.</p>
         </div>
       </section>
 
@@ -1492,6 +1503,7 @@
             <strong style="color:var(--primary)">--font-mono:</strong> <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace</code>
           </p>
           <p class="note" style="margin-top:12px">Inter is bundled as a variable WOFF2 (~95KB). JetBrains Mono bundled as WOFF2 (~100KB). System fonts serve as fallback only.</p>
+          <p class="note" style="margin-top:10px"><strong>Fallback order is deliberate:</strong> each entry is the system font of a target platform — <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>-apple-system</code> / <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>BlinkMacSystemFont</code> for Apple, <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>'SF Pro Display'</code> for macOS, <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>'Segoe UI'</code> for Windows, <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>system-ui</code> last as the generic. If Inter is blocked (offline POS, proxy), text swaps to the platform font instantly. Load with <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>font-display: swap</code> so text is never invisible while fonts download.</p>
         </div>
       </section>
 
@@ -1516,6 +1528,35 @@
             <strong style="color:var(--primary)">Applied on body:</strong> <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;</code>
           </p>
           <p class="note" style="margin-top:8px">This ensures Inter and JetBrains Mono render with consistent weight and clarity across Windows, macOS, Linux, iOS, and Android — no bold/thin surprises between platforms.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Cap line length</h4><p>Body text stays within 65–75 characters per line (~45rem). Longer lines are tiring to read and easy to lose your place in — order cards and dialogs follow this too.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Truncate, don't wrap, in controls</h4><p>Buttons and pills use <code>white-space: nowrap</code> + ellipsis. A button label that wraps to two lines breaks the hit-target shape.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Screen-reader-only text</h4><p>When the visual label is an icon or a truncated string, add a visually-hidden span (the <code>sr-only</code> pattern) so assistive tech reads the full text. Same spirit as the Audit tab's <code>aria-label</code> rule.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Scale with user settings</h4><p>Map the scale to rem tokens in production so text scales with the root font size and respects browser zoom / accessibility settings. The px values on this page are the design reference, not literal production CSS.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Never fake a weight</h4><p>Inter is variable, so 400–800 all exist. Where a platform can't load a weight it synthesises one — that's why smoothing is pinned on <code>body</code> (see Anti-Aliasing above): it keeps synthesised weights from looking muddy.</p></div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
