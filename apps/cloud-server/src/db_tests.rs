@@ -957,7 +957,7 @@ async fn pg_integration_stale_connection_recycled() {
     };
 
     // Take one connection and find its backend PID.
-    let mut client = pool.get().await.expect("get should succeed");
+    let client = pool.get().await.expect("get should succeed");
     let pid: i32 = client
         .query_one("SELECT pg_backend_pid()", &[])
         .await

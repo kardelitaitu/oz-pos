@@ -369,7 +369,7 @@ async fn pg_integration_prune_survives_rls_cutover() {
 
     // Seed an old row as owner (GUC-scoped, since FORCE applies to owner).
     let tenant = format!("pg-prune-rls-{}", uuid::Uuid::now_v7());
-    let mut seed_tx = owner.transaction().await.unwrap();
+    let seed_tx = owner.transaction().await.unwrap();
     seed_tx
         .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
         .await

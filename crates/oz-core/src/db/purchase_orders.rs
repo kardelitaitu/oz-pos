@@ -410,7 +410,7 @@ impl Store<'_> {
         id: &str,
         lines: &[ReceivePoLineInput],
     ) -> Result<PurchaseOrderWithLines, CoreError> {
-        let mut po = self.get_purchase_order(id)?.ok_or(CoreError::NotFound {
+        let po = self.get_purchase_order(id)?.ok_or(CoreError::NotFound {
             entity: "purchase_order",
             id: id.to_owned(),
         })?;

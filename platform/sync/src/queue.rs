@@ -1208,7 +1208,7 @@ mod tests {
 
         // The webhook's exact payload shape.
         let remote =
-            OfflineQueueItem::new("finalize_sale", &format!(r#"{{"sale_id":"{sale_id}"}}"#));
+            OfflineQueueItem::new("finalize_sale", format!(r#"{{"sale_id":"{sale_id}"}}"#));
         let outcome = queue
             .apply_remote_atomic_full(&store, &remote)
             .expect("finalize_sale must apply, not dead-letter as unsupported");
@@ -1247,7 +1247,7 @@ mod tests {
             .unwrap();
 
         let remote =
-            OfflineQueueItem::new("finalize_sale", &format!(r#"{{"sale_id":"{sale_id}"}}"#));
+            OfflineQueueItem::new("finalize_sale", format!(r#"{{"sale_id":"{sale_id}"}}"#));
         queue
             .apply_remote(&store, &remote)
             .expect("legacy apply_remote must accept finalize_sale");

@@ -1207,7 +1207,7 @@ async fn pg_integration_terminal_auth_survives_rls_cutover() {
     // hash must match what verify_terminal_credentials computes
     // (hash_secret("secret")) — a literal 'hash' would never match.
     let real_hash = crate::routes::terminals::hash_secret("secret");
-    let mut seed_tx = owner.transaction().await.unwrap();
+    let seed_tx = owner.transaction().await.unwrap();
     seed_tx
         .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
         .await

@@ -974,7 +974,7 @@ async fn pg_integration_email_analytics_visible_as_restricted_role() {
 
     // Seed as owner — FORCE applies to the owner too, so scope the seed
     // transaction to the tenant GUC (same as the webhook cutover test).
-    let mut seed_tx = admin.transaction().await.unwrap();
+    let seed_tx = admin.transaction().await.unwrap();
     seed_tx
         .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
         .await
@@ -1130,7 +1130,7 @@ async fn pg_integration_active_tenants_survives_rls_cutover() {
         .expect("active-tenants probe role setup should succeed");
 
     // Seed a tenant_plans row (owner + GUC, since FORCE applies to owner).
-    let mut seed_tx = admin.transaction().await.unwrap();
+    let seed_tx = admin.transaction().await.unwrap();
     seed_tx
         .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
         .await

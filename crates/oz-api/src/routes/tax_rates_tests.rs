@@ -63,7 +63,7 @@ fn store_error_response_maps_conflict_to_409() {
 #[test]
 fn store_error_response_maps_not_found_to_404() {
     let resp = store_error_response(CoreError::NotFound {
-        entity: "tax_rate".into(),
+        entity: "tax_rate",
         id: "x".into(),
     })
     .into_response();

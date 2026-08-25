@@ -2137,7 +2137,6 @@ async fn pg_router_with_pool_size(
 ) -> Option<(axum::Router, deadpool_postgres::Pool, SyncState)> {
     let pool = match crate::db::DbPool::connect_postgres(url, false, size, true).await {
         Ok(crate::db::DbPool::Postgres(pool)) => pool,
-        Ok(crate::db::DbPool::Postgres(pool)) => pool,
         Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
         Err(e) => {
             eprintln!("PG pool-bound integration test skipped: {e}");

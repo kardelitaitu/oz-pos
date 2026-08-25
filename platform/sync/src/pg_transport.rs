@@ -744,7 +744,8 @@ mod tests {
         );
     }
 
-    // ── Composite (created_at, id) cursor ──────────────────────────────    #[test]
+    // ── Composite (created_at, id) cursor ──────────────────────────────
+    #[test]
     fn decode_pull_cursor_splits_on_pipe() {
         let (ts, id) = decode_pull_cursor(Some("2026-01-01T00:00:00Z|item-42"));
         assert_eq!(ts.as_deref(), Some("2026-01-01T00:00:00Z"));
@@ -971,7 +972,7 @@ mod tests {
             }
         };
 
-        let _ = client
+        client
             .batch_execute(&format!(
                 "CREATE TABLE IF NOT EXISTS offline_queue (
                     id TEXT PRIMARY KEY,
@@ -1006,11 +1007,12 @@ mod tests {
         );
 
         // Cleanup.
-        let _ = client
+        client
             .batch_execute(&format!(
                 "DELETE FROM offline_queue WHERE tenant_id LIKE '{ns}%';"
             ))
-            .await;
+            .await
+            .ok();
     }
 
     /// RED: `fetch_snapshot` must scope products/tax_rates/users to the
@@ -1038,7 +1040,7 @@ mod tests {
             }
         };
 
-        let _ = client
+        client
             .batch_execute(&format!(
                 "CREATE TABLE IF NOT EXISTS products (
                     id TEXT PRIMARY KEY,
@@ -1071,10 +1073,11 @@ mod tests {
             "tenant A snapshot must include its own product"
         );
 
-        let _ = client
+        client
             .batch_execute(&format!(
                 "DELETE FROM products WHERE tenant_id LIKE '{ns}%';"
             ))
-            .await;
+            .await
+            .ok();
     }
 }

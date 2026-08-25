@@ -37,7 +37,7 @@ fn get_tax_rate_roundtrip() {
     assert_eq!(rate.name, "VAT");
     assert_eq!(rate.rate_bps, 2100);
     assert!(rate.is_default);
-    assert!(rate.is_inclusive || !rate.is_inclusive); // just verify it parsed
+    // is_inclusive parsed successfully (bool field roundtrips)
 }
 
 #[test]
