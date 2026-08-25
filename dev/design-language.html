@@ -158,8 +158,12 @@
 
   /* ── Tab bar ──────────────────────────────────── */
   .tabbar {
+    position: sticky;
+    top: 56px;
+    z-index: 99;
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
   }
   .tabbar-inner {
     max-width: 1120px;
@@ -685,9 +689,38 @@
   .ease-dot.ease-standard { transition-timing-function: cubic-bezier(.2, 0, 0, 1); }
   .ease-dot.ease-bounce   { transition-timing-function: cubic-bezier(.34, 1.56, .64, 1); }
   .ease-dot.ease-exit     { transition-timing-function: cubic-bezier(.4, 0, 1, 1); }
+
+  /* ── Floating scrollbar ──────────────────────────── */
+  html { scrollbar-width: none; }
+  html::-webkit-scrollbar { display: none; }
+
+  #scroll-indicator {
+    position: fixed;
+    right: 6px;
+    top: 6px;
+    bottom: 6px;
+    width: 8px;
+    z-index: 99999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .25s;
+  }
+  #scroll-indicator.visible { opacity: 1; }
+  #scroll-thumb {
+    position: absolute;
+    right: 0;
+    width: 100%;
+    height: 40px;
+    border-radius: 999px;
+    background: var(--text-muted);
+    opacity: .4;
+    transition: opacity .2s;
+  }
+  #scroll-indicator.visible #scroll-thumb { opacity: .5; }
 </style>
 </head>
 <body>
+<div id="scroll-indicator" aria-hidden="true"><div id="scroll-thumb"></div></div>
 
   <!-- ── TOP BAR ─────────────────────────────────── -->
   <div class="topbar">
@@ -2237,6 +2270,36 @@
       });
     });
   }
+
+  /* ── Floating scrollbar ────────────────────────── */
+  const scrollIndicator = document.getElementById('scroll-indicator');
+  const scrollThumb = document.getElementById('scroll-thumb');
+  let scrollHideTimer = null;
+
+  function updateScrollIndicator() {
+    if (!scrollIndicator || !scrollThumb) return;
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    if (max <= 0) {
+      scrollIndicator.classList.remove('visible');
+      return;
+    }
+    const ratio = window.innerHeight / document.documentElement.scrollHeight;
+    const thumbH = Math.max(36, Math.round(window.innerHeight * ratio));
+    const travel = window.innerHeight - thumbH;
+    const y = Math.round((window.scrollY / max) * travel);
+    scrollThumb.style.height = thumbH + 'px';
+    scrollThumb.style.top = y + 'px';
+    scrollIndicator.classList.add('visible');
+    clearTimeout(scrollHideTimer);
+    scrollHideTimer = setTimeout(() => {
+      scrollIndicator.classList.remove('visible');
+    }, 900);
+  }
+
+  window.addEventListener('scroll', updateScrollIndicator, { passive: true });
+  window.addEventListener('resize', updateScrollIndicator);
+  window.addEventListener('load', updateScrollIndicator);
+  updateScrollIndicator();
 </script>
 </body>
 </html>
