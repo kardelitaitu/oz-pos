@@ -2111,6 +2111,16 @@
         <p>Reusable UI patterns — cards, modals, tooltips, alerts, and badges built on the brand token system.</p>
       </div>
 
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px"><strong>Why components?</strong> They are the token system made visible — every component below is composed only from the Colour, Spacing, Radius and Shadow tokens, so the component layer holds <em>zero design decisions</em>. A token change re-themes every screen; a component change re-themes one pattern.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Elevation drives the stack.</strong> Each component sits at a specific elevation (see Spacing): <strong>cards</strong> rest on the page (<code>--shadow-sm</code>), <strong>modals</strong> float above it (<code>--shadow-md</code> + dimmed overlay), <strong>tooltips</strong> hover closest to the eye. If a component's elevation doesn't match its role, the hierarchy is wrong.</p>
+          <p class="note" style="margin-bottom:0"><strong>Choose by what the user must do:</strong> <strong>read</strong> → card. <strong>choose / confirm</strong> → modal. <strong>discover a hidden label</strong> → tooltip. <strong>be told something changed</strong> → alert. <strong>scan a status</strong> → badge. Two components with the same job means the pattern isn't decided yet.</p>
+        </div>
+      </section>
+
       <!-- ── Cards ───────────────────────────────── -->
       <section>
         <h3>Cards</h3>
@@ -2142,6 +2152,7 @@
             </div>
           </div>
           <p class="note">Radius: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--r-lg)</code> (12px). Shadow: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--shadow-sm)</code>. Padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">1.25rem</code>.</p>
+          <p class="note" style="margin-top:10px"><strong>Which flavour:</strong> <strong>Default</strong> for grouping related content — one card per logical unit. <strong>Highlight</strong> for the one standout card per view (upsell, CTA, feature callout). <strong>Ghost</strong> for nesting inside an already-bordered surface — a ghost card inside a default card means the border stack is wrong.</p>
         </div>
       </section>
 
@@ -2168,6 +2179,7 @@
             </div>
           </div>
           <p class="note">Stat cards use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">8–10%</code> opacity background + <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">20%</code> opacity border in the semantic colour.</p>
+          <p class="note" style="margin-top:10px"><strong>Strategy:</strong> one number, one semantic colour, one label — the number is the hero. Use sparingly: three stats on a dashboard is a summary; six is a data table in disguise.</p>
         </div>
       </section>
 
@@ -2195,6 +2207,7 @@
             </div>
           </div>
           <p class="note">Overlay: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">rgba(0,0,0,0.4)</code>. Surface uses <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">shadow-md</code>. Close button: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">28px</code> circle. Footer has hairline border-top.</p>
+          <p class="note" style="margin-top:10px"><strong>Strategy:</strong> use a modal for <em>irreversible decisions</em> (delete, disconnect, cancel-forever) or when the user must focus on one thing. For reversible side tasks (edit a name, pick a date) use an inline panel instead — no overlay. Anatomy: header (title + ✕), body (the <em>consequence</em>, never a bare "Are you sure?"), footer (Cancel left, the action right).</p>
         </div>
       </section>
 
@@ -2237,6 +2250,7 @@
             </div>
           </div>
           <p class="note">Background: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--tooltip-bg)</code> — light: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">#1a1d23</code>, dark: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">#3a3f4c</code>. Adds subtle <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">border</code> + <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">box-shadow</code> in dark mode for contrast against dark page background. Text: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">#fff</code>. Font: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">11px / 600</code>. Padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">4px 10px</code>, radius: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--r-sm)</code>. Arrow: 5px CSS triangle using <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--tooltip-arrow)</code>.</p>
+          <p class="note" style="margin-top:10px"><strong>Strategy:</strong> tooltips reveal hidden labels — they never hold critical info. Trigger on hover or focus; offset 4–8px from the trigger; keep the text short (one line, ≤8rem). The arrow always points at the trigger centre. If the content is essential, it must be visible without a tooltip.</p>
         </div>
       </section>
 
@@ -2279,6 +2293,7 @@
             </div>
           </div>
           <p class="note">Pattern: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">10%</code> bg + <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">20–25%</code> border in semantic colour. Icon: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">16px</code>. Padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">0.75rem 1rem</code>.</p>
+          <p class="note" style="margin-top:10px"><strong>Strategy:</strong> alerts are persistent until dismissed — not auto-disappearing banners. Use for things the user shouldn't miss: connection status, sync state, printer errors. One alert per view, at the top. Never colour alone (Feedback Rule 05) — every tone carries its icon and label.</p>
         </div>
       </section>
 
@@ -2307,6 +2322,36 @@
             <div style="display:flex; align-items:center; gap:6px"><div style="width:8px; height:8px; border-radius:50%; background:var(--danger)"></div><span style="font-size:11px; color:var(--text-muted)">Offline</span></div>
           </div>
           <p class="note">Status labels: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">10–11px</code>, pill radius, <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">10–15%</code> bg tint. Count badges: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">20px</code> height, solid fill. Dots: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">8px</code> circles.</p>
+          <p class="note" style="margin-top:10px"><strong>Which format:</strong> <strong>Status pill</strong> — a labelled state (New, Completed, Pending); use when the label must be readable. <strong>Count badge</strong> — a solid number, cap at 2 digits (<code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">99+</code>); use for quantities, never states. <strong>Dot</strong> — presence only (Online, Away, Offline); use when the colour already carries the meaning and no reading is needed. Pick the format that needs the least reading: dot beats pill beats count.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Modals trap focus and Escape</h4><p>A modal is <code>role="dialog"</code> + <code>aria-modal="true"</code>: focus moves inside, Tab stays inside (focus trap), <code>Escape</code> closes, and focus returns to the trigger. Without these, keyboard users are stranded behind the overlay.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Tooltips never hold critical info</h4><p>If the content matters, it lives in the page — a tooltip is a convenience, not a source of truth. The trigger must be focusable (it is a button, not a span) so keyboard users get the tooltip too.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Alerts announce themselves</h4><p>Dynamic alerts get <code>role="alert"</code> (or <code>aria-live="polite"</code>) so screen readers announce the change without stealing focus. Static examples like these on the page are fine as-is.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Counts are never bare numbers</h4><p>A count badge is meaningless alone to a screen reader. The accessible name reads the context: "3 new orders", not "3". Attach it to the label or use <code>aria-label</code>.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Cards are containers, not buttons</h4><p>When a whole card is clickable, make the inner CTA the focusable element — never nest buttons inside a clickable card, and never make a div clickable without <code>role</code> + keyboard handling.</p></div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
