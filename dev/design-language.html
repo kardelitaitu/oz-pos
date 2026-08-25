@@ -15,6 +15,9 @@
     --border: #dfe1e6;
     --text: #1a1d23;
     --text-muted: #8E8E93;
+    --tooltip-bg: #1a1d23;
+    --tooltip-arrow: #1a1d23;
+    --tooltip-border: transparent;
 
     /* Brand palette */
     --blue: #147EFB;
@@ -75,6 +78,9 @@
     --border: #2a2e39;
     --text: #e8eaef;
     --text-muted: #8b93a3;
+    --tooltip-bg: #3a3f4c;
+    --tooltip-arrow: #3a3f4c;
+    --tooltip-border: rgba(255,255,255,0.08);
     --primary: #3A9AFF;
     --primary-hover: #147EFB;
     --primary-active: #1168D4;
@@ -98,6 +104,13 @@
     padding: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── Global focus ring ───────────────────────── */
+  input:focus-visible, textarea:focus-visible, select:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+    box-shadow: 0 0 0 3px rgba(20,126,251,0.15);
   }
 
   /* ── Top bar ──────────────────────────────────── */
@@ -906,6 +919,16 @@
         <p>Core tokens for backgrounds, text, borders, and semantic states. All values are defined as CSS custom properties for easy theming.</p>
       </div>
 
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px"><strong>Why 8 colors?</strong> The brand palette is deliberately small and borrowed from the iOS system palette — high-chroma hues that stay legible on POS screens viewed from arm's length, in bright kitchens or dim back rooms. Fewer colors means fewer wrong choices, so screens stay consistent.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Why is blue the primary?</strong> Blue is the one color users already read as "tappable / interactive" (the web-link convention), and it holds AA contrast on both white and dark surfaces. Keep it reserved for actions — a blue element is always a promise that clicking does something.</p>
+          <p class="note" style="margin-bottom:0"><strong>Three layers.</strong> Brand colors (the raw palette) → semantic roles (what a color <em>means</em>) → neutral scaffolding (surfaces, text, borders). Components use <em>semantic tokens only</em> — never raw brand hex. A rebrand then touches one <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">:root</code> block, not every component.</p>
+        </div>
+      </section>
+
       <section>
         <h3>Brand Colors</h3>
         <div class="swatch-grid">
@@ -991,6 +1014,38 @@
             <span class="swatch-hex">→ Yellow</span>
           </div>
         </div>
+        <p class="note" style="margin-top:14px"><strong>When to use each role</strong> — these are the only allowed meanings:</p>
+        <div class="rules-list">
+          <div class="rule">
+            <span style="width:12px; height:12px; border-radius:50%; background:var(--primary); margin-top:4px; flex-shrink:0"></span>
+            <div class="rule-body"><h4>Primary — interact</h4><p>Every action the user can take: buttons, links, selected tabs, toggles-on, active filters.</p></div>
+          </div>
+          <div class="rule">
+            <span style="width:12px; height:12px; border-radius:50%; background:var(--success); margin-top:4px; flex-shrink:0"></span>
+            <div class="rule-body"><h4>Success — confirm</h4><p>Completed work: saved, synced, connected. Always paired with a checkmark icon (never green alone).</p></div>
+          </div>
+          <div class="rule">
+            <span style="width:12px; height:12px; border-radius:50%; background:var(--danger); margin-top:4px; flex-shrink:0"></span>
+            <div class="rule-body"><h4>Danger — destroy</h4><p>Destructive actions and hard errors: delete, disconnect, fail. One step from a confirm dialog.</p></div>
+          </div>
+          <div class="rule">
+            <span style="width:12px; height:12px; border-radius:50%; background:var(--warning); margin-top:4px; flex-shrink:0"></span>
+            <div class="rule-body"><h4>Warning — near a limit</h4><p>Thresholds approaching: order age crossing the yellow line, low paper, nearly full storage.</p></div>
+          </div>
+          <div class="rule">
+            <span style="width:12px; height:12px; border-radius:50%; background:var(--info); margin-top:4px; flex-shrink:0"></span>
+            <div class="rule-body"><h4>Info — notify</h4><p>System messages that need no action: printer connected, sync started, background events.</p></div>
+          </div>
+          <div class="rule">
+            <span style="width:12px; height:12px; border-radius:50%; background:#FC3158; margin-top:4px; flex-shrink:0"></span>
+            <div class="rule-body"><h4>Alert — act now</h4><p>Something needs attention immediately — order overdue past the red line. Maps to pink, distinct from danger red.</p></div>
+          </div>
+          <div class="rule">
+            <span style="width:12px; height:12px; border-radius:50%; background:var(--yellow); margin-top:4px; flex-shrink:0"></span>
+            <div class="rule-body"><h4>Accent — decorate</h4><p>Non-interactive highlights: badges, marketing, decorative fills. Never used for actions or status.</p></div>
+          </div>
+        </div>
+        <p class="note">Mapping rule: a semantic role may be re-pointed at a different brand colour in dark mode — but the <em>meaning</em> of the role never changes. Always reference the token, never the brand hex.</p>
       </section>
 
       <section>
@@ -1022,6 +1077,7 @@
             <span class="swatch-hex">#DFE1E6</span>
           </div>
         </div>
+        <p class="note" style="margin-top:14px">The neutral ladder, lightest to darkest: <strong>Page BG</strong> (the canvas) → <strong>Surface</strong> (cards, dialogs — always sits on Page BG) → <strong>Ghost BG</strong> (hover fills, input wells) → <strong>Chip BG</strong> (pills, tags, pressable chips) → <strong>Border</strong> (hairlines, outlines). Dark mode inverts the ladder — surfaces get <em>lighter</em> than the page, never darker. That inversion is what keeps depth readable after the theme flip.</p>
       </section>
 
       <section>
@@ -1041,6 +1097,36 @@
             <div class="swatch-color" style="background:#ffffff"></div>
             <span class="swatch-label">Text on Color</span>
             <span class="swatch-hex">#FFFFFF</span>
+          </div>
+        </div>
+        <p class="note" style="margin-top:14px">Use <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text</code> for anything that must be read. <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text-muted</code> is decorative-only: it sits below the 4.5:1 AA contrast floor on white, so never use it for essential information — timestamps and captions are fine, error messages are not. <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text-on-color</code> (#fff) is for text drawn on primary / danger fills.</p>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Never colour alone</h4><p>Every status also carries an icon, shape, or text — this is Feedback Rule 05/06. A red border without a message, or green without a checkmark, reads as decoration to anyone who can't see the hue.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Red/green is the common colour-blind pair</h4><p>Never make success vs. danger the only difference between two states. Add the icon; when in doubt, also change the shape or position.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Know the weak pairings</h4><p><code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--text-muted</code> on white ≈ 3:1 (large/bold text only). White text on <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--success</code> is low contrast — which is exactly why success always gets the checkmark icon too. Verify any new token pair with a contrast checker before shipping.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Tokens, never hex</h4><p>Components reference <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">var(--token)</code> only. Hardcoded hex breaks dark mode, theming, and future rebrands. If a token is missing, the component inherits the previous value instead of inventing a colour.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>If the stylesheet fails</h4><p>The page degrades to browser defaults — black text on white. Content stays readable because no meaning lives in colour alone (rule 1).</p></div>
+            </div>
           </div>
         </div>
       </section>
@@ -1792,24 +1878,24 @@
           <div style="display:flex; flex-wrap:wrap; gap:32px; align-items:center; justify-content:center; padding:2rem 1rem">
             <!-- Top tooltip -->
             <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
-              <div style="background:#1a1d23; color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative">
+              <div style="background:var(--tooltip-bg); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative; border:1px solid var(--tooltip-border); box-shadow:0 2px 8px rgba(0,0,0,0.25)">
                 Tooltip top
-                <div style="position:absolute; top:100%; left:50%; transform:translateX(-50%); width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:5px solid #1a1d23"></div>
+                <div style="position:absolute; top:100%; left:50%; transform:translateX(-50%); width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:5px solid var(--tooltip-arrow)"></div>
               </div>
               <span style="font-size:11px; color:var(--text-muted)">↑ top</span>
             </div>
             <!-- Bottom tooltip -->
             <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
               <span style="font-size:11px; color:var(--text-muted)">↓ bottom</span>
-              <div style="background:#1a1d23; color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative">
-                <div style="position:absolute; bottom:100%; left:50%; transform:translateX(-50%); width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:5px solid #1a1d23"></div>
+              <div style="background:var(--tooltip-bg); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative; border:1px solid var(--tooltip-border); box-shadow:0 2px 8px rgba(0,0,0,0.25)">
+                <div style="position:absolute; bottom:100%; left:50%; transform:translateX(-50%); width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:5px solid var(--tooltip-arrow)"></div>
                 Tooltip bottom
               </div>
             </div>
             <!-- Left tooltip -->
             <div style="display:flex; align-items:center; gap:8px">
-              <div style="background:#1a1d23; color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative">
-                <div style="position:absolute; right:100%; top:50%; transform:translateY(-50%); width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-right:5px solid #1a1d23"></div>
+              <div style="background:var(--tooltip-bg); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative; border:1px solid var(--tooltip-border); box-shadow:0 2px 8px rgba(0,0,0,0.25)">
+                <div style="position:absolute; right:100%; top:50%; transform:translateY(-50%); width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-right:5px solid var(--tooltip-arrow)"></div>
                 Tooltip left
               </div>
               <span style="font-size:11px; color:var(--text-muted)">← left</span>
@@ -1817,13 +1903,13 @@
             <!-- Right tooltip -->
             <div style="display:flex; align-items:center; gap:8px">
               <span style="font-size:11px; color:var(--text-muted)">right →</span>
-              <div style="background:#1a1d23; color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative">
+              <div style="background:var(--tooltip-bg); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--r-sm); white-space:nowrap; position:relative; border:1px solid var(--tooltip-border); box-shadow:0 2px 8px rgba(0,0,0,0.25)">
                 Tooltip right
-                <div style="position:absolute; left:100%; top:50%; transform:translateY(-50%); width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:5px solid #1a1d23"></div>
+                <div style="position:absolute; left:100%; top:50%; transform:translateY(-50%); width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:5px solid var(--tooltip-arrow)"></div>
               </div>
             </div>
           </div>
-          <p class="note">Background: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">#1a1d23</code> (always dark for contrast). Text: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">#fff</code>. Font: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">11px / 600</code>. Padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">4px 10px</code>, radius: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--r-sm)</code>. Arrow: 5px CSS triangle.</p>
+          <p class="note">Background: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--tooltip-bg)</code> — light: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">#1a1d23</code>, dark: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">#3a3f4c</code>. Adds subtle <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">border</code> + <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">box-shadow</code> in dark mode for contrast against dark page background. Text: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">#fff</code>. Font: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">11px / 600</code>. Padding: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">4px 10px</code>, radius: <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--r-sm)</code>. Arrow: 5px CSS triangle using <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace">var(--tooltip-arrow)</code>.</p>
         </div>
       </section>
 
@@ -2349,7 +2435,7 @@
             <div class="phase phase--feedback">
               <span class="phase-tag">Process</span>
               <h4>Confirming</h4>
-              <div class="phase-demo" style="gap:6px; flex-direction:row-reverse; justify-content:flex-start">
+              <div class="phase-demo" style="gap:6px; justify-content:flex-end">
                 <button class="btn btn--danger btn--sm" type="button" style="font-size:11px; padding:5px 10px">Confirm?</button>
                 <button class="btn btn--ghost btn--sm" type="button" style="font-size:11px; padding:5px 10px">Cancel</button>
               </div>
