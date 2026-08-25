@@ -1811,6 +1811,36 @@
         <p class="note" style="margin-top:14px"><strong>Which stroke where:</strong> <strong>1.5</strong> — light, for 24px+ decorative icons (never below 18px). <strong>2</strong> — the default; use unless there's a reason not to. <strong>2.5</strong> — bold, for small sizes (14px), emphasis, and the "plus" icons on buttons. Never mix stroke weights within one view — mixed weights read as inconsistent system state.</p>
       </section>
 
+      <!-- Example — Windows Logo -->
+      <section>
+        <h3>Example — Windows Logo</h3>
+        <div class="card">
+          <p class="note" style="margin-top:0; margin-bottom:12px">Any brand mark decomposes into the same primitives. The Windows logo is four rounded squares on the 24-grid — one <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">&lt;rect&gt;</code> per pane, no paths needed. Drawn with <code style="font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">stroke="currentColor"</code> it themes with the page automatically.</p>
+          <div class="audit-demo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Windows logo"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <span class="audit-caption">24px · currentColor · stroke 1.5</span>
+          </div>
+          <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin-bottom:12px">
+            <span style="font-size:11px; font-weight:600; color:var(--text-muted)">One artwork, any size:</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <span class="audit-caption">14 · 16 · 18 · 24 · 32px</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">svg</span> <span class="cb-attr">viewBox</span><span class="cb-punc">=</span><span class="cb-val">"0 0 24 24"</span> <span class="cb-attr">stroke</span><span class="cb-punc">=</span><span class="cb-val">"currentColor"</span> <span class="cb-attr">stroke-width</span><span class="cb-punc">=</span><span class="cb-val">"1.5"</span><span class="cb-punc">&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"2"</span>  <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"2"</span>  <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"13"</span> <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"2"</span>  <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"2"</span>  <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"13"</span> <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"13"</span> <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"13"</span> <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">/&gt;</span>
+<span class="cb-punc">&lt;/</span><span class="cb-tag">svg</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>How it's drawn.</strong> The 24-grid splits into <code>2 + 9 + 2 + 9 + 2</code> — a 2px gutter around and between four 9px panes. Rounded corners (<code>rx="2"</code>) keep it from looking harsh next to the system's 8px+ radii. One <code>stroke</code>, one <code>currentColor</code>, zero fills: the mark themes, flips with dark mode, and inherits disabled opacity with no extra rules. Same artwork renders at 14px through 32px — only the <code>width</code>/<code>height</code> change.
+          </div>
+        </div>
+      </section>
+
       <!-- Fallback & Accessibility -->
       <section>
         <h3>Fallback &amp; Accessibility</h3>
