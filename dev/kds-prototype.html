@@ -404,7 +404,9 @@
     outline: 2px solid #147EFB; outline-offset: -2px;
     border-color: #147EFB; opacity: 1;
   }
-  /* Destructive reset row (iOS red-centred) — lives in its own card */
+  /* Destructive reset row (iOS red-centred) — lives in its own card,
+     spaced from the colour editor above like a separate group */
+  .kds-reset-card { margin-top: 14px; }
   .kds-reset-btn {
     width: 100%; padding: 12px 14px; min-height: 44px;
     display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -938,7 +940,8 @@
             <div class="kds-setting-card">
               <div id="color-panel"></div>
             </div>
-            <!-- Destructive reset row — its own group, centered red text -->
+            <!-- Destructive reset row — its own group, centered red text,
+                 spaced from the colour card above (see .kds-reset-card) -->
             <div class="kds-setting-card kds-reset-card">
               <button class="kds-reset-btn" id="reset-colors">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
