@@ -799,7 +799,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('+ Retail POS')).toBeInTheDocument();
     expect(screen.getByText('+ Warehouse')).toBeInTheDocument();
     expect(screen.getByText('+ Hardware Node')).toBeInTheDocument();
-    expect(screen.getByText('Test Order Simulation')).toBeInTheDocument();
+    expect(screen.getByText('Presets')).toBeInTheDocument();
   });
 
   it('adds each of the four supported workspace types from the palette', () => {
@@ -1681,15 +1681,6 @@ describe('NodeTopologyEditor Component', () => {
     expect(kds!.querySelector('.node-port-label-right')?.textContent).toBe('Ticket Out');
   });
 
-  it('toggles simulation mode on button click', () => {
-    renderEditor();
-
-    const simBtn = screen.getByText('Test Order Simulation');
-    fireEvent.click(simBtn);
-
-    expect(screen.getByText('Stop Simulation')).toBeInTheDocument();
-  });
-
   // ── Load persisted topology on mount ──────────────────────────
 
   it('loads persisted topology on mount when data exists', async () => {
@@ -2051,10 +2042,12 @@ describe('NodeTopologyEditor Component', () => {
 
       fireEvent.click(screen.getByText('Apply Topology Changes'));
 
-      // The live banner already carries the message; the Apply toast adds a
-      // second copy — getAllByText pins that the error surfaced (≥1).
+      // The Apply gate opens the issues panel (so the user sees EVERY
+      // blocking issue at once) and toasts a block summary instead of a
+      // single error message.
       await waitFor(() =>
-        expect(screen.getAllByText('Multiple Warehouses require a Pro Tier license.').length).toBeGreaterThanOrEqual(1));
+        expect(screen.getByText('Apply blocked — 1 issue(s) to fix in the panel')).toBeInTheDocument());
+      expect(document.querySelector('.topology-validation-panel')).not.toBeNull();
       expect(onSave).not.toHaveBeenCalled();
     });
 
@@ -2113,7 +2106,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor({ allowLegacyApply: false });
 
       const before = getNodeCount();
-      fireEvent.keyDown(window, { key: '1' });
+      fireEvent.keyDown(document.querySelector('.node-canvas-container')!, { key: '1' });
       expect(getNodeCount()).toBe(before);
     });
   });
@@ -7672,20 +7665,34 @@ describe('NodeTopologyEditor — tool-slot shortcuts', () => {
     // would block the '3' slot on the multi-warehouse gate.
     renderEditor({ currentTier: 'pro' });
     const before = getNodeCount();
+    // The 1–4 slots are canvas-scoped: the keydown must originate inside
+    // the canvas container (the real surface a focused canvas produces).
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
-    fireEvent.keyDown(window, { key: '1' });
+    fireEvent.keyDown(canvas, { key: '1' });
     expect(getNodeCount()).toBe(before + 1);
     expect(lastNodeType()).toContain('node-type-store');
 
-    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.keyDown(canvas, { key: '2' });
     expect(lastNodeType()).toContain('node-type-workspace');
 
-    fireEvent.keyDown(window, { key: '3' });
+    fireEvent.keyDown(canvas, { key: '3' });
     expect(lastNodeType()).toContain('node-type-warehouse');
 
-    fireEvent.keyDown(window, { key: '4' });
+    fireEvent.keyDown(canvas, { key: '4' });
     expect(lastNodeType()).toContain('node-type-hardware');
     expect(getNodeCount()).toBe(before + 4);
+  });
+
+  it('does not spawn from a 1–4 keystroke outside the canvas (body focus)', () => {
+    renderEditor({ currentTier: 'pro' });
+    const before = getNodeCount();
+
+    // Focus on the document body (no canvas interaction) must NOT spawn —
+    // the slot shortcuts are canvas-scoped, so a stray keystroke anywhere
+    // else in the app cannot create a node.
+    fireEvent.keyDown(document.body, { key: '2' });
+    expect(getNodeCount()).toBe(before);
   });
 
   it('does not spawn while the user is typing in a text field', () => {
@@ -7721,7 +7728,7 @@ describe('NodeTopologyEditor — empty-state onboarding', () => {
 
     await waitFor(() => expect(getNodeCount()).toBe(0));
     expect(screen.getByText('Build your store topology')).toBeInTheDocument();
-    expect(screen.getByText(/press 1–4 to add a node/)).toBeInTheDocument();
+    expect(screen.getByText(/press 1–4 with the canvas focused/)).toBeInTheDocument();
   });
 
   it('hides the hint once a node lands on the canvas', async () => {
@@ -7729,7 +7736,7 @@ describe('NodeTopologyEditor — empty-state onboarding', () => {
     await waitFor(() => expect(getNodeCount()).toBe(0));
     expect(screen.getByText('Build your store topology')).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: '1' });
+    fireEvent.keyDown(document.querySelector('.node-canvas-container')!, { key: '1' });
     await waitFor(() => expect(getNodeCount()).toBe(1));
     expect(screen.queryByText('Build your store topology')).not.toBeInTheDocument();
   });

@@ -162,22 +162,6 @@ describe('TopologyWireGroup', () => {
       // Note: hovered state doesn't add a class to the group in current implementation
       expect(group).toHaveClass('wire-group');
     });
-
-    it('renders simulation pulse when pulse prop is provided', async () => {
-      await renderWithFluent(<TopologyWireGroup {...defaultProps({ pulse: { x: 200, y: 100 } })} />);
-
-      const pulse = document.querySelector('.wire-simulation-pulse');
-      expect(pulse).toBeInTheDocument();
-      expect(pulse).toHaveAttribute('cx', '200');
-      expect(pulse).toHaveAttribute('cy', '100');
-    });
-
-    it('does not render pulse when pulse is null', async () => {
-      await renderWithFluent(<TopologyWireGroup {...defaultProps({ pulse: null })} />);
-
-      const pulse = document.querySelector('.wire-simulation-pulse');
-      expect(pulse).not.toBeInTheDocument();
-    });
   });
 
   describe('Validation markers', () => {

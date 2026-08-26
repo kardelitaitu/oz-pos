@@ -81,6 +81,10 @@ export function MinusIcon(props: IconProps) {
   return icon(<line x1="5" y1="12" x2="19" y2="12" />, props);
 }
 
+export function ChevronDownIcon(props: IconProps) {
+  return icon(<polyline points="6 9 12 15 18 9" />, props);
+}
+
 export function WarningIcon(props: IconProps) {
   return icon(<><path d="M12 3 2.5 20h19L12 3z" /><line x1="12" y1="10" x2="12" y2="14" /><circle cx="12" cy="17" r="0.6" fill="currentColor" /></>, props);
 }

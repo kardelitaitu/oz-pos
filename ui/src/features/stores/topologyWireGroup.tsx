@@ -5,23 +5,13 @@
  * selection change re-renders ONLY the affected wire. Like the node card,
  * every prop must be referentially stable across unrelated renders — the
  * geometry objects come from a useMemo'd Map, and the handlers are stable
- * useCallbacks. `pulse` is null while the simulation is idle (the common
- * case) so a hover/selection never re-renders a wire; during a live pulse
- * every wire re-renders every tick, which the animation requires.
- *
- * The pulse math helpers live here (rather than the editor) so the editor
- * can import this module without a runtime import cycle.
+ * useCallbacks.
  */
 
 import { memo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import type { ReactLocalization } from '@fluent/react';
 import type { TopologyWireData } from './NodeTopologyEditor';
 import type { TopologyValidationError } from './topologyContract';
-
-/** Isolated simulation pulse circle so the 30ms tick doesn't re-render the whole canvas. */
-export const SimulationPulse = memo(function SimulationPulse({ x, y }: { x: number; y: number }) {
-  return <circle cx={x} cy={y} r="6" className="wire-simulation-pulse" />;
-});
 
 
 export interface TopologyWireGroupProps {
@@ -36,7 +26,6 @@ export interface TopologyWireGroupProps {
   selected: boolean;
   dimmed: boolean;
   hovered: boolean;
-  pulse: { x: number; y: number } | null;
   /** Wire-scoped validation errors (e.g. warehouse-at-capacity). Must be a
    *  referentially stable array per wire — the editor passes a Map lookup. */
   errors: TopologyValidationError[];
@@ -60,7 +49,6 @@ function TopologyWireGroupImpl({
   selected,
   dimmed,
   hovered,
-  pulse,
   errors,
   l10n,
   onHoverWire,
@@ -123,8 +111,6 @@ function TopologyWireGroupImpl({
               : undefined
         }
       />
-
-      {pulse && <SimulationPulse x={pulse.x} y={pulse.y} />}
 
       {/* Wire-scoped validation marker: a warning badge at the wire's
           midpoint when this wire carries an error (warehouse-at-capacity

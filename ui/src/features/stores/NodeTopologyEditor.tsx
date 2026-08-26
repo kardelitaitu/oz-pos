@@ -15,13 +15,12 @@ import {
   StoreIcon,
   WarehouseIcon,
   PrinterIcon,
-  FlaskIcon,
-  StopIcon,
   CartIcon,
   UtensilsIcon,
   CheckIcon,
   TrashIcon,
   CloseIcon,
+  ChevronDownIcon,
   LockIcon,
   PlusIcon,
   MinusIcon,
@@ -876,9 +875,6 @@ export default function NodeTopologyEditor({
   const selectedNodeIdsRef = useRef<Set<string>>(selectedNodeIds);
   selectedNodeIdsRef.current = selectedNodeIds;
 
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simPulseStep, setSimPulseStep] = useState(0);
-
   /** Drag lifecycle (render set + synchronous ref mirror) lives in one
    *  typed reducer — every begin/end/cancel writes both faces together, so
    *  the touch gesture loop's stale-closure reads can never see a drag
@@ -1243,6 +1239,11 @@ export default function NodeTopologyEditor({
   const [applyPin, setApplyPin] = useState('');
   const [applyPinError, setApplyPinError] = useState(false);
   const [applyPinVerifying, setApplyPinVerifying] = useState(false);
+  const [rememberPin, setRememberPin] = useState(false);
+  /** Session-level PIN cache. When set, subsequent Apply calls skip the
+   *  verifyPin prompt — the checkbox in the dialog controls whether the
+   *  flag is persisted to sessionStorage (cleared on tab close). */
+  const pinVerifiedRef = useRef(false);
   const applyPinRef = useRef<HTMLInputElement>(null);
 
   /** Live canvas getter for the relationship picker's position clamp. */
@@ -1398,6 +1399,8 @@ export default function NodeTopologyEditor({
    *  Escape or any document mousedown outside the picker (the picker
    *  wrapper stops propagation, so slider drags never close it). */
   const [zoomPickerOpen, setZoomPickerOpen] = useState(false);
+  /** Presets popover (Retail / Restaurant & KDS template loaders). */
+  const [presetsOpen, setPresetsOpen] = useState(false);
   /** Save-template popover: open flag + the in-flight template name. */
   const [templateSaveOpen, setTemplateSaveOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -1425,8 +1428,8 @@ export default function NodeTopologyEditor({
   }, [minimapKey, minimapVisible]);
 
   useEffect(() => {
-    if (!zoomPickerOpen) return;
-    const close = () => setZoomPickerOpen(false);
+    if (!zoomPickerOpen && !presetsOpen) return;
+    const close = () => { setZoomPickerOpen(false); setPresetsOpen(false); };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
@@ -1439,7 +1442,7 @@ export default function NodeTopologyEditor({
       document.removeEventListener('mousedown', close);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [zoomPickerOpen]);
+  }, [zoomPickerOpen, presetsOpen]);
 
   /** Bounding box of the current multi-selection in canvas coords — the
    *  align/distribute toolbar floats above it. Null unless 2+ nodes are
@@ -1658,37 +1661,6 @@ export default function NodeTopologyEditor({
     }
     return m;
   }, [wireGeometries, wires, nodes]);
-
-  /** Pulse dots that would be HIDDEN under a card (round 147): the
-   *  simulation pulse travels the base wire path, so at the moment it
-   *  passes under a card it would blink out — breaking the continuity the
-   *  round-146 overlay just restored for the wire itself. Any pulse point
-   *  strictly inside another card's box is rendered on the crossing overlay
-   *  instead (same class, same info-blue dot) and disappears the moment it
-   *  clears the box. Recomputed every render — the pulse advances on a
-   *  30ms interval, so this cannot be a memo. */
-  const pulsePoints = new Map<string, { x: number; y: number }>();
-  const hiddenPulseDots: Array<{ x: number; y: number }> = [];
-  if (isSimulating) {
-    // Reduced motion: the interval below never runs, so simPulseStep stays
-    // 0 — pin the pulse at the wire midpoint instead so the flow
-    // visualization is static (visible mid-path, never under the source
-    // card) rather than a frozen dot collapsed onto the start port.
-    const t = prefersReducedMotion() ? 0.5 : simPulseStep / 100;
-    for (const wire of wires) {
-      const geo = wireGeometries.get(wire.id);
-      if (!geo) continue;
-      const pt = geo.polyline
-        ? polylinePoint(geo.polyline, t)
-        : {
-            x: cubicBezier(t, geo.x1, geo.x1 + geo.dx, geo.x2 - geo.dx, geo.x2),
-            y: cubicBezier(t, geo.y1, geo.y1, geo.y2, geo.y2),
-          };
-      pulsePoints.set(wire.id, pt);
-      const others = nodes.filter((n) => n.id !== wire.fromNodeId && n.id !== wire.toNodeId);
-      if (pointUnderCards(pt, others)) hiddenPulseDots.push(pt);
-    }
-  }
 
   /** Dynamic SVG bounds derived from node positions — replaces fixed 5000×5000px clipping. */
   const svgBounds = useMemo(() => {
@@ -2422,16 +2394,22 @@ export default function NodeTopologyEditor({
     setApplyConfirmOpen(false);
     setApplyPinVerifying(true);
     try {
-      const { verifyPin } = await import('@/api/staff');
-      if (!sessionToken) { setApplyPinError(true); return; }
-      const valid = await verifyPin(sessionToken, applyPin);
-      if (!valid) {
-        setApplyPinError(true);
-        setApplyPin('');
-        setApplyConfirmOpen(true);
-        failApply();
-        setTimeout(() => applyPinRef.current?.focus(), 50);
-        return;
+      // Session-level PIN cache: skip re-verification when the flag is set
+      // (controlled by the "Remember PIN" checkbox in the dialog).
+      if (!pinVerifiedRef.current) {
+        const { verifyPin } = await import('@/api/staff');
+        if (!sessionToken) { setApplyPinError(true); return; }
+        const valid = await verifyPin(sessionToken, applyPin);
+        if (!valid) {
+          setApplyPinError(true);
+          setApplyPin('');
+          setApplyConfirmOpen(true);
+          failApply();
+          setTimeout(() => applyPinRef.current?.focus(), 50);
+          return;
+        }
+        // Persist the verified flag for the rest of the session.
+        if (rememberPin) pinVerifiedRef.current = true;
       }
     } catch {
       setApplyPinError(true);
@@ -2984,18 +2962,6 @@ export default function NodeTopologyEditor({
     };
   }, []);
 
-  useEffect(() => {
-    if (!isSimulating) return;
-    // WCAG 2.3.3: a reduced-motion user still sees the flow (static pulse at
-    // the wire midpoint — see the pulse computation) but the 30ms interval
-    // never churns React state behind their back.
-    if (prefersReducedMotion()) return;
-    const interval = setInterval(() => {
-      setSimPulseStep((prev) => (prev + 1) % 100);
-    }, 30);
-    return () => clearInterval(interval);
-  }, [isSimulating]);
-
   /** Delete a set of nodes in one history entry — every wire touching any
    *  of them goes too. Single-node and batch deletes share this path. */
   /** Branch Location nodes (type === 'store') are the topology anchor
@@ -3283,18 +3249,27 @@ export default function NodeTopologyEditor({
       // rack's card order (Store, Workspace, Warehouse, Hardware). Bare keys
       // only — no modifier, no auto-repeat. The guards above already keep
       // these inert while typing or when a non-canvas control owns focus.
+      // NEW: the spawn additionally requires the keydown target to be INSIDE
+      // the canvas (or a canvas-internal element) — focus on the page body,
+      // a floating dialog, or any chrome outside the canvas no longer
+      // spawns a stray node from a careless keystroke.
       if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat) {
-        const spawnBySlot: Record<string, NodeType> = {
-          '1': 'store',
-          '2': 'workspace',
-          '3': 'warehouse',
-          '4': 'hardware',
-        };
-        const spawnType = spawnBySlot[e.key];
-        if (spawnType) {
-          e.preventDefault();
-          handleAddNodeRef.current?.(spawnType);
-          return;
+        const inCanvas = target
+          && typeof target.closest === 'function'
+          && target.closest('.node-canvas-container');
+        if (inCanvas) {
+          const spawnBySlot: Record<string, NodeType> = {
+            '1': 'store',
+            '2': 'workspace',
+            '3': 'warehouse',
+            '4': 'hardware',
+          };
+          const spawnType = spawnBySlot[e.key];
+          if (spawnType) {
+            e.preventDefault();
+            handleAddNodeRef.current?.(spawnType);
+            return;
+          }
         }
       }
       // Alt pressed MID-move converts the drag into a duplicate (Figma):
@@ -5401,34 +5376,31 @@ export default function NodeTopologyEditor({
         </span>
 
         <div className="node-topology-header-actions">
-          <Button
-            variant={isSimulating ? 'primary' : 'secondary'}
-            onClick={() => setIsSimulating(!isSimulating)}
-            className="simulation-btn"
-            icon={isSimulating ? <StopIcon size={16} /> : <FlaskIcon size={16} />}
-          >
-            <Localized id={isSimulating ? 'topology-sim-stop' : 'topology-sim-start'}>
-              {isSimulating ? 'Stop Simulation' : 'Test Order Simulation'}
-            </Localized>
-          </Button>
+
+          <div className="topology-presets-popover">
+            <Button
+              variant="secondary"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => setPresetsOpen((o) => !o)}
+              icon={<ChevronDownIcon size={16} />}
+            >
+              <Localized id="topology-presets-label">Presets</Localized>
+            </Button>
+            {presetsOpen && (
+              <div className="topology-presets-menu" role="menu" onMouseDown={(e) => e.stopPropagation()}>
+                <button type="button" role="menuitem" onClick={() => { setPresetsOpen(false); if (isCanvasDirty()) setConfirmPreset('retail'); else loadPreset('retail'); }}>
+                  <Localized id="topology-preset-retail">Retail Preset</Localized>
+                  <span className="topology-presets-menu-desc"><Localized id="topology-preset-retail-desc">Store, warehouse, and POS terminals</Localized></span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setPresetsOpen(false); if (isCanvasDirty()) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}>
+                  <Localized id="topology-preset-restaurant">Restaurant & KDS Preset</Localized>
+                  <span className="topology-presets-menu-desc"><Localized id="topology-preset-restaurant-desc">Restaurant POS, kitchen display, and warehouse</Localized></span>
+                </button>
+              </div>
+            )}
+          </div>
 
           <Button
-            variant="secondary"
-            onClick={() => { if (isCanvasDirty()) setConfirmPreset('retail'); else loadPreset('retail'); }}
-            icon={<CartIcon size={16} />}
-          >
-            <Localized id="topology-preset-retail">Retail Preset</Localized>
-          </Button>
-
-          <Button
-            variant="secondary"
-            onClick={() => { if (isCanvasDirty()) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}
-            icon={<UtensilsIcon size={16} />}
-          >
-            <Localized id="topology-preset-restaurant">Resto & KDS Preset</Localized>
-          </Button>            <Button variant="secondary" onClick={autoLayout}>
-            <Localized id="topology-auto-layout">Auto-layout</Localized>
-          </Button>            <Button
               variant="primary"
               disabled={!canSave || saving || !onSave}
               title={canSave && onSave ? undefined : l10n.getString('topology-apply-permission-tooltip')}
@@ -5442,8 +5414,12 @@ export default function NodeTopologyEditor({
                   (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(issueKey(e.nodeId, e.messageId))),
                 );
                 if (validationErrors.length > 0) {
+                  // Open the issues panel so the user sees EVERY blocking
+                  // issue at once instead of fixing them one at a time
+                  // through the toast, then confirm what blocked Apply.
+                  setValidationPanelOpen(true);
                   addToast({
-                    message: l10n.getString(validationErrors[0]!.messageId),
+                    message: l10n.getString('topology-apply-blocked', { count: String(validationErrors.length) }),
                     type: 'error',
                   });
                   return;
@@ -5490,16 +5466,6 @@ export default function NodeTopologyEditor({
                 const effectiveStoreId = branchNode?.storeProfileId
                   ?? (branchNode?.metadata?.['storeProfileId'] as string | undefined)
                   ?? sessionStoreId;
-                // eslint-disable-next-line no-console
-                console.groupCollapsed('%c[Topology Apply] Debug Info', 'color: #f59e0b; font-weight: bold');
-                console.log('sessionStoreId:', sessionStoreId);
-                console.log('effectiveStoreId:', effectiveStoreId);
-                console.log('branchNode:', branchNode ? { id: branchNode.id, storeProfileId: branchNode.storeProfileId, metadata: branchNode.metadata } : 'NONE');
-                console.log('workspaceInstances:', (workspaceInstances ?? []).map((w) => ({ id: w.instanceId, storeId: w.storeId, name: w.name, type: w.typeKey })));
-                console.log('creations:', createdItems.map((i) => ({ id: i.id, name: i.name, typeKey: i.typeKey })));
-                console.log('updates:', updatedItems.map((i) => ({ id: i.id, name: i.name })));
-                console.log('archives:', archivedItems.map((i) => ({ id: i.id, name: i.name })));
-                console.groupEnd();
                 setApplyConfirmData({
                   created: [...createdItems, ...typeChangedItems],
                   updated: updatedItems,
@@ -5580,12 +5546,12 @@ export default function NodeTopologyEditor({
 
       <div className="node-topology-main">
         <div className="node-tool-rack">
-          <button type="button" className={`rack-icon-btn${rackPanel === 'add' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('add')} title={l10n.getString('topology-rack-add-title')} aria-expanded={rackPanel === 'add'}><PlusIcon size={18} /></button>
+          <button type="button" className={`rack-icon-btn${rackPanel === 'add' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('add')} aria-label={l10n.getString('topology-rack-add-title')} aria-expanded={rackPanel === 'add'}><PlusIcon size={18} /></button>
           {(selectedNodeIds.size > 0 || selectedWireId || history.length > 0 || redo.length > 0) && (
-            <button type="button" className={`rack-icon-btn${rackPanel === 'edit' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('edit')} title={l10n.getString('topology-rack-edit-title')} aria-expanded={rackPanel === 'edit'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg></button>
+            <button type="button" className={`rack-icon-btn${rackPanel === 'edit' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('edit')} aria-label={l10n.getString('topology-rack-edit-title')} aria-expanded={rackPanel === 'edit'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg></button>
           )}
-          <button type="button" className={`rack-icon-btn${rackPanel === 'view' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('view')} title={l10n.getString('topology-rack-view-title')} aria-expanded={rackPanel === 'view'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg></button>
-          <button type="button" className={`rack-icon-btn${rackPanel === 'share' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('share')} title={l10n.getString('topology-rack-share-title')} aria-expanded={rackPanel === 'share'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg></button>
+          <button type="button" className={`rack-icon-btn${rackPanel === 'view' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('view')} aria-label={l10n.getString('topology-rack-view-title')} aria-expanded={rackPanel === 'view'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg></button>
+          <button type="button" className={`rack-icon-btn${rackPanel === 'share' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('share')} aria-label={l10n.getString('topology-rack-share-title')} aria-expanded={rackPanel === 'share'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg></button>
 
           {rackPanel && (
             <div className="rack-panel" role="group" aria-label={l10n.getString(`topology-rack-${rackPanel}-title`)}>
@@ -5618,6 +5584,7 @@ export default function NodeTopologyEditor({
               )}
               {rackPanel === 'view' && (
                 <div className="rack-panel-body">
+                  <button type="button" className="tool-card" onClick={autoLayout}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-auto-layout">Auto-layout</Localized></strong></div></button>
                   <button type="button" className={`tool-card${wireRouting === 'elbow' ? ' is-active' : ''}`} aria-pressed={wireRouting === 'elbow'} title={anyBentWires ? l10n.getString('topology-bends-override-note') : undefined} onClick={() => setWireRouting((r) => (r === 'elbow' ? 'curved' : 'elbow'))}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="4 4 4 20 20 20" /><polyline points="4 4 12 12" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-wire-routing-toggle">Elbow wires</Localized></strong>{anyBentWires && <span className="rack-panel-note">{l10n.getString('topology-bends-override-note')}</span>}</div></button>
                   <button type="button" className={`tool-card${snapEnabled ? ' is-active' : ''}`} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((s) => !s)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-snap-toggle">Snap to grid</Localized></strong></div></button>
                   <button type="button" className={`tool-card${panToolActive ? ' is-active' : ''}`} aria-pressed={panToolActive} onClick={() => setPanToolActive((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M18 11V6a2 2 0 0 0-4 0v5" /><path d="M14 10V4a2 2 0 0 0-4 0v6" /><path d="M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-pan-tool-toggle">Pan tool</Localized></strong></div></button>
@@ -6067,12 +6034,6 @@ export default function NodeTopologyEditor({
               {wires.map((wire) => {
                 const geo = wireGeometries.get(wire.id);
                 if (!geo) return null;
-                // Pulse rides the wire's actual geometry: the cubic bezier
-                // by default, or the elbow polyline when orthogonal routing
-                // is on. Computed once per render above (round 147) so the
-                // crossing overlay can render the same point when it would
-                // be hidden under a card.
-                const pulsePoint = pulsePoints.get(wire.id) ?? null;
                 return (
                   <TopologyWireGroup
                     key={wire.id}
@@ -6090,7 +6051,6 @@ export default function NodeTopologyEditor({
                       && wire.fromNodeId !== hoveredNodeId
                       && wire.toNodeId !== hoveredNodeId}
                     hovered={hoveredWireId === wire.id}
-                    pulse={isSimulating ? pulsePoint : null}
                     l10n={l10n}
                     onHoverWire={hoverWire}
                     onWireClick={handleWireClick}
@@ -6286,11 +6246,9 @@ export default function NodeTopologyEditor({
 
             {/* Round 146: the under-card segments of wires that cross a card
                 they do not connect to, drawn on top so the wire reads as
-                continuous. Round 147: the simulation pulse, when it would
-                be hidden under a card, rides the overlay too. Both are
-                pointer-events-none — the overlay never steals clicks or
-                hover from the card below. */}
-            {(wireUnderCardPaths.size > 0 || hiddenPulseDots.length > 0) && (
+                continuous. pointer-events-none — the overlay never steals
+                clicks or hover from the card below. */}
+            {wireUnderCardPaths.size > 0 && (
               <svg className="node-wires-crossing" style={{ width: svgBounds.width, height: svgBounds.height }}>
                 {[...wireUnderCardPaths.entries()].map(([wireId, d]) => {
                   // Round 151: the overlay must mirror the base wire's
@@ -6311,9 +6269,6 @@ export default function NodeTopologyEditor({
                   ].filter(Boolean).join(' ') || undefined;
                   return <path key={wireId} d={d} className={cls} pointerEvents="none" />;
                 })}
-                {hiddenPulseDots.map((p, i) => (
-                  <circle key={`hidden-pulse-${i}`} cx={p.x} cy={p.y} r="6" className="wire-simulation-pulse" pointerEvents="none" />
-                ))}
               </svg>
             )}
           </div>
@@ -6804,6 +6759,16 @@ export default function NodeTopologyEditor({
               <p className="topology-apply-confirm-pin-error">
                 <Localized id="topology-apply-confirm-pin-error">Incorrect PIN. Please try again.</Localized>
               </p>
+            )}
+            {!pinVerifiedRef.current && (
+              <label className="topology-apply-confirm-pin-remember">
+                <input
+                  type="checkbox"
+                  checked={rememberPin}
+                  onChange={(e) => setRememberPin(e.target.checked)}
+                />
+                <Localized id="topology-apply-confirm-pin-remember">Remember PIN for this session</Localized>
+              </label>
             )}
 
             {/* Actions */}

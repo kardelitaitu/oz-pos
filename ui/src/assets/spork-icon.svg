@@ -1,0 +1,13 @@
+<svg viewBox="0 0 96 96" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+  <!-- fork (left) -->
+  <path d="M12 6A3 3 0 0 1 18 6L18.5 48L11.5 48Z"/>   <!-- tine 1 -->
+  <path d="M21 6A3 3 0 0 1 27 6L27.5 48L20.5 48Z"/>   <!-- tine 2 -->
+  <path d="M30 6A3 3 0 0 1 36 6L36.5 48L29.5 48Z"/>   <!-- tine 3 -->
+  <path d="M11.5 48L36.5 48L31 55L17 55Z"/>        <!-- neck -->
+  <rect x="17" y="55" width="14" height="4" rx="1.5"/> <!-- bolster -->
+  <rect x="18.5" y="59" width="11" height="27" rx="2"/>  <!-- handle -->
+
+  <!-- spoon (right) -->
+  <path d="M60 4C66 6 72 12 71.5 20C71 28 64 34 62.5 36L57.5 36C56 34 49 28 48.5 20C48 12 54 6 60 4Z"/>  <!-- teardrop bowl -->
+  <path d="M57.5 36L62.5 36L63 88A1.5 1.5 0 0 1 61.5 89.5L58.5 89.5A1.5 1.5 0 0 1 57 88Z"/>  <!-- stem + handle -->
+</svg>
