@@ -637,11 +637,14 @@
   .kds-category-header {
     display: flex; align-items: center; gap: 8px;
     width: 100%; padding: 6px 13px; border: none; background: transparent;
-    color: var(--text); opacity: 0.85; cursor: pointer; font-size: 12px; font-weight: 600;
+    color: var(--text); opacity: 0.85; cursor: pointer; font-size: 12px; font-weight: 400;
     transition: background 0.1s; text-align: left;
     /* fixed row height: identical whether checked or not */
     min-height: 30px; line-height: 1.2;
   }
+  /* not bold until checked: the whole category flips to 600 when its
+     checkmark appears (done state) */
+  .kds-category-header:has(.kds-cat-check.done) { font-weight: 600; }
   .kds-category-header:hover { background: transparent; }
   /* non-interactive header (completed-card recall view) */
   .kds-category-header.static { cursor: default; }
