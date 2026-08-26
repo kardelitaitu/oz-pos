@@ -6,13 +6,17 @@
 <meta name="theme-color" content="#0f0f14">
 <link rel="manifest" href="manifest.json">
 <title>KDS v2 — Kitchen Display Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* Apple SF fonts across the whole UI — system fonts only, no webfont
-     dependency. -apple-system → SF Pro on iPhone/iPad, Segoe UI on
-     Windows, Roboto on Android. Weight ladder: 400 body · 500 emphasis
-     600 subheadings · 700 headings (on Windows, Segoe UI synthesizes
-     the Medium 500). System fonts are compositor-native, so text
-     transforms never flash a fallback font. */
+  /* Design-language typography: Inter across the whole UI — variable
+     font (400–800 in one file), tall x-height keeps glyphs legible at
+     14px and below, exactly the sizes a POS screen runs at. Loaded via
+     Google Fonts with font-display: swap; the platform stack after it
+     (-apple-system → SF Pro, Segoe UI on Windows, Roboto on Android)
+     is the instant fallback if Inter is blocked. Weight ladder:
+     700 headings · 600 subheadings · 500 emphasis · 400 body. */
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   /* Touch-screen modern scrollbar: thin, transparent, no visible track */
@@ -27,7 +31,7 @@
   .kds-screen.light * { scrollbar-color: rgba(0,0,0,0.2) transparent; }
 
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
     background: var(--bg);
     color: #e6e6e6; /* dark default; light override via :has below */
     display: flex;    align-items: center;
@@ -385,7 +389,7 @@
   .kds-hex-input {
     width: 60px; height: 32px; padding: 0 8px; border-radius: var(--r-sm); font-size: 11px;
     border: 1px solid var(--border-strong); background: var(--bg-surface);
-    color: var(--text); opacity: 0.8; text-align: center; font-family: ui-monospace, monospace;
+    color: var(--text); opacity: 0.8; text-align: center; font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
     transition: all 0.15s; flex-shrink: 0;
   }
   .kds-hex-input:focus { outline: none; border-color: #147EFB; opacity: 1; }
