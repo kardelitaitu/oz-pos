@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
+import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
 
 /**
  * E2E: Product Management — Hard Assertions (E2E-16 through E2E-19)
@@ -27,6 +27,9 @@ test.describe('Product Management', () => {
   test.beforeEach(async ({ page }) => {
     await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.INVENTORY);
+    // Warehouse workspace lands on the warehouse screen; navigate to
+    // the products route explicitly for product management tests.
+    await navigateTo(page, 'products');
   });
 
   // ── E2E-16: Assert product list loads ──────────────────────
