@@ -149,6 +149,8 @@
   .kds-filter-option.checked { background: #147EFB; color: #fff; opacity: 1; }
   /* view-mode row (All / Prepared) above the category grid */
   .kds-filter-modes { display: flex; gap: 6px; margin-bottom: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  /* completed-tab modes: no grid below, so no divider */
+  .kds-filter-modes.no-sep { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
   /* Up to 3 columns; each button is only as wide as its label (max-content) */
   .kds-filter-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 6px; justify-content: start; }
   .kds-tabs { position: relative; display: flex; gap: 4px; background: rgba(255,255,255,0.06); border-radius: var(--r-sm); padding: 3px; justify-self: center; }
@@ -1545,8 +1547,10 @@
         { v: 'dinein', label: 'Dine in' },
         { v: 'takeaway', label: 'Takeaway' },
       ];
+      /* No border-bottom: the Open tab's modes row uses it to separate
+         from the category grid below; the completed row has no grid. */
       panel.innerHTML = `
-      <div class="kds-filter-modes">
+      <div class="kds-filter-modes no-sep">
         ${modes.map(m => `
         <div class="kds-filter-option mode${completedFilter === m.v ? ' checked' : ''}" data-mode="${m.v}" role="option" tabindex="-1" aria-selected="${completedFilter === m.v}">
           <span>${m.label}</span>
