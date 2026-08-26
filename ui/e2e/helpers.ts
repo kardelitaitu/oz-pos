@@ -102,13 +102,34 @@ export async function selectWorkspace(
     await workspaceHome.waitFor({ timeout: 10_000 });
   }
 
+  // The Admin workspace is intentionally excluded from the card grid
+  // (WorkspaceHome.tsx filters type_key !== 'admin') and is instead
+  // accessible via the Tools section at the bottom of the picker.
+  // Each tool card calls handleShortcutNav(route) which sets
+  // setActiveWorkspace('admin') and navigates to a hash route.
+  if (typeKey === 'admin') {
+    // Click the Settings tool card — it activates the admin workspace
+    // and navigates to #/settings. Tests that need a different route
+    // will re-navigate after selectWorkspace returns.
+    const toolCard = page.getByTestId('workspace-tool-card')
+      .filter({ hasText: /settings|pengaturan/i });
+    await expect(toolCard).toBeVisible({ timeout: 8_000 });
+    if (opts?.force) {
+      await toolCard.click({ force: true });
+    } else {
+      await toolCard.click();
+    }
+    // Wait for the admin workspace to activate and route to resolve.
+    await page.waitForTimeout(2_000);
+    return;
+  }
+
   // Map type_key to the display name used in FALLBACK_WORKSPACES.
   const workspaceNames: Record<string, string> = {
     'store-pos': 'Store POS',
     'restaurant-pos': 'Restaurant POS',
     kds: 'Kitchen Display',
     warehouse: 'Warehouse',
-    admin: 'Admin',
   };
 
   const name = workspaceNames[typeKey];
