@@ -1851,7 +1851,7 @@
           <div class="kds-card-main">${catRows}</div>
           <div class="kds-card-footer">
             <div class="kds-footer-actions">
-              <button class="kds-status-btn reopen" onclick="confirmReopen('${o.id}', this)">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Reopen</button>
+              <button class="kds-status-btn reopen" onclick="confirmReopen('${o.id}', this)" data-testid="kds-order-card-${o.display}-status-reopen">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Reopen</button>
             </div>
           </div>
         </div>
@@ -2031,7 +2031,7 @@
           const allCollapsed = list.every(o => collapsedOrders.has(o.id));
           return `
             <div class="kds-col">
-              <button class="kds-completed-col-head" onclick="toggleCol('${b.key}')" aria-expanded="${allCollapsed ? 'false' : 'true'}" aria-label="Expand or minimize ${b.label} orders">
+              <button class="kds-completed-col-head" onclick="toggleCol('${b.key}')" aria-expanded="${allCollapsed ? 'false' : 'true'}" aria-label="Expand or minimize ${b.label} orders" data-testid="kds-completed-bucket-${b.key}">
                 <span>${b.label}</span><span class="kds-completed-col-count">${list.length}</span>
                 <span class="kds-completed-col-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:10px;height:10px"><path d="M6 9l6 6 6-6"/></svg></span>
               </button>
@@ -2176,7 +2176,7 @@
   function buildColorPanel() {
     const root = document.getElementById('color-panel');
     root.innerHTML = COLOR_GROUPS.map(g => `
-      <button type="button" class="kds-acc-head" aria-expanded="false">
+      <button type="button" class="kds-acc-head" aria-expanded="false" data-testid="kds-settings-colors-group-${slugify(g.title)}">
         <span>${g.title}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       </button>
@@ -2185,8 +2185,8 @@
           <div class="kds-color-group">
             <div class="kds-color-head">
               <label for="hex-${k.key}">${k.label}</label>
-              <input type="color" class="kds-native" id="native-${k.key}" data-key="${k.key}" value="${colors[k.key]}" aria-label="${k.label} colour picker">
-              <input class="kds-hex-input" id="hex-${k.key}" data-key="${k.key}" spellcheck="false" aria-label="${k.label} hex">
+              <input type="color" class="kds-native" id="native-${k.key}" data-key="${k.key}" value="${colors[k.key]}" aria-label="${k.label} colour picker" data-testid="kds-settings-colors-native-${k.key}">
+              <input class="kds-hex-input" id="hex-${k.key}" data-key="${k.key}" spellcheck="false" aria-label="${k.label} hex" data-testid="kds-settings-colors-hex-${k.key}">
             </div>
           </div>
         `).join('')}
