@@ -371,23 +371,24 @@
   .kds-color-group:last-child { margin-bottom: 0; }
   .kds-color-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .kds-color-head label { font-size: 12px; color: var(--text); opacity: 0.85; flex: 1; min-width: 0; }
-  /* native colour picker chip: shows the current colour, click → OS picker */
+  /* native colour picker chip: shows the current colour, click → OS picker.
+     36px — the design-language Forms text-input height (2.25rem) */
   .kds-native {
-    width: 32px; height: 32px; padding: 0; border: 1px solid var(--border-strong);
+    width: 36px; height: 36px; padding: 0; border: 1px solid var(--border-strong);
     border-radius: var(--r-sm); background: transparent; cursor: pointer; flex-shrink: 0;
   }
   .kds-native::-webkit-color-swatch-wrapper { padding: 3px; }
   .kds-native::-webkit-color-swatch { border-radius: 6px; border: none; }
   .kds-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
   .kds-swatch {
-    width: 32px; height: 32px; padding: 0; appearance: none;
+    width: 36px; height: 36px; padding: 0; appearance: none;
     border-radius: var(--r-sm); border: 2px solid transparent; cursor: pointer;
     transition: transform 0.1s, border-color 0.1s;
   }
   .kds-swatch:hover { transform: scale(1.12); }
   .kds-swatch.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--bg-top) inset; }
   .kds-hex-input {
-    width: 60px; height: 32px; padding: 0 8px; border-radius: var(--r-sm); font-size: 12px;
+    width: 64px; height: 36px; padding: 0 8px; border-radius: var(--r-sm); font-size: 12px;
     border: 1px solid var(--border-strong); background: var(--bg-surface);
     color: var(--text); opacity: 0.8; text-align: center; font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
     transition: all 0.15s; flex-shrink: 0;
@@ -440,11 +441,11 @@
   /* Display scale (global page) + Card size — each a row inside the
      Display card: label left, − / value / + stepper right. */
   .kds-zoom-row { display: flex; align-items: center; gap: 4px; }
-  .kds-zoom-btn { width: 32px; height: 32px; padding: 0; font-size: 14px; font-weight: 600; border-radius: var(--r-sm); }
+  .kds-zoom-btn { width: 36px; height: 36px; padding: 0; font-size: 14px; font-weight: 600; border-radius: var(--r-sm); }
   /* the value is a clickable reset-to-100% button — underline on hover
      makes the reset affordance discoverable without a tooltip */
   .kds-zoom-value {
-    flex: 1; height: 32px; padding: 0 8px; text-align: center;
+    flex: 1; height: 36px; padding: 0 8px; text-align: center;
     font-size: 12px; font-weight: 600; color: var(--text); opacity: 0.85;
     cursor: pointer; border-radius: var(--r-sm); min-width: 44px;
   }
