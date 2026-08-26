@@ -112,7 +112,7 @@
     p.setAttribute('aria-hidden', p.classList.contains('active') ? 'false' : 'true');
   });
 
-  function activateTab(name) {
+  function activateTab(name, scroll) {
     if (!validTabs.includes(name)) return;
     tabs.forEach(t => {
       const isActive = t.dataset.tab === name;
@@ -124,6 +124,9 @@
       p.classList.toggle('active', isActive);
       p.setAttribute('aria-hidden', isActive ? 'false' : 'true');
     });
+    if (scroll !== false) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }
 
   // Deep link — #forms opens the Forms tab
@@ -132,27 +135,52 @@
     return validTabs.includes(h) ? h : null;
   }
 
+  function activateTabAndHash(name, opts) {
+    activateTab(name, opts && opts.scroll === false ? false : undefined);
+    history.replaceState(null, '', '#' + name);
+    if (name === 'buttons') requestAnimationFrame(positionAllSliders);
+  }
+
   const initial = tabFromHash();
   if (initial) {
-    activateTab(initial);
-    // Position sliders after layout when buttons tab is initially visible
+    activateTab(initial, false); // no scroll on initial load
     if (initial === 'buttons') requestAnimationFrame(positionAllSliders);
   }
 
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
-      activateTab(tab.dataset.tab);
-      history.replaceState(null, '', '#' + tab.dataset.tab);
-      // Position sliders after the panel becomes visible
-      if (tab.dataset.tab === 'buttons') requestAnimationFrame(positionAllSliders);
+      activateTabAndHash(tab.dataset.tab);
     });
   });
+
+  // Keyboard navigation per WAI-ARIA tabs pattern
+  const tabList = document.querySelector('.tabbar-inner');
+  if (tabList) {
+    tabList.addEventListener('keydown', (e) => {
+      const idx = tabs.indexOf(document.activeElement);
+      if (idx === -1) return;
+      let next = -1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        next = (idx + 1) % tabs.length;
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        next = (idx - 1 + tabs.length) % tabs.length;
+      } else if (e.key === 'Home') {
+        next = 0;
+      } else if (e.key === 'End') {
+        next = tabs.length - 1;
+      }
+      if (next !== -1) {
+        e.preventDefault();
+        tabs[next].focus();
+        activateTabAndHash(tabs[next].dataset.tab);
+      }
+    });
+  }
 
   window.addEventListener('hashchange', () => {
     const h = tabFromHash();
     if (h) {
-      activateTab(h);
-      if (h === 'buttons') requestAnimationFrame(positionAllSliders);
+      activateTabAndHash(h);
     }
   });
   window.addEventListener('resize', positionAllSliders);
@@ -274,6 +302,27 @@
   window.addEventListener('load', updateScrollIndicator);
   updateScrollIndicator();
 
+  /* ── Scroll-to-top button ──────────────────────── */
+  const scrollTopBtn = document.createElement('button');
+  scrollTopBtn.className = 'scroll-top';
+  scrollTopBtn.type = 'button';
+  scrollTopBtn.setAttribute('aria-label', 'Scroll to top');
+  scrollTopBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>';
+  document.body.appendChild(scrollTopBtn);
+
+  scrollTopBtn.addEventListener('click', function() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  function updateScrollTopBtn() {
+    if (window.scrollY > 400) {
+      scrollTopBtn.classList.add('is-visible');
+    } else {
+      scrollTopBtn.classList.remove('is-visible');
+    }
+  }
+  window.addEventListener('scroll', updateScrollTopBtn, { passive: true });
+
   /* ── Email validation icon ─────────────────────── */
   const emailInput = document.getElementById('dl-input-email');
   if (emailInput) {
@@ -306,5 +355,52 @@
     btn.addEventListener('click', () => {
       auditFilters.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+    });
+  });
+
+  /* ── Code block copy-to-clipboard ──────────────── */
+  const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  function stripHtml(html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+  }
+
+  document.querySelectorAll('pre.codeblock, pre.snippet-block').forEach(function(pre) {
+    // Wrap in a container
+    const wrap = document.createElement('div');
+    wrap.className = 'codeblock-wrap';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+
+    // Create copy button
+    const btn = document.createElement('button');
+    btn.className = 'codeblock-copy';
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Copy code to clipboard');
+    btn.innerHTML = COPY_ICON + '<span>Copy</span>';
+    wrap.appendChild(btn);
+
+    // Click handler
+    btn.addEventListener('click', function() {
+      const code = pre.querySelector('code');
+      const text = stripHtml(code.innerHTML);
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerHTML = CHECK_ICON + '<span>Copied!</span>';
+        btn.classList.add('is-copied');
+        setTimeout(function() {
+          btn.innerHTML = COPY_ICON + '<span>Copy</span>';
+          btn.classList.remove('is-copied');
+        }, 1500);
+      }).catch(function() {
+        // Fallback: select text
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
     });
   });
