@@ -296,11 +296,18 @@
   .kds-hamburger-panel {
     position: absolute; top: calc(100% + 6px); right: 0; width: 375px;
     overflow: hidden;
-    background: var(--bg-top); border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+    /* iOS grouped-settings layering: the panel IS the page — near-black
+       in dark (groups float lighter above it), gray F2F2F7 in light
+       (groups are white cards). The card colour is scoped here so order
+       cards elsewhere keep their own --bg-surface. */
+    background: var(--bg);
+    --bg-surface: #1c1c1e;
+    border: 1px solid var(--border-strong); border-radius: var(--r-lg);
     padding: 0; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     animation: kds-drop-in 0.18s ease-out;
     transform-origin: top right;
   }
+  .kds-screen.light .kds-hamburger-panel { --bg-surface: #ffffff; }
   /* scrollable body — the floating close overlaps the section eyebrow's
      right side (short left-aligned text, no collision). No dedicated
      top padding — the panel starts tight. */
@@ -312,6 +319,11 @@
   }
   .kds-panel-section { margin-bottom: 14px; }
   .kds-panel-section:last-child { margin-bottom: 0; }
+  /* iOS-style footer text under the last group (version etc.) */
+  .kds-panel-footer {
+    font-size: 13px; color: var(--text); opacity: 0.4;
+    padding: 6px 4px 2px; text-align: left;
+  }
   .kds-panel-section h3 { font-size: 12px; font-weight: 600; color: var(--text); opacity: 0.5; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
   /* section head row: eyebrow + theme tag (which config is being edited) */
   .kds-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -332,13 +344,18 @@
   }
   .kds-setting-row {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; padding: 10px 12px;
+    gap: 12px; padding: 12px 14px; min-height: 44px; position: relative;
   }
-  .kds-setting-row + .kds-setting-row { border-top: 1px solid var(--border); }
-  .kds-setting-label { font-size: 13px; font-weight: 600; color: var(--text); opacity: 0.85; }
+  /* iOS inset separator: hairline starts at the label text (14px inset
+     from the group edge), and the last row has no separator (the + rule
+     naturally skips it). */
+  .kds-setting-row + .kds-setting-row::before {
+    content: ''; position: absolute; top: 0; left: 14px; right: 0;
+    border-top: 1px solid var(--border);
+  }
+  .kds-setting-label { font-size: 17px; font-weight: 500; color: var(--text); opacity: 0.85; }
   .kds-setting-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .kds-setting-caption { font-size: 13px; color: var(--text); opacity: 0.45; }
-  /* visible keyboard focus anywhere inside the panel — buttons only,
+  .kds-setting-caption { font-size: 13px; color: var(--text); opacity: 0.45; }  /* visible keyboard focus anywhere inside the panel — buttons only,
      the hex/native inputs have their own focus treatment */
   .kds-panel-body button:focus-visible {
     outline: 2px solid #147EFB; outline-offset: 1px;
@@ -355,22 +372,27 @@
      accordion groups: head toggles, body collapses. One open at a time. */
   .kds-acc-head {
     display: flex; align-items: center; justify-content: space-between;
-    width: 100%; padding: 11px 12px;
+    width: 100%; padding: 12px 14px; min-height: 44px;
     background: transparent; border: none; cursor: pointer;
-    font-size: 13px; font-weight: 600; color: var(--text); opacity: 0.85;
+    font-size: 17px; font-weight: 500; color: var(--text); opacity: 0.85;
     font-family: inherit;
+    position: relative;
     transition: background 0.15s;
     -webkit-tap-highlight-color: transparent;
   }
   .kds-acc-head:hover { background: var(--border); }
-  .kds-acc-head:not(:first-child) { border-top: 1px solid var(--border); }
-  .kds-acc-head svg { width: 12px; height: 12px; opacity: 0.5; transition: transform 0.2s; }
+  .kds-acc-head:active { background: var(--bg-hover); }
+  .kds-acc-head:not(:first-child)::before {
+    content: ''; position: absolute; top: 0; left: 14px; right: 0;
+    border-top: 1px solid var(--border);
+  }
+  .kds-acc-head svg { width: 14px; height: 14px; opacity: 0.35; transition: transform 0.2s; }
   .kds-acc-head[aria-expanded="true"] svg { transform: rotate(180deg); }
   .kds-acc-body { padding: 6px 12px 12px; }
   .kds-color-group { margin-bottom: 12px; }
   .kds-color-group:last-child { margin-bottom: 0; }
   .kds-color-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .kds-color-head label { font-size: 13px; color: var(--text); opacity: 0.85; flex: 1; min-width: 0; }
+  .kds-color-head label { font-size: 17px; color: var(--text); opacity: 0.85; flex: 1; min-width: 0; }
   /* native colour picker chip: shows the current colour, click → OS picker.
      36px — the design-language Forms text-input height (2.25rem) */
   .kds-native {
@@ -447,7 +469,7 @@
   .kds-zoom-value {
     width: 80px; height: 36px; padding: 0 14px; text-align: center;
     flex-shrink: 0;
-    font-size: 13px; font-weight: 600; color: var(--text); opacity: 0.85;
+    font-size: 17px; font-weight: 500; color: var(--text); opacity: 0.85;
     cursor: pointer; border-radius: var(--r-sm);
   }
   .kds-zoom-value:hover { opacity: 1; background: var(--border); text-decoration: underline; text-underline-offset: 3px; }
@@ -935,6 +957,7 @@
               </button>
             </div>
           </div>
+          <div class="kds-panel-footer">KDS v2 · Prototype · 0.0.29</div>
         </div>
       </div>
     </div>
