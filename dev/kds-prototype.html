@@ -695,11 +695,15 @@
   }
   .kds-order-notes {
     opacity: 0.55; font-style: italic; font-size: 11px;
-    padding: 6px 13px; /* no border-top — the divider lives on the last
-       category, so a note-less order still gets the separation */
+    padding: 0 13px 6px; /* no border-top — the divider lives on the last
+       category, so a note-less order still gets the separation.
+       Top spacing comes from .kds-card-footer's padding-top, so the
+       note-less footer (buttons only) keeps the same rhythm. */
   }
 
-  .kds-card-footer { flex: 0 0 auto; padding: 0 10px 7px; display: flex; flex-direction: column; gap: 6px; }
+  .kds-card-footer {
+    flex: 0 0 auto; padding: 6px 10px 7px; display: flex; flex-direction: column; gap: 6px;
+  }
   .kds-footer-actions { display: flex; gap: 6px; }
   .kds-footer-actions .kds-status-btn { flex: 1; }
   .kds-status-btn {
