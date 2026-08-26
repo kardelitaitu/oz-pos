@@ -308,13 +308,27 @@
     transform-origin: top right;
   }
   .kds-screen.light .kds-hamburger-panel { --bg-surface: #ffffff; }
-  /* scrollable body — the floating close overlaps the section eyebrow's
-     right side (short left-aligned text, no collision). No dedicated
-     top padding — the panel starts tight. */
+  /* iPadOS sheet header: title left, circular close right. The header
+     owns the dismiss, so the body below can scroll freely. */
+  .kds-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 14px 6px;
+  }
+  .kds-panel-title { font-size: 17px; font-weight: 700; color: var(--text); }
+  .kds-panel-close {
+    width: 28px; height: 28px; padding: 0; border: none; border-radius: 50%;
+    background: var(--bg-hover); color: var(--text); opacity: 0.8;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent; transition: background 0.15s, opacity 0.15s;
+  }
+  .kds-panel-close:hover { background: var(--bg-active); opacity: 1; }
+  .kds-panel-close svg { width: 13px; height: 13px; }
+  /* scrollable body — the sheet header owns the close, so the body has
+     no floating control to dodge. */
   .kds-panel-body {
     max-height: calc(100vh - 80px);
     overflow-y: auto; overflow-x: hidden;
-    padding: 14px;
+    padding: 8px 14px 14px;
     scrollbar-width: thin;
   }
   .kds-panel-section { margin-bottom: 14px; }
@@ -419,17 +433,18 @@
     outline: 2px solid #147EFB; outline-offset: -2px;
     border-color: #147EFB; opacity: 1;
   }
-  /* footer action inside the Card Colours card — scoped, labelled, theme-aware */
+  /* Destructive reset row (iOS red-centred) — lives in its own card */
   .kds-reset-btn {
-    width: 100%; padding: 10px 12px;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    background: transparent; border: none; border-top: 1px solid var(--border);
-    color: var(--text); opacity: 0.65; font-size: 13px; font-weight: 600;
+    width: 100%; padding: 12px 14px; min-height: 44px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: transparent; border: none;
+    color: #ef4444; font-size: 15px; font-weight: 500;
     font-family: inherit;
-    cursor: pointer; transition: all 0.15s;
+    cursor: pointer; transition: background 0.15s;
   }
-  .kds-reset-btn:hover { background: var(--border); opacity: 1; }
-  .kds-reset-btn svg { width: 12px; height: 12px; opacity: 0.6; }
+  .kds-reset-btn:hover { background: var(--bg-hover); }
+  .kds-reset-btn:active { background: var(--bg-active); }
+  .kds-reset-btn svg { width: 14px; height: 14px; opacity: 0.8; }
 
   /* Theme toggle — same slider pattern as the Open/Completed tabs:
    a blue pill indicator slides between Dark/Light with a
@@ -881,6 +896,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="kds-hamburger-panel" id="hamburger-panel" role="dialog" aria-label="Settings" aria-hidden="true" style="display:none;">
+        <!-- iPadOS-style sheet header: title + close, owns the dismiss -->
+        <div class="kds-panel-header">
+          <span class="kds-panel-title" id="panel-title">Settings</span>
+          <button class="kds-panel-close" id="panel-close" aria-label="Close settings" title="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
         <div class="kds-panel-body">
           <!-- DISPLAY: theme + scale -->
           <div class="kds-panel-section">
@@ -951,6 +973,9 @@
             </div>
             <div class="kds-setting-card">
               <div id="color-panel"></div>
+            </div>
+            <!-- Destructive reset row — its own group, centered red text -->
+            <div class="kds-setting-card kds-reset-card">
               <button class="kds-reset-btn" id="reset-colors">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
                 Reset colours
@@ -2217,8 +2242,9 @@
     panel.setAttribute('aria-hidden', String(!showing));
     btn.setAttribute('aria-expanded', showing);
     if (showing) {
-      /* focus trap: keep Tab cycling inside the panel — focus the first
-         control (no close button; outside-click/Escape close it) */
+      /* focus trap: keep Tab cycling inside the panel — focus the
+         sheet header's close button first (outside-click/Escape and
+         the close button all dismiss it) */
       panel._lastFocus = document.activeElement;
       const first = panel.querySelector('button, input, [tabindex]:not([tabindex="-1"])');
       if (first) first.focus();
@@ -2234,6 +2260,11 @@
   document.getElementById('hamburger-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     toggleMenu();
+  });
+  /* sheet header close button — the explicit dismiss */
+  document.getElementById('panel-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMenu(false);
   });
   /* close hamburger on outside click.
      Use composedPath(), not panel.contains(e.target): clicking a swatch
