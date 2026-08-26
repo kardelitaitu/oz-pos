@@ -689,7 +689,12 @@
   .kds-item-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .kds-item-qty { opacity: 0.6; font-size: 12px; }
   .kds-item-row.done .kds-item-qty { opacity: 0.6; }
-  .kds-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; } /* SF Medium — emphasis word of each menu row */
+  /* opposite of the category header: item names are bold (600) while
+     NOT done — the cook's attention belongs on what's left — and drop
+     to regular (500) once checked off (the dimmed done state already
+     reads as finished) */
+  .kds-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .kds-item-row.done .kds-item-name { font-weight: 500; }
   .kds-item-done-time { opacity: 0.45; font-size: 12px; flex-shrink: 0; }
   .kds-item-note {
     opacity: 0.5; font-style: italic; font-size: 12px;
