@@ -443,20 +443,30 @@ const confirmDialogAction = (label = 'Delete') => {
  * Open a tool-rack panel (the redesign collapsed the always-visible sidebar
  * into a right-side icon strip with click-to-open panels). The add panel
  * starts open by default; edit/view/share must be opened explicitly. The
- * rack icon buttons carry `title` from the l10n keys. Idempotent: a second
+ * rack icon buttons carry `aria-label` from the l10n keys. Idempotent: a second
  * open for an already-open panel is a no-op (the icon is a toggle).
  */
 const openRackPanel = (panel: 'add' | 'edit' | 'view' | 'share') => {
-  const title = {
+  const label = {
     add: 'topology-rack-add-title',
     edit: 'topology-rack-edit-title',
     view: 'topology-rack-view-title',
     share: 'topology-rack-share-title',
   }[panel];
-  const btn = document.querySelector(`.rack-icon-btn[title="${title}"]`) as HTMLElement | null;
+  const btn = document.querySelector(`.rack-icon-btn[aria-label="${label}"]`) as HTMLElement | null;
   if (!btn) throw new Error(`rack icon button for '${panel}' panel not found`);
   if (btn.classList.contains('is-active')) return;
   fireEvent.click(btn);
+};
+
+/**
+ * Open the presets popover and click a preset by its text.
+ * The presets are behind a toggle button — they're not in the DOM by default.
+ */
+const openPresetsAndClick = (presetText: string) => {
+  const presetsBtn = screen.getByText('Presets');
+  fireEvent.click(presetsBtn);
+  fireEvent.click(screen.getByText(presetText));
 };
 
 /**
@@ -1174,7 +1184,7 @@ describe('NodeTopologyEditor Component', () => {
     // so a second drop is caught by duplicate detection — not silently
     // stacked as a second wire.
     renderEditor();
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
     await waitFor(() => expect(getWireCount()).toBe(4));
 
     const nodes = [...document.querySelectorAll('.topology-node')];
@@ -1349,7 +1359,7 @@ describe('NodeTopologyEditor Component', () => {
 
     // Clean canvas → the preset loads directly (no confirm dialog) and must
     // close the picker; the keyboard guard then releases.
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     await waitFor(() => expect(document.querySelector('.topology-relationship-picker')).toBeNull());
 
     // The canvas keyboard is responsive again: select a node and nudge it
@@ -1656,8 +1666,7 @@ describe('NodeTopologyEditor Component', () => {
   it('switches to restaurant & KDS preset when clicked', () => {
     renderEditor();
 
-    const restoBtn = screen.getByText('Resto & KDS Preset');
-    fireEvent.click(restoBtn);
+    openPresetsAndClick('Restaurant & KDS Preset');
 
     expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
     expect(screen.getByText('Kitchen KDS')).toBeInTheDocument();
@@ -1670,7 +1679,7 @@ describe('NodeTopologyEditor Component', () => {
     // output. Pin the preset's own data so the port contract cannot
     // regress when the preset is edited.
     renderEditor();
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
 
     const nodes = [...document.querySelectorAll('.topology-node')];
     const kds = nodes.find((n) => n.querySelector('.node-title')?.textContent === 'Kitchen KDS');
@@ -2249,7 +2258,7 @@ describe('NodeTopologyEditor Component', () => {
 
     // A plain click is not an edit — the preset must load directly,
     // without the "unsaved changes" confirm dialog.
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
 
     expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
     // The clicked node stays selected; the inspector header shows the same
@@ -3124,7 +3133,7 @@ function BranchDeleteHarness() {
     // Dirty — the preset load asks for confirmation, then replaces the
     // canvas. store-1 stays selected (both presets have store-1) — the card
     // title AND the inspector header both show the preset name.
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
     const confirmBtn = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
     fireEvent.click(confirmBtn as Element);
     expect(screen.getAllByText('Grand Bistro').length).toBeGreaterThanOrEqual(1);
@@ -3360,7 +3369,7 @@ function BranchDeleteHarness() {
       expect(onSave).toHaveBeenCalledTimes(1);
     });
 
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
 
     // No "Load Preset" confirm dialog — the preset loads directly.
     expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
@@ -3384,7 +3393,7 @@ function BranchDeleteHarness() {
     fireEvent.click(screen.getByText('+ Hardware Node'));
 
     // The new unsaved edit must bring the confirm dialog back.
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
   });
 
@@ -3413,7 +3422,7 @@ function BranchDeleteHarness() {
     fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
     expect(getNodeCount()).toBe(4);
 
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
 
     // Cancel the dialog — the undone-to canvas must survive.
@@ -3426,7 +3435,7 @@ function BranchDeleteHarness() {
     // shown a spurious dialog here).
     fireEvent.keyDown(canvas, { key: 'y', ctrlKey: true });
     expect(getNodeCount()).toBe(5);
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
     expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
     expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
   });
@@ -3435,7 +3444,7 @@ function BranchDeleteHarness() {
     renderEditor();
 
     // Loading the same preset is not an edit — it loads directly.
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
 
     // Undo restores the IDENTICAL retail canvas — it still matches the last
@@ -3446,7 +3455,7 @@ function BranchDeleteHarness() {
     expect(getNodeCount()).toBe(3);
 
     // Clicking the preset again must load directly — no "Load Preset" dialog.
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
   });
@@ -3551,7 +3560,7 @@ function BranchDeleteHarness() {
     // The applied snapshot must contain the REMAPPED ids (the exact arrays
     // set on the canvas) — so a preset click right after the save loads
     // directly with no spurious confirm, even though ids changed on screen.
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
   });
@@ -3791,7 +3800,7 @@ function BranchDeleteHarness() {
     fireEvent.change(nameInput, { target: { value: 'Renamed' } });
 
     // A rename is a real edit — the preset load must ask first.
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
 
     // "Load Preset" appears as both the modal title and the confirm
     // button — either is proof the confirm dialog opened.
@@ -3907,14 +3916,14 @@ function BranchDeleteHarness() {
     // Select w-3 — it exists only in the restaurant preset. (Clicking a
     // wire also cycles its direction, which dirties the canvas — the next
     // preset click therefore asks for confirmation, which the test accepts.)
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
     const hitboxes = document.querySelectorAll('.wire-hitbox');
     expect(hitboxes.length).toBe(4);
     fireEvent.click(hitboxes[2]!);
     openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     // Clicking Retail Preset confirms replacing the (now-dirty) canvas.
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     const confirm = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
     fireEvent.click(confirm!);
 
@@ -3997,7 +4006,7 @@ function BranchDeleteHarness() {
     openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     // The restaurant preset has no warehouse node — the selection is dropped.
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
 
     expect(
       screen.getByText('The selected element is not part of this preset and was deselected.'),
@@ -4008,7 +4017,7 @@ function BranchDeleteHarness() {
     renderEditor();
 
     // Load the restaurant preset, then select w-3 — it exists only there.
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
     const hitboxes = document.querySelectorAll('.wire-hitbox');
     expect(hitboxes.length).toBe(4);
     fireEvent.click(hitboxes[2]!);
@@ -4016,7 +4025,7 @@ function BranchDeleteHarness() {
 
     // Retail preset has only w-1/w-2 — the wire selection is dropped. The
     // click dirties the canvas (direction cycled), so confirm the load.
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     const confirm = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
     fireEvent.click(confirm!);
 
@@ -4436,7 +4445,7 @@ it('does not toast when the selected node survives a preset load', () => {
     fireEvent.mouseDown(store, { button: 0 });
     openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
 
     expect(
       screen.queryByText('The selected element is not part of this preset and was deselected.'),
@@ -6027,7 +6036,7 @@ describe('NodeTopologyEditor — multi-select & marquee', () => {
 
     // The preset replaces the canvas — the box must go, and a release must
     // not commit a phantom selection on the preset's nodes.
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
     expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
     expect(document.querySelector('.topology-marquee')).toBeNull();
 
@@ -6475,7 +6484,7 @@ describe('NodeTopologyEditor — simulation pulse vs canvas mutations', () => {
 
     // Canvas-replacement rule: a preset replaces the topology, so the
     // transient simulation state must reset — pulse gone, interval cleared.
-    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    openPresetsAndClick('Restaurant & KDS Preset');
     expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
     expect(document.querySelector('.wire-simulation-pulse')).toBeNull();
     // The sim button shows the START label — the simulation stopped.
@@ -6581,7 +6590,7 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     // Still dirty WHILE the edit is present: a preset click asks about
     // unsaved changes (confirm dialog title + the unsaved-changes message
     // body are both rendered).
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     expect(screen.getAllByText('Load Preset').length).toBeGreaterThan(0);
     expect(
       screen.getByText(/Loading a preset will replace your current topology/),
@@ -6596,7 +6605,7 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     // The undone-to canvas equals the last applied state (the failed save
     // never updated the applied snapshot), so exact tracking loads the
     // preset directly — NO spurious confirm.
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
   });
@@ -7424,7 +7433,7 @@ describe('NodeTopologyEditor — preset load cancels in-flight connection', () =
 
     // Load the SAME preset mid-connection (no edits yet, so it loads
     // directly without the unsaved-changes dialog).
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
 
     // The canvas was replaced — the in-flight connection must be cancelled:
     // no ghost preview may survive the replacement...
@@ -7637,7 +7646,7 @@ describe('NodeTopologyEditor — dialog Escape isolation', () => {
     const countAfterEdit = getNodeCount();
     expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
 
-    fireEvent.click(screen.getByText('Retail Preset'));
+    openPresetsAndClick('Retail Preset');
     expect(screen.getAllByText('Load Preset').length).toBeGreaterThan(0);
 
     // Escape closes the dialog without loading the preset...

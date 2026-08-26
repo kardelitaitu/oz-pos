@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
+import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 /**
  * PERF-10 — Performance smoke suite (desktop + tablet).
