@@ -873,22 +873,22 @@
   <!-- TOPMENU -->
   <div class="kds-topmenu">
     <div class="kds-topmenu-left">
-      <button class="kds-btn kds-btn--icon" id="back-btn" title="Back" aria-label="Back">
+      <button class="kds-btn kds-btn--icon" id="back-btn" title="Back" aria-label="Back" data-testid="kds-topbar-back">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:18px;height:18px"><path d="M15 19l-7-7 7-7"/></svg>
       </button>
       <div class="kds-filter" id="filter-wrap">
-        <button class="kds-btn kds-btn--filter all" id="filter-btn" aria-haspopup="listbox" aria-expanded="false"><span>All Categories</span><span class="caret"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 9h12l-6 7z"/></svg></span></button>
+        <button class="kds-btn kds-btn--filter all" id="filter-btn" aria-haspopup="listbox" aria-expanded="false" data-testid="kds-topbar-filter"><span>All Categories</span><span class="caret"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 9h12l-6 7z"/></svg></span></button>
         <div class="kds-filter-panel" id="filter-panel" role="listbox" aria-multiselectable="true" style="display:none"></div>
       </div>
     </div>
     <div class="kds-tabs" id="tabs">
       <span class="kds-tab-indicator" id="tab-indicator"></span>
-      <button class="kds-tab active" data-tab="open"><span>Open</span><span class="kds-tab-count" id="count-open">0</span></button>
-      <button class="kds-tab" data-tab="completed"><span>Completed</span><span class="kds-tab-count" id="count-completed">0</span></button>
+      <button class="kds-tab active" data-tab="open" data-testid="kds-tab-open"><span>Open</span><span class="kds-tab-count" id="count-open">0</span></button>
+      <button class="kds-tab" data-tab="completed" data-testid="kds-tab-completed"><span>Completed</span><span class="kds-tab-count" id="count-completed">0</span></button>
     </div>
     <div class="kds-topmenu-right">
-      <button class="kds-btn kds-btn--shift kds-btn--stack" id="shift-btn"><span class="visible">Start Shift</span><span>End Shift</span></button>
-      <button class="kds-btn kds-btn--icon" id="hamburger-btn" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">
+      <button class="kds-btn kds-btn--shift kds-btn--stack" id="shift-btn" data-testid="kds-topbar-shift"><span class="visible">Start Shift</span><span>End Shift</span></button>
+      <button class="kds-btn kds-btn--icon" id="hamburger-btn" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false" data-testid="kds-topbar-settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="kds-hamburger-panel" id="hamburger-panel" role="dialog" aria-label="Settings" aria-hidden="true" style="display:none;">
@@ -899,7 +899,7 @@
             <div class="kds-setting-card">
               <div class="kds-setting-row">
                 <span class="kds-setting-label">Theme</span>
-                <button class="kds-theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light or dark theme">
+                <button class="kds-theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light or dark theme" data-testid="kds-settings-theme-toggle">
                   <span class="kds-theme-indicator" id="theme-indicator"></span>
                   <span class="kds-theme-option" data-theme="dark" aria-label="Dark theme">
                     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
@@ -912,17 +912,17 @@
               <div class="kds-setting-row">
                 <span class="kds-setting-label">Display scale</span>
                 <div class="kds-zoom-row">
-                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-out" aria-label="Zoom out">−</button>
-                  <button class="kds-btn kds-btn--muted kds-zoom-value" id="pagezoom-value" title="Reset to 100%" aria-label="Reset zoom to 100%">100%</button>
-                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-in" aria-label="Zoom in">+</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-out" aria-label="Zoom out" data-testid="kds-settings-zoom-out">−</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-value" id="pagezoom-value" title="Reset to 100%" aria-label="Reset zoom to 100%" data-testid="kds-settings-zoom-value">100%</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="pagezoom-in" aria-label="Zoom in" data-testid="kds-settings-zoom-in">+</button>
                 </div>
               </div>
               <div class="kds-setting-row">
                 <span class="kds-setting-label">Columns</span>
                 <div class="kds-zoom-row">
-                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="cols-out" aria-label="Fewer columns">−</button>
-                  <button class="kds-btn kds-btn--muted kds-zoom-value" id="cols-value" title="Reset to auto" aria-label="Reset columns to auto">Auto</button>
-                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="cols-in" aria-label="More columns">+</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="cols-out" aria-label="Fewer columns" data-testid="kds-settings-cols-out">−</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-value" id="cols-value" title="Reset to auto" aria-label="Reset columns to auto" data-testid="kds-settings-cols-value">Auto</button>
+                  <button class="kds-btn kds-btn--muted kds-zoom-btn" id="cols-in" aria-label="More columns" data-testid="kds-settings-cols-in">+</button>
                 </div>
               </div>
             </div>
@@ -936,21 +936,21 @@
                   <span class="kds-setting-label">New order sound</span>
                   <span class="kds-setting-caption">Chime when an order arrives</span>
                 </div>
-                <button class="kds-switch on" id="toggle-sound" role="switch" aria-checked="true" aria-label="New order sound"></button>
+                <button class="kds-switch on" id="toggle-sound" role="switch" aria-checked="true" aria-label="New order sound" data-testid="kds-settings-sound-toggle"></button>
               </div>
               <div class="kds-setting-row">
                 <div class="kds-setting-text">
                   <span class="kds-setting-label">Auto-accept</span>
                   <span class="kds-setting-caption">New orders appear without tapping Accept</span>
                 </div>
-                <button class="kds-switch" id="toggle-ack" role="switch" aria-checked="false" aria-label="Auto-accept new orders"></button>
+                <button class="kds-switch" id="toggle-ack" role="switch" aria-checked="false" aria-label="Auto-accept new orders" data-testid="kds-settings-autoaccept-toggle"></button>
               </div>
               <div class="kds-setting-row">
                 <div class="kds-setting-text">
                   <span class="kds-setting-label">Card animations</span>
                   <span class="kds-setting-caption">Spawn and reorder effects</span>
                 </div>
-                <button class="kds-switch on" id="toggle-anim" role="switch" aria-checked="true" aria-label="Card spawn and move animations"></button>
+                <button class="kds-switch on" id="toggle-anim" role="switch" aria-checked="true" aria-label="Card spawn and move animations" data-testid="kds-settings-anim-toggle"></button>
               </div>
             </div>
           </div>
@@ -966,7 +966,7 @@
             <!-- Destructive reset row — its own group, centered red text,
                  spaced from the colour card above (see .kds-reset-card) -->
             <div class="kds-setting-card kds-reset-card">
-              <button class="kds-reset-btn" id="reset-colors">
+              <button class="kds-reset-btn" id="reset-colors" data-testid="kds-settings-colors-reset">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
                 Reset colours
               </button>
@@ -1000,8 +1000,8 @@
         <h2 class="kds-modal-title" id="confirm-title"></h2>
         <p class="kds-modal-msg" id="confirm-msg"></p>
         <div class="kds-modal-actions">
-          <button class="kds-btn kds-btn--muted" id="confirm-cancel" type="button">Cancel</button>
-          <button class="kds-btn" id="confirm-ok" type="button">Confirm</button>
+          <button class="kds-btn kds-btn--muted" id="confirm-cancel" type="button" data-testid="kds-confirm-cancel">Cancel</button>
+          <button class="kds-btn" id="confirm-ok" type="button" data-testid="kds-confirm-ok">Confirm</button>
         </div>
       </div>
     </div>
@@ -1554,6 +1554,11 @@
   function plainName(name) {
     return name.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu, '').trim();
   }
+  /* kebab-case slug for data-testid (stable across locales, no emoji,
+     no spaces) — '🥗 Appetizers' → 'appetizers' */
+  function slugify(name) {
+    return plainName(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
   function buildFilterPanel() {
     const panel = document.getElementById('filter-panel');
     /* Completed tab: its own mode row — All / Dine in / Takeaway */
@@ -1568,7 +1573,7 @@
       panel.innerHTML = `
       <div class="kds-filter-modes no-sep">
         ${modes.map(m => `
-        <div class="kds-filter-option mode${completedFilter === m.v ? ' checked' : ''}" data-mode="${m.v}" role="option" tabindex="-1" aria-selected="${completedFilter === m.v}">
+        <div class="kds-filter-option mode${completedFilter === m.v ? ' checked' : ''}" data-mode="${m.v}" role="option" tabindex="-1" aria-selected="${completedFilter === m.v}" data-testid="kds-filter-${m.v}">
           <span>${m.label}</span>
         </div>`).join('')}
       </div>`;
@@ -1578,15 +1583,15 @@
     const allActive = filterMode !== 'prepared' && (!filterCats || filterCats.size === 0);
     const procActive = filterMode === 'prepared';
     const rows = cats.map(c => `
-      <div class="kds-filter-option${filterCats && filterCats.has(c) ? ' checked' : ''}" data-cat="${c}" role="option" tabindex="-1" aria-selected="${filterCats && filterCats.has(c)}">
+      <div class="kds-filter-option${filterCats && filterCats.has(c) ? ' checked' : ''}" data-cat="${c}" role="option" tabindex="-1" aria-selected="${filterCats && filterCats.has(c)}" data-testid="kds-filter-cat-${slugify(plainName(c))}">
         <span>${plainName(c)}</span>
       </div>`).join('');
     panel.innerHTML = `
       <div class="kds-filter-modes">
-        <div class="kds-filter-option mode${allActive ? ' checked' : ''}" data-mode="all" role="option" tabindex="-1" aria-selected="${allActive}">
+        <div class="kds-filter-option mode${allActive ? ' checked' : ''}" data-mode="all" role="option" tabindex="-1" aria-selected="${allActive}" data-testid="kds-filter-all">
           <span>All</span>
         </div>
-        <div class="kds-filter-option mode${procActive ? ' checked' : ''}" data-mode="prepared" role="option" tabindex="-1" aria-selected="${procActive}">
+        <div class="kds-filter-option mode${procActive ? ' checked' : ''}" data-mode="prepared" role="option" tabindex="-1" aria-selected="${procActive}" data-testid="kds-filter-prepared">
           <span>Prepared</span>
         </div>
       </div>
@@ -1709,32 +1714,24 @@
     let btnBg = '', btnText = '';
     if (allDone) {
       btnBg = colors.complete; btnText = contrastText(btnBg);
-      statusBtn = `<button class="kds-status-btn complete" style="background:${btnBg};color:${btnText}" onclick="complete('${o.id}')">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Mark Finish</button>`;
+      statusBtn = `<button class="kds-status-btn complete" style="background:${btnBg};color:${btnText}" onclick="complete('${o.id}')" data-testid="kds-order-card-${o.display}-status-finish">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Mark Finish</button>`;
     } else if (o.status === 'processing' || o.status === 'paused') {
-      /* In-progress orders show the status action (Pause/Resume) plus a
-         Force Finish button — for restaurants WITHOUT a dedicated waiter:
-         the kitchen can push the order out even with unchecked items.
-         Force Finish always confirms with the count, and only appears
-         once work has started (processing or paused) — never on a fresh
-         'new' order with nothing clicked.
-         Distinct from 'Mark Finish' above, which only appears when every
-         item is done (the order is prepared). */
       if (o.status === 'paused') {
         btnBg = colors.resume; btnText = contrastText(btnBg);
-        statusBtn = `<button class="kds-status-btn resume" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Resume</button>`;
+        statusBtn = `<button class="kds-status-btn resume" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')" data-testid="kds-order-card-${o.display}-status-resume">${RESUME_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Resume</button>`;
       } else if (o.status === 'processing') {
         btnBg = colors.pause; btnText = contrastText(btnBg);
-        statusBtn = `<button class="kds-status-btn pause" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')">${PAUSE_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Pause</button>`;
+        statusBtn = `<button class="kds-status-btn pause" style="background:${btnBg};color:${btnText}" onclick="advanceC('${o.id}')" data-testid="kds-order-card-${o.display}-status-pause">${PAUSE_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Pause</button>`;
       }
       /* Force Finish is always paired with the status action while in progress */
-      statusBtn += `<button class="kds-status-btn finish" onclick="overrideComplete('${o.id}', ${remaining}, this)">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Force Finish</button>`;
+      statusBtn += `<button class="kds-status-btn finish" onclick="overrideComplete('${o.id}', ${remaining}, this)" data-testid="kds-order-card-${o.display}-status-force-finish">${FINISH_ICON.replace('<svg', '<svg style="width:14px;height:14px"')}Force Finish</button>`;
     }
     // 'new' status (nothing clicked) → no buttons at all
     const footerActions = statusBtn ? `<div class="kds-footer-actions">${statusBtn}</div>` : '';
 
     return `
-    <div class="kds-card${collapsedOrders.has(o.id) ? ' collapsed' : ''}" data-id="${o.id}" data-received="${o.received}">
-      <button class="kds-card-header" style="background:${hdrBg};color:${hdrText}" onclick="toggleCardCollapsed('${o.id}', this)" aria-expanded="${collapsedOrders.has(o.id) ? 'false' : 'true'}">
+    <div class="kds-card${collapsedOrders.has(o.id) ? ' collapsed' : ''}" data-id="${o.id}" data-received="${o.received}" data-testid="kds-order-card-${o.display}">
+      <button class="kds-card-header" style="background:${hdrBg};color:${hdrText}" onclick="toggleCardCollapsed('${o.id}', this)" aria-expanded="${collapsedOrders.has(o.id) ? 'false' : 'true'}" data-testid="kds-order-card-${o.display}-header">
         <div class="kds-card-header-icon">${o.dineIn ? DINE_ICON : TAKEAWAY_ICON}</div>
         <div class="kds-card-header-left">
           <div class="kds-card-header-row">
@@ -1763,13 +1760,13 @@
             const origIdx = cat._i !== undefined ? cat._i : ci;
             return `
             <div class="kds-category">
-              <button class="kds-category-header" onclick="toggleCatC('${o.id}', ${origIdx})">
+              <button class="kds-category-header" onclick="toggleCatC('${o.id}', ${origIdx})" data-testid="kds-order-card-${o.display}-cat-${slugify(plainName(cat.course))}">
                 <span class="kds-cat-label">${cat.items.filter(i => i.done).length}/${cat.items.length} ${plainName(cat.course)}</span>
                 <span class="kds-cat-check${cat.items.every(i => i.done) ? ' done' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:10px;height:10px"><path d="M4 12.5l5 5L20 6.5"/></svg></span>
               </button>
               ${cat.items.map((it, ii) => `
                 <div class="kds-item">
-                  <button class="kds-item-row${it.done ? ' done' : ''}" onclick="toggleItemC('${o.id}', ${origIdx}, ${ii})">
+                  <button class="kds-item-row${it.done ? ' done' : ''}" onclick="toggleItemC('${o.id}', ${origIdx}, ${ii})" data-testid="kds-order-card-${o.display}-item-${slugify(it.name)}">
                     <span class="kds-item-row-inner">
                       <span class="kds-item-left">
                         <span class="kds-item-qty">${it.qty}×</span>
@@ -1834,8 +1831,8 @@
       </div>
     `).join('');
     return `
-    <div class="kds-card${collapsed ? ' collapsed' : ''}" data-id="${o.id}" data-received="${o.received}">
-      <button class="kds-card-header" style="background:${hdrBg};color:${hdrText}" onclick="toggleCardCollapsed('${o.id}', this)" aria-expanded="${collapsed ? 'false' : 'true'}">
+    <div class="kds-card${collapsed ? ' collapsed' : ''}" data-id="${o.id}" data-received="${o.received}" data-testid="kds-order-card-${o.display}">
+      <button class="kds-card-header" style="background:${hdrBg};color:${hdrText}" onclick="toggleCardCollapsed('${o.id}', this)" aria-expanded="${collapsed ? 'false' : 'true'}" data-testid="kds-order-card-${o.display}-header">
         <div class="kds-card-header-icon">${o.dineIn ? DINE_ICON : TAKEAWAY_ICON}</div>
         <div class="kds-card-header-left">
           <div class="kds-card-header-row">
