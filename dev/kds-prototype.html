@@ -687,9 +687,11 @@
   .kds-screen.light .kds-item-row:active { background: rgba(0,0,0,0.1); }
   .kds-item-row.done { opacity: 0.4; }
   .kds-item-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
-  /* fixed qty column: '2×' vs '12×' share a width so item names AND
-     their notes line up in one column (the note indents to the name) */
-  .kds-item-qty { opacity: 0.6; font-size: 13px; flex-shrink: 0; width: 26px; }
+  /* fixed qty column: '2×' vs '4×' share a width so item names AND
+     their notes line up in one column (the note indents to the name).
+     20px fits the widest single-digit qty ('4×' = 17px glyphs) with
+     ~3px slack — much tighter than a wider fixed column. */
+  .kds-item-qty { opacity: 0.6; font-size: 13px; flex-shrink: 0; width: 20px; }
   .kds-item-row.done .kds-item-qty { opacity: 0.6; }
   /* opposite of the category header: item names are bold (600) while
      NOT done — the cook's attention belongs on what's left — and drop
@@ -700,11 +702,12 @@
   .kds-item-done-time { opacity: 0.45; font-size: 12px; flex-shrink: 0; }
   .kds-item-note {
     opacity: 0.5; font-style: italic; font-size: 12px;
-    /* own line, indented to the item NAME column: 7px row padding +
-       26px fixed qty column + 7px gap = 33px. Vertical space is real
-       (2px above, 3px below) so the note reads as a second line, not
-       a caption glued to the qty. */
-    padding: 2px 0 3px 33px; overflow: hidden; text-align: left;
+    /* own line, indented to the item NAME column: 20px fixed qty
+       column + 7px gap = 27px (the note already inherits the button's
+       7px padding, so its own padding is qty + gap only). Vertical
+       space is real (2px above, 3px below) so the note reads as a
+       second line, not a caption glued to the qty. */
+    padding: 2px 0 3px 27px; overflow: hidden; text-align: left;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   }
   .kds-order-notes {
