@@ -368,9 +368,11 @@ describe('TopologyNodeCard', () => {
       const error = makeValidationError();
       await renderWithFluent(<TopologyNodeCard {...defaultProps({ nodeErrors: [error] })} />);
 
-      const text = screen.getByText('topology-validation-warehouse-at-capacity');
-      expect(text).toBeInTheDocument();
-      expect(text).toHaveClass('node-validation-text');
+      // The message renders twice by design: once inside the hover tooltip
+      // (.node-validation-text) and once as the SR-only span (.node-validation-sr).
+      const texts = screen.getAllByText('topology-validation-warehouse-at-capacity');
+      expect(texts.length).toBeGreaterThan(0);
+      expect(texts.some((el) => el.classList.contains('node-validation-text'))).toBe(true);
     });
 
     it('shows count badge when provided', async () => {
@@ -386,7 +388,9 @@ describe('TopologyNodeCard', () => {
       const error = makeValidationError({ code: 'warehouse-missing-stock-routing' });
       await renderWithFluent(<TopologyNodeCard {...defaultProps({ nodeErrors: [error], onDismissNodeIssue: vi.fn() })} />);
 
-      const dismissBtn = screen.getByRole('button', { name: /topology-validation-dismiss/i });
+      // The dismiss button lives inside the Tooltip content, which is
+      // portal-rendered but aria-hidden until the tooltip shows.
+      const dismissBtn = screen.getByRole('button', { name: /topology-validation-dismiss/i, hidden: true });
       expect(dismissBtn).toBeInTheDocument();
     });
 
@@ -860,7 +864,7 @@ describe('TopologyNodeCard', () => {
       const error = makeValidationError({ code: 'warehouse-missing-stock-routing', messageId: 'topology-validation-warehouse-missing-stock-routing' });
       await renderWithFluent(<TopologyNodeCard {...defaultProps({ nodeErrors: [error], onDismissNodeIssue })} />);
 
-      const dismissBtn = screen.getByRole('button', { name: /topology-validation-dismiss/i });
+      const dismissBtn = screen.getByRole('button', { name: /topology-validation-dismiss/i, hidden: true });
       fireEvent.click(dismissBtn);
       expect(onDismissNodeIssue).toHaveBeenCalledWith('node-1', 'topology-validation-warehouse-missing-stock-routing');
     });
@@ -907,8 +911,8 @@ describe('TopologyNodeCard', () => {
       const error2 = makeValidationError({ code: 'duplicate-node', messageId: 'topology-validation-duplicate-node' });
       await renderWithFluent(<TopologyNodeCard {...defaultProps({ nodeErrors: [error1, error2] })} />);
 
-      // Should show first error
-      expect(screen.getByText('topology-validation-warehouse-at-capacity')).toBeInTheDocument();
+      // Should show first error (again: tooltip + SR-only spans both carry it)
+      expect(screen.getAllByText('topology-validation-warehouse-at-capacity').length).toBeGreaterThan(0);
       // But title should have both
       const note = screen.getByRole('status', { name: /warehouse-at-capacity/i });
       expect(note).toHaveAttribute('title', 'topology-validation-warehouse-at-capacity\ntopology-validation-duplicate-node');

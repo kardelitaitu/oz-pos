@@ -231,7 +231,7 @@ Currently, multiple POS nodes in the topology editor appear as independent works
 - Drag-to-add pattern for new POS terminals within the group
 
 **Files to Modify** (Phase 2):
-- `ui/src/features/stores/topologyEditor.tsx` — Add peer grouping visual
+- `ui/src/features/stores/NodeTopologyEditor.tsx` — Add peer grouping visual
 - `crates/oz-core/src/topology.rs` — Add `peer_group` metadata field (optional)
 
 ## 4. Failure Handling & Recovery (Verified Against Schema)

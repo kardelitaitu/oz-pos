@@ -8,7 +8,7 @@
 //! Module layout (split from one 8.5k-line file to stay under the ~3k-line
 //! guideline): `model` (types + serde), `semantics` (JSON validation
 //! engine), `persistence` (keys, save/load, Apply recovery), `commands`
-//! (the four #[tauri::command] entry points). The root re-exports the
+//! (the three #[tauri::command] entry points). The root re-exports the
 //! public surface (the commands lib.rs registers) and, crate-internally,
 //! the whole flat namespace so the split changes no name the tests use.
 

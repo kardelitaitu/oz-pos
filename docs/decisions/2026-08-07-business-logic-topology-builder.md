@@ -610,11 +610,12 @@ through:
   from the recording-side `semanticPortId`, which stays minimal so persisted
   wire semantics and duplicate detection are stable.
 - **`SEMANTIC_PORT_PAIRINGS` + `canSemanticPortsConnect`** is the closed pairing
-  table: `location-out → location-in`/`operation-in`,
+  table: `location-out → location-in`,
   `stock-out → stock-in`, `ticket-out → ticket-in`,
   `operation-out → operation-in`, `device-out → generic-in`,
   `generic-out → generic-in`. Inputs are never sources; unknown combinations
-  fail closed.
+  fail closed. A Branch Location feeds `location-in` only — a warehouse's
+  `operation-in` is fed by Store POS `operation-out` via the generic row.
 - `isPortCompatible` delegates to the table, so while a wire is being dragged
   only compatible target sockets highlight, and an invalid drop is rejected
   with the `topology-wire-incompatible` toast **before** any wire is drawn.
@@ -659,8 +660,5 @@ wire in the preset's exact recorded format. See the implementation ADR
 - [ADR #4: Store-First Tenancy & Workspace Type/Instance Architecture](2026-07-10-workspace-type-instance-design.md)
 - [ADR #7: Data Scope Guard](2026-07-10-data-scope-guard.md)
 
-> last audited 09-08-26 by buffy
-> audit: Phase 1 Core Architecture & API Docs Audit
-
-> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+> last audited 26-08-26 by docs-auditor
 

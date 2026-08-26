@@ -40,21 +40,28 @@ This implementation ADR records the four decisions that close that gap:
 
 ### 1. The semantic pairing table (`SEMANTIC_PORT_PAIRINGS`)
 
-A single ordered row list in `ui/src/features/stores/topologyCard.ts` is the
-one source of truth for what may connect. Each row pairs a source semantic
-with a target semantic, the typed relationship that combination represents,
-and the Fluent id for its human-readable label:
+A single ordered row list in `ui/src/features/stores/topologySemantics.json` is the
+one source of truth for what may connect (imported by `topologyCard.ts` as
+`SEMANTIC_PORT_PAIRINGS`, and shared with the Rust backend via `include_str!`).
+Each row pairs a source semantic with a target semantic, the typed relationship
+that combination represents, and the Fluent id for its human-readable label:
 
 | Source semantic | Target semantic | Relationship type | Label |
 |---|---|---|---|
 | `location-out` | `location-in` | `location` | Location |
-| `location-out` | `operation-in` | `location` | Location |
+| `operation-out` | `operation-in` | `generic` | Operation |
 | `stock-out` | `stock-in` | `stock-routing` | Stock routing |
 | `transfer-out` | `transfer-in` | `inventory-transfer` | Transfer |
 | `ticket-out` | `ticket-in` | `ticket-routing` | Ticket routing |
-| `operation-out` | `operation-in` | `generic` | Operation |
 | `device-out` | `generic-in` | `hardware-connection` | Device connection |
 | `generic-out` | `generic-in` | `generic` | Generic |
+
+> **Note:** A Branch Location (`location-out`) feeds `location-in` only. A
+> warehouse's `operation-in` is fed by Store POS `operation-out` (via the
+> generic row); the `location-out → operation-in` pairing was not carried
+> into the implementation because the warehouse operation-in requires a
+> Store POS operational feed, not a Branch Location ownership wire. Both
+> the frontend gate and the Rust backend enforce the same 7-row contract.
 
 Rules:
 
@@ -398,8 +405,5 @@ than only upgrading the in-memory editor state.
 - [ADR #22: Visual Node-Based Store & Workspace Topology Builder](2026-07-20-node-based-store-topology-builder.md)
 - [ADR #4: Store-First Tenancy & Workspace Type/Instance Architecture](2026-07-10-workspace-type-instance-design.md)
 
-> last audited 09-08-26 by buffy
-> audit: Phase 1 Core Architecture & API Docs Audit
-
-> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+> last audited 26-08-26 by docs-auditor
 

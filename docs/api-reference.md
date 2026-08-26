@@ -798,6 +798,9 @@ Validates the session token and returns the same compile-time version info. |
 | `apply_topology_diff` | Apply a full topology diff atomically (Critical #4).
 
 Creates, updates, and archives workspace instances within a single |
+| `can_save_topology` | Capability probe: whether the authenticated session may persist topology changes.
+
+Used by the frontend to gate the topology save button; the Apply command repeats the permission check server-side. |
 | `archive_workspace_instance_scoped` | Archive (soft-delete) a workspace instance (admin). ADR #7.
 
 Sets the instance status to `archived`, preserving referential |

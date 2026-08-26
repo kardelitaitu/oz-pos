@@ -120,6 +120,31 @@ Key items:
 
 ---
 
+## Topology — Editor UI (`31-topology-editor-ui.md` — ✅ ALL CLOSED 2026-08-26)
+
+**Status:** **all 7 findings repaired in one commit** (TOP-UI-01→TOP-UI-07). Audit of
+`ui/src/features/stores/` (33 production files, ~12k lines) + docs. No blocking
+findings; verdict was "solid code, stale docs".
+
+Closed items:
+- **TOP-UI-01** — ADR #34 pairing table listed 8 rows; shared contract (`topologySemantics.json`,
+  frontend + Rust `include_str!`) implements 7. `location-out → operation-in` removed from the
+  ADR table with an explanatory note; parent ADR #34 §Slice 1 corrected to match.
+- **TOP-UI-02** — ADR #34 audit stamp (09-08-26) predated 12-08-26 sections; new sections
+  re-verified during this audit, stamp refreshed to 26-08-26.
+- **TOP-UI-03** — ADR #34 cited `topologyCard.ts` as the pairing-table home and row order that
+  drifted from the JSON; doc now references `topologySemantics.json` and matches row order.
+- **TOP-UI-04** — `docs/api-reference.md` missing `can_save_topology` command; row added.
+- **TOP-UI-05** — `topology.rs` module doc said "four #[tauri::command]" but only 3 exist
+  (the 4th is a startup daemon); comment corrected to "three".
+- **TOP-UI-06** — 4 pre-existing `topologyNodeCard.test.tsx` failures (validation text renders
+  twice: tooltip + SR-only span; dismiss button hidden in the tooltip portal); tests now query
+  `getAllByText` / `hidden: true`.
+- **TOP-UI-07** — `docs/multi_pos_one_location_support.md` cited `topologyEditor.tsx`; actual
+  file is `NodeTopologyEditor.tsx`; path corrected.
+
+---
+
 ## How to close these
 
 Each finding's original remediation guidance lives in git history under
