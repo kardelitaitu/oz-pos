@@ -361,8 +361,8 @@
     outline: 2px solid #147EFB; outline-offset: 1px;
   }
 
-  /* Inline colour swatches (in the hamburger panel) —
-     accordion groups: head toggles, body collapses. One open at a time. */
+  /* Card-colour accordion (in the hamburger panel) —
+     head toggles, body collapses. One open at a time. */
   .kds-acc-head {
     display: flex; align-items: center; justify-content: space-between;
     width: 100%; padding: 12px 14px; min-height: 44px;
@@ -394,14 +394,6 @@
   }
   .kds-native::-webkit-color-swatch-wrapper { padding: 3px; }
   .kds-native::-webkit-color-swatch { border-radius: 6px; border: none; }
-  .kds-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
-  .kds-swatch {
-    width: 36px; height: 36px; padding: 0; appearance: none;
-    border-radius: var(--r-sm); border: 2px solid transparent; cursor: pointer;
-    transition: transform 0.1s, border-color 0.1s;
-  }
-  .kds-swatch:hover { transform: scale(1.12); }
-  .kds-swatch.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--bg-top) inset; }
   .kds-hex-input {
     width: 64px; height: 36px; padding: 0 8px; border-radius: var(--r-sm); font-size: 13px;
     border: 1px solid var(--border-strong); background: var(--bg-surface);
@@ -995,9 +987,8 @@
   /* Colour system: 8 configurable colours in 3 semantic groups.
      Every coloured element on a card is driven by these — kitchens
      colour-code differently, so all of them are user-controllable.
-     The swatch palette is shared: a kitchen assigns MEANING to a
-     colour, so the preset set is identical for every slot. */
-  const PALETTE = ['#22c55e', '#147EFB', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+     Custom-only: each slot is set with the native picker or hex input,
+     no preset swatches. */
   const COLOR_GROUPS = [
     { title: 'Service Types', keys: [
       { key: 'dinein', label: 'Dine-in' },
@@ -2119,10 +2110,12 @@
     });
   });
 
-  /* ── card colour panel (generated from COLOR_GROUPS + PALETTE) ──
+  /* ── card colour panel (generated from COLOR_GROUPS) ──
      Accordion groups: each group is a toggle head + collapsible body.
      One group open at a time — the full 8-colour editor stays reachable
-     without the wall of controls the panel used to show. */
+     without the wall of controls the panel used to show.
+     Custom-only: each colour is set with the native picker or the hex
+     input — no preset swatches. */
   function buildColorPanel() {
     const root = document.getElementById('color-panel');
     root.innerHTML = COLOR_GROUPS.map(g => `
@@ -2138,7 +2131,6 @@
               <input type="color" class="kds-native" id="native-${k.key}" data-key="${k.key}" value="${colors[k.key]}" aria-label="${k.label} colour picker">
               <input class="kds-hex-input" id="hex-${k.key}" data-key="${k.key}" spellcheck="false" aria-label="${k.label} hex">
             </div>
-            <div class="kds-swatches" data-key="${k.key}"></div>
           </div>
         `).join('')}
       </div>
@@ -2181,15 +2173,6 @@
        run on a theme switch, where every input is created fresh */
     COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
   }
-  function buildSwatches() {
-    COLOR_GROUPS.forEach(g => g.keys.forEach(k => {
-      const el = document.querySelector(`.kds-swatches[data-key="${k.key}"]`);
-      if (!el) return;
-      el.innerHTML = PALETTE.map(s =>
-        `<button type="button" class="kds-swatch${colors[k.key] === s ? ' active' : ''}" style="background:${s}" data-swatch="${s}" title="${s}" aria-label="${k.label}: ${s}" onclick="pickColor('${k.key}', '${s}')"></button>`
-      ).join('');
-    }));
-  }
   function syncColorRow(key) {
     const hex = document.getElementById('hex-' + key);
     if (hex && document.activeElement !== hex) hex.value = colors[key];
@@ -2201,7 +2184,6 @@
     colorConfigs[currentTheme()] = colors; // write back to THIS theme's slot
     saveColorConfigs();
     syncColorRow(key);
-    buildSwatches();
     render();
   }
 
@@ -2232,11 +2214,9 @@
     toggleMenu();
   });
   /* close hamburger on outside click.
-     Use composedPath(), not panel.contains(e.target): clicking a swatch
-     calls pickColor() → buildSwatches() which REPLACES the swatch DOM
-     mid-click, detaching e.target from the panel. contains() then
-     returns false and the menu wrongly closes. composedPath() captures
-     the ancestor chain at dispatch time, before any DOM mutation. */
+     Use composedPath() rather than panel.contains(e.target) so the
+     ancestor chain is captured at dispatch time before any DOM
+     mutation by a click handler can detach a node from the panel. */
   document.addEventListener('click', (e) => {
     const panel = document.getElementById('hamburger-panel');
     const btn = document.getElementById('hamburger-btn');
@@ -2329,7 +2309,6 @@
       colorConfigs[th] = colors;
       saveColorConfigs();
       COLOR_GROUPS.forEach(g => g.keys.forEach(k => syncColorRow(k.key)));
-      buildSwatches();
       render();
     }, true);
   });
@@ -2383,7 +2362,6 @@
     colors = colorConfigs[currentTheme()];
     updateThemeTag();
     buildColorPanel();
-    buildSwatches();
     render();
   });
   moveThemeIndicator();
@@ -2420,7 +2398,6 @@
   }
   setInterval(tickCardTimers, 1000);
   buildColorPanel();
-  buildSwatches();
   render();
   /* measure the tab pill AFTER the first render: the count badge starts
      as '0' in the static HTML, so measuring earlier would lock the blue
