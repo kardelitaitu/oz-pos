@@ -489,7 +489,7 @@
             <!-- 2-tab: Dark / Light -->
             <div>
               <div class="section-label">Theme Toggle</div>
-              <div class="ms-track" data-active="1" class="ms-track-inner">
+              <div class="ms-track ms-track-inner" data-active="1">
                 <div class="ms-indicator ms-indicator"></div>
                 <button aria-label="Light mode" style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -502,7 +502,7 @@
             <!-- 2-tab: Start / Stop shift -->
             <div>
               <div class="section-label">Action Toggle (Start / Stop)</div>
-              <div class="ms-track" data-colors="#22c55e,#22c55e" class="ms-track-inner">
+              <div class="ms-track ms-track-inner" data-colors="#22c55e,#22c55e">
                 <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:#22c55e; border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
                 <button class="ms-btn ms-btn--wide is-active" data-testid="dl-ms-shift-start">Start</button>
                 <button class="ms-btn ms-btn--wide" data-testid="dl-ms-shift-stop">Stop</button>
@@ -532,7 +532,7 @@
             <!-- 3-tab: Quality -->
             <div>
               <div class="section-label">Quality / Density</div>
-              <div class="ms-track" data-active="1" class="ms-track-inner">
+              <div class="ms-track ms-track-inner" data-active="1">
                 <div class="ms-indicator ms-indicator"></div>
                 <button class="ms-btn">Compact</button>
                 <button class="ms-btn is-active">Normal</button>
@@ -542,7 +542,7 @@
             <!-- 3-tab: Order status filter -->
             <div>
               <div class="section-label">Order Filter</div>
-              <div class="ms-track" data-active="2" data-colors="var(--primary),var(--primary),var(--danger)" class="ms-track-inner">
+              <div class="ms-track ms-track-inner" data-active="2" data-colors="var(--primary),var(--primary),var(--danger)">
                 <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:var(--danger); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
                 <button class="ms-btn">Active</button>
                 <button class="ms-btn">Ready</button>
@@ -1590,19 +1590,19 @@ input[role="switch"]:checked ~ .toggle-knob {
             <!-- Error -->
             <div>
               <label for="dl-input-port-error" class="form-label">Port number</label>
-              <input type="text" id="dl-input-port-error" value="abc" class="validate" data-testid="dl-input-port-error" class="input-field input-field--error">
+              <input type="text" id="dl-input-port-error" value="abc" data-testid="dl-input-port-error" class="validate input-field input-field--error">
               <span style="display:block; font-size:11px; color:var(--danger); margin-top:4px; font-weight:500">Must be a number between 1–65535</span>
             </div>
             <!-- Success -->
             <div>
               <label for="dl-input-ip-success" class="form-label">IP address</label>
-              <input type="text" id="dl-input-ip-success" value="192.168.1.100" class="validate" data-testid="dl-input-ip-success" class="input-field input-field--success">
+              <input type="text" id="dl-input-ip-success" value="192.168.1.100" data-testid="dl-input-ip-success" class="validate input-field input-field--success">
               <span style="display:block; font-size:11px; color:var(--success); margin-top:4px; font-weight:500">Connection successful</span>
             </div>
             <!-- Warning -->
             <div>
               <label for="dl-input-sla-warning" class="form-label">SLA threshold</label>
-              <input type="text" id="dl-input-sla-warning" value="14" class="validate" data-testid="dl-input-sla-warning" class="input-field input-field--warning">
+              <input type="text" id="dl-input-sla-warning" value="14" data-testid="dl-input-sla-warning" class="validate input-field input-field--warning">
               <span style="display:block; font-size:11px; color:var(--warning); margin-top:4px; font-weight:500">Above recommended maximum (12 min)</span>
             </div>
           </div>
