@@ -141,7 +141,7 @@
   /* hover bg only on unselected options — an ACTIVE (blue) option keeps
      its colour; hover there is just the gentle pop on the label */
   .kds-filter-option:not(.checked):hover { background: rgba(255,255,255,0.07); }
-  .kds-filter-option.checked { background: #3b82f6; color: #fff; opacity: 1; }
+  .kds-filter-option.checked { background: #147EFB; color: #fff; opacity: 1; }
   /* view-mode row (All / Prepared) above the category grid */
   .kds-filter-modes { display: flex; gap: 4px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
   /* Up to 3 columns; each button is only as wide as its label (max-content) */
@@ -151,7 +151,7 @@
   .kds-screen.light .kds-tabs { background: rgba(0,0,0,0.1); }
   .kds-tab-indicator {
     position: absolute; top: 3px; left: 3px; bottom: 3px;
-    background: #3b82f6; border-radius: var(--r-sm);
+    background: #147EFB; border-radius: var(--r-sm);
     transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
     pointer-events: none;
     transform-origin: center;
@@ -202,11 +202,11 @@
        --filter → caret + 'all' blue state (category dropdown trigger)
        --muted  → translucent (tabs, idle controls) */
   .kds-btn {
-    --btn-bg: #3b82f6;        /* default colour */
+    --btn-bg: #147EFB;        /* default colour */
     --btn-fg: #fff;
-    --btn-hover: #2563eb;     /* normal hover (lighter blue) */
-    --btn-active: #1d4ed8;    /* pressed */
-    --btn-state: #3b82f6;     /* persistent .is-active state */
+    --btn-hover: #1168D4;     /* normal hover (darker blue) */
+    --btn-active: #0D52AD;    /* pressed */
+    --btn-state: #147EFB;     /* persistent .is-active state */
     --btn-state-hover: #ef4444; /* hover while in state */
     padding: 3px 16px; border-radius: var(--r-sm); border: none;
     background: var(--btn-bg); color: var(--btn-fg); opacity: 1;
@@ -256,7 +256,7 @@
   /* --filter: caret rotation + blue 'all' state — height matches the
      34px shift button and tab slider track */
   .kds-btn--filter { min-height: 34px; --btn-bg: rgba(255,255,255,0.06); --btn-fg: var(--text); --btn-hover: rgba(255,255,255,0.08); --btn-active: rgba(255,255,255,0.12); }
-  .kds-btn--filter.all { background: #3b82f6; color: #fff; opacity: 1; }
+  .kds-btn--filter.all { background: #147EFB; color: #fff; opacity: 1; }
   .kds-btn--filter.all .caret { opacity: 0.7; }
   .kds-btn--filter .caret { opacity: 0.5; display: inline-flex; align-items: center; transition: transform 0.2s; }
   .kds-btn--filter .caret svg { width: 18px; height: 18px; }
@@ -272,7 +272,7 @@
     min-height: 34px;
     --btn-hover: #22c55e;      /* starting → green */
     --btn-active: #16a34a;
-    --btn-state: #3b82f6;
+    --btn-state: #147EFB;
     --btn-state-hover: #ef4444; /* stopping → red */
   }
   /* Variant: plain/muted (tabs, filter when not active) */
@@ -336,14 +336,14 @@
   /* visible keyboard focus anywhere inside the panel — buttons only,
      the hex/native inputs have their own focus treatment */
   .kds-panel-body button:focus-visible {
-    outline: 2px solid #3b82f6; outline-offset: 1px;
+    outline: 2px solid #147EFB; outline-offset: 1px;
   }
   /* P4: visible keyboard focus across the whole screen (tabs, item
      rows, category headers, status buttons, filter options, inputs) */
   .kds-screen button:focus-visible,
   .kds-screen [role="option"]:focus-visible,
   .kds-screen input:focus-visible {
-    outline: 2px solid #3b82f6; outline-offset: 1px;
+    outline: 2px solid #147EFB; outline-offset: 1px;
   }
 
   /* Inline colour swatches (in the hamburger panel) —
@@ -387,7 +387,7 @@
     color: var(--text); opacity: 0.8; text-align: center; font-family: ui-monospace, monospace;
     transition: all 0.15s; flex-shrink: 0;
   }
-  .kds-hex-input:focus { outline: none; border-color: #3b82f6; opacity: 1; }
+  .kds-hex-input:focus { outline: none; border-color: #147EFB; opacity: 1; }
   /* footer action inside the Card Colours card — scoped, labelled, theme-aware */
   .kds-reset-btn {
     width: 100%; padding: 10px 12px;
@@ -413,7 +413,7 @@
   .kds-screen.light .kds-theme-toggle { background: rgba(0,0,0,0.08); }
   .kds-theme-indicator {
     position: absolute; top: 3px; left: 3px; bottom: 3px;
-    background: #3b82f6; border-radius: 7px;
+    background: #147EFB; border-radius: 7px;
     transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
     pointer-events: none;
     transform-origin: center;
@@ -762,11 +762,11 @@
     width: 18px; height: 18px; border-radius: 50%; background: #fff;
     transition: transform 0.2s;
   }
-  .kds-switch.on { background: #3b82f6; }
+  .kds-switch.on { background: #147EFB; }
   .kds-switch.on::after { transform: translateX(18px); }
   /* light theme: darken the switch track so it is visible on white */
   .kds-screen.light .kds-switch { background: rgba(0,0,0,0.08); }
-  .kds-screen.light .kds-switch.on { background: #3b82f6; }
+  .kds-screen.light .kds-switch.on { background: #147EFB; }
   /* light theme: muted helper buttons (zoom steppers, filter idle) need
      dark overlays — the dark-theme white tokens vanish on white cards */
   .kds-screen.light .kds-btn--muted {
@@ -966,7 +966,7 @@
      colour-code differently, so all of them are user-controllable.
      The swatch palette is shared: a kitchen assigns MEANING to a
      colour, so the preset set is identical for every slot. */
-  const PALETTE = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+  const PALETTE = ['#22c55e', '#147EFB', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
   const COLOR_GROUPS = [
     { title: 'Service Types', keys: [
       { key: 'dinein', label: 'Dine-in' },
@@ -984,9 +984,9 @@
     ]},
   ];
   const DEFAULT_COLORS_DARK = {
-    dinein: '#22c55e', takeaway: '#3b82f6',
+    dinein: '#22c55e', takeaway: '#147EFB',
     rush: '#ef4444', processing: '#f59e0b', prepared: '#22c55e',
-    pause: '#f59e0b', resume: '#3b82f6', complete: '#4ade80',
+    pause: '#f59e0b', resume: '#147EFB', complete: '#4ade80',
   };
   /* Light theme defaults — tuned for white surfaces (muted, desaturated
      headers; dark prepared/complete for contrast on light cards) */
