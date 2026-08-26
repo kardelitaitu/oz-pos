@@ -18,8 +18,8 @@
 # Required secrets (Settings → Secrets and variables → Actions):
 #   CLOUDFLARE_API_TOKEN   — token with Workers Scripts:Edit
 #                            (wrangler.toml → name "oz-pos")
-#   CLOUDFLARE_ACCOUNT_ID  — Cloudflare account id (dash.cloudflare.com)  #   PUBLIC_LICENSE_API_URL — https://oz--cloud--76cyv4d6bn54.code.run
-  #                            (unified Northflank service, runbook §8)
+#   CLOUDFLARE_ACCOUNT_ID  — Cloudflare account id (dash.cloudflare.com)  #   PUBLIC_LICENSE_API_URL — https://license.ozpos.my.id
+  #                            (unified service, runbook §8)
 #   PUBLIC_PADDLE_CLIENT_TOKEN — Paddle.js v2 client token (optional:
 #                            without it the checkout buttons degrade to
 #                            the mailto fallback at build time)
