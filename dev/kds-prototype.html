@@ -308,10 +308,15 @@
     transform-origin: top right;
   }
   .kds-screen.light .kds-hamburger-panel { --bg-surface: #ffffff; }
-  /* scrollable body — no header, the panel starts with its sections */
+  /* scrollable body — no header, the panel starts with its sections.
+     overflow-y: overlay floats the scrollbar OVER the content instead
+     of reserving layout width, so the rows never shift when the panel
+     grows tall enough to scroll (Chromium-only; acceptable for the KDS
+     tablet target — same justification as the page-zoom note). Firefox
+     falls back to auto + scrollbar-width: thin. */
   .kds-panel-body {
     max-height: calc(100vh - 80px);
-    overflow-y: auto; overflow-x: hidden;
+    overflow-y: overlay; overflow-x: hidden;
     padding: 14px;
     scrollbar-width: thin;
   }
