@@ -146,11 +146,11 @@
   .kds-filter-modes { display: flex; gap: 4px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
   /* Up to 3 columns; each button is only as wide as its label (max-content) */
   .kds-filter-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 3px; justify-content: start; }
-  .kds-tabs { position: relative; display: flex; gap: 4px; background: rgba(255,255,255,0.06); border-radius: var(--r-sm); padding: 2px; justify-self: center; }
+  .kds-tabs { position: relative; display: flex; gap: 4px; background: rgba(255,255,255,0.06); border-radius: var(--r-sm); padding: 3px; justify-self: center; }
   /* light theme: white track is invisible on the white topmenu → darken */
   .kds-screen.light .kds-tabs { background: rgba(0,0,0,0.1); }
   .kds-tab-indicator {
-    position: absolute; top: 2px; left: 2px; bottom: 2px;
+    position: absolute; top: 3px; left: 3px; bottom: 3px;
     background: #3b82f6; border-radius: var(--r-sm);
     transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
     pointer-events: none;
@@ -213,8 +213,9 @@
     gap: 6px;
     -webkit-tap-highlight-color: transparent;
     /* Heights are border-box (see * rule): min-height 22px → 22px total.
-       Text buttons sit at 22px; icon buttons are 32×32; the shift
-       variant overrides min-height to 28px to match the tab pill. */
+       Text buttons sit at 22px; icon buttons are 40×40 (design-language
+       icon-only rule); the shift/filter variants override min-height to
+       34px to match the tab slider track. */
     min-height: 22px;
   }
   .kds-btn:hover { background: var(--btn-hover); }
@@ -238,10 +239,10 @@
   .kds-btn--stack > span.visible { opacity: 1; }
 
   /* --icon: square transparent icon button (back, hamburger, any SVG).
-     Stays 32×32 — bigger tap target; text buttons match the 28px tab
-     slider instead. */
+     Stays 40×40 — design-language icon-only rule: hit area stays 40px
+     (large enough for a fingertip). */
   .kds-btn--icon {
-    width: 32px; height: 32px; padding: 0;
+    width: 40px; height: 40px; padding: 0;
     background: transparent; color: var(--text); opacity: 0.7;
   }
   .kds-btn--icon:hover { background: rgba(255,255,255,0.08); opacity: 1; }
@@ -249,8 +250,8 @@
   .kds-btn--icon svg { width: 18px; height: 18px; transform-box: fill-box; }
 
   /* --filter: caret rotation + blue 'all' state — height matches the
-     28px shift button and tab slider pill */
-  .kds-btn--filter { min-height: 28px; --btn-bg: rgba(255,255,255,0.06); --btn-fg: var(--text); --btn-hover: rgba(255,255,255,0.08); --btn-active: rgba(255,255,255,0.12); }
+     34px shift button and tab slider track */
+  .kds-btn--filter { min-height: 34px; --btn-bg: rgba(255,255,255,0.06); --btn-fg: var(--text); --btn-hover: rgba(255,255,255,0.08); --btn-active: rgba(255,255,255,0.12); }
   .kds-btn--filter.all { background: #3b82f6; color: #fff; opacity: 1; }
   .kds-btn--filter.all .caret { opacity: 0.7; }
   .kds-btn--filter .caret { opacity: 0.5; display: inline-flex; align-items: center; transition: transform 0.2s; }
@@ -260,11 +261,11 @@
   /* Variant: start/end shift — blue rest; GREEN hover when starting
      (not in shift), RED hover when stopping (in shift, destructive).
      The .is-active state decides which hover colour applies.
-     min-height: 28px — the blue backdrop matches the Open/Completed
-     tab slider pill (28px). Everything is border-box, so this IS the
+     min-height: 34px — the blue backdrop matches the Open/Completed
+     tab slider track (34px). Everything is border-box, so this IS the
      final height (22px base + this override). */
   .kds-btn--shift {
-    min-height: 28px;
+    min-height: 34px;
     --btn-hover: #22c55e;      /* starting → green */
     --btn-active: #16a34a;
     --btn-state: #3b82f6;
