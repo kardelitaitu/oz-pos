@@ -308,13 +308,12 @@
     transform-origin: top right;
   }
   .kds-screen.light .kds-hamburger-panel { --bg-surface: #ffffff; }
-  /* iPadOS sheet header: title left, circular close right. The header
-     owns the dismiss, so the body below can scroll freely. */
+  /* Sheet header: title-less — just the circular close, pushed right.
+     The hamburger icon already names the panel, so no title text. */
   .kds-panel-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 14px 6px;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 10px 14px 0;
   }
-  .kds-panel-title { font-size: 17px; font-weight: 700; color: var(--text); }
   .kds-panel-close {
     width: 28px; height: 28px; padding: 0; border: none; border-radius: 50%;
     background: var(--bg-hover); color: var(--text); opacity: 0.8;
@@ -891,9 +890,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="kds-hamburger-panel" id="hamburger-panel" role="dialog" aria-label="Settings" aria-hidden="true" style="display:none;">
-        <!-- iPadOS-style sheet header: title + close, owns the dismiss -->
+        <!-- Sheet header: just the close button — the hamburger icon
+             already labels the panel as settings. -->
         <div class="kds-panel-header">
-          <span class="kds-panel-title" id="panel-title">Settings</span>
           <button class="kds-panel-close" id="panel-close" aria-label="Close settings" title="Close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
