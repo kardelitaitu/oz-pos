@@ -161,6 +161,10 @@
     padding: 5px 16px; border-radius: var(--r-sm); border: none;
     background: transparent; color: var(--text); opacity: 0.5; cursor: pointer; font-size: 13px;
     font-weight: 600; /* constant weight → no text reflow on active */
+    /* 34px min-height (design-language Small) — same tier as the
+       filter/shift buttons; the 18px line-height still pins the label
+       and count badge on one baseline inside the taller box */
+    min-height: 34px;
     line-height: 18px; /* fixed line-height — text (13px) and count (12px)
        share the same box height, so align-items: center aligns both
        perfectly; without this the default line-heights differ and the
