@@ -308,26 +308,11 @@
     transform-origin: top right;
   }
   .kds-screen.light .kds-hamburger-panel { --bg-surface: #ffffff; }
-  /* Sheet header: title-less — just the circular close, pushed right.
-     The hamburger icon already names the panel, so no title text. */
-  .kds-panel-header {
-    display: flex; align-items: center; justify-content: flex-end;
-    padding: 10px 14px 0;
-  }
-  .kds-panel-close {
-    width: 28px; height: 28px; padding: 0; border: none; border-radius: 50%;
-    background: var(--bg-hover); color: var(--text); opacity: 0.8;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    -webkit-tap-highlight-color: transparent; transition: background 0.15s, opacity 0.15s;
-  }
-  .kds-panel-close:hover { background: var(--bg-active); opacity: 1; }
-  .kds-panel-close svg { width: 13px; height: 13px; }
-  /* scrollable body — the sheet header owns the close, so the body has
-     no floating control to dodge. */
+  /* scrollable body — no header, the panel starts with its sections */
   .kds-panel-body {
     max-height: calc(100vh - 80px);
     overflow-y: auto; overflow-x: hidden;
-    padding: 8px 14px 14px;
+    padding: 14px;
     scrollbar-width: thin;
   }
   .kds-panel-section { margin-bottom: 14px; }
@@ -890,13 +875,6 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="kds-hamburger-panel" id="hamburger-panel" role="dialog" aria-label="Settings" aria-hidden="true" style="display:none;">
-        <!-- Sheet header: just the close button — the hamburger icon
-             already labels the panel as settings. -->
-        <div class="kds-panel-header">
-          <button class="kds-panel-close" id="panel-close" aria-label="Close settings" title="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </button>
-        </div>
         <div class="kds-panel-body">
           <!-- DISPLAY: theme + scale -->
           <div class="kds-panel-section">
@@ -2235,9 +2213,8 @@
     panel.setAttribute('aria-hidden', String(!showing));
     btn.setAttribute('aria-expanded', showing);
     if (showing) {
-      /* focus trap: keep Tab cycling inside the panel — focus the
-         sheet header's close button first (outside-click/Escape and
-         the close button all dismiss it) */
+      /* focus trap: keep Tab cycling inside the panel — focus the first
+         control (outside-click and Escape dismiss it) */
       panel._lastFocus = document.activeElement;
       const first = panel.querySelector('button, input, [tabindex]:not([tabindex="-1"])');
       if (first) first.focus();
@@ -2253,11 +2230,6 @@
   document.getElementById('hamburger-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     toggleMenu();
-  });
-  /* sheet header close button — the explicit dismiss */
-  document.getElementById('panel-close').addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleMenu(false);
   });
   /* close hamburger on outside click.
      Use composedPath(), not panel.contains(e.target): clicking a swatch
