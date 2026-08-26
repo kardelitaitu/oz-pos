@@ -61,7 +61,7 @@ import { TopologyApplyValidationError } from './topologyApply';
 import { layoutGhosts, buildGhostWireStubs, compareFocusDimIds, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
-import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
+import { cubicBezier, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
 import { historyEntry, validWiresForNodes } from './topologyHistoryIntegrity';
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
@@ -2731,8 +2731,6 @@ export default function NodeTopologyEditor({
     cancelConnection();
     setHoveredTarget(null);
     clearHover();
-    setIsSimulating(false);
-    setSimPulseStep(0);
     cancelMarquee();
     cancelBendDrag();
     setContextMenu(null);
@@ -2742,8 +2740,6 @@ export default function NodeTopologyEditor({
     cancelConnection,
     setHoveredTarget,
     clearHover,
-    setIsSimulating,
-    setSimPulseStep,
     cancelMarquee,
     cancelBendDrag,
     setContextMenu,
