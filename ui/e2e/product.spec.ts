@@ -99,7 +99,6 @@ test.describe('Product Management', () => {
     // Click "Edit" on the first product row.
     const editBtn = page.locator('.product-mgmt-action-btn').filter({ hasText: 'Edit' }).first();
     await editBtn.click();
-    await page.waitForTimeout(500);
 
     // Edit modal must appear.
     await expect(page.locator('.product-mgmt-overlay')).toBeVisible({ timeout: 5_000 });

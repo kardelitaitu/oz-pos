@@ -46,7 +46,7 @@ manually:
 
 ```bash
 cd website
-PUBLIC_LICENSE_API_URL=https://license.oz-pos.com \
+PUBLIC_LICENSE_API_URL=https://license.ozpos.my.id \
 PUBLIC_PADDLE_CLIENT_TOKEN=<token> \
 PUBLIC_PADDLE_ENVIRONMENT=sandbox \
 npm run build

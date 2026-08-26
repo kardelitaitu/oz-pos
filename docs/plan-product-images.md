@@ -32,10 +32,10 @@ website/src/content/pricing/en.ts  (CANONICAL SOURCE)
 
 | Tier | Stores | Registers | Warehouses | Staff | Sales History | Products (NEW) | Images Synced (NEW) |
 |------|--------|-----------|------------|-------|---------------|----------------|---------------------|
-| Free | 1 | 1 | 1 | 1 | 30 days | 200 | No (local only) |
-| Plus | 1 | 2 | 2 | 5 | Unlimited | 500 | Yes |
-| Pro | 2 | 5 | 3 | 20 | Unlimited | 2,000 | Yes |
-| Premium | Unlimited | Unlimited | Unlimited | Unlimited | Unlimited | 5,000 | Yes |
+| Free | 1 | 1 | 1 | 1 | 3 months | 200 | No (local only) |
+| Plus | 1 | 2 | 2 | 5 | 1 year | 500 | Yes |
+| Pro | 2 | 5 | 3 | 20 | 5 years | 1,000 | Yes |
+| Premium | 5 | Unlimited | Unlimited | 50 | Unlimited | 10,000 | Yes |
 | Enterprise | Unlimited | Unlimited | Unlimited | Unlimited | Unlimited | Unlimited | Yes |
 
 ### Step 1: Update Website (en.ts)
@@ -62,7 +62,7 @@ export const pricing: PricingTier[] = [
 // Add to featureRows:
 export const featureRows: FeatureRow[] = [
   // ... existing rows ...
-  { label: 'Max products', values: { free: 200, plus: 500, pro: 2000, premium: 5000, enterprise: 'Unlimited' } },
+  { label: 'Max products', values: { free: 200, plus: 500, pro: 1000, premium: 10000, enterprise: 'Unlimited' } },
   { label: 'Product image sync', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
 ];
 ```
@@ -87,8 +87,8 @@ node scripts/generate-tier-config.mjs
 pub const TIER_MAX_PRODUCTS: &[(&str, Option<i64>)] = &[
     ("free", Some(200)),
     ("plus", Some(500)),
-    ("pro", Some(2_000)),
-    ("premium", Some(5_000)),
+    ("pro", Some(1_000)),
+    ("premium", Some(10_000)),
     ("enterprise", None),
 ];
 
@@ -107,8 +107,8 @@ pub const TIER_SUPPORTS_IMAGE_SYNC: &[(&str, bool)] = &[
 |------|-------------|---------------|------------|----------------|
 | **Free** | 200 | **No** (local only) | 12 KB | **0** |
 | **Plus** | 500 | Yes | 12 KB | 6 MB |
-| **Pro** | 2,000 | Yes | 12 KB | 24 MB |
-| **Premium** | 5,000 | Yes | 12 KB | 60 MB |
+| **Pro** | 1,000 | Yes | 12 KB | 12 MB |
+| **Premium** | 10,000 | Yes | 12 KB | 120 MB |
 | **Enterprise** | Unlimited | Yes | 12 KB | 6 GB max |
 
 **Why Free images are local-only:**
@@ -127,8 +127,8 @@ pub const TIER_SUPPORTS_IMAGE_SYNC: &[(&str, bool)] = &[
 - 6 GB NVMe volume was sitting empty (0.02 GB used)
 - 512×512 WebP @ 40% = ~12 KB per image (very compact)
 - Free tier gets 200 products (local only, no server storage)
-- Premium gets 5,000 — covers large retailers with full catalogs
-- Realistic max: 100 Premium tenants × 5,000 products = 600 MB (10% of volume)
+- Premium gets 10,000 — covers large retailers with full catalogs
+- Realistic max: 100 Premium tenants × 10,000 products = 1.2 GB (20% of volume)
 
 ## Storage Layout
 
@@ -463,15 +463,15 @@ async fn cleanup_orphaned_images() -> Result<()> {
   - File: `website/src/content/pricing/en.ts`
   - Add `{ label: '200 products', included: true }` to Free tier
   - Add `{ label: '500 products', included: true }` to Plus tier
-  - Add `{ label: '2,000 products', included: true }` to Pro tier
-  - Add `{ label: '5,000 products', included: true }` to Premium tier
+  - Add `{ label: '1,000 products', included: true }` to Pro tier
+  - Add `{ label: '10,000 products', included: true }` to Premium tier
   - Add `{ label: 'Unlimited products', included: true }` to Enterprise tier
 - [ ] 1.2 Add product image sync to features
   - Add `{ label: 'Product images (local only)', included: true }` to Free
   - Add `{ label: 'Product image sync', included: true }` to Plus+
 - [ ] 1.3 Update `featureRows` comparison table
   - File: `website/src/content/pricing/en.ts`
-  - Add `{ label: 'Max products', values: { free: 200, plus: 500, pro: 2000, premium: 5000, enterprise: 'Unlimited' } }`
+  - Add `{ label: 'Max products', values: { free: 200, plus: 500, pro: 1000, premium: 10000, enterprise: 'Unlimited' } }`
   - Add `{ label: 'Product image sync', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } }`
 - [ ] 1.4 Update Indonesian pricing (`id.ts`)
   - File: `website/src/content/pricing/id.ts`
@@ -775,8 +775,8 @@ ALTER TABLE products ADD COLUMN has_image INTEGER NOT NULL DEFAULT 0;
 **Storage Breakdown:**
 - Free tier: 0 GB (local only)
 - Plus tier: ~600 MB (100 tenants × 500 products × 12 KB)
-- Pro tier: ~1.2 GB (50 tenants × 2,000 products × 12 KB)
-- Premium tier: ~600 MB (10 tenants × 5,000 products × 12 KB)
+- Pro tier: ~600 MB (50 tenants × 1,000 products × 12 KB)
+- Premium tier: ~1.2 GB (10 tenants × 10,000 products × 12 KB)
 - **Total: ~2.4 GB** (40% of 6 GB volume)
 
 ## Security Considerations

@@ -1,9 +1,8 @@
 # OZ-POS Website — Cloudflare Workers (static assets)
 #
-# The site is a pure static build (Astro outputs dist/), served from a
-# workers.dev URL until the oz-pos.com domain is bought. Workers static
-# assets honors public/_headers (CSP) and public/_redirects (301s) exactly
-# like Pages does.
+# The site is a pure static build (Astro outputs dist/), served at
+# https://ozpos.my.id. Workers static assets honors public/_headers (CSP)
+# and public/_redirects (301s) exactly like Pages does.
 #
 # Deploy (from website/):   npm run build && npx wrangler deploy
 # Or via CI:                .github/workflows/website.yml
@@ -29,7 +28,7 @@ compatibility_date = "2026-08-16"
 # Runtime backend URL — overrides the build-time PUBLIC_LICENSE_API_URL.
 # Update this (dashboard → Worker → Settings → Variables, or wrangler.toml)
 # when the Northflank host changes; no site rebuild required.
-LICENSE_API_URL = "https://oz--cloud--76cyv4d6bn54.code.run"
+LICENSE_API_URL = "https://license.ozpos.my.id"
 
 # PUBLIC_* env vars are baked into the JS at BUILD time (import.meta.env),
 # so they are NOT bindings — set them when running `npm run build`:

@@ -107,8 +107,8 @@ PocketBase runs as a single container on Northflank with a persistent NVMe volum
 │  └──────────────────────────────────────┘    │
 │                                               │
 │  Northflank Ingress (HTTPS):                  │
-│  ├── license.oz-pos.com/api/* → :8080        │
-│  ├── license.oz-pos.com/_/    → :8080        │
+│  ├── license.ozpos.my.id/api/* → :8080        │
+│  ├── license.ozpos.my.id/_/    → :8080        │
 │  └── TLS auto-provisioned                    │
 └──────────────────────────────────────────────┘
         ▲                          ▲
@@ -123,7 +123,7 @@ PocketBase runs as a single container on Northflank with a persistent NVMe volum
 3. Set environment variables: `OZ_LICENSE_PRIVATE_KEY`
 4. After first deploy, SSH in and create the admin user:
    ```bash
-   /pb/pocketbase superuser upsert admin@oz-pos.com <password>
+   /pb/pocketbase superuser upsert admin@ozpos.my.id <password>
    ```
 5. Import the collections schema (see §4) via the admin UI or API
 
@@ -680,7 +680,7 @@ The POS binary embeds the license server URL at build time:
 
 ```rust
 // In crates/oz-core or a build script
-pub const LICENSE_SERVER_URL: &str = "https://license.oz-pos.com";
+pub const LICENSE_SERVER_URL: &str = "https://license.ozpos.my.id";
 ```
 
 Override via env var for testing:
@@ -768,7 +768,7 @@ The `api_key` is stored once on activation and reused for all subsequent renew a
 - [x] **Step 3.3**: Generate RSA-2048 key pair — public key embedded in `crates/oz-core/oz-license.key.pub`; private key in `crates/oz-core/oz-license-private.pem` (gitignored, to be set as `OZ_LICENSE_PRIVATE_KEY` env var on Northflank). Key generation scripts: `scripts/generate-license-keys.ps1` (Windows) + `scripts/generate-license-keys.sh` (Linux/Mac).
 - [x] **Step 3.4**: Create production Dockerfile (`apps/license-server/Dockerfile`) — multi-stage build (golang:1.23-alpine → alpine:3.20), CGO_ENABLED=1, healthcheck using `/api/` (PocketBase always responds), volume mount. `.dockerignore` excludes test files and build artifacts. `apps/license-server/docker-compose.yml` for local testing. `apps/license-server/DEPLOY.md` is the comprehensive 12-step Northflank deployment guide.
 - [x] **Step 3.5**: Import `pb_schema.json` collections via admin UI.
-- [x] **Step 3.6**: Configure custom domain (e.g., `license.oz-pos.com`).
+- [x] **Step 3.6**: Configure custom domain (e.g., `license.ozpos.my.id`).
 - [x] **Step 3.V1 (Verification)**: End-to-end test: generate key in admin UI → activate from POS → verify signature → check status.
 
 ---

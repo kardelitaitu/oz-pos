@@ -281,30 +281,40 @@ func TestVerifySMTPConfig_UnsetHostSkipped(t *testing.T) {
 	}
 }
 
-func TestVerifySMTPConfig_UnsetFromFails(t *testing.T) {
-	t.Setenv("OZ_SMTP_HOST", "smtp-relay.brevo.com")
-	t.Setenv("OZ_SMTP_PORT", "587")
+func TestVerifySMTPConfig_UnsetFromFallsBackToDefault(t *testing.T) {
+	// When OZ_SMTP_FROM is empty, the code falls back to smtpDefaultFrom
+	// and the SMTP probe decides whether the relay accepts it.
+	addr, _ := runSMTPServer(t, nil, false) // accepts all senders
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("split host/port: %v", err)
+	}
+	t.Setenv("OZ_SMTP_HOST", host)
+	t.Setenv("OZ_SMTP_PORT", port)
 	t.Setenv("OZ_SMTP_USER", "")
 	t.Setenv("OZ_SMTP_PASSWORD", "")
 	t.Setenv("OZ_SMTP_FROM", "")
-	err := verifySMTPConfig()
-	if err == nil {
-		t.Fatal("unset OZ_SMTP_FROM with a configured host must fail fast")
-	}
-	if !strings.Contains(err.Error(), "OZ_SMTP_FROM is required") {
-		t.Errorf("error = %q, want a clear OZ_SMTP_FROM message", err)
+	if err := verifySMTPConfig(); err != nil {
+		t.Fatalf("unset OZ_SMTP_FROM should fall back to default and pass, got: %v", err)
 	}
 }
 
-func TestVerifySMTPConfig_DefaultFromFails(t *testing.T) {
-	t.Setenv("OZ_SMTP_HOST", "smtp-relay.brevo.com")
-	t.Setenv("OZ_SMTP_PORT", "587")
+func TestVerifySMTPConfig_DefaultFromAccepted(t *testing.T) {
+	// The default sender is now a real verified sender on Brevo — the
+	// SMTP probe decides whether it works, not a hardcoded rejection.
+	// With an unreachable relay, the probe is transient → warn-only.
+	addr, _ := runSMTPServer(t, nil, false) // accepts all senders
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("split host/port: %v", err)
+	}
+	t.Setenv("OZ_SMTP_HOST", host)
+	t.Setenv("OZ_SMTP_PORT", port)
 	t.Setenv("OZ_SMTP_USER", "")
 	t.Setenv("OZ_SMTP_PASSWORD", "")
 	t.Setenv("OZ_SMTP_FROM", smtpDefaultFrom)
-	err := verifySMTPConfig()
-	if err == nil {
-		t.Fatal("the unowned default sender must fail fast")
+	if err := verifySMTPConfig(); err != nil {
+		t.Fatalf("default sender should pass when relay accepts it, got: %v", err)
 	}
 }
 

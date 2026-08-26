@@ -1,0 +1,2340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design Language — UX Guidelines</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="scroll-indicator" aria-hidden="true"><div id="scroll-thumb"></div></div>
+
+  <!-- ── SITE HEADER (sticky topbar + tabbar) ─── -->
+  <div class="site-header">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <h1>Design Language</h1>
+      </div>
+      <div class="topbar-actions">
+        <button class="theme-toggle" id="theme-toggle" type="button" data-testid="design-language-theme-toggle">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon-moon" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <span id="theme-label">Dark</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tabbar-inner" role="tablist">
+      <button class="tab active" role="tab" data-tab="colors" type="button" data-testid="nav-tab-colors">Color Palette</button>
+      <button class="tab" role="tab" data-tab="buttons" type="button" data-testid="nav-tab-buttons">Buttons</button>
+      <button class="tab" role="tab" data-tab="typography" type="button" data-testid="nav-tab-typography">Typography</button>
+      <button class="tab" role="tab" data-tab="spacing" type="button" data-testid="nav-tab-spacing">Spacing &amp; Layout</button>
+      <button class="tab" role="tab" data-tab="icons" type="button" data-testid="nav-tab-icons">Icons</button>
+      <button class="tab" role="tab" data-tab="elements" type="button" data-testid="nav-tab-elements">Elements</button>
+      <button class="tab" role="tab" data-tab="components" type="button" data-testid="nav-tab-components">Components</button>
+      <button class="tab" role="tab" data-tab="feedback" type="button" data-testid="nav-tab-feedback">Feedback</button>
+      <button class="tab" role="tab" data-tab="forms" type="button" data-testid="nav-tab-forms">Forms</button>
+      <button class="tab" role="tab" data-tab="audit" type="button" data-testid="nav-tab-audit">Audit</button>
+    </div>
+  </div>
+  </div><!-- .site-header -->
+
+  <!-- ── PAGE CONTENT ────────────────────────────── -->
+  <div class="page-content">
+
+    <!-- ════ COLOR PALETTE ════════════════════════════ -->
+    <div class="tab-panel active" id="panel-colors">
+      <div class="tab-header">
+        <h2>Color Palette</h2>
+        <p>Core tokens for backgrounds, text, borders, and semantic states. All values are defined as CSS custom properties for easy theming.</p>
+      </div>
+
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note note--first"><strong>Why 8 colors?</strong> The brand palette is deliberately small and borrowed from the iOS system palette — high-chroma hues that stay legible on POS screens viewed from arm's length, in bright kitchens or dim back rooms. Fewer colors means fewer wrong choices, so screens stay consistent.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Why is blue the primary?</strong> Blue is the one color users already read as "tappable / interactive" (the web-link convention), and it holds AA contrast on both white and dark surfaces. Keep it reserved for actions — a blue element is always a promise that clicking does something.</p>
+          <p class="note note--mb-none"><strong>Three layers.</strong> Brand colors (the raw palette) → semantic roles (what a color <em>means</em>) → neutral scaffolding (surfaces, text, borders). Components use <em>semantic tokens only</em> — never raw brand hex. A rebrand then touches one <code class="code">:root</code> block, not every component.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Brand Colors</h3>
+        <div class="swatch-grid">
+          <div class="swatch">
+            <div class="swatch-color" style="background:#147EFB"></div>
+            <span class="swatch-label">Blue</span>
+            <span class="swatch-hex">#147EFB</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#5FC9F8"></div>
+            <span class="swatch-label">Sky</span>
+            <span class="swatch-hex">#5FC9F8</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FECB2E"></div>
+            <span class="swatch-label">Yellow</span>
+            <span class="swatch-hex">#FECB2E</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FD9426"></div>
+            <span class="swatch-label">Orange</span>
+            <span class="swatch-hex">#FD9426</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FC3158"></div>
+            <span class="swatch-label">Pink</span>
+            <span class="swatch-hex">#FC3158</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#53D769"></div>
+            <span class="swatch-label">Green</span>
+            <span class="swatch-hex">#53D769</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FC3D39"></div>
+            <span class="swatch-label">Red</span>
+            <span class="swatch-hex">#FC3D39</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#8E8E93"></div>
+            <span class="swatch-label">Gray</span>
+            <span class="swatch-hex">#8E8E93</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h3>Semantic Mapping</h3>
+        <div class="swatch-grid">
+          <div class="swatch">
+            <div class="swatch-color" style="background:#147EFB"></div>
+            <span class="swatch-label">Primary</span>
+            <span class="swatch-hex">→ Blue</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#53D769"></div>
+            <span class="swatch-label">Success</span>
+            <span class="swatch-hex">→ Green</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FC3D39"></div>
+            <span class="swatch-label">Danger</span>
+            <span class="swatch-hex">→ Red</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FC3158"></div>
+            <span class="swatch-label">Alert</span>
+            <span class="swatch-hex">→ Pink</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FD9426"></div>
+            <span class="swatch-label">Warning</span>
+            <span class="swatch-hex">→ Orange</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#5FC9F8"></div>
+            <span class="swatch-label">Info</span>
+            <span class="swatch-hex">→ Sky</span>
+          </div>
+          <div class="swatch">
+            <div class="swatch-color" style="background:#FECB2E"></div>
+            <span class="swatch-label">Accent</span>
+            <span class="swatch-hex">→ Yellow</span>
+          </div>
+        </div>
+        <p class="note note--mt-md"><strong>When to use each role</strong> — these are the only allowed meanings:</p>
+        <div class="rules-list">
+          <div class="rule">
+            <span class="color-dot" style="background:var(--primary)"></span>
+            <div class="rule-body"><h4>Primary — interact</h4><p>Every action the user can take: buttons, links, selected tabs, toggles-on, active filters.</p></div>
+          </div>
+          <div class="rule">
+            <span class="color-dot" style="background:var(--success)"></span>
+            <div class="rule-body"><h4>Success — confirm</h4><p>Completed work: saved, synced, connected. Always paired with a checkmark icon (never green alone).</p></div>
+          </div>
+          <div class="rule">
+            <span class="color-dot" style="background:var(--danger)"></span>
+            <div class="rule-body"><h4>Danger — destroy</h4><p>Destructive actions and hard errors: delete, disconnect, fail. One step from a confirm dialog.</p></div>
+          </div>
+          <div class="rule">
+            <span class="color-dot" style="background:var(--warning)"></span>
+            <div class="rule-body"><h4>Warning — near a limit</h4><p>Thresholds approaching: order age crossing the yellow line, low paper, nearly full storage.</p></div>
+          </div>
+          <div class="rule">
+            <span class="color-dot" style="background:var(--info)"></span>
+            <div class="rule-body"><h4>Info — notify</h4><p>System messages that need no action: printer connected, sync started, background events.</p></div>
+          </div>
+          <div class="rule">
+            <span class="color-dot" style="background:#FC3158"></span>
+            <div class="rule-body"><h4>Alert — act now</h4><p>Something needs attention immediately — order overdue past the red line. Maps to pink, distinct from danger red.</p></div>
+          </div>
+          <div class="rule">
+            <span class="color-dot" style="background:var(--yellow)"></span>
+            <div class="rule-body"><h4>Accent — decorate</h4><p>Non-interactive highlights: badges, marketing, decorative fills. Never used for actions or status.</p></div>
+          </div>
+        </div>
+        <p class="note">Mapping rule: a semantic role may be re-pointed at a different brand colour in dark mode — but the <em>meaning</em> of the role never changes. Always reference the token, never the brand hex.</p>
+      </section>
+
+      <section>
+        <h3>Surfaces &amp; Backgrounds</h3>
+        <div class="token-table token-table--cols3">
+          <div class="tt-head">Token</div>
+          <div class="tt-head tt-head--bordered">Light</div>
+          <div class="tt-head tt-head--bordered">Dark</div>
+          <div class="tt-cell tt-key">--bg</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#f4f5f7; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#F4F5F7</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#12141a; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#12141A</div>
+          <div class="tt-cell tt-key">--bg-surface</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#fff; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#FFFFFF</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#1c1f27; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#1C1F27</div>
+          <div class="tt-cell tt-key">--ghost-bg</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#f0f1f3; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#F0F1F3</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#262a34; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#262A34</div>
+          <div class="tt-cell tt-key">--chip-bg</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#e8e9ec; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#E8E9EC</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#2a2e39; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#2A2E39</div>
+          <div style="padding:8px 14px; font-family:var(--font-mono); font-size:11px">--border</div>
+          <div class="tt-cell tt-cell--bordered tt-cell--nolast"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#dfe1e6; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#DFE1E6</div>
+          <div class="tt-cell tt-cell--bordered tt-cell--nolast"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#2a2e39; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#2A2E39</div>
+        </div>
+        <p class="note note--mt-md">The neutral ladder, lightest to darkest: <strong>Page BG</strong> (the canvas) → <strong>Surface</strong> (cards, dialogs) → <strong>Ghost BG</strong> (hover fills, input wells) → <strong>Chip BG</strong> (pills, tags) → <strong>Border</strong> (hairlines). Dark mode inverts the ladder — surfaces get <em>lighter</em> than the page, never darker. That inversion keeps depth readable after the theme flip.</p>
+      </section>
+
+      <section>
+        <h3>Text</h3>
+        <div class="token-table token-table--cols3">
+          <div class="tt-head">Token</div>
+          <div class="tt-head tt-head--bordered">Light</div>
+          <div class="tt-head tt-head--bordered">Dark</div>
+          <div class="tt-cell tt-key">--text</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#1a1d23; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#1A1D23</div>
+          <div class="tt-cell tt-cell--bordered"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#e8eaef; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#E8EAEF</div>
+          <div style="padding:8px 14px; font-family:var(--font-mono); font-size:11px">--text-muted</div>
+          <div class="tt-cell tt-cell--bordered tt-cell--nolast"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#8e8e93; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#8E8E93</div>
+          <div class="tt-cell tt-cell--bordered tt-cell--nolast"><span style="display:inline-block; width:14px; height:14px; border-radius:3px; background:#8b93a3; border:1px solid var(--border); vertical-align:middle; margin-right:6px"></span>#8B93A3</div>
+        </div>
+        <p class="note note--mt-md">Use <code class="code">--text</code> for anything that must be read. <code class="code">--text-muted</code> is decorative-only: it sits below the 4.5:1 AA contrast floor on white, so never use it for essential information. <code class="code">--text-on-color</code> (#fff) is always white for text drawn on primary / danger fills.</p>
+      </section>
+
+      <section>
+        <h3>Theme Tokens — Light vs Dark</h3>
+        <div class="card">
+          <p class="note note--first-lg">These tokens change between themes. Brand colors (<code style="font-family:'JetBrains Mono',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--blue</code>, <code style="font-family:'JetBrains Mono',monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px">--green</code>, etc.) stay the same — semantic roles may shift to maintain contrast.</p>
+          <div class="token-table token-table--cols4">
+            <div class="tt-head">Token</div>
+            <div class="tt-head tt-head--bordered">Light</div>
+            <div class="tt-head tt-head--bordered">Dark</div>
+            <div class="tt-head tt-head--bordered">Shift</div>
+            <div class="tt-cell tt-cell--compact tt-key">--primary</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#147EFB; vertical-align:middle; margin-right:4px"></span>#147EFB</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#147EFB; vertical-align:middle; margin-right:4px"></span>#147EFB</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered tt-note">Same — brand consistency</div>
+            <div class="tt-cell tt-cell--compact tt-key">--primary-hover</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#1168D4; vertical-align:middle; margin-right:4px"></span>#1168D4</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#1A8FFF; vertical-align:middle; margin-right:4px"></span>#1A8FFF</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered tt-note">Brighter for contrast</div>
+            <div class="tt-cell tt-cell--compact tt-key">--danger</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#FC3D39; vertical-align:middle; margin-right:4px"></span>#FC3D39</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#FF6B68; vertical-align:middle; margin-right:4px"></span>#FF6B68</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered tt-note">Brighter red</div>
+            <div class="tt-cell tt-cell--compact tt-key">--success</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#53D769; vertical-align:middle; margin-right:4px"></span>#53D769</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#6FE884; vertical-align:middle; margin-right:4px"></span>#6FE884</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered tt-note">Brighter green</div>
+            <div class="tt-cell tt-cell--compact tt-key">--warning</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#FD9426; vertical-align:middle; margin-right:4px"></span>#FD9426</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#FFA94D; vertical-align:middle; margin-right:4px"></span>#FFA94D</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered tt-note">Brighter orange</div>
+            <div class="tt-cell tt-cell--compact tt-key">--info</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#5FC9F8; vertical-align:middle; margin-right:4px"></span>#5FC9F8</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#7DD6FB; vertical-align:middle; margin-right:4px"></span>#7DD6FB</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered tt-note">Brighter sky</div>
+            <div class="tt-cell tt-cell--compact tt-key">--tooltip-bg</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#1a1d23; border:1px solid var(--border); vertical-align:middle; margin-right:4px"></span>#1A1D23</div>
+            <div class="tt-cell tt-cell--compact tt-cell--bordered"><span style="display:inline-block; width:12px; height:12px; border-radius:3px; background:#3a3f4c; border:1px solid var(--border); vertical-align:middle; margin-right:4px"></span>#3A3F4C</div>
+            <div style="padding:6px 14px; border-left:1px solid var(--border); color:var(--text-muted); font-size:10px">Lighter to contrast dark bg</div>
+          </div>
+          <p class="note note--mt-md">The dark theme rule: <strong>push semantic colors brighter</strong> so they maintain AA contrast on dark surfaces. The primary hover chain shifts too — dark hover uses light primary, dark active uses light primary-hover. This creates a natural depth ladder in both directions.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Never colour alone</h4><p>Every status also carries an icon, shape, or text — this is Feedback Rule 05/06. A red border without a message, or green without a checkmark, reads as decoration to anyone who can't see the hue.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Red/green is the common colour-blind pair</h4><p>Never make success vs. danger the only difference between two states. Add the icon; when in doubt, also change the shape or position.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Know the weak pairings</h4><p><code class="code">--text-muted</code> on white ≈ 3:1 (large/bold text only). White text on <code class="code">--success</code> is low contrast — which is exactly why success always gets the checkmark icon too. Verify any new token pair with a contrast checker before shipping.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Tokens, never hex</h4><p>Components reference <code class="code">var(--token)</code> only. Hardcoded hex breaks dark mode, theming, and future rebrands. If a token is missing, the component inherits the previous value instead of inventing a colour.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>If the stylesheet fails</h4><p>The page degrades to browser defaults — black text on white. Content stays readable because no meaning lives in colour alone (rule 1).</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ BUTTONS ═══════════════════════════════════ -->
+    <div class="tab-panel" id="panel-buttons">
+      <div class="tab-header">
+        <h2>Buttons</h2>
+        <p>Complete button system — sizes, variants, icon combos, and interactive states.</p>
+      </div>
+
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note note--first"><strong>Why three sizes?</strong> Size is hierarchy, and hierarchy must be obvious at a glance. <strong>Large</strong> (48px) is the minimum comfortable touch target and marks the one action a screen is about. <strong>Medium</strong> (42px) is the default for any inline action. <strong>Small</strong> (34px) is for dense rows, toolbars, and confirm dialogs — never the primary action.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Why so many variants?</strong> They form an <em>emphasis ladder</em> — how loudly a button asks for attention: <strong>primary</strong> (loudest, the main action) → <strong>secondary</strong> (the alternative) → <strong>ghost</strong> (quiet, row-level actions) → <strong>danger / success</strong> (meaning, not volume) → <strong>chip</strong> (selectable options, not actions).</p>
+          <p class="note note--mb-none"><strong>One primary per view.</strong> A screen gets exactly one <code class="code">btn--primary</code>; everything else drops down the ladder. Two primaries compete and neither wins.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Sizes — Large / Medium / Small</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--lg" type="button">Large button</button>
+          <button class="btn btn--primary btn--md" type="button">Medium button</button>
+          <button class="btn btn--primary btn--sm" type="button">Small button</button>
+        </div>
+        <p class="note">Large is for the screen's primary CTA and full-width actions. Medium is the default — use it unless there's a reason not to. Small is for compact rows and dialogs; if a view's only action is small, it should probably be medium.</p>
+      </section>
+
+      <section>
+        <h3>Semantic Variants</h3>
+        <div class="grid">
+          <button class="btn btn--danger btn--md" type="button" data-testid="dl-btn-delete">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Delete
+          </button>
+          <button class="btn btn--success btn--md" type="button" data-testid="dl-btn-upload">
+            Upload
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </button>
+        </div>
+        <p class="note">The emphasis ladder in practice: one <code class="code">primary</code> per view; <code class="code">secondary</code> for the escape-hatch action; <code class="code">ghost</code> for row-level edits; <code class="code">danger</code> only for destructive work (delete, disconnect, cancel-forever); <code class="code">success</code> only as a settled confirmation (Saved ✓), never as the resting state of a CTA.</p>
+      </section>
+
+      <section>
+        <h3>Leading Icon</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--lg" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Large button
+          </button>
+          <button class="btn btn--primary btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Medium button
+          </button>
+          <button class="btn btn--primary btn--sm" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Small button
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Outline &amp; Link Actions</h3>
+        <div class="grid">
+          <button class="btn btn--outline-neutral btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Add a link
+          </button>
+          <button class="btn btn--outline-neutral btn--md" type="button">
+            Share
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Pill Buttons &amp; Badges</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--pill btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Play
+            <span style="opacity:.7; font-weight:500; margin-left:4px">2:42</span>
+          </button>
+          <button class="btn btn--primary btn--pill btn--md" type="button">Primary button</button>
+          <button class="btn btn--secondary btn--pill btn--md" type="button">Secondary button</button>
+          <button class="btn btn--ghost btn--pill btn--md" type="button">Action button</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Ghost &amp; Icon Combos</h3>
+        <div class="grid">
+          <button class="btn btn--ghost btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+            Like
+          </button>
+          <button class="btn btn--ghost btn--md" type="button">
+            Duplicate
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="btn btn--ghost btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
+            Filter
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Trailing Icon</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--pill btn--md" type="button">
+            Download
+            <span class="btn-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </span>
+          </button>
+          <button class="btn btn--secondary btn--md" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            Add to cart
+          </button>
+          <button class="btn btn--primary btn--pill btn--md" type="button">
+            Get started
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Icon-Only Buttons</h3>
+        <div class="grid">
+          <button class="btn btn--icon-only" type="button" aria-label="Add">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="btn btn--icon-only btn--outlined" type="button" aria-label="Add outlined">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="btn btn--icon-only btn--primary" type="button" aria-label="Add primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+        <p class="note">Icon-only buttons are <strong>always</strong> paired with an <code class="code">aria-label</code> (already on these demos) — otherwise screen readers announce an unnamed button. In dense UIs add a tooltip for sighted users who don't recognise the icon. Hit area stays 40px (large enough for a fingertip).</p>
+      </section>
+
+      <section>
+        <h3>Chip &amp; Price Buttons</h3>
+        <div class="grid">
+          <button class="btn btn--chip btn--sm btn--price" type="button">$10</button>
+          <button class="btn btn--chip btn--sm btn--price" type="button">$20</button>
+          <button class="btn btn--chip btn--sm btn--price" type="button">$50</button>
+          <button class="btn btn--chip btn--sm btn--price" type="button">$100</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Wide Button</h3>
+        <div class="grid" style="max-width: 340px;">
+          <button class="btn btn--outline-neutral btn--md btn--wide" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Lock
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Disabled State</h3>
+        <div class="grid">
+          <button class="btn btn--primary btn--md" type="button" disabled>Primary</button>
+          <button class="btn btn--secondary btn--md" type="button" disabled>Secondary</button>
+          <button class="btn btn--ghost btn--md" type="button" disabled>Ghost</button>
+          <button class="btn btn--danger btn--md" type="button" disabled>Danger</button>
+        </div>
+        <p class="note">Disabled = 45% opacity + <code class="code">pointer-events: none</code> (no hover, no click). Use the native <code class="code">disabled</code> attribute for controls that must be skipped by keyboard too. If a button is unavailable <em>temporarily</em> and users need to know why (e.g. "save requires an order"), use <code class="code">aria-disabled="true"</code> instead — it stays focusable and lets you explain the reason.</p>
+      </section>
+
+      <!-- ── Menu Sliders ────────────────────────── -->
+      <section>
+        <h3>Menu Slider — 2 Options</h3>
+        <div class="card">
+          <p class="note note--first-lg">A blue pill indicator slides between options. From the KDS topmenu — used for Open/Completed tabs, Dark/Light theme toggle, and shift start/stop.</p>
+          <div style="display:flex; flex-direction:column; gap:16px; align-items:flex-start">
+            <!-- 2-tab: Open / Completed -->
+            <div>
+              <div class="section-label">Tab Switcher</div>
+              <div class="ms-track ms-track-inner">
+                <div class="ms-indicator ms-indicator"></div>
+                <button class="ms-btn ms-btn--wide is-active" data-testid="dl-ms-tab-open">Open</button>
+                <button class="ms-btn ms-btn--wide" data-testid="dl-ms-tab-completed">Completed</button>
+              </div>
+            </div>
+            <!-- 2-tab: Dark / Light -->
+            <div>
+              <div class="section-label">Theme Toggle</div>
+              <div class="ms-track" data-active="1" class="ms-track-inner">
+                <div class="ms-indicator ms-indicator"></div>
+                <button aria-label="Light mode" style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:var(--text); opacity:0.5; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                </button>
+                <button aria-label="Dark mode" style="position:relative; z-index:1; padding:5px 9px; border-radius:var(--r-sm); border:none; background:transparent; color:#fff; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+              </div>
+            </div>
+            <!-- 2-tab: Start / Stop shift -->
+            <div>
+              <div class="section-label">Action Toggle (Start / Stop)</div>
+              <div class="ms-track" data-colors="#22c55e,#22c55e" class="ms-track-inner">
+                <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:#22c55e; border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
+                <button class="ms-btn ms-btn--wide is-active" data-testid="dl-ms-shift-start">Start</button>
+                <button class="ms-btn ms-btn--wide" data-testid="dl-ms-shift-stop">Stop</button>
+              </div>
+            </div>
+          </div>
+          <p class="note">Track: <code class="code--plain">padding: 3px</code>, <code class="code--plain">background: var(--ghost-bg)</code>. Indicator: absolute, <code class="code--plain">top/bottom: 3px</code>, <code class="code--plain">background: var(--primary)</code>. Slide easing: <code class="code--plain">cubic-bezier(0.33, 1, 0.68, 1)</code>.</p>
+          <p class="note note--mt-sm"><strong>When to use:</strong> a menu slider is for one-of-N mutually exclusive choices — exactly 2–3 options, all visible, with short labels. For 4+ options, long labels, or dynamic content, use tabs or a select instead. <strong>Fallback:</strong> on narrow screens the track wraps or scrolls — keep labels short enough to fit one row (13px, ≤12 chars).</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Menu Slider — 3 Options</h3>
+        <div class="card">
+          <p class="note note--first-lg">Same pattern with 3 tabs. The indicator width auto-adjusts. Used for view modes (All / Prepared / Archived) and quality selectors.</p>
+          <div style="display:flex; flex-direction:column; gap:16px; align-items:flex-start">
+            <!-- 3-tab: View mode -->
+            <div>
+              <div class="section-label">View Mode</div>
+              <div class="ms-track ms-track-inner">
+                <div class="ms-indicator ms-indicator"></div>
+                <button class="ms-btn is-active">All</button>
+                <button class="ms-btn">Prepared</button>
+                <button class="ms-btn">Archived</button>
+              </div>
+            </div>
+            <!-- 3-tab: Quality -->
+            <div>
+              <div class="section-label">Quality / Density</div>
+              <div class="ms-track" data-active="1" class="ms-track-inner">
+                <div class="ms-indicator ms-indicator"></div>
+                <button class="ms-btn">Compact</button>
+                <button class="ms-btn is-active">Normal</button>
+                <button class="ms-btn">Comfortable</button>
+              </div>
+            </div>
+            <!-- 3-tab: Order status filter -->
+            <div>
+              <div class="section-label">Order Filter</div>
+              <div class="ms-track" data-active="2" data-colors="var(--primary),var(--primary),var(--danger)" class="ms-track-inner">
+                <div class="ms-indicator" style="position:absolute; top:3px; left:3px; bottom:3px; background:var(--danger); border-radius:var(--r-sm); transition:left 0.28s cubic-bezier(0.33,1,0.68,1), width 0.28s cubic-bezier(0.33,1,0.68,1), background 0.28s"></div>
+                <button class="ms-btn">Active</button>
+                <button class="ms-btn">Ready</button>
+                <button class="ms-btn is-active">Overdue</button>
+              </div>
+            </div>
+          </div>
+          <p class="note">Indicator width: <code class="code--plain">calc(100% / N - gap)</code>. Active tab: <code class="code--plain">opacity: 1; color: #fff</code>. Inactive: <code class="code--plain">opacity: 0.5</code>. The indicator can use any semantic colour (primary, danger, etc.).</p>
+          <p class="note note--mt-sm"><strong>Fallback:</strong> the indicator width is <code class="code--plain">track/N</code> — if one label is much longer than the others, that option's label clips. Keep option labels roughly equal length, and cap the track's max-width so three long labels never blow the row.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>48px minimum hit target</h4><p>The large size is the floor for anything a finger might tap. Small (34px) is only for mouse/toolbar contexts — never for the key action on a screen.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>One primary per view</h4><p>Exactly one <code>btn--primary</code>. If two actions feel equally primary, the design has a hierarchy problem — resolve it before adding a second primary.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Meaning is never colour alone</h4><p>Danger vs. success is red vs. green — the classic colour-blind pair. Pair every variant with its icon (trash for delete, check for success) and a clear label.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Icon-only is never unnamed</h4><p>Every icon-only button carries an <code>aria-label</code>. No exceptions — a silent round button is a mystery to screen-reader users.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Busy buttons must not double-fire</h4><p>While an action is in flight, disable the button and show feedback (see the Feedback tab's Busy → Done). Otherwise a double-tap triggers the action twice.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ TYPOGRAPHY ═══════════════════════════════ -->
+    <div class="tab-panel" id="panel-typography">
+      <div class="tab-header">
+        <h2>Typography</h2>
+        <p>Type scale, weights, and usage guidelines for the design system.</p>
+      </div>
+
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note note--first"><strong>Why Inter?</strong> A tall x-height keeps glyphs legible at 14px and below — exactly the sizes a POS screen runs at. It's also a variable font: one ~95KB WOFF2 carries every weight from 400 to 800, so bold never "fakes" itself from a single file.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Why JetBrains Mono?</strong> Monospace is for data that must align and compare: code, hex values, IPs, receipt totals. Fixed-width digits make columns line up; the fallback chain keeps it available on every platform.</p>
+          <p class="note note--mb-none"><strong>Strategy.</strong> The scale is a strict ladder — 32/24/20/16/14/12/11 — climb it one rung at a time, never skip. Weight follows role: 800 for Display only, 700 for headings and buttons, 600 for subheads, 400 for body. Letter-spacing tightens as size grows (−0.03em at 32px, down to 0 at body size).</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Type Scale</h3>
+        <div class="card">
+          <div class="type-scale">
+            <div class="type-row">
+              <span class="type-label">Display</span>
+              <span class="type-sample" style="font-size:32px; font-weight:800; letter-spacing:-0.03em">The quick brown fox</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">H1</span>
+              <span class="type-sample" style="font-size:24px; font-weight:700; letter-spacing:-0.02em">The quick brown fox</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">H2</span>
+              <span class="type-sample" style="font-size:20px; font-weight:700; letter-spacing:-0.01em">The quick brown fox</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">H3</span>
+              <span class="type-sample" style="font-size:16px; font-weight:600">The quick brown fox</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">Body</span>
+              <span class="type-sample" style="font-size:14px; font-weight:400">The quick brown fox jumps over the lazy dog. This is standard body text used for paragraphs and content.</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">Small</span>
+              <span class="type-sample" style="font-size:12px; font-weight:400; color:var(--text-muted)">The quick brown fox jumps over the lazy dog. Used for captions and metadata.</span>
+            </div>
+            <div class="type-row">
+              <span class="type-label">Label</span>
+              <span class="type-sample" style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted)">SECTION HEADING</span>
+            </div>
+            <div class="type-row" style="border-bottom:none">
+              <span class="type-label">Mono</span>
+              <span class="type-sample" style="font-size:13px; font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; color:var(--text-muted)">const token = '#147EFB';</span>
+            </div>
+          </div>
+          <p class="note note--mt-md"><strong>Where each size lives:</strong> <strong>Display</strong> — screen titles / splash, never paragraphs. <strong>H1</strong> — page titles. <strong>H2</strong> — section titles within a page. <strong>H3</strong> — card and dialog titles. <strong>Body</strong> — default text everywhere. <strong>Small</strong> — captions, metadata, timestamps (never essential info). <strong>Label</strong> — uppercase section labels, table headers. <strong>Mono</strong> — code, hex, IPs, prices in receipts.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Font Stack</h3>
+        <div class="card">
+          <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:16px">
+            <div style="flex:1; min-width:200px; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md)">
+              <div class="section-label section-label--mb">Primary — Inter</div>
+              <div style="font-family:'Inter',sans-serif; font-size:20px; font-weight:700; color:var(--text); margin-bottom:4px">Aa Bb Cc 123</div>
+              <div style="font-family:'Inter',sans-serif; font-size:13px; color:var(--text-muted)">UI, body text, headings, labels</div>
+            </div>
+            <div style="flex:1; min-width:200px; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md)">
+              <div class="section-label section-label--mb">Mono — JetBrains Mono</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:700; color:var(--text); margin-bottom:4px">Aa Bb 0O 1l</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-muted)">Code, receipts, hex values, IPs</div>
+            </div>
+          </div>
+          <p class="note" style="margin-top:0; font-size:12px; color:var(--text)">
+            <strong style="color:var(--primary)">--font:</strong> <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif</code>
+          </p>
+          <p class="note" style="font-size:12px; color:var(--text)">
+            <strong style="color:var(--primary)">--font-mono:</strong> <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace</code>
+          </p>
+          <p class="note" style="margin-top:12px">Inter is bundled as a variable WOFF2 (~95KB). JetBrains Mono bundled as WOFF2 (~100KB). System fonts serve as fallback only.</p>
+          <p class="note note--mt-sm"><strong>Fallback order is deliberate:</strong> each entry is the system font of a target platform — <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>-apple-system</code> / <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>BlinkMacSystemFont</code> for Apple, <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>'SF Pro Display'</code> for macOS, <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>'Segoe UI'</code> for Windows, <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>system-ui</code> last as the generic. If Inter is blocked (offline POS, proxy), text swaps to the platform font instantly. Load with <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>font-display: swap</code> so text is never invisible while fonts download.</p>
+        </div>
+      </section>
+
+      <!-- ── Anti-Aliasing ────────────────────────── -->
+      <section>
+        <h3>Anti-Aliasing</h3>
+        <div class="card">
+          <p class="note note--first-lg">Always render text at the highest quality. The body applies subpixel antialiasing on all platforms for crisp, consistent text.</p>
+          <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px">
+            <div style="flex:1; min-width:220px; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); text-align:center">
+              <div style="font-size:28px; font-weight:700; color:var(--text); margin-bottom:4px; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale">Aa</div>
+              <div style="font-size:11px; font-weight:600; color:var(--success)">✓ Antialiased</div>
+              <div style="font-size:10px; color:var(--text-muted); margin-top:2px">Smooth, consistent rendering</div>
+            </div>
+            <div style="flex:1; min-width:220px; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); text-align:center">
+              <div style="font-size:28px; font-weight:700; color:var(--text); margin-bottom:4px; -webkit-font-smoothing:auto">Aa</div>
+              <div style="font-size:11px; font-weight:600; color:var(--danger)">✗ Auto (default)</div>
+              <div style="font-size:10px; color:var(--text-muted); margin-top:2px">Platform-dependent, inconsistent</div>
+            </div>
+          </div>
+          <p class="note" style="font-size:12px; color:var(--text)">
+            <strong style="color:var(--primary)">Applied on body:</strong> <code style='font-family:"JetBrains Mono",monospace; background:var(--ghost-bg); padding:2px 6px; border-radius:4px'>-webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;</code>
+          </p>
+          <p class="note" style="margin-top:8px">This ensures Inter and JetBrains Mono render with consistent weight and clarity across Windows, macOS, Linux, iOS, and Android — no bold/thin surprises between platforms.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Cap line length</h4><p>Body text stays within 65–75 characters per line (~45rem). Longer lines are tiring to read and easy to lose your place in — order cards and dialogs follow this too.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Truncate, don't wrap, in controls</h4><p>Buttons and pills use <code>white-space: nowrap</code> + ellipsis. A button label that wraps to two lines breaks the hit-target shape.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Screen-reader-only text</h4><p>When the visual label is an icon or a truncated string, add a visually-hidden span (the <code>sr-only</code> pattern) so assistive tech reads the full text. Same spirit as the Audit tab's <code>aria-label</code> rule.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Scale with user settings</h4><p>Map the scale to rem tokens in production so text scales with the root font size and respects browser zoom / accessibility settings. The px values on this page are the design reference, not literal production CSS.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Never fake a weight</h4><p>Inter is variable, so 400–800 all exist. Where a platform can't load a weight it synthesises one — that's why smoothing is pinned on <code>body</code> (see Anti-Aliasing above): it keeps synthesised weights from looking muddy.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ SPACING & LAYOUT ═════════════════════════ -->
+    <div class="tab-panel" id="panel-spacing">
+      <div class="tab-header">
+        <h2>Spacing &amp; Layout</h2>
+        <p>Consistent spacing scale, border radii, and elevation tokens.</p>
+      </div>
+
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note note--first"><strong>Why a 4px base?</strong> Every value on the scale is a multiple of 4 — the tightest grid that still divides evenly into 8 and 12. It gives enough granularity for dense POS screens without pixel-fiddling, and because everything is a multiple of 4, components slot together with no magic numbers.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Gap and padding, never margins.</strong> Layout spacing comes from <code class="code">gap</code> on flex/grid containers and <code class="code">padding</code> on surfaces. Margins on shared components leak into every context that embeds them; gap and padding belong to the container and stay predictable.</p>
+          <p class="note note--mb-none"><strong>Strategy by size.</strong> <strong>4</strong> — micro gaps (icon-to-text, dot-to-label). <strong>8</strong> — the default gap between related controls. <strong>12</strong> — gap between groups. <strong>16</strong> — card padding. <strong>24</strong> — separation between sections. <strong>32+</strong> — page-level rhythm. Use <code class="code">rem</code> for padding that should scale with the user's font size, <code class="code">px</code> for hairline borders.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Spacing Scale (px)</h3>
+        <div class="card">
+          <div class="spacing-grid">
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:4px"></div>
+              <span class="spacing-label">4</span>
+              <span class="spacing-value">4px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:8px"></div>
+              <span class="spacing-label">8</span>
+              <span class="spacing-value">8px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:12px"></div>
+              <span class="spacing-label">12</span>
+              <span class="spacing-value">12px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:16px"></div>
+              <span class="spacing-label">16</span>
+              <span class="spacing-value">16px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:20px"></div>
+              <span class="spacing-label">20</span>
+              <span class="spacing-value">20px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:24px"></div>
+              <span class="spacing-label">24</span>
+              <span class="spacing-value">24px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:32px"></div>
+              <span class="spacing-label">32</span>
+              <span class="spacing-value">32px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:40px"></div>
+              <span class="spacing-label">40</span>
+              <span class="spacing-value">40px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:48px"></div>
+              <span class="spacing-label">48</span>
+              <span class="spacing-value">48px</span>
+            </div>
+            <div class="spacing-item">
+              <div class="spacing-bar" style="width:16px; height:64px"></div>
+              <span class="spacing-label">64</span>
+              <span class="spacing-value">64px</span>
+            </div>
+          </div>
+          <p class="note note--mt-md"><strong>Where each step lands:</strong> <strong>4</strong> icon↔text · <strong>8</strong> default control gap · <strong>12</strong> between groups · <strong>16</strong> card padding · <strong>20–24</strong> section separation · <strong>32+</strong> page rhythm. Pick the step, not a value in between — if 8 feels tight and 12 feels loose, the layout, not the number, is wrong.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Border Radius</h3>
+        <div class="card">
+          <div class="radius-grid">
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:4px"></div>
+              <span class="radius-label">4px — Micro</span>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:8px"></div>
+              <span class="radius-label">8px — <code class="code code--sm">--r-sm</code></span>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:10px"></div>
+              <span class="radius-label">10px — <code class="code code--sm">--r-md</code></span>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:12px"></div>
+              <span class="radius-label">12px — <code class="code code--sm">--r-lg</code></span>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius:999px"></div>
+              <span class="radius-label">Pill — <code class="code code--sm">--r-pill</code></span>
+            </div>
+          </div>
+          <p class="note note--mt-md"><strong>Which radius where:</strong> <strong>4px</strong> — dots, check marks, tiny badges (reference, no token). <strong>8px</strong> <code class="code">--r-sm</code> — inputs, buttons, pills. <strong>10px</strong> <code class="code">--r-md</code> — panels, table rows, dropdowns. <strong>12px</strong> <code class="code">--r-lg</code> — cards, dialogs, modals. <strong>Pill</strong> — toggles, chips, status badges. The corner never exceeds half the element's smaller dimension — otherwise it reads as a pill by accident.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Elevation / Shadows</h3>
+        <div class="card">
+          <div class="shadow-grid">
+            <div class="shadow-item">
+              <div class="shadow-box" style="box-shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1)"></div>
+              <span class="shadow-label">Shadow SM</span>
+            </div>
+            <div class="shadow-item">
+              <div class="shadow-box" style="box-shadow: 0 4px 6px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.06)"></div>
+              <span class="shadow-label">Shadow MD</span>
+            </div>
+            <div class="shadow-item">
+              <div class="shadow-box" style="box-shadow: 0 10px 15px rgba(16,24,40,.08), 0 4px 6px rgba(16,24,40,.05)"></div>
+              <span class="shadow-label">Shadow LG</span>
+            </div>
+          </div>
+          <p class="note note--mt-md"><strong>Elevation ladder:</strong> <code class="code">--shadow-sm</code> — resting cards and rows on the page. <code class="code">--shadow-md</code> — floating layers: modals, dropdowns, tooltips. <code class="code">--shadow-lg</code> — full-screen overlays and command palettes (rare). Shadow is a <em>closeness</em> signal: more shadow = closer to the user's eye. If you need a fourth level, the layout is the problem, not the token.</p>
+          <p class="note note--mt-sm"><strong>Dark-mode fallback:</strong> shadows barely read on dark backgrounds — the tint is nearly invisible. In dark mode, elevation is carried by surface tone (lighter surface) + a hairline border instead. Keep shadows in code, but don't rely on them for separation in dark themes.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>No margins for layout</h4><p>Spacing between elements comes from <code>gap</code> or container <code>padding</code> — never from margins on shared components. Margins make an element impossible to embed safely.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>8px minimum between touch targets</h4><p>Adjacent buttons and tappable rows keep at least 8px between hit areas — below that, mis-taps climb sharply on a POS used at speed.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Three elevation levels max</h4><p>Page → card → modal. More levels blur what's actually on top. If something needs to float above a modal, restructure instead.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Dark mode: tone + border, not shadow</h4><p>On dark surfaces shadows are invisible — elevate with a lighter surface fill and a hairline border. Test every layer in both themes.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Narrow screens degrade gracefully</h4><p>The 1120px container keeps 32px gutters; below ~640px, gutters drop to 16px and flex grids wrap. Never let content overflow — wrap or stack before clipping.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ ICONS ═════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-icons">
+      <div class="tab-header">
+        <h2>Icons</h2>
+        <p>Icon system guidelines — sizes, stroke weights, and usage patterns.</p>
+      </div>
+
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note note--first"><strong>One drawing grid — or more.</strong> Simple icons draw on a 24×24 viewBox. Curves and several parts use 48×48 or 96×96 for double/triple resolution. The dine-in fork &amp; spoon push further to 256×256 for precision line art — the grid is drawing resolution, not size: all these grids render at 14–32px. The artwork inherits the surrounding text colour via <code class="code">currentColor</code> — stroke or fill, an icon never makes its own colour decision. The size shown is just the render size; the artwork never changes.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Outlines for simple, line art for detailed.</strong> Most UI icons are stroke-based — lighter next to text. A detailed glyph (like the fork) uses a higher grid and thicker stroke so fine lines (tines, curves) stay crisp at small render sizes. The same <code>currentColor</code> inheritance applies; pick one style per icon and never mix strokes and fills in the same glyph.</p>
+          <p class="note note--mb-none"><strong>Placement strategy.</strong> A <em>leading</em> icon carries the verb (add, save, delete). A <em>trailing</em> icon signals navigation or disclosure (chevron, arrow, download-after). Never put two icons on one button unless the second is a badge. If an icon needs explaining, it's the wrong icon — not a missing tooltip.</p>
+        </div>
+      </section>
+
+      <section>
+        <h3>Icon Sizes</h3>
+        <div class="card">
+          <div class="grid" style="gap:24px; align-items:flex-end">
+            <div class="flex-col-center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">14px — Small</span>
+            </div>
+            <div class="flex-col-center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">16px — Default</span>
+            </div>
+            <div class="flex-col-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">18px — Large</span>
+            </div>
+            <div class="flex-col-center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">24px — XL</span>
+            </div>
+          </div>
+        </div>
+        <p class="note note--mt-md"><strong>Where each size lives:</strong> <strong>14px</strong> — inline micro (badge icons, tiny captions, compact rows). <strong>16px</strong> — default (buttons, list rows, toggles, table cells). <strong>18px</strong> — large (toolbar icons, empty-state illustrations, alerts). <strong>24px</strong> — XL (standalone, graphic headers, no nearby text). At 14px the stroke must be 2.5 or the icon becomes a smudge; at 24px, 1.5 is fine for a delicate look.</p>
+      </section>
+
+      <section>
+        <h3>Stroke Weights</h3>
+        <div class="card">
+          <div class="grid" style="gap:24px; align-items:flex-end">
+            <div class="flex-col-center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">1.5 — Light</span>
+            </div>
+            <div class="flex-col-center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">2 — Default</span>
+            </div>
+            <div class="flex-col-center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span class="spacing-label">2.5 — Bold</span>
+            </div>
+          </div>
+        </div>
+        <p class="note note--mt-md"><strong>Which stroke where:</strong> <strong>1.5</strong> — light, for 24px+ decorative icons (never below 18px). <strong>2</strong> — the default; use unless there's a reason not to. <strong>2.5</strong> — bold, for small sizes (14px), emphasis, and the "plus" icons on buttons. Never mix stroke weights within one view — mixed weights read as inconsistent system state.</p>
+      </section>
+
+      <!-- Example — Windows Logo -->
+      <section>
+        <h3>Example — Windows Logo</h3>
+        <div class="card">
+          <p class="note note--first">Any brand mark decomposes into the same primitives. The Windows logo is four rounded squares on the 24-grid — one <code class="code">&lt;rect&gt;</code> per pane, no paths needed. Drawn with <code class="code">stroke="currentColor"</code> it themes with the page automatically.</p>
+          <div class="audit-demo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Windows logo"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <span class="audit-caption">24px · currentColor · stroke 1.5</span>
+          </div>
+          <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin-bottom:12px">
+            <span style="font-size:11px; font-weight:600; color:var(--text-muted)">One artwork, any size:</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></svg>
+            <span class="audit-caption">14 · 16 · 18 · 24 · 32px</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">svg</span> <span class="cb-attr">viewBox</span><span class="cb-punc">=</span><span class="cb-val">"0 0 24 24"</span> <span class="cb-attr">stroke</span><span class="cb-punc">=</span><span class="cb-val">"currentColor"</span> <span class="cb-attr">stroke-width</span><span class="cb-punc">=</span><span class="cb-val">"1.5"</span><span class="cb-punc">&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"2"</span>  <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"2"</span>  <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"13"</span> <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"2"</span>  <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"2"</span>  <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"13"</span> <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">rect</span> <span class="cb-attr">x</span><span class="cb-punc">=</span><span class="cb-val">"13"</span> <span class="cb-attr">y</span><span class="cb-punc">=</span><span class="cb-val">"13"</span> <span class="cb-attr">width</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">height</span><span class="cb-punc">=</span><span class="cb-val">"9"</span> <span class="cb-attr">rx</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">/&gt;</span>
+<span class="cb-punc">&lt;/</span><span class="cb-tag">svg</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>How it's drawn.</strong> The 24-grid splits into <code>2 + 9 + 2 + 9 + 2</code> — a 2px gutter around and between four 9px panes. Rounded corners (<code>rx="2"</code>) keep it from looking harsh next to the system's 8px+ radii. One <code>stroke</code>, one <code>currentColor</code>, zero fills: the mark themes, flips with dark mode, and inherits disabled opacity with no extra rules. Same artwork renders at 14px through 32px — only the <code>width</code>/<code>height</code> change.
+          </div>
+        </div>
+      </section>
+
+      <!-- Example — Dine-in (Fork & Spoon) -->
+      <section>
+        <h3>Example — Dine-in (Fork &amp; Spoon)</h3>
+        <div class="card">
+          <p class="note note--first">The dine-in signal: a precision line-art fork and spoon drawn on the <strong>256-grid</strong> — clean, balanced, and perfectly proportioned with flat bases and open tines.</p>
+          <div class="audit-demo">
+            <svg width="32" height="32" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="butt" stroke-linejoin="round" aria-label="Fork and spoon, dine-in" role="img">
+              <path d="M 60,24 V 80 C 60,96 74,102 74,112 L 72,232 H 92 L 90,112 C 90,102 104,96 104,80 V 24" />
+              <line x1="74.6" y1="24" x2="74.6" y2="76" />
+              <line x1="89.3" y1="24" x2="89.3" y2="76" />
+              <path d="M 166,24 C 142,24 136,44 136,64 C 136,84 158,96 158,112 L 156,232 H 176 L 174,112 C 174,96 196,84 196,64 C 196,44 190,24 166,24 Z" />
+            </svg>
+            <span class="audit-caption">256-grid · outline line art · rendered 32px</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">svg</span> <span class="cb-attr">viewBox</span><span class="cb-punc">=</span><span class="cb-val">"0 0 256 256"</span> <span class="cb-attr">fill</span><span class="cb-punc">=</span><span class="cb-val">"none"</span> <span class="cb-attr">stroke</span><span class="cb-punc">=</span><span class="cb-val">"currentColor"</span> <span class="cb-attr">stroke-width</span><span class="cb-punc">=</span><span class="cb-val">"7"</span> <span class="cb-attr">stroke-linecap</span><span class="cb-punc">=</span><span class="cb-val">"butt"</span> <span class="cb-attr">stroke-linejoin</span><span class="cb-punc">=</span><span class="cb-val">"round"</span><span class="cb-punc">&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">fork</span> <span class="cb-punc">(left)</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M 60,24 V 80 C 60,96 74,102 74,112 L 72,232 H 92 L 90,112 C 90,102 104,96 104,80 V 24"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">line</span> <span class="cb-attr">x1</span><span class="cb-punc">=</span><span class="cb-val">"74.6"</span> <span class="cb-attr">y1</span><span class="cb-punc">=</span><span class="cb-val">"24"</span> <span class="cb-attr">x2</span><span class="cb-punc">=</span><span class="cb-val">"74.6"</span> <span class="cb-attr">y2</span><span class="cb-punc">=</span><span class="cb-val">"76"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">line</span> <span class="cb-attr">x1</span><span class="cb-punc">=</span><span class="cb-val">"89.3"</span> <span class="cb-attr">y1</span><span class="cb-punc">=</span><span class="cb-val">"24"</span> <span class="cb-attr">x2</span><span class="cb-punc">=</span><span class="cb-val">"89.3"</span> <span class="cb-attr">y2</span><span class="cb-punc">=</span><span class="cb-val">"76"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">spoon</span> <span class="cb-punc">(right)</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M 166,24 C 142,24 136,44 136,64 C 136,84 158,96 158,112 L 156,232 H 176 L 174,112 C 174,96 196,84 196,64 C 196,44 190,24 166,24 Z"</span><span class="cb-punc">/&gt;</span>
+<span class="cb-punc">&lt;/</span><span class="cb-tag">svg</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>How it's drawn.</strong> Drawn on a 256-grid with stroke-based line precision. <strong>Fork on the left</strong> with 4 open tines and a 32px gap to the <strong>Spoon on the right</strong>. Both handles feature flat horizontal bases. Inherits <code>currentColor</code> with <code>stroke-width="7"</code> to theme seamlessly across light and dark modes.
+          </div>
+        </div>
+      </section>
+
+      <!-- Example — Takeout (Bag) -->
+      <section>
+        <h3>Example — Takeout (Bag)</h3>
+        <div class="card">
+          <p class="note note--first">The takeout signal: a paper-bag silhouette with a loop handle. Body is one closed path; handle is one arch. No fills — the outline carries the whole shape.</p>
+          <div class="audit-demo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Takeout bag"><path d="M4.5 9h15l-1.4 10.5a2.5 2.5 0 0 1-2.5 1.5H8.4a2.5 2.5 0 0 1-2.5-1.5L4.5 9z"/><path d="M8.5 9V6.75a3.5 3.5 0 0 1 7 0V9"/></svg>
+            <span class="audit-caption">24px · currentColor · stroke 2</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">svg</span> <span class="cb-attr">viewBox</span><span class="cb-punc">=</span><span class="cb-val">"0 0 24 24"</span> <span class="cb-attr">stroke</span><span class="cb-punc">=</span><span class="cb-val">"currentColor"</span> <span class="cb-attr">stroke-width</span><span class="cb-punc">=</span><span class="cb-val">"2"</span><span class="cb-punc">&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">bag</span> <span class="cb-tag">body</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M4.5 9h15l-1.4 10.5a2.5 2.5 0 0 1-2.5 1.5H8.4a2.5 2.5 0 0 1-2.5-1.5L4.5 9z"</span><span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;!--</span> <span class="cb-tag">handle</span> <span class="cb-punc">--&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">path</span> <span class="cb-attr">d</span><span class="cb-punc">=</span><span class="cb-val">"M8.5 9V6.75a3.5 3.5 0 0 1 7 0V9"</span><span class="cb-punc">/&gt;</span>
+<span class="cb-punc">&lt;/</span><span class="cb-tag">svg</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>How it's drawn.</strong> The body is a paper-bag silhouette: a 15-unit top edge (y9) whose sides flare out 1.4 units over a 10.5-unit drop, closed with 2.5-radius corners. The handle is a single arch from the top edge up to y3.25 (<code>M8.5 9V6.75</code>, 3.5-radius sweep, back down). Together they read as "package it to go" at any size. Pair with the label "Takeout" — and never invert the pair: dine-in and takeout use different shapes so they never get confused by colour alone.
+          </div>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Icon-only is never unnamed</h4><p>Every icon-only button carries an <code>aria-label</code> (see Buttons). The label is the meaning; the icon is the decoration — if the icon fails to render, the button still has a name.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Meaning never lives in the icon alone</h4><p>Status icons pair with colour and text (Feedback Rules 05/06). An icon that only a sighted user can interpret is not confirmation.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>currentColor only</h4><p>Icons inherit colour via <code>stroke="currentColor"</code> — never hardcode a fill or stroke. Otherwise the icon breaks dark mode and disabled states.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Scale uniformly</h4><p>Resize icons with equal width/height only. Non-uniform scaling distorts the 24×24 grid and makes strokes uneven — a squashed icon reads as broken UI.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Small sizes need heavy strokes</h4><p>Below 16px, a 2.0 stroke blurs on low-DPI POS screens. Go 2.5 at 14px, or increase the size — don't let the icon degrade into a smudge.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ ELEMENTS ═══════════════════════════════════ -->
+    <div class="tab-panel" id="panel-elements">
+      <div class="tab-header">
+        <h2>Elements</h2>
+        <p>How to wrap element groups using modern flex layouts, rem-based padding, and percentage-based widths.</p>
+      </div>
+
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note note--first"><strong>Why flex?</strong> Most UI is one-axis flow — a row of actions, a stack of settings, a row of order cards. Flex lays out along one axis and lets children size themselves, so rows of variable content (labels, prices, buttons) fit naturally. Grid is for true 2D layouts only — a fixed table of cards — and is rare in this system.</p>
+          <p class="note" style="margin-bottom:12px"><strong>The mental model.</strong> The <em>container</em> decides direction (<code class="code">row</code> / <code class="code">column</code>), spacing (<code class="code">gap</code>) and wrapping; the <em>children</em> decide their own size (<code class="code">flex</code>, <code class="code">width</code>). Don't let children fight the container — no margins on shared children, no width on the container's axis unless you mean it.</p>
+          <p class="note note--mb-none"><strong>When each pattern:</strong> <strong>row</strong> — action groups, toolbars, label+value lines, order-card footers. <strong>column</strong> — settings stacks, form fields, card bodies. <strong>wrap</strong> — anything with an unknown count (tags, chips, payment buttons). Fixed equal count → <code class="code">flex: 1</code>; exact proportions (60/40 split) → % widths — see the gap trap below.</p>
+        </div>
+      </section>
+
+      <!-- Flex Row -->
+      <section>
+        <h3>Flex Row — Horizontal Group</h3>
+        <div class="card">
+          <p class="note note--first">Use <code class="code">display: flex</code> with <code class="code">gap</code> and <code class="code">padding: 1rem</code> to group related items horizontally.</p>
+          <div style="display:flex; gap:0.75rem; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); border:1px dashed var(--border)">
+            <div style="flex:1; background:var(--primary); color:#fff; padding:0.75rem 1rem; border-radius:var(--r-sm); text-align:center; font-size:13px; font-weight:600">Item A</div>
+            <div style="flex:1; background:var(--primary); color:#fff; padding:0.75rem 1rem; border-radius:var(--r-sm); text-align:center; font-size:13px; font-weight:600">Item B</div>
+            <div style="flex:1; background:var(--primary); color:#fff; padding:0.75rem 1rem; border-radius:var(--r-sm); text-align:center; font-size:13px; font-weight:600">Item C</div>
+          </div>
+          <p class="note"><code class="code--plain">display: flex; gap: 0.75rem; padding: 1rem;</code></p>
+          <p class="note note--mt-sm"><strong>When:</strong> toolbars, action rows, label+value pairs, order-card footers. Items read left-to-right and share one baseline — the spacing lives in <code class="code">gap</code>, never in margins on the items.</p>
+        </div>
+      </section>
+
+      <!-- Flex Column -->
+      <section>
+        <h3>Flex Column — Vertical Stack</h3>
+        <div class="card">
+          <p class="note note--first">Stack elements vertically with <code class="code">flex-direction: column</code>. Use <code class="code">gap</code> for consistent spacing between rows.</p>
+          <div style="display:flex; flex-direction:column; gap:0.5rem; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); border:1px dashed var(--border); max-width:320px">
+            <div style="background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600">Row 1 — 0.5rem gap</div>
+            <div style="background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600">Row 2</div>
+            <div style="background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600">Row 3</div>
+          </div>
+          <p class="note"><code class="code--plain">display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem;</code></p>
+          <p class="note note--mt-sm"><strong>When:</strong> settings lists, stacked form fields, card bodies, action menus. Rows relate vertically — keep <code class="code">gap</code> tight (0.5–0.75rem) so the stack reads as one unit, and use <code class="code">margin-top: auto</code> sparingly to pin a footer to the bottom.</p>
+        </div>
+      </section>
+
+      <!-- Flex Wrap -->
+      <section>
+        <h3>Flex Wrap — Auto-Wrapping Grid</h3>
+        <div class="card">
+          <p class="note note--first">Add <code class="code">flex-wrap: wrap</code> so children flow to the next line when space runs out.</p>
+          <div style="display:flex; flex-wrap:wrap; gap:0.5rem; padding:1rem; background:var(--ghost-bg); border-radius:var(--r-md); border:1px dashed var(--border)">
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 1</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 2</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 3</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 4</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 5</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 6</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 7</div>
+            <div style="background:var(--orange); color:#fff; padding:0.5rem 1rem; border-radius:var(--r-sm); font-size:12px; font-weight:600">Tag 8</div>
+          </div>
+          <p class="note"><code class="code--plain">display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem;</code></p>
+          <p class="note note--mt-sm"><strong>When:</strong> anything with an unknown or changing count — tags, chips, price buttons, payment options. The container grows downward instead of overflowing sideways. Rule: <em>wrap before clip</em> — a row that can't fit must wrap, never overflow.</p>
+        </div>
+      </section>
+
+      <!-- rem Padding -->
+      <section>
+        <h3>rem Padding Scale</h3>
+        <div class="card">
+          <p class="note note--first-lg">Use <code class="code">rem</code> units for padding so spacing scales with the root font size.</p>
+          <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end">
+            <div class="flex-col-center flex-col-center--tight">
+              <div style="width:64px; height:32px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">0.25rem</span></div>
+              <span class="spacing-label">4px</span>
+            </div>
+            <div class="flex-col-center flex-col-center--tight">
+              <div style="width:64px; height:40px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">0.5rem</span></div>
+              <span class="spacing-label">8px</span>
+            </div>
+            <div class="flex-col-center flex-col-center--tight">
+              <div style="width:64px; height:48px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">0.75rem</span></div>
+              <span class="spacing-label">12px</span>
+            </div>
+            <div class="flex-col-center flex-col-center--tight">
+              <div style="width:64px; height:56px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">1rem</span></div>
+              <span class="spacing-label">16px</span>
+            </div>
+            <div class="flex-col-center flex-col-center--tight">
+              <div style="width:64px; height:64px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">1.5rem</span></div>
+              <span class="spacing-label">24px</span>
+            </div>
+            <div class="flex-col-center flex-col-center--tight">
+              <div style="width:64px; height:80px; background:var(--sky); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center"><span style="font-size:10px; font-weight:600">2rem</span></div>
+              <span class="spacing-label">32px</span>
+            </div>
+          </div>
+          <p class="note note--mt-md">The rem scale is the Spacing tab's 4→32px ladder expressed in <code class="code">rem</code>: <strong>0.25rem</strong> = 4px · <strong>0.5rem</strong> = 8px · <strong>0.75rem</strong> = 12px · <strong>1rem</strong> = 16px · <strong>1.5rem</strong> = 24px · <strong>2rem</strong> = 32px. Padding in rem scales with the root font size (user zoom, accessibility settings). Border hairlines and shadows stay in px.</p>
+        </div>
+      </section>
+
+      <!-- % Width -->
+      <section>
+        <h3>Percentage Widths</h3>
+        <div class="card">
+          <p class="note note--first">Use <code class="code">%</code> widths for fluid, parent-relative sizing — the layout adapts with no breakpoints. The page resets <code class="code">box-sizing: border-box</code> globally, so % widths include padding and never overflow their own box.</p>
+
+          <div style="margin-bottom:12px">
+            <p class="note" style="margin-top:0; margin-bottom:6px"><strong>100% width</strong> — full container</p>
+            <div style="width:100%; background:var(--pink); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600">width: 100%</div>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; margin-bottom:12px">
+            <div style="width:50%; background:var(--blue); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">50%</div>
+            <div style="width:50%; background:var(--blue); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">50%</div>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; margin-bottom:12px">
+            <div style="width:33.333%; background:var(--yellow); color:var(--text); padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">33%</div>
+            <div style="width:33.333%; background:var(--yellow); color:var(--text); padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">33%</div>
+            <div style="width:33.333%; background:var(--yellow); color:var(--text); padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">33%</div>
+          </div>
+
+          <div style="display:flex; gap:0.5rem">
+            <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
+            <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
+            <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
+            <div style="width:25%; background:var(--green); color:#fff; padding:0.625rem 1rem; border-radius:var(--r-sm); font-size:13px; font-weight:600; text-align:center">25%</div>
+          </div>
+          <p class="note note--mt-md">⚠️ <strong>The gap trap.</strong> N × (100/N)% <em>plus</em> gaps always overflows: 50% + 50% + a 0.5rem gap is more than 100%. The rows above stay inside only because <code class="code">flex-shrink</code> silently squeezes them — the "50%" labels are approximate. For exact proportions with gaps, use <code class="code">flex-basis: calc(100% / N - gap × (N-1) / N)</code>; if the columns should be equal anyway, just use <code class="code">flex: 1</code>.</p>
+        </div>
+      </section>
+
+      <!-- Flex + % Combo -->
+      <section>
+        <h3>Combo — Flex + % + rem</h3>
+        <div class="card">
+          <p class="note note--first">Combine all three: flex for layout direction, % for widths, rem for internal padding.</p>
+          <div style="display:flex; gap:1rem; padding:1.25rem; background:var(--ghost-bg); border-radius:var(--r-lg); border:1px dashed var(--border)">
+            <div style="width:60%; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-md); padding:1.25rem; box-shadow:var(--shadow-sm)">
+              <div style="font-size:14px; font-weight:700; margin-bottom:0.5rem">Main Content — 60%</div>
+              <div style="font-size:12px; color:var(--text-muted); line-height:1.5">padding: 1.25rem inside a flex container. Width is percentage-based, padding is rem-based.</div>
+            </div>
+            <div style="width:40%; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-md); padding:1.25rem; box-shadow:var(--shadow-sm)">
+              <div style="font-size:14px; font-weight:700; margin-bottom:0.5rem">Sidebar — 40%</div>
+              <div style="font-size:12px; color:var(--text-muted); line-height:1.5">Same pattern: flex row with gap, percentage widths, rem padding inside each card.</div>
+            </div>
+          </div>
+          <p class="note"><code class="code--plain">display: flex; gap: 1rem; padding: 1.25rem;</code> — children use <code class="code--plain">width: 60%</code> / <code class="code--plain">40%</code> with <code class="code--plain">padding: 1.25rem</code></p>
+          <p class="note note--mt-sm">Children in a fixed split also need <code class="code">min-width: 0</code> — otherwise a long label or <code class="code">nowrap</code> text forces the column wider than its %.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>min-width: 0 on content children</h4><p>A flex child with long or nowrap text refuses to shrink below its content width. Add <code>min-width: 0</code> to any child that can hold a long label; pair with ellipsis where the label must truncate.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>The % + gap trap</h4><p>Equal % widths plus gaps overflow the container. Use <code>flex-basis: calc(100% / N - gap × (N-1) / N)</code> for exact columns, or <code>flex: 1</code> when equal distribution is fine.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Wrap before clip</h4><p>Unknown counts (tags, chips, options) get <code>flex-wrap: wrap</code>. A row that overflows its container is a layout bug, not a style choice.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>border-box is assumed</h4><p>The reset sets <code>box-sizing: border-box</code> everywhere — % widths include padding and borders. Don't fight it with <code>content-box</code>; the arithmetic breaks.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Truncate with a title</h4><p>When a label must stay on one line (buttons, pills, table cells), use <code>white-space: nowrap; overflow: hidden; text-overflow: ellipsis</code> and keep the full text in the <code>title</code> attribute for hover + screen readers.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ COMPONENTS ════════════════════════════════ -->
+    <div class="tab-panel" id="panel-components">
+      <div class="tab-header">
+        <h2>Components</h2>
+        <p>Reusable UI patterns — cards, modals, tooltips, alerts, and badges built on the brand token system.</p>
+      </div>
+
+      <!-- Logic & Strategy -->
+      <section>
+        <h3>Logic &amp; Strategy</h3>
+        <div class="card">
+          <p class="note note--first"><strong>Why components?</strong> They are the token system made visible — every component below is composed only from the Colour, Spacing, Radius and Shadow tokens, so the component layer holds <em>zero design decisions</em>. A token change re-themes every screen; a component change re-themes one pattern.</p>
+          <p class="note" style="margin-bottom:12px"><strong>Elevation drives the stack.</strong> Each component sits at a specific elevation (see Spacing): <strong>cards</strong> rest on the page (<code>--shadow-sm</code>), <strong>modals</strong> float above it (<code>--shadow-md</code> + dimmed overlay), <strong>tooltips</strong> hover closest to the eye. If a component's elevation doesn't match its role, the hierarchy is wrong.</p>
+          <p class="note note--mb-none"><strong>Choose by what the user must do:</strong> <strong>read</strong> → card. <strong>choose / confirm</strong> → modal. <strong>discover a hidden label</strong> → tooltip. <strong>be told something changed</strong> → alert. <strong>scan a status</strong> → badge. Two components with the same job means the pattern isn't decided yet.</p>
+        </div>
+      </section>
+
+      <!-- ── Cards ───────────────────────────────── -->
+      <section>
+        <h3>Cards</h3>
+        <div class="card">
+          <div style="display:flex; flex-wrap:wrap; gap:16px">
+            <!-- Default card -->
+            <div style="flex:1; min-width:220px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-sm); padding:1.25rem">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:0.75rem">
+                <div style="width:32px; height:32px; background:var(--primary); border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center; color:#fff">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                </div>
+                <div>
+                  <div style="font-size:14px; font-weight:700; color:var(--text)">Order #1234</div>
+                  <div style="font-size:11px; color:var(--text-muted)">2 items · $45.00</div>
+                </div>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted); line-height:1.5; margin:0">Standard card with shadow, border, and padding. Use for grouping related content.</p>
+            </div>
+            <!-- Highlight card -->
+            <div style="flex:1; min-width:220px; background:var(--primary); color:#fff; border-radius:var(--r-lg); box-shadow:var(--shadow-md); padding:1.25rem">
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; opacity:0.7; margin-bottom:0.5rem">Featured</div>
+              <div style="font-size:16px; font-weight:700; margin-bottom:0.5rem">Premium Plan</div>
+              <p style="font-size:12px; opacity:0.85; line-height:1.5; margin:0">Brand-colored card for emphasis. Use sparingly for CTAs or highlights.</p>
+            </div>
+            <!-- Ghost card -->
+            <div style="flex:1; min-width:220px; background:var(--ghost-bg); border-radius:var(--r-lg); padding:1.25rem">
+              <div style="font-size:14px; font-weight:700; color:var(--text); margin-bottom:0.5rem">Ghost Card</div>
+              <p style="font-size:12px; color:var(--text-muted); line-height:1.5; margin:0">No border or shadow. Use for subtle grouping within an already elevated surface.</p>
+            </div>
+          </div>
+          <p class="note">Radius: <code class="code--plain">var(--r-lg)</code> (12px). Shadow: <code class="code--plain">var(--shadow-sm)</code>. Padding: <code class="code--plain">1.25rem</code>.</p>
+          <p class="note note--mt-sm"><strong>Which flavour:</strong> <strong>Default</strong> for grouping related content — one card per logical unit. <strong>Highlight</strong> for the one standout card per view (upsell, CTA, feature callout). <strong>Ghost</strong> for nesting inside an already-bordered surface — a ghost card inside a default card means the border stack is wrong.</p>
+        </div>
+      </section>
+
+      <!-- ── Card Variants ────────────────────────── -->
+      <section>
+        <h3>Card Colour Variants</h3>
+        <div class="card">
+          <div style="display:flex; flex-wrap:wrap; gap:12px">
+            <div style="flex:1; min-width:140px; background:rgba(20,126,251,0.08); border:1px solid rgba(20,126,251,0.2); border-radius:var(--r-md); padding:1rem; text-align:center">
+              <div style="font-size:24px; font-weight:800; color:var(--primary)">142</div>
+              <div class="stat-label stat-label--primary">Orders Today</div>
+            </div>
+            <div style="flex:1; min-width:140px; background:rgba(83,215,105,0.1); border:1px solid rgba(83,215,105,0.2); border-radius:var(--r-md); padding:1rem; text-align:center">
+              <div style="font-size:24px; font-weight:800; color:var(--success)">98%</div>
+              <div class="stat-label stat-label--success">Completion</div>
+            </div>
+            <div style="flex:1; min-width:140px; background:rgba(252,61,57,0.08); border:1px solid rgba(252,61,57,0.2); border-radius:var(--r-md); padding:1rem; text-align:center">
+              <div style="font-size:24px; font-weight:800; color:var(--danger)">5</div>
+              <div class="stat-label stat-label--danger">Overdue</div>
+            </div>
+            <div style="flex:1; min-width:140px; background:rgba(253,148,38,0.1); border:1px solid rgba(253,148,38,0.2); border-radius:var(--r-md); padding:1rem; text-align:center">
+              <div style="font-size:24px; font-weight:800; color:var(--warning)">12</div>
+              <div class="stat-label stat-label--warning">Pending</div>
+            </div>
+          </div>
+          <p class="note">Stat cards use <code class="code--plain">8–10%</code> opacity background + <code class="code--plain">20%</code> opacity border in the semantic colour.</p>
+          <p class="note note--mt-sm"><strong>Strategy:</strong> one number, one semantic colour, one label — the number is the hero. Use sparingly: three stats on a dashboard is a summary; six is a data table in disguise.</p>
+        </div>
+      </section>
+
+      <!-- ── Modals ───────────────────────────────── -->
+      <section>
+        <h3>Modals</h3>
+        <div class="card">
+          <p class="note note--first-lg">Modal dialogs use a dimmed overlay, centred surface card, and action buttons at the bottom.</p>
+          <div style="position:relative; background:rgba(0,0,0,0.4); border-radius:var(--r-lg); padding:24px; overflow:hidden; min-height:280px; display:flex; align-items:center; justify-content:center">
+            <div style="background:var(--bg-surface); border-radius:var(--r-lg); box-shadow:var(--shadow-md); width:100%; max-width:380px; overflow:hidden">
+              <!-- Modal header -->
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem 0">
+                <div style="font-size:16px; font-weight:700; color:var(--text)">Delete order?</div>
+                <button style="width:28px; height:28px; border-radius:50%; border:none; background:var(--ghost-bg); color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1">✕</button>
+              </div>
+              <!-- Modal body -->
+              <div style="padding:0.75rem 1.25rem 1rem">
+                <p style="font-size:13px; color:var(--text-muted); line-height:1.5; margin:0">This will permanently remove order #1234 and all associated items. This action cannot be undone.</p>
+              </div>
+              <!-- Modal footer -->
+              <div style="display:flex; gap:8px; padding:0.75rem 1.25rem; border-top:1px solid var(--border); justify-content:flex-end">
+                <button class="btn btn--ghost btn--sm" type="button">Cancel</button>
+                <button class="btn btn--danger btn--sm" type="button">Delete</button>
+              </div>
+            </div>
+          </div>
+          <p class="note">Overlay: <code class="code--plain">rgba(0,0,0,0.4)</code>. Surface uses <code class="code--plain">shadow-md</code>. Close button: <code class="code--plain">28px</code> circle. Footer has hairline border-top.</p>
+          <p class="note note--mt-sm"><strong>Strategy:</strong> use a modal for <em>irreversible decisions</em> (delete, disconnect, cancel-forever) or when the user must focus on one thing. For reversible side tasks (edit a name, pick a date) use an inline panel instead — no overlay. Anatomy: header (title + ✕), body (the <em>consequence</em>, never a bare "Are you sure?"), footer (Cancel left, the action right).</p>
+        </div>
+      </section>
+
+      <!-- ── Tooltips ─────────────────────────────── -->
+      <section>
+        <h3>Tooltips</h3>
+        <div class="card">
+          <div style="display:flex; flex-wrap:wrap; gap:32px; align-items:center; justify-content:center; padding:2rem 1rem">
+            <!-- Top tooltip -->
+            <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
+              <div class="tooltip">
+                Tooltip top
+                <div style="position:absolute; top:100%; left:50%; transform:translateX(-50%); width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:5px solid var(--tooltip-arrow)"></div>
+              </div>
+              <span style="font-size:11px; color:var(--text-muted)">↑ top</span>
+            </div>
+            <!-- Bottom tooltip -->
+            <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
+              <span style="font-size:11px; color:var(--text-muted)">↓ bottom</span>
+              <div class="tooltip">
+                <div style="position:absolute; bottom:100%; left:50%; transform:translateX(-50%); width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:5px solid var(--tooltip-arrow)"></div>
+                Tooltip bottom
+              </div>
+            </div>
+            <!-- Left tooltip -->
+            <div style="display:flex; align-items:center; gap:8px">
+              <div class="tooltip">
+                <div style="position:absolute; right:100%; top:50%; transform:translateY(-50%); width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-right:5px solid var(--tooltip-arrow)"></div>
+                Tooltip left
+              </div>
+              <span style="font-size:11px; color:var(--text-muted)">← left</span>
+            </div>
+            <!-- Right tooltip -->
+            <div style="display:flex; align-items:center; gap:8px">
+              <span style="font-size:11px; color:var(--text-muted)">right →</span>
+              <div class="tooltip">
+                Tooltip right
+                <div style="position:absolute; left:100%; top:50%; transform:translateY(-50%); width:0; height:0; border-top:5px solid transparent; border-bottom:5px solid transparent; border-left:5px solid var(--tooltip-arrow)"></div>
+              </div>
+            </div>
+          </div>
+          <p class="note">Background: <code class="code--plain">var(--tooltip-bg)</code> — light: <code class="code--plain">#1a1d23</code>, dark: <code class="code--plain">#3a3f4c</code>. Adds subtle <code class="code--plain">border</code> + <code class="code--plain">box-shadow</code> in dark mode for contrast against dark page background. Text: <code class="code--plain">#fff</code>. Font: <code class="code--plain">11px / 600</code>. Padding: <code class="code--plain">4px 10px</code>, radius: <code class="code--plain">var(--r-sm)</code>. Arrow: 5px CSS triangle using <code class="code--plain">var(--tooltip-arrow)</code>.</p>
+          <p class="note note--mt-sm"><strong>Strategy:</strong> tooltips reveal hidden labels — they never hold critical info. Trigger on hover or focus; offset 4–8px from the trigger; keep the text short (one line, ≤8rem). The arrow always points at the trigger centre. If the content is essential, it must be visible without a tooltip.</p>
+        </div>
+      </section>
+
+      <!-- ── Alerts / Banners ─────────────────────── -->
+      <section>
+        <h3>Alerts</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:10px">
+            <!-- Info -->
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:0.75rem 1rem; background:rgba(95,201,248,0.1); border:1px solid rgba(95,201,248,0.25); border-radius:var(--r-sm)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="alert-icon"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text)">Printer connected</div>
+                <div class="alert-caption">Epson TM-T88VI on USB001 is ready.</div>
+              </div>
+            </div>
+            <!-- Success -->
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:0.75rem 1rem; background:rgba(83,215,105,0.1); border:1px solid rgba(83,215,105,0.25); border-radius:var(--r-sm)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="alert-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text)">Sync complete</div>
+                <div class="alert-caption">All 24 items uploaded to the cloud.</div>
+              </div>
+            </div>
+            <!-- Warning -->
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:0.75rem 1rem; background:rgba(253,148,38,0.1); border:1px solid rgba(253,148,38,0.25); border-radius:var(--r-sm)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="alert-icon"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text)">Low paper warning</div>
+                <div class="alert-caption">Receipt printer paper is running low.</div>
+              </div>
+            </div>
+            <!-- Danger -->
+            <div style="display:flex; align-items:flex-start; gap:10px; padding:0.75rem 1rem; background:rgba(252,61,57,0.08); border:1px solid rgba(252,61,57,0.2); border-radius:var(--r-sm)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="alert-icon"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text)">Connection lost</div>
+                <div class="alert-caption">Unable to reach the KDS server. Retrying...</div>
+              </div>
+            </div>
+          </div>
+          <p class="note">Pattern: <code class="code--plain">10%</code> bg + <code class="code--plain">20–25%</code> border in semantic colour. Icon: <code class="code--plain">16px</code>. Padding: <code class="code--plain">0.75rem 1rem</code>.</p>
+          <p class="note note--mt-sm"><strong>Strategy:</strong> alerts are persistent until dismissed — not auto-disappearing banners. Use for things the user shouldn't miss: connection status, sync state, printer errors. One alert per view, at the top. Never colour alone (Feedback Rule 05) — every tone carries its icon and label.</p>
+        </div>
+      </section>
+
+      <!-- ── Badges ───────────────────────────────── -->
+      <section>
+        <h3>Badges</h3>
+        <div class="card">
+          <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center">
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(20,126,251,0.12); color:var(--primary)">New</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(83,215,105,0.15); color:var(--success)">Completed</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(253,148,38,0.15); color:var(--warning)">Pending</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(252,61,57,0.12); color:var(--danger)">Overdue</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:rgba(95,201,248,0.15); color:var(--info)">Info</span>
+            <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:var(--chip-bg); color:var(--text-muted)">Draft</span>
+          </div>
+          <p class="note" style="margin-top:12px">Count badges (numbers):</p>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:8px">
+            <span style="display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--danger); color:#fff; font-size:10px; font-weight:700">3</span>
+            <span style="display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--primary); color:#fff; font-size:10px; font-weight:700">12</span>
+            <span style="display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--gray); color:#fff; font-size:10px; font-weight:700">99+</span>
+          </div>
+          <p class="note" style="margin-top:12px">Dot indicators:</p>
+          <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:8px">
+            <div style="display:flex; align-items:center; gap:6px"><div style="width:8px; height:8px; border-radius:50%; background:var(--success)"></div><span style="font-size:11px; color:var(--text-muted)">Online</span></div>
+            <div style="display:flex; align-items:center; gap:6px"><div style="width:8px; height:8px; border-radius:50%; background:var(--warning)"></div><span style="font-size:11px; color:var(--text-muted)">Away</span></div>
+            <div style="display:flex; align-items:center; gap:6px"><div style="width:8px; height:8px; border-radius:50%; background:var(--danger)"></div><span style="font-size:11px; color:var(--text-muted)">Offline</span></div>
+          </div>
+          <p class="note">Status labels: <code class="code--plain">10–11px</code>, pill radius, <code class="code--plain">10–15%</code> bg tint. Count badges: <code class="code--plain">20px</code> height, solid fill. Dots: <code class="code--plain">8px</code> circles.</p>
+          <p class="note note--mt-sm"><strong>Which format:</strong> <strong>Status pill</strong> — a labelled state (New, Completed, Pending); use when the label must be readable. <strong>Count badge</strong> — a solid number, cap at 2 digits (<code class="code--plain">99+</code>); use for quantities, never states. <strong>Dot</strong> — presence only (Online, Away, Offline); use when the colour already carries the meaning and no reading is needed. Pick the format that needs the least reading: dot beats pill beats count.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Modals trap focus and Escape</h4><p>A modal is <code>role="dialog"</code> + <code>aria-modal="true"</code>: focus moves inside, Tab stays inside (focus trap), <code>Escape</code> closes, and focus returns to the trigger. Without these, keyboard users are stranded behind the overlay.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Tooltips never hold critical info</h4><p>If the content matters, it lives in the page — a tooltip is a convenience, not a source of truth. The trigger must be focusable (it is a button, not a span) so keyboard users get the tooltip too.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Alerts announce themselves</h4><p>Dynamic alerts get <code>role="alert"</code> (or <code>aria-live="polite"</code>) so screen readers announce the change without stealing focus. Static examples like these on the page are fine as-is.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Counts are never bare numbers</h4><p>A count badge is meaningless alone to a screen reader. The accessible name reads the context: "3 new orders", not "3". Attach it to the label or use <code>aria-label</code>.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>Cards are containers, not buttons</h4><p>When a whole card is clickable, make the inner CTA the focusable element — never nest buttons inside a clickable card, and never make a div clickable without <code>role</code> + keyboard handling.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ FORMS ═════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-forms">
+      <div class="tab-header">
+        <h2>Forms</h2>
+        <p>Form element guidelines — toggle switches, inputs, selects, checkboxes, sliders, and validation states.</p>
+      </div>
+
+      <!-- ── Toggle Switch ──────────────────────── -->
+      <section>
+        <h3>Toggle Switch (settings-toggle-slider)</h3>
+        <div class="card">
+          <p class="note note--first-lg">Small toggle switch used across all settings screens. Track: <code class="code">2.5rem × 1.375rem</code>, knob: <code class="code">1.125rem</code> circle with bounce easing.</p>
+          <div style="display:flex; flex-direction:column; gap:12px; max-width:360px">
+            <!-- OFF state -->
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; background:var(--ghost-bg); border-radius:var(--r-sm)">
+              <span style="font-size:13px; font-weight:600; color:var(--text)">Dark mode</span>
+              <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
+                <input type="checkbox" role="switch" id="demo-toggle-1" data-testid="dl-toggle-dark-mode" style="opacity:0; width:0; height:0; position:absolute">
+                <label for="demo-toggle-1" class="toggle-track" style="position:absolute; inset:0; border-radius:999px; cursor:pointer; transition:background 0.2s"></label>
+                <label for="demo-toggle-1" class="toggle-knob" style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s"></label>
+              </span>
+            </div>
+            <!-- ON state (forced) -->
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; background:var(--ghost-bg); border-radius:var(--r-sm)">
+              <span style="font-size:13px; font-weight:600; color:var(--text)">Sound enabled</span>
+              <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
+                <input type="checkbox" role="switch" id="demo-toggle-2" data-testid="dl-toggle-sound" checked style="opacity:0; width:0; height:0; position:absolute">
+                <label for="demo-toggle-2" class="toggle-track" style="position:absolute; inset:0; border-radius:999px; cursor:pointer; transition:background 0.2s"></label>
+                <label for="demo-toggle-2" class="toggle-knob" style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s"></label>
+              </span>
+            </div>
+            <!-- Disabled -->
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; background:var(--ghost-bg); border-radius:var(--r-sm); opacity:0.45; pointer-events:none">
+              <span style="font-size:13px; font-weight:600; color:var(--text)">Hardware accel (disabled)</span>
+              <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
+                <span style="position:absolute; inset:0; background:var(--gray); border-radius:999px"></span>
+                <span style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; box-shadow:var(--shadow-sm)"></span>
+              </span>
+            </div>
+          </div>
+          <p class="note">Spec: track <code class="code--plain">2.5rem × 1.375rem</code>, knob <code class="code--plain">1.125rem</code>, translate <code class="code--plain">1.125rem</code> on toggle, bounce ease <code class="code--plain">cubic-bezier(0.34, 1.56, 0.64, 1)</code>.</p>
+          <div class="css-rule-header">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Toggle Switch CSS Rule &amp; Explanation:</p>
+            <pre class="snippet-block"><code>input[role="switch"]:checked ~ .toggle-track {
+  background: var(--primary);
+}
+input[role="switch"]:checked ~ .toggle-knob {
+  transform: translateX(1.125rem);
+}</code></pre>
+            <ul class="snippet-explain">
+              <li><code>input[role="switch"]:checked ~ .toggle-track</code> — Sets track background to Primary Blue (<code>#147EFB</code>) when toggled ON.</li>
+              <li><code>transform: translateX(1.125rem)</code> — Translates knob across track with <code>cubic-bezier(0.34, 1.56, 0.64, 1)</code> spring bounce easing.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Text Input ─────────────────────────── -->
+      <section>
+        <h3>Text Input</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:14px; max-width:400px">
+            <div>
+              <label for="dl-input-store-name" class="form-label">Store name</label>
+              <input type="text" id="dl-input-store-name" placeholder="Enter store name" data-testid="dl-input-store-name" class="input-field">
+            </div>
+            <div>
+              <label for="dl-input-email" class="form-label">Email address</label>
+              <div class="input-valid-wrap">
+                <input type="email" id="dl-input-email" placeholder="you@example.com" value="dika@example.com" data-testid="dl-input-email" class="input-field">
+                <span class="input-valid-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              </div>
+            </div>
+            <div>
+              <label for="dl-input-disabled" class="form-label">Disabled input</label>
+              <input type="text" id="dl-input-disabled" value="Read only" disabled data-testid="dl-input-disabled" class="input-field input-field--disabled">
+            </div>
+          </div>
+          <p class="note">Height: <code class="code--plain">36px</code> (<code class="code--plain">2.25rem</code>), padding: <code class="code--plain">0 0.75rem</code>, radius: <code class="code--plain">var(--r-sm)</code> (8px).</p>
+          <div class="css-rule-header">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Text Input Focus CSS Rule &amp; Explanation:</p>
+            <pre class="snippet-block"><code>input:focus, input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-color: var(--primary);
+}</code></pre>
+            <ul class="snippet-explain">
+              <li><code>outline: 2px solid var(--primary); outline-offset: -2px;</code> — Projects a 2px solid Primary Blue ring inside the border, conforming smoothly to <code>border-radius: var(--r-sm)</code> (8px).</li>
+              <li><code>border-color: var(--primary);</code> — Switches border to Primary Blue (<code>#147EFB</code>).</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Validation States ───────────────────── -->
+      <section>
+        <h3>Validation States</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:14px; max-width:400px">
+            <!-- Error -->
+            <div>
+              <label for="dl-input-port-error" class="form-label">Port number</label>
+              <input type="text" id="dl-input-port-error" value="abc" class="validate" data-testid="dl-input-port-error" class="input-field input-field--error">
+              <span style="display:block; font-size:11px; color:var(--danger); margin-top:4px; font-weight:500">Must be a number between 1–65535</span>
+            </div>
+            <!-- Success -->
+            <div>
+              <label for="dl-input-ip-success" class="form-label">IP address</label>
+              <input type="text" id="dl-input-ip-success" value="192.168.1.100" class="validate" data-testid="dl-input-ip-success" class="input-field input-field--success">
+              <span style="display:block; font-size:11px; color:var(--success); margin-top:4px; font-weight:500">Connection successful</span>
+            </div>
+            <!-- Warning -->
+            <div>
+              <label for="dl-input-sla-warning" class="form-label">SLA threshold</label>
+              <input type="text" id="dl-input-sla-warning" value="14" class="validate" data-testid="dl-input-sla-warning" class="input-field input-field--warning">
+              <span style="display:block; font-size:11px; color:var(--warning); margin-top:4px; font-weight:500">Above recommended maximum (12 min)</span>
+            </div>
+          </div>
+          <p class="note">Border switches to the semantic colour (<code class="code--plain">2px solid</code>), with a matching caption below. On focus, the border smoothly animates from the validation colour to Primary Blue over <code class="code--plain">0.2s</code> — and back when focus leaves. Click between the three inputs above to see the transition in action.</p>
+          <div class="css-rule-header">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Validation States CSS Rule &amp; Explanation:</p>
+            <pre class="snippet-block"><code>input.validate { border-width: 2px; transition: border-color 0.2s ease; }
+input.validate:focus { border-color: var(--primary) !important; outline: 2px solid var(--primary); outline-offset: -2px; }</code></pre>
+            <ul class="snippet-explain">
+              <li><code>border-width: 2px</code> — Uses 2px solid semantic colors (danger red, success green, warning yellow).</li>
+              <li><code>transition: border-color 0.2s ease</code> — Smoothly animates the border between the validation colour and the focus ring colour, so the state change feels intentional rather than jarring.</li>
+              <li><code>input.validate:focus</code> — Uses <code>!important</code> to override the inline <code>border</code> shorthand, switching to Primary Blue. Applies a 2px outline ring inside the border for keyboard users.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Select ──────────────────────────────── -->
+      <section>
+        <h3>Select Dropdown</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:14px; max-width:400px">
+            <div>
+              <label for="dl-select-theme" class="form-label">Theme</label>
+              <select id="dl-select-theme" data-testid="dl-select-theme" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:2rem">
+                <option>Dark</option>
+                <option>Light</option>
+                <option>System</option>
+              </select>
+            </div>
+            <div>
+              <label for="dl-select-language" class="form-label">Language</label>
+              <select id="dl-select-language" data-testid="dl-select-language" style="width:100%; height:36px; padding:0 0.75rem; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-surface); color:var(--text); font:inherit; font-size:13px; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:2rem">
+                <option>English</option>
+                <option>Indonesian</option>
+              </select>
+            </div>
+          </div>
+          <p class="note">Same dimensions as text input. Custom chevron via <code class="code--plain">appearance: none</code> + <code class="code--plain">background-image</code> SVG.</p>
+          <div class="css-rule-header">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Select Dropdown Focus CSS Rule &amp; Explanation:</p>
+            <pre class="snippet-block"><code>select:focus, select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-color: var(--primary);
+}</code></pre>
+            <ul class="snippet-explain">
+              <li><code>appearance: none</code> — Suppresses native OS dropdown arrow in favor of custom SVG chevron.</li>
+              <li><code>select:focus</code> — Applies 2px solid Primary Blue focus ring matching standard text inputs.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Checkbox & Radio ────────────────────── -->
+      <section>
+        <h3>Checkbox &amp; Radio</h3>
+        <div class="card">
+          <div style="display:flex; gap:48px">
+            <!-- Checkboxes -->
+            <div>
+              <p style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:10px">Checkboxes</p>
+              <div style="display:flex; flex-direction:column; gap:10px">
+                <label class="flex-label">
+                  <input type="checkbox" checked style="width:16px; height:16px; accent-color:var(--primary)">
+                  Show currency
+                </label>
+                <label class="flex-label">
+                  <input type="checkbox" style="width:16px; height:16px; accent-color:var(--primary)">
+                  Show tax
+                </label>
+                <label class="flex-label flex-label--disabled">
+                  <input type="checkbox" disabled style="width:16px; height:16px; accent-color:var(--primary)">
+                  Disabled option
+                </label>
+              </div>
+            </div>
+            <!-- Radio -->
+            <div>
+              <p style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin-bottom:10px">Radio</p>
+              <div style="display:flex; flex-direction:column; gap:10px">
+                <label class="flex-label">
+                  <input type="radio" name="demo-radio" checked style="width:16px; height:16px; accent-color:var(--primary)">
+                  High quality
+                </label>
+                <label class="flex-label">
+                  <input type="radio" name="demo-radio" style="width:16px; height:16px; accent-color:var(--primary)">
+                  Normal
+                </label>
+                <label class="flex-label flex-label--disabled">
+                  <input type="radio" name="demo-radio" disabled style="width:16px; height:16px; accent-color:var(--primary)">
+                  Disabled
+                </label>
+              </div>
+            </div>
+          </div>
+          <p class="note">Use native <code class="code--plain">accent-color: var(--primary)</code> for consistent brand colouring.</p>
+          <div class="css-rule-header">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">No Outer Focus Ring on Checkbox &amp; Radio:</p>
+            <pre class="snippet-block"><code>input[type="checkbox"]:focus, input[type="radio"]:focus,
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}</code></pre>
+            <p style="color:var(--text-muted); line-height:1.4">Checkboxes and radio inputs rely solely on native <code>accent-color</code> and must suppress outer text-input focus ring glow boxes (<code>outline: none; box-shadow: none</code>).</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Range Slider ────────────────────────── -->
+      <section>
+        <h3>Range Slider</h3>
+        <div class="card">
+          <div style="display:flex; flex-direction:column; gap:18px; max-width:400px">
+            <div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
+                <label for="dl-slider-sound" style="font-size:12px; font-weight:600; color:var(--text)">Sound volume</label>
+                <span id="dl-slider-sound-val" style="font-size:12px; font-weight:600; color:var(--primary)">80%</span>
+              </div>
+              <input type="range" id="dl-slider-sound" min="0" max="100" value="80" data-testid="dl-slider-sound" style="width:100%">
+            </div>
+            <div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
+                <label for="dl-slider-yellow" style="font-size:12px; font-weight:600; color:var(--text)">Yellow threshold</label>
+                <span id="dl-slider-yellow-val" style="font-size:12px; font-weight:600; color:var(--warning)">7 min</span>
+              </div>
+              <input type="range" id="dl-slider-yellow" min="1" max="15" value="7" class="slider-warning" data-testid="dl-slider-yellow" style="width:100%">
+            </div>
+            <div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
+                <label for="dl-slider-red" style="font-size:12px; font-weight:600; color:var(--text)">Red threshold</label>
+                <span id="dl-slider-red-val" style="font-size:12px; font-weight:600; color:var(--danger)">12 min</span>
+              </div>
+              <input type="range" id="dl-slider-red" min="9" max="15" value="12" class="slider-danger" data-testid="dl-slider-red" style="width:100%">
+            </div>
+          </div>
+          <p class="note">Track: <code class="code--plain">6px</code> height, <code class="code--plain">border-radius: 999px</code>. Fill uses <code class="code--plain">linear-gradient</code> with semantic colour for filled portion.</p>
+          <div class="css-rule-header">
+            <p style="font-weight:600; color:var(--text); margin-bottom:6px">Range Slider CSS Rule &amp; Explanation:</p>
+            <pre class="snippet-block"><code>input[type="range"] {
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+}
+input[type="range"]:focus { outline: none; box-shadow: none; }</code></pre>
+            <ul class="snippet-explain">
+              <li><code>height: 6px; border-radius: 999px;</code> — Custom pill track styling across WebKit and Gecko engines.</li>
+              <li><code>outline: none; box-shadow: none;</code> — Range slider thumb handles active states natively without outer box distortion.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Textarea ────────────────────────────── -->
+      <section>
+        <h3>Textarea</h3>
+        <div class="card">
+          <div style="max-width:400px">
+            <label for="dl-textarea-notes" class="form-label">Notes</label>
+            <textarea id="dl-textarea-notes" placeholder="Add any notes here..." rows="3" data-testid="dl-textarea-notes" class="input-field input-field--textarea"></textarea>
+          </div>
+          <p class="note">Same border, radius, and font as text inputs. Use <code class="code--plain">resize: vertical</code> to let users adjust height.</p>
+          <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border); font-size:13px; color:var(--text)">
+            <p style="font-weight:600; color:var(--text); margin-bottom:8px">Proper Focus Ring CSS Rule &amp; Explanation:</p>
+            <pre style="background:var(--ghost-bg); padding:10px 12px; border-radius:var(--r-sm); font-family:'JetBrains Mono','SF Mono','Fira Code',monospace; font-size:12px; color:var(--text); overflow-x:auto; margin-bottom:12px"><code>input:focus, textarea:focus, select:focus,
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-color: var(--primary);
+}</code></pre>
+            <ul style="margin-left:1.2rem; display:flex; flex-direction:column; gap:6px; color:var(--text-muted); font-size:12px; line-height:1.5">
+              <li><code>input:focus, textarea:focus, select:focus, input:focus-visible...</code> — Targets form inputs, textareas, and select dropdowns for both keyboard navigation and pointer click interactions across all browsers.</li>
+              <li><code>outline: 2px solid var(--primary); outline-offset: -2px;</code> — Projects a 2px solid Primary Blue ring inside the border, eliminating the gap between the element edge and the focus indicator.</li>
+              <li><code>border-color: var(--primary);</code> — Transitions the inner 1px border color to Primary Blue (<code>#147EFB</code>) for seamless active focus state feedback.</li>
+              <li><code>outline: 2px solid var(--primary); outline-offset: -2px;</code> — Projects a crisp 2px solid Primary Blue ring inside the border, perfectly conforming to its <code>border-radius</code> (8px) without any alpha/transparency gap.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ MOTION & FEEDBACK ══════════════════════════ -->
+    <div class="tab-panel" id="panel-feedback">
+      <div class="tab-header">
+        <h2>Motion &amp; Feedback</h2>
+        <p>Universal interaction rule: every action has a <strong>before</strong>, a <strong>feedback</strong>, and an <strong>after</strong> — so every action is confirmable by the visuals alone.</p>
+      </div>
+
+      <!-- The Rule -->
+      <section>
+        <h3>The Rule — Before · Feedback · After</h3>
+        <div class="phase-flow">
+          <div class="phase phase--before">
+            <span class="phase-tag">Before</span>
+            <h4>Resting state</h4>
+            <p>The control shows what it is and what it does. The user hasn't touched it yet — nothing has happened.</p>
+            <div class="phase-demo">
+              <button class="btn btn--primary btn--md" type="button">Save changes</button>
+            </div>
+          </div>
+          <div class="phase-arrow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="phase phase--feedback">
+            <span class="phase-tag">Feedback</span>
+            <h4>While pressing</h4>
+            <p>Immediate tactile response — press, hover, focus. This happens in under 150ms, before the work is done.</p>
+            <div class="phase-demo">
+              <button class="btn btn--primary btn--md" type="button" style="transform: scale(.97)">Save changes</button>
+            </div>
+          </div>
+          <div class="phase-arrow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="phase phase--after">
+            <span class="phase-tag">After</span>
+            <h4>Confirmation</h4>
+            <p>The settled state that proves the action landed — checkmark, state change, or disabled. Never leave the user guessing.</p>
+            <div class="phase-demo">
+              <button class="btn btn--success btn--md fb-btn" type="button">
+                <span class="fb-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
+                Saved
+              </button>
+            </div>
+          </div>
+        </div>
+        <p class="note">Rule of thumb: if the user can't tell from the pixels alone whether their action worked, the feedback is missing.</p>
+      </section>
+
+      <!-- The Rules -->
+      <section>
+        <h3>The Rules</h3>
+        <div class="rules-list">
+          <div class="rule">
+            <span class="rule-num">01</span>
+            <div class="rule-body">
+              <h4>Confirm by visuals alone</h4>
+              <p>Every action must be verifiable from the pixels — state, colour, icon, motion. If the user has to wonder whether it worked, the feedback is missing.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">02</span>
+            <div class="rule-body">
+              <h4>Feedback before work</h4>
+              <p>Respond within <code>120ms</code> (fast token). The heavy work may take seconds — the press response must never wait for it.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">03</span>
+            <div class="rule-body">
+              <h4>The after-state must differ from the before</h4>
+              <p>A click that changes nothing is indistinguishable from a click that never registered. Flip the state: button → disabled + checkmark, tab → selected, toggle → slid.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">04</span>
+            <div class="rule-body">
+              <h4>Never animate instant flips</h4>
+              <p>Theme, filters, selected tabs, counts — these are state flips, not transitions. Use <code>0ms</code> (instant token). Animate only what moves in space.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">05</span>
+            <div class="rule-body">
+              <h4>Error is motion + colour + text</h4>
+              <p>Shake + red border + caption. Never red alone (invisible to colour-blind users), never a caption alone (missed by fast eyes).</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">06</span>
+            <div class="rule-body">
+              <h4>Success is a checkmark, not just green</h4>
+              <p>Green alone can read as decoration. Pair it with the icon and a real state flip — disabled button, removed row, updated value.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">07</span>
+            <div class="rule-body">
+              <h4>Motion is communication, not decoration</h4>
+              <p>Every animation answers a question: did it work? what changed? where did it go? If it communicates nothing, cut it. Never loop idle animation — spinners only while genuinely busy.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">08</span>
+            <div class="rule-body">
+              <h4>Least motion that confirms</h4>
+              <p>Use the smallest duration and amplitude that reads clearly. When in doubt, a <code>120ms</code> scale/translate micro-interaction beats a fancy <code>500ms</code> entrance.</p>
+            </div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">09</span>
+            <div class="rule-body">
+              <h4>Respect reduced motion</h4>
+              <p>Honor <code>prefers-reduced-motion</code> — swap motion feedback for instant state change. The after-state must still confirm.</p>
+            </div>
+          </div>
+        </div>
+        <p class="note">If a rule conflicts with another, <strong>the after-state wins</strong> — confirmation beats polish, every time.</p>
+      </section>
+
+      <!-- Pick Your Feedback -->
+      <section>
+        <h3>Pick Your Feedback</h3>
+        <div class="card">
+          <div style="display:grid; grid-template-columns:1.2fr 2fr 1fr; gap:0; border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; font-size:12px">
+            <div class="tt-head">Action</div>
+            <div class="tt-head tt-head--bordered">Feedback</div>
+            <div class="tt-head tt-head--bordered">Token</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Press</div>
+            <div class="tt-cell tt-cell--bordered">scale(.97) + darker bg</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">fast · 120ms</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Busy work</div>
+            <div class="tt-cell tt-cell--bordered">spinner inside the button, disabled</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">slow · 350ms+</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Success</div>
+            <div class="tt-cell tt-cell--bordered">green + checkmark pop</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">base · 200ms</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Error</div>
+            <div class="tt-cell tt-cell--bordered">shake + red border + caption</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">fast · 120ms</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Remove</div>
+            <div class="tt-cell tt-cell--bordered">slide out + height collapse</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">slow · 350ms</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); font-weight:600">Toggle</div>
+            <div class="tt-cell tt-cell--bordered">knob travel, bounce</div>
+            <div style="padding:8px 14px; border-bottom:1px solid var(--border); border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">base · 200ms</div>
+            <div style="padding:8px 14px; font-weight:600">Instant flip</div>
+            <div class="tt-cell tt-cell--bordered tt-cell--nolast">nothing — the state flips now</div>
+            <div style="padding:8px 14px; border-left:1px solid var(--border); font-family:var(--font-mono); font-size:11px">instant · 0ms</div>
+          </div>
+          <p class="note note--mt-md">If you're unsure which feedback an action deserves, match it to the nearest row — every pattern below is built from these seven.</p>
+        </div>
+      </section>
+
+      <!-- Interaction States -->
+      <section>
+        <h3>Interaction States</h3>
+        <div class="state-row">
+          <div class="state-cell">
+            <span class="state-name">Resting</span>
+            <button class="btn btn--primary btn--md" type="button">Hover me</button>
+            <span class="state-spec">default</span>
+          </div>
+          <div class="state-cell">
+            <span class="state-name">Hovered</span>
+            <button class="btn btn--primary btn--md" type="button" style="background:var(--primary-hover)">Hovered</button>
+            <span class="state-spec">bg → primary-hover</span>
+          </div>
+          <div class="state-cell">
+            <span class="state-name">Pressed</span>
+            <button class="btn btn--primary btn--md" type="button" style="background:var(--primary-active); transform:scale(.97)">Pressed</button>
+            <span class="state-spec">scale .97 · darker</span>
+          </div>
+          <div class="state-cell">
+            <span class="state-name">Focused</span>
+            <button class="btn btn--primary btn--md" type="button" style="box-shadow:0 0 0 3px rgba(20,126,251,.35)">Focused</button>
+            <span class="state-spec">focus ring</span>
+          </div>
+          <div class="state-cell">
+            <span class="state-name">Disabled</span>
+            <button class="btn btn--primary btn--md" type="button" disabled>Disabled</button>
+            <span class="state-spec">opacity .45</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Motion Tokens -->
+      <section>
+        <h3>Motion Tokens</h3>
+        <div class="card">
+          <div class="motion-tokens">
+            <div class="motion-token">
+              <span class="mt-name">Instant</span>
+              <span class="mt-value">0ms</span>
+              <span class="mt-use">Immediate state flips — no animation</span>
+            </div>
+            <div class="motion-token">
+              <span class="mt-name">Fast</span>
+              <span class="mt-value">120ms</span>
+              <span class="mt-use">Press / hover feedback</span>
+            </div>
+            <div class="motion-token">
+              <span class="mt-name">Base</span>
+              <span class="mt-value">200ms</span>
+              <span class="mt-use">State transitions, toggles, chips</span>
+            </div>
+            <div class="motion-token">
+              <span class="mt-name">Slow</span>
+              <span class="mt-value">350ms</span>
+              <span class="mt-use">Entrances, larger movement</span>
+            </div>
+          </div>
+          <p class="note">Rules: <strong>feedback is always faster than the action's work</strong> — respond in ≤120ms, then let the work take as long as it needs. Never animate anything that should be instant (state flips like theme, filters, selected tabs).</p>
+          <p class="note note--mt-sm"><strong>Implementation:</strong> animate <em>only</em> <code class="code">transform</code> and <code class="code">opacity</code>. The compositor runs those on the GPU without touching layout, which keeps even an old i3-2100 at 60fps. Never animate <code class="code">width</code>, <code class="code">height</code>, <code class="code">top</code>, or <code class="code">margin</code> — each frame re-lays-out the page.</p>
+        </div>
+      </section>
+
+      <!-- Easing Comparison -->
+      <section>
+        <h3>Easing Comparison</h3>
+        <div class="card">
+          <div class="ease-demo">
+            <div class="ease-track"><span class="ease-label">Standard</span><div class="ease-dot ease-standard"></div></div>
+            <div class="ease-track"><span class="ease-label">Bounce</span><div class="ease-dot ease-bounce"></div></div>
+            <div class="ease-track"><span class="ease-label">Exit</span><div class="ease-dot ease-exit"></div></div>
+          </div>
+          <div style="margin-top:14px">
+            <button class="btn btn--ghost btn--md" type="button" id="ease-play" data-testid="dl-fb-ease-play">Play all</button>
+          </div>
+          <p class="note">Standard <code class="code--plain">cubic-bezier(.2, 0, 0, 1)</code> for entrances · Bounce <code class="code--plain">cubic-bezier(.34, 1.56, .64, 1)</code> for playful knobs · Exit <code class="code--plain">cubic-bezier(.4, 0, 1, 1)</code> for removals.</p>
+        </div>
+      </section>
+
+      <!-- Feedback Patterns -->
+      <section>
+        <h3>Feedback Patterns</h3>
+
+        <!-- Busy -> Done -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Busy → Done</h4>
+          <p class="note note--first-lg">The workhorse: press gives immediate feedback, work happens, then a green confirmation pops in.</p>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+            <button class="btn btn--primary btn--md fb-btn" type="button" id="demo-save" data-testid="dl-fb-save" data-state="idle">
+              <span class="fb-icon"></span>
+              <span class="fb-label">Save</span>
+            </button>
+            <span class="note" style="margin:0" id="demo-save-hint">Click to run the full before → feedback → after cycle.</span>
+          </div>
+        </div>
+
+        <!-- Error Shake -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Error Feedback — Shake</h4>
+          <p class="note note--first-lg">Invalid actions shake the control and flag it red. The shake is the <em>feedback</em>; the red state is the <em>after</em>.</p>
+          <div style="display:flex; flex-direction:column; gap:10px; max-width:400px">
+            <input type="text" id="demo-error-input" placeholder="Type 'ok' to succeed" data-testid="dl-fb-error-input" class="input-field">
+            <button class="btn btn--primary btn--md" type="button" id="demo-error-btn" data-testid="dl-fb-validate" style="align-self:flex-start">Validate</button>
+          </div>
+        </div>
+
+        <!-- Delete Confirmation -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Delete — Before · Process · After</h4>
+          <p class="note note--first-lg">Destructive actions need confirmation. The button flips to a two-step pattern: click → confirm → done.</p>
+          <div class="phase-flow" style="margin-bottom:14px">
+            <div class="phase phase--before">
+              <span class="phase-tag">Before</span>
+              <h4>Active item</h4>
+              <div class="phase-demo">
+                <button class="btn btn--danger btn--sm" type="button">Delete</button>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--feedback">
+              <span class="phase-tag">Process</span>
+              <h4>Confirming</h4>
+              <div class="phase-demo" style="gap:6px; justify-content:center">
+                <button class="btn btn--ghost btn--sm" type="button" style="font-size:11px; padding:5px 10px">Cancel</button>
+                <button class="btn btn--danger btn--sm" type="button" style="font-size:11px; padding:5px 10px">Confirm?</button>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--after">
+              <span class="phase-tag">After</span>
+              <h4>Removed</h4>
+              <div class="phase-demo">
+                <span style="font-size:12px; color:var(--text-muted); text-decoration:line-through">Order #1234</span>
+              </div>
+            </div>
+          </div>
+          <p class="note">Timeline: <code class="code--accent">0ms</code> button flips → <code class="code--accent">200ms</code> confirm appears → <code class="code--accent">350ms</code> row slides out.</p>
+        </div>
+
+        <!-- Toggle Switch -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Toggle — Before · Process · After</h4>
+          <p class="note note--first-lg">Toggles slide the knob while the work happens. The knob movement IS the feedback — no spinner needed.</p>
+          <div class="phase-flow" style="margin-bottom:14px">
+            <div class="phase phase--before">
+              <span class="phase-tag">Before</span>
+              <h4>Off</h4>
+              <div class="phase-demo">
+                <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem"><span style="position:absolute; inset:0; background:var(--gray); border-radius:999px"></span><span style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; box-shadow:var(--shadow-sm)"></span></span>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--feedback">
+              <span class="phase-tag">Process</span>
+              <h4>Sliding</h4>
+              <div class="phase-demo">
+                <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem"><span style="position:absolute; inset:0; background:var(--primary); border-radius:999px"></span><span style="position:absolute; width:1.125rem; height:1.125rem; left:calc(50% - 0.5625rem); bottom:0.125rem; background:#fff; border-radius:50%; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1)"></span></span>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--after">
+              <span class="phase-tag">After</span>
+              <h4>On</h4>
+              <div class="phase-demo">
+                <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem"><span style="position:absolute; inset:0; background:var(--primary); border-radius:999px"></span><span style="position:absolute; width:1.125rem; height:1.125rem; left:1.125rem; bottom:0.125rem; background:#fff; border-radius:50%; box-shadow:var(--shadow-sm)"></span></span>
+              </div>
+            </div>
+          </div>
+          <p class="note">Knob translation: <code class="code--accent">1.125rem</code>. Easing: <code class="code--accent">cubic-bezier(0.34, 1.56, 0.64, 1)</code> (bounce). Duration: <code class="code--accent">200ms</code>.</p>
+        </div>
+
+        <!-- Card Remove -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Card — Before · Process · After</h4>
+          <p class="note note--first-lg">Items leaving a list slide out and collapse. The empty space closing proves it's gone.</p>
+          <div class="phase-flow" style="margin-bottom:14px">
+            <div class="phase phase--before">
+              <span class="phase-tag">Before</span>
+              <h4>Present</h4>
+              <div class="phase-demo">
+                <div style="padding:8px 14px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-sm); font-size:12px; font-weight:600; box-shadow:var(--shadow-sm)">Order #5678</div>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--feedback">
+              <span class="phase-tag">Process</span>
+              <h4>Sliding out</h4>
+              <div class="phase-demo" style="overflow:hidden">
+                <div style="padding:8px 14px; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-sm); font-size:12px; font-weight:600; opacity:0.25; transform:translateX(40px) scale(0.95); box-shadow:var(--shadow-sm); transition:all 0.28s ease">Order #5678</div>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--after">
+              <span class="phase-tag">After</span>
+              <h4>Gone</h4>
+              <div class="phase-demo" style="background:transparent; border:1px dashed var(--border)">
+                <span style="font-size:11px; color:var(--text-muted); font-style:italic">No items</span>
+              </div>
+            </div>
+          </div>
+          <p class="note">Exit animation: <code class="code--accent">translateX(20px) + opacity 0</code> over <code class="code--accent">280ms</code>. Container height collapses with <code class="code--accent">grid-template-rows: 0fr</code> transition.</p>
+        </div>
+
+        <!-- Form Submit -->
+        <div class="card">
+          <h4 style="font-size:14px; font-weight:700; margin-bottom:4px">Form Submit — Before · Process · After</h4>
+          <p class="note note--first-lg">The button becomes the progress indicator. No extra spinner — the button label and icon tell the whole story.</p>
+          <div class="phase-flow" style="margin-bottom:14px">
+            <div class="phase phase--before">
+              <span class="phase-tag">Before</span>
+              <h4>Ready</h4>
+              <div class="phase-demo">
+                <button class="btn btn--primary btn--sm" type="button">Submit</button>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--feedback">
+              <span class="phase-tag">Process</span>
+              <h4>Submitting</h4>
+              <div class="phase-demo">
+                <button class="btn btn--primary btn--sm" type="button" style="opacity:.8; pointer-events:none">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:kds-spin .7s linear infinite"><circle cx="12" cy="12" r="10" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
+                  Submitting…
+                </button>
+              </div>
+            </div>
+            <div class="phase-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+            <div class="phase phase--after">
+              <span class="phase-tag">After</span>
+              <h4>Done</h4>
+              <div class="phase-demo">
+                <button class="btn btn--success btn--sm" type="button" style="pointer-events:none">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Submitted
+                </button>
+              </div>
+            </div>
+          </div>
+          <p class="note">Spinner: <code class="code--accent">stroke-dasharray</code> circle, <code class="code--accent">0.7s linear infinite</code>. Success: swap to green + checkmark after <code class="code--accent">300ms</code> hold.</p>
+        </div>
+      </section>
+
+      <!-- Fallback & Accessibility -->
+      <section>
+        <h3>Fallback &amp; Accessibility</h3>
+        <div class="card">
+          <div class="rules-list">
+            <div class="rule">
+              <span class="rule-num">1</span>
+              <div class="rule-body"><h4>Honor reduced motion for real</h4><p>Rule 09 made concrete: <code>@media (prefers-reduced-motion: reduce)</code> collapses every duration to <code>0ms</code> and skips entrance/spin/shake — but the <em>after-state never disappears</em>. The checkmark, the red border, the removed row all stay.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">2</span>
+              <div class="rule-body"><h4>Old hardware is the baseline</h4><p>POS terminals can be a decade old (an i3-2100 is the floor). Animations are <code>transform</code>/<code>opacity</code> only, never layout properties; long lists use <code>content-visibility</code>; no blur or heavy shadow animations. If it stutters there, it's too heavy everywhere.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">3</span>
+              <div class="rule-body"><h4>Long work keeps the spinner</h4><p>If an action runs past ~10s, keep the indeterminate spinner — never fake a progress bar. The contract is the after-state, not the elapsed time. Offer a cancel path for genuinely long operations.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">4</span>
+              <div class="rule-body"><h4>Busy buttons must not double-fire</h4><p>While feedback is in flight the control is disabled (see Buttons' rule 5). A second tap that restarts the cycle is the fastest way to break the before → feedback → after contract.</p></div>
+            </div>
+            <div class="rule">
+              <span class="rule-num">5</span>
+              <div class="rule-body"><h4>The state confirms, not the animation</h4><p>When an animation ends, the after-state must persist — if the only thing left is the memory of motion, it was decoration (Rule 07), and the confirmation is missing.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ════ AUDIT ═══════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-audit">
+      <div class="tab-header">
+        <h2>Audit</h2>
+        <p>Every interactive element carries a <code style="font-family:var(--font-mono); color:var(--primary)">data-testid</code> with an easy-to-understand name — the contract between the UI and automated tests.</p>
+      </div>
+
+      <!-- The Convention -->
+      <section>
+        <h3>The Convention</h3>
+        <div class="card">
+          <p class="note note--first-lg">Tests (Playwright, Testing Library) select elements by <code style="font-family:var(--font-mono)">data-testid</code> — <strong>never</strong> by CSS class, DOM position, or visible text. Visible text gets translated; classes get refactored; the testid is the only stable handle.</p>
+          <div class="testid-pattern">
+            <span class="tp-fixed">data-testid="</span>
+            <span class="tp-part tp-part--feature">feature</span>
+            <span class="tp-fixed">-</span>
+            <span class="tp-part tp-part--element">element</span>
+            <span class="tp-fixed">[-</span>
+            <span class="tp-part tp-part--action">action</span>
+            <span class="tp-fixed">]"</span>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px">
+            <span class="spacing-label badge-pill">kebab-case, lowercase</span>
+            <span class="spacing-label badge-pill">feature scope first</span>
+            <span class="spacing-label badge-pill">describes what it is / does</span>
+            <span class="spacing-label badge-pill">never position (no button-3)</span>
+            <span class="spacing-label badge-pill">stable across locales</span>
+            <span class="spacing-label badge-pill">unique per screen</span>
+          </div>
+          <p class="note">One id per control, everywhere that control appears. If the same button exists in two features, prefix it with each feature — the id must be unique on the page.</p>
+        </div>
+      </section>
+
+      <!-- Example 1 -->
+      <section>
+        <h3>Example 1 — Start an order</h3>
+        <div class="card">
+          <p class="note note--first">The KDS order card's primary action. Click it — the button itself is the test target.</p>
+          <div class="audit-demo">
+            <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:200px">
+              <div style="width:32px; height:32px; border-radius:var(--r-sm); background:var(--primary); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:12px">#1042</div>
+              <div>
+                <div style="font-size:13px; font-weight:700; color:var(--text)">Order #1042</div>
+                <div style="font-size:11px; color:var(--text-muted)">3 items · $42.50</div>
+              </div>
+            </div>
+            <button class="btn btn--primary btn--md fb-btn" type="button" data-testid="dl-comp-start-order" id="audit-start">
+              Start order
+            </button>
+            <span class="audit-caption">[dl-comp-start-order]</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">button</span>
+  <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"btn btn--primary btn--md"</span>
+  <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-comp-start-order</span><span class="cb-val">"</span>
+<span class="cb-punc">&gt;</span>Start order<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span></code></pre>
+          <p class="note note--first">The rendered demo adds <code>id="audit-start"</code> and <code>fb-btn</code> only to power this page's click demo — real code carries just <code>data-testid</code> + styling classes.</p>
+          <div class="audit-why">
+            <strong>Why <code>dl-comp-start-order</code>?</strong> The name is <code>feature + element + action</code>: <code>dl</code> scopes it to this design-language page, <code>comp</code> is the Components section, <code>start-order</code> is the exact action. When the label is translated to Indonesian — <em>"Mulai"</em> — the testid never changes, so tests keep working without touching a selector. No positional info: the button can move to a different column and <code>getByTestId('dl-comp-start-order')</code> still finds it.
+          </div>
+          <div style="margin-top:14px">
+            <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted)">In tests — Playwright</span>
+            <pre class="codeblock" style="margin-top:8px; margin-bottom:0"><code><span class="cb-punc">//</span> comp-start-order.spec.ts
+await page.getByTestId(&#39;<span class="cb-testid">dl-comp-start-order</span>&#39;).click();
+await expect(page.getByTestId(&#39;<span class="cb-testid">dl-comp-start-order</span>&#39;)).toBeDisabled();</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Example 2 -->
+      <section>
+        <h3>Example 2 — Sound toggle</h3>
+        <div class="card">
+          <p class="note note--first">A settings-toggle-slider from the Forms tab. The id lives on the real <code style="font-family:var(--font-mono)">&lt;input&gt;</code>, not the decorative labels. Click it.</p>
+          <div class="audit-demo">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex:1; max-width:320px; padding:0.75rem 1rem; background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--r-sm)">
+              <span style="font-size:13px; font-weight:600; color:var(--text)">Sound enabled</span>
+              <span style="position:relative; display:inline-block; width:2.5rem; height:1.375rem; flex-shrink:0">
+                <input type="checkbox" role="switch" id="audit-sound" data-testid="dl-toggle-sound" style="opacity:0; width:0; height:0; position:absolute">
+                <label for="audit-sound" class="toggle-track" style="position:absolute; inset:0; border-radius:999px; cursor:pointer; transition:background 0.2s"></label>
+                <label for="audit-sound" class="toggle-knob" style="position:absolute; width:1.125rem; height:1.125rem; left:0.125rem; bottom:0.125rem; background:#fff; border-radius:50%; cursor:pointer; box-shadow:var(--shadow-sm); transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s"></label>
+              </span>
+            </div>
+            <span class="audit-caption">[dl-toggle-sound]</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">span</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"settings-toggle-slider"</span><span class="cb-punc">&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">input</span>
+    <span class="cb-attr">type</span><span class="cb-punc">=</span><span class="cb-val">"checkbox"</span>
+    <span class="cb-attr">role</span><span class="cb-punc">=</span><span class="cb-val">"switch"</span>
+    <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-toggle-sound</span><span class="cb-val">"</span>
+  <span class="cb-punc">/&gt;</span>
+  <span class="cb-punc">&lt;</span><span class="cb-tag">label</span> <span class="cb-attr">for</span><span class="cb-punc">=</span><span class="cb-val">"audit-sound"</span><span class="cb-punc">&gt;</span><span class="cb-punc">&lt;/</span><span class="cb-tag">label</span><span class="cb-punc">&gt;</span>
+<span class="cb-punc">&lt;/</span><span class="cb-tag">span</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>Why <code>dl-toggle-sound</code>?</strong> <code>dl</code> scopes it to this design-language page, <code>toggle</code> is the control type, <code>sound</code> is the specific setting. When this same component appears in the real Settings screen, it becomes <code>settings-sound-toggle</code> — each screen owns its own prefix. Tests can assert <em>"sound is off by default"</em> with <code>expect(getByTestId('dl-toggle-sound')).not.toBeChecked()</code>.
+          </div>
+        </div>
+      </section>
+
+      <!-- Example 3 -->
+      <section>
+        <h3>Example 3 — Filter tabs</h3>
+        <div class="card">
+          <p class="note note--first">A filter group on the order list. The id encodes the <em>semantic value</em>, not the position. Click a filter.</p>
+          <div class="audit-demo">
+            <div style="display:flex; gap:8px; flex-wrap:wrap">
+              <button class="audit-filter active" type="button" data-testid="dl-orderlist-filter-all">All</button>
+              <button class="audit-filter" type="button" data-testid="dl-orderlist-filter-dine-in">Dine-in</button>
+              <button class="audit-filter" type="button" data-testid="dl-orderlist-filter-takeaway">Takeaway</button>
+            </div>
+            <span class="audit-caption">[dl-orderlist-filter-all · dl-orderlist-filter-dine-in · dl-orderlist-filter-takeaway]</span>
+          </div>
+          <pre class="codeblock"><code><span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-orderlist-filter-all</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter active"</span><span class="cb-punc">&gt;</span>All<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span>
+<span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-orderlist-filter-dine-in</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter"</span><span class="cb-punc">&gt;</span>Dine-in<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span>
+<span class="cb-punc">&lt;</span><span class="cb-tag">button</span> <span class="cb-attr">data-testid</span><span class="cb-punc">=</span><span class="cb-val">"</span><span class="cb-testid">dl-orderlist-filter-takeaway</span><span class="cb-val">"</span> <span class="cb-attr">class</span><span class="cb-punc">=</span><span class="cb-val">"audit-filter"</span><span class="cb-punc">&gt;</span>Takeaway<span class="cb-punc">&lt;/</span><span class="cb-tag">button</span><span class="cb-punc">&gt;</span></code></pre>
+          <div class="audit-why">
+            <strong>Why <code>dl-orderlist-filter-dine-in</code> (not <code>filter-tab-2</code>)?</strong> The testid carries the <em>meaning</em> of the choice. Reorder the tabs, add a new one at index 0, or translate the labels — <code>dl-orderlist-filter-dine-in</code> still selects the right control. Position-based ids (<code>tab-1</code>, <code>tab-2</code>) silently break on the first layout change; semantic ids survive refactors. A test can also assert the default state: <code>expect(getByTestId('dl-orderlist-filter-all')).toHaveClass('active')</code>.
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </div>
+
+<script src="app.js"></script>
+
+</body>
+</html>

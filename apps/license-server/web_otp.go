@@ -333,24 +333,37 @@ func constantTimeHashEq(a, b string) bool {
 // ── CORS allowlist ───────────────────────────────────────────────────
 
 // webAllowedOrigins returns the comma-separated OZ_WEB_ALLOWED_ORIGINS
-// allowlist, defaulting to the current workers.dev origin, the future
-// oz-pos.com domain, and the local dev origin. Requests without an
-// Origin header (curl, POS clients, server-to-server) are always allowed
-// — CORS only governs browsers.
+// allowlist, defaulting to the current ozpos.my.id domain and the local
+// dev origin. Additionally, OZ_CORS_ORIGINS (extra comma-separated
+// origins, used by the Rust cloud server) is merged in so operators only
+// need to set one env var for both services. Requests without an Origin
+// header (curl, POS clients, server-to-server) are always allowed —
+// CORS only governs browsers.
 func webAllowedOrigins() []string {
+	// Primary allowlist from OZ_WEB_ALLOWED_ORIGINS.
 	v := strings.TrimSpace(os.Getenv("OZ_WEB_ALLOWED_ORIGINS"))
+	var out []string
 	if v == "" {
-		return []string{
-			"https://oz-pos.adikaradwiatmaja.workers.dev",
-			"https://oz-pos.com",
+		out = []string{
+			"https://ozpos.my.id",
 			"http://localhost:4321",
 		}
+	} else {
+		parts := strings.Split(v, ",")
+		out = make([]string, 0, len(parts))
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
 	}
-	parts := strings.Split(v, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
+	// Merge extra origins from OZ_CORS_ORIGINS (shared with the Rust
+	// cloud server) so a single env var covers both services.
+	if extra := strings.TrimSpace(os.Getenv("OZ_CORS_ORIGINS")); extra != "" {
+		for _, p := range strings.Split(extra, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
 		}
 	}
 	return out
@@ -387,7 +400,7 @@ var sendOTPEmail = sendOTPEmailSMTP
 //	OZ_SMTP_PORT     (default 587)
 //	OZ_SMTP_USER     (optional; some relays send unauthenticated)
 //	OZ_SMTP_PASSWORD (optional)
-//	OZ_SMTP_FROM     (default "no-reply@oz-pos.com")
+//	OZ_SMTP_FROM     (default "no-reply@ozpos.my.id")
 //
 // Config is read per call so tests can t.Setenv and ops can fix a relay
 // with a redeploy. Env values are never echoed in responses or logs.
@@ -404,7 +417,7 @@ func sendOTPEmailSMTP(to, code string) error {
 	password := os.Getenv("OZ_SMTP_PASSWORD")
 	from := strings.TrimSpace(os.Getenv("OZ_SMTP_FROM"))
 	if from == "" {
-		from = "no-reply@oz-pos.com"
+		from = "no-reply@ozpos.my.id"
 	}
 
 	msg := buildOtpEmail(from, to, code)
@@ -473,6 +486,7 @@ func handleRequestOTP(app core.App) func(e *core.RequestEvent) error {
 		e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, webMaxBodyBytes)
 
 		if !webOriginAllowed(e) {
+			log.Printf("/web/request-otp: CORS blocked origin %q (add it to OZ_WEB_ALLOWED_ORIGINS or OZ_CORS_ORIGINS)", e.Request.Header.Get("Origin"))
 			return e.JSON(http.StatusForbidden, map[string]any{
 				"error": "origin not allowed",
 			})
@@ -633,6 +647,7 @@ func handleVerifyOTP(app core.App) func(e *core.RequestEvent) error {
 		e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, webMaxBodyBytes)
 
 		if !webOriginAllowed(e) {
+			log.Printf("/web/verify-otp: CORS blocked origin %q (add it to OZ_WEB_ALLOWED_ORIGINS or OZ_CORS_ORIGINS)", e.Request.Header.Get("Origin"))
 			return e.JSON(http.StatusForbidden, map[string]any{
 				"error": "origin not allowed",
 			})

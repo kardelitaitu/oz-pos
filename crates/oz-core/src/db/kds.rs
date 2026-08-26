@@ -59,10 +59,25 @@ impl Store<'_> {
         input: CreateKdsOrderInput,
         target_instance_ids: &[String],
     ) -> Result<KdsOrder, CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let order = self.create_kds_order_fanout_in_tx(&tx, input, target_instance_ids)?;
+        tx.commit()?;
+        Ok(order)
+    }
+
+    /// Same as [`Store::create_kds_order_fanout`] but inside a caller-owned
+    /// transaction, so a multi-zone fanout commits atomically (a failure on
+    /// one zone rolls back the whole set instead of leaving partial tickets).
+    fn create_kds_order_fanout_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        input: CreateKdsOrderInput,
+        target_instance_ids: &[String],
+    ) -> Result<KdsOrder, CoreError> {
         let primary_target = target_instance_ids.first().map(String::as_str);
-        let order = self.create_kds_order_with_target(input, primary_target)?;
+        let order = self.create_kds_order_with_target_in_tx(tx, input, primary_target)?;
         for target_instance_id in target_instance_ids {
-            self.conn.execute(
+            tx.execute(
                 "INSERT OR IGNORE INTO kds_order_targets (kds_order_id, target_instance_id) VALUES (?1, ?2)",
                 params![order.id, target_instance_id],
             )?;
@@ -72,6 +87,18 @@ impl Store<'_> {
 
     fn create_kds_order_with_target(
         &self,
+        input: CreateKdsOrderInput,
+        target_instance_id: Option<&str>,
+    ) -> Result<KdsOrder, CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let order = self.create_kds_order_with_target_in_tx(&tx, input, target_instance_id)?;
+        tx.commit()?;
+        Ok(order)
+    }
+
+    fn create_kds_order_with_target_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
         input: CreateKdsOrderInput,
         target_instance_id: Option<&str>,
     ) -> Result<KdsOrder, CoreError> {
@@ -96,20 +123,20 @@ impl Store<'_> {
 
         let id = uuid::Uuid::now_v7().to_string();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let store_key = input.store_id.as_deref().unwrap_or("");
 
-        let tx = self.conn.unchecked_transaction()?;
-
-        // Upsert the daily counter.
+        // Upsert the daily counter, keyed by (date, store) so each store's
+        // tickets start at #1 daily. '' = legacy single-store rows.
         tx.execute(
-            "INSERT INTO kds_daily_counters (date, counter) VALUES (?1, 1)
-             ON CONFLICT(date) DO UPDATE SET counter = counter + 1",
-            params![today],
+            "INSERT INTO kds_daily_counters (date, store_id, counter) VALUES (?1, ?2, 1)
+             ON CONFLICT(date, store_id) DO UPDATE SET counter = counter + 1",
+            params![today, store_key],
         )?;
 
         // Read back the counter.
         let display_number: i64 = tx.query_row(
-            "SELECT counter FROM kds_daily_counters WHERE date = ?1",
-            params![today],
+            "SELECT counter FROM kds_daily_counters WHERE date = ?1 AND store_id = ?2",
+            params![today, store_key],
             |row| row.get(0),
         )?;
 
@@ -137,11 +164,16 @@ impl Store<'_> {
             ],
         )?;
 
-        tx.commit()?;
-
-        self.get_kds_order(&id)?.ok_or_else(|| {
-            CoreError::Internal("KDS order was inserted but could not be read back".into())
-        })
+        // Read back (within the caller's transaction so the whole fanout
+        // commits atomically).
+        let mut stmt = tx.prepare(
+            "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
+                    received_at, started_at, ready_at, served_at,
+                    prep_time_seconds, kitchen_zone, notes, table_number, priority
+             FROM kds_orders WHERE id = ?1",
+        )?;
+        let order = stmt.query_row(params![id], Self::row_to_kds_order)?;
+        Ok(order)
     }
 
     /// List KDS orders, optionally filtered by status. Ordered by received_at DESC.
@@ -272,20 +304,17 @@ impl Store<'_> {
         }
     }
 
-    /// Get a KDS order by the originating sale id.
-    pub fn get_kds_order_by_sale(&self, sale_id: &str) -> Result<Option<KdsOrder>, CoreError> {
+    /// Get the KDS orders originating from one sale (one per kitchen zone
+    /// when the sale's items span multiple zones).
+    pub fn get_kds_orders_by_sale(&self, sale_id: &str) -> Result<Vec<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders WHERE sale_id = ?1",
         )?;
-        let result = stmt.query_row(params![sale_id], Self::row_to_kds_order);
-        match result {
-            Ok(order) => Ok(Some(order)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e.into()),
-        }
+        let rows = stmt.query_map(params![sale_id], Self::row_to_kds_order)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     /// Update the items (summary + count) on an existing KDS order.
@@ -374,6 +403,14 @@ impl Store<'_> {
 
     /// Update the status of a KDS order. Automatically sets the corresponding
     /// timestamp field (started_at, ready_at, served_at) based on the new status.
+    ///
+    /// Transitions are FORWARD-ONLY: `pending → preparing → ready → served`,
+    /// plus `cancelled` from any non-terminal state. A regression (e.g. a
+    /// stale offline replay moving a served order back to preparing) is
+    /// rejected with a `Validation` error so ticket timestamps and the
+    /// kitchen queue are never corrupted. `served` and `cancelled` are
+    /// terminal. Reaching `served` computes `prep_time_seconds`
+    /// (`served_at − started_at`).
     pub fn update_kds_status(&self, id: &str, new_status: &str) -> Result<KdsOrder, CoreError> {
         let valid = KdsStatus::from_str(new_status).is_some();
         if !valid {
@@ -383,9 +420,58 @@ impl Store<'_> {
             });
         }
 
+        // ── State machine: reject regressions + transitions from terminal
+        //    states before touching any row (no partial writes).
+        let current = self.get_kds_order(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "kds_order",
+            id: id.to_owned(),
+        })?;
+        let allowed = |from: &str, to: &str| match (from, to) {
+            // Forward progression.
+            ("pending", "preparing") | ("preparing", "ready") | ("ready", "served") => true,
+            // Cancellation from any active state.
+            ("pending", "cancelled") | ("preparing", "cancelled") | ("ready", "cancelled") => true,
+            // No-op (idempotent replay of the current state).
+            (from, to) if from == to => true,
+            // Everything else (regressions, terminal-state moves) is invalid.
+            _ => false,
+        };
+        if !allowed(&current.status, new_status) {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: format!(
+                    "invalid KDS status transition: {} -> {new_status}",
+                    current.status
+                ),
+            });
+        }
+
         let now = chrono::Utc::now()
             .format("%Y-%m-%dT%H:%M:%S%.3fZ")
             .to_string();
+
+        // Compute prep time when the ticket is served: served_at - started_at.
+        let prep_time = if new_status == "served" {
+            match (current.started_at.as_deref(), Some(now.as_str())) {
+                (Some(started), Some(served)) => {
+                    let parse = |ts: &str| {
+                        chrono::DateTime::parse_from_rfc3339(ts)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .ok()
+                    };
+                    match (parse(started), parse(served)) {
+                        (Some(start), Some(served_dt)) => {
+                            let secs = served_dt.signed_duration_since(start).num_seconds();
+                            std::cmp::max(0, secs)
+                        }
+                        _ => current.prep_time_seconds,
+                    }
+                }
+                _ => current.prep_time_seconds,
+            }
+        } else {
+            current.prep_time_seconds
+        };
 
         let timestamp_col = match new_status {
             "preparing" => "started_at",
@@ -396,13 +482,15 @@ impl Store<'_> {
 
         if timestamp_col.is_empty() {
             self.conn.execute(
-                "UPDATE kds_orders SET status = ?1 WHERE id = ?2",
-                params![new_status, id],
+                "UPDATE kds_orders SET status = ?1, prep_time_seconds = ?2 WHERE id = ?3",
+                params![new_status, prep_time, id],
             )?;
         } else {
-            let sql =
-                format!("UPDATE kds_orders SET status = ?1, {timestamp_col} = ?2 WHERE id = ?3");
-            self.conn.execute(&sql, params![new_status, now, id])?;
+            let sql = format!(
+                "UPDATE kds_orders SET status = ?1, {timestamp_col} = ?2, prep_time_seconds = ?3 WHERE id = ?4"
+            );
+            self.conn
+                .execute(&sql, params![new_status, now, prep_time, id])?;
         }
 
         self.get_kds_order(id)?.ok_or_else(|| CoreError::NotFound {
@@ -551,6 +639,10 @@ impl Store<'_> {
         };
 
         let mut orders = Vec::with_capacity(by_zone.len());
+        // One transaction for the WHOLE fanout: a failure on any zone
+        // (duplicate sale/zone, line-item error) rolls back every ticket
+        // created so far, so the kitchen never sees a partial set.
+        let tx = self.conn.unchecked_transaction()?;
         for (zone, lines) in by_zone {
             // Build structured line items with course + modifier data (TODO 2a).
             let structured_items: Vec<CreateKdsLineItemInput> = lines
@@ -582,7 +674,8 @@ impl Store<'_> {
 
             let (items_summary, item_count) = Store::derive_kds_summary(&structured_items);
 
-            let order = self.create_kds_order_fanout(
+            let order = self.create_kds_order_fanout_in_tx(
+                &tx,
                 CreateKdsOrderInput {
                     sale_id: sale_id.to_owned(),
                     store_id: store_id.map(|s| s.to_owned()),
@@ -597,10 +690,11 @@ impl Store<'_> {
             )?;
 
             // Create the structured line items in the new kds_line_items table.
-            self.create_kds_line_items(&order.id, &structured_items)?;
+            self.create_kds_line_items_in_tx(&tx, &order.id, &structured_items)?;
 
             orders.push(order);
         }
+        tx.commit()?;
 
         Ok(orders)
     }
@@ -815,6 +909,10 @@ impl Store<'_> {
     }
 
     /// Update a line item's status and its corresponding workflow timestamp.
+    ///
+    /// Forward-only transitions (pending → preparing → ready → served, plus
+    /// cancelled from any active state) — mirrors the order-level state
+    /// machine so a stale offline replay cannot regress a line item.
     pub fn update_kds_line_item_status(
         &self,
         item_id: &str,
@@ -824,6 +922,37 @@ impl Store<'_> {
             return Err(CoreError::Validation {
                 field: "item_status",
                 message: format!("invalid KDS line item status: {new_status}"),
+            });
+        }
+
+        // Read the current status before mutating (no partial writes on
+        // regression).
+        let current_status: String = self
+            .conn
+            .query_row(
+                "SELECT item_status FROM kds_line_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                    entity: "kds_line_item",
+                    id: item_id.to_owned(),
+                },
+                other => CoreError::Db(other),
+            })?;
+        let allowed = |from: &str, to: &str| match (from, to) {
+            ("pending", "preparing") | ("preparing", "ready") | ("ready", "served") => true,
+            ("pending", "cancelled") | ("preparing", "cancelled") | ("ready", "cancelled") => true,
+            (from, to) if from == to => true,
+            _ => false,
+        };
+        if !allowed(&current_status, new_status) {
+            return Err(CoreError::Validation {
+                field: "item_status",
+                message: format!(
+                    "invalid KDS line item status transition: {current_status} -> {new_status}"
+                ),
             });
         }
 
@@ -1130,19 +1259,22 @@ struct KdsDeviceRow {
 // ── Order Acknowledgment ─────────────────────────────────────────
 
 impl Store<'_> {
-    /// Acknowledge a KDS order — atomically transitions status from 'pending' to 'acked'.
-    ///
-    /// Uses an `UPDATE ... WHERE status = 'pending'` pattern for optimistic
-    /// locking: only one device can win the race. Returns `Ok(true)` on
-    /// success, `Ok(false)` if another device already acknowledged it.
+    /// Acknowledge a KDS order — the device accepted the ticket and started
+    /// prep, so the order advances pending → preparing. Uses an
+    /// `UPDATE WHERE status = 'pending'` pattern for optimistic locking:
+    /// only one device can win the race. Returns `Ok(true)` on success,
+    /// `Ok(false)` if another device already acknowledged it.
     pub fn ack_kds_order(&self, order_id: &str, device_id: &str) -> Result<bool, CoreError> {
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let updated = self.conn.execute(
-            "UPDATE kds_orders SET status = 'ready', acked_by_device = ?1, acked_at = ?2
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
+        let affected = self.conn.execute(
+            "UPDATE kds_orders SET status = 'preparing', started_at = ?1,
+             acked_by_device = ?2, acked_at = ?1
              WHERE id = ?3 AND status = 'pending'",
-            params![device_id, now, order_id],
+            params![now, device_id, order_id],
         )?;
-        Ok(updated > 0)
+        Ok(affected > 0)
     }
 }
 

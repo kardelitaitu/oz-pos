@@ -32,7 +32,6 @@ test.describe('Settings Change', () => {
     await page.evaluate(() => {
       window.location.hash = '#/settings';
     });
-    await page.waitForTimeout(2_000);
 
     // Sidebar must be visible.
     const sidebar = page.locator('[data-testid="settings-sidebar"]');
@@ -55,7 +54,6 @@ test.describe('Settings Change', () => {
     await page.evaluate(() => {
       window.location.hash = '#/settings';
     });
-    await page.waitForTimeout(2_000);
 
     // Wait for sidebar.
     await expect(page.locator('[data-testid="settings-sidebar"]')).toBeVisible({ timeout: 10_000 });
@@ -64,7 +62,6 @@ test.describe('Settings Change', () => {
     const appearanceNav = page.locator('.settings-nav-item').filter({ hasText: 'Appearance' });
     await expect(appearanceNav).toBeVisible({ timeout: 3_000 });
     await appearanceNav.click();
-    await page.waitForTimeout(1_000);
 
     // The Appearance section heading is "Display" (from Localized id="settings-section-display").
     const appearanceHeading = page.locator('.settings-section-title').filter({ hasText: 'Display' });
@@ -80,7 +77,6 @@ test.describe('Settings Change', () => {
     await page.evaluate(() => {
       window.location.hash = '#/settings';
     });
-    await page.waitForTimeout(2_000);
 
     await expect(page.locator('[data-testid="settings-sidebar"]')).toBeVisible({ timeout: 10_000 });
 
@@ -88,7 +84,6 @@ test.describe('Settings Change', () => {
     const syncNav = page.locator('.settings-nav-item').filter({ hasText: 'Cloud Sync' });
     await expect(syncNav).toBeVisible({ timeout: 3_000 });
     await syncNav.click();
-    await page.waitForTimeout(1_000);
 
     // The Cloud Sync section heading should be visible.
     const syncHeading = page.locator('.settings-section-title').filter({ hasText: 'Cloud Sync' });
@@ -105,7 +100,6 @@ test.describe('Settings Change', () => {
     await page.evaluate(() => {
       window.location.hash = '#/settings';
     });
-    await page.waitForTimeout(2_000);
 
     // Wait for main content to load.
     await expect(page.locator('[data-testid="settings-sidebar"]')).toBeVisible({ timeout: 10_000 });
@@ -118,7 +112,6 @@ test.describe('Settings Change', () => {
 
     // Type new value to trigger dirty state.
     await firstInput.fill('OZ-POS E2E Test');
-    await page.waitForTimeout(200);
 
     // Verify the value was set (dirty state is now active in the React component).
     const value = await firstInput.inputValue();

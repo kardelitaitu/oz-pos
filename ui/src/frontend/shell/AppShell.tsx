@@ -20,6 +20,7 @@ import { LazyBoundary } from '@/components/LazyBoundary';
 import type { WizardState } from '@/features/setup/SetupWizard';
 import type { WorkspaceType } from '@/features/settings/WorkspaceSettingsModal';
 import { getLicenseStatus } from '@/api/license';
+import { hasUsers } from '@/api/staff';
 import LicenseActivationScreen from '@/features/auth/LicenseActivationScreen';
 import CreatePinScreen from '@/features/auth/CreatePinScreen';
 import SessionLockScreen from '@/features/auth/SessionLockScreen';
@@ -71,6 +72,7 @@ export default function AppShell() {
   const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   const [hasActiveLicense, setHasActiveLicense] = useState(false);
+  const [hasAnyUsers, setHasAnyUsers] = useState<boolean | null>(null);
   const [licenseError, setLicenseError] = useState<string | null>(null);
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
@@ -127,6 +129,9 @@ export default function AppShell() {
       setLoading(false);
       // PERF-06: time-to-shell marker — app shell became interactive.
       recordMark('oz:shell-ready');
+      // Check if any users exist so we can show CreatePinScreen
+      // for first-run bootstrapping even in dev mode.
+      hasUsers().then((result) => setHasAnyUsers(result.has_users)).catch(() => {});
       return;
     }
 
@@ -140,6 +145,15 @@ export default function AppShell() {
 
         if (!cancelled) {
           setHasCompletedSetup(status.completed);
+
+          // Check if any users exist — needed to decide between
+          // CreatePinScreen (first-run) and StaffLoginScreen.
+          try {
+            const usersResult = await hasUsers();
+            if (!cancelled) setHasAnyUsers(usersResult.has_users);
+          } catch {
+            if (!cancelled) setHasAnyUsers(false);
+          }
 
           if (status.completed) {
             // ── Existing install ───────────────────────────────────────
@@ -194,12 +208,18 @@ export default function AppShell() {
       const hashRoute = window.location.hash.replace('#/', '');
       if (hashRoute && getPage(hashRoute)) {
         setCurrentRoute(hashRoute);
+        // Clear the hash after consuming it so it does not persist and
+        // override the workspace default on subsequent workspace switches.
+        // (WorkspaceHome's Analytics/Reports shortcuts set the hash before
+        // switching workspaces — this prevents a stale hash from hijacking
+        // the next admin workspace open.)
+        window.location.hash = '';
       } else {
         const workspaceRoute: Record<string, string> = {
           'restaurant-pos': 'sales',
           'store-pos': 'products',
           kds: 'kds',
-          warehouse: 'inventory',
+          warehouse: 'warehouse',
           admin: 'settings',
         };
         setCurrentRoute(workspaceRoute[activeWorkspace ?? ''] ?? 'products');
@@ -367,6 +387,22 @@ export default function AppShell() {
   }
 
   if (!session) {
+    // First-run: no user accounts exist yet — show the owner bootstrap
+    // screen so the user can create the first admin account. When the
+    // hasUsers check is still loading (null), fall through to the login
+    // screen — the bootstrap call will fail with a clear error if the
+    // DB is truly empty.
+    if (hasAnyUsers === false) {
+      return (
+        <CreatePinScreen
+          onCreated={() => {
+            setHasAnyUsers(true);
+            // After bootstrap, the user is auto-logged-in by
+            // CreatePinScreen via swapSession — no further action needed.
+          }}
+        />
+      );
+    }
     return (
       <LazyBoundary>
         <StaffLoginScreen />

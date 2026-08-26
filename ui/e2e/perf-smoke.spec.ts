@@ -74,10 +74,15 @@ test.describe('Performance smoke (PERF-10)', () => {
   });
 
   test('route transition within budget', async ({ page }) => {
-    await loginAs(page, 'admin', '9999');
-    await selectWorkspaceForce(page, WORKSPACES.ADMIN);
+    // Retail POS workspace renders RetailPosScreen which has internal
+    // sub-views (sales history, stock inquiry). Toggle the sales-history
+    // sub-view via the function-bar button and measure the transition.
+    await loginAs(page, 'staff', '1234');
+    await selectWorkspaceForce(page, WORKSPACES.STORE_POS);
+    await expect(page.locator('.retail-product-btn').first()).toBeVisible({ timeout: 10_000 });
     const ms = await timeStep(page, async () => {
-      await navigateTo(page, 'sales-history');
+      // F6 opens the sales-history sub-view inside RetailPosScreen.
+      await page.keyboard.press('F6');
       await expect(page.locator('.sales-history')).toBeVisible({ timeout: 8_000 });
     });
     expect(ms).toBeLessThan(BUDGETS.route);

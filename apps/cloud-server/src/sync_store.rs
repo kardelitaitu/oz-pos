@@ -29,7 +29,6 @@ use std::sync::Arc;
 use deadpool_postgres::Pool;
 use rusqlite::{Connection, params};
 use tokio::sync::Mutex;
-use tokio_postgres::error::SqlState;
 
 use oz_core::TenantPlan;
 use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
@@ -113,39 +112,85 @@ impl SyncStore {
     /// duplicate id / database error. Only backend-connection failures
     /// (Postgres pool exhaustion) surface as `Err`, which the handler maps
     /// to a 500.
+    ///
+    /// This is a single-item convenience over [`SyncStore::push_batch`];
+    /// the HTTP handler always uses the batched form.
+    #[cfg(test)]
     pub async fn push_item(
         &self,
         item: &OfflineQueueItem,
         tenant_id: &str,
     ) -> Result<PushOutcome, String> {
+        let mut outcomes = self
+            .push_batch(std::slice::from_ref(item), tenant_id)
+            .await?;
+        // `push_batch` returns exactly one outcome per item.
+        Ok(outcomes
+            .pop()
+            .expect("push_batch returns one outcome per item"))
+    }
+
+    /// Persist a batch of offline queue items in **one transaction**.
+    ///
+    /// The hot push path previously opened a transaction per item — a
+    /// 50-item batch meant 50 pool acquisitions + 50 GUC sets + 50 COMMITs.
+    /// This hoists the transaction out of the loop: one pool acquisition,
+    /// one `oz.tenant_id` GUC, N INSERTs, one COMMIT.
+    ///
+    /// Per-item outcomes are preserved so a single bad item cannot roll
+    /// back its siblings:
+    ///
+    /// - PostgreSQL runs each INSERT inside a **SAVEPOINT** — a duplicate
+    ///   id returns zero rows via `ON CONFLICT (id) DO NOTHING RETURNING
+    ///   id` (reported `Rejected`, savepoint released); a non-unique data
+    ///   error (trigger, CHECK, NOT NULL) is caught, the savepoint rolled
+    ///   back, and the item reported `Rejected` while the rest of the
+    ///   batch continues. Without the SAVEPOINT, ANY statement failure
+    ///   would abort the whole transaction ("current transaction is
+    ///   aborted") and the COMMIT would fail — silently losing the valid
+    ///   items.
+    /// - SQLite keeps the `UNIQUE` substring check per item.
+    ///
+    /// Only backend-connection failures (pool exhaustion, COMMIT failure)
+    /// surface as `Err`, which the handler maps to a 500.
+    pub async fn push_batch(
+        &self,
+        items: &[OfflineQueueItem],
+        tenant_id: &str,
+    ) -> Result<Vec<PushOutcome>, String> {
         let status = OfflineQueueStatus::Pending.as_stored_str();
         match self {
             Self::Sqlite(conn) => {
                 let conn = conn.lock().await;
-                match conn.execute(
-                    "INSERT INTO offline_queue (id, action, payload, status, retry_count, \
-                     last_error, created_at, synced_at, tenant_id)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                    params![
-                        item.id,
-                        item.action,
-                        item.payload,
-                        status,
-                        item.retry_count,
-                        item.last_error,
-                        item.created_at,
-                        item.synced_at,
-                        tenant_id,
-                    ],
-                ) {
-                    Ok(_) => Ok(PushOutcome::Accepted),
-                    Err(e) if e.to_string().contains("UNIQUE") => Ok(PushOutcome::Rejected {
-                        reason: format!("duplicate id: {}", item.id),
-                    }),
-                    Err(e) => Ok(PushOutcome::Rejected {
-                        reason: format!("database error: {e}"),
-                    }),
+                let mut results = Vec::with_capacity(items.len());
+                for item in items {
+                    let outcome = match conn.execute(
+                        "INSERT INTO offline_queue (id, action, payload, status, retry_count, \
+                         last_error, created_at, synced_at, tenant_id)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                        params![
+                            item.id,
+                            item.action,
+                            item.payload,
+                            status,
+                            item.retry_count,
+                            item.last_error,
+                            item.created_at,
+                            item.synced_at,
+                            tenant_id,
+                        ],
+                    ) {
+                        Ok(_) => PushOutcome::Accepted,
+                        Err(e) if e.to_string().contains("UNIQUE") => PushOutcome::Rejected {
+                            reason: format!("duplicate id: {}", item.id),
+                        },
+                        Err(e) => PushOutcome::Rejected {
+                            reason: format!("database error: {e}"),
+                        },
+                    };
+                    results.push(outcome);
                 }
+                Ok(results)
             }
             Self::Postgres(pool) => {
                 let mut client = pool.get().await.map_err(|e| e.to_string())?;
@@ -153,43 +198,81 @@ impl SyncStore {
                 tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
                     .await
                     .map_err(|e| e.to_string())?;
-                let params: &[&(dyn tokio_postgres::types::ToSql + Sync)] = &[
-                    &item.id,
-                    &item.action,
-                    &item.payload,
-                    &status,
-                    &item.retry_count,
-                    &item.last_error,
-                    &item.created_at,
-                    &item.synced_at,
-                    &tenant_id,
-                ];
-                let outcome = match tx
-                    .execute(
-                        "INSERT INTO offline_queue (id, action, payload, status, retry_count, \
-                     last_error, created_at, synced_at, tenant_id)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-                        params,
-                    )
-                    .await
-                {
-                    Ok(_) => Ok(PushOutcome::Accepted),
-                    Err(e)
-                        if e.as_db_error()
-                            .map(|d| d.code() == &SqlState::UNIQUE_VIOLATION)
-                            .unwrap_or(false) =>
-                    {
-                        Ok(PushOutcome::Rejected {
-                            reason: format!("duplicate id: {}", item.id),
-                        })
+                let mut results = Vec::with_capacity(items.len());
+                for (i, item) in items.iter().enumerate() {
+                    // Each item runs inside a SAVEPOINT so a non-unique
+                    // data error (trigger, CHECK, NOT NULL) rolls back
+                    // only that item, NOT the whole batch. The SAVEPOINT
+                    // is released on success (Accepted / Rejected-dup)
+                    // or rolled back on a true error.
+                    let sp = format!("push_item_{i}");
+                    if let Err(e) = tx.execute(&format!("SAVEPOINT {sp}"), &[]).await {
+                        let _ = tx
+                            .execute(&format!("ROLLBACK TO SAVEPOINT {sp}"), &[])
+                            .await;
+                        return Err(format!("SAVEPOINT error: {e}"));
                     }
-                    Err(e) => Ok(PushOutcome::Rejected {
-                        reason: format!("database error: {e}"),
-                    }),
-                };
-                // The write path must COMMIT (drop would roll back the insert).
+
+                    let params: &[&(dyn tokio_postgres::types::ToSql + Sync)] = &[
+                        &item.id,
+                        &item.action,
+                        &item.payload,
+                        &status,
+                        &item.retry_count,
+                        &item.last_error,
+                        &item.created_at,
+                        &item.synced_at,
+                        &tenant_id,
+                    ];
+                    let outcome = match tx
+                        .query_opt(
+                            "INSERT INTO offline_queue (id, action, payload, status, retry_count, \
+                         last_error, created_at, synced_at, tenant_id)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                         ON CONFLICT (id) DO NOTHING
+                         RETURNING id",
+                            params,
+                        )
+                        .await
+                    {
+                        // A returned row means the INSERT landed (Accepted);
+                        // zero rows means the id already existed (Rejected).
+                        // `DO NOTHING` keeps the transaction alive either way —
+                        // release the SAVEPOINT in both cases.
+                        Ok(Some(_)) => {
+                            let _ = tx.execute(&format!("RELEASE SAVEPOINT {sp}"), &[]).await;
+                            PushOutcome::Accepted
+                        }
+                        Ok(None) => {
+                            let _ = tx.execute(&format!("RELEASE SAVEPOINT {sp}"), &[]).await;
+                            PushOutcome::Rejected {
+                                reason: format!("duplicate id: {}", item.id),
+                            }
+                        }
+                        Err(e) => {
+                            // A non-unique error (trigger, CHECK, NOT NULL)
+                            // aborts the transaction — roll back to the
+                            // SAVEPOINT so the rest of the batch survives.
+                            let _ = tx
+                                .execute(&format!("ROLLBACK TO SAVEPOINT {sp}"), &[])
+                                .await;
+                            // Use the REAL db message, not the generic
+                            // tokio-postgres error kind (whose Display is
+                            // just "db error").
+                            let reason = e
+                                .as_db_error()
+                                .map(|d| d.message().to_owned())
+                                .unwrap_or_else(|| e.to_string());
+                            PushOutcome::Rejected {
+                                reason: format!("database error: {reason}"),
+                            }
+                        }
+                    };
+                    results.push(outcome);
+                }
+                // The write path must COMMIT (drop would roll back the inserts).
                 tx.commit().await.map_err(|e| e.to_string())?;
-                outcome
+                Ok(results)
             }
         }
     }

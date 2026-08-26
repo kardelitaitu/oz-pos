@@ -135,6 +135,13 @@ bash scripts/coverage.sh ui      # just ui
 
 Reports land in `coverage/{rust,ui}/index.html`. The CI `coverage` job uploads the same artifacts on every push to `main`. Use them to spot under-tested modules after refactors.
 
+If a PostgreSQL integration test skips with `Migration error` (the dev DB drifted from the committed `PG_INIT` schema), reset the dev container before running the suite:
+
+```bash
+bash scripts/reset-dev-pg.sh          # bash (Linux/WSL/Git Bash)
+pwsh scripts/reset-dev-pg.ps1        # Windows PowerShell
+```
+
 If your change touches something a skill describes (a path, a type, a trait, a dependency version, a golden rule), run the drift guard before opening the PR:
 
 ```bash

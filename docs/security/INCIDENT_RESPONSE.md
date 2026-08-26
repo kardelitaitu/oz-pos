@@ -84,11 +84,11 @@ Incidents are classified by severity level. The classification determines the re
 
 | Contact | Method | Availability |
 |---------|--------|-------------|
-| **Security Lead** | `security@oz-pos.com` · PagerDuty escalation · +1-555-SECURE | 24/7 |
-| **Incident Commander** | `incident@oz-pos.com` · +1-555-INCIDENT | 24/7 (P1 only) |
-| **DevOps Lead** | `devops@oz-pos.com` · Slack @devops-oncall | Business hours + P1 on-call |
-| **CEO** | `ceo@oz-pos.com` · +1-555-CEO-OZPOS | Business hours (P1: any time) |
-| **Legal Counsel** | `legal@oz-pos.com` (retained firm) | Business hours (P1: escalation) |
+| **Security Lead** | `security@ozpos.my.id` · PagerDuty escalation · +1-555-SECURE | 24/7 |
+| **Incident Commander** | `incident@ozpos.my.id` · +1-555-INCIDENT | 24/7 (P1 only) |
+| **DevOps Lead** | `devops@ozpos.my.id` · Slack @devops-oncall | Business hours + P1 on-call |
+| **CEO** | `ceo@ozpos.my.id` · +1-555-CEO-OZPOS | Business hours (P1: any time) |
+| **Legal Counsel** | `legal@ozpos.my.id` (retained firm) | Business hours (P1: escalation) |
 | **Internal Slack** | `#security-incidents` channel | All incidents |
 
 > **Emergency contacts file:** `docs/security/EMERGENCY_CONTACTS.md` (maintained quarterly) — ⚠️ **pending**: this file does not exist yet (verified 2026-08-08 by docs-auditor); create it before relying on this contact plan
@@ -484,7 +484,7 @@ For on-call engineers: a one-page quick reference is maintained at `docs/securit
 ---
 
 > **This document is maintained by the Security Team.**
-> Questions or suggestions → `security@oz-pos.com`
+> Questions or suggestions → `security@ozpos.my.id`
 
 ---
 

@@ -257,7 +257,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const fetchWorkspaces = useCallback(
     async (storeId: string, cancelled: () => boolean) => {
-      // audit/06: the picker ticket binds the caller server-side; the
+      // audit-open-findings: the picker ticket binds the caller server-side; the
       // backend derives the real role from the ticket, so the UI never
       // sends a role/user claim that could be forged.
       if (!pickerTicket) return;
@@ -374,7 +374,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         // auto-boots into its store+instance instead of the primary.
         const deviceId = await getDeviceId().catch(() => "");
         const resolution = await resolveBootStore(deviceId || undefined);
-        storeId = resolution.store_id;
+        storeId = resolution.store_id || DEFAULT_STORE_ID;
         if (!cancelled) {
           setResolvedStoreId(storeId);
         }
@@ -409,7 +409,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setWorkspaceScreensState([]);
       return;
     }
-    // audit/06: the picker ticket binds the caller server-side — the screen
+    // audit-open-findings: the picker ticket binds the caller server-side — the screen
     // list is only readable by a genuinely-authenticated user.
     listWorkspaceScreens(
       pickerTicket ?? "",

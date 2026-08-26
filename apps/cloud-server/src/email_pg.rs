@@ -98,25 +98,102 @@ async fn try_send_scheduled_pg(pool: &Pool) -> Result<(), String> {
 /// entirely — two instances can never both send the same tenant's report.
 /// The lock lives on its own dedicated connection for the whole cycle
 /// (every helper below uses independent pooled connections, so a
-/// transaction-scoped lock would not guard them); it is released on every
-/// exit path and, worst case, dies with the connection when deadpool
-/// recycles it.
+/// transaction-scoped lock would not guard them).
+///
+/// # Lock lifecycle
+///
+/// The advisory lock is session-level, and the connection comes from the
+/// pool. If the unlock failed or the inner cycle panicked, the lock would
+/// leak onto the recycled connection, permanently blocking that tenant's
+/// future sends. The guard handles this:
+///
+/// 1. On success → explicit `release()` unlocks the lock and returns the
+///    connection to the pool normally.
+/// 2. On error → `release()` still unlocks (runs after inner), then the
+///    error is propagated — the lock is clean.
+/// 3. On panic → `Drop` runs, which calls `AdvisoryLockGuard::take()` to
+///    **detach** the connection from the pool. When the detached wrapper
+///    drops, the underlying socket is closed, the session ends, and the
+///    advisory lock dies with it — no leak.
 async fn try_send_scheduled_for_tenant_pg(pool: &Pool, tenant: &str) -> Result<(), String> {
-    let lock_conn = pool.get().await.map_err(|e| e.to_string())?;
-    let acquired: bool = lock_conn
-        .query_one("SELECT pg_try_advisory_lock(hashtext($1))", &[&tenant])
-        .await
-        .map_err(|e| format!("DB error: {e}"))?
-        .get(0);
-    if !acquired {
-        // Another instance is handling this tenant's cycle this round.
+    let mut guard = AdvisoryLockGuard::acquire(pool, tenant).await?;
+    if !guard.acquired {
         return Ok(());
     }
     let result = try_send_scheduled_tenant_inner_pg(pool, tenant).await;
-    let _ = lock_conn
-        .execute("SELECT pg_advisory_unlock(hashtext($1))", &[&tenant])
-        .await;
+    // `release` unlocks on success OR error — the guard's Drop only runs
+    // if release is NOT called (panic or early return before this line).
+    guard.release().await;
     result
+}
+
+/// RAII guard for a session-level advisory lock on a pooled connection.
+/// On `Drop` (including panic unwinding), the connection is detached from
+/// the pool and closed — the session ends, and the advisory lock dies
+/// with it. This prevents a classic PG pooled-connection footgun: a
+/// leaked lock on a recycled connection would block that tenant forever.
+struct AdvisoryLockGuard {
+    /// `None` after `release()` or `take()` — prevents double-free.
+    conn: Option<deadpool_postgres::Client>,
+    /// `false` when `pg_try_advisory_lock` returned false (lock not held).
+    acquired: bool,
+    /// Tenant identifier for the unlock query.
+    tenant: String,
+}
+
+impl AdvisoryLockGuard {
+    /// Acquire the advisory lock. Returns `Ok(guard)` with `acquired`
+    /// set to `false` when another instance holds the lock.
+    async fn acquire(pool: &Pool, tenant: &str) -> Result<Self, String> {
+        let conn = pool.get().await.map_err(|e| e.to_string())?;
+        let acquired: bool = conn
+            .query_one("SELECT pg_try_advisory_lock(hashtext($1))", &[&tenant])
+            .await
+            .map_err(|e| format!("DB error: {e}"))?
+            .get(0);
+        Ok(Self {
+            conn: Some(conn),
+            acquired,
+            tenant: tenant.to_owned(),
+        })
+    }
+
+    /// Release the advisory lock. Always called on the success OR error
+    /// path (after `inner`) — the guard's `Drop` is only for the panic
+    /// case.
+    async fn release(&mut self) {
+        let Some(conn) = self.conn.take() else {
+            return; // already released or taken
+        };
+        // `pg_advisory_unlock` with the same key as the lock.
+        // If the unlock fails (dead connection, transient error), the
+        // connection must NOT return to the pool still holding the lock.
+        // Detach it instead — the session (and the lock) dies with the
+        // closed socket.
+        match conn
+            .execute("SELECT pg_advisory_unlock(hashtext($1))", &[&self.tenant])
+            .await
+        {
+            Ok(_) => { /* returned to pool normally — no lock held */ }
+            Err(_) => {
+                // Unlock failed — cannot trust the connection's lock state.
+                let _ = deadpool_postgres::Client::take(conn);
+            }
+        }
+    }
+}
+
+impl Drop for AdvisoryLockGuard {
+    fn drop(&mut self) {
+        if let Some(conn) = self.conn.take()
+            && self.acquired
+        {
+            // Lock was never released — detach so the session dies
+            // and the advisory lock is released with it.
+            let _ = deadpool_postgres::Client::take(conn);
+        }
+        // Not acquired → connection holds no lock → returns to pool normally.
+    }
 }
 /// The un-serialized per-tenant send cycle: scoped settings → due check →
 /// claim the period → tenant-filtered report → send → scoped last-sent
@@ -196,8 +273,38 @@ async fn try_send_scheduled_tenant_inner_pg(pool: &Pool, tenant: &str) -> Result
 /// sends). `default` sorts first, the rest alphabetically, for
 /// deterministic log output.
 async fn active_tenants_pg(pool: &Pool) -> Result<Vec<String>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    let rows = client
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+
+    // Tenant discovery is a CROSS-tenant read: the loop must enumerate
+    // every tenant before any single tenant is known. Post-RLS-cutover
+    // (oz_app + FORCE RLS) a bare read sees zero rows — the email loop
+    // would silently stop. Mirror the webhook pattern: if this session
+    // user is a member of the dedicated BYPASSRLS discovery role, scope
+    // the read to it (`SET LOCAL ROLE` auto-resets on commit so the
+    // pooled connection never keeps the bypass). Pre-cutover the app
+    // connects as the table owner, which is not a member and bypasses
+    // RLS until FORCE — the unscoped read below is the owner's behaviour.
+    let is_discovery_member: bool = tx
+        .query_one(
+            "SELECT EXISTS(
+                SELECT 1 FROM pg_roles r
+                JOIN pg_auth_members m ON m.roleid = r.oid
+                WHERE r.rolname = 'oz_email_discovery'
+                  AND m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+             )",
+            &[],
+        )
+        .await
+        .map_err(|e| format!("DB error: {e}"))?
+        .get(0);
+    if is_discovery_member {
+        tx.execute("SET LOCAL ROLE oz_email_discovery", &[])
+            .await
+            .map_err(|e| format!("DB error: {e}"))?;
+    }
+
+    let rows = tx
         .query(
             "SELECT tenant_id FROM tenant_plans
              UNION SELECT tenant_id FROM offline_queue
@@ -258,8 +365,12 @@ async fn claim_period_pg(
     period: &str,
     report_id: &str,
 ) -> Result<bool, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    let n = client
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
+    let n = tx
         .execute(
             "INSERT INTO sent_reports (tenant_id, period, report_id)
              VALUES ($1, $2, $3)
@@ -268,6 +379,7 @@ async fn claim_period_pg(
         )
         .await
         .map_err(|e| format!("DB error: {e}"))?;
+    tx.commit().await.map_err(|e| e.to_string())?;
     Ok(n > 0)
 }
 
@@ -276,14 +388,18 @@ async fn claim_period_pg(
 /// whose SMTP response was lost is the unavoidable at-least-once boundary
 /// of email delivery.
 async fn release_period_pg(pool: &Pool, tenant: &str, period: &str) -> Result<(), String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    client
-        .execute(
-            "DELETE FROM sent_reports WHERE tenant_id = $1 AND period = $2",
-            &[&tenant, &period],
-        )
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
         .await
-        .map_err(|e| format!("DB error: {e}"))?;
+        .map_err(|e| e.to_string())?;
+    tx.execute(
+        "DELETE FROM sent_reports WHERE tenant_id = $1 AND period = $2",
+        &[&tenant, &period],
+    )
+    .await
+    .map_err(|e| format!("DB error: {e}"))?;
+    tx.commit().await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -527,10 +643,14 @@ async fn daily_revenue_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<DailyRevenueRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT d.date, d.total_minor, d.currency, d.sale_count,
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
@@ -582,10 +702,14 @@ async fn weekly_revenue_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<WeeklyRevenueRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT d.week_start, d.total_minor, d.currency, d.sale_count,
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
@@ -636,10 +760,14 @@ async fn monthly_revenue_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<MonthlyRevenueRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT d.month, d.total_minor, d.currency, d.sale_count,
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
@@ -697,7 +825,11 @@ async fn top_products_pg(
     } else {
         "total_minor DESC"
     };
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
     let sql = format!(
@@ -716,7 +848,7 @@ async fn top_products_pg(
          ORDER BY {order_clause}, p.sku
          LIMIT $3"
     );
-    let rows = client
+    let rows = tx
         .query(&sql, &[&start, &end, &limit, &tenant])
         .await
         .map_err(|e| format!("DB error: {e}"))?;
@@ -751,10 +883,14 @@ async fn hourly_heatmap_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<HourlyHeatmapRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT EXTRACT(DOW FROM created_at::timestamp)::bigint AS day_of_week,
                     EXTRACT(HOUR FROM created_at::timestamp)::bigint AS hour,
@@ -790,10 +926,14 @@ async fn category_breakdown_pg(
     end_date: &str,
     tenant: &str,
 ) -> Result<Vec<CategoryBreakdownRow>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
     let end = parse_date(end_date)?;
-    let rows = client
+    let rows = tx
         .query(
             "SELECT p.category_id, COALESCE(c.name, 'Uncategorised') AS category_name,
                     SUM(sl.line_minor)::bigint AS total_minor,
@@ -840,8 +980,12 @@ async fn low_stock_alerts_at_location_pg(
     default_threshold: i64,
     tenant: &str,
 ) -> Result<Vec<LowStockAlert>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    let rows = client
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
+    let rows = tx
         .query(
             "SELECT p.id AS product_id, p.sku, p.name, p.currency,
                     p.price_minor, p.cost_minor,
@@ -896,8 +1040,12 @@ async fn active_stock_alerts_pg(
     location_id: &str,
     tenant: &str,
 ) -> Result<Vec<StockAlertEvent>, String> {
-    let client = pool.get().await.map_err(|e| e.to_string())?;
-    let rows = client
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let tx = client.transaction().await.map_err(|e| e.to_string())?;
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .map_err(|e| e.to_string())?;
+    let rows = tx
         .query(
             "SELECT sae.id, sae.threshold_id, sae.product_id, sae.location_id,
                     sae.current_qty, sae.threshold, sae.status,

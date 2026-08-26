@@ -425,5 +425,131 @@ workspace-home-analytics-desc = Staff performance, sales trends, and shift metri
 workspace-home-analytics-aria = Open Analytics
 workspace-home-reports-title = Reports
 workspace-home-reports-desc = Sales, inventory, and custom reports dashboard
+workspace-home-staff-title = Staff Management
+workspace-home-staff-desc = Manage staff, roles, and permissions
+workspace-home-settings-title = Settings
+workspace-home-settings-desc = System configuration and preferences
+workspace-home-audit-title = Audit Log
+workspace-home-audit-desc = View system activity and change history
+workspace-home-workspaces-section = Workspaces
+workspace-home-tools-section = Tools
+workspace-home-add-workspace = Add Workspace
+workspace-home-add-workspace-desc = Configure workspaces in the topology editor
+workspace-home-add-workspace-aria = Add workspace via topology editor
 workspace-home-reports-aria = Open Reports
 workspace-home-shortcut-open = Open
+
+# Warehouse workspace
+warehouse-title = Warehouse Inventory
+warehouse-location = Location
+warehouse-no-location-title = No warehouse location
+warehouse-no-location-desc = This workspace is not bound to a warehouse location. Configure it in the topology editor.
+warehouse-empty-title = No products
+warehouse-empty-desc = No inventory-tracked products found at this location.
+warehouse-load-error = Failed to load warehouse inventory.
+warehouse-adjust-error = Failed to adjust stock.
+warehouse-col-sku = SKU
+warehouse-col-name = Name
+warehouse-col-category = Category
+warehouse-col-qty = Qty
+warehouse-col-cost = Cost
+warehouse-col-actions = Actions
+warehouse-products-count = products
+warehouse-low-stock-alerts = low stock alerts
+warehouse-search-placeholder = Search by name or SKU…
+warehouse-search-aria = Search products
+warehouse-filter-category = Filter by category
+warehouse-filter-stock = Filter by stock status
+warehouse-all-categories = All categories
+warehouse-stock-all = All stock
+warehouse-stock-in = In stock
+warehouse-stock-out = Out of stock
+warehouse-stock-low = Low stock
+warehouse-no-results = No products match your search.
+warehouse-stat-total = Total
+warehouse-stat-out-of-stock = Out of stock
+warehouse-stat-low-stock = Low stock
+warehouse-btn-adjust = Adjust
+warehouse-adjust-title = Adjust Stock
+warehouse-adjust-current = Current stock
+warehouse-adjust-delta-label = Quantity change (use + to add, − to remove)
+warehouse-adjust-reason-label = Reason
+warehouse-adjust-reason-placeholder = e.g. stock count, damage, return
+warehouse-adjust-confirm = Confirm
+warehouse-adjust-cancel = Cancel
+
+# ── Warehouse POS console (v2) ────────────────────────────────
+warehouse-mode-receive = Receive
+warehouse-mode-send = Send
+warehouse-mode-count = Count
+warehouse-mode-stock = Stock
+warehouse-mode-receive-desc = Receive goods inbound
+warehouse-mode-send-desc = Send goods outbound
+warehouse-mode-count-desc = Cycle count
+warehouse-mode-stock-desc = View stock
+
+warehouse-scan-placeholder = Scan barcode or type SKU…
+warehouse-scan-aria = Scan barcode or type SKU
+warehouse-scan-add = Add
+warehouse-scan-no-match = No product matches that barcode
+warehouse-bin = Bin: { $bin }
+
+warehouse-session-empty = Session is empty — scan or pick products
+warehouse-session-items = { $count } item{ $count ->
+  [one] 
+ *[other] s
+}
+warehouse-session-line-qty = Qty
+warehouse-session-line-picked = Picked
+warehouse-session-complete-receive = Complete Receive
+warehouse-session-complete-send = Complete Send
+warehouse-session-print = Print
+warehouse-session-clear = Clear
+
+warehouse-fn-receive = Receive
+warehouse-fn-send = Send
+warehouse-fn-count = Count
+warehouse-fn-stock = Stock
+warehouse-fn-print = Print
+warehouse-fn-reserved = { $key }
+warehouse-fn-fullscreen = Fullscreen
+warehouse-fn-bar-aria = Function keys
+warehouse-shortcut-list = Shortcut list
+warehouse-shortcut-close = Close
+
+warehouse-popup-receive-title = Incoming session
+warehouse-popup-send-title = Outgoing session
+warehouse-popup-count-title = Count session
+warehouse-popup-close = Close
+
+warehouse-send-destination = Send to…
+warehouse-send-destination-aria = Choose destination
+warehouse-send-confirmed = Sent! { $number } — { $count } items to { $destination }
+warehouse-send-verify-hint = Scan each item to verify it is picked
+warehouse-send-unpicked = { $count } line{ $count ->
+  [one]  not picked
+ *[other] s not picked
+}
+
+warehouse-receive-source-po = Receive from purchase order
+warehouse-receive-source-transfer = Receive from transfer
+warehouse-receive-no-transfers = No in-transit transfers
+warehouse-receive-no-pos = No approved purchase orders
+warehouse-receive-confirmed = Received! { $number } — { $count } items
+warehouse-receive-expected = Expected
+warehouse-receive-received = Received
+warehouse-receive-damaged = Damaged
+warehouse-receive-short = Short
+
+warehouse-count-create = Start Count
+warehouse-count-type = Count type
+warehouse-count-notes = Notes
+warehouse-count-start = Start
+warehouse-count-open = Open counts
+warehouse-count-history = History
+warehouse-count-lines = lines
+warehouse-count-empty = No lines yet — scan a barcode to start counting
+warehouse-count-back = Back
+warehouse-count-complete = Complete Count
+warehouse-count-complete-success = Count complete — { $count } adjustments posted
+warehouse-count-error = Count failed

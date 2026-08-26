@@ -136,7 +136,6 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
       const btn = layoutButtons.filter({ hasText: new RegExp(name, 'i') }).first();
       await expect(btn).toBeVisible({ timeout: 3_000 });
       await btn.click();
-      await page.waitForTimeout(1_000);
 
       // No crash after layout switch.
       await expect(page.locator('[class*="error-boundary"]')).toHaveCount(0, { timeout: 3_000 });
@@ -157,7 +156,6 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     const settingsToggle = page.locator('.kds-settings-btn').first();
     await expect(settingsToggle).toBeVisible({ timeout: 5_000 });
     await settingsToggle.click();
-    await page.waitForTimeout(500);
 
     // Settings popover must open.
     const settingsPanel = page.locator('.kds-settings-popover');
@@ -198,7 +196,6 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
 
     // Close settings panel.
     await settingsToggle.click();
-    await page.waitForTimeout(500);
     await expect(settingsPanel).not.toBeVisible({ timeout: 3_000 });
 
     // No crash.
@@ -215,7 +212,6 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
 
     // Open history panel.
     await historyToggle.click();
-    await page.waitForTimeout(1_000);
 
     // History panel should render (either as a panel or replacing the main content).
     const historyPanel = page.locator('.kds-history-panel, .kds-history');
@@ -228,7 +224,6 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
 
     // Close history by clicking toggle again.
     await historyToggle.click();
-    await page.waitForTimeout(1_000);
 
     // Columns must be visible again.
     await expect(page.locator('.kds-columns')).toBeVisible({ timeout: 5_000 });
@@ -247,7 +242,6 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
 
     // Open shortcuts popover.
     await shortcutsBtn.click();
-    await page.waitForTimeout(300);
 
     const popover = page.locator('.kds-shortcuts-popover');
     await expect(popover).toBeVisible({ timeout: 3_000 });
@@ -259,7 +253,6 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
 
     // Close with Escape key.
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
     await expect(popover).not.toBeVisible({ timeout: 3_000 });
 
     // No crash.
@@ -291,9 +284,6 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
   test('click actionable per-item row to advance individual line item status', async ({ page }) => {
     await expect(page.locator('.kds-columns')).toBeVisible({ timeout: TIMEOUT });
 
-    // Wait for line items to lazy-fetch (getKdsOrderLinesScoped).
-    await page.waitForTimeout(3_000);
-
     // Find an actionable per-item row inside a ticket (dev-mock returns course-grouped items).
     const actionableItem = page.locator(
       '.kds-ticket .kds-ticket-item-row--actionable',
@@ -307,7 +297,6 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
 
     // Click the actionable item row to advance its status.
     await actionableItem.click();
-    await page.waitForTimeout(1_000);
 
     // No crash after per-item status advance.
     await expect(page.locator('[class*="error-boundary"]')).toHaveCount(0, { timeout: 3_000 });

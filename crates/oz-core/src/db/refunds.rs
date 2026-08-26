@@ -32,6 +32,54 @@ impl Store<'_> {
                 message: format!("invalid UTF-8 in currency bytes: {e}"),
             })?;
 
+        // ── 0. Over-refund guard ──────────────────────────────────
+        // A sale may be refunded AT MOST its original total. The sale stays
+        // 'completed' (nothing transitions it to 'refunded'), so without
+        // this check the same sale could be refunded unlimited times and
+        // stock credited each time. Reject when the cumulative refunded
+        // amount plus this refund would exceed the sale's total.
+        let (sale_total, sale_currency): (i64, String) = match self.conn.query_row(
+            "SELECT total_minor, currency FROM sales WHERE id = ?1",
+            params![refund.sale_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ) {
+            Ok(pair) => pair,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                return Err(CoreError::NotFound {
+                    entity: "sale",
+                    id: refund.sale_id.clone(),
+                });
+            }
+            Err(e) => return Err(CoreError::Db(e)),
+        };
+        let already_refunded: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(total_minor), 0) FROM refunds WHERE sale_id = ?1 AND currency = ?2",
+                params![refund.sale_id, cur_str],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let after = already_refunded
+            .checked_add(refund.total.minor_units)
+            .ok_or_else(|| CoreError::Validation {
+                field: "total",
+                message: "refund total overflow".into(),
+            })?;
+        if after > sale_total {
+            return Err(CoreError::Validation {
+                field: "total",
+                message: format!(
+                    "refund total {} exceeds refundable balance {} for sale {} (already refunded {})",
+                    refund.total.minor_units,
+                    sale_total - already_refunded,
+                    refund.sale_id,
+                    already_refunded
+                ),
+            });
+        }
+        let _ = sale_currency; // currency mismatch handled by caller's checked_add
+
         let tx = self.conn.unchecked_transaction()?;
 
         // ── 1. Persist refund + lines ──────────────────────────────
@@ -333,32 +381,47 @@ impl Store<'_> {
     }
 
     /// Get total refunded amount for a sale.
+    ///
+    /// Returns `Money::zero` in the sale's currency when no refunds exist
+    /// (callers use this as a balance check). Only refunds in the SALE's
+    /// currency are summed — a cross-currency refund line would not be
+    /// comparable and is excluded from the balance.
     pub fn total_refunded_for_sale(&self, sale_id: &str) -> Result<Money, CoreError> {
         let row = self.conn.query_row(
-            "SELECT COALESCE(SUM(total_minor), 0) AS total, currency FROM refunds WHERE sale_id = ?1 GROUP BY currency",
+            "SELECT total_minor, currency FROM sales WHERE id = ?1",
             params![sale_id],
-            |row| {
-                Ok((row.get::<_, i64>("total")?, row.get::<_, String>("currency")?))
-            },
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
         );
-        match row {
-            Ok((total, cur_str)) => {
-                let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
-                    rusqlite::Error::ToSqlConversionFailure(
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
-                    )
-                })?;
-                Ok(Money {
-                    minor_units: total,
-                    currency,
-                })
+        let (sale_total_unused, sale_currency_str) = match row {
+            Ok(pair) => pair,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                return Err(CoreError::NotFound {
+                    entity: "sale",
+                    id: sale_id.to_owned(),
+                });
             }
-            Err(rusqlite::Error::QueryReturnedNoRows) => Err(CoreError::NotFound {
-                entity: "refund",
-                id: sale_id.to_owned(),
-            }),
-            Err(e) => Err(e.into()),
-        }
+            Err(e) => return Err(CoreError::Db(e)),
+        };
+        let _ = sale_total_unused;
+        let sale_currency: Currency =
+            sale_currency_str
+                .parse()
+                .map_err(|e| CoreError::Validation {
+                    field: "currency",
+                    message: format!("invalid sale currency: {e}"),
+                })?;
+        let total: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(total_minor), 0) FROM refunds WHERE sale_id = ?1 AND currency = ?2",
+                params![sale_id, sale_currency_str],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        Ok(Money {
+            minor_units: total,
+            currency: sale_currency,
+        })
     }
 
     fn row_to_refund_line(row: &rusqlite::Row) -> rusqlite::Result<RefundLine> {

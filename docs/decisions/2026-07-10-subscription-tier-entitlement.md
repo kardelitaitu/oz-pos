@@ -7,12 +7,14 @@
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** subscriptions, entitlements, billing, multi-store, quotas, offline-grace
 
-> **Supersession note:** [`subscription-tiers.md`](../guides/subscription-tiers.md) is now the single source
+> **Supersession note:** [`subscription-tiers.md`](../subscription-tiers.md) is now the single source
 > of truth for tier pricing, quotas, and feature gates. The lineup is
 > **Free · Plus · Pro ⭐ · Premium · Enterprise** (this ADR's `Free / Pro /
 > Premium / Enterprise` matrix and the old numeric quotas — e.g. Pro = 2
-> stores / 3 registers, Premium = 5 stores — are outdated; the new matrix
-> is Pro = 2 stores / 5 registers, Premium = unlimited). The architectural
+> stores / 3 registers, Premium = 5 stores / 10 registers — are outdated;
+> the new matrix is Free = 1/1/1/1/3mo, Plus = 1/2/2/5/1yr, Pro = 2/5/3/20/5yr,
+> Premium = 5/unlimited/unlimited/50/unlimited, Enterprise = unlimited).
+> The architectural
 > mechanism this ADR defines — signed `tenant_subscription`, per-store quota
 > checks, `InstanceStatus` downgrade/recovery, offline grace — remains valid
 > and unchanged. `TODO.md` Phase C0/C1 tracks the quota-value migration in
@@ -58,20 +60,25 @@ CREATE TABLE tenant_subscription (
 ### 2. Security & Offline Rules
 
 - **Signature Verification**: On startup and prior to quota checks, the backend verifies `signature` against the public key (`oz-pos-updater.key.pub`). If tampered, the backend raises `CoreError::InvalidSubscriptionSignature`.
-- **14-Day Offline Grace & Monotonic Ledger Clock Check**: When offline, registers evaluate `expires_at`. To prevent users from rolling back their OS system clock to bypass expiration, the backend computes the effective time as the maximum of `Utc::now()` and the most recent timestamp across **all** databases:
+- **Per-Tier Offline Grace & Monotonic Ledger Clock Check**: When offline, registers evaluate `expires_at`. To prevent users from rolling back their OS system clock to bypass expiration, the backend computes the effective time as the maximum of `Utc::now()` and the most recent timestamp across **all** databases:
 
   $$\text{Effective Time} = \max\Big(\mathtt{Utc::now()},\; \max_{\text{all store DBs}}\big(\max_{r \in \text{orders}}(\mathtt{r.created\_at}),\; \max_{l \in \text{audit\_logs}}(\mathtt{l.created\_at})\big)\Big)$$
 
-  The global audit log and each store's orders table are checked. If any timestamp exceeds `Utc::now()` by more than a configured tolerance (e.g., 5 minutes), the system detects clock rollback (`CoreError::SystemClockTampered`) and locks all registers until an online cloud sync occurs. If all tables are empty, the check falls back to `Utc::now()`. Paid tiers continue operating for up to 14 days offline; after that, quotas revert to the Free tier until connectivity returns.
+  The global audit log and each store's orders table are checked. If any timestamp exceeds `Utc::now()` by more than a configured tolerance (e.g., 30 seconds), the system detects clock rollback (`CoreError::SystemClockTampered`) and locks all registers until an online cloud sync occurs. If all tables are empty, the check falls back to `Utc::now()`. Paid tiers continue operating for their per-tier offline grace period (Plus/Pro 14 days, Premium 30, Enterprise custom) — after that, quotas revert to the Free tier until connectivity returns.
 
 ### 3. Subscription Tier Enforcement Matrix
 
+> Quotas below are the **current** values (per `subscription-tiers.md` §3 and
+> `SubscriptionTier` in oz-core). This ADR's mechanism is what matters — the
+> exact numbers change with pricing decisions.
+
 | Tier | Store Quota (`store_profiles`) | POS Register Quota per Store (`workspace_instances`) | Allowed Workspace Types (`workspace_types`) | Advanced Features & Hardware |
 | :--- | :--- | :--- | :--- | :--- |
-| **Free** | **1 Store** | **1 POS Register** | `store-pos` (or `restaurant-pos`), `admin` | Basic receipt printing (`oz-hal`), Local SQLite only. |
-| **Pro** | **Up to 2 Stores** | **Up to 3 Registers / Store** | `restaurant-pos`, `store-pos`, `inventory`, `admin` | Barcode scanners, Cash drawers, Basic inventory tracking. |
-| **Premium** | **Up to 5 Stores** | **Up to 10 Registers / Store** | + `kds` (Kitchen Display System), `analytics-pro` | Multi-store cloud sync (`apps/cloud-server`), Advanced recipe costing. |
-| **Enterprise** | **Unlimited (`N`)** | **Unlimited Registers / Store** | + All types + Custom Plugin Workspaces (`oz-plugin`) | Multi-warehouse routing, Custom Lua scripts (`oz-lua`), Dedicated API access. |
+| **Free** | **1 Store** | **1 POS Register** | `store-pos` (or `restaurant-pos`), `admin` | Basic receipt printing (`oz-hal`), Local SQLite only, 3-month sales history. |
+| **Plus** | **1 Store** | **2 Registers / Store** | `store-pos`, `restaurant-pos`, `admin`, `inventory`, `warehouse` | QRIS (Midtrans), cloud sync, Daily Sales Dashboard, product bundles. |
+| **Pro** | **Up to 2 Stores** | **Up to 5 Registers / Store** | + `kds` (Kitchen Display System) | Analytics, Stripe cards, multi-store dashboard, multi-warehouse routing. |
+| **Premium** | **Up to 5 Stores** | **Unlimited Registers / Store** | + all types | Loyalty program, Lua scripting, scheduled report emails, priority 1h support. |
+| **Enterprise** | **Unlimited (`N`)** | **Unlimited Registers / Store** | + All types + Custom Plugin Workspaces (`oz-plugin`) | White-label, regional zones, custom HAL drivers, dedicated account manager. |
 
 ### 4. Runtime Quota Validation (Cross-Database)
 
@@ -122,7 +129,7 @@ When a user attempts to open an advanced workspace (`kds` or `analytics-pro`), t
 ```rust
 if !tier.allows_workspace_type(&instance.type_key) {
     return Err(CoreError::SubscriptionUpgradeRequired(
-        "Kitchen Display System (KDS) requires Premium tier or higher."
+        "Kitchen Display System (KDS) requires Pro tier or higher."
     ));
 }
 ```
@@ -142,7 +149,7 @@ pub enum InstanceStatus {
 ```
 
 - **Upgrades & Automatic Recovery**: Raising a tier instantly increases `max_pos_instances` and unlocks `allowed_workspace_types`. When `apps/cloud-server` syncs an upgraded quota, the backend iterates over all store databases, queries all `QuotaSuspended` instances, and automatically restores them to `Active` (ordered by `last_accessed_at DESC`) up to the new per-store tier limit. Admin-deleted (`Archived`) registers remain untouched.
-- **Downgrading (Safe Archiving)**: If a client downgrades below their current register count or their 14-day offline grace expires, surplus active instances transition to `QuotaSuspended` across all affected store databases. Historical audit logs, cash accountability, and orders are preserved, while only quota-compliant instances remain openable for new sales.
+- **Downgrading (Safe Archiving)**: If a client downgrades below their current register count or their per-tier offline grace expires, surplus active instances transition to `QuotaSuspended` across all affected store databases. Historical audit logs, cash accountability, and orders are preserved, while only quota-compliant instances remain openable for new sales.
 
 ---
 
@@ -159,7 +166,7 @@ pub enum InstanceStatus {
 - [x] Wire entitlement filtering into `list_workspaces_scoped` Tauri command (filters by `tier.allows_workspace_type()`).
 - [x] Write tests (14 subscription + 22 workspace = 36/36 pass).
 - [x] Implement entitlement check during session resolution (filter `list_workspaces` by tier-allowed types via `list_workspaces_with_entitlement()`).
-- [x] Implement 14-day offline grace period (`is_within_grace_period()`, `effective_tier()`) and monotonic clock rollback detection (`validate_clock_rollback()`, `compute_max_ledger_timestamp()`). Wired into both `create_workspace_instance_scoped` and `list_workspaces_scoped`.
+- [x] Implement per-tier offline grace period (`is_within_grace_period()`, `effective_tier()` — Free 7d / Plus-Pro 14d / Premium 30d / Enterprise custom) and monotonic clock rollback detection (`validate_clock_rollback()`, `compute_max_ledger_timestamp()`). Wired into both `create_workspace_instance_scoped` and `list_workspaces_scoped`.
 - [x] Implement automatic instance recovery on tier upgrade (`auto_recover_instances`) with transaction safety and downgrade-safe suspension (`suspend_surplus_instances`). Wired into Tauri commands (`recover_workspace_instances_scoped`, `suspend_surplus_workspace_instances_scoped`). Tests cover recovery limits, unlimited tiers, suspension, and roundtrip.
 - [x] Run `cargo clippy -p oz-core -- -D warnings` (17 pre-existing missing-docs warnings; no new warnings) and full test suite (54/54 pass).
 
@@ -191,7 +198,7 @@ pub enum InstanceStatus {
 ## Open Questions
 
 1. **✅ Resolved:** The public key is embedded in the binary via `include_str!("oz-license.key.pub")` in `crates/oz-core/src/license_verification.rs` (`LICENSE_PUBLIC_KEY_PEM`) — build-time only; an earlier note claimed an `OZ_LICENSE_PUBLIC_KEY` env override, but the code never reads it, so swapping the key requires recompiling. See ADR #9.
-2. **✅ Resolved:** After 14 days offline, `effective_tier()` falls back to Free tier quotas. The register must reconnect to the license server to restore paid tier features. See `is_within_grace_period()` in `crates/oz-core/src/subscription.rs`.
+2. **✅ Resolved:** After the per-tier offline grace period elapses (Plus/Pro 14 days, Premium 30, Enterprise custom), `effective_tier()` falls back to Free tier quotas. The register must reconnect to the license server to restore paid tier features. See `is_within_grace_period()` in `crates/oz-core/src/subscription.rs`.
 3. **Deferred:** Device-bound terminals always count as one instance toward the quota. A future ADR may distinguish device-bound instances (fixed hardware) from user-picked instances (floating licenses) for quota purposes.
 
 ---

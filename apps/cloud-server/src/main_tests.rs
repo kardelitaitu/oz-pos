@@ -768,3 +768,159 @@ fn lifecycle_stripe_signature(payload: &[u8], secret: &str) -> String {
     let expected = hex::encode(mac.finalize().into_bytes());
     format!("t={},v1={}", timestamp, expected)
 }
+
+/// Health must fail fast under pool saturation (Bug 3). The Docker
+/// healthcheck has its own --timeout=5s; if the health handler waited
+/// the full 5s builder wait_timeout while the pool is exhausted, the
+/// container would be marked unhealthy and restarted during a burst.
+/// The health path bounds its wait to 2s and returns a degraded
+/// (db_connected: false) response instead.
+#[tokio::test]
+async fn pg_integration_health_fails_fast_when_pool_exhausted() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 1, false).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG health-under-saturation integration test skipped: {e}");
+            return;
+        }
+    };
+    let state = CloudServerState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        pg: Some(pool.clone()),
+        started_at: Instant::now(),
+        stripe_webhook_secret: None,
+        square_webhook_signature_key: None,
+        square_webhook_url: None,
+    };
+    let app = build_router(
+        state,
+        crate::rate_limit::RateLimiterState::new(),
+        &test_config(),
+        None,
+    );
+
+    // Exhaust the max_size(1) pool.
+    let _held = pool.get().await.expect("first get should succeed");
+
+    // The health request must complete within ~2s (not the 5s builder
+    // wait_timeout) with a degraded response.
+    let start = std::time::Instant::now();
+    let req = Request::builder()
+        .uri("/health")
+        .body(Body::empty())
+        .unwrap();
+    let resp = tokio::time::timeout(std::time::Duration::from_secs(4), app.oneshot(req))
+        .await
+        .expect("health must complete within 4s — it should fail fast, not wait the full 5s pool timeout")
+        .expect("tower oneshot error is infallible");
+    let elapsed = start.elapsed();
+
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "health always returns 200 with a degraded payload"
+    );
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        json["db_connected"], false,
+        "exhausted pool must be reported as db_connected: false"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_secs(3),
+        "health must fail fast (~2s), took {elapsed:?}"
+    );
+}
+
+/// The health endpoint's `SELECT MAX(synced_at) FROM offline_queue`
+/// runs on every Docker healthcheck (every 15s). Without an index on
+/// synced_at it is a full table scan over the 90-day retention queue —
+/// constant O(n) cost on the free-tier CPU budget, exactly the class of
+/// waste the SOTA pass eliminated elsewhere. The index must exist in
+/// PG_INIT so the query is an index scan.
+#[tokio::test]
+async fn pg_integration_health_last_sync_query_is_indexed() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG health-index integration test skipped: {e}");
+            return;
+        }
+    };
+
+    // The index must exist in the applied PG_INIT schema.
+    let client = pool.get().await.unwrap();
+    let index: Option<String> = client
+        .query_opt(
+            "SELECT indexname FROM pg_indexes
+             WHERE tablename = 'offline_queue' AND indexname = 'idx_offline_queue_synced_at'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .map(|r| r.get(0));
+    assert!(
+        index.is_some(),
+        "idx_offline_queue_synced_at must exist — the health MAX(synced_at) query \
+         (every 15s) full-scans without it"
+    );
+
+    // Prove the plan uses the index, not a Seq Scan, on a non-trivial
+    // table. Unique ids per run (uuid prefix) so re-runs never collide
+    // with leftover rows; clean leftovers first.
+    let seed_tenant = format!("health-index-seed-{}", uuid::Uuid::now_v7());
+    client
+        .execute(
+            "DELETE FROM offline_queue WHERE tenant_id LIKE 'health-index-seed-%'",
+            &[],
+        )
+        .await
+        .unwrap();
+    client
+        .execute(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+             SELECT 'seed-' || g || '-' || $1, 'act', '{}', 'synced',
+                    '2026-01-01T00:00:00Z', $2
+             FROM generate_series(1, 2000) g",
+            &[&uuid::Uuid::now_v7().simple().to_string(), &seed_tenant],
+        )
+        .await
+        .unwrap();
+    // EXPLAIN returns one row PER PLAN LINE; join them all.
+    let rows = client
+        .query(
+            "EXPLAIN SELECT MAX(synced_at) FROM offline_queue WHERE synced_at IS NOT NULL",
+            &[],
+        )
+        .await
+        .unwrap();
+    let plan: String = rows
+        .iter()
+        .map(|r| r.get::<_, String>(0))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        !plan.contains("Seq Scan"),
+        "health MAX(synced_at) must use the index, got plan: {plan}"
+    );
+    assert!(
+        plan.contains("Index Scan")
+            || plan.contains("Index Only Scan")
+            || plan.contains("Bitmap Index"),
+        "health MAX(synced_at) must use an index scan, got plan: {plan}"
+    );
+
+    client
+        .execute(
+            "DELETE FROM offline_queue WHERE tenant_id = $1",
+            &[&seed_tenant],
+        )
+        .await
+        .unwrap();
+}

@@ -56,7 +56,7 @@ pub fn compute_hardware_fingerprint() -> Result<String, SecurityError> {
 
 ## 3. PocketBase License Auth Server Collection (`trial_registrations`)
 
-The central license auth server (`license.oz-pos.com`) maintains a `trial_registrations` collection.
+The central license auth server (`license.ozpos.my.id`) maintains a `trial_registrations` collection.
 
 ### 3.1 Collection Schema
 

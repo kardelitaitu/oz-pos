@@ -436,7 +436,7 @@ pub async fn get_user_workspace_instances_scoped(
 ///
 /// This narrow bootstrap command runs after username/PIN authentication but
 /// before an opaque session token exists. The caller presents the short-lived
-/// picker ticket minted by `staff_login` / `bootstrap_owner` (audit/06
+/// picker ticket minted by `staff_login` / `bootstrap_owner` (audit-open-findings
 /// residual): the REAL user is resolved from the global identity database and
 /// the REAL role is used for the listing. A caller-supplied `role_id` /
 /// `user_id` can no longer enumerate instances in stores the caller has no
@@ -601,7 +601,7 @@ pub async fn list_all_workspaces_scoped(
 /// selection. The store ID is explicit so the read is routed to the correct
 /// store database; authenticated callers should prefer the scoped variant.
 ///
-/// The picker ticket (audit/06 residual) proves the caller completed a real
+/// The picker ticket (audit-open-findings residual) proves the caller completed a real
 /// login before this bootstrap read can touch any store database.
 #[tauri::command]
 pub async fn list_workspace_screens(

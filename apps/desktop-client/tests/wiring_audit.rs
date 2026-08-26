@@ -2,7 +2,7 @@
 //! in the `generate_handler!` macro that would cause a runtime panic.
 //!
 //! This test also protects the Staff security boundary: legacy unscoped
-//! staff commands must not be registered after audit/06 remediation.
+//! staff commands must not be registered after audit-open-findings remediation.
 //! Tauri v2 panics at runtime when duplicate command paths appear in the macro.
 //!
 //! This test parses the `lib.rs` source and asserts no duplicate entries

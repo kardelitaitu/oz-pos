@@ -64,7 +64,7 @@ impl InstanceStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionTier {
-    /// Free forever — 30-day sales history, 1 store, 1 register, 1 warehouse, offline-only.
+    /// Free forever — 3-month sales history, 1 store, 1 register, 1 warehouse, offline-only.
     Free,
     /// 1-Time Perpetual License — 1 store, 1 register, 1 warehouse, offline-first.
     ///
@@ -78,7 +78,7 @@ pub enum SubscriptionTier {
     Plus,
     /// Pro SaaS — 2 stores, 5 registers/store, 3 warehouses, analytics + KDS, Stripe + QRIS.
     Pro,
-    /// Premium — unlimited stores/registers/warehouses, loyalty program, Lua engine, priority support.
+    /// Premium — 5 stores, unlimited registers/warehouses, loyalty program, Lua engine, priority support.
     Premium,
     /// Enterprise — unlimited stores/registers/warehouses, regional zones, custom ERP adaptors.
     Enterprise,
@@ -126,7 +126,7 @@ impl SubscriptionTier {
     }
 
     /// Maximum number of stores allowed for this tier.
-    /// C4.2: Premium allows up to 10 stores self-serve; >10 requires
+    /// C4.2: Premium allows up to 5 stores self-serve; more requires
     /// Enterprise contract. Enterprise is unlimited.
     pub fn max_stores(&self) -> Option<i64> {
         match self {

@@ -8,20 +8,19 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { loadTopology, type TopologyApplyResult } from '@/api/topology';
 import { useSettings } from '@/contexts/SettingsContext';
 import {
-  StoreInfoCard,
   type WorkspaceCardProps,
 } from '@/features/settings/workspace-cards';
+import { updateStore, getStore, type StoreProfile } from '@/api/stores';
 import {
   StoreIcon,
   WarehouseIcon,
   PrinterIcon,
-  FlaskIcon,
-  StopIcon,
   CartIcon,
   UtensilsIcon,
   CheckIcon,
   TrashIcon,
   CloseIcon,
+  ChevronDownIcon,
   LockIcon,
   PlusIcon,
   MinusIcon,
@@ -58,10 +57,11 @@ import { TopologyMinimap } from './topologyMinimap';
 import { TopologyRelationshipPicker } from './topologyRelationshipPicker';
 import { TopologyValidationWidget } from './topologyValidationWidget';
 import type { TopologyOverlay } from './topologyBranchCompare';
+import { TopologyApplyValidationError } from './topologyApply';
 import { layoutGhosts, buildGhostWireStubs, compareFocusDimIds, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
-import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
+import { cubicBezier, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
 import { historyEntry, validWiresForNodes } from './topologyHistoryIntegrity';
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
@@ -277,7 +277,7 @@ export interface WorkspaceInstanceSeed {
 }
 
 export interface NodeTopologyEditorProps {
-  currentTier?: 'free' | 'one_time' | 'standard' | 'pro' | 'premium' | 'enterprise';
+  currentTier?: 'free' | 'one_time' | 'plus' | 'pro' | 'premium' | 'enterprise';
   /**
    * Optional toolbar content rendered inside the topology header, above the
    * title/actions row. The parent screen uses this slot to merge its branch
@@ -701,8 +701,97 @@ export function validateEditorGraph(
     : [];
 }
 
+/** Branch Location profile fields — fetched lazily from the backend. */
+function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
+  nodeId: string;
+  l10n: ReturnType<typeof useLocalization>['l10n'];
+  beginInspectorEdit: (id: string) => void;
+}) {
+  const [profile, setProfile] = useState<StoreProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [draft, setDraft] = useState<Partial<Pick<StoreProfile, 'address' | 'currency' | 'timezone' | 'tax_id'>> | null>(null);
+  const active = draft && profile ? { ...profile, ...draft } : profile;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getStore(nodeId)
+      .then((p) => { if (!cancelled) { setProfile(p); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [nodeId]);
+
+  const persist = useCallback(() => {
+    if (draft && profile) {
+      const merged = { ...profile, ...draft };
+      updateStore(merged).then(setProfile).catch(() => {});
+      setDraft(null);
+    }
+  }, [draft, profile]);
+
+  if (loading) {
+    return (
+      <div className="inspector-section">
+        <h4 className="inspector-section-title"><Localized id="topology-inspector-section-location">Branch Location</Localized></h4>
+        <span className="inspector-type-label">Loading…</span>
+      </div>
+    );
+  }
+
+  if (!active) return null;
+
+  return (
+    <div className="inspector-section">
+      <h4 className="inspector-section-title"><Localized id="topology-inspector-section-location">Branch Location</Localized></h4>
+      <label className="inspector-field">
+        <span><Localized id="topology-inspector-address">Address</Localized></span>
+        <input
+          type="text"
+          value={active.address}
+          placeholder={l10n.getString('topology-inspector-address-placeholder')}
+          onChange={(e) => { beginInspectorEdit(nodeId); setDraft((d) => ({ ...d ?? {}, address: e.target.value })); }}
+          onBlur={persist}
+        />
+      </label>
+      <div className="inspector-field-row">
+        <label className="inspector-field inspector-field--half">
+          <span><Localized id="topology-inspector-currency">Currency</Localized></span>
+          <input
+            type="text"
+            value={active.currency}
+            placeholder="USD"
+            maxLength={3}
+            onChange={(e) => { beginInspectorEdit(nodeId); setDraft((d) => ({ ...d ?? {}, currency: e.target.value.toUpperCase() })); }}
+            onBlur={persist}
+          />
+        </label>
+        <label className="inspector-field inspector-field--half">
+          <span><Localized id="topology-inspector-timezone">Timezone</Localized></span>
+          <input
+            type="text"
+            value={active.timezone}
+            placeholder="UTC"
+            onChange={(e) => { beginInspectorEdit(nodeId); setDraft((d) => ({ ...d ?? {}, timezone: e.target.value })); }}
+            onBlur={persist}
+          />
+        </label>
+      </div>
+      <label className="inspector-field">
+        <span><Localized id="topology-inspector-tax-id">Tax ID</Localized></span>
+        <input
+          type="text"
+          value={active.tax_id}
+          placeholder={l10n.getString('topology-inspector-tax-id-placeholder')}
+          onChange={(e) => { beginInspectorEdit(nodeId); setDraft((d) => ({ ...d ?? {}, tax_id: e.target.value })); }}
+          onBlur={persist}
+        />
+      </label>
+    </div>
+  );
+}
+
 export default function NodeTopologyEditor({
-  currentTier = 'standard',
+  currentTier = 'free',
   onSave,
   workspaceInstances,
   branchLocations,
@@ -718,14 +807,14 @@ export default function NodeTopologyEditor({
   compareFocus = false,
   canSave = true,
 }: NodeTopologyEditorProps) {
-  const { sessionToken } = useWorkspace();
+  const { sessionToken, resolvedStoreId: sessionStoreId } = useWorkspace();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
   /** Latest l10n for ref-based callbacks (duplicate commit/cancel) so the
    *  announcement strings always come from the current bundle. */
   const l10nRef = useRef(l10n);
-  l10nRef.current = l10n;
-  const { settings } = useSettings();
+  l10nRef.current = l10n;    const { settings } = useSettings();
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -785,9 +874,6 @@ export default function NodeTopologyEditor({
    *  memo for unrelated cards). */
   const selectedNodeIdsRef = useRef<Set<string>>(selectedNodeIds);
   selectedNodeIdsRef.current = selectedNodeIds;
-
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simPulseStep, setSimPulseStep] = useState(0);
 
   /** Drag lifecycle (render set + synchronous ref mirror) lives in one
    *  typed reducer — every begin/end/cancel writes both faces together, so
@@ -1129,6 +1215,37 @@ export default function NodeTopologyEditor({
   const toggleShortcuts = useCallback(() => setShowShortcuts((p) => !p), []);
   const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
 
+  /** Right-side tool rack panel state. The add panel starts open so the
+   *  palette is immediately visible (matches the pre-redesign sidebar and
+   *  the test suite's invariant). The edit/view/share panels stay collapsed
+   *  and open on click. */
+  const [rackPanel, setRackPanel] = useState<string | null>('add');
+  const toggleRackPanel = useCallback((key: string) => setRackPanel((p) => (p === key ? null : key)), []);
+
+  // ── Apply confirmation popup ──────────────────────────────────────
+  type ApplyDiffItem = { id: string; name: string; typeKey: string };
+  interface ApplyConfirmData {
+    created: ApplyDiffItem[];
+    updated: ApplyDiffItem[];
+    archived: ApplyDiffItem[];
+    typeChanged: ApplyDiffItem[];
+    /** The session's store ID (where the caller is authenticated). */
+    sessionStoreId: string;
+    /** The Branch Location's store profile ID from the diagram (the effective store for workspace CRUD). */
+    effectiveStoreId: string;
+  }
+  const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
+  const [applyConfirmData, setApplyConfirmData] = useState<ApplyConfirmData | null>(null);
+  const [applyPin, setApplyPin] = useState('');
+  const [applyPinError, setApplyPinError] = useState(false);
+  const [applyPinVerifying, setApplyPinVerifying] = useState(false);
+  const [rememberPin, setRememberPin] = useState(false);
+  /** Session-level PIN cache. When set, subsequent Apply calls skip the
+   *  verifyPin prompt — the checkbox in the dialog controls whether the
+   *  flag is persisted to sessionStorage (cleared on tab close). */
+  const pinVerifiedRef = useRef(false);
+  const applyPinRef = useRef<HTMLInputElement>(null);
+
   /** Live canvas getter for the relationship picker's position clamp. */
   const getCanvas = useCallback(() => canvasRef.current, []);
   /** Legacy-schema migration dialog (ADR #34 item 7): a fully-unknown
@@ -1282,6 +1399,8 @@ export default function NodeTopologyEditor({
    *  Escape or any document mousedown outside the picker (the picker
    *  wrapper stops propagation, so slider drags never close it). */
   const [zoomPickerOpen, setZoomPickerOpen] = useState(false);
+  /** Presets popover (Retail / Restaurant & KDS template loaders). */
+  const [presetsOpen, setPresetsOpen] = useState(false);
   /** Save-template popover: open flag + the in-flight template name. */
   const [templateSaveOpen, setTemplateSaveOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -1309,8 +1428,8 @@ export default function NodeTopologyEditor({
   }, [minimapKey, minimapVisible]);
 
   useEffect(() => {
-    if (!zoomPickerOpen) return;
-    const close = () => setZoomPickerOpen(false);
+    if (!zoomPickerOpen && !presetsOpen) return;
+    const close = () => { setZoomPickerOpen(false); setPresetsOpen(false); };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
@@ -1323,7 +1442,7 @@ export default function NodeTopologyEditor({
       document.removeEventListener('mousedown', close);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [zoomPickerOpen]);
+  }, [zoomPickerOpen, presetsOpen]);
 
   /** Bounding box of the current multi-selection in canvas coords — the
    *  align/distribute toolbar floats above it. Null unless 2+ nodes are
@@ -1441,6 +1560,24 @@ export default function NodeTopologyEditor({
     [],
   );
 
+  /** Relationship type display metadata: color, icon SVG, and localized label. */
+  const relationshipStyle = useCallback((type?: SemanticRelationshipType): { color: string; icon: string; label: string } => {
+    const map: Record<string, { color: string; icon: string; labelKey: string }> = {
+      'location':            { color: '#3b82f6', icon: '📍', labelKey: 'topology-relationship-location' },
+      'generic':             { color: '#6b7280', icon: '🔗', labelKey: 'topology-relationship-generic' },
+      'stock-routing':       { color: '#10b981', icon: '📦', labelKey: 'topology-relationship-stock-routing' },
+      'inventory-transfer':  { color: '#f59e0b', icon: '🔄', labelKey: 'topology-relationship-inventory-transfer' },
+      'ticket-routing':      { color: '#8b5cf6', icon: '🎫', labelKey: 'topology-relationship-ticket-routing' },
+      'hardware-connection': { color: '#ef4444', icon: '🔌', labelKey: 'topology-relationship-hardware-connection' },
+    };
+    const entry = type ? map[type] : undefined;
+    return {
+      color: entry?.color ?? '#6b7280',
+      icon: entry?.icon ?? '🔗',
+      label: entry ? l10n.getString(entry.labelKey) : l10n.getString('topology-relationship-generic'),
+    };
+  }, [l10n]);
+
   /** User-visible wire label: the custom label, else the endpoint-name join,
    *  else the generic connection fallback. Shared by the context-menu title
    *  and the label pills so the two surfaces can never disagree. */
@@ -1524,37 +1661,6 @@ export default function NodeTopologyEditor({
     }
     return m;
   }, [wireGeometries, wires, nodes]);
-
-  /** Pulse dots that would be HIDDEN under a card (round 147): the
-   *  simulation pulse travels the base wire path, so at the moment it
-   *  passes under a card it would blink out — breaking the continuity the
-   *  round-146 overlay just restored for the wire itself. Any pulse point
-   *  strictly inside another card's box is rendered on the crossing overlay
-   *  instead (same class, same info-blue dot) and disappears the moment it
-   *  clears the box. Recomputed every render — the pulse advances on a
-   *  30ms interval, so this cannot be a memo. */
-  const pulsePoints = new Map<string, { x: number; y: number }>();
-  const hiddenPulseDots: Array<{ x: number; y: number }> = [];
-  if (isSimulating) {
-    // Reduced motion: the interval below never runs, so simPulseStep stays
-    // 0 — pin the pulse at the wire midpoint instead so the flow
-    // visualization is static (visible mid-path, never under the source
-    // card) rather than a frozen dot collapsed onto the start port.
-    const t = prefersReducedMotion() ? 0.5 : simPulseStep / 100;
-    for (const wire of wires) {
-      const geo = wireGeometries.get(wire.id);
-      if (!geo) continue;
-      const pt = geo.polyline
-        ? polylinePoint(geo.polyline, t)
-        : {
-            x: cubicBezier(t, geo.x1, geo.x1 + geo.dx, geo.x2 - geo.dx, geo.x2),
-            y: cubicBezier(t, geo.y1, geo.y1, geo.y2, geo.y2),
-          };
-      pulsePoints.set(wire.id, pt);
-      const others = nodes.filter((n) => n.id !== wire.fromNodeId && n.id !== wire.toNodeId);
-      if (pointUnderCards(pt, others)) hiddenPulseDots.push(pt);
-    }
-  }
 
   /** Dynamic SVG bounds derived from node positions — replaces fixed 5000×5000px clipping. */
   const svgBounds = useMemo(() => {
@@ -2282,6 +2388,109 @@ export default function NodeTopologyEditor({
     addToast({ message: l10nRef.current.getString('topology-toast-template-saved'), type: 'info' });
   }, [nodes, wires, addToast]);
 
+  // ── Confirm-apply: the actual save after the confirmation popup ──
+  const confirmApply = useCallback(async () => {
+    if (!beginApply()) return;
+    setApplyConfirmOpen(false);
+    setApplyPinVerifying(true);
+    try {
+      // Session-level PIN cache: skip re-verification when the flag is set
+      // (controlled by the "Remember PIN" checkbox in the dialog).
+      if (!pinVerifiedRef.current) {
+        const { verifyPin } = await import('@/api/staff');
+        if (!sessionToken) { setApplyPinError(true); return; }
+        const valid = await verifyPin(sessionToken, applyPin);
+        if (!valid) {
+          setApplyPinError(true);
+          setApplyPin('');
+          setApplyConfirmOpen(true);
+          failApply();
+          setTimeout(() => applyPinRef.current?.focus(), 50);
+          return;
+        }
+        // Persist the verified flag for the rest of the session.
+        if (rememberPin) pinVerifiedRef.current = true;
+      }
+    } catch {
+      setApplyPinError(true);
+      setApplyPin('');
+      setApplyConfirmOpen(true);
+      failApply();
+      setTimeout(() => applyPinRef.current?.focus(), 50);
+      return;
+    } finally {
+      setApplyPinVerifying(false);
+    }
+    skipNextLoadRef.current = true;
+    addToast({ message: l10n.getString('topology-apply-status-saving'), type: 'info' });
+    let savedNodes = nodes;
+    let savedWires = wires;
+    let nextRevision: number | undefined;
+    try {
+      const result = await onSave?.(nodes, wires, topologyRevision, [...resolvedIssues]);
+      const idMap: Record<string, string> | undefined = result && typeof result === 'object' && 'idMap' in result
+        ? (result.idMap && typeof result.idMap === 'object'
+          ? result.idMap as Record<string, string>
+          : undefined)
+        : result && typeof result === 'object' && !('revision' in result)
+          ? result as Record<string, string>
+          : undefined;
+      if (result && typeof result === 'object' && 'revision' in result && typeof result.revision === 'number') {
+        nextRevision = result.revision;
+      }
+      if (idMap && Object.keys(idMap).length > 0) {
+        clearAll();
+        setHistory([]);
+        setRedo([]);
+        savedNodes = nodes.map((n) => {
+          const newId = idMap[n.id];
+          return newId ? { ...n, id: newId } : n;
+        });
+        savedWires = wires.map((w) => {
+          const newFrom = idMap[w.fromNodeId];
+          const newTo = idMap[w.toNodeId];
+          if (newFrom || newTo) {
+            return {
+              ...w,
+              fromNodeId: newFrom ?? w.fromNodeId,
+              toNodeId: newTo ?? w.toNodeId,
+            };
+          }
+          return w;
+        });
+        setNodes(savedNodes);
+        setWires(savedWires);
+      }
+    } catch (err) {
+      if (isTopologyRevisionConflict(err)) {
+        addToast({ message: l10n.getString('topology-toast-revision-conflict'), type: 'error' });
+        skipNextLoadRef.current = false;
+        failApply();
+        setReloadKey((k) => k + 1);
+        return;
+      }
+      if (!(err instanceof TopologyApplyValidationError)) {
+        // Show both the localized error category AND the raw backend detail
+        // so the user (and developer) can see exactly what failed.
+        const typed = parseAppError(err);
+        const rawMsg = typed?.message ?? plainErrorMessage(err);
+        const userMsg = plainErrorMessage(err);
+        addToast({
+          message: `${l10n.getString('topology-toast-save-error')}: ${userMsg}${rawMsg !== userMsg ? ` (${rawMsg})` : ''}`,
+          type: 'error',
+        });
+      }
+      skipNextLoadRef.current = false;
+      failApply();
+      return;
+    }
+    commitSnapshot({ nodes: savedNodes, wires: savedWires });
+    setTimeout(() => {
+      skipNextLoadRef.current = false;
+      finishApply(nextRevision ?? topologyRevision);
+    }, 0);
+  }, [nodes, wires, topologyRevision, resolvedIssues, onSave, addToast, l10n, beginApply, failApply, finishApply, commitSnapshot, applyPin, sessionToken]);
+
   /** Load a saved template, replacing the canvas under one undo entry. */
   const handleLoadTemplate = useCallback((name: string) => {
     const payload = loadTemplate(name);
@@ -2522,8 +2731,6 @@ export default function NodeTopologyEditor({
     cancelConnection();
     setHoveredTarget(null);
     clearHover();
-    setIsSimulating(false);
-    setSimPulseStep(0);
     cancelMarquee();
     cancelBendDrag();
     setContextMenu(null);
@@ -2533,8 +2740,6 @@ export default function NodeTopologyEditor({
     cancelConnection,
     setHoveredTarget,
     clearHover,
-    setIsSimulating,
-    setSimPulseStep,
     cancelMarquee,
     cancelBendDrag,
     setContextMenu,
@@ -2753,28 +2958,25 @@ export default function NodeTopologyEditor({
     };
   }, []);
 
-  useEffect(() => {
-    if (!isSimulating) return;
-    // WCAG 2.3.3: a reduced-motion user still sees the flow (static pulse at
-    // the wire midpoint — see the pulse computation) but the 30ms interval
-    // never churns React state behind their back.
-    if (prefersReducedMotion()) return;
-    const interval = setInterval(() => {
-      setSimPulseStep((prev) => (prev + 1) % 100);
-    }, 30);
-    return () => clearInterval(interval);
-  }, [isSimulating]);
-
   /** Delete a set of nodes in one history entry — every wire touching any
    *  of them goes too. Single-node and batch deletes share this path. */
+  /** Branch Location nodes (type === 'store') are the topology anchor
+   *  and must never be deleted — every workspace, warehouse, and hardware
+   *  node is organized under them. */
+  const isBranchLocation = useCallback((nodeId: string) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    return node?.type === 'store';
+  }, [nodes]);
+
   const deleteNodes = useCallback((ids: string[]) => {
-    if (ids.length === 0) return;
-    const doomed = new Set(ids);
+    // Filter out Branch Location nodes — they are permanent anchors.
+    const doomed = new Set(ids.filter((id) => !isBranchLocation(id)));
+    if (doomed.size === 0) return;
     pushHistory();
     setNodes((prev) => prev.filter((n) => !doomed.has(n.id)));
     setWires((prev) => prev.filter((w) => !doomed.has(w.fromNodeId) && !doomed.has(w.toNodeId)));
     clearSelection();
-  }, [pushHistory, setNodes, setWires, clearSelection]);
+  }, [pushHistory, setNodes, setWires, clearSelection, isBranchLocation]);
 
   /** Fit the whole diagram into the viewport (clamped 40%..200%). */
   const zoomToFit = useCallback(() => {
@@ -3009,8 +3211,7 @@ export default function NodeTopologyEditor({
       // shortcuts, so keyboard Delete on a focused node still works.
       // `closest` only exists on Elements — keydown can target window/document
       // (tests, programmatic dispatch), which must never throw out of the guard.
-      if (target && typeof target.closest === 'function'
-        && target.closest('.node-tool-rack, .node-topology-header, .node-inspector-drawer')) {
+      if (target && typeof target.closest === 'function'            && target.closest('.node-tool-rack, .node-topology-header, .node-inspector-drawer, .topology-apply-confirm-overlay')) {
         return;
       }
       // Guard: a confirm dialog owns the keyboard while it is open — Escape
@@ -3044,18 +3245,27 @@ export default function NodeTopologyEditor({
       // rack's card order (Store, Workspace, Warehouse, Hardware). Bare keys
       // only — no modifier, no auto-repeat. The guards above already keep
       // these inert while typing or when a non-canvas control owns focus.
+      // NEW: the spawn additionally requires the keydown target to be INSIDE
+      // the canvas (or a canvas-internal element) — focus on the page body,
+      // a floating dialog, or any chrome outside the canvas no longer
+      // spawns a stray node from a careless keystroke.
       if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat) {
-        const spawnBySlot: Record<string, NodeType> = {
-          '1': 'store',
-          '2': 'workspace',
-          '3': 'warehouse',
-          '4': 'hardware',
-        };
-        const spawnType = spawnBySlot[e.key];
-        if (spawnType) {
-          e.preventDefault();
-          handleAddNodeRef.current?.(spawnType);
-          return;
+        const inCanvas = target
+          && typeof target.closest === 'function'
+          && target.closest('.node-canvas-container');
+        if (inCanvas) {
+          const spawnBySlot: Record<string, NodeType> = {
+            '1': 'store',
+            '2': 'workspace',
+            '3': 'warehouse',
+            '4': 'hardware',
+          };
+          const spawnType = spawnBySlot[e.key];
+          if (spawnType) {
+            e.preventDefault();
+            handleAddNodeRef.current?.(spawnType);
+            return;
+          }
         }
       }
       // Alt pressed MID-move converts the drag into a duplicate (Figma):
@@ -3112,7 +3322,9 @@ export default function NodeTopologyEditor({
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedNodeIds.size > 0 || selectedWireId)) {
         e.preventDefault();
         if (selectedNodeIds.size > 0) {
-          const targets = [...selectedNodeIds];
+          // Filter out Branch Location nodes — they are permanent anchors.
+          const targets = [...selectedNodeIds].filter((id) => !isBranchLocation(id));
+          if (targets.length === 0) return; // Only Branch Location(s) selected
           const hasWires = wires.some((w) => targets.includes(w.fromNodeId) || targets.includes(w.toNodeId));
           if (hasWires) {
             // A single wired node keeps the established dialog; 2+ use the
@@ -4969,7 +5181,9 @@ export default function NodeTopologyEditor({
 
   const handleDeleteRequest = () => {
     if (selectedNodeIds.size > 0) {
-      const targets = [...selectedNodeIds];
+      // Filter out Branch Location nodes — they are permanent anchors.
+      const targets = [...selectedNodeIds].filter((id) => !isBranchLocation(id));
+      if (targets.length === 0) return; // Only Branch Location(s) selected
       const hasWires = wires.some((w) => targets.includes(w.fromNodeId) || targets.includes(w.toNodeId));
       if (hasWires) {
         if (targets.length === 1) setConfirmDelete(targets[0]!);
@@ -5158,34 +5372,31 @@ export default function NodeTopologyEditor({
         </span>
 
         <div className="node-topology-header-actions">
-          <Button
-            variant={isSimulating ? 'primary' : 'secondary'}
-            onClick={() => setIsSimulating(!isSimulating)}
-            className="simulation-btn"
-            icon={isSimulating ? <StopIcon size={16} /> : <FlaskIcon size={16} />}
-          >
-            <Localized id={isSimulating ? 'topology-sim-stop' : 'topology-sim-start'}>
-              {isSimulating ? 'Stop Simulation' : 'Test Order Simulation'}
-            </Localized>
-          </Button>
+
+          <div className="topology-presets-popover">
+            <Button
+              variant="secondary"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => setPresetsOpen((o) => !o)}
+              icon={<ChevronDownIcon size={16} />}
+            >
+              <Localized id="topology-presets-label">Presets</Localized>
+            </Button>
+            {presetsOpen && (
+              <div className="topology-presets-menu" role="menu" onMouseDown={(e) => e.stopPropagation()}>
+                <button type="button" role="menuitem" onClick={() => { setPresetsOpen(false); if (isCanvasDirty()) setConfirmPreset('retail'); else loadPreset('retail'); }}>
+                  <Localized id="topology-preset-retail">Retail Preset</Localized>
+                  <span className="topology-presets-menu-desc"><Localized id="topology-preset-retail-desc">Store, warehouse, and POS terminals</Localized></span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setPresetsOpen(false); if (isCanvasDirty()) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}>
+                  <Localized id="topology-preset-restaurant">Restaurant & KDS Preset</Localized>
+                  <span className="topology-presets-menu-desc"><Localized id="topology-preset-restaurant-desc">Restaurant POS, kitchen display, and warehouse</Localized></span>
+                </button>
+              </div>
+            )}
+          </div>
 
           <Button
-            variant="secondary"
-            onClick={() => { if (isCanvasDirty()) setConfirmPreset('retail'); else loadPreset('retail'); }}
-            icon={<CartIcon size={16} />}
-          >
-            <Localized id="topology-preset-retail">Retail Preset</Localized>
-          </Button>
-
-          <Button
-            variant="secondary"
-            onClick={() => { if (isCanvasDirty()) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}
-            icon={<UtensilsIcon size={16} />}
-          >
-            <Localized id="topology-preset-restaurant">Resto & KDS Preset</Localized>
-          </Button>            <Button variant="secondary" onClick={autoLayout}>
-            <Localized id="topology-auto-layout">Auto-layout</Localized>
-          </Button>            <Button
               variant="primary"
               disabled={!canSave || saving || !onSave}
               title={canSave && onSave ? undefined : l10n.getString('topology-apply-permission-tooltip')}
@@ -5199,103 +5410,71 @@ export default function NodeTopologyEditor({
                   (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(issueKey(e.nodeId, e.messageId))),
                 );
                 if (validationErrors.length > 0) {
+                  // Open the issues panel so the user sees EVERY blocking
+                  // issue at once instead of fixing them one at a time
+                  // through the toast, then confirm what blocked Apply.
+                  setValidationPanelOpen(true);
                   addToast({
-                    message: l10n.getString(validationErrors[0]!.messageId),
+                    message: l10n.getString('topology-apply-blocked', { count: String(validationErrors.length) }),
                     type: 'error',
                   });
                   return;
                 }
-                if (!beginApply()) return;
-                skipNextLoadRef.current = true;
-                // Hoisted ABOVE the try: the snapshot below is written after
-                // the catch, and let/const are block-scoped to the try — a
-                // declaration inside would ReferenceError on success.
-                let savedNodes = nodes;
-                let savedWires = wires;
-                // Revision returned by the backend on success; hoisted above
-                // the try so the deferred finishApply (setTimeout below) can
-                // read it — same block-scoping rule as savedNodes/savedWires.
-                let nextRevision: number | undefined;
-                try {
-                  const result = await onSave?.(nodes, wires, topologyRevision, [...resolvedIssues]);
-                  const idMap: Record<string, string> | undefined = result && typeof result === 'object' && 'idMap' in result
-                    ? (result.idMap && typeof result.idMap === 'object'
-                      ? result.idMap as Record<string, string>
-                      : undefined)
-                    : result && typeof result === 'object' && !('revision' in result)
-                      ? result as Record<string, string>
-                      : undefined;
-                  if (result && typeof result === 'object' && 'revision' in result && typeof result.revision === 'number') {
-                    nextRevision = result.revision;
-                  }
-                  if (idMap && Object.keys(idMap).length > 0) {
-                    // Remap old UUIDs to new UUIDs from archive+recreate
-                    // operations so the canvas stays in sync with the backend.
-                    // Clear selection to avoid dangling references to old IDs,
-                    // and drop the undo/redo stacks — every pre-save entry
-                    // holds the OLD ids, which no longer exist on the canvas
-                    // or in the DB. Undo must not restore dangling ids.
-                    clearAll();
-                    setHistory([]);
-                    setRedo([]);
-                    savedNodes = nodes.map((n) => {
-                      const newId = idMap[n.id];
-                      return newId ? { ...n, id: newId } : n;
-                    });
-                    savedWires = wires.map((w) => {
-                      const newFrom = idMap[w.fromNodeId];
-                      const newTo = idMap[w.toNodeId];
-                      if (newFrom || newTo) {
-                        return {
-                          ...w,
-                          fromNodeId: newFrom ?? w.fromNodeId,
-                          toNodeId: newTo ?? w.toNodeId,
-                        };
-                      }
-                      return w;
-                    });
-                    // Direct array set (not the updater form): nothing can
-                    // interleave during this handler's synchronous tail after
-                    // the await, and the same arrays are snapshotted below.
-                    setNodes(savedNodes);
-                    setWires(savedWires);
-                  }
-                } catch (err) {
-                  if (isTopologyRevisionConflict(err)) {
-                    // A stale base revision can never retry — the backend
-                    // rejected it (round 133) and every retry will fail the
-                    // same way. Adopt the authoritative topology so the user
-                    // re-applies onto the fresh revision instead of being
-                    // stranded on a stale canvas.
-                    addToast({
-                      message: l10n.getString('topology-toast-revision-conflict'),
-                      type: 'error',
-                    });
-                    skipNextLoadRef.current = false;
-                    failApply();
-                    setReloadKey((k) => k + 1);
-                    return;
-                  }
-                  addToast({
-                    message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
-                    type: 'error',
+                // Compute the diff preview and show the confirmation popup.
+                const snap = appliedSnapshotRef.current;
+                const beforeInstances = workspaceInstances !== undefined
+                  ? workspaceInstances.map((s) => ({
+                    instance_id: s.instanceId,
+                    type_key: s.typeKey,
+                    ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
+                    name: s.name,
+                  }))
+                  : (snap?.nodes ?? [])
+                    .filter((n) => n.type === 'workspace')
+                    .map((n) => ({
+                      instance_id: n.id,
+                      type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
+                      purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
+                      name: n.name,
+                    }));
+                const plan = planTopologyDiff(nodes, beforeInstances);
+                const wsNodes = new Map(nodes.filter((n) => n.type === 'workspace').map((n) => [n.id, n]));
+                const instanceMap = new Map((workspaceInstances ?? []).map((s) => [s.instanceId, s]));
+                const items = (ids: string[], map: Map<string, { name: string; typeKey?: string; type_key?: string }>): ApplyDiffItem[] =>
+                  ids.map((id) => {
+                    const entry = map.get(id);
+                    return { id, name: entry?.name ?? id, typeKey: entry?.typeKey ?? entry?.type_key ?? 'store-pos' };
                   });
-                  skipNextLoadRef.current = false;
-                  failApply();
-                  return;
-                }
-                // Save succeeded — the canvas now matches the backend, so a
-                // preset load must not ask about unsaved changes. (A failed
-                // save returned above and stays dirty.) The snapshot is the
-                // FINAL canvas — remapped ids included — so exact tracking
-                // compares against what is actually on screen post-remap.
-                commitSnapshot({ nodes: savedNodes, wires: savedWires });
-                // Defer reset so React commits state updates + fires effects first,
-                // preventing post-save reload from clobbering in-flight edits (#8).
-                setTimeout(() => {
-                  skipNextLoadRef.current = false;
-                  finishApply(nextRevision ?? topologyRevision);
-                }, 0);
+                const createdItems = items(
+                  plan.createNodeIds.filter((id) => !plan.typeChanges.has(id)),
+                  wsNodes,
+                );
+                const typeChangedItems = [...plan.typeChanges.entries()].map(([id, ch]) => ({
+                  id: ch.newId, name: wsNodes.get(id)?.name ?? id, typeKey: ch.newTypeKey,
+                }));
+                const updatedItems = items(plan.updateNodeIds, instanceMap);
+                const archivedItems = items(
+                  plan.archiveIds.filter((id) => !plan.typeChanges.has(id)),
+                  instanceMap,
+                );
+                // Resolve store IDs for the debug info panel.
+                const branchNode = nodes.find((n) => n.type === 'store');
+                const effectiveStoreId = branchNode?.storeProfileId
+                  ?? (branchNode?.metadata?.['storeProfileId'] as string | undefined)
+                  ?? sessionStoreId;
+                setApplyConfirmData({
+                  created: [...createdItems, ...typeChangedItems],
+                  updated: updatedItems,
+                  archived: archivedItems,
+                  typeChanged: typeChangedItems,
+                  sessionStoreId,
+                  effectiveStoreId,
+                });
+                setApplyPin('');
+                setApplyPinError(false);
+                setApplyConfirmOpen(true);
+                // Focus the PIN input after the popup renders.
+                setTimeout(() => applyPinRef.current?.focus(), 50);
               }}
               icon={<CheckIcon size={16} />}
             >
@@ -5363,226 +5542,72 @@ export default function NodeTopologyEditor({
 
       <div className="node-topology-main">
         <div className="node-tool-rack">
-          <h3><Localized id="topology-palette-title">Palette Tools</Localized></h3>
-          <p className="tool-rack-desc"><Localized id="topology-palette-desc">Drag or click to spawn topology nodes:</Localized></p>
-
-          <div className="tool-rack-section">
-            <h4 className="tool-rack-section-title"><Localized id="topology-rack-add-title">Add Nodes</Localized></h4>
-
-          {allowLegacyApply && (
-            <button type="button" className="tool-card" onClick={() => handleAddNode('store')}>
-              <span className="tool-card-icon"><StoreIcon size={22} /></span>
-              <div className="tool-card-info">
-                <strong><Localized id="topology-tool-store">+ Store Node</Localized></strong>
-                <span><Localized id="topology-tool-store-desc">Store Branch Profile</Localized></span>
-              </div>
-              <kbd className="tool-card-shortcut" aria-hidden="true">1</kbd>
-            </button>
-          )}
-
-          <div className="tool-rack-subsection-title">{l10n.getString('topology-workspace-types-title')}</div>
-
-          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace', undefined, 'restaurant-pos')}>
-            <span className="tool-card-icon"><UtensilsIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-restaurant-pos">+ Restaurant POS</Localized></strong>
-              <span><Localized id="topology-tool-restaurant-pos-desc">Restaurant checkout workspace</Localized></span>
-            </div>
-          </button>
-
-          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace', undefined, 'store-pos')}>
-            <span className="tool-card-icon"><CartIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-retail-pos">+ Retail POS</Localized></strong>
-              <span><Localized id="topology-tool-retail-pos-desc">Retail checkout workspace</Localized></span>
-            </div>
-          </button>
-
-          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace', undefined, 'kds')}>
-            <span className="tool-card-icon"><NodesIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-kds">+ KDS</Localized></strong>
-              <span><Localized id="topology-tool-kds-desc">Kitchen display workspace</Localized></span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            className={`tool-card ${!isProAllowed && nodes.some((n) => n.type === 'warehouse') ? 'locked' : ''}`}
-            onClick={() => handleAddNode('warehouse')}
-          >
-            <span className="tool-card-icon"><WarehouseIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-warehouse-workspace">+ Warehouse</Localized></strong>
-              <span><Localized id="topology-tool-warehouse-workspace-desc">Inventory storage workspace</Localized></span>
-            </div>
-            {!isProAllowed && nodes.some((n) => n.type === 'warehouse') && (
-              <span className="lock-badge"><LockIcon size={12} /> <Localized id="topology-lock-pro">Pro</Localized></span>
-            )}
-          </button>
-
-          <div className="tool-rack-subsection-title"><Localized id="topology-other-nodes-title">Other Nodes</Localized></div>
-          <button type="button" className="tool-card" onClick={() => handleAddNode('hardware')}>
-            <span className="tool-card-icon"><PrinterIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-hardware">+ Hardware Node</Localized></strong>
-              <span><Localized id="topology-tool-hardware-desc">Printer / KDS Peripheral</Localized></span>
-            </div>
-          </button>
-          </div>
-
+          <button type="button" className={`rack-icon-btn${rackPanel === 'add' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('add')} aria-label={l10n.getString('topology-rack-add-title')} aria-expanded={rackPanel === 'add'}><PlusIcon size={18} /></button>
           {(selectedNodeIds.size > 0 || selectedWireId || history.length > 0 || redo.length > 0) && (
-            <div className="tool-rack-section">
-              <h4 className="tool-rack-section-title"><Localized id="topology-rack-edit-title">Edit</Localized></h4>
-
-          {selectedNodeIds.size > 0 || selectedWireId ? (
-            <Button variant="secondary" onClick={handleDeleteRequest} className="delete-btn" icon={<TrashIcon size={16} />}>
-              <Localized id="topology-delete-selected">Delete Selected Element</Localized>
-            </Button>
-          ) : null}
-
-          {history.length > 0 && (
-            <Button variant="secondary" onClick={popUndo} style={{ fontSize: 'var(--text-xs)' }}>
-              <Localized id="topology-undo">Undo (Ctrl+Z)</Localized>
-            </Button>
+            <button type="button" className={`rack-icon-btn${rackPanel === 'edit' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('edit')} aria-label={l10n.getString('topology-rack-edit-title')} aria-expanded={rackPanel === 'edit'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg></button>
           )}
+          <button type="button" className={`rack-icon-btn${rackPanel === 'view' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('view')} aria-label={l10n.getString('topology-rack-view-title')} aria-expanded={rackPanel === 'view'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg></button>
+          <button type="button" className={`rack-icon-btn${rackPanel === 'share' ? ' is-active' : ''}`} onClick={() => toggleRackPanel('share')} aria-label={l10n.getString('topology-rack-share-title')} aria-expanded={rackPanel === 'share'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg></button>
 
-          {redo.length > 0 && (
-            <Button variant="secondary" onClick={popRedo} style={{ fontSize: 'var(--text-xs)' }}>
-              <Localized id="topology-redo">Redo (Ctrl+Y)</Localized>
-            </Button>
-          )}
-            </div>
-          )}
-
-            <div className="tool-rack-section">
-              <h4 className="tool-rack-section-title"><Localized id="topology-rack-view-title">View</Localized></h4>                <button
-                  type="button"
-                  className={`rack-view-toggle ${wireRouting === 'elbow' ? 'is-active' : ''}`}
-                  aria-pressed={wireRouting === 'elbow'}
-                  onClick={() => setWireRouting((r) => (r === 'elbow' ? 'curved' : 'elbow'))}
-                  title={anyBentWires ? l10n.getString('topology-bends-override-note') : undefined}
-                >
-                  <Localized id="topology-wire-routing-toggle">Elbow wires</Localized>
-                </button>
-                {anyBentWires && (
-                  <span className="rack-view-note" role="status">
-                    {l10n.getString('topology-bends-override-note')}
-                  </span>
-                )}
-              <button
-                type="button"
-                className={`rack-view-toggle ${snapEnabled ? 'is-active' : ''}`}
-                aria-pressed={snapEnabled}
-                onClick={() => setSnapEnabled((s) => !s)}
-              >
-                <Localized id="topology-snap-toggle">Snap to grid</Localized>
-              </button>
-              <button
-                type="button"
-                className={`rack-view-toggle ${panToolActive ? 'is-active' : ''}`}
-                aria-pressed={panToolActive}
-                onClick={() => setPanToolActive((v) => !v)}
-              >
-                <Localized id="topology-pan-tool-toggle">Pan tool</Localized>
-              </button>
-              <button
-                type="button"
-                className={`rack-view-toggle ${wireLabelsVisible ? 'is-active' : ''}`}
-                aria-pressed={wireLabelsVisible}
-                onClick={() => setWireLabelsVisible((v) => !v)}
-              >
-                <Localized id="topology-wire-labels-toggle">Wire labels</Localized>
-              </button>
-            </div>
-
-            <div className="tool-rack-section">
-              <h4 className="tool-rack-section-title"><Localized id="topology-rack-share-title">Share</Localized></h4>
-              <div className="rack-share-row">
-                <button type="button" className="rack-view-toggle" onClick={handleExport}>
-                  <Localized id="topology-export">Export</Localized>
-                </button>
-                <button type="button" className="rack-view-toggle" onClick={handleImport}>
-                  <Localized id="topology-import">Import</Localized>
-                </button>
+          {rackPanel && (
+            <div className="rack-panel" role="group" aria-label={l10n.getString(`topology-rack-${rackPanel}-title`)}>
+              <div className="rack-panel-header">
+                <h3 className="rack-panel-title"><Localized id={`topology-rack-${rackPanel}-title`}>{rackPanel}</Localized></h3>
+                <button type="button" className="rack-panel-close" onClick={() => setRackPanel(null)} aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
               </div>
-              <div className="rack-share-row">
-                <button
-                  type="button"
-                  className="rack-view-toggle"
-                  aria-expanded={templateSaveOpen}
-                  onClick={() => setTemplateSaveOpen((v) => !v)}
-                >
-                  <Localized id="topology-save-template">Save template</Localized>
-                </button>
-                <button
-                  type="button"
-                  className="rack-view-toggle"
-                  aria-expanded={templatesOpen}
-                  onClick={openTemplates}
-                >
-                  <Localized id="topology-templates">Templates</Localized>
-                </button>
-              </div>
-              {templateSaveOpen && (
-                <div
-                  className="rack-template-pop"
-                  role="group"
-                  aria-label={l10n.getString('topology-save-template')}
-                >
-                  <input
-                    type="text"
-                    className="rack-template-input"
-                    placeholder={l10n.getString('topology-template-name-placeholder')}
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveTemplate(templateName);
-                      else if (e.key === 'Escape') {
-                        setTemplateSaveOpen(false);
-                        setTemplateName('');
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="rack-template-save"
-                    onClick={() => handleSaveTemplate(templateName)}
-                  >
-                    <Localized id="topology-template-save">Save</Localized>
-                  </button>
+              {rackPanel === 'add' && (
+                <div className="rack-panel-body">
+                  {allowLegacyApply && (
+                    <button type="button" className="tool-card" onClick={() => { handleAddNode('store'); }}><span className="tool-card-icon"><StoreIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-store">+ Store Node</Localized></strong><span><Localized id="topology-tool-store-desc">Store Branch Profile</Localized></span></div><kbd className="tool-card-shortcut">1</kbd></button>
+                  )}
+                  <div className="rack-panel-subsection"><span className="rack-panel-subsection-title">{l10n.getString('topology-workspace-types-title')}</span></div>
+                  <button type="button" className="tool-card" onClick={() => { handleAddNode('workspace', undefined, 'restaurant-pos'); }}><span className="tool-card-icon"><UtensilsIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-restaurant-pos">+ Restaurant POS</Localized></strong><span><Localized id="topology-tool-restaurant-pos-desc">Restaurant checkout workspace</Localized></span></div></button>
+                  <button type="button" className="tool-card" onClick={() => { handleAddNode('workspace', undefined, 'store-pos'); }}><span className="tool-card-icon"><CartIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-retail-pos">+ Retail POS</Localized></strong><span><Localized id="topology-tool-retail-pos-desc">Retail checkout workspace</Localized></span></div></button>
+                  <button type="button" className="tool-card" onClick={() => { handleAddNode('workspace', undefined, 'kds'); }}><span className="tool-card-icon"><NodesIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-kds">+ KDS</Localized></strong><span><Localized id="topology-tool-kds-desc">Kitchen display workspace</Localized></span></div></button>
+                  <button type="button" className={`tool-card${!isProAllowed && nodes.some((n) => n.type === 'warehouse') ? ' locked' : ''}`} onClick={() => { handleAddNode('warehouse'); }}><span className="tool-card-icon"><WarehouseIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-warehouse-workspace">+ Warehouse</Localized></strong><span><Localized id="topology-tool-warehouse-workspace-desc">Inventory storage workspace</Localized></span></div>{!isProAllowed && nodes.some((n) => n.type === 'warehouse') && <span className="lock-badge"><LockIcon size={12} /> Pro</span>}</button>
+                  <div className="rack-panel-subsection"><span className="rack-panel-subsection-title"><Localized id="topology-other-nodes-title">Other Nodes</Localized></span></div>
+                  <button type="button" className="tool-card" onClick={() => { handleAddNode('hardware'); }}><span className="tool-card-icon"><PrinterIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-tool-hardware">+ Hardware Node</Localized></strong><span><Localized id="topology-tool-hardware-desc">Printer / KDS Peripheral</Localized></span></div></button>
                 </div>
               )}
-              {templatesOpen && (
-                <div
-                  className="rack-template-list"
-                  role="group"
-                  aria-label={l10n.getString('topology-templates')}
-                >
-                  {savedTemplates.length === 0 ? (
-                    <span className="rack-template-empty">
-                      <Localized id="topology-no-templates">No saved templates</Localized>
-                    </span>
-                  ) : (
-                    <ul className="rack-template-items">
-                      {savedTemplates.map((name) => (
-                        <li key={name} className="rack-template-item">
-                          <span className="rack-template-name">{name}</span>
-                          <div className="rack-template-actions">
-                            <button type="button" onClick={() => handleLoadTemplate(name)}>
-                              <Localized id="topology-template-load">Load</Localized>
-                            </button>
-                            <button type="button" onClick={() => handleDeleteTemplate(name)}>
-                              <Localized id="topology-template-delete">Delete</Localized>
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+              {rackPanel === 'edit' && (
+                <div className="rack-panel-body">
+                  {selectedNodeIds.size > 0 || selectedWireId ? (
+                    <button type="button" className="tool-card" onClick={handleDeleteRequest}><span className="tool-card-icon" style={{ color: 'var(--color-danger)' }}><TrashIcon size={20} /></span><div className="tool-card-info"><strong><Localized id="topology-delete-selected">Delete Selected Element</Localized></strong></div></button>
+                  ) : <p className="rack-panel-empty">Select a node or wire to delete</p>}
+                  {history.length > 0 && <button type="button" className="tool-card" onClick={popUndo}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-undo">Undo (Ctrl+Z)</Localized></strong></div></button>}
+                  {redo.length > 0 && <button type="button" className="tool-card" onClick={popRedo}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-redo">Redo (Ctrl+Y)</Localized></strong></div></button>}
+                </div>
+              )}
+              {rackPanel === 'view' && (
+                <div className="rack-panel-body">
+                  <button type="button" className="tool-card" onClick={autoLayout}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-auto-layout">Auto-layout</Localized></strong></div></button>
+                  <button type="button" className={`tool-card${wireRouting === 'elbow' ? ' is-active' : ''}`} aria-pressed={wireRouting === 'elbow'} title={anyBentWires ? l10n.getString('topology-bends-override-note') : undefined} onClick={() => setWireRouting((r) => (r === 'elbow' ? 'curved' : 'elbow'))}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><polyline points="4 4 4 20 20 20" /><polyline points="4 4 12 12" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-wire-routing-toggle">Elbow wires</Localized></strong>{anyBentWires && <span className="rack-panel-note">{l10n.getString('topology-bends-override-note')}</span>}</div></button>
+                  <button type="button" className={`tool-card${snapEnabled ? ' is-active' : ''}`} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((s) => !s)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-snap-toggle">Snap to grid</Localized></strong></div></button>
+                  <button type="button" className={`tool-card${panToolActive ? ' is-active' : ''}`} aria-pressed={panToolActive} onClick={() => setPanToolActive((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M18 11V6a2 2 0 0 0-4 0v5" /><path d="M14 10V4a2 2 0 0 0-4 0v6" /><path d="M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-pan-tool-toggle">Pan tool</Localized></strong></div></button>
+                  <button type="button" className={`tool-card${wireLabelsVisible ? ' is-active' : ''}`} aria-pressed={wireLabelsVisible} onClick={() => setWireLabelsVisible((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-wire-labels-toggle">Wire labels</Localized></strong></div></button>
+                </div>
+              )}
+              {rackPanel === 'share' && (
+                <div className="rack-panel-body">
+                  <button type="button" className="tool-card" onClick={handleExport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-export">Export</Localized></strong><span>Download as JSON</span></div></button>
+                  <button type="button" className="tool-card" onClick={handleImport}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-import">Import</Localized></strong><span>Load from JSON file</span></div></button>
+                  <div className="rack-panel-divider" />
+                  <button type="button" className="tool-card" onClick={() => setTemplateSaveOpen((v) => !v)}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-save-template">Save template</Localized></strong></div></button>
+                  {templateSaveOpen && (
+                    <div className="rack-template-pop" role="group"><input type="text" className="rack-template-input" placeholder={l10n.getString('topology-template-name-placeholder')} value={templateName} onChange={(e) => setTemplateName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTemplate(templateName); else if (e.key === 'Escape') { setTemplateSaveOpen(false); setTemplateName(''); } }} /><button type="button" className="rack-template-save" onClick={() => handleSaveTemplate(templateName)}><Localized id="topology-template-save">Save</Localized></button></div>
+                  )}
+                  <button type="button" className="tool-card" onClick={openTemplates}><span className="tool-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg></span><div className="tool-card-info"><strong><Localized id="topology-templates">Templates</Localized></strong></div></button>
+                  {templatesOpen && (
+                    <div className="rack-template-list" role="group">
+                      {savedTemplates.length === 0 ? <p className="rack-panel-empty"><Localized id="topology-no-templates">No saved templates</Localized></p> : (
+                        <ul className="rack-template-items">{savedTemplates.map((name) => (<li key={name} className="rack-template-item"><span className="rack-template-name">{name}</span><div className="rack-template-actions"><button type="button" onClick={() => handleLoadTemplate(name)}>Load</button><button type="button" onClick={() => handleDeleteTemplate(name)}>Delete</button></div></li>))}</ul>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
             </div>
+          )}
         </div>
 
         <div
@@ -5776,22 +5801,26 @@ export default function NodeTopologyEditor({
                           {l10n.getString('topology-context-rename')}
                         </button>
                       )}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); duplicateSelection(); }}
-                      >
-                        {l10n.getString('topology-context-duplicate')}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="topology-context-item"
-                        onClick={() => { setContextMenu(null); handleDeleteRequest(); }}
-                      >
-                        {l10n.getString('topology-confirm-delete-node-title')}
-                      </button>
+                      {menuNode.type !== 'store' && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topology-context-item"
+                          onClick={() => { setContextMenu(null); duplicateSelection(); }}
+                        >
+                          {l10n.getString('topology-context-duplicate')}
+                        </button>
+                      )}
+                      {menuNode.type !== 'store' && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topology-context-item"
+                          onClick={() => { setContextMenu(null); handleDeleteRequest(); }}
+                        >
+                          {l10n.getString('topology-confirm-delete-node-title')}
+                        </button>
+                      )}
                       <div className="topology-context-divider" />
                       <button
                         type="button"
@@ -6001,12 +6030,6 @@ export default function NodeTopologyEditor({
               {wires.map((wire) => {
                 const geo = wireGeometries.get(wire.id);
                 if (!geo) return null;
-                // Pulse rides the wire's actual geometry: the cubic bezier
-                // by default, or the elbow polyline when orthogonal routing
-                // is on. Computed once per render above (round 147) so the
-                // crossing overlay can render the same point when it would
-                // be hidden under a card.
-                const pulsePoint = pulsePoints.get(wire.id) ?? null;
                 return (
                   <TopologyWireGroup
                     key={wire.id}
@@ -6024,7 +6047,6 @@ export default function NodeTopologyEditor({
                       && wire.fromNodeId !== hoveredNodeId
                       && wire.toNodeId !== hoveredNodeId}
                     hovered={hoveredWireId === wire.id}
-                    pulse={isSimulating ? pulsePoint : null}
                     l10n={l10n}
                     onHoverWire={hoverWire}
                     onWireClick={handleWireClick}
@@ -6096,13 +6118,17 @@ export default function NodeTopologyEditor({
               const isDimmed = hoverConnections !== null
                 && wire.fromNodeId !== hoveredNodeId
                 && wire.toNodeId !== hoveredNodeId;
+              const rStyle = relationshipStyle(wire.relationshipType);
+              const fromName = nodeMap.get(wire.fromNodeId)?.name ?? '';
+              const toName = nodeMap.get(wire.toNodeId)?.name ?? '';
+              const tooltip = `${rStyle.icon} ${rStyle.label}: ${fromName} → ${toName}`;
               return (
                 <button
                   key={wire.id}
                   type="button"
                   className={`wire-label-pill${isDimmed ? ' wire-label-pill-dimmed' : ''}`}
                   style={{ left: mid.x, top: mid.y }}
-                  title={l10n.getString('topology-context-rename-wire')}
+                  title={tooltip}
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -6110,7 +6136,8 @@ export default function NodeTopologyEditor({
                     startWireRename(wire.id);
                   }}
                 >
-                  {wireDisplayLabel(wire)}
+                  <span className="wire-label-badge" style={{ backgroundColor: rStyle.color }} />
+                  <span className="wire-label-text-content">{wireDisplayLabel(wire)}</span>
                 </button>
               );
             })}
@@ -6215,11 +6242,9 @@ export default function NodeTopologyEditor({
 
             {/* Round 146: the under-card segments of wires that cross a card
                 they do not connect to, drawn on top so the wire reads as
-                continuous. Round 147: the simulation pulse, when it would
-                be hidden under a card, rides the overlay too. Both are
-                pointer-events-none — the overlay never steals clicks or
-                hover from the card below. */}
-            {(wireUnderCardPaths.size > 0 || hiddenPulseDots.length > 0) && (
+                continuous. pointer-events-none — the overlay never steals
+                clicks or hover from the card below. */}
+            {wireUnderCardPaths.size > 0 && (
               <svg className="node-wires-crossing" style={{ width: svgBounds.width, height: svgBounds.height }}>
                 {[...wireUnderCardPaths.entries()].map(([wireId, d]) => {
                   // Round 151: the overlay must mirror the base wire's
@@ -6240,9 +6265,6 @@ export default function NodeTopologyEditor({
                   ].filter(Boolean).join(' ') || undefined;
                   return <path key={wireId} d={d} className={cls} pointerEvents="none" />;
                 })}
-                {hiddenPulseDots.map((p, i) => (
-                  <circle key={`hidden-pulse-${i}`} cx={p.x} cy={p.y} r="6" className="wire-simulation-pulse" pointerEvents="none" />
-                ))}
               </svg>
             )}
           </div>
@@ -6359,51 +6381,86 @@ export default function NodeTopologyEditor({
           )}
         </div>
 
-        {selectedNode && (
+        {selectedNode && (() => {
+          const NodeIcon = NODE_TYPE_ICON[selectedNode.type];
+          const typeColors: Record<string, string> = {
+            store: 'var(--color-warning, #f59e0b)',
+            workspace: 'var(--color-accent, #5a9fd4)',
+            warehouse: 'var(--color-success, #4caf50)',
+            hardware: 'var(--color-fg-muted, #8b95a5)',
+          };
+          const typeLabelKey: Record<string, string> = {
+            store: 'topology-node-type-store',
+            workspace: `topology-node-type-${(selectedNode.metadata?.['typeKey'] as string) ?? 'workspace'}`,
+            warehouse: 'topology-node-type-warehouse',
+            hardware: 'topology-node-type-hardware',
+          };
+          const typeColor = typeColors[selectedNode.type] ?? 'var(--color-fg-muted)';
+          return (
           <div className="node-inspector-drawer">
+            {/* Type-specific header */}
             <div className="inspector-header">
-              <h3><Localized id="topology-inspector-title">Node Inspector</Localized></h3>
-              <Button variant="secondary" onClick={clearSelection} icon={<CloseIcon size={14} />} aria-label={l10n.getString('topology-inspector-close-aria')}>{null}</Button>
+              <div className="inspector-type-badge" style={{ backgroundColor: typeColor }}>
+                <NodeIcon size={18} />
+              </div>
+              <div className="inspector-header-text">
+                <h3>{selectedNode.name || l10n.getString(typeLabelKey[selectedNode.type] ?? 'topology-node-type-workspace')}</h3>
+                <span className="inspector-type-label" style={{ color: typeColor }}>
+                  {l10n.getString(typeLabelKey[selectedNode.type] ?? 'topology-node-type-workspace')}
+                </span>
+              </div>
+              <button type="button" className="inspector-close-btn" onClick={clearSelection} aria-label={l10n.getString('topology-inspector-close-aria')}>
+                <CloseIcon size={16} />
+              </button>
             </div>
 
             <div className="inspector-content">
               <ErrorBoundary>
-              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
-              <label className="inspector-field">
-                <span><Localized id="topology-inspector-node-name">Node Name</Localized></span>
-                <input
-                  type="text"
-                  value={selectedNode.name}
-                  onChange={(e) => {
-                    beginInspectorEdit(selectedNode.id);
-                    const name = e.target.value;
-                    setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, name } : n)));
-                  }}
-                  onFocus={() => { renameBaselineRef.current = selectedNode.name; }}
-                  onBlur={() => void persistNodeRename(selectedNode.id, selectedNode.name)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void persistNodeRename(selectedNode.id, selectedNode.name); } }}
-                />
-              </label>
+              {/* ── Name section ─────────────────────────────────────── */}
+              <div className="inspector-section">
+                <h4 className="inspector-section-title"><Localized id="topology-inspector-section-identity">Identity</Localized></h4>
+                <label className="inspector-field">
+                  <span><Localized id="topology-inspector-node-name">Name</Localized></span>
+                  <input
+                    type="text"
+                    value={selectedNode.name}
+                    onChange={(e) => {
+                      beginInspectorEdit(selectedNode.id);
+                      const name = e.target.value;
+                      setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, name } : n)));
+                    }}
+                    onFocus={() => { renameBaselineRef.current = selectedNode.name; }}
+                    onBlur={() => void persistNodeRename(selectedNode.id, selectedNode.name)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void persistNodeRename(selectedNode.id, selectedNode.name); } }}
+                  />
+                </label>
+                <label className="inspector-field">
+                  <span><Localized id="topology-inspector-subtitle">Subtitle / Location</Localized></span>
+                  <input
+                    type="text"
+                    value={selectedNode.subtitle || ''}
+                    onChange={(e) => {
+                      beginInspectorEdit(selectedNode.id);
+                      const subtitle = e.target.value;
+                      setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, subtitle } : n)));
+                    }}
+                  />
+                </label>
+              </div>
 
-              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
-              <label className="inspector-field">
-                <span><Localized id="topology-inspector-subtitle">Subtitle / Location</Localized></span>
-                <input
-                  type="text"
-                  value={selectedNode.subtitle || ''}
-                  onChange={(e) => {
-                    beginInspectorEdit(selectedNode.id);
-                    const subtitle = e.target.value;
-                    setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, subtitle } : n)));
-                  }}
+              {/* ── Branch Location store profile fields ──────────── */}
+              {selectedNode.type === 'store' && (
+                <BranchLocationFields
+                  nodeId={selectedNode.storeProfileId ?? selectedNode.id}
+                  l10n={l10n}
+                  beginInspectorEdit={beginInspectorEdit}
                 />
-              </label>
+              )}
 
-              {/* Workspace type selector + settings card */}
-              {selectedNode.type === 'workspace' && (                  <div className="inspector-section">
-                  <h4>
-                    <Localized id="workspace-type-selector-label">Workspace Type</Localized>
-                  </h4>
+              {/* ── Workspace type section ────────────────────────── */}
+              {selectedNode.type === 'workspace' && (
+                <div className="inspector-section">
+                  <h4 className="inspector-section-title"><Localized id="workspace-type-selector-label">Workspace Type</Localized></h4>
                   <div className="topology-workspace-identity" data-testid="workspace-identity-fields">
                     <span className="topology-identity-row">
                       <Localized id="topology-workspace-purpose-label">Purpose</Localized>:
@@ -6479,29 +6536,259 @@ export default function NodeTopologyEditor({
                   {renderWorkspaceCard(selectedNode)}
                 </div>
               )}
+
+              {/* ── Warehouse section ────────────────────────────── */}
               {selectedNode.type === 'warehouse' && (
-                <WarehouseSettingsCard node={selectedNode} onChange={handleSetNodeMetadata} capacityLocked={!isProAllowed} />
+                <div className="inspector-section">
+                  <h4 className="inspector-section-title"><Localized id="topology-inspector-section-warehouse">Warehouse</Localized></h4>
+                  <WarehouseSettingsCard node={selectedNode} onChange={handleSetNodeMetadata} capacityLocked={!isProAllowed} />
+                </div>
               )}
-              {selectedNode.type === 'store' && (
-                <StoreInfoCard variant="inspector-drawer" />
-              )}
+
+              {/* ── Hardware section ──────────────────────────────── */}
               {selectedNode.type === 'hardware' && (
                 <div className="inspector-section" data-testid="hardware-inspector">
-                  <h4>
-                    <Localized id="topology-inspector-hardware-title">Hardware Device</Localized>
-                  </h4>
+                  <h4 className="inspector-section-title"><Localized id="topology-inspector-hardware-title">Hardware Device</Localized></h4>
                   {selectedNode.telemetryBadge && (
                     <span className={`node-telemetry-badge telemetry-${selectedNode.telemetryStatus ?? 'online'}`}>
                       {selectedNode.telemetryBadge}
                     </span>
                   )}
+                  <label className="inspector-field">
+                    <span><Localized id="topology-inspector-device-type">Device Type</Localized></span>
+                    <select
+                      className="inspector-select"
+                      value={(selectedNode.metadata?.['deviceType'] as string) ?? 'thermal-receipt'}
+                      onChange={(e) => {
+                        beginInspectorEdit(selectedNode.id);
+                        const deviceType = e.target.value;
+                        setNodes((prev) => prev.map((n) => n.id === selectedNode.id
+                          ? { ...n, metadata: { ...n.metadata, deviceType } }
+                          : n));
+                      }}
+                    >
+                      <option value="thermal-receipt">{l10n.getString('topology-hardware-thermal-receipt')}</option>
+                      <option value="thermal-kitchen">{l10n.getString('topology-hardware-thermal-kitchen')}</option>
+                      <option value="barcode-scanner">{l10n.getString('topology-hardware-barcode-scanner')}</option>
+                      <option value="cash-drawer">{l10n.getString('topology-hardware-cash-drawer')}</option>
+                      <option value="display-customer">{l10n.getString('topology-hardware-display-customer')}</option>
+                    </select>
+                  </label>
+                  <label className="inspector-field">
+                    <span><Localized id="topology-inspector-device-address">Connection Address</Localized></span>
+                    <input
+                      type="text"
+                      placeholder={l10n.getString('topology-inspector-device-address-placeholder')}
+                      value={(selectedNode.metadata?.['deviceAddress'] as string) ?? ''}
+                      onChange={(e) => {
+                        beginInspectorEdit(selectedNode.id);
+                        const deviceAddress = e.target.value;
+                        setNodes((prev) => prev.map((n) => n.id === selectedNode.id
+                          ? { ...n, metadata: { ...n.metadata, deviceAddress } }
+                          : n));
+                      }}
+                    />
+                  </label>
                 </div>
               )}
+
+              {/* ── Quick actions ─────────────────────────────────── */}
+              <div className="inspector-section inspector-section--actions">
+                <h4 className="inspector-section-title"><Localized id="topology-inspector-section-actions">Actions</Localized></h4>
+                <div className="inspector-actions">
+                  {selectedNode.type !== 'store' && (
+                    <button type="button" className="inspector-action-btn" onClick={() => { duplicateSelection(); }}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                      <Localized id="topology-inspector-duplicate">Duplicate</Localized>
+                    </button>
+                  )}
+                  {selectedNode.type !== 'store' ? (
+                    <button type="button" className="inspector-action-btn inspector-action-btn--danger" onClick={handleDeleteRequest}>
+                      <TrashIcon size={14} />
+                      <Localized id="topology-inspector-delete">Delete</Localized>
+                    </button>
+                  ) : (
+                    <span className="inspector-anchor-badge">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="12" height="12"><circle cx="12" cy="5" r="2" /><path d="M12 7v10" /><path d="M8 21h8" /></svg>
+                      <Localized id="topology-inspector-anchor-label">Anchor</Localized>
+                    </span>
+                  )}
+                </div>
+              </div>
               </ErrorBoundary>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
+
+      {/* ── Apply confirmation popup ──────────────────────────────── */}
+      {applyConfirmOpen && applyConfirmData && (
+        <div
+          className="topology-apply-confirm-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="topology-apply-confirm-title"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="topology-apply-confirm">
+            <h3 id="topology-apply-confirm-title" className="topology-apply-confirm-title">
+              <Localized id="topology-apply-confirm-title">Confirm Topology Changes</Localized>
+            </h3>
+
+            {/* Diff summary */}
+            <div className="topology-apply-confirm-diff">
+              {applyConfirmData.created.length > 0 && (
+                <div className="topology-apply-confirm-section">
+                  <h4 className="topology-apply-confirm-section-title topology-apply-confirm-section--created">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                    <Localized id="topology-apply-confirm-created">Created</Localized>
+                    <span className="topology-apply-confirm-count">{applyConfirmData.created.length}</span>
+                  </h4>
+                  <ul className="topology-apply-confirm-list">
+                    {applyConfirmData.created.map((item) => (
+                      <li key={item.id} className="topology-apply-confirm-item">
+                        <span className="topology-apply-confirm-dot topology-apply-confirm-dot--created" />
+                        <span className="topology-apply-confirm-name">{item.name}</span>
+                        <span className="topology-apply-confirm-type">{item.typeKey}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {applyConfirmData.updated.length > 0 && (
+                <div className="topology-apply-confirm-section">
+                  <h4 className="topology-apply-confirm-section-title topology-apply-confirm-section--updated">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                    <Localized id="topology-apply-confirm-updated">Updated</Localized>
+                    <span className="topology-apply-confirm-count">{applyConfirmData.updated.length}</span>
+                  </h4>
+                  <ul className="topology-apply-confirm-list">
+                    {applyConfirmData.updated.map((item) => (
+                      <li key={item.id} className="topology-apply-confirm-item">
+                        <span className="topology-apply-confirm-dot topology-apply-confirm-dot--updated" />
+                        <span className="topology-apply-confirm-name">{item.name}</span>
+                        <span className="topology-apply-confirm-type">{item.typeKey}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {applyConfirmData.archived.length > 0 && (
+                <div className="topology-apply-confirm-section">
+                  <h4 className="topology-apply-confirm-section-title topology-apply-confirm-section--archived">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><circle cx="12" cy="12" r="10" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                    <Localized id="topology-apply-confirm-archived">Archived</Localized>
+                    <span className="topology-apply-confirm-count">{applyConfirmData.archived.length}</span>
+                  </h4>
+                  <ul className="topology-apply-confirm-list">
+                    {applyConfirmData.archived.map((item) => (
+                      <li key={item.id} className="topology-apply-confirm-item">
+                        <span className="topology-apply-confirm-dot topology-apply-confirm-dot--archived" />
+                        <span className="topology-apply-confirm-name">{item.name}</span>
+                        <span className="topology-apply-confirm-type">{item.typeKey}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {applyConfirmData.created.length === 0
+                && applyConfirmData.updated.length === 0
+                && applyConfirmData.archived.length === 0 && (
+                <p className="topology-apply-confirm-empty">
+                  <Localized id="topology-apply-confirm-no-changes">No workspace changes detected.</Localized>
+                </p>
+              )}
+            </div>
+
+            {/* Store scope debug info */}
+            <div className="topology-apply-confirm-scope">
+              <div className="topology-apply-confirm-scope-row">
+                <span className="topology-apply-confirm-scope-label">
+                  <Localized id="topology-apply-confirm-scope-session">Session store</Localized>
+                </span>
+                <code className="topology-apply-confirm-scope-value">{applyConfirmData.sessionStoreId}</code>
+              </div>
+              <div className="topology-apply-confirm-scope-row">
+                <span className="topology-apply-confirm-scope-label">
+                  <Localized id="topology-apply-confirm-scope-target">Target store</Localized>
+                </span>
+                <code className={`topology-apply-confirm-scope-value${applyConfirmData.sessionStoreId !== applyConfirmData.effectiveStoreId ? ' topology-apply-confirm-scope-value--mismatch' : ''}`}>
+                  {applyConfirmData.effectiveStoreId}
+                </code>
+              </div>
+              {applyConfirmData.sessionStoreId !== applyConfirmData.effectiveStoreId && (
+                <p className="topology-apply-confirm-scope-warning">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                  <Localized id="topology-apply-confirm-scope-mismatch">Session store differs from Branch Location store. Workspace CRUD will target the Branch Location's store.</Localized>
+                </p>
+              )}
+            </div>
+
+            {/* PIN confirmation */}
+            <label className="topology-apply-confirm-pin-label" htmlFor="topology-apply-pin">
+              <Localized id="topology-apply-confirm-pin-label">Enter your PIN to confirm</Localized>
+            </label>
+            <input
+              ref={applyPinRef}
+              id="topology-apply-pin"
+              type="password"
+              className={`topology-apply-confirm-pin${applyPinError ? ' topology-apply-confirm-pin--error' : ''}`}
+              placeholder={l10n.getString('topology-apply-confirm-pin-placeholder')}
+              value={applyPin}
+              onChange={(e) => { setApplyPin(e.target.value); setApplyPinError(false); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && applyPin.length >= 4 && !applyPinVerifying) {
+                  e.preventDefault();
+                  void confirmApply();
+                }
+              }}
+              autoComplete="off"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              disabled={applyPinVerifying}
+            />
+            {applyPinError && (
+              <p className="topology-apply-confirm-pin-error">
+                <Localized id="topology-apply-confirm-pin-error">Incorrect PIN. Please try again.</Localized>
+              </p>
+            )}
+            {!pinVerifiedRef.current && (
+              <label className="topology-apply-confirm-pin-remember">
+                <input
+                  type="checkbox"
+                  checked={rememberPin}
+                  onChange={(e) => setRememberPin(e.target.checked)}
+                />
+                <Localized id="topology-apply-confirm-pin-remember">Remember PIN for this session</Localized>
+              </label>
+            )}
+
+            {/* Actions */}
+            <div className="topology-apply-confirm-actions">
+              <Button
+                variant="secondary"
+                onClick={() => setApplyConfirmOpen(false)}
+              >
+                <Localized id="topology-apply-confirm-cancel">Cancel</Localized>
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void confirmApply()}
+                disabled={saving || applyPinVerifying || applyPin.length < 4}
+                icon={applyPinVerifying ? undefined : <CheckIcon size={16} />}
+              >
+                {applyPinVerifying
+                  ? <Localized id="topology-apply-confirm-verifying">Verifying…</Localized>
+                  : <Localized id="topology-apply-confirm-apply">Apply</Localized>}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

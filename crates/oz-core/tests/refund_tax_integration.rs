@@ -3,7 +3,7 @@
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
 
-use oz_core::{Currency, Money, Refund, RefundLine, Store, migrations};
+use oz_core::{CoreError, Currency, Money, Refund, RefundLine, Store, migrations};
 use rusqlite::Connection;
 
 // ── Shared helpers ────────────────────────────────────────────────────
@@ -643,14 +643,15 @@ fn delete_tax_rate_with_product_assignments() {
 }
 
 #[test]
-fn refund_exceeding_sale_total_succeeds() {
-    // The domain does not validate that refund total ≤ sale total.
-    // This test documents that behavior.
+fn refund_exceeding_sale_total_is_rejected() {
+    // The over-refund guard rejects refunds whose total exceeds the
+    // sale's original total. This prevents unlimited refunds on a
+    // completed sale.
     let conn = setup();
     seed_sale(&conn, "exceed-sale");
     let s = store(&conn);
 
-    // SKU must match seed_sale's dynamic format: {sale_id}-{name}.
+    // Sale total is 1150; refund 3500 → must be rejected.
     let line = RefundLine::new(
         "exceed-sale-sl-1",
         "exceed-sale-COFFEE",
@@ -666,10 +667,9 @@ fn refund_exceeding_sale_total_succeeds() {
         "user-1",
         vec![line],
     );
-    s.create_refund(&refund).unwrap();
-
-    let refunds = s.list_refunds_for_sale("exceed-sale").unwrap();
-    assert_eq!(refunds.len(), 1);
-    assert_eq!(refunds[0].total.minor_units, 3500);
-    assert_eq!(refunds[0].note, "exceeds total");
+    let err = s.create_refund(&refund).unwrap_err();
+    assert!(
+        matches!(err, CoreError::Validation { field, .. } if field == "total"),
+        "over-refund must be rejected, got: {err:?}"
+    );
 }

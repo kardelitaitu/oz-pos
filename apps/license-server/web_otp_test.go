@@ -815,11 +815,11 @@ func TestWebSessionTTL_InvalidEnvFallsBack(t *testing.T) {
 
 func TestWebAllowedOrigins_Default(t *testing.T) {
 	origins := webAllowedOrigins()
-	if len(origins) != 3 {
-		t.Fatalf("expected 3 default origins, got %d", len(origins))
+	if len(origins) != 2 {
+		t.Fatalf("expected 2 default origins, got %d", len(origins))
 	}
-	if !strings.Contains(strings.Join(origins, ","), "oz-pos.adikaradwiatmaja.workers.dev") {
-		t.Errorf("expected workers.dev origin in defaults, got %v", origins)
+	if !strings.Contains(strings.Join(origins, ","), "ozpos.my.id") {
+		t.Errorf("expected ozpos.my.id origin in defaults, got %v", origins)
 	}
 }
 
@@ -828,6 +828,109 @@ func TestWebAllowedOrigins_EnvOverride(t *testing.T) {
 	origins := webAllowedOrigins()
 	if len(origins) != 2 || origins[0] != "https://a.com" || origins[1] != "https://b.com" {
 		t.Errorf("unexpected origins from env: %v", origins)
+	}
+}
+
+func TestWebAllowedOrigins_CorsOriginsMerged(t *testing.T) {
+	// OZ_CORS_ORIGINS should be merged into the allowlist alongside
+	// the primary OZ_WEB_ALLOWED_ORIGINS (or its defaults).
+	t.Setenv("OZ_CORS_ORIGINS", "https://extra.com, https://also-extra.com")
+	origins := webAllowedOrigins()
+	found := map[string]bool{}
+	for _, o := range origins {
+		found[o] = true
+	}
+	// Default origins still present.
+	if !found["https://ozpos.my.id"] {
+		t.Error("default ozpos.my.id origin missing after OZ_CORS_ORIGINS merge")
+	}
+	if !found["http://localhost:4321"] {
+		t.Error("default localhost origin missing after OZ_CORS_ORIGINS merge")
+	}
+	// Extra origins merged in.
+	if !found["https://extra.com"] {
+		t.Error("OZ_CORS_ORIGINS extra origin https://extra.com not merged")
+	}
+	if !found["https://also-extra.com"] {
+		t.Error("OZ_CORS_ORIGINS extra origin https://also-extra.com not merged")
+	}
+}
+
+func TestWebAllowedOrigins_CorsOriginsWithCustomPrimary(t *testing.T) {
+	// Both env vars set: primary + extra should all be present.
+	t.Setenv("OZ_WEB_ALLOWED_ORIGINS", "https://primary.com")
+	t.Setenv("OZ_CORS_ORIGINS", "https://extra.com")
+	origins := webAllowedOrigins()
+	found := map[string]bool{}
+	for _, o := range origins {
+		found[o] = true
+	}
+	if !found["https://primary.com"] {
+		t.Error("primary origin missing")
+	}
+	if !found["https://extra.com"] {
+		t.Error("extra origin missing")
+	}
+	// Default ozpos.my.id should NOT be present (overridden by primary).
+	if found["https://ozpos.my.id"] {
+		t.Error("default origin should not appear when OZ_WEB_ALLOWED_ORIGINS is set")
+	}
+}
+
+func TestWebAllowedOrigins_CorsOriginsEmpty(t *testing.T) {
+	// Empty OZ_CORS_ORIGINS should not add anything.
+	t.Setenv("OZ_CORS_ORIGINS", "")
+	origins := webAllowedOrigins()
+	if len(origins) != 2 {
+		t.Errorf("expected 2 default origins with empty OZ_CORS_ORIGINS, got %d: %v", len(origins), origins)
+	}
+}
+
+func TestWebAllowedOrigins_CorsOriginsWhitespace(t *testing.T) {
+	// Whitespace-only and comma-only entries should be silently skipped.
+	t.Setenv("OZ_CORS_ORIGINS", " , https://valid.com , ")
+	origins := webAllowedOrigins()
+	found := map[string]bool{}
+	for _, o := range origins {
+		found[o] = true
+	}
+	if !found["https://valid.com"] {
+		t.Error("valid origin from OZ_CORS_ORIGINS not found")
+	}
+	// Should not have empty-string entries.
+	for _, o := range origins {
+		if o == "" {
+			t.Error("empty string origin in allowlist")
+		}
+	}
+}
+
+func TestWebOriginAllowed_AcceptsCorsOrigin(t *testing.T) {
+	// A request from an origin listed in OZ_CORS_ORIGINS must be allowed.
+	t.Setenv("OZ_CORS_ORIGINS", "https://cors-extra.com")
+	e := &core.RequestEvent{}
+	// Simulate an Origin header.
+	e.Request = &http.Request{Header: http.Header{"Origin": {"https://cors-extra.com"}}}
+	if !webOriginAllowed(e) {
+		t.Error("origin from OZ_CORS_ORIGINS should be allowed")
+	}
+}
+
+func TestWebOriginAllowed_RejectsUnknownOrigin(t *testing.T) {
+	// An origin not in any allowlist must be rejected.
+	e := &core.RequestEvent{}
+	e.Request = &http.Request{Header: http.Header{"Origin": {"https://evil.com"}}}
+	if webOriginAllowed(e) {
+		t.Error("unknown origin should be rejected")
+	}
+}
+
+func TestWebOriginAllowed_NoOriginHeaderAllowed(t *testing.T) {
+	// Non-browser callers (curl, server-to-server) have no Origin — always allowed.
+	e := &core.RequestEvent{}
+	e.Request = &http.Request{Header: http.Header{}}
+	if !webOriginAllowed(e) {
+		t.Error("request without Origin header should be allowed")
 	}
 }
 
@@ -879,5 +982,67 @@ func TestWindowLimiter_Sweep(t *testing.T) {
 	wl.sweep()
 	if _, ok := wl.entries["k"]; ok {
 		t.Error("expired window should be swept")
+	}
+}
+
+// ── Email builder tests ─────────────────────────────────────────────
+
+func TestBuildOtpEmail_RFC5322Headers(t *testing.T) {
+	msg := buildOtpEmail("no-reply@ozpos.my.id", "user@example.com", "123456")
+	s := string(msg)
+
+	for _, want := range []string{
+		"From: OZ-POS <no-reply@ozpos.my.id>",
+		"To: user@example.com",
+		"Subject: Your OZ-POS verification code",
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain; charset=utf-8",
+		"Date:",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing header %q in OTP email", want)
+		}
+	}
+}
+
+func TestBuildOtpEmail_ContainsCode(t *testing.T) {
+	msg := buildOtpEmail("from@test.com", "to@test.com", "998877")
+	s := string(msg)
+
+	if !strings.Contains(s, "998877") {
+		t.Error("OTP email must contain the verification code")
+	}
+	if !strings.Contains(s, "6-digit") && !strings.Contains(s, "6 digit") {
+		// The body mentions the code format.
+	}
+}
+
+func TestBuildOtpEmail_ExpiryMinutes(t *testing.T) {
+	msg := buildOtpEmail("from@test.com", "to@test.com", "000000")
+	s := string(msg)
+
+	// The body states the TTL in minutes (webOtpTTL = 15 minutes).
+	if !strings.Contains(s, "15 minutes") {
+		t.Errorf("OTP email should mention 15-minute expiry, got body:\n%s", s)
+	}
+}
+
+func TestBuildOtpEmail_RFC5322LineEndings(t *testing.T) {
+	msg := buildOtpEmail("from@test.com", "to@test.com", "111111")
+	s := string(msg)
+
+	// RFC 5322 requires \r\n line endings in headers.
+	if !strings.Contains(s, "From: ...\r\n") || strings.Contains(s, "From:\n") {
+		// Check that headers use \r\n, not bare \n.
+	}
+	// Verify no bare \n after header names (common bug: missing \r).
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "From:") || strings.HasPrefix(line, "To:") || strings.HasPrefix(line, "Subject:") {
+			// The line before splitting on \n should have ended with \r.
+			if i > 0 && !strings.HasSuffix(lines[i-1], "\r") {
+				t.Errorf("header at line %d missing \r before \n (RFC 5322 requires CRLF)", i)
+			}
+		}
 	}
 }

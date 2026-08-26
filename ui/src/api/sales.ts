@@ -340,7 +340,7 @@ export interface SaleDetail {
  */
 export interface SaleListResponse {
   sales: SaleListItem[];
-  /** True when the tier's history window (Free = 30 days) was applied. */
+  /** True when the tier's history window (Free = 3 months) was applied. */
   salesHistoryCapped: boolean;
 }
 

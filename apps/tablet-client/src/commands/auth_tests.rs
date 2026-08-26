@@ -62,7 +62,7 @@ fn staff_login_result_debug() {
     assert!(debug.contains("Bob"));
 }
 
-// ── Session-mint authorization gate (audit/06 residual) ───────────
+// ── Session-mint authorization gate (audit-open-findings residual) ───────────
 //
 // Parity with the desktop client: `create_session` must fail closed
 // when the caller claims an identity it has not authenticated. The
@@ -87,7 +87,7 @@ fn seed_owner(conn: &rusqlite::Connection) {
 
 #[tokio::test]
 async fn staff_login_mints_verifiable_picker_ticket() {
-    // audit/06 (parity with the desktop client): the picker ticket
+    // audit-open-findings (parity with the desktop client): the picker ticket
     // returned by a successful login must verify against the process
     // secret and bind the authenticated user.
     let conn = migrations::fresh_db();

@@ -118,7 +118,7 @@ function makeSessionResult(overrides: Partial<CreateSessionResult> = {}): Create
   };
 }
 
-// Picker ticket the backend mints at login (audit/06) — used by the
+// Picker ticket the backend mints at login (audit-open-findings) — used by the
 // pre-session picker until createSession returns the opaque token.
 const DEFAULT_TICKET = 'ticket-abc';
 
@@ -140,7 +140,7 @@ function MockAuthProvider({
 
 function renderWorkspaceHook(
   session: LoginSessionDto | null = DEFAULT_SESSION,
-  // With no session there is no login → no picker ticket either (audit/06).
+  // With no session there is no login → no picker ticket either (audit-open-findings).
   pickerTicket: string | null = session ? DEFAULT_TICKET : null,
 ) {
   const wrapper = ({ children }: { children: ReactNode }) => (

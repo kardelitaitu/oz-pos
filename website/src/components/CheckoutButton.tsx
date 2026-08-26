@@ -69,7 +69,7 @@ export default function CheckoutButton({ tier, locale }: Props) {
   if (useMidtrans ? !licenseApiUrl() : !priceId || isPlaceholderPriceId(priceId) || !isPaddleConfigured()) {
     return (
       <a
-        href={`mailto:sales@oz-pos.com?subject=${encodeURIComponent('OZ-POS plan: ' + tier.name)}`}
+        href={`mailto:sales@ozpos.my.id?subject=${encodeURIComponent('OZ-POS plan: ' + tier.name)}`}
         className="block w-full rounded-md border border-ink/15 px-4 py-2.5 text-center text-sm font-semibold text-ink transition hover:bg-ink/5"
       >
         {tier.cta}

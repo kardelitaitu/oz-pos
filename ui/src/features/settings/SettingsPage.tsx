@@ -322,6 +322,19 @@ function SettingsPageContent() {
     setMobileSidebarOpen(false);
   }, []);
 
+  // ── Read section from URL hash on mount (e.g. #/settings/topology) ──
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#\//, '');
+    if (hash.startsWith('settings/')) {
+      const section = hash.slice('settings/'.length);
+      if (section) {
+        setActiveSection(section);
+        // Clear the hash after consuming it so stale sections don't persist
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+  }, []);
+
   // ── Unsaved changes tracking ────────────────────────────────
   const [isDirty, setIsDirty] = useState(false);
   const markDirty = useCallback(() => { setIsDirty(true); }, []);

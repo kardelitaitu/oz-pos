@@ -94,6 +94,15 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-ws-type-kds': 'Kitchen Display (KDS)',
   'topology-port-operation-in': 'Operation',
   'topology-ws-type-warehouse': 'Warehouse',
+  'topology-node-type-store': 'Branch Location',
+  'topology-node-type-workspace': 'Workspace',
+  'topology-node-type-warehouse': 'Warehouse',
+  'topology-node-type-hardware': 'Hardware Device',
+  'topology-hardware-thermal-receipt': 'Thermal Receipt Printer',
+  'topology-hardware-thermal-kitchen': 'Kitchen Printer',
+  'topology-hardware-barcode-scanner': 'Barcode Scanner',
+  'topology-hardware-cash-drawer': 'Cash Drawer',
+  'topology-hardware-display-customer': 'Customer Display',
   'topology-port-location-out': 'Location',
   'topology-port-location-in': 'Location',
   'topology-port-location-out-aria': 'Location port',
@@ -192,7 +201,10 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-shortcuts-find': 'Find node',
   'topology-auto-layout': 'Auto-layout',
   'topology-layout-announce': 'Topology arranged automatically',
-  'topology-rack-share-title': 'Share',
+  'topology-rack-share-title': 'topology-rack-share-title',
+  'topology-rack-add-title': 'topology-rack-add-title',
+  'topology-rack-edit-title': 'topology-rack-edit-title',
+  'topology-rack-view-title': 'topology-rack-view-title',
   'topology-export': 'Export',
   'topology-import': 'Import',
   'topology-save-template': 'Save template',
@@ -261,6 +273,13 @@ vi.mock('@/contexts/SettingsContext', () => ({
   }),
 }));
 
+// The Apply flow now requires PIN verification before onSave (the redesign
+// added a PIN confirmation popup). Mock verifyPin to accept any 4+ digit PIN
+// so Apply tests drive the real popup flow instead of bypassing it.
+vi.mock('@/api/staff', () => ({
+  verifyPin: vi.fn(async () => true),
+}));
+
 const mockLoadTopology = vi.mocked(loadTopology);
 
 type TopologyTier = Exclude<ComponentProps<typeof NodeTopologyEditor>['currentTier'], undefined>;
@@ -285,7 +304,7 @@ const renderEditor = (props?: {
   compareFocus?: boolean;
   canSave?: boolean;
 }) =>
-  renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
+  renderWithProvidersSync(<NodeTopologyEditor currentTier="plus" {...props} />, multiStoreFtl, sharedFtl);
 
 /**
  * Harness that re-renders the editor with a NEW workspaceInstances array
@@ -301,7 +320,7 @@ function ReloadingHarness({ next }: { next: WorkspaceInstanceSeed[] }) {
         reload-instances
       </button>
       {/* exactOptionalPropertyTypes: omit the prop while instances is undefined */}
-      <NodeTopologyEditor currentTier="standard" {...(instances ? { workspaceInstances: instances } : {})} />
+      <NodeTopologyEditor currentTier="plus" {...(instances ? { workspaceInstances: instances } : {})} />
     </>
   );
 }
@@ -332,7 +351,7 @@ function BranchRenameHarness() {
   ]);
   return (
     <NodeTopologyEditor
-      currentTier="standard"
+      currentTier="plus"
       workspaceInstances={renameWsInstances}
       branchLocations={locations}
       onRenameBranch={async (id, name) => {
@@ -352,7 +371,7 @@ function WorkspaceRenameHarness() {
   ]);
   return (
     <NodeTopologyEditor
-      currentTier="standard"
+      currentTier="plus"
       workspaceInstances={instances}
       branchLocations={[{ id: 'store-1', name: 'Downtown Branch' }]}
       onRenameWorkspace={async (id, name) => {
@@ -377,7 +396,7 @@ function BothChangeHarness() {
         both-change
       </button>
       <NodeTopologyEditor
-        currentTier="standard"
+        currentTier="plus"
         {...(instances ? { workspaceInstances: instances } : {})}
         {...(locations ? { branchLocations: locations } : {})}
       />
@@ -408,6 +427,52 @@ const mockCanvasSize = (width: number, height: number) => {
   Object.defineProperty(canvas, 'clientHeight', { value: height, configurable: true });
 };
 
+/**
+ * Click the confirm button of an open confirm dialog. The dialog's confirm
+ * button carries aria-label="Delete" while the inspector may also render a
+ * Delete button for the selected node — scope the query to the dialog panel.
+ */
+const confirmDialogAction = (label = 'Delete') => {
+  const dialog = document.querySelector('.modal-panel[role="dialog"]') as HTMLElement | null;
+  if (!dialog) throw new Error('no open confirm dialog');
+  const btn = within(dialog).getByRole('button', { name: label });
+  fireEvent.click(btn);
+};
+
+/**
+ * Open a tool-rack panel (the redesign collapsed the always-visible sidebar
+ * into a right-side icon strip with click-to-open panels). The add panel
+ * starts open by default; edit/view/share must be opened explicitly. The
+ * rack icon buttons carry `title` from the l10n keys. Idempotent: a second
+ * open for an already-open panel is a no-op (the icon is a toggle).
+ */
+const openRackPanel = (panel: 'add' | 'edit' | 'view' | 'share') => {
+  const title = {
+    add: 'topology-rack-add-title',
+    edit: 'topology-rack-edit-title',
+    view: 'topology-rack-view-title',
+    share: 'topology-rack-share-title',
+  }[panel];
+  const btn = document.querySelector(`.rack-icon-btn[title="${title}"]`) as HTMLElement | null;
+  if (!btn) throw new Error(`rack icon button for '${panel}' panel not found`);
+  if (btn.classList.contains('is-active')) return;
+  fireEvent.click(btn);
+};
+
+/**
+ * Complete the Apply flow through the PIN confirmation popup (the redesign
+ * gates Apply behind a 4+ digit PIN). Clicks Apply Topology Changes, types
+ * the PIN, and confirms; returns after the verifyPin promise settles. The
+ * verifyPin module mock accepts any PIN.
+ */
+const applyWithPin = async (pin = '1234') => {
+  fireEvent.click(screen.getByText('Apply Topology Changes'));
+  const input = document.getElementById('topology-apply-pin') as HTMLInputElement | null;
+  if (!input) throw new Error('Apply PIN input not found');
+  fireEvent.change(input, { target: { value: pin } });
+  fireEvent.click(screen.getByText('Apply'));
+};
+
 describe('NodeTopologyEditor Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -419,8 +484,8 @@ describe('NodeTopologyEditor Component', () => {
     renderEditor();
 
     // The header no longer carries a title — the tier badge (default
-    // currentTier = 'standard') marks the header instead.
-    expect(screen.getByText('STANDARD TIER')).toBeInTheDocument();
+    // currentTier = 'plus') marks the header instead.
+    expect(screen.getByText('PLUS TIER')).toBeInTheDocument();
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
     expect(screen.getByText('Retail POS #1')).toBeInTheDocument();
     expect(screen.getByText('Main Warehouse')).toBeInTheDocument();
@@ -734,7 +799,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('+ Retail POS')).toBeInTheDocument();
     expect(screen.getByText('+ Warehouse')).toBeInTheDocument();
     expect(screen.getByText('+ Hardware Node')).toBeInTheDocument();
-    expect(screen.getByText('Test Order Simulation')).toBeInTheDocument();
+    expect(screen.getByText('Presets')).toBeInTheDocument();
   });
 
   it('adds each of the four supported workspace types from the palette', () => {
@@ -1467,7 +1532,9 @@ describe('NodeTopologyEditor Component', () => {
     } as never);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(3));
-    expect(screen.getByText('Keep exactly one Branch Location node in this graph.')).toBeInTheDocument();
+    // Node-scoped error (never a banner): the message rides the card's
+    // sr span + portal tooltip — tolerate both copies.
+    expect(screen.getAllByText('Keep exactly one Branch Location node in this graph.').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows a canvas banner when no Branch Location root exists', async () => {
@@ -1487,7 +1554,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(within(nodeAt(0)).getByText('Connect this workspace to a Branch Location using Location In.')).toBeInTheDocument();
   });
 
-  it('clears the multiple-branch banner live when the extra branch is deleted', async () => {
+  it('cannot clear the multiple-branch banner by deleting a Branch Location (permanent anchors)', async () => {
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch A', x: 80, y: 140, store_profile_id: 'store-1' },
@@ -1500,15 +1567,16 @@ describe('NodeTopologyEditor Component', () => {
     } as never);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(3));
-    expect(screen.getByText('Keep exactly one Branch Location node in this graph.')).toBeInTheDocument();
+    expect(screen.getAllByText('Keep exactly one Branch Location node in this graph.').length).toBeGreaterThanOrEqual(1);
 
-    // Delete the second branch (it has no wires → deletes immediately).
+    // Branch Location nodes are permanent anchors — the Delete action is a
+    // no-op for them, so the graph stays invalid and the error persists.
     fireEvent.mouseDown(nodeAt(1), { button: 0 });
-    fireEvent.click(screen.getByText('Delete Selected Element'));
-    await waitFor(() => expect(getNodeCount()).toBe(2));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Delete Selected Element'));
+    expect(getNodeCount()).toBe(3);
 
-    // The banner cleared live — no Apply round-trip.
-    await waitFor(() => expect(screen.queryByText('Keep exactly one Branch Location node in this graph.')).toBeNull());
+    // The error stays live — the extra branch cannot be deleted away.
+    expect(screen.queryAllByText('Keep exactly one Branch Location node in this graph.').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows a canvas banner for a wire referencing a ghost node', async () => {
@@ -1613,15 +1681,6 @@ describe('NodeTopologyEditor Component', () => {
     expect(kds!.querySelector('.node-port-label-right')?.textContent).toBe('Ticket Out');
   });
 
-  it('toggles simulation mode on button click', () => {
-    renderEditor();
-
-    const simBtn = screen.getByText('Test Order Simulation');
-    fireEvent.click(simBtn);
-
-    expect(screen.getByText('Stop Simulation')).toBeInTheDocument();
-  });
-
   // ── Load persisted topology on mount ──────────────────────────
 
   it('loads persisted topology on mount when data exists', async () => {
@@ -1690,8 +1749,7 @@ describe('NodeTopologyEditor Component', () => {
     const onSave = vi.fn();
     renderEditor({ onSave });
 
-    const applyBtn = screen.getByText('Apply Topology Changes');
-    fireEvent.click(applyBtn);
+    await applyWithPin();
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
@@ -1708,7 +1766,7 @@ describe('NodeTopologyEditor Component', () => {
     const onSave = vi.fn();
     renderEditor({ onSave });
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
@@ -1735,7 +1793,9 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(screen.getByText('+ Store Node'));
 
     expect(getNodeCount()).toBe(initialCount + 1);
-    expect(screen.getByText('New Store')).toBeInTheDocument();
+    // The spawned node is auto-selected, so the inspector header shows the
+    // same name — the card title AND the inspector h3 both match.
+    expect(screen.getAllByText('New Store').length).toBeGreaterThanOrEqual(1);
   });
 
   it('adds a new hardware node when tool rack button clicked', () => {
@@ -1743,7 +1803,7 @@ describe('NodeTopologyEditor Component', () => {
 
     fireEvent.click(screen.getByText('+ Hardware Node'));
 
-    expect(screen.getByText('New Hardware')).toBeInTheDocument();
+    expect(screen.getAllByText('New Hardware').length).toBeGreaterThanOrEqual(1);
   });
 
   // ── Spawn placement (P3): no stacking, no off-screen spawns ──────
@@ -1971,7 +2031,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor();
       await waitFor(() => expect(getNodeCount()).toBe(4));
 
-      expect(screen.getByText('Multiple Warehouses require a Pro Tier license.')).toBeInTheDocument();
+      expect(screen.getAllByText('Multiple Warehouses require a Pro Tier license.').length).toBeGreaterThanOrEqual(1);
     });
 
     it('blocks Apply for two warehouses on standard tier without calling onSave', async () => {
@@ -1982,10 +2042,12 @@ describe('NodeTopologyEditor Component', () => {
 
       fireEvent.click(screen.getByText('Apply Topology Changes'));
 
-      // The live banner already carries the message; the Apply toast adds a
-      // second copy — getAllByText pins that the error surfaced (≥1).
+      // The Apply gate opens the issues panel (so the user sees EVERY
+      // blocking issue at once) and toasts a block summary instead of a
+      // single error message.
       await waitFor(() =>
-        expect(screen.getAllByText('Multiple Warehouses require a Pro Tier license.').length).toBeGreaterThanOrEqual(1));
+        expect(screen.getByText('Apply blocked — 1 issue(s) to fix in the panel')).toBeInTheDocument());
+      expect(document.querySelector('.topology-validation-panel')).not.toBeNull();
       expect(onSave).not.toHaveBeenCalled();
     });
 
@@ -1995,7 +2057,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor({ currentTier: 'pro', onSave });
       await waitFor(() => expect(getNodeCount()).toBe(4));
 
-      fireEvent.click(screen.getByText('Apply Topology Changes'));
+      await applyWithPin();
       await waitFor(() => expect(onSave).toHaveBeenCalled());
     });
 
@@ -2003,7 +2065,7 @@ describe('NodeTopologyEditor Component', () => {
       // Regression: the editor's Pro set was ['pro', 'enterprise'] and the
       // screen's tier union omitted 'premium', so a Premium install saw the
       // standard-tier warehouse-tier-limit banner and Apply gate even though
-      // the backend treats Premium as Pro (unlimited warehouses).
+      // the backend treats Premium as an unlimited-warehouse tier.
       mockLoadTopology.mockResolvedValueOnce(twoWarehouseDiagram);
       const onSave = vi.fn();
       renderEditor({ currentTier: 'premium', onSave });
@@ -2011,7 +2073,7 @@ describe('NodeTopologyEditor Component', () => {
 
       expect(screen.queryByText('Multiple Warehouses require a Pro Tier license.')).toBeNull();
 
-      fireEvent.click(screen.getByText('Apply Topology Changes'));
+      await applyWithPin();
       await waitFor(() => expect(onSave).toHaveBeenCalled());
     });
   });
@@ -2044,7 +2106,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor({ allowLegacyApply: false });
 
       const before = getNodeCount();
-      fireEvent.keyDown(window, { key: '1' });
+      fireEvent.keyDown(document.querySelector('.node-canvas-container')!, { key: '1' });
       expect(getNodeCount()).toBe(before);
     });
   });
@@ -2066,10 +2128,13 @@ describe('NodeTopologyEditor Component', () => {
   it('deletes a node without wires immediately', async () => {
     renderEditor();
 
-    // Add a new node (no wires connected) then delete it
-    fireEvent.click(screen.getByText('+ Store Node'));
+    // Add a new node (no wires connected) then delete it. Hardware is a
+    // deletable type — Branch Locations are permanent anchors.
+    fireEvent.click(screen.getByText('+ Hardware Node'));
     await waitFor(() => {
-      expect(screen.getByText('New Store')).toBeInTheDocument();
+      // The spawned node is auto-selected, so the inspector header also
+      // shows the name — the card title AND the inspector h3 both match.
+      expect(screen.getAllByText('New Hardware').length).toBeGreaterThanOrEqual(1);
     });
 
     // Select the new node (last one in the DOM)
@@ -2077,22 +2142,25 @@ describe('NodeTopologyEditor Component', () => {
     const newNode = nodes[nodes.length - 1];
     fireEvent.mouseDown(newNode as Element, { button: 0 });
 
-    const deleteBtn = screen.getByText('Delete Selected Element');
+    openRackPanel('edit'); const deleteBtn = screen.getByText('Delete Selected Element');
     fireEvent.click(deleteBtn);
 
     await waitFor(() => {
-      expect(screen.queryByText('New Store')).not.toBeInTheDocument();
+      expect(screen.queryByText('New Hardware')).not.toBeInTheDocument();
     });
   });
 
   it('shows confirmation dialog when deleting node with wires', () => {
     renderEditor();
 
-    selectFirstNode();
+    // ws-1 (Retail POS #1) is wired and NOT a Branch Location anchor, so it
+    // is deletable and opens the confirm dialog.
+    const wired = document.querySelector('.node-type-workspace') as HTMLElement;
+    fireEvent.mouseDown(wired, { button: 0 });
 
     expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
 
-    const deleteBtn = screen.getByText('Delete Selected Element');
+    openRackPanel('edit'); const deleteBtn = screen.getByText('Delete Selected Element');
     fireEvent.click(deleteBtn);
 
     expect(screen.getByText('Delete Node')).toBeInTheDocument();
@@ -2108,7 +2176,7 @@ describe('NodeTopologyEditor Component', () => {
 
     fireEvent.click(screen.getByText('+ Store Node'));
 
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
   });
 
   it('restores previous state on undo', () => {
@@ -2119,7 +2187,7 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(screen.getByText('+ Store Node'));
     expect(getNodeCount()).toBe(initialCount + 1);
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect(getNodeCount()).toBe(initialCount);
   });
@@ -2139,7 +2207,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(hitbox).not.toBeNull();
     fireEvent.click(hitbox!);
 
-    const deleteBtn = screen.getByText('Delete Selected Element');
+    openRackPanel('edit'); const deleteBtn = screen.getByText('Delete Selected Element');
     fireEvent.click(deleteBtn);
 
     // Confirm the wire deletion dialog
@@ -2149,7 +2217,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(getWireCount()).toBe(initialWireCount - 1);
 
     // Undo should restore the wire
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect(getWireCount()).toBe(initialWireCount);
   });
@@ -2184,7 +2252,9 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(screen.getByText('Resto & KDS Preset'));
 
     expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
-    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
+    // The clicked node stays selected; the inspector header shows the same
+    // name as the card — both match.
+    expect(screen.getAllByText('Grand Bistro').length).toBeGreaterThanOrEqual(1);
   });
 
   it('enables Undo only after an actual drag and restores the position on undo', () => {
@@ -2204,12 +2274,12 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
     fireEvent.mouseMove(canvas, { clientX: 48, clientY: 48 });
 
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
     expect(firstNode.style.left).toBe('120px');
     expect(firstNode.style.top).toBe('192px');
 
     fireEvent.mouseUp(canvas, { button: 0 });
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect(firstNode.style.left).toBe('80px');
     expect(firstNode.style.top).toBe('140px');
@@ -2499,7 +2569,7 @@ function DeleteAllHarness() {
         delete-all-branches
       </button>
       <NodeTopologyEditor
-        currentTier="standard"
+        currentTier="plus"
         workspaceInstances={instances}
         branchLocations={locations}
       />
@@ -2522,7 +2592,7 @@ function BranchDeleteHarness() {
         delete-store-1
       </button>
       <NodeTopologyEditor
-        currentTier="standard"
+        currentTier="plus"
         workspaceInstances={renameWsInstances}
         branchLocations={locations}
       />
@@ -2753,7 +2823,7 @@ function BranchDeleteHarness() {
 
     // A single undo must return the node to the ORIGINAL position — the
     // held key produced exactly one history entry.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(firstNode.style.left).toBe('80px');
   });
 
@@ -2775,7 +2845,7 @@ function BranchDeleteHarness() {
 
     // ONE undo reverts the WHOLE burst back to the origin — not just the
     // last grid step — and the burst consumed exactly one entry.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(firstNode.style.left).toBe('80px');
     expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
   });
@@ -2795,9 +2865,9 @@ function BranchDeleteHarness() {
 
     // The first undo reverts only the LATEST nudge; the second reverts the
     // first. Two entries exist — the pause split the burst.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(firstNode.style.left).toBe('96px');
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(firstNode.style.left).toBe('80px');
   });
 
@@ -2816,7 +2886,7 @@ function BranchDeleteHarness() {
 
     // Undo reverts the WHOLE burst to its origin; the burst session must
     // NOT survive the undo.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(firstNode.style.left).toBe('80px');
 
     // A fresh nudge immediately after the undo must be its OWN entry: if
@@ -2824,7 +2894,7 @@ function BranchDeleteHarness() {
     // following undo could not revert the nudge.
     fireEvent.keyDown(canvas, { key: 'ArrowRight' });
     expect(firstNode.style.left).toBe('96px');
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(firstNode.style.left).toBe('80px');
   });
 
@@ -2868,7 +2938,7 @@ function BranchDeleteHarness() {
     } as never);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(1));
-    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+    openRackPanel('view'); fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     const node = document.querySelector('.topology-node') as HTMLElement;
     selectFirstNode();
@@ -3021,8 +3091,9 @@ function BranchDeleteHarness() {
 
     // Make an edit so the undo stack has an entry.
     fireEvent.click(screen.getByText('+ Store Node'));
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
-    expect(screen.getByText('New Store')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    // Auto-select opens the inspector header with the same name — both match.
+    expect(screen.getAllByText('New Store').length).toBeGreaterThanOrEqual(1);
 
     // Parent pushes a fresh workspaceInstances array → non-skip reload.
     fireEvent.click(screen.getByText('reload-instances'));
@@ -3048,21 +3119,22 @@ function BranchDeleteHarness() {
     // Select store-1 and edit its name — one session entry.
     fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
     fireEvent.change(nameInput(), { target: { value: 'Renamed Branch' } });
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
 
     // Dirty — the preset load asks for confirmation, then replaces the
-    // canvas. store-1 stays selected (both presets have store-1).
+    // canvas. store-1 stays selected (both presets have store-1) — the card
+    // title AND the inspector header both show the preset name.
     fireEvent.click(screen.getByText('Resto & KDS Preset'));
     const confirmBtn = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
     fireEvent.click(confirmBtn as Element);
-    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
+    expect(screen.getAllByText('Grand Bistro').length).toBeGreaterThanOrEqual(1);
     expect(nameInput().value).toBe('Grand Bistro');
 
     // Editing the SAME node after the preset load must start a fresh
     // session — one undo returns to the preset name, not the pre-preset
     // renamed state (which would prove the entry was never pushed).
     fireEvent.change(nameInput(), { target: { value: 'Grand Bistro Edited' } });
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect(nameInput().value).toBe('Grand Bistro');
   });
@@ -3166,7 +3238,7 @@ function BranchDeleteHarness() {
       expect(screen.getByText('Remap POS')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
@@ -3198,10 +3270,10 @@ function BranchDeleteHarness() {
     fireEvent.mouseDown(wsNode as Element, { button: 0 });
 
     // Inspector should be visible (Delete button appears when something is selected)
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     // Click Apply — the idMap remapping should clear selection
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
@@ -3232,12 +3304,13 @@ function BranchDeleteHarness() {
 
     // Make an edit so the undo stack holds a pre-save entry.
     fireEvent.click(screen.getByText('+ Store Node'));
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit');
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
 
     // Apply — archive+recreate remaps 'ws-test' → 'ws-remapped-id' after
     // onSave resolves. The undo stack must be cleared: every pre-save entry
     // holds the OLD id, which no longer exists on the canvas or in the DB.
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
     });
@@ -3254,16 +3327,17 @@ function BranchDeleteHarness() {
     });
 
     fireEvent.click(screen.getByText('+ Store Node'));
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit');
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
     });
 
     // No remap → ids unchanged → the pre-save undo entry stays valid, so
     // undo-after-save keeps working (the entry restores real, existing ids).
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
   });
 
   it('does not ask about unsaved changes when a preset loads after a successful Apply', async () => {
@@ -3276,11 +3350,12 @@ function BranchDeleteHarness() {
 
     // Make an edit so the canvas is dirty.
     fireEvent.click(screen.getByText('+ Store Node'));
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit');
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
 
     // Apply persists the canvas — after a successful save the canvas matches
     // the backend, so a preset load must NOT ask about unsaved changes.
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
     });
@@ -3302,7 +3377,7 @@ function BranchDeleteHarness() {
 
     // Edit → save (canvas clean) → new edit re-dirties the canvas.
     fireEvent.click(screen.getByText('+ Store Node'));
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
     });
@@ -3324,10 +3399,10 @@ function BranchDeleteHarness() {
     // Build a 5-node canvas (preset 3 + A + B), saving after each add so
     // both additions are persisted and the canvas is clean afterwards.
     fireEvent.click(screen.getByText('+ Store Node')); // node A → 4
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByText('+ Store Node')); // node B → 5
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
 
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
@@ -3386,7 +3461,7 @@ function BranchDeleteHarness() {
 
     const initialNodeCount = getNodeCount();
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
@@ -3410,7 +3485,7 @@ function BranchDeleteHarness() {
 
     const initialNodeCount = getNodeCount();
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
@@ -3442,7 +3517,7 @@ function BranchDeleteHarness() {
     const initialWireCount = getWireCount();
     expect(initialWireCount).toBe(1);
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
@@ -3468,7 +3543,7 @@ function BranchDeleteHarness() {
 
     // Apply with a non-empty idMap — every workspace node id changes on
     // screen via the client-side remap.
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
     });
@@ -3521,7 +3596,7 @@ function BranchDeleteHarness() {
     const onSave = vi.fn();
     renderEditor({ onSave });
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledTimes(1);
@@ -3544,10 +3619,11 @@ function BranchDeleteHarness() {
     fireEvent.click(screen.getByText('+ Store Node'));
     expect(getNodeCount()).toBe(initialCount + 3);
 
-    // Undo 3 times
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    // Undo 3 times (the edit panel holds the Undo button)
+    openRackPanel('edit');
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect(getNodeCount()).toBe(initialCount);
   });
@@ -3561,16 +3637,17 @@ function BranchDeleteHarness() {
 
     fireEvent.click(screen.getByText('+ Store Node'));
     expect(getNodeCount()).toBe(initialCount + 1);
-    expect(screen.getByText('New Store')).toBeInTheDocument();
+    expect(screen.getAllByText('New Store').length).toBeGreaterThanOrEqual(1);
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit');
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(getNodeCount()).toBe(initialCount);
     // Redo button appears after undo
     expect(screen.getByText('Redo (Ctrl+Y)')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Redo (Ctrl+Y)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Redo (Ctrl+Y)'));
     expect(getNodeCount()).toBe(initialCount + 1);
-    expect(screen.getByText('New Store')).toBeInTheDocument();
+    expect(screen.getAllByText('New Store').length).toBeGreaterThanOrEqual(1);
     // Redo stack consumed, button gone
     expect(screen.queryByText('Redo (Ctrl+Y)')).not.toBeInTheDocument();
   });
@@ -3579,11 +3656,13 @@ function BranchDeleteHarness() {
     renderEditor();
 
     fireEvent.click(screen.getByText('+ Store Node'));
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     // Redo should be available
     expect(screen.getByText('Redo (Ctrl+Y)')).toBeInTheDocument();
 
-    // New edit after undo — clears redo branch
+    // New edit after undo — clears redo branch (back to the add panel for
+    // the tool card, then re-open edit to verify Redo is gone).
+    openRackPanel('add');
     fireEvent.click(screen.getByText('+ Hardware Node'));
     expect(screen.queryByText('Redo (Ctrl+Y)')).not.toBeInTheDocument();
   });
@@ -3691,10 +3770,11 @@ function BranchDeleteHarness() {
     fireEvent.change(nameInput, { target: { value: 'Renamed' } });
     fireEvent.change(nameInput, { target: { value: 'Renamed Branch' } });
 
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit');
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
 
     // One undo must restore the ORIGINAL name.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect(
       (document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement).value,
@@ -3730,7 +3810,7 @@ function BranchDeleteHarness() {
     await waitFor(() => expect(onDirtyChange).toHaveBeenCalledWith(true));
 
     // Undo back to the applied snapshot flips it false again.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
   });
 
@@ -3747,9 +3827,9 @@ function BranchDeleteHarness() {
 
     fireEvent.change(select, { target: { value: 'restaurant-pos' } });
     expect(select.value).toBe('restaurant-pos');
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect((document.querySelector('.inspector-select') as HTMLSelectElement).value).toBe('store-pos');
   });
@@ -3761,13 +3841,14 @@ function BranchDeleteHarness() {
 
     // Adding a node auto-selects it — the tool-rack Delete button appears.
     fireEvent.click(screen.getByText('+ Store Node'));
-    expect(screen.getByText('New Store')).toBeInTheDocument();
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    // Auto-select opens the inspector header with the same name — both match.
+    expect(screen.getAllByText('New Store').length).toBeGreaterThanOrEqual(1);
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     // Undo removes the node. The selection must NOT stay dangling at the
     // now-gone node — the Delete button (rendered for any selection) is
     // the observable proof the selection was cleared.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect(screen.queryByText('New Store')).not.toBeInTheDocument();
     expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
@@ -3787,11 +3868,11 @@ function BranchDeleteHarness() {
     expect(firstNode.style.left).toBe('120px');
     fireEvent.mouseUp(canvas, { button: 0 });
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(firstNode.style.left).toBe('80px');
 
     // The node still exists — its selection must survive the undo.
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
   });
 
   it('preserves a still-valid wire selection when undoing a direction cycle', () => {
@@ -3803,20 +3884,20 @@ function BranchDeleteHarness() {
     expect(hitbox).not.toBeNull();
     const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
     fireEvent.click(hitbox);
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
     expect(path().getAttribute('data-direction')).toBe('reverse');
 
     // Cycle again (pushes another undo entry), then undo twice: the first
     // undo restores reverse, the second restores one-way.
     fireEvent.click(hitbox);
     expect(path().getAttribute('data-direction')).toBe('two-way');
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(path().getAttribute('data-direction')).toBe('reverse');
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(path().getAttribute('data-direction')).toBe('one-way');
 
     // Direction restored and the wire still exists — selection preserved.
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
   });
 
   it('clears a wire selection when a preset load removes the selected wire', () => {
@@ -3830,7 +3911,7 @@ function BranchDeleteHarness() {
     const hitboxes = document.querySelectorAll('.wire-hitbox');
     expect(hitboxes.length).toBe(4);
     fireEvent.click(hitboxes[2]!);
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     // Clicking Retail Preset confirms replacing the (now-dirty) canvas.
     fireEvent.click(screen.getByText('Retail Preset'));
@@ -3846,40 +3927,44 @@ function BranchDeleteHarness() {
   it('re-selects a node restored by undoing a dialog (wired) delete', () => {
     renderEditor();
 
-    // store-1 has connected wires → the dialog delete path.
-    const storeNode = document.querySelector('.node-type-store') as HTMLElement;
-    expect(storeNode).not.toBeNull();
-    fireEvent.mouseDown(storeNode, { button: 0 });
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    // ws-1 (Retail POS #1) has connected wires → the dialog delete path,
+    // and is NOT a Branch Location anchor so it is deletable.
+    const wired = document.querySelector('.node-type-workspace') as HTMLElement;
+    expect(wired).not.toBeNull();
+    fireEvent.mouseDown(wired, { button: 0 });
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Delete Selected Element'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Delete Selected Element'));
     expect(screen.getByText('Delete Node')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Delete')); // confirm
-    expect(screen.queryByText('Downtown Branch')).not.toBeInTheDocument();
+    confirmDialogAction(); // confirm via the dialog (scoped to modal-panel)
+    expect(screen.queryByText('Retail POS #1')).not.toBeInTheDocument();
 
-    // Undo restores store-1 AND must re-select it so the inspector reopens.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    // Undo restores ws-1 AND must re-select it so the inspector reopens.
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
-    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    // The card title AND the inspector header both show the restored name.
+    expect(screen.getAllByText('Retail POS #1').length).toBeGreaterThanOrEqual(1);
     expect(
       (document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement).value,
-    ).toBe('Downtown Branch');
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    ).toBe('Retail POS #1');
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
   });
 
   it('re-selects a node restored by undoing an immediate (wireless) delete', () => {
     renderEditor();
 
-    // A freshly added node has no wires → the immediate delete path.
-    fireEvent.click(screen.getByText('+ Store Node'));
-    expect(screen.getByText('New Store')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Delete Selected Element'));
-    expect(screen.queryByText('New Store')).not.toBeInTheDocument();
+    // A freshly added hardware node has no wires → the immediate delete path
+    // (hardware is deletable; Branch Locations are permanent anchors).
+    fireEvent.click(screen.getByText('+ Hardware Node'));
+    expect(screen.getAllByText('New Hardware').length).toBeGreaterThanOrEqual(1);
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Delete Selected Element'));
+    expect(screen.queryByText('New Hardware')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
-    expect(screen.getByText('New Store')).toBeInTheDocument();
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    // Undo re-selects the restored node — card AND inspector header match.
+    expect(screen.getAllByText('New Hardware').length).toBeGreaterThanOrEqual(1);
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
   });
 
   it('does not re-select a node when undoing a wire deletion', () => {
@@ -3889,13 +3974,13 @@ function BranchDeleteHarness() {
     const hitbox = document.querySelector('.wire-hitbox') as Element;
     expect(hitbox).not.toBeNull();
     fireEvent.click(hitbox);
-    fireEvent.click(screen.getByText('Delete Selected Element'));
-    fireEvent.click(screen.getByText('Delete')); // confirm
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Delete Selected Element'));
+    confirmDialogAction(); // confirm the wire-delete dialog
     expect(getWireCount()).toBe(1);
 
     // Undo restores the wire — no node was restored, so nothing may be
     // re-selected (the Delete button must stay hidden).
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(getWireCount()).toBe(2);
     expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
   });
@@ -3909,7 +3994,7 @@ function BranchDeleteHarness() {
     const warehouse = document.querySelector('.node-type-warehouse') as HTMLElement;
     expect(warehouse).not.toBeNull();
     fireEvent.mouseDown(warehouse, { button: 0 });
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     // The restaurant preset has no warehouse node — the selection is dropped.
     fireEvent.click(screen.getByText('Resto & KDS Preset'));
@@ -3927,7 +4012,7 @@ function BranchDeleteHarness() {
     const hitboxes = document.querySelectorAll('.wire-hitbox');
     expect(hitboxes.length).toBe(4);
     fireEvent.click(hitboxes[2]!);
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     // Retail preset has only w-1/w-2 — the wire selection is dropped. The
     // click dirties the canvas (direction cycled), so confirm the load.
@@ -4206,8 +4291,9 @@ describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
     renderEditor();
 
     // The guard is chrome-scoped: canvas-internal elements (node cards,
-    // ports, wire labels) keep their keyboard shortcuts.
-    fireEvent.click(screen.getByText('+ Store Node'));
+    // ports, wire labels) keep their keyboard shortcuts. Hardware nodes are
+    // deletable (Branch Locations are permanent anchors).
+    fireEvent.click(screen.getByText('+ Hardware Node'));
     const count = getNodeCount();
     const addedNode = document.querySelectorAll('.topology-node')[count - 1] as HTMLElement;
     addedNode.focus();
@@ -4262,8 +4348,9 @@ describe('NodeTopologyEditor — Delete/Backspace key flow', () => {
     renderEditor();
     const baseline = getNodeCount();
 
-    fireEvent.click(screen.getByText('+ Store Node'));
-    await waitFor(() => expect(screen.getByText('New Store')).toBeInTheDocument());
+    // Hardware nodes are deletable (Branch Locations are permanent anchors).
+    fireEvent.click(screen.getByText('+ Hardware Node'));
+    await waitFor(() => expect(screen.getAllByText('New Hardware').length).toBeGreaterThanOrEqual(1));
     const nodes = document.querySelectorAll('.topology-node');
     fireEvent.mouseDown(nodes[nodes.length - 1] as Element, { button: 0 });
 
@@ -4277,8 +4364,8 @@ describe('NodeTopologyEditor — Delete/Backspace key flow', () => {
     renderEditor();
     const baseline = getNodeCount();
 
-    fireEvent.click(screen.getByText('+ Store Node'));
-    await waitFor(() => expect(screen.getByText('New Store')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('+ Hardware Node'));
+    await waitFor(() => expect(screen.getAllByText('New Hardware').length).toBeGreaterThanOrEqual(1));
     const nodes = document.querySelectorAll('.topology-node');
     fireEvent.mouseDown(nodes[nodes.length - 1] as Element, { button: 0 });
 
@@ -4291,7 +4378,10 @@ describe('NodeTopologyEditor — Delete/Backspace key flow', () => {
     renderEditor();
     const nodeCount = getNodeCount();
     const wireCount = getWireCount();
-    selectFirstNode(); // store-1 has connected wires
+    // ws-1 (Retail POS #1) is wired (w-1, w-2) and is NOT a Branch Location
+    // anchor, so it is deletable and opens the confirm dialog.
+    const wired = document.querySelector('.node-type-workspace') as HTMLElement;
+    fireEvent.mouseDown(wired, { button: 0 });
 
     fireEvent.keyDown(window, { key: 'Delete' });
 
@@ -4308,13 +4398,16 @@ describe('NodeTopologyEditor — Delete/Backspace key flow', () => {
     renderEditor();
     const nodeCount = getNodeCount();
     const wireCount = getWireCount();
-    selectFirstNode();
+    const wired = document.querySelector('.node-type-workspace') as HTMLElement;
+    fireEvent.mouseDown(wired, { button: 0 });
 
     fireEvent.keyDown(window, { key: 'Delete' });
-    fireEvent.click(screen.getByText('Delete')); // confirm label
+    confirmDialogAction(); // confirm via the dialog (scoped to modal-panel)
 
     expect(getNodeCount()).toBe(nodeCount - 1);
-    expect(getWireCount()).toBe(wireCount - 1); // store-1's only wire (w-1) goes with it
+    // ws-1 (Retail POS #1) has TWO preset wires (w-1 from store-1 and w-2
+    // to wh-1) — both go with it.
+    expect(getWireCount()).toBe(wireCount - 2);
     expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
   });
 
@@ -4324,12 +4417,12 @@ describe('NodeTopologyEditor — Delete/Backspace key flow', () => {
 
     const hitbox = document.querySelector('.wire-hitbox') as HTMLElement;
     fireEvent.click(hitbox);
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'Delete' });
     expect(screen.getByText('Delete Wire')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Delete')); // confirm label
+    confirmDialogAction(); // confirm via the dialog (scoped to modal-panel)
     expect(getWireCount()).toBe(wireCount - 1);
   });
 });
@@ -4341,7 +4434,7 @@ it('does not toast when the selected node survives a preset load', () => {
     const store = document.querySelector('.node-type-store') as HTMLElement;
     expect(store).not.toBeNull();
     fireEvent.mouseDown(store, { button: 0 });
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Resto & KDS Preset'));
 
@@ -4380,7 +4473,7 @@ describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', (
     // to the store-1 -> new-workspace connection being built.
     const hitboxes = document.querySelectorAll('.wire-hitbox');
     fireEvent.click(hitboxes[1] as Element);
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Delete' });
     expect(screen.getByText('Delete Wire')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Delete'));
@@ -4410,7 +4503,7 @@ describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', (
     // silently duplicate the deleted wire on completion.
     const hitboxes = document.querySelectorAll('.wire-hitbox');
     fireEvent.click(hitboxes[0] as Element);
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Delete' });
     expect(screen.getByText('Delete Wire')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Delete'));
@@ -4434,7 +4527,7 @@ describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', (
 
     const hitboxes = document.querySelectorAll('.wire-hitbox');
     fireEvent.click(hitboxes[1] as Element); // w-2: workspace right <-> warehouse left
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Delete' });
     expect(screen.getByText('Delete Wire')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Delete'));
@@ -4649,7 +4742,7 @@ describe('NodeTopologyEditor — warehouse inspector settings card', () => {
     fireEvent.change(screen.getByLabelText(/Capacity/), { target: { value: '500' } });
     fireEvent.change(screen.getByLabelText(/Low-Stock Threshold/), { target: { value: '25' } });
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
 
@@ -4667,7 +4760,7 @@ describe('NodeTopologyEditor — warehouse inspector settings card', () => {
 
     fireEvent.change(screen.getByLabelText(/Current Stock/), { target: { value: '5' } });
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
 
@@ -4789,7 +4882,9 @@ describe('NodeTopologyEditor — warehouse capacity validation', () => {
   };
 
   const warehouseNote = () =>
-    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note');
+    /* the card's visually-hidden message span carries the error text;
+       the header chip itself only shows the red ! marker */
+    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-sr') ?? null;
 
   it('flags the Warehouse card when stock is at capacity', async () => {
     await renderStockedGraph(1000, 1000);
@@ -4848,7 +4943,9 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
   };
 
   const warehouseNote = () =>
-    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note');
+    /* the card's visually-hidden message span carries the error text;
+       the header chip itself only shows the red ! marker */
+    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-sr') ?? null;
 
   it('prompts to route stock in when a warehouse with room has no stock wire', async () => {
     await renderUnwiredWarehouse({ stock: 500, capacity: 1000 });
@@ -5098,7 +5195,9 @@ describe('NodeTopologyEditor — missing-stock-routing dismiss', () => {
   };
 
   const noteDismiss = () =>
-    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note-dismiss') as HTMLElement | null;
+    /* the dismiss lives inside the portal tooltip (document.body) — the
+       card's overflow:hidden would clip an in-card tooltip */
+    document.querySelector('.node-validation-note-dismiss') as HTMLElement | null;
 
   it('renders a dismiss action on the missing-stock-routing card note', async () => {
     await renderUnwired();
@@ -5132,7 +5231,7 @@ describe('NodeTopologyEditor — missing-stock-routing dismiss', () => {
     // Zero visible issues → the issues widget disappears entirely.
     expect(document.querySelector('.topology-issues-btn')).toBeNull();
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
   });
 
@@ -5153,7 +5252,7 @@ describe('NodeTopologyEditor — missing-stock-routing dismiss', () => {
     await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
 
     expect(document.querySelector('.node-validation-note')).toBeNull();
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
   });
 });
@@ -5207,7 +5306,7 @@ describe('NodeTopologyEditor — warehouse capacity tier gate', () => {
 // ── Warehouse capacity tier notice ──────────────────────────────
 
 describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
-  const renderGraph = async (tier: 'standard' | 'pro', metadata: Record<string, unknown>) => {
+  const renderGraph = async (tier: 'plus' | 'pro', metadata: Record<string, unknown>) => {
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
@@ -5223,8 +5322,8 @@ describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
     await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
   };
 
-  it('shows the notice on standard tier when capacity numbers are stored', async () => {
-    await renderGraph('standard', { stock: 500, capacity: 1000 });
+  it('shows the notice on plus tier when capacity numbers are stored', async () => {
+    await renderGraph('plus', { stock: 500, capacity: 1000 });
 
     const notice = document.querySelector('.topology-tier-notice');
     expect(notice).not.toBeNull();
@@ -5236,8 +5335,8 @@ describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
     expect(document.querySelector('.topology-tier-notice')).toBeNull();
   });
 
-  it('hides the notice on standard tier without capacity numbers', async () => {
-    await renderGraph('standard', { stock: 500 });
+  it('hides the notice on plus tier without capacity numbers', async () => {
+    await renderGraph('plus', { stock: 500 });
     expect(document.querySelector('.topology-tier-notice')).toBeNull();
   });
 
@@ -5258,7 +5357,7 @@ describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
     await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
 
     expect(document.querySelector('.topology-tier-notice')).not.toBeNull();
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
   });
 });
@@ -5437,7 +5536,7 @@ describe('NodeTopologyEditor — canvas pan', () => {
     // start point restores the node to EXACTLY 80px. The gesture pushed a
     // history entry on first movement — a COMPLETED no-op drag must pop
     // it, so Undo never appears enabled but restores identical positions.
-    fireEvent.click(screen.getByText('Snap to grid'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Snap to grid'));
     fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
     fireEvent.mouseMove(canvas, { clientX: 48, clientY: 0 });
     expect(firstNode.style.left).toBe('128px');
@@ -5524,7 +5623,7 @@ describe('NodeTopologyEditor — canvas pan', () => {
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
 
-    fireEvent.click(screen.getByText('Pan tool'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Pan tool'));
     const toggle = screen.getByRole('button', { name: 'Pan tool' });
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(canvas.className).toContain('canvas-space-pan');
@@ -5544,8 +5643,8 @@ describe('NodeTopologyEditor — canvas pan', () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
-    fireEvent.click(screen.getByText('Pan tool'));
-    fireEvent.click(screen.getByText('Pan tool'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Pan tool'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Pan tool'));
     expect(screen.getByRole('button', { name: 'Pan tool' })).toHaveAttribute('aria-pressed', 'false');
     expect(canvas.className).not.toContain('canvas-space-pan');
 
@@ -6144,33 +6243,37 @@ describe('NodeTopologyEditor — multi-select & marquee', () => {
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
         { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-b', type: 'workspace', name: 'POS B', x: 680, y: 140, metadata: { typeKey: 'store-pos' } },
       ],
       wires: [
         { id: 'w-1', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-a', to_port: 'left', direction: 'one-way' },
+        { id: 'w-2', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-b', to_port: 'left', direction: 'one-way' },
       ],
     } as never);
     renderEditor();
-    await waitFor(() => expect(getNodeCount()).toBe(2));
+    await waitFor(() => expect(getNodeCount()).toBe(3));
     mockCanvasSize(1200, 800);
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
-    // Select the wired pair together.
-    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
-    fireEvent.mouseMove(canvas, { clientX: 700, clientY: 500 });
+    // Select the two wired workspaces (POS A + POS B) together — the
+    // marquee starts past the branch anchor's right edge (80+240=320) and
+    // extends past ws-b's right edge (680+240=920).
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 340, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 1000, clientY: 400 });
     fireEvent.mouseUp(canvas, { button: 0 });
     expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
 
     // Batch delete: the pair has wires, so the count-aware dialog appears.
-    fireEvent.click(screen.getByText('Delete Selected Element'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Delete Selected Element'));
     expect(screen.getByText('Delete 2 Nodes')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Delete'));
-    await waitFor(() => expect(getNodeCount()).toBe(0));
+    confirmDialogAction(); // confirm via the dialog (scoped to modal-panel)
+    await waitFor(() => expect(getNodeCount()).toBe(1)); // the branch anchor stays
     expect(getWireCount()).toBe(0);
 
     // One undo restores the whole batch.
     fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
-    await waitFor(() => expect(getNodeCount()).toBe(2));
-    expect(getWireCount()).toBe(1);
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    expect(getWireCount()).toBe(2);
   });
 
   it('Delete key removes an unwired multi-selection immediately, no dialog', async () => {
@@ -6195,9 +6298,12 @@ describe('NodeTopologyEditor — multi-select & marquee', () => {
 
     fireEvent.keyDown(canvas, { key: 'Delete' });
 
-    expect(getNodeCount()).toBe(1);
+    // The unwired workspace deletes immediately; the Branch Location anchor
+    // survives (permanent anchors), so 2 of the 3 nodes remain.
+    expect(getNodeCount()).toBe(2);
     expect(screen.queryByText('Delete 2 Nodes')).not.toBeInTheDocument();
     expect(document.querySelector('.topology-node[data-node-id="wh-1"]')).not.toBeNull();
+    expect(document.querySelector('.topology-node[data-node-id="store-1"]')).not.toBeNull();
   });
 });
 
@@ -6461,7 +6567,7 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     const countAfterEdit = getNodeCount();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     // The failure surfaces as an error toast (plainErrorMessage sanitizes the
     // thrown Error to the generic fallback, so pin the save-error key itself).
@@ -6504,7 +6610,7 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     const selectedBefore = document.querySelector('.topology-node.node-selected');
     expect(selectedBefore).not.toBeNull();
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     await waitFor(() =>
       expect(screen.getByText(/topology-toast-save-error/)).toBeInTheDocument(),
@@ -6555,7 +6661,7 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     fireEvent.click(screen.getByText('+ Store Node'));
     expect(getNodeCount()).toBe(2);
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
 
     // The conflict must trigger an authoritative reload that replaces the
     // stale canvas (back to the authoritative diagram's single node) — and
@@ -6578,7 +6684,7 @@ describe('NodeTopologyEditor — wire click direction cycle', () => {
     fireEvent.click(hitbox);
     expect(path().getAttribute('data-direction')).toBe('reverse');
     // The click also selects the wire (Delete button appears).
-    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
     fireEvent.click(hitbox);
     expect(path().getAttribute('data-direction')).toBe('two-way');
@@ -6643,7 +6749,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     expect(path.getAttribute('d')).toBe('M 320 364 L 400 300 L 380 304');
 
     // The whole drag is ONE undo entry.
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
   });
 
   it('shows a bends-override note when any wire carries bends, and hides it otherwise', () => {
@@ -6656,7 +6762,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
 
     // The elbow toggle silently does nothing for a bent wire (authored
     // geometry wins) — the note makes that visible instead of lying.
-    expect(screen.getByText('Bends override routing on bent wires')).toBeInTheDocument();
+    openRackPanel('view'); expect(screen.getByText('Bends override routing on bent wires')).toBeInTheDocument();
     // The toggle itself carries the same explanation as a tooltip.
     const toggle = screen.getByText('Elbow wires').closest('button');
     expect(toggle?.getAttribute('title')).toContain('Bends override');
@@ -6696,7 +6802,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     const hitbox = selectFirstWire();
     createBend();
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
 
     expect(document.querySelector('.wire-bend-handle')).toBeNull();
     const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
@@ -6729,7 +6835,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     // the selection and the bend survives.
     const hitbox = document.querySelector('.wire-hitbox') as Element;
     fireEvent.click(hitbox);
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
     const handle = document.querySelector('.wire-bend-handle') as Element;
     expect(handle).not.toBeNull();
@@ -6794,7 +6900,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     expect(path.getAttribute('d')).toBe('M 320 364 L 400 300 L 380 304');
 
     // The cancelled MOVE left no entry: ONE undo reverts the creation.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(document.querySelector('.wire-bend-handle')).toBeNull();
     expect(path.getAttribute('d')).toContain('C');
   });
@@ -6816,7 +6922,7 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
     expect(path.getAttribute('d')).toContain('C');
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(document.querySelector('.wire-bend-handle')).toBeNull();
     expect(path.getAttribute('data-direction')).toBe('one-way');
   });
@@ -6907,8 +7013,8 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     expect(path.getAttribute('d')).toBe('M 320 364 L 400 300 L 380 304');
     // The drag is exactly ONE undo entry (hover pushed nothing, and the
     // direction cycle never fired) — undo removes the bend.
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(document.querySelector('.wire-bend-handle')).toBeNull();
   });
 
@@ -7298,9 +7404,9 @@ describe('NodeTopologyEditor — wire relabel undo', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(label()).toContain('X Wire');
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(label()).toContain('Binds Store');
   });
 });
@@ -7451,7 +7557,7 @@ describe('NodeTopologyEditor — wire click keeps an in-flight connection', () =
     // receive the bubbled wire click, standing in for a future
     // canvas-level background-click-cancels-connection handler.
     function Wrap() {
-      return <button type="button" onClick={onCanvasClick}><NodeTopologyEditor currentTier="standard" /></button>;
+      return <button type="button" onClick={onCanvasClick}><NodeTopologyEditor currentTier="plus" /></button>;
     }
     renderWithProvidersSync(<Wrap />, multiStoreFtl, sharedFtl);
 
@@ -7504,8 +7610,11 @@ describe('NodeTopologyEditor — dialog Escape isolation', () => {
     renderEditor();
 
     // Select a wired node so the delete flow opens the confirm dialog.
-    selectFirstNode();
-    fireEvent.click(screen.getByText('Delete Selected Element'));
+    // ws-1 (Retail POS #1) is wired and NOT a Branch Location anchor, so it
+    // is deletable and opens the dialog.
+    const wired = document.querySelector('.node-type-workspace') as HTMLElement;
+    fireEvent.mouseDown(wired, { button: 0 });
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Delete Selected Element'));
     expect(screen.getByText('Delete Node')).toBeInTheDocument();
 
     // Escape closes the dialog (the Modal's focus trap owns it)...
@@ -7556,20 +7665,34 @@ describe('NodeTopologyEditor — tool-slot shortcuts', () => {
     // would block the '3' slot on the multi-warehouse gate.
     renderEditor({ currentTier: 'pro' });
     const before = getNodeCount();
+    // The 1–4 slots are canvas-scoped: the keydown must originate inside
+    // the canvas container (the real surface a focused canvas produces).
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
-    fireEvent.keyDown(window, { key: '1' });
+    fireEvent.keyDown(canvas, { key: '1' });
     expect(getNodeCount()).toBe(before + 1);
     expect(lastNodeType()).toContain('node-type-store');
 
-    fireEvent.keyDown(window, { key: '2' });
+    fireEvent.keyDown(canvas, { key: '2' });
     expect(lastNodeType()).toContain('node-type-workspace');
 
-    fireEvent.keyDown(window, { key: '3' });
+    fireEvent.keyDown(canvas, { key: '3' });
     expect(lastNodeType()).toContain('node-type-warehouse');
 
-    fireEvent.keyDown(window, { key: '4' });
+    fireEvent.keyDown(canvas, { key: '4' });
     expect(lastNodeType()).toContain('node-type-hardware');
     expect(getNodeCount()).toBe(before + 4);
+  });
+
+  it('does not spawn from a 1–4 keystroke outside the canvas (body focus)', () => {
+    renderEditor({ currentTier: 'pro' });
+    const before = getNodeCount();
+
+    // Focus on the document body (no canvas interaction) must NOT spawn —
+    // the slot shortcuts are canvas-scoped, so a stray keystroke anywhere
+    // else in the app cannot create a node.
+    fireEvent.keyDown(document.body, { key: '2' });
+    expect(getNodeCount()).toBe(before);
   });
 
   it('does not spawn while the user is typing in a text field', () => {
@@ -7605,7 +7728,7 @@ describe('NodeTopologyEditor — empty-state onboarding', () => {
 
     await waitFor(() => expect(getNodeCount()).toBe(0));
     expect(screen.getByText('Build your store topology')).toBeInTheDocument();
-    expect(screen.getByText(/press 1–4 to add a node/)).toBeInTheDocument();
+    expect(screen.getByText(/press 1–4 with the canvas focused/)).toBeInTheDocument();
   });
 
   it('hides the hint once a node lands on the canvas', async () => {
@@ -7613,7 +7736,7 @@ describe('NodeTopologyEditor — empty-state onboarding', () => {
     await waitFor(() => expect(getNodeCount()).toBe(0));
     expect(screen.getByText('Build your store topology')).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: '1' });
+    fireEvent.keyDown(document.querySelector('.node-canvas-container')!, { key: '1' });
     await waitFor(() => expect(getNodeCount()).toBe(1));
     expect(screen.queryByText('Build your store topology')).not.toBeInTheDocument();
   });
@@ -7632,7 +7755,7 @@ describe('NodeTopologyEditor — unsaved-changes indicator', () => {
     fireEvent.change(nameInput, { target: { value: 'Renamed POS' } });
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await applyWithPin();
     await waitFor(() => expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument());
   });
 
@@ -7744,7 +7867,7 @@ describe('NodeTopologyEditor — unsaved-changes indicator', () => {
     const summary = () => document.querySelector('.topology-diff-summary')?.textContent ?? '';
 
     fireEvent.mouseDown(nodeAt(1), { button: 0 });
-    fireEvent.click(screen.getByText('Delete Selected Element'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Delete Selected Element'));
     await waitFor(() => expect(getNodeCount()).toBe(1));
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     expect(summary()).toContain('1 archived');
@@ -7856,8 +7979,9 @@ describe('NodeTopologyEditor — hover focus mode', () => {
     const baseline = getNodeCount();
 
     // Add a wireless node (Delete removes it immediately, no dialog).
-    fireEvent.click(screen.getByText('+ Store Node'));
-    await waitFor(() => expect(screen.getByText('New Store')).toBeInTheDocument());
+    // Hardware is deletable; Branch Locations are permanent anchors.
+    fireEvent.click(screen.getByText('+ Hardware Node'));
+    await waitFor(() => expect(screen.getAllByText('New Hardware').length).toBeGreaterThanOrEqual(1));
     const nodes = document.querySelectorAll('.topology-node');
     const last = nodes[nodes.length - 1] as HTMLElement;
 
@@ -8070,9 +8194,9 @@ describe('NodeTopologyEditor — align & distribute toolbar', () => {
       .map((n) => parseInt((n as HTMLElement).style.top, 10));
     expect(yAfterAlign()[0]).toBe(80);
     expect(yAfterAlign()[1]).toBe(80);
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     const yAfterUndo = yAfterAlign();
     expect(yAfterUndo[0]).toBe(140);
     expect(yAfterUndo[1]).toBe(80);
@@ -8404,7 +8528,7 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
     expect(pastedWs).not.toBeNull();
     fireEvent.mouseDown(pastedWs, { button: 0 });
     fireEvent.keyDown(document, { key: 'Delete' });
-    fireEvent.click(screen.getByText('Delete')); // confirm the wired-node dialog
+    confirmDialogAction(); // confirm the wired-node dialog
     await waitFor(() => expect(getNodeCount()).toBe(3));
     expect(getWireCount()).toBe(1);
     expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
@@ -8454,7 +8578,7 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
     // reference a node the undo did not also restore.
     expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
 
-    fireEvent.click(screen.getByText('Redo (Ctrl+Y)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Redo (Ctrl+Y)'));
     await waitFor(() => expect(getNodeCount()).toBe(4));
     expect(getWireCount()).toBe(2); // the remapped wire returns WITH its endpoints
     expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
@@ -8871,10 +8995,11 @@ describe('NodeTopologyEditor — minimap overview', () => {
 
   it('hides the minimap when the canvas is empty', async () => {
     // An empty load falls back to the retail preset, so the only way to an
-    // empty canvas is deleting every node. Use a single unwired node so
-    // Delete removes it immediately (no dialog).
+    // empty canvas is deleting every node. Use a single unwired hardware
+    // node so Delete removes it immediately (no dialog; hardware is
+    // deletable, Branch Locations are permanent anchors).
     mockLoadTopology.mockResolvedValueOnce({
-      nodes: [{ id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 }],
+      nodes: [{ id: 'hw-1', type: 'hardware', name: 'Printer', x: 80, y: 140 }],
       wires: [],
     } as never);
     renderEditor();
@@ -9187,11 +9312,11 @@ describe('NodeTopologyEditor — wire routing styles', () => {
   it('toggles to orthogonal elbow routing and back', () => {
     renderEditor();
 
-    fireEvent.click(screen.getByText('Elbow wires'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Elbow wires'));
     expect(firstPathD()).toContain('L ');
     expect(firstPathD()).not.toContain('C ');
 
-    fireEvent.click(screen.getByText('Elbow wires'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Elbow wires'));
     expect(firstPathD()).toContain('C ');
   });
 
@@ -9199,7 +9324,7 @@ describe('NodeTopologyEditor — wire routing styles', () => {
     vi.useFakeTimers();
     renderEditor();
 
-    fireEvent.click(screen.getByText('Elbow wires'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Elbow wires'));
     fireEvent.click(screen.getByText('Test Order Simulation'));
 
     expect(document.querySelector('.wire-simulation-pulse')).not.toBeNull();
@@ -9229,9 +9354,13 @@ describe('NodeTopologyEditor — node context menu & double-click rename', () =>
 
   it('the node menu duplicates the node', () => {
     renderEditor({ onRenameBranch: vi.fn() });
-    rightClickNode(0);
+    // Right-click a non-anchor node (Branch Location menus hide Duplicate).
+    rightClickNode(1); // ws-1 (Retail POS #1)
 
-    fireEvent.click(screen.getByText('Duplicate'));
+    // The context menu's Duplicate item (the selected node also shows a
+    // Duplicate button in the inspector — scope to the menu).
+    const menu = document.querySelector('.topology-context-menu') as HTMLElement;
+    fireEvent.click(within(menu).getByText('Duplicate'));
     expect(getNodeCount()).toBe(4);
   });
 
@@ -9410,7 +9539,7 @@ describe('NodeTopologyEditor — live preview & snap toggle', () => {
 
   it('the connection preview uses elbow routing when enabled', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('Elbow wires'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Elbow wires'));
     fireEvent.mouseMove(canvas(), { clientX: 300, clientY: 200 });
 
     fireEvent.click(portOf(nodeAt(0), 'right'));
@@ -9420,7 +9549,7 @@ describe('NodeTopologyEditor — live preview & snap toggle', () => {
 
   it('dragging with snap off places the node off-grid', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+    openRackPanel('view'); fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
     const node = document.querySelector('.topology-node') as HTMLElement;
 
     fireEvent.mouseDown(node, { button: 0, clientX: 0, clientY: 0 });
@@ -9448,7 +9577,7 @@ describe('NodeTopologyEditor — live preview & snap toggle', () => {
 
   it('the canvas menu spawn respects the snap toggle', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+    openRackPanel('view'); fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
 
     fireEvent.contextMenu(canvas(), { clientX: 100, clientY: 100 });
     fireEvent.click(screen.getByText('New Hardware'));
@@ -9672,7 +9801,7 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
 
   it('persists the elbow routing preference to the branch-scoped key', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('Elbow wires'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Elbow wires'));
     expect(localStorage.getItem('oz-topology-view-routing:unassigned')).toBe('elbow');
   });
 
@@ -9686,7 +9815,7 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
 
   it('persists the snap preference to the branch-scoped key', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+    openRackPanel('view'); fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
     expect(localStorage.getItem('oz-topology-view-snap:unassigned')).toBe('0');
   });
 
@@ -9697,7 +9826,7 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
 
     it("persists the choice to the active branch's key only", () => {
       renderEditor({ branchId: 'branch-a' });
-      fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+      openRackPanel('view'); fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
 
       expect(localStorage.getItem('oz-topology-view-snap:branch-a')).toBe('0');
       expect(localStorage.getItem('oz-topology-view-snap:branch-b')).toBeNull();
@@ -9707,28 +9836,28 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
       localStorage.setItem('oz-topology-view-snap:branch-a', '0');
       renderEditor({ branchId: 'branch-a' });
 
-      expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'false');
+      openRackPanel('view'); expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'false');
     });
 
     it("does not leak another branch's saved snap", () => {
       localStorage.setItem('oz-topology-view-snap:branch-a', '0');
       renderEditor({ branchId: 'branch-b' });
 
-      expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'true');
+      openRackPanel('view'); expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('inherits the legacy per-install value once when no per-branch choice exists', () => {
       localStorage.setItem('oz-topology-view-snap', '0');
       renderEditor({ branchId: 'branch-a' });
 
-      expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'false');
+      openRackPanel('view'); expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('falls back to snap ON when the saved value is corrupted', () => {
       localStorage.setItem('oz-topology-view-snap:branch-a', 'garbage');
       renderEditor({ branchId: 'branch-a' });
 
-      expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'true');
+      openRackPanel('view'); expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'true');
     });
   });
 
@@ -9740,7 +9869,7 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
 
     it('persists the choice to the active branch\'s key only', () => {
       renderEditor({ branchId: 'branch-a' });
-      fireEvent.click(screen.getByText('Elbow wires'));
+      openRackPanel('view'); fireEvent.click(screen.getByText('Elbow wires'));
 
       expect(localStorage.getItem('oz-topology-view-routing:branch-a')).toBe('elbow');
       expect(localStorage.getItem('oz-topology-view-routing:branch-b')).toBeNull();
@@ -9794,8 +9923,8 @@ describe('NodeTopologyEditor — wire label pills', () => {
     renderEditor();
     expect(pills()).toHaveLength(0);
 
-    fireEvent.click(screen.getByText('Wire labels'));
-    expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
+    openRackPanel('view'); fireEvent.click(screen.getByText('Wire labels'));
+    openRackPanel('view'); expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
 
     // One pill per preset wire, titled with the label (custom or endpoint).
     const texts = pills().map((p) => p.textContent);
@@ -9805,7 +9934,7 @@ describe('NodeTopologyEditor — wire label pills', () => {
 
   it('clicking a pill opens the rename editor without cycling the direction', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('Wire labels'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Wire labels'));
 
     const path = () => document.querySelector('.wire-path') as SVGPathElement;
     expect(path().getAttribute('data-direction')).toBe('one-way');
@@ -9824,7 +9953,7 @@ describe('NodeTopologyEditor — wire label pills', () => {
 
   it('the pill of the wire being renamed is replaced by the editor input', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('Wire labels'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Wire labels'));
 
     fireEvent.click(pills()[0]!);
 
@@ -9834,7 +9963,7 @@ describe('NodeTopologyEditor — wire label pills', () => {
 
   it('persists the preference to the branch-scoped key', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('Wire labels'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Wire labels'));
     expect(localStorage.getItem('oz-topology-view-wire-labels:unassigned')).toBe('1');
   });
 
@@ -9843,7 +9972,7 @@ describe('NodeTopologyEditor — wire label pills', () => {
     renderEditor();
 
     expect(pills()).toHaveLength(2);
-    expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
+    openRackPanel('view'); expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   describe('per-branch wire-labels persistence', () => {
@@ -9851,7 +9980,7 @@ describe('NodeTopologyEditor — wire label pills', () => {
 
     it("persists the choice to the active branch's key only", () => {
       renderEditor({ branchId: 'branch-a' });
-      fireEvent.click(screen.getByText('Wire labels'));
+      openRackPanel('view'); fireEvent.click(screen.getByText('Wire labels'));
 
       expect(localStorage.getItem('oz-topology-view-wire-labels:branch-a')).toBe('1');
       expect(localStorage.getItem('oz-topology-view-wire-labels:branch-b')).toBeNull();
@@ -9862,7 +9991,7 @@ describe('NodeTopologyEditor — wire label pills', () => {
       renderEditor({ branchId: 'branch-a' });
 
       expect(pills()).toHaveLength(2);
-      expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
+      openRackPanel('view'); expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
     });
 
     it("does not leak another branch's saved wire-labels", () => {
@@ -9889,7 +10018,7 @@ describe('NodeTopologyEditor — wire label pills', () => {
 
   it('dims pills for wires outside the hovered node neighbourhood', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('Wire labels'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Wire labels'));
 
     // Hover the store: w-2 (ws-1 → wh-1) is not in its neighbourhood.
     fireEvent.mouseEnter(document.querySelectorAll('.topology-node')[0]!);
@@ -9943,7 +10072,7 @@ describe('NodeTopologyEditor — alignment guides', () => {
   it('does not snap beyond the threshold (guides stay clear)', () => {
     renderEditor();
     mockCanvasSize(1200, 800);
-    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+    openRackPanel('view'); fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
     const store = nodeAt(0);
 
     // Right edge lands at 390 — 10px past ws-1's left edge (380): no snap.
@@ -10145,7 +10274,7 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
 
     // Snap off so the rigid +60 group delta is exact (per-node grid snap
     // would land the copies at 264/552 instead — snap is covered in test 1).
-    fireEvent.click(screen.getByText('Snap to grid'));
+    openRackPanel('view'); fireEvent.click(screen.getByText('Snap to grid'));
 
     // Alt+drag on A by +60: BOTH copies ride along rigidly (+60 each).
     fireEvent.mouseDown(nodeBy('a'), { button: 0, altKey: true, clientX: 0, clientY: 0 });
@@ -10297,7 +10426,7 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
 
     // Redo → copies AND the copy wire return.
-    fireEvent.click(screen.getByText('Redo (Ctrl+Y)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Redo (Ctrl+Y)'));
     await waitFor(() => expect(getNodeCount()).toBe(4));
     expect(getWireCount()).toBe(2);
     expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
@@ -10352,7 +10481,7 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     fireEvent.mouseUp(canvas(), { button: 0 });
     expect(getNodeCount()).toBe(2);
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(getNodeCount()).toBe(1); // the whole copy vanishes in one undo
     expect(nodeBy('a').style.left).toBe('200px');
   });
@@ -10426,7 +10555,7 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     fireEvent.mouseUp(canvas(), { button: 0 });
     expect(getNodeCount()).toBe(2);
 
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(getNodeCount()).toBe(1); // exactly ONE undo removes the copy
     expect(nodeBy('a').style.left).toBe('200px');
   });
@@ -10737,7 +10866,7 @@ describe('NodeTopologyEditor — Escape cancels a move', () => {
     fireEvent.mouseDown(node(), { button: 0, clientX: 0, clientY: 0 });
     fireEvent.mouseMove(canvas(), { clientX: 70, clientY: 70 });
     expect(node().style.left).toBe('144px');
-    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument(); // move pushed an entry
+    openRackPanel('edit'); expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument(); // move pushed an entry
 
     fireEvent.keyDown(canvas(), { key: 'Escape' });
 
@@ -10823,7 +10952,7 @@ describe('NodeTopologyEditor — auto-fit on load', () => {
   it('never refits after the user has interacted, even when the content changes', async () => {
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
-        { id: 'a', type: 'store', name: 'A', x: 0, y: 0 },
+        { id: 'a', type: 'hardware', name: 'A', x: 0, y: 0 },
         { id: 'b', type: 'workspace', name: 'B', x: 2000, y: 100, metadata: { typeKey: 'store-pos' } },
       ],
       wires: [],
@@ -10839,7 +10968,7 @@ describe('NodeTopologyEditor — auto-fit on load', () => {
 
     // Delete node 'a': the content key changes, but the user is driving now
     // — the view must not jump (a refit would zoom 'b' alone to scale(1.5)).
-    // A wire-less node deletes immediately (no confirm dialog).
+    // A wire-less hardware node deletes immediately (no confirm dialog).
     const target = nodeAt(0);
     target.focus();
     fireEvent.keyDown(target, { key: 'Delete' });
@@ -10950,7 +11079,7 @@ describe('topology export / import / templates (clipboard + localStorage)', () =
     renderEditor();
     expect(getNodeCount()).toBe(3); // retail preset
 
-    fireEvent.click(screen.getByText('Export'));
+    openRackPanel('share'); fireEvent.click(screen.getByText('Export'));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     const json = writeText.mock.calls[0]![0] as string;
@@ -10966,7 +11095,7 @@ describe('topology export / import / templates (clipboard + localStorage)', () =
     unsetClipboard();
     renderEditor();
 
-    fireEvent.click(screen.getByText('Export'));
+    openRackPanel('share'); fireEvent.click(screen.getByText('Export'));
 
     await waitFor(() =>
       expect(screen.getByText('Clipboard is not available')).toBeInTheDocument(),
@@ -10977,7 +11106,7 @@ describe('topology export / import / templates (clipboard + localStorage)', () =
     readText.mockResolvedValue(validPayload);
     renderEditor();
 
-    fireEvent.click(screen.getByText('Import'));
+    openRackPanel('share'); fireEvent.click(screen.getByText('Import'));
 
     await waitFor(() => expect(getNodeCount()).toBe(2));
     expect(document.querySelector('.topology-node[data-node-id="imp-1"]')).not.toBeNull();
@@ -10986,7 +11115,7 @@ describe('topology export / import / templates (clipboard + localStorage)', () =
     expect(screen.getByText('Topology imported')).toBeInTheDocument();
 
     // Undo restores the retail preset.
-    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    openRackPanel('edit'); fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     await waitFor(() => expect(getNodeCount()).toBe(3));
   });
 
@@ -10994,7 +11123,7 @@ describe('topology export / import / templates (clipboard + localStorage)', () =
     readText.mockResolvedValue('garbage { not json');
     renderEditor();
 
-    fireEvent.click(screen.getByText('Import'));
+    openRackPanel('share'); fireEvent.click(screen.getByText('Import'));
 
     await waitFor(() =>
       expect(screen.getByText('Clipboard does not contain a valid topology')).toBeInTheDocument(),
@@ -11005,7 +11134,7 @@ describe('topology export / import / templates (clipboard + localStorage)', () =
   it('saves the current diagram as a named template', async () => {
     renderEditor();
 
-    fireEvent.click(screen.getByText('Save template'));
+    openRackPanel('share'); fireEvent.click(screen.getByText('Save template'));
     fireEvent.change(screen.getByPlaceholderText('Template name'), { target: { value: 'My Layout' } });
     fireEvent.click(screen.getByText('Save'));
 
@@ -11021,14 +11150,14 @@ describe('topology export / import / templates (clipboard + localStorage)', () =
     localStorage.setItem('oz-topology-template:Import Me', validPayload);
     renderEditor();
 
-    fireEvent.click(screen.getByText('Templates'));
+    openRackPanel('share'); fireEvent.click(screen.getByText('Templates'));
     expect(screen.getByText('Import Me')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Load'));
     await waitFor(() => expect(getNodeCount()).toBe(2));
     expect(document.querySelector('.topology-node[data-node-id="imp-1"]')).not.toBeNull();
 
-    fireEvent.click(screen.getByText('Templates'));
+    openRackPanel('share'); fireEvent.click(screen.getByText('Templates'));
     fireEvent.click(screen.getByText('Delete'));
     await waitFor(() =>
       expect(screen.getByText('Template deleted')).toBeInTheDocument(),
@@ -11168,7 +11297,9 @@ describe('NodeTopologyEditor — tier-limit error node scoping', () => {
     await waitFor(() => expect(getNodeCount()).toBe(4));
 
     const wh2Card = document.querySelector('.topology-node[data-node-id="wh-2"]')!;
-    expect(wh2Card.querySelector('.node-validation-count-badge')?.textContent).toBe(
+    expect(wh2Card.querySelector('.node-validation-note')).not.toBeNull();
+    // The excess-count badge rides the header tooltip (portal to body)
+    expect(document.querySelector('.node-validation-tip .node-validation-count-badge')?.textContent).toBe(
       '2 Warehouses — 1 allowed',
     );
   });
@@ -11242,7 +11373,8 @@ describe('NodeTopologyEditor — extra-branch error node scoping', () => {
     await waitFor(() => expect(getNodeCount()).toBe(3));
 
     const branchBCard = document.querySelector('.topology-node[data-node-id="store-2"]')!;
-    expect(branchBCard.querySelector('.node-validation-count-badge')?.textContent).toBe(
+    expect(branchBCard.querySelector('.node-validation-note')).not.toBeNull();
+    expect(document.querySelector('.node-validation-tip .node-validation-count-badge')?.textContent).toBe(
       '2 Branch Locations — 1 allowed',
     );
   });

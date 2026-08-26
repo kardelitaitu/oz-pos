@@ -18,6 +18,7 @@
 
 use std::{
     collections::HashMap,
+    hash::{Hash, Hasher},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -141,20 +142,49 @@ impl TokenBucket {
 
 // ── Rate limiter state ────────────────────────────────────────────
 
+/// Number of shards for the bucket map.
+///
+/// Every rate-limited request previously took the single global write
+/// lock (SOTA finding E) — at the 200-400 terminal ceiling (~2,700
+/// req/s through `/api/sync/*`), one `RwLock<HashMap>` serialized every
+/// tenant's token consumption. Sharding by key hash means each request
+/// locks only its shard, so contention drops ~16×.
+const SHARD_COUNT: usize = 16;
+
+/// One shard of the bucket map: an independently-locked per-tenant map.
+type BucketShard = RwLock<HashMap<String, TokenBucket>>;
+
 /// Shared per-tenant rate limiter state.
+///
+/// Buckets are stored across [`SHARD_COUNT`] independent
+/// `RwLock<HashMap>`s, indexed by a hash of the bucket key, so
+/// concurrent requests for different tenants/endpoints never contend
+/// on the same lock.
 #[derive(Clone)]
 pub struct RateLimiterState {
     /// Per-endpoint key → per-tenant → TokenBucket.
     /// Key format: `"{tenant_id}|{endpoint_key}"`.
-    buckets: Arc<RwLock<HashMap<String, TokenBucket>>>,
+    /// One `RwLock` per shard; `shard_for(key)` picks the lock.
+    shards: Arc<Vec<Arc<BucketShard>>>,
 }
 
 impl RateLimiterState {
     /// Create a new empty rate limiter state.
     pub fn new() -> Self {
+        let shards = (0..SHARD_COUNT)
+            .map(|_| Arc::new(RwLock::new(HashMap::new())))
+            .collect::<Vec<_>>();
         Self {
-            buckets: Arc::new(RwLock::new(HashMap::new())),
+            shards: Arc::new(shards),
         }
+    }
+
+    /// Pick the shard lock for a bucket key (stable across calls).
+    fn shard_for(&self, key: &str) -> Arc<BucketShard> {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        key.hash(&mut hasher);
+        let idx = hasher.finish() as usize % SHARD_COUNT;
+        self.shards[idx].clone()
     }
 
     /// Try to consume a token for the given tenant and URI path.
@@ -190,14 +220,16 @@ impl RateLimiterState {
     }
 
     /// Consume one token from the bucket identified by `key`, creating it on
-    /// demand with the given capacity and refill rate.
+    /// demand with the given capacity and refill rate. Locks only the shard
+    /// that owns `key` (SOTA finding E).
     async fn check_keyed(
         &self,
         key: String,
         capacity: u32,
         refill_per_sec: f64,
     ) -> Result<(), f64> {
-        let mut buckets = self.buckets.write().await;
+        let shard = self.shard_for(&key);
+        let mut buckets = shard.write().await;
         let bucket = buckets
             .entry(key)
             .or_insert_with(|| TokenBucket::new(capacity, refill_per_sec));
@@ -211,14 +243,20 @@ impl RateLimiterState {
 
     /// Remove buckets that haven't been used in more than `max_age`.
     pub async fn cleanup_stale_buckets(&self, max_age: Duration) {
-        let mut buckets = self.buckets.write().await;
         let cutoff = Instant::now() - max_age;
-        buckets.retain(|_, bucket| bucket.last_refill > cutoff);
+        for shard in self.shards.iter() {
+            let mut buckets = shard.write().await;
+            buckets.retain(|_, bucket| bucket.last_refill > cutoff);
+        }
     }
 
     /// Return the number of active buckets (for metrics/debugging).
     pub async fn bucket_count(&self) -> usize {
-        self.buckets.read().await.len()
+        let mut total = 0;
+        for shard in self.shards.iter() {
+            total += shard.read().await.len();
+        }
+        total
     }
 }
 

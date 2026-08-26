@@ -149,7 +149,7 @@ pub struct UpdateTerminalResult {
 
 // ── Device binding ────────────────────────────────────────────────────
 //
-// Parity with the desktop client (audit/06 residual): a tablet can be
+// Parity with the desktop client (audit-open-findings residual): a tablet can be
 // bound to a store+instance so `resolve_boot_store` auto-boots into it.
 // The binding signature is an HMAC-SHA256 over
 // `{terminal_id}:{bound_store_id}:{bound_instance_id}` keyed by a secret

@@ -228,7 +228,7 @@ fn migrations_create_expected_tables() {
         // 094 adds deduction_location_id + location_override_at to active_carts (no new table).
         // ── ADR #22 Phase 0d (migration 100) ──
         "setting_updated",
-        // ── audit/09 SYNC-01 (migration 114) ──
+        // ── audit-open-findings SYNC-01 (migration 114) ──
         "sync_pull_state",
         "sync_applied_items",
         "sync_remote_failures",
@@ -385,7 +385,7 @@ fn init_sql_creates_complete_schema_surface() {
             &conn,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
         ),
-        129,
+        130,
         "index surface drifted"
     );
     assert_eq!(
@@ -494,7 +494,9 @@ fn existing_db_with_legacy_rows_upgrades_idempotently() {
             "20260815_tenant_unique_indexes.sql".to_string(),
             "20260820_kds_devices.sql".to_string(),
             "20260821_tender_currency.sql".to_string(),
+            "20260822_kds_counter_store.sql".to_string(),
             "20260822_sale_charges.sql".to_string(),
+            "20260823_po_receive_state.sql".to_string(),
         ]
     );
 

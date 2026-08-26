@@ -177,6 +177,12 @@ strip = "symbols"
 debug = 1
 codegen-units = 16
 
+# A01: foundation tests are runtime-trivial (0.1s for 475 tests);
+# higher codegen-units trades binary size for faster compile with zero
+# quality impact. Scoped per-package to avoid affecting other crates.
+[profile.test.package.foundation]
+codegen-units = 256
+
 # TDD profile: fastest possible compile for tight test loops
 [profile.tdd]
 inherits = "dev"

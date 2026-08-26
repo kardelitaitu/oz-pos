@@ -98,6 +98,11 @@ pub const PG_SYNC_DBNAME: &str = "pg_sync.dbname";
 pub const PG_SYNC_USER: &str = "pg_sync.user";
 /// PostgreSQL password.
 pub const PG_SYNC_PASSWORD: &str = "pg_sync.password";
+/// Whether the PG sync transport must connect over TLS. `"1"` or `"0"`.
+/// Default `"0"` (matches the historical `NoTls` transport); set to `"1"`
+/// to refuse plaintext connections to cloud PostgreSQL (AWS RDS, Azure,
+/// etc.) — the server must then accept an `sslmode=require` handshake.
+pub const PG_SYNC_REQUIRE_TLS: &str = "pg_sync.require_tls";
 
 // ── Redis Cache settings ─────────────────────────────────────
 /// Redis server URL. Default `"redis://localhost:6379"`.

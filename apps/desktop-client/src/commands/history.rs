@@ -42,13 +42,14 @@ pub struct SaleListItem {
 pub struct SaleListResponse {
     /// The sales — already capped to the tier's history window.
     pub sales: Vec<SaleListItem>,
-    /// C1.2: true when the tier's history window (Free = 30 days) was
-    /// applied, so the UI can show the upgrade teaser.
+    /// C1.2: true when the tier's history window (Free = 3 months, Plus = 1
+    /// year, Pro = 5 years) was applied, so the UI can show the upgrade teaser.
     pub sales_history_capped: bool,
 }
 
 /// C1.2: load the tenant subscription and list sales capped to its history
-/// window (`sales_history_days()` — Free = 30 days, paid tiers = unlimited).
+/// window (`sales_history_days()` — Free = 3 months, Plus = 1 year, Pro = 5
+/// years, Premium/Enterprise = unlimited).
 /// The subscription lives in the global identity DB that also holds sales for
 /// the legacy global variant; the store-scoped variant reads sales from the
 /// store DB but the subscription from the same global DB.

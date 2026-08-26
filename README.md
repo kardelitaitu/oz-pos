@@ -185,6 +185,7 @@ See [docs/QUICKSTART.md](./docs/QUICKSTART.md) for detailed setup instructions.
 | `cargo test --workspace` | Run tests (5,200+) |
 | `bash scripts/check.sh` | Full local pre-push gate (Rust + UI + migrations) |
 | `bash scripts/coverage.sh` | Rust + UI coverage reports |
+| `bash scripts/reset-dev-pg.sh` | Reset the dev PostgreSQL container to the committed PG_INIT schema (`.ps1` twin on Windows) |
 
 ---
 

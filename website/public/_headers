@@ -13,8 +13,8 @@
   #   license-server web API (OTP auth, contact form, account page). The
   #   API host is resolved at RUNTIME via worker.ts [vars] LICENSE_API_URL
   #   (runbook §8); connect-src allows any *.code.run host so a Northflank
-  #   URL change needs no rebuild. Tighten to the exact host once oz-pos.com
-  #   is bought.
+  #   URL change needs no rebuild. Connect-src allows any *.code.run host so a
+  #   Northflank URL change needs no rebuild.
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.paddle.com; style-src 'self' 'unsafe-inline' https://*.paddle.com; img-src 'self' data:; font-src 'self'; frame-src https://*.paddle.com; connect-src 'self' https://*.code.run https://*.paddle.com; object-src 'none'; base-uri 'self'; form-action 'self'

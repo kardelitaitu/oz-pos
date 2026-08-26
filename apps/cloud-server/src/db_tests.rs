@@ -85,9 +85,17 @@ async fn postgres_url_parsing_rejects_bad_url() {
 
 #[tokio::test]
 async fn postgres_url_parsing_accepts_valid_url() {
-    // This won't connect, but the URL parsing should succeed
-    let result =
-        DbPool::connect_postgres("postgresql://localhost:5432/test", false, 20, true).await;
+    // This won't connect, but the URL parsing should succeed.
+    // max_attempts=1 skips the 30+ seconds of production retry backoff
+    // on a dead port — the test only asserts parsing + connection failure.
+    let result = DbPool::connect_postgres_with_retries(
+        "postgresql://localhost:5432/test",
+        false,
+        20,
+        true,
+        1,
+    )
+    .await;
     // Will fail at connection, not parsing
     let err = result.unwrap_err();
     let msg = err.to_string();
@@ -113,12 +121,14 @@ async fn require_tls_rejects_url_without_sslmode_require() {
 #[tokio::test]
 async fn require_tls_accepts_sslmode_require_and_fails_on_connection() {
     // sslmode=require passes the check; it then fails because no server
-    // is listening — a Connection error, not a config error.
-    let err = DbPool::connect_postgres(
+    // is listening — a Connection error, not a config error. max_attempts=1
+    // skips the 30+ seconds of production retry backoff on a dead port.
+    let err = DbPool::connect_postgres_with_retries(
         "postgresql://localhost:5432/test?sslmode=require",
         true,
         20,
         true,
+        1,
     )
     .await
     .unwrap_err();
@@ -134,7 +144,7 @@ async fn require_tls_accepts_sslmode_require_and_fails_on_connection() {
 static ENV_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
     std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
-#[serial]
+#[serial(pg_rls_cutover)]
 #[tokio::test]
 async fn from_env_defaults_to_sqlite() {
     let _guard = ENV_LOCK.lock().await;
@@ -151,14 +161,16 @@ async fn from_env_defaults_to_sqlite() {
     unsafe { std::env::remove_var("OZ_DB_PATH") };
 }
 
-#[serial]
+#[serial(pg_rls_cutover)]
 #[tokio::test]
 async fn from_env_detects_postgres_url() {
     let _guard = ENV_LOCK.lock().await;
     // SAFETY: ENV_LOCK (held by _guard) serializes access to the process-global
     // environment. The set_var is paired with a remove_var before the guard drops.
     unsafe { std::env::set_var("DATABASE_URL", "postgresql://localhost:5432/test") };
-    let pool = DbPool::from_env().await;
+    // max_attempts=1 skips the 30+ seconds of production retry backoff on a
+    // dead port — the test only asserts the URL is routed to PostgreSQL.
+    let pool = DbPool::from_env_with_retries(1).await;
     // SAFETY: Restores the environment — see SAFETY note on set_var above.
     unsafe { std::env::remove_var("DATABASE_URL") };
     // Should attempt connection but fail
@@ -286,6 +298,57 @@ async fn pg_integration_connect_and_create_tables() {
         trigger_count >= 4,
         "expected the 4 rewritten triggers, found {trigger_count}"
     );
+}
+
+/// Integration test: a fully-exhausted pool must FAIL FAST instead of
+/// hanging request threads forever.
+///
+/// The pool is built with `max_size(1)` + the 5s `wait_timeout` from
+/// `connect_postgres`. Holding the only connection and then asking for a
+/// second one must return `PoolError::Timeout` in ~5s (not block
+/// indefinitely). This is the SOTA guarantee behind Finding D: a stalled
+/// DB can no longer wedge every request.
+#[tokio::test]
+async fn pg_integration_pool_get_fails_fast_when_exhausted() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match DbPool::connect_postgres(&url, false, 1, false).await {
+        Ok(DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG pool-timeout integration test skipped: {e}");
+            return;
+        }
+    };
+
+    // Exhaust the pool: take the single connection and keep it.
+    let held = pool.get().await.expect("first get should succeed");
+
+    // A second get must time out (deadpool `wait_timeout` = 5s) rather
+    // than wait forever. Wrap in an outer 15s guard so a regression that
+    // removes the timeout fails the test instead of hanging the suite.
+    let start = std::time::Instant::now();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(15), pool.get()).await;
+
+    let elapsed = start.elapsed();
+    let err = match result {
+        Err(_) => panic!("pool.get() blocked beyond the 15s guard — wait_timeout lost"),
+        Ok(Err(e)) => e,
+        Ok(Ok(_)) => panic!("second get succeeded despite max_size(1) — pool not exhausted"),
+    };
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Timeout") || msg.contains("waiting for a slot"),
+        "expected a wait timeout, got: {msg}"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_secs(12),
+        "wait timeout took too long: {elapsed:?}"
+    );
+
+    // Dropping the held connection must free the slot immediately.
+    drop(held);
+    let _ = pool.get().await.expect("get after drop should succeed");
 }
 
 /// Integration test: `OZ_APPLY_SCHEMA=0` skips the `PG_INIT` re-apply.
@@ -421,10 +484,53 @@ async fn pg_integration_apply_schema_can_be_skipped() {
 /// pool), rows are namespaced per process for shared dev databases, and
 /// the test skips when Postgres is unreachable.
 #[tokio::test]
+#[serial(pg_rls_cutover)]
 async fn pg_integration_rls_fails_closed() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-    let pool = match DbPool::connect_postgres(&url, false, 20, true).await {
+    // Throwaway DB: this test queries `products` while the cutover test
+    // (`pg_integration_rls_force_blocks_owner`) runs FORCE RLS on the
+    // shared base tables inside an open transaction — a concurrent query
+    // there surfaces as a spurious RLS denial. The throwaway DB isolates
+    // this test from that window entirely.
+    // Admin connection is raw (apply_schema = false): it only creates /
+    // drops the throwaway database.
+    let admin_pool = match DbPool::connect_postgres(&url, false, 20, false).await {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("PG integration test skipped: {e}");
+            return;
+        }
+    };
+    let admin = admin_pool
+        .pg_client()
+        .await
+        .expect("pg_client should succeed");
+    let db_name = format!("oz_rls_closed_{}", std::process::id());
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop stale database should succeed");
+    if let Err(e) = admin
+        .execute(&format!("CREATE DATABASE {db_name}"), &[])
+        .await
+    {
+        eprintln!("PG integration test skipped: cannot CREATE DATABASE ({e})");
+        return;
+    }
+    drop(admin);
+    let (base, query) = match url.split_once('?') {
+        Some((b, q)) => (b, Some(q)),
+        None => (url.as_str(), None),
+    };
+    let (head, _old_db) = base
+        .rsplit_once('/')
+        .expect("URL must have a database path");
+    let db_url = match query {
+        Some(q) => format!("{head}/{db_name}?{q}"),
+        None => format!("{head}/{db_name}"),
+    };
+    let pool = match DbPool::connect_postgres(&db_url, false, 20, true).await {
         Ok(p) => p,
         Err(e) => {
             eprintln!("PG integration test skipped: {e}");
@@ -439,6 +545,11 @@ async fn pg_integration_rls_fails_closed() {
     let alpha = format!("{ns}-alpha");
     let beta = format!("{ns}-beta");
     let sku = format!("{ns}-sku");
+    // Per-process role name: under nextest each test runs in its own
+    // process, and a FIXED name would race a concurrent test session
+    // (another agent's run) doing DROP OWNED BY on the same role →
+    // "tuple concurrently updated". A pid-suffixed role can never collide.
+    let probe_role = format!("oz_rls_probe_{}", std::process::id());
 
     // Set up the non-owner role (idempotent) and clear prior rows. A
     // previous run's role persists WITH its grants (this test
@@ -448,14 +559,14 @@ async fn pg_integration_rls_fails_closed() {
     client
         .batch_execute(&format!(
             "DO $$ BEGIN
-                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_rls_probe') THEN
-                    EXECUTE 'DROP OWNED BY oz_rls_probe';
-                    EXECUTE 'DROP ROLE oz_rls_probe';
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{probe_role}') THEN
+                    EXECUTE 'DROP OWNED BY {probe_role}';
+                    EXECUTE 'DROP ROLE {probe_role}';
                 END IF;
              END $$;
-             CREATE ROLE oz_rls_probe;
-             GRANT USAGE ON SCHEMA public TO oz_rls_probe;
-             GRANT SELECT, INSERT, UPDATE, DELETE ON products TO oz_rls_probe;
+             CREATE ROLE {probe_role};
+             GRANT USAGE ON SCHEMA public TO {probe_role};
+             GRANT SELECT, INSERT, UPDATE, DELETE ON products TO {probe_role};
              DELETE FROM products WHERE tenant_id LIKE '{ns}%';"
         ))
         .await
@@ -481,15 +592,16 @@ async fn pg_integration_rls_fails_closed() {
         .expect("seed beta product should succeed");
 
     // A dedicated connection for the probe role — SET ROLE must never
-    // leak onto a pooled connection another test might reuse.
-    let (probe, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+    // leak onto a pooled connection another test might reuse. Connects to
+    // the THROWAWAY database (the probe role's grants live there).
+    let (probe, conn) = tokio_postgres::connect(&db_url, tokio_postgres::NoTls)
         .await
         .expect("dedicated probe connection should succeed");
     tokio::spawn(async move {
         let _ = conn.await;
     });
     probe
-        .execute("SET ROLE oz_rls_probe", &[])
+        .execute(&format!("SET ROLE {probe_role}"), &[])
         .await
         .expect("SET ROLE should succeed");
 
@@ -564,6 +676,17 @@ async fn pg_integration_rls_fails_closed() {
         )
         .await
         .expect("update of the visible row should succeed");
+
+    // Cleanup: drop the throwaway database.
+    drop(probe);
+    drop(pool);
+    admin_pool
+        .pg_client()
+        .await
+        .expect("cleanup admin client")
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop throwaway database should succeed");
 }
 
 /// Integration test: the deployment cutover script
@@ -590,6 +713,7 @@ async fn pg_integration_rls_fails_closed() {
 ///    are visible again. This is exactly the mechanism the cutover
 ///    relies on for a non-superuser deployment role.
 #[tokio::test]
+#[serial(pg_rls_cutover)]
 async fn pg_integration_rls_force_blocks_owner() {
     let url = std::env::var("OZ_TEST_PG_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
@@ -610,6 +734,20 @@ async fn pg_integration_rls_force_blocks_owner() {
     client
         .batch_execute(
             "DO $$ DECLARE r record; BEGIN
+                -- A crashed run leaves FORCE RLS applied to the shared
+                -- tenant tables (FORCE is non-transactional). NO FORCE
+                -- them so the Proof-1 rollback assertion starts clean.
+                FOR r IN
+                    SELECT relname FROM pg_class
+                    WHERE relkind = 'r' AND relforcerowsecurity
+                      AND relname IN ('bundle_items','offline_queue','product_activity',
+                                      'product_bundles','product_taxes','product_variants',
+                                      'products','sales','sent_reports','stripe_customers',
+                                      'sync_terminals','tax_rates','tenant_plans',
+                                      'tenant_subscription','users')
+                LOOP
+                    EXECUTE format('ALTER TABLE %I NO FORCE ROW LEVEL SECURITY', r.relname);
+                END LOOP;
                 FOR r IN
                     SELECT relname FROM pg_class
                     WHERE relkind = 'r' AND relname LIKE 'rls_force_probe_%'
@@ -628,6 +766,8 @@ async fn pg_integration_rls_force_blocks_owner() {
         .expect("probe leftovers cleanup should succeed");
 
     // ── Proof 1: the real cutover script executes and is idempotent. ──
+    // Runs inside a transaction that ROLLBACKs below; the assertion after
+    // rollback (`forced == 0`) proves FORCE RLS is transactional here.
     const CUTOVER: &str = include_str!("../../../scripts/rls-cutover.sql");
     client
         .batch_execute("BEGIN")
@@ -794,4 +934,61 @@ async fn pg_integration_rls_force_blocks_owner() {
         ))
         .await
         .expect("probe cleanup should succeed");
+}
+
+/// A connection killed server-side (PG addon idle-timeout, restart,
+/// `pg_terminate_backend`) must be recycled — the next `pool.get()`
+/// returns a WORKING connection, not the stale socket.
+///
+/// This is the behavior `RecyclingMethod::Fast`'s `is_closed()` probe
+/// relies on (SOTA finding F): deadpool 0.12 has no max_lifetime, so
+/// server-closed connections are detected reactively on checkout.
+#[tokio::test]
+async fn pg_integration_stale_connection_recycled() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match DbPool::connect_postgres(&url, false, 20, false).await {
+        Ok(DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG stale-connection integration test skipped: {e}");
+            return;
+        }
+    };
+
+    // Take one connection and find its backend PID.
+    let client = pool.get().await.expect("get should succeed");
+    let pid: i32 = client
+        .query_one("SELECT pg_backend_pid()", &[])
+        .await
+        .expect("pg_backend_pid should work")
+        .get(0);
+
+    // Kill it server-side, simulating the PG addon dropping the session.
+    let killer = pool.get().await.expect("second get should succeed");
+    killer
+        .execute("SELECT pg_terminate_backend($1)", &[&pid])
+        .await
+        .expect("pg_terminate_backend should succeed");
+    drop(killer);
+
+    // The next query on the killed client must fail — proving it really
+    // is dead (not a false-positive scenario).
+    let query_after_kill = client.query_one("SELECT 1", &[]).await;
+    assert!(
+        query_after_kill.is_err(),
+        "the terminated connection must fail its next query"
+    );
+    drop(client);
+
+    // The pool must recycle it: a fresh get() gives a working connection.
+    let fresh = pool
+        .get()
+        .await
+        .expect("pool must hand out a new connection");
+    let row = fresh
+        .query_one("SELECT 1", &[])
+        .await
+        .expect("fresh connection must serve queries after recycle");
+    assert_eq!(row.get::<_, i32>(0), 1);
 }

@@ -406,23 +406,23 @@ const legacyNodes: TopologyNodeData[] = [
 describe('validateEditorGraph', () => {
   it('skips validation for a legacy canvas when allowLegacyApply is true', () => {
     // No canonical identity + legacy apply allowed → non-blocking path.
-    expect(validateEditorGraph(legacyNodes, canonicalWires, true, 'standard')).toEqual([]);
+    expect(validateEditorGraph(legacyNodes, canonicalWires, true, 'free')).toEqual([]);
   });
 
   it('validates a legacy canvas when strict mode is requested (allowLegacyApply=false)', () => {
     // The gate only skips when the legacy path is explicitly allowed; with
     // allowLegacyApply=false the same graph hits the strict contract.
-    const errors = validateEditorGraph(legacyNodes, canonicalWires, false, 'standard');
+    const errors = validateEditorGraph(legacyNodes, canonicalWires, false, 'free');
     expect(errors.map((e) => e.code)).toContain('branch-location-missing-identity');
   });
 
   it('passes a canonical graph with clean validation', () => {
-    expect(validateEditorGraph(canonicalNodes, canonicalWires, true, 'standard')).toEqual([]);
+    expect(validateEditorGraph(canonicalNodes, canonicalWires, true, 'free')).toEqual([]);
   });
 
   it('still validates a canonical graph even when allowLegacyApply is true', () => {
     // Canonical identity present → validation always runs.
-    expect(validateEditorGraph(canonicalNodes, canonicalWires, true, 'standard')).toEqual([]);
+    expect(validateEditorGraph(canonicalNodes, canonicalWires, true, 'free')).toEqual([]);
   });
 
   it('reports a duplicate node id through the contract', () => {
@@ -430,7 +430,7 @@ describe('validateEditorGraph', () => {
       ...canonicalNodes,
       { ...canonicalNodes[1]!, id: 'store-1', name: 'Duplicate Store' },
     ];
-    const errors = validateEditorGraph(dupNodes, canonicalWires, true, 'standard');
+    const errors = validateEditorGraph(dupNodes, canonicalWires, true, 'free');
     expect(errors.map((e) => e.code)).toContain('duplicate-node');
   });
 
@@ -445,7 +445,7 @@ describe('validateEditorGraph', () => {
       { id: 'w-2', fromNodeId: 'ws-1', toNodeId: 'wh-1', direction: 'one-way', fromPortId: 'operation-out', toPortId: 'operation-in', relationshipType: 'generic' },
       { id: 'w-3', fromNodeId: 'ws-1', toNodeId: 'wh-2', direction: 'one-way', fromPortId: 'operation-out', toPortId: 'operation-in', relationshipType: 'generic' },
     ];
-    const errors = validateEditorGraph(nodes, wires, true, 'standard');
+    const errors = validateEditorGraph(nodes, wires, true, 'free');
     expect(errors.map((e) => e.code)).toContain('warehouse-tier-limit');
   });
 

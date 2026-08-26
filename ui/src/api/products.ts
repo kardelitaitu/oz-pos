@@ -114,6 +114,19 @@ export const listProductsScoped = (sessionToken: string): Promise<ProductDto[]> 
 export const createProduct = (args: CreateProductArgs): Promise<{ sku: string }> =>
   loggedInvoke('create_product', { args });
 
+/**
+ * List inventory-tracked products with stock at a specific warehouse location.
+ * Used by the warehouse workspace to show per-location stock levels.
+ */
+export const listWarehouseProductsAtLocation = (
+  sessionToken: string,
+  locationId: string,
+): Promise<ProductDto[]> =>
+  loggedInvoke<ProductDto[]>('list_warehouse_products_at_location', {
+    sessionToken,
+    locationId,
+  });
+
 /** ADR #7: Scoped product creation — `userId` is read from session, not args. */
 export interface CreateProductScopedArgs {
   sku: string;

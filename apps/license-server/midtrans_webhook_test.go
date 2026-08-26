@@ -739,3 +739,36 @@ func TestMidtransPlus_SnapToRenew_EndToEnd(t *testing.T) {
 		t.Errorf("renewed subscription expiry must extend beyond mint expiry")
 	}
 }
+
+// ── Boot-time config gate ───────────────────────────────────────────
+
+func TestVerifyMidtransConfig_EmptyKeyReturnsNil(t *testing.T) {
+	// When MIDTRANS_SERVER_KEY is unset, verifyMidtransConfig must NOT
+	// return an error — the server should start with Midtrans disabled
+	// (webhook returns 503, Snap checkout returns error). This is a
+	// grace degradation, not a fatal misconfiguration.
+	t.Setenv("MIDTRANS_SERVER_KEY", "")
+	t.Setenv("MIDTRANS_PRICE_TIERS", "")
+	if err := verifyMidtransConfig(); err != nil {
+		t.Errorf("expected nil error when MIDTRANS_SERVER_KEY is empty, got: %v", err)
+	}
+}
+
+func TestVerifyMidtransConfig_KeySetWithoutTiersReturnsError(t *testing.T) {
+	// When the key IS set but the price map is missing, provisioning
+	// would fail on every webhook — this must be a hard error.
+	t.Setenv("MIDTRANS_SERVER_KEY", "SB-Mid-server-test")
+	t.Setenv("MIDTRANS_PRICE_TIERS", "")
+	if err := verifyMidtransConfig(); err == nil {
+		t.Error("expected error when MIDTRANS_PRICE_TIERS is empty but server key is set")
+	}
+}
+
+func TestVerifyMidtransConfig_KeyAndTiersReturnNil(t *testing.T) {
+	// Both set and valid → nil error.
+	t.Setenv("MIDTRANS_SERVER_KEY", "SB-Mid-server-test")
+	t.Setenv("MIDTRANS_PRICE_TIERS", "149000:plus:month")
+	if err := verifyMidtransConfig(); err != nil {
+		t.Errorf("expected nil with valid config, got: %v", err)
+	}
+}

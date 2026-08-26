@@ -216,5 +216,5 @@ staff-error-pay-invalid = Masukkan jumlah positif.
 staff-error-dob-invalid = Gunakan format YYYY-MM-DD.
 
 # C2.2: Pro→Premium approaching-limit banner (16+ staf, batas 20).
-staff-limit-approaching-premium = Anda hampir mencapai batas 20 staf paket Pro. Tingkatkan ke Premium untuk staf tanpa batas.
+staff-limit-approaching-premium = Anda hampir mencapai batas 20 staf paket Pro. Tingkatkan ke Premium untuk hingga 50 staf.
 staff-limit-approaching-premium-cta = Tingkatkan ke Premium

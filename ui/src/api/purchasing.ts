@@ -66,6 +66,15 @@ export interface PurchaseOrderLineDto {
   qty: number;
   unit_cost_minor: number;
   line_total_minor: number;
+  received_qty: number;
+  damaged_qty: number;
+}
+
+/** Input for receiving one PO line with damage accounting. */
+export interface ReceivePoLineInput {
+  line_id: string;
+  received_qty: number;
+  damaged_qty: number;
 }
 
 /** A full purchase order with its line items. */
@@ -142,3 +151,10 @@ export const updatePoStatus = (args: UpdatePoStatusArgs): Promise<PurchaseOrderD
 /** Mark a purchase order as received and update stock quantities. */
 export const receivePurchaseOrder = (id: string): Promise<PurchaseOrderDto> =>
   loggedInvoke<PurchaseOrderDto>('receive_purchase_order', { id });
+
+/** Receive a purchase order with per-line received/damaged quantities (warehouse Phase 2). */
+export const receivePurchaseOrderWithLines = (
+  id: string,
+  lines: ReceivePoLineInput[],
+): Promise<PurchaseOrderDto> =>
+  loggedInvoke<PurchaseOrderDto>('receive_purchase_order_with_lines', { id, lines });

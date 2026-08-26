@@ -422,5 +422,128 @@ workspace-home-analytics-desc = Performa staf, tren penjualan, dan metrik shift
 workspace-home-analytics-aria = Buka Analitik
 workspace-home-reports-title = Laporan
 workspace-home-reports-desc = Dasbor laporan penjualan, inventaris, dan kustom
+workspace-home-staff-title = Manajemen Staf
+workspace-home-staff-desc = Kelola staf, peran, dan izin
+workspace-home-settings-title = Pengaturan
+workspace-home-settings-desc = Konfigurasi sistem dan preferensi
+workspace-home-audit-title = Log Audit
+workspace-home-audit-desc = Lihat aktivitas sistem dan riwayat perubahan
+workspace-home-workspaces-section = Workspace
+workspace-home-tools-section = Alat
+workspace-home-add-workspace = Tambah Workspace
+workspace-home-add-workspace-desc = Konfigurasi workspace di editor topologi
+workspace-home-add-workspace-aria = Tambah workspace melalui editor topologi
 workspace-home-reports-aria = Buka Laporan
 workspace-home-shortcut-open = Buka
+
+# Warehouse workspace
+warehouse-title = Inventaris Gudang
+warehouse-location = Lokasi
+warehouse-no-location-title = Tidak ada lokasi gudang
+warehouse-no-location-desc = Workspace ini tidak terikat ke lokasi gudang. Konfigurasi di editor topologi.
+warehouse-empty-title = Tidak ada produk
+warehouse-empty-desc = Tidak ada produk inventaris yang ditemukan di lokasi ini.
+warehouse-load-error = Gagal memuat inventaris gudang.
+warehouse-adjust-error = Gagal menyesuaikan stok.
+warehouse-col-sku = SKU
+warehouse-col-name = Nama
+warehouse-col-category = Kategori
+warehouse-col-qty = Stok
+warehouse-col-cost = Harga
+warehouse-col-actions = Aksi
+warehouse-products-count = produk
+warehouse-low-stock-alerts = peringatan stok rendah
+warehouse-search-placeholder = Cari berdasarkan nama atau SKU…
+warehouse-search-aria = Cari produk
+warehouse-filter-category = Filter berdasarkan kategori
+warehouse-filter-stock = Filter berdasarkan status stok
+warehouse-all-categories = Semua kategori
+warehouse-stock-all = Semua stok
+warehouse-stock-in = Ada stok
+warehouse-stock-out = Habis
+warehouse-stock-low = Stok rendah
+warehouse-no-results = Tidak ada produk yang cocok dengan pencarian Anda.
+warehouse-stat-total = Total
+warehouse-stat-out-of-stock = Habis stok
+warehouse-stat-low-stock = Stok rendah
+warehouse-btn-adjust = Sesuaikan
+warehouse-adjust-title = Sesuaikan Stok
+warehouse-adjust-current = Stok saat ini
+warehouse-adjust-delta-label = Perubahan jumlah (gunakan + untuk menambah, − untuk mengurangi)
+warehouse-adjust-reason-label = Alasan
+warehouse-adjust-reason-placeholder = contoh: hitung stok, kerusakan, pengembalian
+warehouse-adjust-confirm = Konfirmasi
+warehouse-adjust-cancel = Batal
+
+# ── Warehouse POS console (v2) ────────────────────────────────
+warehouse-mode-receive = Terima
+warehouse-mode-send = Kirim
+warehouse-mode-count = Hitung
+warehouse-mode-stock = Stok
+warehouse-mode-receive-desc = Terima barang masuk
+warehouse-mode-send-desc = Kirim barang keluar
+warehouse-mode-count-desc = Hitung stok
+warehouse-mode-stock-desc = Lihat stok
+
+warehouse-scan-placeholder = Pindai barcode atau ketik SKU…
+warehouse-scan-aria = Pindai barcode atau ketik SKU
+warehouse-scan-add = Tambah
+warehouse-scan-no-match = Tidak ada produk yang cocok dengan barcode itu
+warehouse-bin = Rak: { $bin }
+
+warehouse-session-empty = Sesi kosong — pindai atau pilih produk
+warehouse-session-items = { $count } item{ $count ->
+  [one] 
+ *[other] s
+}
+warehouse-session-line-qty = Jumlah
+warehouse-session-line-picked = Dipetik
+warehouse-session-complete-receive = Selesaikan Terima
+warehouse-session-complete-send = Selesaikan Kirim
+warehouse-session-print = Cetak
+warehouse-session-clear = Kosongkan
+
+warehouse-fn-receive = Terima
+warehouse-fn-send = Kirim
+warehouse-fn-count = Hitung
+warehouse-fn-stock = Stok
+warehouse-fn-print = Cetak
+warehouse-fn-reserved = { $key }
+warehouse-fn-fullscreen = Layar penuh
+warehouse-fn-bar-aria = Tombol fungsi
+warehouse-shortcut-list = Daftar pintasan
+warehouse-shortcut-close = Tutup
+
+warehouse-popup-receive-title = Sesi masuk
+warehouse-popup-send-title = Sesi keluar
+warehouse-popup-count-title = Sesi hitung
+warehouse-popup-close = Tutup
+
+warehouse-send-destination = Kirim ke…
+warehouse-send-destination-aria = Pilih tujuan
+warehouse-send-confirmed = Terkirim! { $number } — { $count } item ke { $destination }
+warehouse-send-verify-hint = Pindai setiap item untuk memverifikasi pemetikan
+warehouse-send-unpicked = { $count } baris belum dipetik
+
+warehouse-receive-source-po = Terima dari pesanan pembelian
+warehouse-receive-source-transfer = Terima dari transfer
+warehouse-receive-no-transfers = Tidak ada transfer dalam perjalanan
+warehouse-receive-no-pos = Tidak ada pesanan pembelian yang disetujui
+warehouse-receive-confirmed = Diterima! { $number } — { $count } item
+warehouse-receive-expected = Diharapkan
+warehouse-receive-received = Diterima
+warehouse-receive-damaged = Rusak
+warehouse-receive-short = Kurang
+
+warehouse-count-create = Mulai Hitung
+warehouse-count-type = Tipe hitung
+warehouse-count-notes = Catatan
+warehouse-count-start = Mulai
+warehouse-count-open = Hitungan terbuka
+warehouse-count-history = Riwayat
+warehouse-count-lines = baris
+warehouse-count-empty = Belum ada baris — pindai barcode untuk mulai menghitung
+warehouse-count-back = Kembali
+warehouse-count-complete = Selesaikan Hitung
+warehouse-count-complete-success = Hitung selesai — { $count } penyesuaian diposting
+warehouse-count-error = Hitung gagal

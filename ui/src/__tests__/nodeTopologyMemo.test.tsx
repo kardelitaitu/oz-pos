@@ -156,7 +156,7 @@ describe('topology memoized render layers — hover/selection touch only the aff
       } as never), 100)),
     );
     renderResult = renderWithProvidersSync(
-      <NodeTopologyEditor currentTier="standard" />,
+      <NodeTopologyEditor currentTier="free" />,
       multiStoreFtl,
       sharedFtl,
     );
@@ -232,7 +232,7 @@ describe('topology memoized render layers — hover/selection touch only the aff
     rerenderWithProviders(
       renderResult!,
       <NodeTopologyEditor
-        currentTier="standard"
+        currentTier="free"
         workspaceInstances={[
           { instanceId: 'ws-1', name: 'POS 1', typeKey: 'store-pos', purposeKey: 'general' },
           { instanceId: 'ws-2', name: 'POS 2', typeKey: 'store-pos', purposeKey: 'general' },

@@ -250,6 +250,26 @@ fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, App
     map_products_to_dtos(&store, products)
 }
 
+/// Fetch inventory-tracked products with stock at a specific location.
+///
+/// Used by the warehouse workspace to show per-location stock levels.
+/// The `location_id` is the bound warehouse location from the topology
+/// editor (workspace_instances → inventory_locations).
+#[tauri::command]
+pub async fn list_warehouse_products_at_location(
+    state: State<'_, AppState>,
+    session_token: String,
+    location_id: String,
+) -> Result<Vec<ProductDto>, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let products = store.list_warehouse_products_at_location(&location_id)?;
+    map_products_to_dtos(&store, products)
+}
+
 /// Shared mapping from a vec of ProductWithDetails to ProductDto vec.
 fn map_products_to_dtos(
     store: &Store<'_>,

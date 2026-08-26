@@ -576,11 +576,11 @@ fn enforce_store_quota_error_message_includes_tier_and_count() {
 }
 
 #[test]
-fn enforce_store_quota_premium_allows_nine() {
+fn enforce_store_quota_premium_allows_four() {
     let (store, _) = setup();
-    // Premium allows up to 10 stores (limit is exclusive: >= blocks).
-    // We have 1 seeded; add 8 more = 9 total → OK.
-    for i in 0..8 {
+    // Premium allows up to 5 stores (limit is exclusive: >= blocks).
+    // We have 1 seeded; add 3 more = 4 total → OK.
+    for i in 0..3 {
         let p = StoreProfile {
             id: format!("store-{i}"),
             name: format!("Branch {i}"),
@@ -594,16 +594,16 @@ fn enforce_store_quota_premium_allows_nine() {
         };
         store.create_store_profile(&p).unwrap();
     }
-    assert_eq!(store.count_store_profiles().unwrap(), 9);
+    assert_eq!(store.count_store_profiles().unwrap(), 4);
     assert!(
         store
             .enforce_store_quota(&SubscriptionTier::Premium)
             .is_ok()
     );
-    // Add 1 more = 10 total → must be blocked.
+    // Add 1 more = 5 total → must be blocked.
     let p = StoreProfile {
-        id: "store-9".into(),
-        name: "Branch 9".into(),
+        id: "store-3".into(),
+        name: "Branch 3".into(),
         address: "".into(),
         tax_id: "".into(),
         currency: "USD".into(),
@@ -613,13 +613,13 @@ fn enforce_store_quota_premium_allows_nine() {
         updated_at: "2026-07-02T00:00:00Z".into(),
     };
     store.create_store_profile(&p).unwrap();
-    assert_eq!(store.count_store_profiles().unwrap(), 10);
+    assert_eq!(store.count_store_profiles().unwrap(), 5);
     let err = store
         .enforce_store_quota(&SubscriptionTier::Premium)
         .unwrap_err();
     assert!(
         matches!(err, CoreError::SubscriptionLimitExceeded(_)),
-        "Premium with 10 stores must be blocked: {err:?}"
+        "Premium with 5 stores must be blocked: {err:?}"
     );
 }
 

@@ -1149,7 +1149,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    const tierErrors = validateTopologyGraph(normalized, 'standard').filter(
+    const tierErrors = validateTopologyGraph(normalized, 'plus').filter(
       (e) => e.code === 'warehouse-tier-limit',
     );
     // Exactly ONE excess Stock Room for two warehouses — the second node is
@@ -1181,7 +1181,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    const tierErrors = validateTopologyGraph(normalized, 'standard').filter(
+    const tierErrors = validateTopologyGraph(normalized, 'plus').filter(
       (e) => e.code === 'warehouse-tier-limit',
     );
     expect(tierErrors.map((e) => e.nodeId)).toEqual(['wh-mid', 'wh-leaf']);
@@ -1211,7 +1211,7 @@ describe('semantic topology contract', () => {
       [ownershipWire('w-owner', 'ws-1'), stockWire('w-stock', 'ws-1', 'wh-1')],
     );
 
-    const errors = validateTopologyGraph(normalized, 'standard');
+    const errors = validateTopologyGraph(normalized, 'plus');
     expect(errors.filter((e) => e.code === 'warehouse-at-capacity')).toHaveLength(0);
   });
 
@@ -1221,7 +1221,7 @@ describe('semantic topology contract', () => {
       [ownershipWire('w-owner', 'ws-1')],
     );
 
-    const errors = validateTopologyGraph(normalized, 'standard');
+    const errors = validateTopologyGraph(normalized, 'plus');
     expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toHaveLength(0);
   });
 

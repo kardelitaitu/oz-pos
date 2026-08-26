@@ -921,11 +921,11 @@ fn e2e_three_terminal_restaurant() {
     assert!(s.ack_kds_order(&kds_order_front.id, "kds-1").unwrap());
     assert!(s.ack_kds_order(&kds_order_back.id, "kds-1").unwrap());
 
-    // ── Verify: both acked ──
+    // ── Verify: both acked (preparing — device accepted + started cooking) ──
     let front_ack = s.get_kds_order(&kds_order_front.id).unwrap().unwrap();
     let back_ack = s.get_kds_order(&kds_order_back.id).unwrap().unwrap();
-    assert_eq!(front_ack.status, "ready");
-    assert_eq!(back_ack.status, "ready");
+    assert_eq!(front_ack.status, "preparing");
+    assert_eq!(back_ack.status, "preparing");
 
     // ── Close both shifts independently ──
     s.close_shift(&shift_front.id, 0, None).unwrap();

@@ -128,7 +128,7 @@ fn update_staff_args_debug() {
     assert!(d.contains("z"));
 }
 
-// ── STAFF-01 / STAFF-04 — session-scoped authorization (audit/06) ───
+// ── STAFF-01 / STAFF-04 — session-scoped authorization (audit-open-findings) ───
 //
 // TDD red: these tests pin the NEW scoped-command contract. They fail to
 // compile until `list_staff_scoped` / `list_roles_scoped` /

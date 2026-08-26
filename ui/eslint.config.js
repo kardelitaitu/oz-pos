@@ -101,6 +101,15 @@ export default ts.config(
     },
   },
   {
+    // FTL template strings contain literal `\$` that ESLint flags as
+    // "useless escape" — but the backslash prevents `${...}` template
+    // expression parsing. Suppress for test files that embed FTL bundles.
+    files: ['src/__tests__/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-useless-escape': 'off',
+    },
+  },
+  {
     // ESLint flat config does NOT auto-respect .gitignore — every build
     // output dir must be listed here explicitly or `eslint .` lints the
     // minified bundles (see ui/.gitignore for the matching set).

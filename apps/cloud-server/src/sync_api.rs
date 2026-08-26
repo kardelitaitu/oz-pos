@@ -12,6 +12,7 @@ use axum::{
     Router,
     extract::{Extension, Request, State},
     middleware,
+    response::IntoResponse,
     routing::{get, post},
 };
 use rusqlite::Connection;
@@ -27,6 +28,39 @@ use crate::rate_limit::{RateLimiterState, rate_limit_middleware};
 type CacheEntry = (std::time::Instant, Vec<u8>);
 /// Per-tenant snapshot cache map.
 type SnapshotCache = Arc<Mutex<std::collections::HashMap<String, CacheEntry>>>;
+
+/// Cached global tenant count (status endpoint).
+///
+/// `distinct_tenant_count()` is a `COUNT(DISTINCT tenant_id)` over the
+/// whole `offline_queue` — O(n) on a table bounded only by the 90-day
+/// retention horizon. Every terminal polls `/api/sync/status` on its
+/// heartbeat, so an uncached scan would repeat constantly on the hot
+/// path. The count only feeds the tiered-heartbeat calculation, so a
+/// bounded-stale value is fine: refresh at most once per
+/// [`TENANT_COUNT_CACHE_TTL`](Self::TENANT_COUNT_CACHE_TTL) and serve
+/// the cached value in between.
+#[derive(Clone, Default)]
+pub struct TenantCountCache(Arc<Mutex<Option<(std::time::Instant, i64)>>>);
+
+impl TenantCountCache {
+    /// How long a cached tenant count is trusted before the next refresh.
+    const TENANT_COUNT_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+    /// Return the cached count, or `None` when no refresh has run yet.
+    async fn cached(&self) -> Option<i64> {
+        let guard = self.0.lock().await;
+        guard
+            .as_ref()
+            .filter(|(at, _)| at.elapsed() < Self::TENANT_COUNT_CACHE_TTL)
+            .map(|(_, count)| *count)
+    }
+
+    /// Store a freshly-computed count.
+    async fn store(&self, count: i64) {
+        let mut guard = self.0.lock().await;
+        *guard = Some((std::time::Instant::now(), count));
+    }
+}
 
 /// Shared state for sync handlers — a database connection behind `Arc<Mutex<>>`.
 #[derive(Clone)]
@@ -45,6 +79,8 @@ pub struct SyncState {
     /// without parsing the id as UUID — saves ~0.02 core CPU at 200+ terminals.
     /// Set via OZ_SKIP_PUSH_VALIDATION=1.
     pub skip_push_validation: bool,
+    /// TTL-cached global tenant count for the status endpoint.
+    pub tenant_count_cache: TenantCountCache,
 }
 
 impl SyncState {
@@ -62,6 +98,7 @@ impl SyncState {
             skip_push_validation: std::env::var("OZ_SKIP_PUSH_VALIDATION")
                 .map(|v| v == "1" || v == "true")
                 .unwrap_or(false),
+            tenant_count_cache: TenantCountCache::default(),
         }
     }
 
@@ -74,6 +111,19 @@ impl SyncState {
             Some(pool) => crate::sync_store::SyncStore::postgres(pool.clone()),
             None => crate::sync_store::SyncStore::sqlite(self.db.clone()),
         }
+    }
+
+    /// Global tenant count for the status endpoint, served from a
+    /// TTL-bounded cache to avoid a `COUNT(DISTINCT tenant_id)` full scan
+    /// on every heartbeat poll (SOTA: the count only feeds tiered
+    /// heartbeat sizing, so up to 60s of staleness is harmless).
+    async fn cached_tenant_count(&self) -> i64 {
+        if let Some(count) = self.tenant_count_cache.cached().await {
+            return count;
+        }
+        let count = self.store().distinct_tenant_count().await;
+        self.tenant_count_cache.store(count).await;
+        count
     }
 }
 
@@ -185,57 +235,67 @@ async fn push_handler(
     let batch_bytes = serde_json::to_vec(&items).map(|v| v.len()).unwrap_or(0) as f64;
     metrics::SYNC_BATCH_SIZE_BYTES.observe(batch_bytes);
 
-    // Phase 1.2: the per-item INSERT goes through the sync store, so the
-    // SQLite and Postgres backends share one code path. `db_start` now
-    // measures backend access for the batch (mutex lock / pool acquisition).
+    // Phase 1.2: INSERT goes through the sync store in a single transaction
+    // (previously one transaction per item). `db_start` measures backend
+    // access for the whole batch (mutex lock / pool acquisition).
     let store = state.store();
     let db_start = std::time::Instant::now();
-    let mut results = Vec::with_capacity(items.len());
-
-    for item in &items {
-        // Defense-in-depth (round 119): ids are client-supplied strings that
-        // end up in the prune DELETE path. When skip_push_validation is set
-        // (trusted server-to-server), skip UUID parsing to save ~0.02 core CPU.
+    // Phase 1: separate valid items from rejected UUIDs (cheap, no DB).
+    // `valid_indexes` records each valid item's ORIGINAL position so the
+    // batch outcomes can be reassembled in request order — the client
+    // zips `pending` against `results` by index (apply_push_results), so
+    // a reordering would mark the WRONG items as synced/failed.
+    let mut valid_items: Vec<oz_core::offline::OfflineQueueItem> = Vec::with_capacity(items.len());
+    let mut valid_indexes: Vec<usize> = Vec::with_capacity(items.len());
+    for (idx, item) in items.iter().enumerate() {
         if !state.skip_push_validation && uuid::Uuid::parse_str(&item.id).is_err() {
             metrics::SYNC_PUSHES_TOTAL
                 .with_label_values(&["rejected"])
                 .inc();
-            results.push(PushOutcome::Rejected {
-                reason: format!("invalid id: {}", item.id),
-            });
-            continue;
+        } else {
+            valid_items.push(item.clone());
+            valid_indexes.push(idx);
         }
-        match store.push_item(item, tenant_id).await {
-            Ok(PushOutcome::Accepted) => {
-                metrics::SYNC_PUSHES_TOTAL
-                    .with_label_values(&["accepted"])
-                    .inc();
-                results.push(PushOutcome::Accepted);
-            }
-            Ok(PushOutcome::Rejected { reason }) => {
-                let label = if reason.starts_with("duplicate id:") {
-                    "conflict"
-                } else {
-                    "rejected"
-                };
-                metrics::SYNC_PUSHES_TOTAL.with_label_values(&[label]).inc();
-                results.push(PushOutcome::Rejected { reason });
-            }
-            Ok(PushOutcome::Conflict(conflict_item)) => {
-                // The store never resolves conflicts, but the match must be
-                // exhaustive over the wire type.
-                metrics::SYNC_PUSHES_TOTAL
-                    .with_label_values(&["conflict"])
-                    .inc();
-                results.push(PushOutcome::Conflict(conflict_item));
-            }
-            Err(e) => {
+    }
+
+    // Phase 2: single-transaction batch insert for the valid items.
+    let batch_results = if valid_items.is_empty() {
+        Vec::new()
+    } else {
+        store
+            .push_batch(&valid_items, tenant_id)
+            .await
+            .map_err(|e| {
                 metrics::SYNC_PUSHES_TOTAL
                     .with_label_values(&["rejected"])
                     .inc();
-                return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, e));
-            }
-        }
+                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e)
+            })?
+    };
+
+    // Reassemble in request order: invalid ids stay Rejected at their
+    // original position; batch outcomes land at the valid items' slots.
+    let mut results = Vec::with_capacity(items.len());
+    for (idx, item) in items.iter().enumerate() {
+        let outcome = match valid_indexes.iter().position(|&v| v == idx) {
+            Some(pos) => batch_results.get(pos).cloned().unwrap_or_else(|| {
+                // Should be unreachable: every valid index has an outcome.
+                PushOutcome::Rejected {
+                    reason: format!("missing batch outcome for {}", item.id),
+                }
+            }),
+            None => PushOutcome::Rejected {
+                reason: format!("invalid id: {}", item.id),
+            },
+        };
+        let label = match &outcome {
+            PushOutcome::Accepted => "accepted",
+            PushOutcome::Rejected { reason } if reason.starts_with("duplicate id:") => "conflict",
+            PushOutcome::Rejected { .. } => "rejected",
+            PushOutcome::Conflict(..) => "conflict",
+        };
+        metrics::SYNC_PUSHES_TOTAL.with_label_values(&[label]).inc();
+        results.push(outcome);
     }
 
     metrics::DB_CONTENTION_SECONDS
@@ -326,12 +386,27 @@ async fn pull_handler(
     Ok(axum::Json(PullResponse { items, next_cursor }))
 }
 
+/// Build a JSON response from pre-serialized bytes.
+///
+/// Serves the snapshot cache hit path without a
+/// `serde_json::from_slice` → `axum::Json` re-serialize round trip
+/// (SOTA finding C): the cache stores `Vec<u8>` precisely to avoid
+/// JSON work on hits, so the hit path now returns the bytes as-is.
+fn json_bytes_response(bytes: Vec<u8>) -> axum::response::Response {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        bytes,
+    )
+        .into_response()
+}
+
 /// `GET /api/sync/snapshot` — return reference data baseline for a tenant (P-3).
 ///
 /// Called by clients whose sync anchor has expired. Returns all products,
 /// tax rates, and users for the requesting tenant (scoped by `tenant_id`
 /// from JWT claims). Responses are cached in-memory per-tenant with a
-/// 5-min TTL.
+/// 15-min TTL; cache hits serve the stored bytes directly with zero JSON
+/// processing.
 ///
 /// Both `POST /api/v1/tax-rates` and `POST /api/v1/users` now stamp
 /// `tenant_id` from JWT claims (same pattern as `create_product` in
@@ -341,8 +416,7 @@ async fn pull_handler(
 async fn snapshot_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
-) -> Result<axum::Json<serde_json::Value>, (axum::http::StatusCode, axum::Json<serde_json::Value>)>
-{
+) -> Result<axum::response::Response, (axum::http::StatusCode, axum::Json<serde_json::Value>)> {
     let start = std::time::Instant::now();
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
@@ -365,9 +439,10 @@ async fn snapshot_handler(
         let cache = state.snapshot_cache.lock().await;
         if let Some((cached_at, cached_bytes)) = cache.get(tenant_id)
             && cached_at.elapsed().as_secs() < SNAPSHOT_CACHE_TTL_SECS
-            && let Ok(json) = serde_json::from_slice::<serde_json::Value>(cached_bytes)
         {
-            return Ok(axum::Json(json));
+            // Cache hit: serve the stored bytes directly. No JSON
+            // deserialize → re-serialize (SOTA finding C).
+            return Ok(json_bytes_response(cached_bytes.clone()));
         }
     }
 
@@ -393,17 +468,26 @@ async fn snapshot_handler(
         "users": users,
     });
 
-    // Cache the result.
-    if let Ok(cached_bytes) = serde_json::to_vec(&snapshot) {
-        let mut cache = state.snapshot_cache.lock().await;
-        cache.insert(
-            tenant_id.to_owned(),
-            (std::time::Instant::now(), cached_bytes),
-        );
-    }
+    // Serialize once: the bytes are both cached and served as the
+    // response body (SOTA finding C — no second JSON pass).
+    let bytes = match serde_json::to_vec(&snapshot) {
+        Ok(bytes) => bytes,
+        Err(e) => return Err(error_json(&e.to_string())),
+    };
+
+    // Cache the result, opportunistically pruning expired entries so a
+    // tenant that stops polling cannot leave its bytes in memory forever
+    // (unbounded growth under tenant churn). The TTL read-check above
+    // only skips STALE reads; this eviction is what bounds the map size.
+    let mut cache = state.snapshot_cache.lock().await;
+    cache.retain(|_, (cached_at, _)| cached_at.elapsed().as_secs() < SNAPSHOT_CACHE_TTL_SECS);
+    cache.insert(
+        tenant_id.to_owned(),
+        (std::time::Instant::now(), bytes.clone()),
+    );
 
     metrics::SYNC_PULL_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
-    Ok(axum::Json(snapshot))
+    Ok(json_bytes_response(bytes))
 }
 
 /// `GET /api/sync/status` — return server health, version, and pending queue depth.
@@ -416,7 +500,7 @@ async fn status_handler(
     let store = state.store();
     let (pending_count, total_tenants) = (
         store.pending_count(tenant_id).await,
-        store.distinct_tenant_count().await,
+        state.cached_tenant_count().await,
     );
 
     // P-3: Tiered heartbeat — server tells client how often to poll.

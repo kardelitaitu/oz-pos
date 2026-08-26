@@ -1,5 +1,97 @@
 use super::*;
 use oz_core::export::email_report::SMTP_CONFIG_SETTINGS_KEY;
+use serial_test::serial;
+
+/// Create a process-unique throwaway database (the established pattern for
+/// tests that mutate global catalog state — roles, FORCE RLS — which would
+/// otherwise race the other PG integration tests on a shared dev DB).
+///
+/// Returns `(db_url, db_name, admin_pool)`; the admin pool stays connected
+/// to the base DB so the caller can `DROP DATABASE` on cleanup. Returns
+/// `None` (test skips) when Postgres is unreachable or the URL role lacks
+/// `CREATE DATABASE`.
+async fn throwaway_pg_db(
+    url: &str,
+    prefix: &str,
+) -> Option<(String, String, deadpool_postgres::Pool)> {
+    // Admin connection is raw (apply_schema = false): it only sweeps stale
+    // DBs and creates the throwaway one, so it must not re-apply PG_INIT
+    // to the shared base DB (concurrent catalog DDL across parallel PG
+    // test binaries is a flake source).
+    let admin_pool = match crate::db::DbPool::connect_postgres(url, false, 20, false).await {
+        Ok(crate::db::DbPool::Postgres(p)) => p,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG test skipped: {e}");
+            return None;
+        }
+    };
+    let admin = admin_pool.get().await.expect("admin client");
+
+    // Sweep any stale throwaway DBs a crashed run left behind (only
+    // tests create `{prefix}_%`), so the fixed-name probe role never
+    // owns objects in a leftover DB — DROP ROLE would then fail.
+    let stale: Vec<String> = admin
+        .query(
+            "SELECT datname FROM pg_database WHERE datname LIKE $1",
+            &[&format!("{prefix}\\_%")],
+        )
+        .await
+        .expect("stale database query")
+        .iter()
+        .map(|r| r.get::<_, String>(0))
+        .collect();
+    for d in &stale {
+        admin
+            .batch_execute(&format!("DROP DATABASE IF EXISTS {d} WITH (FORCE);"))
+            .await
+            .expect("drop stale test database");
+    }
+
+    // A crashed earlier run (before the throwaway-DB refactor) may have
+    // left the fixed-name probe roles owning objects in the BASE database.
+    // DROP OWNED BY releases those so the role setup's DROP ROLE succeeds.
+    // NOTE: `oz_email_discovery` is deliberately NOT dropped here — it is a
+    // cluster-wide role that production code (`SET LOCAL ROLE
+    // oz_email_discovery`) depends on, and nextest runs each test in its own
+    // process, so dropping it from this helper would race a concurrent test
+    // that is mid-flight using it (the observed flake). It is created
+    // idempotently (`IF NOT EXISTS`) and owns nothing, so it is safe to
+    // leave in place across test runs.
+    for role in ["oz_email_rls_probe", "oz_email_tenants_probe"] {
+        let _ = admin.batch_execute(&format!("DROP OWNED BY {role};")).await;
+        let _ = admin
+            .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
+            .await;
+    }
+
+    let db_name = format!("{prefix}_{}", std::process::id());
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop stale database should succeed");
+    if let Err(e) = admin
+        .execute(&format!("CREATE DATABASE {db_name}"), &[])
+        .await
+    {
+        eprintln!("PG test skipped: cannot CREATE DATABASE ({e})");
+        return None;
+    }
+
+    // URL for the throwaway DB (swap the path segment, keep any query).
+    let (base, query) = match url.split_once('?') {
+        Some((b, q)) => (b, Some(q)),
+        None => (url, None),
+    };
+    let (head, _old_db) = base
+        .rsplit_once('/')
+        .expect("URL must have a database path");
+    let db_url = match query {
+        Some(q) => format!("{head}/{db_name}?{q}"),
+        None => format!("{head}/{db_name}"),
+    };
+    Some((db_url, db_name, admin_pool))
+}
 
 /// Integration test against a live Postgres instance — seeds a product,
 /// a completed sale with lines, stock, and the settings the loop reads,
@@ -621,4 +713,484 @@ async fn pg_integration_sent_reports_skips_claimed_period_before_smtp() {
         .execute("DELETE FROM sent_reports WHERE tenant_id = $1", &[&tenant])
         .await
         .unwrap();
+}
+
+/// The advisory lock must not leak onto a pooled connection (Bug 2).
+///
+/// `pg_try_advisory_lock` is session-level: if the lock holder's
+/// connection is returned to the pool still holding the lock, the next
+/// borrower inherits it and that tenant's email cycle is blocked
+/// forever. The RAII guard must release on the normal path, and on the
+/// panic path must detach/close the connection so the lock dies with
+/// the session.
+#[tokio::test]
+async fn pg_integration_advisory_lock_released_after_cycle() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG advisory-lock integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-adv-lock-{}", uuid::Uuid::now_v7());
+
+    // Simulate the full guard lifecycle WITHOUT running the inner cycle
+    // (which would need seeded settings + SMTP): acquire, then release.
+    {
+        let mut guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            guard.acquired,
+            "fresh tenant must acquire the advisory lock"
+        );
+        guard.release().await;
+    }
+
+    // The lock must be released — a second acquire on a (possibly
+    // recycled) pool connection must succeed, proving the lock was not
+    // leaked onto the returned connection.
+    {
+        let mut guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            guard.acquired,
+            "advisory lock must be released after the cycle — a leaked lock would block this tenant forever"
+        );
+        guard.release().await;
+    }
+}
+
+/// The panic path: if the inner cycle panics while holding the advisory
+/// lock, the guard's Drop must close the connection so the session (and
+/// the lock) dies — the tenant must not be blocked forever.
+#[tokio::test]
+async fn pg_integration_advisory_lock_guard_detaches_on_drop_without_release() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG advisory-lock guard integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-adv-lock-panic-{}", uuid::Uuid::now_v7());
+
+    // Acquire the lock, then drop the guard WITHOUT calling release —
+    // this simulates a panic inside the inner cycle (Drop runs during
+    // unwinding). The guard must detach the connection, closing the
+    // session and releasing the lock.
+    {
+        let guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            guard.acquired,
+            "fresh tenant must acquire the advisory lock"
+        );
+        // No `release()` — dropped here, as during panic unwinding.
+    }
+
+    // The lock must be gone: a new acquire must succeed.
+    {
+        let mut guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            guard.acquired,
+            "a dropped-without-release guard must close the connection so the advisory lock dies with the session"
+        );
+        guard.release().await;
+    }
+}
+
+/// Defect A (round-3): `release()` must NOT return a lock-holding
+/// connection to the pool when the unlock query FAILS. The current code
+/// does `let _ = unlock` — on failure the connection goes back to the
+/// pool still holding the session-level lock, and Drop cannot detach it
+/// (conn already taken). Simulate: acquire the lock, kill the backend,
+/// then release() — the unlock fails, and the connection must be
+/// detached (pool size drops), not returned holding a lock.
+#[tokio::test]
+async fn pg_integration_advisory_lock_release_detaches_on_unlock_failure() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 2, false).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG advisory-lock release integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-adv-release-{}", uuid::Uuid::now_v7());
+
+    // Acquire the lock and find the guard connection's backend PID.
+    let mut guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+    assert!(guard.acquired);
+    let pid: i32 = guard
+        .conn
+        .as_ref()
+        .unwrap()
+        .query_one("SELECT pg_backend_pid()", &[])
+        .await
+        .unwrap()
+        .get(0);
+
+    // Kill the backend from a second connection — the unlock query in
+    // release() will now fail.
+    let killer = pool.get().await.unwrap();
+    killer
+        .execute("SELECT pg_terminate_backend($1)", &[&pid])
+        .await
+        .unwrap();
+    drop(killer);
+
+    let size_before = pool.status().size;
+    guard.release().await;
+    let size_after = pool.status().size;
+
+    // The failed unlock must DETACH the dead connection (size drops),
+    // not return it to the pool. A returned connection holding (or
+    // about to leak) the lock is the exact bug we are guarding against.
+    assert!(
+        size_after < size_before || size_after == 0,
+        "failed unlock must detach the connection (size {size_before} -> {size_after}), not return it to the pool"
+    );
+}
+/// Defect B (round-3): when `pg_try_advisory_lock` returns false (another
+/// instance holds the tenant's lock), the guard must return its
+/// connection to the pool NORMALLY — NOT detach/destroy it. The current
+/// `Drop` detaches unconditionally, so every lock-contention round
+/// destroys a pool connection (deadpool `size` drops; the next get()
+/// must create a brand-new session — connection churn).
+///
+/// Observable: with max_size(2), holder takes 1 (size → 1). The
+/// non-acquired guard takes the 2nd (size → 2). After it drops:
+///   correct:   connection returned → size stays 2
+///   buggy:     detached/destroyed → size drops to 1
+#[tokio::test]
+async fn pg_integration_advisory_lock_not_acquired_returns_connection() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 2, false).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG advisory-lock contention integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-adv-contend-{}", uuid::Uuid::now_v7());
+
+    // Instance 1 holds the lock → size grows to 1.
+    let mut holder = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+    assert!(holder.acquired);
+    assert_eq!(pool.status().size, 1, "holder must use 1 connection");
+
+    // Instance 2 tries the same tenant — takes the 2nd connection,
+    // does NOT acquire the lock.
+    {
+        let guard = AdvisoryLockGuard::acquire(&pool, &tenant).await.unwrap();
+        assert!(
+            !guard.acquired,
+            "second instance must not acquire the held lock"
+        );
+        assert_eq!(
+            pool.status().size,
+            2,
+            "contender must use the 2nd connection"
+        );
+    } // guard dropped here
+
+    assert_eq!(
+        pool.status().size,
+        2,
+        "a non-acquired guard must return its connection to the pool, not detach it (churn)"
+    );
+
+    holder.release().await;
+}
+
+/// RED (TDD): the email report path must be RLS-cutover compatible.
+///
+/// After `scripts/rls-cutover.sql` (FORCE ROW LEVEL SECURITY), every
+/// query touching a tenant table must run with `SET LOCAL oz.tenant_id`
+/// in a transaction. The webhook path was made oz_app-compatible; the
+/// email analytics path was NOT — `daily_revenue_pg` (and the
+/// sent_reports claim) run bare queries with no transaction and no GUC.
+/// As the restricted role, the seeded sale is invisible → the report is
+/// silently empty (bug), and the sent_reports INSERT violates WITH
+/// CHECK.
+#[tokio::test]
+#[serial(pg_rls_cutover)]
+async fn pg_integration_email_analytics_visible_as_restricted_role() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    // Throwaway DB: FORCE RLS on shared tables would race the other PG
+    // integration tests (webhooks writes to the same tables). The admin
+    // pool stays connected to the base DB for cleanup.
+    let Some((db_url, db_name, admin_pool)) = throwaway_pg_db(&url, "oz_email_rls").await else {
+        return;
+    };
+    let pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG email-RLS integration test skipped: {e}");
+            return;
+        }
+    };
+    let mut admin = pool.get().await.unwrap();
+    let ns = format!("pg-email-rls-{}", std::process::id());
+    let tenant = format!("{ns}-tenant");
+    let role = "oz_email_rls_probe";
+
+    // Set up the restricted role with FORCEd RLS on the tables the email
+    // path touches (mirrors scripts/rls-cutover.sql). sale_lines is a
+    // non-RLS child table (no tenant_id) — same as the real cutover.
+    admin
+        .batch_execute(&format!(
+            "DO $$ BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') THEN
+                    EXECUTE 'DROP OWNED BY {role}';
+                    EXECUTE 'DROP ROLE {role}';
+                END IF;
+             END $$;
+             CREATE ROLE {role} LOGIN PASSWORD 'oz_email_rls_probe_pw';
+             GRANT USAGE ON SCHEMA public TO {role};
+             GRANT SELECT, INSERT, UPDATE, DELETE ON sales, sale_lines, sent_reports, products TO {role};
+             ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE sent_reports ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE sales FORCE ROW LEVEL SECURITY;
+             ALTER TABLE sent_reports FORCE ROW LEVEL SECURITY;
+             DROP POLICY IF EXISTS tenant_isolation ON sales;
+             CREATE POLICY tenant_isolation ON sales
+                 USING (tenant_id = current_setting('oz.tenant_id', true));
+             DROP POLICY IF EXISTS tenant_isolation ON sent_reports;
+             CREATE POLICY tenant_isolation ON sent_reports
+                 USING (tenant_id = current_setting('oz.tenant_id', true));"
+        ))
+        .await
+        .expect("email-RLS probe role setup should succeed");
+
+    // Seed as owner — FORCE applies to the owner too, so scope the seed
+    // transaction to the tenant GUC (same as the webhook cutover test).
+    let seed_tx = admin.transaction().await.unwrap();
+    seed_tx
+        .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .unwrap();
+    seed_tx
+        .execute(
+            "INSERT INTO sales (id, tenant_id, status, total_minor, currency, created_at, line_count)
+             VALUES ($1, $2, 'completed', 100, 'USD', '2026-01-15T09:00:00.000Z', 1)",
+            &[&format!("{ns}-sale"), &tenant],
+        )
+        .await
+        .unwrap();
+    seed_tx
+        .execute(
+            "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position)
+             VALUES ($1, $2, $3, 1, 100, 100, 'USD', 0)",
+            &[&format!("{ns}-line"), &format!("{ns}-sale"), &format!("{ns}-sku")],
+        )
+        .await
+        .unwrap();
+    seed_tx.commit().await.unwrap();
+    drop(admin);
+
+    // The app pool: connects AS the restricted role (same pattern as the
+    // webhook cutover test), to the THROWAWAY database.
+    let scheme_end = db_url.find("://").expect("URL has a scheme") + 3;
+    let at = db_url.find('@').expect("URL has credentials");
+    let app_url = format!(
+        "{}oz_email_rls_probe:oz_email_rls_probe_pw@{}",
+        &db_url[..scheme_end],
+        &db_url[at + 1..]
+    );
+    let app_pool = {
+        use deadpool_postgres::Manager;
+        use std::str::FromStr;
+        let config = tokio_postgres::Config::from_str(&app_url).expect("valid app URL");
+        let manager = Manager::new(config, tokio_postgres::NoTls);
+        deadpool_postgres::Pool::builder(manager)
+            .max_size(2)
+            .build()
+            .expect("app pool build")
+    };
+
+    // The actual email analytics function, run AS the restricted role.
+    // Today it runs a bare query with no GUC → the seeded sale is
+    // invisible → the report is empty. The fix must make it visible by
+    // setting the tenant GUC in a transaction.
+    let rows = daily_revenue_pg(&app_pool, "2026-01-01", "2026-01-31", &tenant).await;
+    let rows = match rows {
+        Ok(r) => r,
+        Err(e) => panic!("daily_revenue_pg failed as restricted role: {e}"),
+    };
+    assert!(
+        !rows.is_empty(),
+        "the seeded sale must be visible to the restricted role — \
+         daily_revenue_pg must set the tenant GUC (RLS cutover compat)"
+    );
+
+    // The sent_reports claim must also work as the restricted role.
+    let claimed = claim_period_pg(&app_pool, &tenant, "2026-01", "rpt-1").await;
+    assert!(
+        claimed.is_ok() && claimed.unwrap(),
+        "the sent_reports claim must succeed as the restricted role (WITH CHECK needs the GUC)"
+    );
+
+    // Cleanup: drop every handle, then the throwaway database (kills the
+    // role's objects), then remove the probe role from the shared cluster.
+    // DROP DATABASE cannot run inside a transaction — separate statements.
+    drop(pool);
+    let admin = admin_pool.get().await.unwrap();
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("email-RLS drop throwaway database should succeed");
+    admin
+        .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
+        .await
+        .expect("email-RLS probe role cleanup should succeed");
+}
+
+/// RED (TDD): tenant discovery must survive RLS cutover.
+///
+/// `active_tenants_pg` enumerates every tenant by reading tenant_plans /
+/// offline_queue / sync_terminals — all RLS FORCEd tables. As the
+/// restricted role with no GUC, RLS hides all rows → the loop discovers
+/// 0 tenants and scheduled reports silently stop. The webhook path solved
+/// the identical read-before-tenant-known problem with a BYPASSRLS
+/// resolver role; the email discovery path needs the same treatment.
+#[tokio::test]
+#[serial(pg_rls_cutover)]
+async fn pg_integration_active_tenants_survives_rls_cutover() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    // Throwaway DB: FORCE RLS on shared tables (offline_queue etc.) would
+    // race the other PG integration tests. Admin pool stays on base DB.
+    let Some((db_url, db_name, admin_pool)) = throwaway_pg_db(&url, "oz_email_tenants").await
+    else {
+        return;
+    };
+    let pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG active-tenants integration test skipped: {e}");
+            return;
+        }
+    };
+    let mut admin = pool.get().await.unwrap();
+    let ns = format!("pg-email-tenants-{}", std::process::id());
+    let tenant = format!("{ns}-tenant");
+    let role = "oz_email_tenants_probe";
+
+    // Set up the restricted role + FORCE RLS on the discovery tables,
+    // mirroring the real cutover.
+    admin
+        .batch_execute(&format!(
+            "DO $$ BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') THEN
+                    EXECUTE 'DROP OWNED BY {role}';
+                    EXECUTE 'DROP ROLE {role}';
+                END IF;
+             END $$;
+             CREATE ROLE {role} LOGIN PASSWORD 'oz_email_tenants_probe_pw';
+             GRANT USAGE ON SCHEMA public TO {role};
+             GRANT SELECT ON tenant_plans, offline_queue, sync_terminals TO {role};
+             -- The BYPASSRLS discovery role (mirrors rls-cutover.sql 2d):
+             -- the code SET LOCAL ROLEs into it to read cross-tenant.
+             DO $$ BEGIN
+                 IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_email_discovery') THEN
+                     CREATE ROLE oz_email_discovery NOLOGIN BYPASSRLS;
+                 END IF;
+             END $$;
+             GRANT USAGE ON SCHEMA public TO oz_email_discovery;
+             GRANT SELECT ON tenant_plans, offline_queue, sync_terminals TO oz_email_discovery;
+             GRANT oz_email_discovery TO {role};
+             ALTER TABLE tenant_plans ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE offline_queue ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE sync_terminals ENABLE ROW LEVEL SECURITY;
+             ALTER TABLE tenant_plans FORCE ROW LEVEL SECURITY;
+             ALTER TABLE offline_queue FORCE ROW LEVEL SECURITY;
+             ALTER TABLE sync_terminals FORCE ROW LEVEL SECURITY;
+             DROP POLICY IF EXISTS tenant_isolation ON tenant_plans;
+             CREATE POLICY tenant_isolation ON tenant_plans
+                 USING (tenant_id = current_setting('oz.tenant_id', true));
+             DROP POLICY IF EXISTS tenant_isolation ON offline_queue;
+             CREATE POLICY tenant_isolation ON offline_queue
+                 USING (tenant_id = current_setting('oz.tenant_id', true));
+             DROP POLICY IF EXISTS tenant_isolation ON sync_terminals;
+             CREATE POLICY tenant_isolation ON sync_terminals
+                 USING (tenant_id = current_setting('oz.tenant_id', true));"
+        ))
+        .await
+        .expect("active-tenants probe role setup should succeed");
+
+    // Seed a tenant_plans row (owner + GUC, since FORCE applies to owner).
+    let seed_tx = admin.transaction().await.unwrap();
+    seed_tx
+        .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+        .await
+        .unwrap();
+    seed_tx
+        .execute(
+            "INSERT INTO tenant_plans (tenant_id, plan, updated_at)
+             VALUES ($1, 'pro', '2026-01-01T00:00:00Z')
+             ON CONFLICT (tenant_id) DO NOTHING",
+            &[&tenant],
+        )
+        .await
+        .unwrap();
+    seed_tx.commit().await.unwrap();
+    drop(admin);
+
+    // The app pool connects AS the restricted role, to the THROWAWAY DB.
+    let scheme_end = db_url.find("://").expect("URL has a scheme") + 3;
+    let at = db_url.find('@').expect("URL has credentials");
+    let app_url = format!(
+        "{}oz_email_tenants_probe:oz_email_tenants_probe_pw@{}",
+        &db_url[..scheme_end],
+        &db_url[at + 1..]
+    );
+    let app_pool = {
+        use deadpool_postgres::Manager;
+        use std::str::FromStr;
+        let config = tokio_postgres::Config::from_str(&app_url).expect("valid app URL");
+        let manager = Manager::new(config, tokio_postgres::NoTls);
+        deadpool_postgres::Pool::builder(manager)
+            .max_size(2)
+            .build()
+            .expect("app pool build")
+    };
+
+    // The REAL discovery function, as the restricted role. Post-cutover it
+    // must still enumerate the seeded tenant — today it returns only
+    // 'default' (RLS hides every tenant row without a GUC).
+    let tenants = active_tenants_pg(&app_pool).await.unwrap();
+    assert!(
+        tenants.contains(&tenant),
+        "active_tenants_pg must enumerate the seeded tenant post-cutover, got: {tenants:?}"
+    );
+
+    // Cleanup: drop every handle, then the throwaway database (kills the
+    // roles' objects), then remove the probe + discovery roles.
+    // DROP DATABASE cannot run inside a transaction — separate statements.
+    drop(pool);
+    let admin = admin_pool.get().await.unwrap();
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("active-tenants drop throwaway database should succeed");
+    admin
+        .batch_execute(&format!("DROP ROLE IF EXISTS {role};"))
+        .await
+        .expect("active-tenants probe role cleanup should succeed");
+    // `oz_email_discovery` is deliberately left in place (see the NOTE at
+    // the stale-role cleanup in `throwaway_pg_db`): it is cluster-wide,
+    // production depends on it, and dropping it here would race concurrent
+    // tests that use it. It is idempotently re-created (`IF NOT EXISTS`) by
+    // the next run.
 }

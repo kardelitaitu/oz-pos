@@ -29,6 +29,12 @@ use tracing::{info, warn};
 
 /// A pooled database connection, either SQLite (behind a Mutex) or
 /// PostgreSQL (via deadpool).
+///
+/// Cluster-wide advisory lock key used to serialize PG_INIT schema apply
+/// and cutover role mutations across parallel test processes (and two
+/// app instances booting simultaneously). Value = ASCII "OZTESTSQ".
+pub(crate) const SCHEMA_LOCK_KEY: i64 = 0x4f5a_5445_5354_5351;
+
 #[derive(Clone, Debug)]
 pub enum DbPool {
     /// SQLite connection wrapped in `Arc<Mutex<>>` (compatible with
@@ -39,9 +45,6 @@ pub enum DbPool {
 }
 
 impl DbPool {
-    /// Create a new `DbPool` from the environment.
-    ///
-    /// Resolution order:
     /// Create a new `DbPool` from a [`CloudServerConfig`].
     ///
     /// Resolution order:
@@ -49,14 +52,25 @@ impl DbPool {
     ///    connect to PostgreSQL.
     /// 2. Otherwise, open SQLite from `db_path`.
     pub async fn from_config(config: &CloudServerConfig) -> Result<Self, DbError> {
+        Self::from_config_with_retries(config, 5).await
+    }
+
+    /// Like [`from_config`] but with a caller-chosen PG retry budget.
+    /// Production uses the default (5) via [`from_config`]; tests asserting a
+    /// connection failure on a dead port pass `1` to skip the backoff sleeps.
+    pub(crate) async fn from_config_with_retries(
+        config: &CloudServerConfig,
+        max_attempts: u32,
+    ) -> Result<Self, DbError> {
         if let Some(ref url) = config.database_url
             && (url.starts_with("postgres://") || url.starts_with("postgresql://"))
         {
-            return Self::connect_postgres(
+            return Self::connect_postgres_with_retries(
                 url,
                 config.require_tls,
                 config.db_pool_size,
                 config.apply_schema,
+                max_attempts,
             )
             .await;
         }
@@ -67,9 +81,18 @@ impl DbPool {
     /// Production code should go through [`CloudServerConfig`].
     #[cfg(test)]
     pub async fn from_env() -> Result<Self, DbError> {
+        Self::from_env_with_retries(5).await
+    }
+
+    /// Like [`from_env`] but with a caller-chosen retry budget for the
+    /// underlying `connect_postgres`. Tests asserting a connection failure
+    /// on a dead port should pass `max_attempts: 1` to avoid 30+ seconds
+    /// of backoff sleeps.
+    #[cfg(test)]
+    pub async fn from_env_with_retries(max_attempts: u32) -> Result<Self, DbError> {
         let config =
             CloudServerConfig::from_env().expect("CloudServerConfig::from_env failed in test");
-        Self::from_config(&config).await
+        Self::from_config_with_retries(&config, max_attempts).await
     }
 
     /// Detect paths that are obviously non-Linux: a Windows drive-letter
@@ -127,6 +150,9 @@ impl DbPool {
     /// When `require_tls` is set, the URL must specify `sslmode=require`;
     /// otherwise startup fails rather than allowing a plaintext fallback.
     /// `pool_size` bounds the deadpool connection pool (max open connections).
+    /// `max_attempts` controls the connectivity retry budget (5 for production
+    /// to handle PG addon startup; tests asserting a connection failure use 1
+    /// to avoid 30+ seconds of backoff sleeps).
     ///
     /// When `apply_schema` is true (the default), the full schema (`PG_INIT`)
     /// is applied at startup. Set it to false (via `OZ_APPLY_SCHEMA=0`) for
@@ -134,11 +160,31 @@ impl DbPool {
     /// restricted `oz_app` role that only has DML grants — re-running the DDL
     /// would fail with `permission denied for schema public`. The schema is
     /// then applied once by the migration tool as the table owner.
+    ///
+    /// This is the production entry point (5-attempt retry budget). The
+    /// crate is a binary, so the only callers inside the crate are the test
+    /// suite; `connect_postgres_with_retries` exists for tests that assert a
+    /// failure without burning the backoff sleeps.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub async fn connect_postgres(
         url: &str,
         require_tls: bool,
         pool_size: usize,
         apply_schema: bool,
+    ) -> Result<Self, DbError> {
+        Self::connect_postgres_with_retries(url, require_tls, pool_size, apply_schema, 5).await
+    }
+
+    /// Like [`connect_postgres`] but with a caller-chosen retry budget.
+    /// Tests that assert a connection failure should pass `max_attempts: 1`
+    /// to avoid the 30+ seconds of backoff sleeps the production retry loop
+    /// burns on a dead port.
+    pub(crate) async fn connect_postgres_with_retries(
+        url: &str,
+        require_tls: bool,
+        pool_size: usize,
+        apply_schema: bool,
+        max_attempts: u32,
     ) -> Result<Self, DbError> {
         use deadpool_postgres::{Manager, ManagerConfig, RecyclingMethod};
 
@@ -183,6 +229,26 @@ impl DbPool {
 
         let pool = deadpool_postgres::Pool::builder(manager)
             .max_size(pool_size)
+            // The timeouts need a runtime to sleep on. deadpool's default
+            // `rt_tokio_1` feature provides TokioRuntime; binding it here
+            // makes the timeout options actually enforceable.
+            .runtime(deadpool_postgres::Runtime::Tokio1)
+            // Bound the wait for a pool slot: deadpool defaults to an
+            // UNBOUNDED wait, so a stalled DB (slow query holding all
+            // connections, PG addon hiccup) would hang every request
+            // indefinitely — queue buildup, health-check timeout, container
+            // restart. Fail fast after 5s instead (the doc's §7.2 "5-20ms
+            // typical wait" becomes an upper bound, not a hope).
+            .wait_timeout(Some(std::time::Duration::from_secs(5)))
+            // Bound connection establishment: a flaky addon must not let a
+            // new-connection attempt hang the requesting handler forever.
+            .create_timeout(Some(std::time::Duration::from_secs(10)))
+            // Bound the recycle (is_closed) check so a wedged pooled
+            // connection can't stall checkout. Note: deadpool 0.12 has no
+            // max_lifetime/idle_timeout (added in 0.13+); stale connections
+            // closed by the PG addon are already caught reactively by
+            // RecyclingMethod::Fast's per-checkout is_closed() probe.
+            .recycle_timeout(Some(std::time::Duration::from_secs(5)))
             .build()
             .map_err(|e| DbError::Pool(e.to_string()))?;
 
@@ -191,8 +257,8 @@ impl DbPool {
         // Retry with exponential backoff: 2s, 4s, 8s, 16s, 30s (max 5 attempts = ~60s total).
         let mut last_err = String::new();
         let mut connected = false;
-        for attempt in 1..=5 {
-            let delay_secs = std::cmp::min(2u64.pow(attempt as u32), 30);
+        for attempt in 1..=max_attempts {
+            let delay_secs = std::cmp::min(2u64.pow(attempt), 30);
             info!(attempt, delay_secs, "attempting PostgreSQL connection");
 
             match tokio::time::timeout(std::time::Duration::from_secs(10), pool.get()).await {
@@ -228,7 +294,7 @@ impl DbPool {
                 }
             }
 
-            if attempt < 5 {
+            if attempt < max_attempts {
                 info!(attempt, delay_secs, "retrying after delay");
                 tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
             }
@@ -236,7 +302,7 @@ impl DbPool {
 
         if !connected {
             return Err(DbError::Connection(format!(
-                "failed to connect to PostgreSQL after 5 attempts: {last_err}"
+                "failed to connect to PostgreSQL after {max_attempts} attempts: {last_err}"
             )));
         }
 
@@ -263,13 +329,27 @@ impl DbPool {
 
             // Schema migration can take 10-30s on first boot. Timeout at 60s
             // to prevent indefinite hang if the migration script has issues.
-            tokio::time::timeout(
+            // Serialize the DDL with a cluster-wide advisory lock: under
+            // nextest every PG integration test runs in its own process and
+            // several apply PG_INIT to the SAME base DB concurrently, which
+            // raced catalog DDL (the recurring flake); the same race exists
+            // between two app instances booting at once. The lock is
+            // session-scoped, so a crashed process releases it automatically.
+            migrate_client
+                .batch_execute(&format!("SELECT pg_advisory_lock({SCHEMA_LOCK_KEY});"))
+                .await
+                .map_err(|e| DbError::Migration(format!("failed to take schema lock: {e}")))?;
+            let apply = tokio::time::timeout(
                 std::time::Duration::from_secs(60),
                 migrate_client.batch_execute(oz_core::migrations::PG_INIT),
             )
             .await
             .map_err(|_| DbError::Migration("schema migration timed out after 60s".into()))?
-            .map_err(|e| DbError::Migration(e.to_string()))?;
+            .map_err(|e| DbError::Migration(e.to_string()));
+            let _ = migrate_client
+                .batch_execute(&format!("SELECT pg_advisory_unlock({SCHEMA_LOCK_KEY});"))
+                .await;
+            apply?;
             info!("PostgreSQL database connected and full schema applied");
         } else {
             info!("PostgreSQL database connected (schema application skipped: OZ_APPLY_SCHEMA=0)");

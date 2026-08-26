@@ -78,6 +78,7 @@ const KNOWN_NOISE_SELECTORS = [
   '.permission-denied-card',
   '.tables-floorplan',
   '.terminal-mgmt-toggle-thumb',
+  '.warehouse-popup',
   '.workspace-card--active',
   '.workspace-skeleton-card',
   '.ctx-menu',

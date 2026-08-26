@@ -104,7 +104,6 @@ test.describe('Kitchen Display System', () => {
     const pendingTicket = page.locator('.kds-column--pending .kds-ticket').first();
     await expect(pendingTicket).toBeVisible({ timeout: 5_000 });
     await pendingTicket.click();
-    await page.waitForTimeout(1_000);
 
     // No error boundary after status advance.
     await expect(page.locator('[class*="error-boundary"]')).toHaveCount(0, { timeout: 3_000 });

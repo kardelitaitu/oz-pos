@@ -68,8 +68,12 @@ CREATE TABLE IF NOT EXISTS inventory_locations (
 
 
 CREATE TABLE IF NOT EXISTS kds_daily_counters (
-    date        TEXT PRIMARY KEY,
-    counter     BIGINT NOT NULL DEFAULT 0
+    -- Display-number counter per (day, store): each store's tickets start
+    -- at #1 daily. '' = legacy single-store rows (no store identity).
+    date        TEXT NOT NULL,
+    store_id    TEXT NOT NULL DEFAULT '',
+    counter     BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (date, store_id)
 );
 
 
@@ -918,7 +922,10 @@ CREATE TABLE IF NOT EXISTS gift_card_transactions (
 
 CREATE TABLE IF NOT EXISTS "kds_orders" (
     id              TEXT PRIMARY KEY,
-    sale_id         TEXT NOT NULL UNIQUE REFERENCES sales(id),
+    -- One order per sale AND kitchen zone: a sale with items in multiple
+    -- zones fans out into one ticket per zone (multi-KDS routing), so the
+    -- uniqueness key is the (sale, zone) pair, not the sale alone.
+    sale_id         TEXT NOT NULL REFERENCES sales(id),
     -- Valid states: pending (received, not started), preparing,
     -- ready (cooked, awaiting pickup), served (delivered),
     -- cancelled (voided by kitchen or POS).
@@ -933,7 +940,8 @@ CREATE TABLE IF NOT EXISTS "kds_orders" (
     served_at       TEXT,
     prep_time_seconds BIGINT DEFAULT 0,
     notes           TEXT NOT NULL DEFAULT ''
-, store_id TEXT, kitchen_zone TEXT, table_number TEXT, priority BIGINT NOT NULL DEFAULT 0, target_instance_id TEXT, restaurant_pos_id TEXT, acked_by_device TEXT, acked_at TEXT);
+, store_id TEXT, kitchen_zone TEXT, table_number TEXT, priority BIGINT NOT NULL DEFAULT 0, target_instance_id TEXT, restaurant_pos_id TEXT, acked_by_device TEXT, acked_at TEXT,
+    UNIQUE (sale_id, kitchen_zone));
 
 
 CREATE TABLE IF NOT EXISTS loyalty_transactions (
@@ -1398,6 +1406,12 @@ CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_status ON offline_queue(tena
 
 
 CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_created ON offline_queue(tenant_id, created_at);
+
+
+-- Serves the health endpoint's `MAX(synced_at)` query (runs every 15s on
+-- the Docker healthcheck). Without this, that query is a full table scan
+-- over the whole 90-day retention queue on every health poll.
+CREATE INDEX IF NOT EXISTS idx_offline_queue_synced_at ON offline_queue(synced_at);
 
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_idempotency_key ON payments(idempotency_key);

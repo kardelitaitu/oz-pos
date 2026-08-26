@@ -32,7 +32,6 @@ test.describe('POS Workflows', () => {
 
     // In store-pos workspace, sales history is a sub-view opened via F6.
     await page.keyboard.press('F6');
-    await page.waitForTimeout(1_000);
 
     // Sales history container must appear.
     await expect(page.locator('.sales-history')).toBeVisible({ timeout: 8_000 });
@@ -49,7 +48,6 @@ test.describe('POS Workflows', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     await page.locator('.retail-cart-action-btn--pay').click();
     await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
@@ -82,7 +80,6 @@ test.describe('POS Workflows', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
-    await page.waitForTimeout(500);
 
     // Cart must have a line item.
     await expect(page.locator('[data-testid="cart-panel-line-item"]').first()).toBeVisible({ timeout: 3_000 });

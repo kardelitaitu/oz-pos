@@ -73,6 +73,15 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-ws-type-restaurant-pos': 'Restaurant POS',
   'topology-ws-type-kds': 'Kitchen Display (KDS)',
   'topology-ws-type-warehouse': 'Warehouse',
+  'topology-node-type-store': 'Branch Location',
+  'topology-node-type-workspace': 'Workspace',
+  'topology-node-type-warehouse': 'Warehouse',
+  'topology-node-type-hardware': 'Hardware Device',
+  'topology-hardware-thermal-receipt': 'Thermal Receipt Printer',
+  'topology-hardware-thermal-kitchen': 'Kitchen Printer',
+  'topology-hardware-barcode-scanner': 'Barcode Scanner',
+  'topology-hardware-cash-drawer': 'Cash Drawer',
+  'topology-hardware-display-customer': 'Customer Display',
   'topology-wire-toggle-aria': 'Toggle wire direction',
   'topology-zoom-in': 'Zoom in',
   'topology-zoom-out': 'Zoom out',
@@ -93,7 +102,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-validation-details': 'Issues ({count})',
   'topology-validation-panel-aria': 'Diagram issues',
   'topology-validation-dismiss': 'Dismiss',
-  'topology-inspector-title': 'Node Inspector',
+  'topology-inspector-title': 'Node Properties',
   'topology-inspector-node-name': 'Node Name',
   'topology-inspector-subtitle': 'Subtitle / Location',
   'topology-inspector-close-aria': 'Close inspector',
@@ -142,12 +151,12 @@ const COMPARE_OVERLAY = {
 
 describe('NodeTopologyEditor a11y', () => {
   it('has no axe violations on initial render', async () => {
-    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="standard" />);
+    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="plus" />);
     await checkA11y(container);
   });
 
   it('has no axe violations with the node finder open', async () => {
-    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="standard" />);
+    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="plus" />);
     fireEvent.keyDown(document, { key: 'f', ctrlKey: true });
     const input = container.querySelector('.topology-finder-input') as HTMLInputElement | null;
     expect(input).not.toBeNull();
@@ -160,7 +169,7 @@ describe('NodeTopologyEditor a11y', () => {
 
   it('has no axe violations with the branch-compare overlay active', async () => {
     const { container } = renderWithProviders(
-      <NodeTopologyEditor currentTier="standard" compareOverlay={COMPARE_OVERLAY} compareFocus />,
+      <NodeTopologyEditor currentTier="plus" compareOverlay={COMPARE_OVERLAY} compareFocus />,
     );
     // Ghost layer + only-here markers + the compare panel all render.
     expect(container.querySelector('.topology-overlay-ghost-layer')).not.toBeNull();
@@ -179,7 +188,7 @@ describe('NodeTopologyEditor a11y', () => {
       ],
       wires: [],
     } as never);
-    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="standard" />);
+    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="plus" />);
     // Wait for the async load to land the two-node diagram (the preset
     // placeholder validates clean, so the widget only appears post-load).
     await waitFor(() => {

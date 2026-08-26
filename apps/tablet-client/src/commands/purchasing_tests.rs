@@ -28,6 +28,8 @@ fn make_po_line() -> PurchaseOrderLine {
         qty: 10,
         unit_cost_minor: 5000,
         line_total_minor: 50000,
+        received_qty: 0,
+        damaged_qty: 0,
     }
 }
 

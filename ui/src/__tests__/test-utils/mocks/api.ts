@@ -39,6 +39,7 @@ export interface SalesApiOverrides {
   exportDailySummaryScoped?: ReturnType<typeof vi.fn>;
   exportSalesByHourScoped?: ReturnType<typeof vi.fn>;
   exportEodReportScoped?: ReturnType<typeof vi.fn>;
+  listOpenBillsScoped?: ReturnType<typeof vi.fn>;
 }
 
 export function createSalesApiMock(overrides: SalesApiOverrides = {}) {
@@ -70,6 +71,7 @@ export function createSalesApiMock(overrides: SalesApiOverrides = {}) {
     listHeldCartsScoped: vi.fn((_token: string) => Promise.resolve([])),
     getHeldCartScoped: vi.fn((_token: string, _id: string) => Promise.resolve(null)),
     deleteHeldCartScoped: vi.fn((_token: string, _id: string) => Promise.resolve()),
+    listOpenBillsScoped: vi.fn((_token: string) => Promise.resolve([])),
     startSaleScoped: vi.fn((_token: string) => Promise.resolve({ cartId: 'cart-1' })),
     addLineScoped: vi.fn((_token: string) => Promise.resolve({ lineId: 'line-added-1', lineTotal: null })),
     setCartDiscountScoped: vi.fn((_token: string) => Promise.resolve()),

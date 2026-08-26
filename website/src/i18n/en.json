@@ -31,7 +31,7 @@
     "title": "Support",
     "subtitle": "We're here to help — reach out any time.",
     "emailLabel": "Email us",
-    "email": "support@oz-pos.com",
+    "email": "support@ozpos.my.id",
     "name": "Name",
     "namePlaceholder": "Your name",
     "message": "Message",
@@ -57,7 +57,7 @@
       },
       {
         "q": "Where can I report a bug?",
-        "a": "Email us at support@oz-pos.com with your version number and a description of what happened."
+        "a": "Email us at support@ozpos.my.id with your version number and a description of what happened."
       }
     ]
   },
@@ -232,7 +232,7 @@
     "logout": "Sign out",
     "notConfigured": "The license API is not configured on this deployment.",
     "noSubscription": "You don't have an active subscription yet. Choose a plan to get started.",
-    "checkoutUnavailable": "Online checkout isn't available yet — contact sales@oz-pos.com to subscribe.",
+    "checkoutUnavailable": "Online checkout isn't available yet — contact sales@ozpos.my.id to subscribe.",
     "subscribe": "Subscribe",
     "subscription": "Subscription",
     "starts": "Starts",

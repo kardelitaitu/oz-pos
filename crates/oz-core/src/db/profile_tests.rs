@@ -546,3 +546,59 @@ fn deactivation_preserves_profile() {
     assert_eq!(profile.national_id.as_deref(), Some("123456789"));
     assert_eq!(profile.monthly_take_home_minor, Some(5_000_000));
 }
+
+// ── mask_last4 ──────────────────────────────────────────────────────
+
+#[test]
+fn mask_last4_empty_string_returns_stars() {
+    assert_eq!(mask_last4(""), "****");
+}
+
+#[test]
+fn mask_last4_short_string_masks_all() {
+    // ≤4 chars: all masked (no suffix revealed).
+    assert_eq!(mask_last4("1234"), "****");
+    assert_eq!(mask_last4("ab"), "**");
+    assert_eq!(mask_last4("x"), "*");
+}
+
+#[test]
+fn mask_last4_reveals_last_four() {
+    assert_eq!(mask_last4("123456789"), "*****6789");
+    assert_eq!(mask_last4("abcdef"), "**cdef");
+    assert_eq!(mask_last4("12345678"), "****5678");
+}
+
+#[test]
+fn mask_last4_exactly_five_shows_one_star() {
+    assert_eq!(mask_last4("12345"), "*2345");
+}
+
+#[test]
+fn mask_last4_unicode_chars_count_correctly() {
+    // Unicode chars each count as one char for masking.
+    assert_eq!(mask_last4("一二三四五六七八九"), "*****六七八九");
+}
+
+// ── sha256_hex ──────────────────────────────────────────────────────
+
+#[test]
+fn sha256_hex_deterministic() {
+    let a = sha256_hex("hello");
+    let b = sha256_hex("hello");
+    assert_eq!(a, b);
+}
+
+#[test]
+fn sha256_hex_different_inputs_different_hashes() {
+    let a = sha256_hex("hello");
+    let b = sha256_hex("world");
+    assert_ne!(a, b);
+}
+
+#[test]
+fn sha256_hex_returns_64_char_hex() {
+    let hash = sha256_hex("test");
+    assert_eq!(hash.len(), 64);
+    assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+}

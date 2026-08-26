@@ -299,7 +299,7 @@ fn run_bootstrap_owner_rejects_short_pin() {
 
 #[tokio::test]
 async fn bootstrap_owner_mints_verifiable_picker_ticket() {
-    // audit/06 (parity with the desktop client): the command-level
+    // audit-open-findings (parity with the desktop client): the command-level
     // bootstrap must mint a ticket bound to the NEW owner so the
     // pre-session workspace picker works immediately after setup.
     let conn = migrations::fresh_db();

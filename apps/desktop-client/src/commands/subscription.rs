@@ -10,7 +10,7 @@ use serde::Serialize;
 use tauri::State;
 
 use oz_core::db::Store;
-use oz_core::subscription::TenantSubscription;
+use oz_core::subscription::{SubscriptionTier, TenantSubscription};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -29,7 +29,7 @@ pub struct SubscriptionCapabilitiesDto {
     pub max_warehouses: Option<i64>,
     /// Maximum staff users (`None` = unlimited).
     pub max_staff_users: Option<i64>,
-    /// Free = 30 days; paid tiers = unlimited (`None`).
+    /// Free = 3 months; Plus = 1 year; Pro = 5 years; Premium/Enterprise = unlimited (`None`).
     pub sales_history_days: Option<i64>,
     /// Whether the tier can process QRIS payments (Plus+).
     pub supports_qris: bool,
@@ -60,6 +60,18 @@ fn load_capabilities(db: &rusqlite::Connection) -> Result<SubscriptionCapabiliti
     sub.verify_signature()?;
     let tier = sub.effective_tier();
 
+    // In debug/dev builds, upgrade the bootstrap Free tier to Premium so
+    // all features are available during development. This mirrors the
+    // dev-mock's behavior (which returns Pro-tier capabilities). The real
+    // Free tier is only enforced in release builds where a license server
+    // issues signed subscriptions.
+    #[cfg(debug_assertions)]
+    let tier = if tier == SubscriptionTier::Free {
+        SubscriptionTier::Premium
+    } else {
+        tier
+    };
+
     let store_count: i64 = db
         .query_row("SELECT COUNT(*) FROM store_profiles", [], |r| r.get(0))
         .map_err(|e| AppError::Internal(format!("count store_profiles: {e}")))?;
@@ -76,7 +88,7 @@ fn load_capabilities(db: &rusqlite::Connection) -> Result<SubscriptionCapabiliti
         max_staff_users: tier.max_staff_users(),
         sales_history_days: tier.sales_history_days(),
         supports_qris: tier.supports_qris(),
-        supports_analytics: sub.supports_analytics_with_addons(),
+        supports_analytics: tier.supports_analytics(),
         supports_loyalty: tier.supports_loyalty(),
         supports_daily_dashboard: tier.supports_daily_dashboard(),
         supports_cloud_sync: tier.supports_cloud_sync(),

@@ -61,9 +61,11 @@ var smtpTLSRootCAs *x509.CertPool
 const smtpProbeTimeout = 5 * time.Second
 
 // smtpDefaultFrom is the fallback the senders use when OZ_SMTP_FROM is
-// unset. It is deliberately treated as unconfigured by verifySMTPConfig:
-// no-reply@oz-pos.com is not a domain we own, so relays reject or flag it.
-const smtpDefaultFrom = "no-reply@oz-pos.com"
+// unset. The value is a real verified sender on Brevo — relays accept it
+// once the DNS records (DKIM, DMARC) are in place. When OZ_SMTP_HOST is
+// set but OZ_SMTP_FROM is empty, this default is used and the boot-time
+// SMTP probe verifies the relay actually accepts it.
+const smtpDefaultFrom = "no-reply@ozpos.my.id"
 
 // verifySMTPConfig is the boot-time sender-identity gate (called from
 // main before the server starts serving). It fails fast when email
@@ -71,8 +73,8 @@ const smtpDefaultFrom = "no-reply@oz-pos.com"
 //
 //   - OZ_SMTP_HOST unset → no-op (SMTP not configured; request-otp
 //     answers 503 by design, and local dev runs without a relay).
-//   - OZ_SMTP_FROM unset or the unowned smtpDefaultFrom placeholder →
-//     hard error: every signup code and receipt would be rejected.
+//   - OZ_SMTP_FROM unset → falls back to smtpDefaultFrom, and the
+//     relay probe verifies it works (permanent rejection → hard error).
 //   - Permanent relay rejection of the sender (5xx on AUTH or MAIL FROM,
 //     e.g. Brevo's "550 Sender address is not verified") → hard error.
 //   - Transient failures (relay unreachable, 4xx) → log a warning and
@@ -94,10 +96,9 @@ func verifySMTPConfig() error {
 	password := os.Getenv("OZ_SMTP_PASSWORD")
 	from := strings.TrimSpace(os.Getenv("OZ_SMTP_FROM"))
 
-	if from == "" || from == smtpDefaultFrom {
-		return fmt.Errorf(
-			"OZ_SMTP_FROM is required when OZ_SMTP_HOST is set — the code default %q is an unowned domain that relays reject; set it to a sender verified with your relay (e.g. Brevo → Sender Identity)",
-			smtpDefaultFrom)
+	if from == "" {
+		from = smtpDefaultFrom
+		log.Printf("OZ_SMTP_FROM not set — falling back to default sender %q (probed at boot)", from)
 	}
 
 	if err := probeSMTPFrom(host, port, user, password, from); err != nil {

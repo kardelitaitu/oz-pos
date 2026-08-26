@@ -35,7 +35,7 @@ const WHITELISTED_RAW_PARSE: Array<{ file: string; line: number }> = [
   { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 150 },
   // complete() catch: reads err.message to JSON-detect PartialStockResult;
   // never displayed. Non-stock errors are classified for display below.
-  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 987 },
+  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 992 },
 ];
 
 function collectFiles(): string[] {

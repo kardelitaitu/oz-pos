@@ -366,8 +366,6 @@ impl QrisPaymentProcessor {
     /// Poll the transaction status until settlement or failure.
     async fn poll_status(&self, order_id: &str) -> Result<TransactionStatusResponse, PaymentError> {
         for attempt in 1..=MAX_POLL_ATTEMPTS {
-            tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
-
             let (status, text) = self.get_json(&format!("/{}/status", order_id)).await?;
 
             if !(200..300).contains(&status) {
@@ -396,6 +394,11 @@ impl QrisPaymentProcessor {
                     }
                 }
             }
+
+            // Check first, sleep between polls: an already-settled
+            // transaction returns on the first attempt instead of
+            // waiting a full POLL_INTERVAL_MS (2 s) for nothing.
+            tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
         }
 
         Err(PaymentError::Timeout(

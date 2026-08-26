@@ -151,8 +151,9 @@ fn get_kds_order_by_sale() {
         })
         .unwrap();
 
-    let by_sale = s.get_kds_order_by_sale(&sale_id).unwrap().unwrap();
-    assert_eq!(by_sale.id, order.id);
+    let by_sale = s.get_kds_orders_by_sale(&sale_id).unwrap();
+    assert_eq!(by_sale.len(), 1);
+    assert_eq!(by_sale[0].id, order.id);
 }
 
 #[test]
@@ -215,6 +216,155 @@ fn update_kds_status_sets_timestamps() {
     let updated = s.update_kds_status(&order.id, "served").unwrap();
     assert_eq!(updated.status, "served");
     assert!(updated.served_at.is_some());
+}
+
+/// RED: status transitions must be FORWARD-only. A regression (e.g. a stale
+/// offline replay moving a ready/served order back to preparing) must be
+/// rejected — today the backend accepts it and OVERWRITES started_at,
+/// corrupting the ticket's prep metrics and re-surfacing a served order on
+/// the kitchen queue.
+#[test]
+fn update_kds_status_rejects_regression() {
+    let conn = fresh();
+    let s = store(&conn);
+    let (order, _sale) = seed_completed_sale_to_kds(&s);
+
+    // Advance to ready.
+    let updated = s.update_kds_status(&order.id, "preparing").unwrap();
+    let started_at = updated.started_at.clone();
+    assert!(started_at.is_some());
+    s.update_kds_status(&order.id, "ready").unwrap();
+
+    // Regression: ready -> preparing must be rejected and must NOT overwrite
+    // the original started_at.
+    let err = s.update_kds_status(&order.id, "preparing").unwrap_err();
+    assert!(
+        matches!(err, CoreError::Validation { .. }),
+        "regression must be a validation error, got: {err:?}"
+    );
+    let after = s.get_kds_order(&order.id).unwrap().unwrap();
+    assert_eq!(after.status, "ready", "status must stay at ready");
+    assert_eq!(
+        after.started_at, started_at,
+        "started_at must not be overwritten"
+    );
+}
+
+/// RED: served is terminal — a served order must not go back to the queue.
+#[test]
+fn update_kds_status_served_is_terminal() {
+    let conn = fresh();
+    let s = store(&conn);
+    let (order, _sale) = seed_completed_sale_to_kds(&s);
+
+    s.update_kds_status(&order.id, "preparing").unwrap();
+    s.update_kds_status(&order.id, "ready").unwrap();
+    let served = s.update_kds_status(&order.id, "served").unwrap();
+    assert!(served.served_at.is_some());
+
+    // served -> preparing / ready / pending must all be rejected.
+    for regression in ["preparing", "ready", "pending"] {
+        let err = s.update_kds_status(&order.id, regression).unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { .. }),
+            "served -> {regression} must be rejected, got: {err:?}"
+        );
+    }
+    let after = s.get_kds_order(&order.id).unwrap().unwrap();
+    assert_eq!(after.status, "served");
+}
+
+/// RED: cancelled is terminal — a cancelled order must not be resurrected.
+#[test]
+fn update_kds_status_cancelled_is_terminal() {
+    let conn = fresh();
+    let s = store(&conn);
+    let (order, _sale) = seed_completed_sale_to_kds(&s);
+
+    s.update_kds_status(&order.id, "cancelled").unwrap();
+
+    let err = s.update_kds_status(&order.id, "preparing").unwrap_err();
+    assert!(
+        matches!(err, CoreError::Validation { .. }),
+        "cancelled -> preparing must be rejected, got: {err:?}"
+    );
+}
+
+/// RED: prep_time_seconds must be computed when the order reaches served
+/// (served_at - started_at). Today the column is never written — it is read
+/// in every SELECT but always 0.
+#[test]
+fn update_kds_status_computes_prep_time_on_served() {
+    let conn = fresh();
+    let s = store(&conn);
+    let (order, _sale) = seed_completed_sale_to_kds(&s);
+
+    // Start prep 2 minutes in the past so the elapsed time is deterministic.
+    s.update_kds_status(&order.id, "preparing").unwrap();
+    let started_at = chrono::Utc::now() - chrono::Duration::minutes(2);
+    conn.execute(
+        "UPDATE kds_orders SET started_at = ?1 WHERE id = ?2",
+        rusqlite::params![
+            started_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            order.id
+        ],
+    )
+    .unwrap();
+    s.update_kds_status(&order.id, "ready").unwrap();
+    let served = s.update_kds_status(&order.id, "served").unwrap();
+    assert!(
+        served.prep_time_seconds >= 120,
+        "prep_time_seconds must be ~2 minutes (120s), got: {}",
+        served.prep_time_seconds
+    );
+}
+
+/// Helper: seed a completed sale and create a KDS order from it.
+fn seed_completed_sale_to_kds(s: &Store<'_>) -> (KdsOrder, Sale) {
+    let conn = s.conn;
+    seed_product(conn, "KDS-SKU", "Burger");
+    let sale_id = uuid::Uuid::now_v7().to_string();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let sale = Sale {
+        id: sale_id.clone(),
+        status: crate::SaleStatus::Completed,
+        total: price(0),
+        currency: usd(),
+        line_count: 0,
+        payment_method: None,
+        tendered_minor: None,
+        discount_percent: 0,
+        discount_label: None,
+        user_id: None,
+        created_at: now.clone(),
+        updated_at: now,
+        subtotal: price(0),
+        tax_total: price(0),
+        customer_id: None,
+        base_currency: None,
+        base_total_minor: None,
+        tender_rate_millionths: None,
+        tip_minor: 0,
+        service_charge_minor: 0,
+        lines: vec![],
+        version: 1,
+    };
+    s.create_sale(&sale).unwrap();
+    // No restaurant lines → complete_sale_to_kds returns nothing; create a
+    // KDS order directly so the status machine can be exercised.
+    let order = s
+        .create_kds_order(CreateKdsOrderInput {
+            sale_id: sale_id.clone(),
+            store_id: None,
+            items_summary: "Burger x1".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+    (order, sale)
 }
 
 #[test]
@@ -424,6 +574,8 @@ fn get_kds_queue_returns_pending_and_preparing() {
         .unwrap();
 
     s.update_kds_status(&o2.id, "preparing").unwrap();
+    s.update_kds_status(&o3.id, "preparing").unwrap();
+    s.update_kds_status(&o3.id, "ready").unwrap();
     s.update_kds_status(&o3.id, "served").unwrap();
 
     let queue = s.get_kds_queue(None).unwrap();
@@ -528,6 +680,95 @@ fn display_number_increments_per_day() {
 
     assert_eq!(o1.display_number, Some(1));
     assert_eq!(o2.display_number, Some(2));
+}
+
+/// RED: display numbers must be per-STORE, not global. The counter is keyed
+/// by date only, so in a multi-store deployment (kds_orders carries
+/// store_id) two stores' first tickets of the day collide — the kitchen
+/// shouts "#1 up!" at both stores. Each store must start at 1.
+#[test]
+fn display_number_is_per_store() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    let mk_sale = |sid: &str| {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        Sale {
+            id: sid.to_string(),
+            status: crate::SaleStatus::Completed,
+            total: price(0),
+            currency: usd(),
+            line_count: 0,
+            payment_method: None,
+            tendered_minor: None,
+            discount_percent: 0,
+            discount_label: None,
+            user_id: None,
+            created_at: now.clone(),
+            updated_at: now,
+            subtotal: price(0),
+            tax_total: price(0),
+            customer_id: None,
+            base_currency: None,
+            base_total_minor: None,
+            tender_rate_millionths: None,
+            tip_minor: 0,
+            service_charge_minor: 0,
+            lines: vec![],
+            version: 1,
+        }
+    };
+    s.create_sale(&mk_sale("store-a-sale-1")).unwrap();
+    s.create_sale(&mk_sale("store-a-sale-2")).unwrap();
+    s.create_sale(&mk_sale("store-b-sale-1")).unwrap();
+
+    // Store A gets two tickets today.
+    let a1 = s
+        .create_kds_order(CreateKdsOrderInput {
+            sale_id: "store-a-sale-1".into(),
+            store_id: Some("store-a".into()),
+            items_summary: "A1".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+    let a2 = s
+        .create_kds_order(CreateKdsOrderInput {
+            sale_id: "store-a-sale-2".into(),
+            store_id: Some("store-a".into()),
+            items_summary: "A2".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+    // Store B gets its first ticket of the day.
+    let b1 = s
+        .create_kds_order(CreateKdsOrderInput {
+            sale_id: "store-b-sale-1".into(),
+            store_id: Some("store-b".into()),
+            items_summary: "B1".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+    assert_eq!(a1.display_number, Some(1));
+    assert_eq!(a2.display_number, Some(2));
+    assert_eq!(
+        b1.display_number,
+        Some(1),
+        "store B's first ticket of the day must be #1, not #{} (global counter collision)",
+        b1.display_number.unwrap_or(0)
+    );
 }
 
 // ── CHECK constraint tests ──────────────────────────────────────
@@ -692,7 +933,24 @@ fn get_kds_queue_excludes_served_and_cancelled() {
             })
             .unwrap();
         if *st != "pending" {
-            s.update_kds_status(&order.id, st).unwrap();
+            // Advance through the state machine to reach the target status.
+            match *st {
+                "preparing" => {
+                    s.update_kds_status(&order.id, "preparing").unwrap();
+                }
+                "served" | "cancelled" => {
+                    s.update_kds_status(&order.id, "preparing").unwrap();
+                    s.update_kds_status(&order.id, "ready").unwrap();
+                    if *st == "served" {
+                        s.update_kds_status(&order.id, "served").unwrap();
+                    } else {
+                        s.update_kds_status(&order.id, "cancelled").unwrap();
+                    }
+                }
+                _ => {
+                    s.update_kds_status(&order.id, st).unwrap();
+                }
+            }
         }
         ids.push(order.id);
     }
@@ -835,6 +1093,93 @@ fn complete_sale_to_kds_no_restaurant_lines_returns_empty() {
 
     let orders = s.complete_sale_to_kds(&sale.id, None).unwrap();
     assert!(orders.is_empty(), "no KDS orders for retail-only sale");
+}
+
+/// RED: a sale with items in TWO kitchen zones must create TWO KDS orders
+/// (one per zone). The schema declares `sale_id UNIQUE` (one order per sale),
+/// so the second zone's insert collides and the whole completion fails with a
+/// constraint error — the kitchen never sees either ticket.
+#[test]
+fn complete_sale_to_kds_multi_zone_creates_one_order_per_zone() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    seed_product_with_zone(&conn, "STEAK", "Ribeye Steak", "grill");
+    seed_product_with_zone(&conn, "BEER", "Craft Beer", "bar");
+
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("STEAK"), 1, price(1500)))
+        .unwrap();
+    cart.add_line(CartLine::new(Sku::new("BEER"), 1, price(600)))
+        .unwrap();
+
+    let sale = Sale::from_cart(&cart).unwrap();
+    s.create_sale(&sale).unwrap();
+
+    let orders = s.complete_sale_to_kds(&sale.id, None).unwrap();
+    assert_eq!(
+        orders.len(),
+        2,
+        "one KDS order per kitchen zone (grill + bar), got: {orders:?}"
+    );
+    let mut zones: Vec<Option<String>> = orders.iter().map(|o| o.kitchen_zone.clone()).collect();
+    zones.sort();
+    assert_eq!(zones, vec![Some("bar".into()), Some("grill".into())]);
+}
+
+/// RED: the multi-zone fanout must be ATOMIC. If one zone's order insert
+/// fails (e.g. a concurrent terminal already completed this sale, so the
+/// (sale, zone) pair exists), NO new tickets may be created — today the
+/// loop commits each zone in its own transaction, so the earlier zones'
+/// tickets survive the error, leaving a partial set on the kitchen
+/// display.
+#[test]
+fn complete_sale_to_kds_fanout_is_atomic_on_partial_failure() {
+    let conn = fresh();
+    let s = store(&conn);
+
+    seed_product_with_zone(&conn, "STEAK", "Ribeye Steak", "grill");
+    seed_product_with_zone(&conn, "BEER", "Craft Beer", "bar");
+
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("STEAK"), 1, price(1500)))
+        .unwrap();
+    cart.add_line(CartLine::new(Sku::new("BEER"), 1, price(600)))
+        .unwrap();
+    let sale = Sale::from_cart(&cart).unwrap();
+    s.create_sale(&sale).unwrap();
+
+    // Simulate a concurrent terminal that already created the GRILL zone
+    // ticket for this sale (partial completion / double-complete). Zones
+    // are processed in sorted order (bar before grill), so the fanout
+    // commits the BAR ticket first, then hits the grill conflict — the
+    // non-atomic loop leaves the bar ticket behind on error.
+    s.create_kds_order(CreateKdsOrderInput {
+        sale_id: sale.id.clone(),
+        store_id: None,
+        items_summary: "Steak".into(),
+        item_count: 1,
+        kitchen_zone: Some("grill".into()),
+        notes: String::new(),
+        table_number: None,
+        priority: false,
+    })
+    .unwrap();
+
+    let err = s.complete_sale_to_kds(&sale.id, None).unwrap_err();
+    assert!(
+        matches!(err, CoreError::Validation { .. }) || matches!(err, CoreError::Db(_)),
+        "duplicate zone must error, got: {err:?}"
+    );
+
+    // Atomicity: the failed fanout must NOT have created the bar ticket.
+    let orders = s.get_kds_orders_by_sale(&sale.id).unwrap();
+    assert_eq!(
+        orders.len(),
+        1,
+        "only the pre-existing grill ticket may exist; the failed fanout must leave no partial tickets, got: {orders:?}"
+    );
+    assert_eq!(orders[0].kitchen_zone.as_deref(), Some("grill"));
 }
 
 fn seed_product_with_zone(conn: &Connection, sku: &str, name: &str, zone: &str) {
@@ -1068,8 +1413,8 @@ fn kds_order_targets_support_multiple_instances() {
 fn get_kds_order_by_sale_not_found() {
     let conn = fresh();
     let s = store(&conn);
-    let result = s.get_kds_order_by_sale("no-such-sale").unwrap();
-    assert!(result.is_none());
+    let result = s.get_kds_orders_by_sale("no-such-sale").unwrap();
+    assert!(result.is_empty());
 }
 
 #[test]
@@ -1570,6 +1915,56 @@ fn ack_order_second_device_loses() {
     assert!(!second, "second ack should return false");
 }
 
+/// RED: an ack means the device ACCEPTED the ticket and started prep — the
+/// order must advance pending → preparing with started_at set. The old code
+/// jumped straight to 'ready' with no started_at, so the ticket appeared
+/// ready-to-serve the instant it was acknowledged and prep_time_seconds
+/// could never be computed on serve.
+#[test]
+fn ack_moves_to_preparing_and_sets_started_at() {
+    let conn = fresh();
+    let s = store(&conn);
+    let mut cart = Cart::new(usd());
+    cart.add_line(CartLine::new(Sku::new("SKU-1"), 1, price(100)))
+        .unwrap();
+    let sale = Sale::from_cart_with_user(&cart, None).unwrap();
+    s.create_sale(&sale).unwrap();
+    let kds_order = s
+        .create_kds_order(crate::CreateKdsOrderInput {
+            sale_id: sale.id.clone(),
+            store_id: None,
+            items_summary: "Item".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+    assert!(s.ack_kds_order(&kds_order.id, "device-a").unwrap());
+
+    let after = s.get_kds_order(&kds_order.id).unwrap().unwrap();
+    assert_eq!(
+        after.status, "preparing",
+        "ack must advance pending -> preparing (device started cooking)"
+    );
+    assert!(
+        after.started_at.is_some(),
+        "ack must set started_at so prep_time can be computed on serve"
+    );
+
+    // The flow continues: preparing -> ready -> served computes prep_time
+    // from the ack's started_at.
+    s.update_kds_status(&kds_order.id, "ready").unwrap();
+    let served = s.update_kds_status(&kds_order.id, "served").unwrap();
+    assert!(
+        served.prep_time_seconds >= 0,
+        "prep_time_seconds must be computable after an ack, got {}",
+        served.prep_time_seconds
+    );
+}
+
 #[test]
 fn ack_order_already_ready_is_noop() {
     let conn = fresh();
@@ -1757,9 +2152,11 @@ fn ack_order_records_device_and_timestamp() {
     let result = s.ack_kds_order(&kds_order.id, "device-alpha").unwrap();
     assert!(result);
 
-    // Verify the order has acked_by_device and acked_at set.
+    // Verify the order has acked_by_device and acked_at set, and that the
+    // ack moved it to PREPARING (device accepted + started cooking) — not
+    // 'ready' (the ticket is not ready-to-serve at the instant of ack).
     let fetched = s.get_kds_order(&kds_order.id).unwrap().unwrap();
-    assert_eq!(fetched.status, "ready");
+    assert_eq!(fetched.status, "preparing");
 }
 
 // ── Event Replay & Cleanup ───────────────────────────────────
@@ -2517,9 +2914,9 @@ fn e2e_enrollment_flow_register_validate_route_ack() {
     let acked2 = s.ack_kds_order(&kds_order.id, "other-device").unwrap();
     assert!(!acked2);
 
-    // 11. Verify order is now in 'ready' state.
+    // 11. Verify order is now in 'preparing' state (device accepted + cooking).
     let order = s.get_kds_order(&kds_order.id).unwrap().unwrap();
-    assert_eq!(order.status, "ready");
+    assert_eq!(order.status, "preparing");
 
     // 12. Replay should not include this order (it's old and ready).
     let replayed = s

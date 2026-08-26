@@ -38,7 +38,8 @@ fn test_transport() -> PgTransport {
         .get_password()
         .map(|password| std::str::from_utf8(password).expect("UTF-8 PG password"))
         .unwrap_or("");
-    PgTransport::new(host, port, dbname, user, password).expect("create PG transport")
+    PgTransport::new(host, port, dbname, user, password, "test-tenant")
+        .expect("create PG transport")
 }
 
 async fn connect() -> Result<Client, Box<dyn std::error::Error>> {
@@ -58,17 +59,18 @@ async fn reset_schema(client: &Client) -> Result<(), tokio_postgres::Error> {
             "DROP TABLE IF EXISTS offline_queue, products, tax_rates, users CASCADE;
              CREATE TABLE offline_queue (
                  id TEXT PRIMARY KEY,
+                 tenant_id TEXT NOT NULL DEFAULT 'default',
                  action TEXT NOT NULL,
                  payload TEXT NOT NULL,
                  status TEXT NOT NULL DEFAULT 'pending',
                  retry_count INTEGER NOT NULL DEFAULT 0,
                  last_error TEXT,
-                 tenant_id TEXT NOT NULL DEFAULT 'default',
                  created_at TIMESTAMPTZ NOT NULL,
                  synced_at TIMESTAMPTZ
              );
              CREATE TABLE products (
                  id TEXT PRIMARY KEY,
+                 tenant_id TEXT NOT NULL DEFAULT 'default',
                  sku TEXT NOT NULL UNIQUE,
                  name TEXT NOT NULL,
                  price_minor BIGINT NOT NULL,
@@ -83,6 +85,7 @@ async fn reset_schema(client: &Client) -> Result<(), tokio_postgres::Error> {
              );
              CREATE TABLE tax_rates (
                  id TEXT PRIMARY KEY,
+                 tenant_id TEXT NOT NULL DEFAULT 'default',
                  name TEXT NOT NULL,
                  rate_bps BIGINT NOT NULL,
                  is_default BOOLEAN NOT NULL DEFAULT FALSE,
@@ -92,6 +95,7 @@ async fn reset_schema(client: &Client) -> Result<(), tokio_postgres::Error> {
              );
              CREATE TABLE users (
                  id TEXT PRIMARY KEY,
+                 tenant_id TEXT NOT NULL DEFAULT 'default',
                  username TEXT NOT NULL UNIQUE,
                  pin_hash TEXT NOT NULL,
                  display_name TEXT NOT NULL,
@@ -114,8 +118,8 @@ async fn pull_updates_detects_expired_anchor_against_postgres_retention() {
         .expect("create isolated test schema");
     client
         .execute(
-            "INSERT INTO offline_queue (id, action, payload, created_at)
-             VALUES ('retained-1', 'settings.update', '{}', '2026-02-01T00:00:00Z')",
+            "INSERT INTO offline_queue (id, action, payload, tenant_id, created_at)
+             VALUES ('retained-1', 'settings.update', '{}', 'test-tenant', '2026-02-01T00:00:00Z')",
             &[],
         )
         .await
@@ -149,16 +153,16 @@ async fn fetch_snapshot_decodes_postgres_types_without_credentials() {
     client
         .batch_execute(
             "INSERT INTO products
-                 (id, sku, name, price_minor, currency, track_serial, created_at, updated_at)
+                 (id, sku, name, price_minor, currency, track_serial, tenant_id, created_at, updated_at)
              VALUES
-                 ('product-1', 'COFFEE', 'Coffee', 350, 'USD', TRUE,
+                 ('product-1', 'COFFEE', 'Coffee', 350, 'USD', TRUE, 'test-tenant',
                   '2026-02-01T00:00:00Z', '2026-02-01T00:00:00Z');
              INSERT INTO tax_rates
-                 (id, name, rate_bps, is_default, is_inclusive)
-             VALUES ('tax-1', 'VAT', 1100, TRUE, FALSE);
+                 (id, name, rate_bps, tenant_id, is_default, is_inclusive)
+             VALUES ('tax-1', 'VAT', 1100, 'test-tenant', TRUE, FALSE);
              INSERT INTO users
-                 (id, username, pin_hash, display_name, role_id, is_active)
-             VALUES ('user-1', 'staff', 'must-not-leak', 'Staff', 'role-staff', TRUE);",
+                 (id, username, pin_hash, display_name, role_id, tenant_id, is_active)
+             VALUES ('user-1', 'cashier', 'must-not-leak', 'Cashier', 'role-staff', 'test-tenant', TRUE);",
         )
         .await
         .expect("seed snapshot rows");

@@ -668,6 +668,21 @@ impl Settings {
         )?)
     }
 
+    /// Get whether PG sync must connect over TLS.
+    pub fn get_pg_sync_require_tls(conn: &Connection) -> Result<bool, CoreError> {
+        Ok(platform_core::settings::Settings::get_pg_sync_require_tls(
+            conn,
+        )?)
+    }
+
+    /// Set whether PG sync must connect over TLS.
+    pub fn set_pg_sync_require_tls(conn: &Connection, require_tls: bool) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_pg_sync_require_tls(
+            conn,
+            require_tls,
+        )?)
+    }
+
     // ── Brand / White-label ─────────────────────────────────────
 
     /// Get the primary brand colour (hex).

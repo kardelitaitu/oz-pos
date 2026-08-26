@@ -1,0 +1,672 @@
+/* Warehouse workspace — location-scoped stock view */
+
+.warehouse-screen {
+  padding: var(--space-4, 1rem);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+
+.warehouse-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 0.75rem);
+  margin-bottom: var(--space-4, 1rem);
+}
+
+.warehouse-title {
+  font-size: var(--text-xl, 1.25rem);
+  font-weight: 600;
+  color: var(--color-fg);
+  margin: 0;
+}
+
+/* ── Summary stats ───────────────────────────────────────────────── */
+
+.warehouse-stats {
+  display: flex;
+  gap: var(--space-4, 1rem);
+  margin-bottom: var(--space-4, 1rem);
+}
+
+.warehouse-stat {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  background: var(--color-surface-secondary, #1e293b);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: var(--radius-md, 0.5rem);
+  min-width: 100px;
+}
+
+.warehouse-stat-value {
+  font-size: var(--text-2xl, 1.5rem);
+  font-weight: 700;
+  color: var(--color-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.warehouse-stat-label {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-fg-secondary, #94a3b8);
+  margin-top: var(--space-1, 0.25rem);
+}
+
+/* ── Toolbar (search + filters) ──────────────────────────────────── */
+
+.warehouse-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  margin-bottom: var(--space-4, 1rem);
+  flex-wrap: wrap;
+}
+
+.warehouse-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+
+.warehouse-search {
+  width: 100%;
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  padding-right: var(--space-8, 2rem);
+  background: var(--color-surface, #0f172a);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: var(--radius-md, 0.5rem);
+  color: var(--color-fg, #e2e8f0);
+  font-size: var(--text-sm, 0.875rem);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.warehouse-search:focus {
+  border-color: var(--color-primary, #6366f1);
+}
+
+.warehouse-search::placeholder {
+  color: var(--color-fg-tertiary, #64748b);
+}
+
+.warehouse-search-clear {
+  position: absolute;
+  right: var(--space-2, 0.5rem);
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-fg-secondary, #94a3b8);
+  font-size: var(--text-lg, 1.125rem);
+  cursor: pointer;
+  padding: 0 var(--space-1, 0.25rem);
+  line-height: 1;
+}
+
+.warehouse-search-clear:hover {
+  color: var(--color-fg, #e2e8f0);
+}
+
+.warehouse-filters {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+}
+
+.warehouse-select {
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  background: var(--color-surface, #0f172a);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: var(--radius-md, 0.5rem);
+  color: var(--color-fg, #e2e8f0);
+  font-size: var(--text-sm, 0.875rem);
+  cursor: pointer;
+}
+
+.warehouse-select:focus {
+  border-color: var(--color-primary, #6366f1);
+  outline: none;
+}
+
+/* ── No results ──────────────────────────────────────────────────── */
+
+.warehouse-no-results {
+  padding: var(--space-8, 2rem);
+  text-align: center;
+  color: var(--color-fg-secondary, #94a3b8);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+/* ── Loading skeleton ────────────────────────────────────────────── */
+
+.warehouse-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+}
+
+.warehouse-skeleton {
+  height: 48px;
+  background: var(--color-surface-secondary, #1e293b);
+  border-radius: var(--radius-md, 0.5rem);
+  animation: warehouse-shimmer 1.5s ease-in-out infinite;
+  animation-play-state: var(--animation-play, running);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .warehouse-skeleton { animation: none; }
+}
+
+@keyframes warehouse-shimmer {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* ── Error banner ────────────────────────────────────────────────── */
+
+.warehouse-error {
+  padding: var(--space-3, 0.75rem);
+  background: var(--color-danger-bg, rgba(239, 68, 68, 0.1));
+  border: 1px solid var(--color-danger-border, rgba(239, 68, 68, 0.3));
+  border-radius: var(--radius-md, 0.5rem);
+  color: var(--color-danger, #ef4444);
+  font-size: var(--text-sm, 0.875rem);
+  margin-bottom: var(--space-4, 1rem);
+}
+
+/* ── Product table ───────────────────────────────────────────────── */
+
+.warehouse-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border, #334155);
+  border-radius: var(--radius-lg, 0.75rem);
+}
+
+.warehouse-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.warehouse-table thead {
+  background: var(--color-surface-secondary, #1e293b);
+}
+
+.warehouse-table th {
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-fg-secondary, #94a3b8);
+  border-bottom: 1px solid var(--color-border, #334155);
+  white-space: nowrap;
+}
+
+.warehouse-th-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.warehouse-th-btn:hover {
+  color: var(--color-fg, #e2e8f0);
+}
+
+.warehouse-table td {
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  border-bottom: 1px solid var(--color-border-subtle, #1e293b);
+  color: var(--color-fg, #e2e8f0);
+}
+
+.warehouse-table tbody tr:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.03));
+}
+
+.warehouse-row--out-of-stock {
+  opacity: 0.6;
+}
+
+.warehouse-cell-sku {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-fg-tertiary, #64748b);
+}
+
+.warehouse-cell-qty {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.warehouse-qty--zero {
+  color: var(--color-danger, #ef4444);
+}
+
+.warehouse-col-qty {
+  text-align: right;
+}
+
+/* ── Action buttons ──────────────────────────────────────────────── */
+
+.warehouse-actions {
+  display: flex;
+  gap: var(--space-1, 0.25rem);
+}
+
+.warehouse-btn {
+  padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--color-surface, #0f172a);
+  color: var(--color-fg-secondary, #94a3b8);
+  font-size: var(--text-xs, 0.75rem);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.warehouse-btn:hover:not(:disabled) {
+  background: var(--color-surface-secondary, #1e293b);
+  color: var(--color-fg, #e2e8f0);
+  border-color: var(--color-border-hover, #475569);
+}
+
+.warehouse-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.warehouse-btn--adjust {
+  border-color: var(--color-primary-border, rgba(99, 102, 241, 0.3));
+  color: var(--color-primary, #6366f1);
+}
+
+.warehouse-btn--adjust:hover:not(:disabled) {
+  background: var(--color-primary-bg, rgba(99, 102, 241, 0.1));
+}
+
+/* ── Summary bar ─────────────────────────────────────────────────── */
+
+.warehouse-summary {
+  margin-top: var(--space-3, 0.75rem);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-secondary, #94a3b8);
+}
+
+.warehouse-alert-count {
+  color: var(--color-warning, #f59e0b);
+}
+
+/* ── Adjust modal ────────────────────────────────────────────────── */
+
+.warehouse-adjust-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+  min-width: 300px;
+}
+
+.warehouse-adjust-product {
+  font-weight: 600;
+  color: var(--color-fg);
+  margin: 0;
+}
+
+.warehouse-adjust-sku {
+  font-weight: 400;
+  color: var(--color-fg-tertiary, #64748b);
+}
+
+.warehouse-adjust-current {
+  color: var(--color-fg-secondary, #94a3b8);
+  font-size: var(--text-sm, 0.875rem);
+  margin: 0;
+}
+
+.warehouse-adjust-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 0.25rem);
+}
+
+.warehouse-adjust-field label {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-secondary, #94a3b8);
+}
+
+.warehouse-adjust-input {
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  background: var(--color-surface, #0f172a);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: var(--radius-md, 0.5rem);
+  color: var(--color-fg, #e2e8f0);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.warehouse-adjust-input:focus {
+  border-color: var(--color-primary, #6366f1);
+  outline: none;
+}
+
+/* ── Warehouse POS console (v2) ─────────────────────────────── */
+
+.warehouse-mode-tabs {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+  margin-bottom: var(--space-4, 1rem);
+}
+
+.warehouse-mode-tab {
+  padding: var(--space-2, 0.5rem) var(--space-5, 1.25rem);
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 6px);
+  background: var(--color-surface, #fff);
+  color: var(--color-fg);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.warehouse-mode-tab--active {
+  background: var(--color-primary, #2563eb);
+  border-color: var(--color-primary, #2563eb);
+  color: var(--color-fg-on-primary, #fff);
+}
+
+.warehouse-scan-row {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+  margin-bottom: var(--space-4, 1rem);
+}
+
+.warehouse-scan-input {
+  flex: 1;
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  font-size: var(--text-lg, 1.125rem);
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 6px);
+}
+
+.warehouse-body {
+  display: flex;
+  gap: var(--space-4, 1rem);
+}
+
+.warehouse-grid-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.warehouse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-2, 0.5rem);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.warehouse-grid-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 6px);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+  text-align: left;
+}
+
+.warehouse-grid-sku { font-weight: 600; font-size: var(--text-sm, 0.875rem); }
+.warehouse-grid-name { font-size: var(--text-sm, 0.875rem); color: var(--color-fg); }
+.warehouse-grid-bin { font-size: var(--text-xs, 0.75rem); color: var(--color-muted, #666); }
+
+.warehouse-session-panel {
+  width: 360px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 6px);
+  padding: var(--space-3, 0.75rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+.warehouse-session-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.warehouse-session-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  padding: 0.5rem;
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius, 4px);
+}
+
+.warehouse-session-line-info { display: flex; flex-direction: column; gap: 0.125rem; }
+.warehouse-session-line-sku { font-weight: 600; font-size: var(--text-sm, 0.875rem); }
+.warehouse-session-line-name { font-size: var(--text-sm, 0.875rem); }
+.warehouse-session-line-bin { font-size: var(--text-xs, 0.75rem); color: var(--color-muted, #666); }
+.warehouse-session-line-actions { display: flex; align-items: center; gap: 0.5rem; }
+.warehouse-session-line-qty { font-weight: 600; }
+
+.warehouse-session-pick-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: var(--text-xs, 0.75rem);
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+}
+
+.warehouse-session-remove {
+  border: none;
+  background: none;
+  font-size: var(--text-lg, 1.25rem);
+  cursor: pointer;
+  color: var(--color-danger, #dc2626);
+}
+
+.warehouse-session-empty { color: var(--color-muted, #666); padding: 0.5rem; }
+.warehouse-empty-panel { color: var(--color-muted, #666); padding: var(--space-6, 1.5rem) 0; }
+
+.warehouse-session-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  border-top: 1px solid var(--color-border, #eee);
+  padding-top: var(--space-3, 0.75rem);
+}
+
+.warehouse-session-count { font-weight: 600; }
+
+/* ── FnBar ─────────────────────────────────────────────────────── */
+
+.warehouse-fn-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  margin-top: var(--space-4, 1rem);
+  padding: 0.5rem;
+  border-top: 1px solid var(--color-border, #eee);
+  position: sticky;
+  bottom: 0;
+  background: var(--color-surface, #fff);
+}
+
+.warehouse-fn-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+  min-width: 56px;
+}
+
+.warehouse-fn-btn--placeholder { opacity: 0.45; cursor: default; }
+.warehouse-fn-btn--help { margin-left: auto; }
+.warehouse-fn-key { font-weight: 700; font-size: var(--text-xs, 0.75rem); }
+.warehouse-fn-label { font-size: var(--text-xs, 0.75rem); }
+.warehouse-fn-spacer { flex: 1; }
+
+/* ── Popup sessions ────────────────────────────────────────────── */
+
+.warehouse-popup {
+  position: fixed;
+  right: var(--space-4, 1rem);
+  bottom: var(--space-8, 2rem);
+  width: 420px;
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 8px);
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.2));
+  z-index: 50;
+  padding: var(--space-4, 1rem);
+}
+
+.warehouse-popup-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3, 0.75rem);
+}
+
+.warehouse-popup-head h2 { margin: 0; font-size: var(--text-lg, 1.125rem); }
+
+.warehouse-popup-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-muted, #666);
+}
+
+.warehouse-popup-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+.warehouse-transfer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.warehouse-transfer-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+  background: var(--color-surface, #fff);
+  cursor: pointer;
+}
+
+/* ── Phase 2: PO receive ────────────────────────────────────────── */
+
+.warehouse-popup-source-row {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+}
+
+.warehouse-damage-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-left: auto;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-muted, #666);
+}
+
+.warehouse-damage-field input {
+  width: 3.5rem;
+  padding: 0.25rem 0.375rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+}
+
+/* ── Phase 3: cycle counting ────────────────────────────────────── */
+
+.warehouse-count {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+.warehouse-count-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.warehouse-count-title {
+  margin: 0;
+  font-size: var(--text-lg, 1.125rem);
+}
+
+.warehouse-count-actions {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+}
+
+.warehouse-count-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.warehouse-count-group-title {
+  margin: 0.5rem 0 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-muted, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.warehouse-count-history-item {
+  padding: 0.5rem;
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius, 4px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.warehouse-count-input {
+  width: 4rem;
+  padding: 0.25rem 0.375rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius, 4px);
+  text-align: right;
+}
+
+.warehouse-count-create-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+.warehouse-count-type-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: var(--text-sm, 0.875rem);
+}

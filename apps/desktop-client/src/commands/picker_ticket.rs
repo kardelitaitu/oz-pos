@@ -1,5 +1,5 @@
 //! Short-lived HMAC-signed picker tickets for the pre-session
-//! workspace picker (audit/06 residual).
+//! workspace picker (audit-open-findings residual).
 //!
 //! `staff_login` / `bootstrap_owner` mint a ticket after successful
 //! authentication. The pre-session `list_workspaces` /

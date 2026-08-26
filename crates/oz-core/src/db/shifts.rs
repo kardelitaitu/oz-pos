@@ -157,6 +157,19 @@ impl Store<'_> {
             |row| row.get(0),
         )?;
 
+        // Cash refunds take cash OUT of the drawer, so the expected cash must
+        // subtract them — otherwise a refund makes the drawer look OVER by
+        // the refunded amount (a false positive that masks a real shortage).
+        let cash_refunds: i64 = tx.query_row(
+            "SELECT COALESCE(SUM(r.total_minor), 0)
+             FROM refunds r
+             JOIN sales s ON r.sale_id = s.id
+             WHERE s.user_id = ?1 AND s.payment_method = 'cash'
+               AND r.created_at >= ?2 AND r.created_at <= ?3",
+            params![shift.user_id, shift.opened_at, now],
+            |row| row.get(0),
+        )?;
+
         // Include cash payouts (safe drops) in the expected cash calculation.
         let total_payouts: i64 = tx.query_row(
             "SELECT COALESCE(SUM(amount_minor), 0) FROM cash_payouts WHERE shift_id = ?1",
@@ -164,7 +177,7 @@ impl Store<'_> {
             |row| row.get(0),
         )?;
 
-        let expected_cash = shift.opening_balance_minor + total_cash - total_payouts;
+        let expected_cash = shift.opening_balance_minor + total_cash - cash_refunds - total_payouts;
         let cash_difference = closing_balance_minor - expected_cash;
 
         tx.execute(

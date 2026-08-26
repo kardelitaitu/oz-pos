@@ -1341,6 +1341,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // activation state (enumeration oracle closed).
   'staff_check_username': (_args) => ({ proceed: true }),
 
+  // Pre-auth check — the dev-mock always has seeded staff accounts.
+  'has_users': () => ({ has_users: true }),
+
   'staff_login': (args) => {
     const { username, pin } = args as { username: string; pin: string };
     const key = username.toLowerCase();
@@ -1372,7 +1375,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         // gates on permissions like the real backend.
         permissions: MOCK_ROLE_PERMISSIONS[staff.role] ?? [],
       },
-      // audit/06 parity: the real backend mints a short-lived picker
+      // audit-open-findings parity: the real backend mints a short-lived picker
       // ticket at login; without it the workspace picker never loads
       // (WorkspaceProvider bails when pickerTicket is null). The mock
       // must return one so browser dev previews work like the client.
@@ -1389,7 +1392,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         role_id: 'role-owner',
         permissions: MOCK_ROLE_PERMISSIONS['role-owner'] ?? [],
       },
-      // audit/06 parity: the first-owner flow also mints a picker ticket.
+      // audit-open-findings parity: the first-owner flow also mints a picker ticket.
       picker_ticket: `mock-picker-owner-1-${Date.now()}`,
     };
   },
@@ -1463,6 +1466,24 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'resume_subscription': () => ({
     status: 'active',
     tierKey: 'plus',
+  }),
+  'get_subscription_capabilities': () => ({
+    tier: 'premium',
+    maxStores: null,
+    maxPosInstances: null,
+    maxWarehouses: null,
+    maxStaffUsers: null,
+    salesHistoryDays: null,
+    supportsQris: true,
+    supportsAnalytics: true,
+    supportsLoyalty: true,
+    supportsDailyDashboard: true,
+    supportsCloudSync: true,
+    offlineGraceDays: 30,
+    storeCount: 1,
+    staffCount: 1,
+    terminalCount: 1,
+    addons: [],
   }),
 
   // ═══════════════════════════════════════════════════════════════
@@ -1624,6 +1645,10 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'send_test_report': () => 'Email sent',
 
   'can_save_topology': () => true,
+  // The editor's Apply flow now confirms the operator PIN first (round 148).
+  // The dev-mock accepts any PIN so the real Apply chain stays reachable in
+  // the editor's integration tests.
+  'verify_pin': () => true,
   'load_topology': () => ({
     revision: mockTopology.revision ?? 0,
     resolved_issue_keys: [...(mockTopology.resolved_issue_keys ?? [])],
@@ -2259,7 +2284,22 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // STOCK TRANSFERS
   // ═══════════════════════════════════════════════════════════════
 
-  'create_stock_transfer_scoped': () => null,
+  'create_stock_transfer_scoped': () => ({
+    id: `mock-trf-${Date.now()}`,
+    transfer_number: `TRF-${Date.now().toString(36).toUpperCase()}`,
+    status: 'draft',
+    source_location: 'Warehouse A',
+    destination_location: 'Store B',
+    source_terminal_id: null,
+    destination_terminal_id: null,
+    notes: '',
+    created_by: 'admin-1',
+    received_by: null,
+    created_at: new Date().toISOString(),
+    sent_at: null,
+    received_at: null,
+    updated_at: new Date().toISOString(),
+  }),
   'get_stock_transfer_scoped': () => null,
   'list_stock_transfers_scoped': () => [
     { id: 'st-1', transfer_number: 'ST-001', status: 'draft', source_location: 'Warehouse A', destination_location: 'Store B', source_terminal_id: null, destination_terminal_id: null, notes: '', created_by: 'admin-1', received_by: null, created_at: new Date().toISOString(), sent_at: null, received_at: null, updated_at: new Date().toISOString() },
@@ -3065,6 +3105,73 @@ handlers['update_kds_order_items_scoped'] = (args) => {
   const raw = (args ?? {}) as { id?: string; args?: { id?: string } };
   const id = raw.id ?? raw.args?.id ?? '';
   return mockKdsOrders.find((o) => o['id'] === id) ?? null;
+};
+
+// ── Remaining uncovered commands (14 total) ───────────────────────
+// Staff profile
+handlers['get_staff_profile_scoped'] = (args) => {
+  const { userId } = (args ?? {}) as { userId?: string };
+  return {
+    user_id: userId ?? 'owner-1',
+    username: 'owner',
+    display_name: 'Owner',
+    date_of_birth: '1990-01-15',
+    phone: '+628123456789',
+    national_id_type: 'nik',
+    national_id: null,
+    national_id_masked: '****-****-****-1234',
+    email: 'owner@example.com',
+    monthly_take_home_minor: 5000000,
+    emergency_contact_name: 'Spouse',
+    emergency_contact_phone: '+628987654321',
+    job_title: 'Owner',
+    notes: '',
+    address: null,
+    language: null,
+    avatar: null,
+    tax_id: null,
+    national_id_expires_at: null,
+    emergency_contact_relationship: 'spouse',
+    hire_date: '2026-01-01',
+    is_complete: true,
+  };
+};
+
+// KDS order item updates (non-scoped)
+handlers['update_kds_order_items'] = handlers['update_kds_order_items_scoped'];
+
+// Settings writes (non-scoped + scoped)
+handlers['set_setting'] = () => true;
+handlers['set_settings'] = () => true;
+handlers['set_settings_scoped'] = () => true;
+
+// PG sync
+handlers['get_sync_plan'] = () => ({ pushed: 0, pulled: 0, conflicts: 0 });
+handlers['get_pg_sync_settings'] = () => ({
+  enabled: false, host: '', port: '5432', dbname: '', user: '',
+});
+handlers['update_pg_sync_settings'] = () => true;
+handlers['pg_sync_status'] = () => ({
+  running: false, last_error: null, last_sync_at: null,
+});
+handlers['pg_sync_start'] = () => true;
+handlers['pg_sync_stop'] = () => true;
+
+// Analytics daily staff breakdown
+handlers['get_staff_analytics_daily_scoped'] = () => [];
+
+// Workspace store listing (multi-store picker)
+handlers['list_workspaces_for_store_scoped'] = () => [];
+handlers['suspend_surplus_workspace_instances_scoped'] = () => [];
+
+// Warehouse products at a specific location
+handlers['list_warehouse_products_at_location'] = (args) => {
+  const { locationId: _locationId } = (args ?? {}) as { locationId?: string };
+  // Return mock products with stock at the given location
+  return MOCK_PRODUCTS.slice(0, 12).map((p, i) => ({
+    ...p,
+    stock_qty: 10 + ((i * 7) % 40),
+  }));
 };
 
 /**

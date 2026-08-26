@@ -17,14 +17,12 @@ test.describe('ADR #22 — F10 modal → Admin Settings shortcut', () => {
   test.beforeEach(async ({ page }) => {
     await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.STORE_POS);
-    // Wait for POS screen to load.
-    await page.waitForTimeout(2_000);
+    // POS screen loaded (selectWorkspace waits for workspace-home).
   });
 
   test('F10 opens workspace settings modal in Store POS', async ({ page }) => {
     // Press F10 to open the workspace settings modal.
     await page.keyboard.press('F10');
-    await page.waitForTimeout(1_500);
 
     // The modal should be visible with role=dialog and aria-modal=true.
     const modal = page.locator('[role="dialog"][aria-modal="true"]');
@@ -38,7 +36,6 @@ test.describe('ADR #22 — F10 modal → Admin Settings shortcut', () => {
   test('Admin Settings button navigates to Settings page', async ({ page }) => {
     // Open F10 modal.
     await page.keyboard.press('F10');
-    await page.waitForTimeout(1_500);
 
     // Click "Admin Settings" shortcut in the modal header.
     const adminBtn = page.locator('[role="dialog"]')
@@ -46,7 +43,6 @@ test.describe('ADR #22 — F10 modal → Admin Settings shortcut', () => {
       .filter({ hasText: /admin settings/i });
     await expect(adminBtn.first()).toBeVisible({ timeout: 3_000 });
     await adminBtn.first().click();
-    await page.waitForTimeout(2_000);
 
     // Should navigate to #/settings — verify sidebar is visible.
     await expect(page.locator('[data-testid="settings-sidebar"]'))
@@ -55,14 +51,12 @@ test.describe('ADR #22 — F10 modal → Admin Settings shortcut', () => {
 
   test('Esc closes the workspace settings modal', async ({ page }) => {
     await page.keyboard.press('F10');
-    await page.waitForTimeout(1_500);
 
     const modal = page.locator('[role="dialog"][aria-modal="true"]');
     await expect(modal).toBeVisible({ timeout: 5_000 });
 
     // Press Escape to close.
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(1_000);
 
     // Modal should no longer be in the DOM (or hidden with exit animation).
     await expect(modal).not.toBeVisible({ timeout: 5_000 });
@@ -83,7 +77,6 @@ test.describe('ADR #22 — Topology canvas', () => {
     await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.ADMIN);
     await navigateTo(page, 'settings');
-    await page.waitForTimeout(2_000);
     await expect(page.locator('[data-testid="settings-sidebar"]'))
       .toBeVisible({ timeout: 10_000 });
   });
@@ -100,7 +93,6 @@ test.describe('ADR #22 — Topology canvas', () => {
       .catch(() => false);
     if (!isExpanded) {
       await managementHeader.click();
-      await page.waitForTimeout(300);
     }
 
     const topologyNav = page.locator('.settings-nav-item')
@@ -109,7 +101,6 @@ test.describe('ADR #22 — Topology canvas', () => {
 
     // Click it.
     await topologyNav.click();
-    await page.waitForTimeout(1_500);
 
     // Topology screen must render (the dedicated editor, not a settings
     // section — its own header with the branch toolbar + tier badge).
@@ -127,13 +118,11 @@ test.describe('ADR #22 — Topology canvas', () => {
       .catch(() => false);
     if (!isExpanded) {
       await managementHeader.click();
-      await page.waitForTimeout(300);
     }
 
     const topologyNav = page.locator('.settings-nav-item')
       .filter({ hasText: /topology/i });
     await topologyNav.click();
-    await page.waitForTimeout(2_000);
 
     // The TopologyScreen should render an interactive area (canvas, SVG, or layout).
     const interactive = page.locator('.node-topology-editor, canvas, svg, [class*="topology"], [class*="node"]');
@@ -152,13 +141,11 @@ test.describe('ADR #22 — Topology canvas', () => {
       .catch(() => false);
     if (!isExpanded) {
       await managementHeader.click();
-      await page.waitForTimeout(300);
     }
 
     const topologyNav = page.locator('.settings-nav-item')
       .filter({ hasText: /topology/i });
     await topologyNav.click();
-    await page.waitForTimeout(2_000);
 
     // The header branch selector auto-selects the seeded branch.
     const selectorTrigger = page.locator('.topology-branch-selector .ssel-trigger');
@@ -173,7 +160,6 @@ test.describe('ADR #22 — Topology canvas', () => {
     await expect(renameInput).toBeVisible({ timeout: 3_000 });
     await renameInput.fill('TOKO RENAMED');
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(1_000);
 
     // The persisted rename flows into the header selector's label.
     await expect(selectorTrigger).toContainText('TOKO RENAMED', { timeout: 5_000 });
@@ -195,13 +181,11 @@ test.describe('ADR #22 — Topology canvas', () => {
       .catch(() => false);
     if (!isExpanded) {
       await managementHeader.click();
-      await page.waitForTimeout(300);
     }
 
     const topologyNav = page.locator('.settings-nav-item')
       .filter({ hasText: /topology/i });
     await topologyNav.click();
-    await page.waitForTimeout(2_000);
 
     // Baseline: the seeded branch is on canvas, selected, wired, and in
     // the header selector.
@@ -241,19 +225,16 @@ test.describe('ADR #22 — Topology canvas', () => {
       .catch(() => false);
     if (!isExpanded) {
       await managementHeader.click();
-      await page.waitForTimeout(300);
     }
 
     const topologyNav = page.locator('.settings-nav-item')
       .filter({ hasText: /topology/i });
     await topologyNav.click();
-    await page.waitForTimeout(2_000);
 
     // Click on a real topology node card in the canvas.
     const node = page.locator('.topology-node').first();
     await expect(node).toBeVisible({ timeout: 5_000 });
     await node.click({ force: true });
-    await page.waitForTimeout(1_000);
 
     // Inspector drawer or settings panel should appear on the right.
     const inspector = page.locator('[class*="inspector"], [class*="drawer"], [role="complementary"]');
@@ -378,13 +359,11 @@ test.describe('ADR #22 — Topology canvas', () => {
       .catch(() => false);
     if (!isExpanded) {
       await managementHeader.click();
-      await page.waitForTimeout(300);
     }
 
     const topologyNav = page.locator('.settings-nav-item')
       .filter({ hasText: /topology/i });
     await topologyNav.click();
-    await page.waitForTimeout(2_000);
 
     const canvas = page.locator('.node-canvas-container');
     await expect(canvas).toBeVisible({ timeout: 8_000 });
@@ -419,13 +398,11 @@ test.describe('ADR #22 — Topology canvas', () => {
       .catch(() => false);
     if (!isExpanded) {
       await managementHeader.click();
-      await page.waitForTimeout(300);
     }
 
     const topologyNav = page.locator('.settings-nav-item')
       .filter({ hasText: /topology/i });
     await topologyNav.click();
-    await page.waitForTimeout(2_000);
 
     const canvas = page.locator('.node-canvas-container');
     await expect(canvas).toBeVisible({ timeout: 8_000 });
@@ -456,7 +433,6 @@ test.describe('ADR #22 — Workspace config in SettingsNavTree', () => {
     await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.ADMIN);
     await navigateTo(page, 'settings');
-    await page.waitForTimeout(2_000);
     await expect(page.locator('[data-testid="settings-sidebar"]'))
       .toBeVisible({ timeout: 10_000 });
   });
@@ -493,7 +469,6 @@ test.describe('ADR #22 — Staff security guard', () => {
 
     // Attempt to access settings directly.
     await navigateTo(page, 'settings');
-    await page.waitForTimeout(3_000);
 
     // Settings sidebar must NOT be visible.
     const sidebar = page.locator('[data-testid="settings-sidebar"]');

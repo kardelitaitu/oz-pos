@@ -15,7 +15,7 @@ import type { SubscriptionCapabilities } from '@/api/subscription';
 
 // Tier is switchable per test — the capacity guards are Pro-gated, and
 // the screen's Apply gate must agree with the editor's live gate.
-let mockLicenseTier: string = 'standard';
+let mockLicenseTier: string = 'plus';
 vi.mock('@/api/license', () => ({
   checkLicenseStatus: () => Promise.resolve({ tier: mockLicenseTier }),
 }));
@@ -61,10 +61,16 @@ vi.mock('@/contexts/SubscriptionContext', () => ({
 
 // The editor's Apply gate mirrors the backend `staff:update` permission via
 // the session role. Switchable per test so the view-only behavior can be
-// pinned.
+// pinned. The screen derives canSave from session.permissions (staff:update
+// or the `*` wildcard), not from a role-name boolean.
 let mockIsManager: boolean = true;
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ isManager: mockIsManager }),
+  useAuth: () => ({
+    isManager: mockIsManager,
+    session: mockIsManager
+      ? { user_id: 'u-1', display_name: 'Owner', role_name: 'Owner', role_id: 'r-owner', permissions: ['*'] }
+      : { user_id: 'u-2', display_name: 'Cashier', role_name: 'Cashier', role_id: 'r-cashier', permissions: [] },
+  }),
 }));
 
 const mockAddToast = vi.fn();
@@ -270,7 +276,7 @@ function appliedArgs() {
 describe('TopologyScreen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockLicenseTier = 'standard';
+    mockLicenseTier = 'plus';
     mockIsManager = true;
     mockCanSaveTopology.mockImplementation(() => Promise.resolve(mockIsManager));
     capturedEditorProps = {};
@@ -1000,7 +1006,7 @@ describe('TopologyScreen', () => {
 
     expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
     expect(mockAddToast).toHaveBeenCalledWith({
-      message: 'Something went wrong. Please try again.',
+      message: 'topology-validation-missing-location',
       type: 'error',
     });
   });
@@ -1081,8 +1087,11 @@ describe('TopologyScreen', () => {
     ])).rejects.toThrow('topology-validation-warehouse-at-capacity');
 
     expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
+    // The Apply gate now toasts the specific validation message (the
+    // refactored topologyApply.ts shows the localized messageId, not the
+    // generic plainErrorMessage fallback).
     expect(mockAddToast).toHaveBeenCalledWith({
-      message: 'Something went wrong. Please try again.',
+      message: 'topology-validation-warehouse-at-capacity',
       type: 'error',
     });
   });
@@ -1121,7 +1130,7 @@ describe('TopologyScreen', () => {
 
     expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
     expect(mockAddToast).toHaveBeenCalledWith({
-      message: 'Something went wrong. Please try again.',
+      message: 'topology-validation-warehouse-missing-stock-routing',
       type: 'error',
     });
   });
@@ -1181,8 +1190,9 @@ describe('TopologyScreen', () => {
     )).rejects.toThrow('topology-toast-multi-warehouse');
 
     expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
+    // The Apply gate toasts the specific tier-limit messageId.
     expect(mockAddToast).toHaveBeenCalledWith({
-      message: 'Something went wrong. Please try again.',
+      message: 'topology-toast-multi-warehouse',
       type: 'error',
     });
   });
@@ -1229,8 +1239,10 @@ describe('TopologyScreen', () => {
       [locationWire('store-1', 'ws-new')],
     )).rejects.toThrow('DB locked');
 
-    // Toast error surfaced
-    expect(mockAddToast).toHaveBeenCalledWith(
+    // The screen re-throws IPC failures without a toast — the editor's
+    // confirmApply owns error display for non-validation failures (it shows
+    // topology-toast-save-error there). No screen-level toast is emitted.
+    expect(mockAddToast).not.toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'error',
         message: expect.stringContaining('Something went wrong'),
@@ -1247,8 +1259,9 @@ describe('TopologyScreen', () => {
       wsNode({ id: 'ws-new', name: 'POS', metadata: { typeKey: 'store-pos', persisted: false } }),
     ], [locationWire('store-1', 'ws-new')])).rejects.toThrow('Network failure');
 
-    // Toast error surfaced with the error message
-    expect(mockAddToast).toHaveBeenCalledWith(
+    // Same ownership contract: the rejection surfaces the error; the editor
+    // (not the screen) shows the save-error toast.
+    expect(mockAddToast).not.toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'error',
         message: expect.stringContaining('Something went wrong'),

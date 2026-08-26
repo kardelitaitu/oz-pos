@@ -49,6 +49,7 @@ fn test_router() -> Router {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     sync_router(state, false)
 }
@@ -66,6 +67,7 @@ fn test_router_with_plan_enforcement(enforce: bool) -> Router {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     sync_router_with_plan_enforcement(state, enforce)
 }
@@ -84,6 +86,7 @@ async fn test_router_with_plan(tenant: &str, plan: &str, enforce: bool) -> Route
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     {
         let conn = state.db.lock().await;
@@ -175,6 +178,7 @@ async fn snapshot_omits_pin_hash_entirely() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -233,6 +237,7 @@ async fn snapshot_query_failure_returns_500_not_empty_success() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -265,6 +270,7 @@ async fn snapshot_serves_store_id_when_present() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -321,14 +327,407 @@ async fn snapshot_serves_store_id_when_present() {
 #[tokio::test]
 async fn snapshot_cache_hit_returns_200() {
     // After a successful snapshot, a second request within the TTL
-    // must still return 200 (the cache path must return Ok).
+    // must still return 200 (the cache path must return Ok), serve
+    // application/json, and round-trip as the same JSON body — proving
+    // the raw-bytes cache-hit path (SOTA finding C) is wire-compatible
+    // with the original axum::Json response.
     let app = test_router();
     let req1 = authed(axum::http::Method::GET, "/api/sync/snapshot", None);
     let resp1 = app.clone().oneshot(req1).await.unwrap();
     assert_eq!(resp1.status(), StatusCode::OK);
+    assert_eq!(
+        resp1
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "application/json"
+    );
+    let body1 = resp1.into_body().collect().await.unwrap().to_bytes();
+    let json1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
+
+    // Second request hits the cache: same status, same content-type,
+    // same JSON.
     let req2 = authed(axum::http::Method::GET, "/api/sync/snapshot", None);
     let resp2 = app.oneshot(req2).await.unwrap();
     assert_eq!(resp2.status(), StatusCode::OK);
+    assert_eq!(
+        resp2
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "application/json"
+    );
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(json1, json2, "cache hit must serve the identical JSON");
+}
+
+/// A cache hit must serve the stored bytes with ZERO database access —
+/// the whole point of the raw-bytes cache (SOTA finding C). Warm the
+/// cache, then DELETE every product from the DB: a hit that touched the
+/// DB would return the now-empty set, but the cache must return the
+/// original snapshot.
+#[tokio::test]
+async fn snapshot_cache_hit_serves_without_db_access() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Seed a product for tenant-a so the snapshot has content.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-cache', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-cache', 'SKU-CACHE', 'Cached', 100, 'USD', 'tenant-a')",
+            [],
+        )
+        .unwrap();
+    }
+
+    // First request warms the cache with the product present.
+    let req1 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(resp1.status(), StatusCode::OK);
+    let body1 = resp1.into_body().collect().await.unwrap().to_bytes();
+    let json1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
+    assert_eq!(
+        json1["products"].as_array().unwrap().len(),
+        1,
+        "warm snapshot must include the product"
+    );
+
+    // DELETE every product — the cache hit must NOT see this.
+    {
+        let conn = state.db.lock().await;
+        conn.execute("DELETE FROM products", []).unwrap();
+    }
+
+    // Second request is a cache hit: must still return the product.
+    let req2 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(resp2.status(), StatusCode::OK);
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(
+        json2["products"].as_array().unwrap().len(),
+        1,
+        "cache hit must serve bytes with zero DB access"
+    );
+    assert_eq!(json1, json2);
+}
+
+/// The snapshot cache must evict expired entries — otherwise every
+/// tenant that ever connects leaves a (Instant, Vec<u8>) entry forever,
+/// an unbounded memory leak (Bug 1 — snapshot cache).
+///
+/// Seed 5 stale entries directly into the cache, then insert a fresh
+/// one. The store must opportunistically prune the expired entries so
+/// the cache does not grow unboundedly with tenant churn.
+#[tokio::test]
+async fn snapshot_cache_evicts_expired_entries_on_insert() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    // Seed 5 stale entries directly into the cache (expired past the
+    // 900s TTL).
+    {
+        let mut cache = state.snapshot_cache.lock().await;
+        for i in 0..5 {
+            cache.insert(
+                format!("stale-tenant-{i}"),
+                (
+                    std::time::Instant::now() - std::time::Duration::from_secs(1800),
+                    b"{}".to_vec(),
+                ),
+            );
+        }
+        assert_eq!(cache.len(), 5, "precondition: 5 stale entries");
+    }
+
+    // Seed a product so the miss path produces a real snapshot.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-evic', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-evic', 'SKU-EVIC', 'EvictTest', 100, 'USD', 'fresh-tenant')",
+            [],
+        )
+        .unwrap();
+    }
+
+    // A miss for a new tenant triggers a cache insert with opportunistic
+    // eviction — the 5 stale entries must be gone.
+    let app = test_router_with_state(state.clone());
+    let req = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("fresh-tenant"),
+    );
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let cache = state.snapshot_cache.lock().await;
+    assert_eq!(
+        cache.len(),
+        1,
+        "stale entries must be evicted; only the fresh tenant's entry should remain, got {} entries",
+        cache.len()
+    );
+    assert!(
+        cache.contains_key("fresh-tenant"),
+        "the fresh tenant's entry must be present"
+    );
+}
+
+/// When the snapshot cache TTL expires, the next request must re-query
+/// the DB and serve FRESH data. The cache entry's timestamp is
+/// backdated directly (child module can reach the cache map) so no real
+/// 15-minute wait is needed.
+#[tokio::test]
+async fn snapshot_cache_refetches_after_expiry() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Warm the cache (empty snapshot).
+    let req1 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(resp1.status(), StatusCode::OK);
+    let body1 = resp1.into_body().collect().await.unwrap().to_bytes();
+    let json1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
+    assert_eq!(json1["products"].as_array().unwrap().len(), 0);
+
+    // Add a product to the DB, then backdate the cached entry beyond the
+    // 900s TTL so the next request must treat it as stale.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-expiry', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-expiry', 'SKU-EXPIRY', 'Fresh', 100, 'USD', 'tenant-a')",
+            [],
+        )
+        .unwrap();
+    }
+    {
+        let mut cache = state.snapshot_cache.lock().await;
+        let entry = cache
+            .get_mut("tenant-a")
+            .expect("cache must be warm after the first request");
+        entry.0 = std::time::Instant::now() - std::time::Duration::from_secs(1800);
+    }
+
+    // The expired cache must be replaced by a fresh DB read.
+    let req2 = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(resp2.status(), StatusCode::OK);
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(
+        json2["products"].as_array().unwrap().len(),
+        1,
+        "expired cache must re-query and see the fresh product"
+    );
+}
+
+/// Snapshot caching must be per-tenant: after tenant A warms its cache,
+/// a request from tenant B must NOT receive A's data.
+#[tokio::test]
+async fn snapshot_cache_tenant_isolation() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Seed data for tenant-a only.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES ('r-iso', 'Owner', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+             VALUES ('prod-iso', 'SKU-ISO', 'Isolated', 100, 'USD', 'tenant-a')",
+            [],
+        )
+        .unwrap();
+    }
+
+    // Tenant A warms the cache with its product.
+    let req_a = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-a"),
+    );
+    let resp_a = app.clone().oneshot(req_a).await.unwrap();
+    let body_a = resp_a.into_body().collect().await.unwrap().to_bytes();
+    let json_a: serde_json::Value = serde_json::from_slice(&body_a).unwrap();
+    assert_eq!(json_a["products"].as_array().unwrap().len(), 1);
+
+    // Tenant B (cache populated for A) must see an EMPTY snapshot.
+    let req_b = authed(
+        axum::http::Method::GET,
+        "/api/sync/snapshot",
+        Some("tenant-b"),
+    );
+    let resp_b = app.oneshot(req_b).await.unwrap();
+    assert_eq!(resp_b.status(), StatusCode::OK);
+    let body_b = resp_b.into_body().collect().await.unwrap().to_bytes();
+    let json_b: serde_json::Value = serde_json::from_slice(&body_b).unwrap();
+    assert_eq!(
+        json_b["products"].as_array().unwrap().len(),
+        0,
+        "tenant B must not receive tenant A's cached snapshot"
+    );
+}
+
+/// The raw-bytes snapshot cache must behave identically against live
+/// PostgreSQL: first request queries + caches, second request is a hit
+/// serving identical JSON with the same content-type.
+#[tokio::test]
+async fn pg_integration_snapshot_cache_roundtrip() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG snapshot-cache integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-snap-{}", uuid::Uuid::now_v7());
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: Some(pool.clone()),
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Seed one product for the tenant so the snapshot has content.
+    {
+        let client = pool.get().await.unwrap();
+        let role_id = format!("role-{tenant}");
+        client
+            .execute(
+                "INSERT INTO roles (id, name, permissions) VALUES ($1, $2, '[]')",
+                &[&role_id, &role_id],
+            )
+            .await
+            .unwrap();
+        client
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, track_serial, is_active, tenant_id)
+                 VALUES ($1, $2, 'Widget', 100, 'USD', 1, 1, $3)",
+                &[&format!("prod-{tenant}"), &format!("SKU-{tenant}"), &tenant],
+            )
+            .await
+            .unwrap();
+    }
+
+    // Request 1 (cache miss) and request 2 (cache hit) must be identical.
+    let mut bodies = Vec::new();
+    for _ in 0..2 {
+        let req = authed(axum::http::Method::GET, "/api/sync/snapshot", Some(&tenant));
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers()
+                .get("content-type")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "application/json"
+        );
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json["products"].as_array().unwrap().len(),
+            1,
+            "PG snapshot must include the product"
+        );
+        bodies.push(json);
+    }
+    assert_eq!(
+        bodies[0], bodies[1],
+        "cache hit on PG must serve the identical snapshot"
+    );
+
+    // Cleanup.
+    let client = pool.get().await.unwrap();
+    client
+        .execute("DELETE FROM products WHERE tenant_id = $1", &[&tenant])
+        .await
+        .unwrap();
+    client
+        .execute(
+            "DELETE FROM roles WHERE id = $1",
+            &[&format!("role-{tenant}")],
+        )
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -343,6 +742,7 @@ async fn pull_returns_500_on_malformed_row() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -373,6 +773,7 @@ async fn snapshot_tenant_isolation() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -477,6 +878,7 @@ async fn push_inserts_items_with_existing_ids() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -518,6 +920,7 @@ async fn push_duplicate_id_returns_rejected() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -561,6 +964,7 @@ async fn push_rejects_invalid_non_uuid_id() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -627,6 +1031,195 @@ async fn push_rejects_invalid_non_uuid_id() {
     assert_eq!(hacked, 0, "injected CREATE TABLE executed!");
 }
 
+/// The two-phase handler logic (UUID validation → single batch INSERT)
+/// must report the right per-item outcome for a MIXED batch: an invalid
+/// id, a fresh item, and a duplicate of an existing row. The duplicate
+/// must not abort the valid insert — the batch survives it.
+#[tokio::test]
+async fn handler_mixed_batch_invalid_uuid_valid_duplicate() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    // Seed an existing row that the batch will duplicate.
+    let dup_id = uuid::Uuid::now_v7().to_string();
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+             VALUES (?1, 'test', '{}', 'pending', '2026-01-01T00:00:00Z', 'default')",
+            [&dup_id],
+        )
+        .unwrap();
+    }
+
+    let hostile = "not-a-uuid";
+    let fresh = uuid::Uuid::now_v7().to_string();
+    let body = format!(
+        r#"[
+            {{"id":"{hostile}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+            {{"id":"{fresh}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+            {{"id":"{dup_id}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}
+        ]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let push_resp: PushResponse = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(push_resp.results.len(), 3);
+    match &push_resp.results[0] {
+        PushOutcome::Rejected { reason } => {
+            assert!(reason.contains("invalid id"), "got: {reason}");
+        }
+        other => panic!("expected invalid-id Rejected, got: {other:?}"),
+    }
+    assert!(
+        matches!(push_resp.results[1], PushOutcome::Accepted),
+        "fresh item must be Accepted: {:?}",
+        push_resp.results[1]
+    );
+    match &push_resp.results[2] {
+        PushOutcome::Rejected { reason } => {
+            assert!(
+                reason.contains("duplicate id"),
+                "duplicate must be Rejected, got: {reason}"
+            );
+        }
+        other => panic!("expected duplicate Rejected, got: {other:?}"),
+    }
+
+    // Exactly the fresh item was persisted; the duplicate and hostile id
+    // were not double-inserted.
+    let conn = state.db.lock().await;
+    let fresh_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM offline_queue WHERE id = ?1",
+            [&fresh],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(fresh_count, 1, "fresh item must be persisted once");
+    let dup_total: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM offline_queue WHERE id = ?1",
+            [&dup_id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(dup_total, 1, "duplicate id must not be double-inserted");
+}
+
+/// The push response outcomes must be in the SAME ORDER as the request
+/// items — the client (`apply_push_results`) zips `pending` against
+/// `results` by index to mark items synced/failed. A regression hoisted
+/// invalid-UUID rejections to the front, shifting outcomes for mixed
+/// batches and marking the WRONG items as synced. RED: [valid, invalid,
+/// valid] must return [Accepted, Rejected, Accepted] in request order.
+#[tokio::test]
+async fn push_outcomes_preserve_request_order_with_mixed_batch() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    let first = uuid::Uuid::now_v7().to_string();
+    let hostile = "middle-not-a-uuid";
+    let last = uuid::Uuid::now_v7().to_string();
+    let body = format!(
+        r#"[
+            {{"id":"{first}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+            {{"id":"{hostile}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+            {{"id":"{last}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}
+        ]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let push_resp: PushResponse = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(push_resp.results.len(), 3, "one outcome per request item");
+
+    // Index 0 = first item (valid) → Accepted.
+    assert!(
+        matches!(push_resp.results[0], PushOutcome::Accepted),
+        "results[0] must be Accepted (first item), got: {:?}",
+        push_resp.results[0]
+    );
+    // Index 1 = middle item (invalid) → Rejected.
+    match &push_resp.results[1] {
+        PushOutcome::Rejected { reason } => {
+            assert!(reason.contains("invalid id"), "got: {reason}");
+        }
+        other => panic!("results[1] must be Rejected (middle item), got: {other:?}"),
+    }
+    // Index 2 = last item (valid) → Accepted.
+    assert!(
+        matches!(push_resp.results[2], PushOutcome::Accepted),
+        "results[2] must be Accepted (last item), got: {:?}",
+        push_resp.results[2]
+    );
+}
+
+/// With `OZ_SKIP_PUSH_VALIDATION=1` (trusted server-to-server), a
+/// non-UUID id must pass through the handler and be inserted — the
+/// validation gate is the only thing stopping it.
+#[tokio::test]
+async fn push_batch_skip_validation_flag_accepts_non_uuid() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: true,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+
+    let non_uuid = "server-generated-key-123";
+    let body = format!(
+        r#"[{{"id":"{non_uuid}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let push_resp: PushResponse = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(push_resp.results.len(), 1);
+    assert!(
+        matches!(push_resp.results[0], PushOutcome::Accepted),
+        "skip_push_validation must accept the non-UUID id: {:?}",
+        push_resp.results[0]
+    );
+
+    let conn = state.db.lock().await;
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM offline_queue WHERE id = ?1",
+            [non_uuid],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        count, 1,
+        "non-UUID id must be persisted when validation is skipped"
+    );
+}
+
 #[tokio::test]
 async fn pull_returns_items_for_tenant() {
     let state = SyncState {
@@ -635,6 +1228,7 @@ async fn pull_returns_items_for_tenant() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -670,6 +1264,7 @@ async fn pull_tenant_isolation() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -709,6 +1304,7 @@ async fn pull_filters_by_since_and_tenant() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -770,6 +1366,7 @@ async fn status_counts_only_current_tenant() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -815,6 +1412,7 @@ async fn status_counts_zero_for_empty_tenant() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -837,6 +1435,273 @@ async fn status_counts_zero_for_empty_tenant() {
     let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(json["pending_count"], 0);
+}
+
+/// The tenant-count cache must serve the TTL'd value instead of re-scanning
+/// `offline_queue` on every status poll. First read warms the cache; rows
+/// added for new tenants afterwards are NOT visible until the cache
+/// expires (the value only feeds tiered-heartbeat sizing).
+#[tokio::test]
+async fn tenant_count_cache_serves_stale_value_within_ttl() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('t1', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-a')",
+        )
+        .unwrap();
+    }
+
+    // First read warms the cache: 1 distinct tenant.
+    assert_eq!(state.cached_tenant_count().await, 1);
+
+    // A second tenant appears in the DB, but within the 60s TTL the cache
+    // must serve the previous count (no rescan of offline_queue).
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('t2', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-b')",
+        )
+        .unwrap();
+    }
+
+    assert_eq!(
+        state.cached_tenant_count().await,
+        1,
+        "cache must serve the stale count within TTL"
+    );
+}
+
+/// When the cache TTL expires, the next read must RESCAN and return the
+/// updated tenant count. The cache's internal timestamp is backdated
+/// directly (the test module can reach `TenantCountCache.0`) so no real
+/// 60s wait is needed.
+#[tokio::test]
+async fn tenant_count_cache_refreshes_after_expiry() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('r1', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-a')",
+        )
+        .unwrap();
+    }
+    assert_eq!(state.cached_tenant_count().await, 1);
+
+    // A second tenant appears AFTER the warm read.
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('r2', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-b')",
+        )
+        .unwrap();
+    }
+
+    // Backdate the cached entry beyond the 60s TTL so the next read must
+    // treat it as expired and rescan → 2.
+    {
+        let mut guard = state.tenant_count_cache.0.lock().await;
+        let (_, count) = guard.as_ref().expect("cache must be warm");
+        *guard = Some((
+            std::time::Instant::now() - std::time::Duration::from_secs(120),
+            *count,
+        ));
+    }
+
+    assert_eq!(
+        state.cached_tenant_count().await,
+        2,
+        "expired cache must rescan and see the new tenant"
+    );
+}
+
+/// The cache must behave identically on the real PostgreSQL backend:
+/// warm at N, serve stale within TTL, rescan after expiry.
+///
+/// Runs on a DEDICATED throwaway database: `distinct_tenant_count` is a
+/// global aggregate over the whole `offline_queue`, so sharing the dev DB
+/// with parallel PG tests (which write their own rows) makes the count
+/// non-deterministic. The temp DB is process-unique and dropped after.
+#[tokio::test]
+async fn pg_integration_tenant_count_cache() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    // Admin connection (raw, no schema) to create the throwaway DB.
+    let admin_pool = match crate::db::DbPool::connect_postgres(&url, false, 20, false).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG tenant-count cache integration test skipped: {e}");
+            return;
+        }
+    };
+    let admin = admin_pool.get().await.expect("admin client");
+    let db_name = format!("oz_tenant_count_{}", std::process::id());
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop stale database should succeed");
+    if let Err(e) = admin
+        .execute(&format!("CREATE DATABASE {db_name}"), &[])
+        .await
+    {
+        eprintln!("PG tenant-count cache test skipped: cannot CREATE DATABASE ({e})");
+        return;
+    }
+    let (base, query) = match url.split_once('?') {
+        Some((b, q)) => (b, Some(q)),
+        None => (url.as_str(), None),
+    };
+    let (head, _old_db) = base
+        .rsplit_once('/')
+        .expect("URL must have a database path");
+    let db_url = match query {
+        Some(q) => format!("{head}/{db_name}?{q}"),
+        None => format!("{head}/{db_name}"),
+    };
+    drop(admin);
+
+    // The dedicated DB: full schema applied here, no other test touches it.
+    let pool = match crate::db::DbPool::connect_postgres(&db_url, false, 20, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG tenant-count cache integration test skipped: {e}");
+            return;
+        }
+    };
+    let tenant = format!("pg-cache-{}", uuid::Uuid::now_v7());
+
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: Some(pool.clone()),
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    // Seed two tenants directly in PG.
+    {
+        let client = pool.get().await.unwrap();
+        for i in 0..2 {
+            client
+                .execute(
+                    "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+                     VALUES ($1, 'act', '{}', 'pending', '2026-01-01T00:00:00Z', $2)",
+                    &[&format!("{tenant}-item-{i}"), &format!("{tenant}-t{i}")],
+                )
+                .await
+                .unwrap();
+        }
+    }
+
+    // Warm: 2 distinct tenants.
+    assert_eq!(state.cached_tenant_count().await, 2);
+
+    // Add a third tenant; within TTL the cache still serves 2.
+    {
+        let client = pool.get().await.unwrap();
+        client
+            .execute(
+                "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
+                 VALUES ($1, 'act', '{}', 'pending', '2026-01-01T00:00:00Z', $2)",
+                &[&format!("{tenant}-item-3"), &format!("{tenant}-t3")],
+            )
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        state.cached_tenant_count().await,
+        2,
+        "cache must serve stale count within TTL on PG"
+    );
+
+    // Expire the cache → rescan sees 3.
+    {
+        let mut guard = state.tenant_count_cache.0.lock().await;
+        let (_, count) = guard.as_ref().expect("cache must be warm");
+        *guard = Some((
+            std::time::Instant::now() - std::time::Duration::from_secs(120),
+            *count,
+        ));
+    }
+    assert_eq!(
+        state.cached_tenant_count().await,
+        3,
+        "expired PG cache must rescan"
+    );
+
+    // Cleanup: drop the dedicated database.
+    let admin = admin_pool.get().await.expect("admin client for cleanup");
+    admin
+        .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+        .await
+        .expect("drop dedicated database should succeed");
+}
+
+/// Concurrent cold reads must all agree on the same count and leave the
+/// cache populated — no double-count, no panic under parallel warm-up.
+#[tokio::test]
+async fn tenant_count_cache_concurrent_first_reads() {
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: None,
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+
+    {
+        let conn = state.db.lock().await;
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id) VALUES
+             ('c1', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-a'),
+             ('c2', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-b'),
+             ('c3', 'act', '{}', 'pending', '2026-01-01T00:00:00Z', 'tenant-c')",
+        )
+        .unwrap();
+    }
+
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let state = state.clone();
+        handles.push(tokio::spawn(
+            async move { state.cached_tenant_count().await },
+        ));
+    }
+    let mut counts = Vec::with_capacity(handles.len());
+    for handle in handles {
+        counts.push(handle.await.unwrap());
+    }
+    assert!(
+        counts.iter().all(|c| *c == 3),
+        "all concurrent reads must agree on 3, got: {counts:?}"
+    );
+
+    // Cache is now warm — a subsequent read is served without rescanning.
+    assert_eq!(state.cached_tenant_count().await, 3);
 }
 
 // ── Plan enforcement (ADR sync-plan-gating) ─────────────────────
@@ -964,6 +1829,7 @@ async fn pull_returns_410_when_anchor_expired() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -1003,6 +1869,7 @@ async fn pull_succeeds_when_anchor_is_fresh() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state.clone());
 
@@ -1040,6 +1907,7 @@ async fn pull_null_since_never_expired() {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     };
     let app = test_router_with_state(state);
 
@@ -1094,6 +1962,7 @@ fn shared_state() -> SyncState {
         rate_limiter: RateLimiterState::new(),
         pg: None,
         skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
     }
 }
 
@@ -1257,4 +2126,123 @@ async fn rate_limit_status_endpoint_within_burst_limit() {
             "status endpoint should not be rate-limited at 50 requests (300/min limit)"
         );
     }
+}
+
+// ── Pool wait bound (SOTA finding D) ─────────────────────────────
+
+/// Build a PG-backed SyncState + router whose pool is `max_size(1)`.
+async fn pg_router_with_pool_size(
+    url: &str,
+    size: usize,
+) -> Option<(axum::Router, deadpool_postgres::Pool, SyncState)> {
+    let pool = match crate::db::DbPool::connect_postgres(url, false, size, true).await {
+        Ok(crate::db::DbPool::Postgres(pool)) => pool,
+        Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+        Err(e) => {
+            eprintln!("PG pool-bound integration test skipped: {e}");
+            return None;
+        }
+    };
+    let state = SyncState {
+        db: Arc::new(Mutex::new(fresh_db())),
+        snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        rate_limiter: RateLimiterState::new(),
+        pg: Some(pool.clone()),
+        skip_push_validation: false,
+        tenant_count_cache: TenantCountCache::default(),
+    };
+    let app = test_router_with_state(state.clone());
+    Some((app, pool, state))
+}
+
+/// The end-to-end version of the pool wait bound: with a fully-exhausted
+/// PG pool (max_size(1), connection held), a real push request must
+/// complete with a 500 within ~5s — NOT hang indefinitely. This is the
+/// doc §7.2 scenario through the full handler → store → pool stack.
+#[tokio::test]
+async fn pg_integration_push_returns_500_when_pool_exhausted() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let Some((app, pool, _state)) = pg_router_with_pool_size(&url, 1).await else {
+        return;
+    };
+
+    // Exhaust the pool: take the single connection and hold it.
+    let _held = pool.get().await.expect("first get should succeed");
+
+    let id = uuid::Uuid::now_v7().to_string();
+    let body = format!(
+        r#"[{{"id":"{id}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+
+    // Guard with 15s: a regression that removes the 5s wait_timeout
+    // fails the test instead of hanging the whole suite.
+    let result = tokio::time::timeout(std::time::Duration::from_secs(15), app.oneshot(req)).await;
+    let resp = match result {
+        Err(_) => panic!("push hung beyond 15s — wait_timeout lost"),
+        Ok(Ok(resp)) => resp,
+        Ok(Err(_)) => unreachable!("tower oneshot error is infallible"),
+    };
+
+    assert_eq!(
+        resp.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "exhausted pool must fail fast with 500, not hang"
+    );
+}
+
+/// After the held connection is dropped, the same router must serve
+/// requests again — the pool must not be permanently poisoned by the
+/// timeout path.
+#[tokio::test]
+async fn pg_integration_pool_recovers_after_exhaustion() {
+    let url = std::env::var("OZ_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+    let Some((app, pool, _state)) = pg_router_with_pool_size(&url, 1).await else {
+        return;
+    };
+
+    // Exhaust → push fails fast.
+    {
+        let _held = pool.get().await.expect("first get should succeed");
+        let id = uuid::Uuid::now_v7().to_string();
+        let body = format!(
+            r#"[{{"id":"{id}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+        );
+        let req = authed_post("/api/sync/push", &body, None);
+        let resp =
+            tokio::time::timeout(std::time::Duration::from_secs(15), app.clone().oneshot(req))
+                .await
+                .expect("push must complete within 15s")
+                .expect("tower oneshot error is infallible");
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    } // held connection dropped here → slot freed
+
+    // The SAME router now succeeds: the pool recovers.
+    let id = uuid::Uuid::now_v7().to_string();
+    let body = format!(
+        r#"[{{"id":"{id}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+    );
+    let req = authed_post("/api/sync/push", &body, None);
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "pool must recover after drop"
+    );
+
+    // Verify the item actually persisted in PG (the handler wrote through
+    // the PG store, not the SQLite fallback).
+    let client = pool.get().await.unwrap();
+    let count: i64 = client
+        .query_one("SELECT COUNT(*) FROM offline_queue WHERE id = $1", &[&id])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(count, 1);
+    client
+        .execute("DELETE FROM offline_queue WHERE id = $1", &[&id])
+        .await
+        .unwrap();
 }

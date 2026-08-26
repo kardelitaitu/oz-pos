@@ -1,5 +1,5 @@
 /*
-last audited 31-07-26 (audit/06 remediation: STAFF-01..13)
+last audited 31-07-26 (audit-open-findings remediation: STAFF-01..13)
 crate: modules-staff | status: SAFE | lint: CLEAN
 findings: Transitional module implementing Module trait. No unsafe code. Re-exports User, Role,
   builtin_roles, seed_users from oz-core. Staff CRUD commands are now session-scoped

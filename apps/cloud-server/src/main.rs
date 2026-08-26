@@ -312,29 +312,38 @@ async fn health_handler(
     let (db_connected, db_latency_us, sync_queue_depth, last_sync_at, db_kind) =
         if let Some(pool) = &state.pg {
             let db_start = std::time::Instant::now();
-            let (connected, depth, last) = match pool.get().await {
-                Ok(client) => {
-                    let depth = client
-                        .query_one(
-                            "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
-                            &[],
-                        )
-                        .await
-                        .map(|r| r.get::<_, i64>(0))
-                        .unwrap_or(0);
-                    let last = client
-                        .query_one(
-                            "SELECT MAX(synced_at) FROM offline_queue \
+            // The health endpoint must fail fast under pool saturation:
+            // the Docker healthcheck has its own --timeout=5s, so waiting
+            // the full 5s builder wait_timeout here would let the
+            // container be marked unhealthy during a burst. Bound the
+            // health-path wait to 2s — a degraded "db_connected: false"
+            // response is better than a container restart.
+            let (connected, depth, last) =
+                match tokio::time::timeout(std::time::Duration::from_secs(2), pool.get()).await {
+                    Ok(Ok(client)) => {
+                        let depth = client
+                            .query_one(
+                                "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+                                &[],
+                            )
+                            .await
+                            .map(|r| r.get::<_, i64>(0))
+                            .unwrap_or(0);
+                        let last = client
+                            .query_one(
+                                "SELECT MAX(synced_at) FROM offline_queue \
                              WHERE synced_at IS NOT NULL",
-                            &[],
-                        )
-                        .await
-                        .map(|r| r.get::<_, Option<String>>(0))
-                        .unwrap_or(None);
-                    (true, depth, last)
-                }
-                Err(_) => (false, 0, None),
-            };
+                                &[],
+                            )
+                            .await
+                            .map(|r| r.get::<_, Option<String>>(0))
+                            .unwrap_or(None);
+                        (true, depth, last)
+                    }
+                    // Timeout (2s guard) OR deadpool error → degraded health.
+                    Ok(Err(_)) => (false, 0, None),
+                    Err(_) => (false, 0, None),
+                };
             let latency = db_start.elapsed().as_micros() as u64;
             (connected, latency, depth, last, "postgres")
         } else {

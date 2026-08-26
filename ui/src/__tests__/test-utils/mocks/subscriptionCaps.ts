@@ -12,7 +12,7 @@ export function makeSubscriptionCaps(
     maxPosInstances: 1,
     maxWarehouses: 1,
     maxStaffUsers: 1,
-    salesHistoryDays: 30,
+    salesHistoryDays: 90, // Free = 3 months (90 days)
     supportsQris: false,
     supportsAnalytics: false,
     supportsLoyalty: false,

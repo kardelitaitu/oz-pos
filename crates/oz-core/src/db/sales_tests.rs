@@ -103,9 +103,13 @@ fn test_sales_history_cap_free_tier() {
     store.create_sale(&recent).unwrap();
     store.create_sale(&old).unwrap();
 
-    // Free tier (30-day window): only the recent sale survives, capped=true.
+    // Capped window (e.g. 30 days for demonstration — the real Free-tier
+    // window is 90 days / 3 months): only the recent sale survives, capped=true.
     let (capped_sales, capped) = store.list_sales_with_history_cap(Some(30)).unwrap();
-    assert!(capped, "Free tier must flag the history window as capped");
+    assert!(
+        capped,
+        "capped window must flag the history window as capped"
+    );
     assert_eq!(capped_sales.len(), 1, "40-day-old sale must be excluded");
     assert_eq!(capped_sales[0].id, recent.id);
 

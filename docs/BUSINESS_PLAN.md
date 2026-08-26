@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings on code-claim basis — business/strategy doc) · market-facing feature descriptions match implemented capabilities verified in prior turns: Embedded Lua VM (oz-lua), Midtrans QRIS + Stripe (oz-payment qris.rs/stripe.rs), HAL peripherals (oz-hal), PostgreSQL outbox sync (platform/sync), offline-first SQLite · minor marketing nit (line 36 lists "Windows 7" while QUICKSTART scopes to 10/11) is a positioning claim, not code drift · no stale codebase claims -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings on code-claim basis — business/strategy doc) · market-facing feature descriptions match implemented capabilities verified in prior turns: Embedded Lua VM (oz-lua), Midtrans QRIS + Stripe (oz-payment qris.rs/stripe.rs), HAL peripherals (oz-hal), PostgreSQL outbox sync (platform/sync), offline-first SQLite · §2 rewritten 2026-08-26 to the approved 5-tier lineup per subscription-tiers.md / website pricing -->
 
 # Business Plan: OZ-POS Platform
 
@@ -12,87 +12,106 @@ To democratize enterprise-grade, zero-downtime point-of-sale infrastructure for 
 
 ---
 
-## 2. Product Tiering & Hybrid Pricing Model
+## 2. Product Tiering & Pricing Model
 
-> ⚠️ **Superseded for pricing (2026-08-17):** the tier lineup and prices in
-> this section are **outdated** — the approved lineup is **Free · Plus · Pro
-> ⭐ · Premium · Enterprise** with USD/IDR prices, annual "2 months free"
-> billing, and the full quota/feature matrix, per
-> [`subscription-tiers.md`](../guides/subscription-tiers.md) (FINAL, single source
-> of truth). The 1-Time/Standard/Pro/Enterprise model and the IDR figures
-> below are retained as historical market analysis only.
-
-To capture the diverse landscape of Indonesian commerce—ranging from neighborhood stores (*warung kelontong*) to nationwide retail chains—OZ-POS originally employed a **hybrid pricing strategy** spanning four distinct tiers:
+> This section mirrors the **approved 5-tier lineup** — Free · Plus · Pro ⭐ ·
+> Premium · Enterprise — with USD/IDR prices, annual "2 months free" billing,
+> and the full quota/feature matrix, per
+> [`subscription-tiers.md`](./subscription-tiers.md) (FINAL, single source of
+> truth) and the live pricing page (`website/src/content/pricing/{en,id}.ts`).
+> USD and IDR are independent market prices: global customers pay the USD
+> rate; Indonesian customers the lower IDR rate.
 
 ```mermaid
 graph TD
-    A[OZ-POS Platform] --> B[1 Time Tier: IDR 3.500.000 One-Time]
-    A --> C[Standard Tier: IDR 2.000.000 / Year]
-    A --> D[Pro Tier: IDR 5.000.000 / Year]
-    A --> E[Enterprise Tier: Bespoke Contract]
+    A[OZ-POS Platform] --> B[Free Tier: Rp 0 — free forever]
+    A --> C[Plus Tier: Rp 49.000 / mo]
+    A --> D[Pro Tier: Rp 99.000 / mo]
+    A --> E[Premium Tier: Rp 399.000 / mo]
+    A --> F[Enterprise Tier: Bespoke Contract]
 ```
 
 ### 2.1 Master Feature & Licensing Tier Comparison Matrix
 
-| Category / Feature | 1-Time Tier (IDR 3.5jt One-Time) | Standard Tier (IDR 2jt / Year) | Pro Tier (IDR 5jt / Year) | Enterprise Tier (Bespoke Quote) |
-| :--- | :---: | :---: | :---: | :---: |
-| **Pricing & Licensing** | **IDR 3.500.000 / terminal** | **IDR 2.000.000 / year** | **IDR 5.000.000 / year** | **Bespoke Quote** |
-| **Billing Frequency** | Perpetual (One-Time) | Annual Subscription | Annual Subscription | Annual Contract |
-| **3-Month Free Trial** | ✓ (Limited: offline-only) | ✓ (Full feature trial) | ✓ (Full feature trial) | Dedicated Sandbox |
-| **Target Audience** | Solo retail / *Warung* | Small shops & Cafes | Multi-terminal & Franchises | Large Chains & Corporates |
-| **Core Platform & Hardware** | | | | |
-| **Offline-First Edge SQLite Engine** | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) |
-| **HAL Hardware Integrations** | ✓ (Scanner, Printer, Drawer) | ✓ (Scanner, Printer, Drawer) | ✓ (+ Customer Display, KDS) | ✓ (+ Custom HAL Drivers) |
-| **Cross-Platform Support** | Windows 7/10/11, Android | Windows, Android, Linux | Windows, Android, iOS, Linux | Windows, Android, iOS, Linux |
-| **Multi-Store & Topology Builder** | | | | |
-| **Max Store Branches** | **1 Store** | **1 Store** | **Unlimited** | **Unlimited** |
-| **Max POS Workspace Terminals** | **1 Terminal** | **2 Terminals** | **Unlimited** | **Unlimited** |
-| **Max Warehouse Storage Locations** | **1 Location** | **1 Location** | **Unlimited** | **Unlimited** |
-| **Visual Node Topology Canvas** | ✓ (Single Store / 1 WS) | ✓ (Single Store / 2 WS) | ✓ (Unlimited Nodes) | ✓ (+ Regional Zone Containers) |
-| **1-Way & 2-Way Arrow Connections** | ✓ (Basic Store->WS link) | ✓ (Basic Store->WS link) | ✓ (Full Directional Arrow Wires) | ✓ (Full Arrow Wires + Zone Bounds) |
-| **Multi-Warehouse Fallback Wires** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled (Priority 1, 2)** | **✓ Enabled (Priority 1, 2, 3+)** |
-| **Live Order Simulation Debugger** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled** | **✓ Enabled** |
-| **Payments & Gateways** | | | | |
-| **Cash & Manual Split Billing** | ✓ | ✓ | ✓ | ✓ |
-| **Integrated Midtrans QRIS** | — | ✓ | ✓ | ✓ |
-| **Stripe Credit / Debit Cards** | — | — | ✓ | ✓ |
-| **Multi-Currency Exchange Rate Sync** | — | — | ✓ | ✓ |
-| **Rules & Business Logic** | | | | |
-| **Standard Tax & Discount Setup** | ✓ | ✓ | ✓ | ✓ |
-| **Embedded Lua VM Rules Engine** | — | — | ✓ (Buy-X-Get-Y, Custom Tax) | ✓ (Advanced Custom Rules) |
-| **Product Bundles Engine** | — | ✓ (Basic Bundles) | ✓ (Advanced Bundles) | ✓ (Advanced Bundles) |
-| **Loyalty Tiers & Points Redemption** | — | — | ✓ | ✓ |
-| **Reporting, Sync & SLA** | | | | |
-| **Local CSV Report Exports** | ✓ | ✓ | ✓ | ✓ |
-| **PostgreSQL Outbox Sync Daemon** | — | ✓ (Up to 2 terminals) | ✓ (Unlimited terminals) | ✓ (Dedicated / Private Host) |
-| **Multi-Store Centralized Dashboard** | — | — | ✓ | ✓ |
-| **Custom ERP Adaptors (SAP/Odoo)** | — | — | — | ✓ |
-| **Software Updates** | Free Minor (Major: 1.5jt) | ✓ Free Minor & Major | ✓ Free Minor & Major | ✓ Free Minor & Major |
-| **Support SLA** | Community Forum | Email/Chat (24h SLA) | Priority 24/7 SLA | Dedicated Account Manager |
+| Category / Feature | Free | Plus | Pro ⭐ | Premium | Enterprise |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Pricing & Licensing** | **Rp 0 — free forever** | **Rp 49.000 / mo** (Rp 500.000 / yr) | **Rp 99.000 / mo** (Rp 1.000.000 / yr) | **Rp 399.000 / mo** (Rp 3.999.000 / yr) | **Bespoke Quote** |
+| **USD price** | $0 | $4.99/mo · $49.99/yr | $9.99/mo · $99.99/yr | $39.99/mo · $399.99/yr | Custom |
+| **Billing Frequency** | Free forever | Monthly / Yearly (2 months free) | Monthly / Yearly (2 months free) | Monthly / Yearly (2 months free) | Annual Contract |
+| **Trial** | — | 14-day Plus trial (general) | 14-day Pro trial (restaurant/cafe); 30-day (enterprise referral) | — | Dedicated Sandbox |
+| **Target Audience** | Warung / kios trying OZ-POS | Single-store shops ready to grow | Cafes, toko, growing multi-store businesses | Multi-store chains needing loyalty & automation | Large Chains & Corporates |
+| **Core Platform & Hardware** | | | | | |
+| **Offline-First Edge SQLite Engine** | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) |
+| **HAL Hardware Integrations** | ✓ (Scanner, Printer, Drawer) | ✓ (Scanner, Printer, Drawer) | ✓ (+ Customer Display, KDS) | ✓ (+ Customer Display, KDS) | ✓ (+ Custom HAL Drivers) |
+| **Cross-Platform Support** | Windows 10/11, Android | Windows, Android, Linux | Windows, Android, Linux | Windows, Android, Linux | Windows, Android, Linux |
+| **Multi-Store & Topology Builder** | | | | | |
+| **Max Store Branches** | **1 Store** | **1 Store** | **2 Stores** | **5 Stores** | **Unlimited** |
+| **Max POS Workspace Terminals / store** | **1 Terminal** | **2 Terminals** | **5 Terminals** | **Unlimited** | **Unlimited** |
+| **Max Warehouse Storage Locations** | **1 Location** | **2 Locations** | **3 Locations** | **Unlimited** | **Unlimited** |
+| **Max KDS screens / store** | 0 | 0 | 2 | Unlimited | Unlimited |
+| **Max products / menu** | 200 | 500 | 1,000 | 10,000 | Unlimited |
+| **Max staff users** | 1 | 5 | 20 | 50 | Unlimited |
+| **Sales history (view & export)** | 3 months | 1 year | 5 years | Unlimited | Unlimited |
+| **Visual Node Topology Canvas** | ✓ (Single Store / 1 WS) | ✓ (Single Store / 2 WS) | ✓ (2 Stores / 5 WS) | ✓ (Unlimited Nodes) | ✓ (+ Regional Zone Containers) |
+| **1-Way & 2-Way Arrow Connections** | ✓ (Basic Store->WS link) | ✓ (Basic Store->WS link) | ✓ (Full Directional Arrow Wires) | ✓ (Full Arrow Wires) | ✓ (Full Arrow Wires + Zone Bounds) |
+| **Multi-Warehouse Fallback Wires** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled (Priority 1, 2)** | **✓ Enabled (Priority 1, 2, 3)** | **✓ Enabled (Priority 1, 2, 3+)** |
+| **Workspace types: `restaurant-pos` / `store-pos` / `admin`** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Workspace types: `inventory` / `warehouse`** | ✗ | ✓ | ✓ | ✓ | ✓ |
+| **Workspace type: `kds`** | ✗ | ✗ (via Restaurant Starter bundle) | ✓ | ✓ | ✓ |
+| **Live Order Simulation Debugger** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled** | **✓ Enabled** | **✓ Enabled** |
+| **Payments & Gateways** | | | | | |
+| **Cash & Manual Split Billing** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Integrated Midtrans QRIS** | — | ✓ | ✓ | ✓ | ✓ |
+| **Stripe Credit / Debit Cards** | — | — | ✓ | ✓ | ✓ |
+| **Rules & Business Logic** | | | | | |
+| **Standard Tax & Discount Setup** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Daily Sales Dashboard (Laporan Harian)** | ✗ (blurred teaser) | ✓ (Plus hero) | ✓ | ✓ | ✓ |
+| **Reports & Analytics (`analytics:view`)** | — | — | ✓ | ✓ | ✓ |
+| **Scheduled report emails** | — | — | — | ✓ | ✓ |
+| **Embedded Lua VM Rules Engine** | — | — | — | ✓ (Buy-X-Get-Y, Custom Tax) | ✓ (Advanced Custom Rules) |
+| **Product Bundles Engine** | — | ✓ (Basic Bundles) | ✓ (Advanced Bundles) | ✓ (Advanced Bundles) | ✓ (Advanced Bundles) |
+| **Loyalty Tiers & Points Redemption** | — | — | — (locked teaser) | ✓ | ✓ |
+| **Cloud Sync & SLA** | | | | | |
+| **PostgreSQL Outbox Sync Daemon** | — | ✓ | ✓ | ✓ | ✓ (Dedicated / Private Host) |
+| **Multi-Store Centralized Dashboard** | — | — | ✓ | ✓ | ✓ |
+| **Custom ERP Adaptors (SAP/Odoo)** | — | — | — | — | ✓ |
+| **Software Updates** | Free Minor & Major | Free Minor & Major | Free Minor & Major | Free Minor & Major | Free Minor & Major |
+| **Offline grace period** | 7 days | 14 days | 14 days | 30 days | Custom (per contract) |
+| **Support SLA** | Community Forum | Email/Chat (24h) | Email/Chat (8h) | Priority 1h (24/7) | Dedicated Account Manager |
 
 ### 2.2 Tier Details
-All tiers include a **3‑month free trial** with limited functionality: offline‑only operation, no cloud‑sync, and no integrated payment gateways. This allows merchants to evaluate the platform risk‑free before committing to a paid plan. During the free trial, merchants cannot import existing databases or user‑settings; a fresh local store is created.
 
+Trials are **segmented by signup vertical** (no universal Pro trial): general
+signups get a **14-day Plus trial** (exposes QRIS + Daily Sales Dashboard —
+the two hooks that drive Plus conversion); restaurant/cafe signups get a
+**14-day Pro trial** (KDS is the key differentiator); enterprise-referral
+signups get a **30-day Pro trial**. After the trial ends, a clear downgrade
+screen lists exactly what the user loses, with a one-click upgrade path.
 
-#### 1 Time Tier (Local-First Perpetual License)
-*   **Pricing:** **IDR 3.500.000 / terminal** (One-Time Payment)
-*   **Target Market:** Solo retailers, neighborhood mini-markets (*warung kelontong*), and independent vendors seeking to escape recurring monthly software bills.
-*   **Core Offerings:** Edge SQLite engine, local HAL peripherals, stock control, self-service support via community forum. Free minor updates; major version upgrades are IDR 1.500.000.
+#### Free Tier (Free Forever)
+*   **Pricing:** **Rp 0** — free forever (no license key needed; begins at first launch)
+*   **Target Market:** Warung / kios, solo retailers evaluating OZ-POS
+*   **Core Offerings:** 1 store / 1 register / 1 warehouse / 1 staff, 3-month sales history, offline-first SQLite engine, local HAL peripherals (scanner, printer, drawer), community forum support. QRIS, cloud sync, and the Daily Sales Dashboard are locked with blurred upgrade teasers.
 
-#### Standard Tier (Entry-Level Cloud SaaS)
-*   **Pricing:** **IDR 2.000.000 / year** (Billed annually)
-*   **Target Market:** Growing retail shops, small cafes, and service outlets that need basic multi-device sync and dynamic QRIS payment processing.
-*   **Core Offerings:** PostgreSQL cloud database sync (for up to 2 terminals), integrated Midtrans QRIS payments, and next-business-day email/chat support. Free minor and major updates.
+#### Plus Tier (Entry Paid — Daily Sales Dashboard)
+*   **Pricing:** **$4.99/mo · $49.99/yr** (IDR **Rp 49.000/mo · Rp 500.000/yr**; yearly = 2 months free)
+*   **Target Market:** Single-store shops ready to grow from manual to smart operations
+*   **Core Offerings:** 1 store / 2 registers / 2 warehouses / 5 staff, 1-year sales history, **Daily Sales Dashboard (Laporan Harian)** — the hero feature, Midtrans QRIS payments, PostgreSQL cloud sync, and next-business-day email/chat support. Product bundles included.
 
-#### Pro Tier (Premium Cloud SaaS)
-*   **Pricing:** **IDR 5.000.000 / year** (Billed annually)
-*   **Target Market:** High-volume restaurants, multi-terminal stores, and expanding retail franchises requiring advanced checkout logic and multi-outlet management.
-*   **Core Offerings:** Unlimited terminals, PostgreSQL cloud database sync, Midtrans QRIS and Stripe card payments, local Lua VM engine for customizable promotion rules, unified store manager dashboard, and 24/7 SLA-backed priority support.
+#### Pro Tier ⭐ (Most Popular)
+*   **Pricing:** **$9.99/mo · $99.99/yr** (IDR **Rp 99.000/mo · Rp 1.000.000/yr**; yearly = 2 months free; A/B-tested monthly variant at $7.99 / Rp 79.000)
+*   **Target Market:** Cafes, toko, growing businesses ready for full analytics, KDS, and multi-terminal setups
+*   **Core Offerings:** 2 stores / 5 registers per store / 3 warehouses / 20 staff, 5-year sales history, **reports & analytics**, **Kitchen Display (2 per store)**, Stripe cards + QRIS, multi-store dashboard, multi-warehouse routing, 8h support SLA.
+
+#### Premium Tier (Loyalty & Automation)
+*   **Pricing:** **$39.99/mo · $399.99/yr** (IDR **Rp 399.000/mo · Rp 3.999.000/yr**; yearly = 2 months free)
+*   **Target Market:** Multi-store chains needing loyalty, automation, and unlimited registers/warehouses
+*   **Core Offerings:** 5 stores / unlimited registers & warehouses / 50 staff, unlimited sales history, **loyalty program (points & tiers)**, Lua scripting engine, scheduled report emails, priority 1h (24/7) support, multi-warehouse fallback.
 
 #### Enterprise Tier (Custom Contract & Dedicated Infrastructure)
-*   **Pricing:** **Bespoke Pricing / Custom Quote** (Billed annually)
-*   **Target Market:** Nationwide retail chains, large restaurant groups, and enterprise corporates requiring high-security data compliance, custom hosting, and integrations with ERP software.
-*   **Core Offerings:** All Pro Tier features deployed on dedicated cloud infrastructure (AWS RDS PostgreSQL or CockroachDB), custom ERP integrations (e.g., SAP, Odoo), on-premise execution support, a dedicated account manager, and on-site training.
+*   **Pricing:** **Bespoke / Custom Quote** (billed annually; ranges: small 5-20 stores $100-200/mo, medium 21-100 stores $200-400/mo, large 100+ stores $400+/mo)
+*   **Target Market:** Nationwide retail chains, large restaurant groups, and enterprise corporates requiring white-label branding, custom hardware, and dedicated infrastructure
+*   **Core Offerings:** Unlimited stores/registers/warehouses/staff, regional zone containers, custom ERP integrations (e.g., SAP, Odoo), custom HAL drivers, white-label branding, on-premise execution support, a dedicated account manager, and a custom support SLA.
 
 ---
 
@@ -102,7 +121,7 @@ Indonesia hosts over **64 million Micro, Small, and Medium Enterprises (MSMEs / 
 
 ### 3.1 Pain Points Addressed
 1.  **Internet Instability:** Many cloud-only POS systems crash or lock up when cellular or fiber connections drop. OZ-POS's offline-first architecture allows sales to process continuously.
-2.  **Exorbitant Platform Fees:** Competitors often charge transactional commissions or high monthly fees. OZ-POS offers a predictable annual flat-rate license.
+2.  **Exorbitant Platform Fees:** Competitors often charge transactional commissions or high monthly fees. OZ-POS offers predictable flat-rate subscription pricing (plus a free-forever tier).
 3.  **Hardware Lock-in & Forced Upgrades:** Many POS competitors lock merchants into buying proprietary tablets or expensive modern registers. Furthermore, legacy systems built on heavy frameworks (like Electron/Java) run sluggishly on budget hardware, forcing hardware upgrade CAPEX. The native Rust + Tauri v2 core of OZ-POS is extremely lightweight, extending the lifecycle of legacy and budget terminals.
 
 ### 3.2 Competitive Landscape Matrix
@@ -115,7 +134,7 @@ Indonesia hosts over **64 million Micro, Small, and Medium Enterprises (MSMEs / 
 | **Pawoon** | SaaS (IDR 2.5jt - 4jt / yr) | Medium (Offline mode with sync limit) | Limited (Preset API partners only) | Medium (Recommended tablet bundles) | Partner-channel payment MDR | Standard tax/discount templates | Small/mid F&B, retail |
 | **Olsera** | SaaS (IDR 1.8jt - 3.5jt / yr) | Medium (Basic offline checkout) | Limited (Basic webhook access) | Low (Multi-platform app support) | Partner-channel payment MDR | Standard promo rule templates | Boutique retail, cafes |
 | **ESB POS** | SaaS (IDR 6jt - 15jt+ / yr) | Good (Requires local hub server install) | Custom (Paid enterprise integrations) | High (Requires enterprise hardware) | Negotiated enterprise MDR | Complex templates (ERP-coupled) | Large F&B chains, fine dining |
-| **OZ-POS** | **Four-Tier Hybrid (One-Time / SaaS)** | **Excellent (Offline-first SQLite engine)** | **Unlimited (Open source core + Lua scripting)** | **None (Runs on legacy Windows/Android/iOS)** | **0% app fees (Direct Midtrans/Stripe)** | **Dynamic programmable Lua VM engine** | Micro to Enterprise retail/F&B |
+| **OZ-POS** | **Five-Tier SaaS (Free / Plus / Pro / Premium / Enterprise)** | **Excellent (Offline-first SQLite engine)** | **Unlimited (Open source core + Lua scripting)** | **None (Runs on legacy Windows/Android/iOS)** | **0% app fees (Direct Midtrans/Stripe)** | **Dynamic programmable Lua VM engine** | Micro to Enterprise retail/F&B |
 
 ### 3.3 Ultra-Lightweight Footprint & Legacy Hardware Support (CAPEX Reduction)
 
@@ -124,7 +143,7 @@ A primary barrier to POS adoption for Indonesian MSMEs (UMKM) is the upfront Cap
 *   **Sub-50MB RAM Footprint:** Legacy Windows POS registers (e.g., ex-thin clients like HP T628 or generic POS terminals commonly sold on Tokopedia) often have only **2GB to 4GB of DDR3 RAM**. While Electron-based POS applications require **500MB to 1GB of RAM** (causing severe OS memory thrashing and slow disk swapping), OZ-POS runs on Tauri v2. By utilizing the OS-native webview (WebView2 on Windows, WebKit on Linux, WebKit/Safari on iOS) and a native Rust backend, memory consumption is kept **under 50MB of RAM**.
 *   **Legacy CPU Optimization:** Budget POS hardware typically uses low-power, older x86 processors (such as the **Intel Celeron J1900 / J1800** or Atom D525) or entry-level mobile ARM chips (such as the quad-core **ARM Cortex-A53** found in budget Android tablets and older Sunmi V1/V2 handheld terminals). Because Rust compiles directly to highly optimized native machine code with **no runtime virtual machine and no garbage collection**, it avoids CPU spikes. Database read/write operations on SQLite execute in under a millisecond, preventing UI stuttering and input lag during peak checkout hours.
 *   **Cellular-Friendly Installer (15MB):** Standard Java or Electron-based POS installers exceed 150MB–300MB. OZ-POS's native desktop installer is **under 15MB**. This allows field operators and merchants in rural or semi-urban areas to install and update the application via standard 3G/4G cellular modems or mobile hotspots without consuming high data quotas.
-*   **Maximized CAPEX Protection:** Merchants can continue running their existing Windows 7/10 terminals, older iPads, or Android 8+ devices. By eliminating forced hardware upgrades, the customer acquisition friction is drastically reduced, enabling immediate software adoption.
+*   **Maximized CAPEX Protection:** Merchants can continue running their existing Windows 10/11 terminals or Android 8+ devices. By eliminating forced hardware upgrades, the customer acquisition friction is drastically reduced, enabling immediate software adoption.
 
 ---
 
@@ -144,7 +163,7 @@ gantt
     Developer Ecosystem Launch        : 2027-02, 2027-06
 ```
 
-1.  **Hardware Bundling:** Partner with local POS hardware distributors in Jakarta, Surabaya, and Bandung to bundle the Basic Tier license pre-installed on cash registers and touch terminals.
+1.  **Hardware Bundling:** Partner with local POS hardware distributors in Jakarta, Surabaya, and Bandung to bundle the Plus plan license pre-installed on cash registers and touch terminals.
 2.  **SME Franchise Focus:** Target growing local franchise chains (*Kopi Susu* outlets, local fashion brands) that require multi-outlet syncing but find enterprise software cost-prohibitive.
 3.  **Developer Ecosystem:** Leverage the Rust-based plugin architecture and Lua scripting layer to attract local software agencies. Agencies can build customized themes or localized modules for clients while running on the OZ-POS core.
 
@@ -152,19 +171,19 @@ gantt
 
 ## 5. Financial Projections (Conservative 5-Year Forecast)
 
-Based on conservative customer acquisition projections across major Indonesian tier-1 and tier-2 cities under the expanded 4-tier model.
+Based on conservative customer acquisition projections across major Indonesian tier-1 and tier-2 cities under the approved 5-tier model (annual IDR rates: Plus Rp 500.000, Pro Rp 1.000.000, Premium Rp 3.999.000; Free generates no revenue).
 
 | Metric | Year 1 | Year 2 | Year 3 | Year 4 | Year 5 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **New 1 Time Licenses (One-Time)** | 100 | 200 | 350 | 500 | 700 |
-| **Active Standard Subscribers** | 150 | 300 | 600 | 1,000 | 1,500 |
+| **Active Plus Subscribers** | 150 | 300 | 600 | 1,000 | 1,500 |
 | **Active Pro Subscribers** | 200 | 300 | 450 | 650 | 900 |
+| **Active Premium Subscribers** | 50 | 100 | 200 | 350 | 500 |
 | **Active Enterprise Contracts** | 0 | 5 | 10 | 15 | 25 |
-| **1 Time License Revenue** | IDR 350.000.000 | IDR 700.000.000 | IDR 1.225.000.000 | IDR 1.750.000.000 | IDR 2.450.000.000 |
-| **Standard SaaS Revenue** | IDR 300.000.000 | IDR 600.000.000 | IDR 1.200.000.000 | IDR 2.000.000.000 | IDR 3.000.000.000 |
-| **Pro SaaS Revenue** | IDR 1.000.000.000 | IDR 1.500.000.000 | IDR 2.250.000.000 | IDR 3.250.000.000 | IDR 4.500.000.000 |
+| **Plus Revenue (Rp 500.000/yr)** | IDR 75.000.000 | IDR 150.000.000 | IDR 300.000.000 | IDR 500.000.000 | IDR 750.000.000 |
+| **Pro Revenue (Rp 1.000.000/yr)** | IDR 200.000.000 | IDR 300.000.000 | IDR 450.000.000 | IDR 650.000.000 | IDR 900.000.000 |
+| **Premium Revenue (Rp 3.999.000/yr)** | IDR 200.000.000 | IDR 400.000.000 | IDR 800.000.000 | IDR 1.400.000.000 | IDR 2.000.000.000 |
 | **Enterprise Revenue (50jt avg.)** | IDR 0 | IDR 250.000.000 | IDR 500.000.000 | IDR 750.000.000 | IDR 1.250.000.000 |
-| **Total Annual Revenue** | **IDR 1.650.000.000** | **IDR 3.050.000.000** | **IDR 5.175.000.000** | **IDR 7.750.000.000** | **IDR 11.200.000.000** |
+| **Total Annual Revenue** | **IDR 475.000.000** | **IDR 1.100.000.000** | **IDR 2.050.000.000** | **IDR 3.300.000.000** | **IDR 4.900.000.000** |
 
 ---
 
@@ -191,8 +210,8 @@ Due to the **local‑first edge database architecture** (SQLite processes >99 
 
 ### 6.3 Margin Metrics (Conservative Estimates)
 
-* **1‑Time License Tier:** Gross margin **≈ 97 %** (minor hardware‑support cost of IDR 5 000 per terminal).
-* **Standard / Pro / Enterprise Tiers:** Gross margin **≥ 94 %** after accounting for incremental support, compliance, and continuous sync infrastructure costs.
+* **SaaS Tiers (Plus / Pro / Premium):** Gross margin **≥ 94 %** after accounting for incremental support, compliance, and continuous sync infrastructure costs.
+* **Enterprise Tier:** Gross margin **≥ 94 %** (custom contract; dedicated hosting passed through at cost).
 
 These figures deliberately err on the side of caution, using higher cloud‑cost baselines and lower margin expectations than initial projections. The resulting high‑margin profile underscores OZ‑POS’s suitability for price‑sensitive Indonesian MSMEs while still delivering a robust, offline‑first experience.
 

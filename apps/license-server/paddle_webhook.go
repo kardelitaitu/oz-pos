@@ -425,9 +425,9 @@ func tierQuotas(tier, bundle string) (maxStores, maxPOSInstances int, allowedTyp
 	case "pro":
 		return 2, 5, all
 	case "premium":
-		// C4.2: Premium allows up to 10 stores self-serve; >10 requires
+		// C4.2: Premium allows up to 5 stores self-serve; >5 requires
 		// Enterprise contract. Unlimited instances and all workspace types.
-		return 10, 0, all
+		return 5, 0, all
 	case "plus":
 		// 1 store, 2 registers/store, no kds (§3 Workspace Types — kds is Pro+).
 		// maxWarehouses is enforced client-side via SubscriptionTier::max_warehouses().
@@ -513,7 +513,7 @@ func sendReceiptEmailSMTP(to, licenseKey, tier, expiresAt string) error {
 	password := os.Getenv("OZ_SMTP_PASSWORD")
 	from := strings.TrimSpace(os.Getenv("OZ_SMTP_FROM"))
 	if from == "" {
-		from = "no-reply@oz-pos.com"
+		from = "no-reply@ozpos.my.id"
 	}
 
 	msg := buildReceiptEmail(from, to, licenseKey, tier, expiresAt)

@@ -164,6 +164,30 @@ mod tests {
     }
 
     #[test]
+    fn create_exchange_rate_args_deserialize_full() {
+        let json = r#"{
+            "from_currency": "USD",
+            "to_currency": "IDR",
+            "rate_millionths": 16200000000,
+            "source": "ecb",
+            "effective_date": "2026-07-01"
+        }"#;
+        let args: CreateExchangeRateArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.from_currency, "USD");
+        assert_eq!(args.to_currency, "IDR");
+        assert_eq!(args.rate_millionths, 16_200_000_000);
+        assert_eq!(args.source.as_deref(), Some("ecb"));
+        assert_eq!(args.effective_date.as_deref(), Some("2026-07-01"));
+    }
+
+    #[test]
+    fn create_exchange_rate_args_rejects_missing_required_field() {
+        // from_currency is required; omitting it must fail to deserialize.
+        let json = r#"{"to_currency":"IDR","rate_millionths":16200000000}"#;
+        assert!(serde_json::from_str::<CreateExchangeRateArgs>(json).is_err());
+    }
+
+    #[test]
     fn create_exchange_rate_args_debug() {
         let args = CreateExchangeRateArgs {
             from_currency: "F".into(),

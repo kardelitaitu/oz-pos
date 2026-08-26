@@ -502,7 +502,7 @@ are configured.
 ### Auth function (PocketBase)
 
 ```bash
-PB_URL=https://api.oz-pos.com
+PB_URL=https://api.ozpos.my.id
 OZ_LICENSE_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----..."
 # SMTP for web_users email (future website)
 SMTP_HOST=... SMTP_PORT=587 SMTP_USERNAME=... SMTP_PASSWORD=...
@@ -602,8 +602,8 @@ Lock to an explicit allowlist before serving the website:
 
 | Origin | Purpose |
 |--------|---------|
-| `https://oz-pos.com` | Website (global) |
-| `https://id.oz-pos.com` | Website (Indonesia) |
+| `https://ozpos.my.id` | Website (global) |
+| `https://id.ozpos.my.id` | Website (Indonesia) |
 | `http://localhost:4321` | Website (dev) |
 | `tauri://localhost` | POS app (Tauri) |
 

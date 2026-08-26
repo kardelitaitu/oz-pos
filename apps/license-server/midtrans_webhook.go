@@ -582,7 +582,8 @@ func midtransSetGrace(app core.App, n midtransNotification) error {
 // provisioning purchases — mirroring verifyPaddleConfig.
 func verifyMidtransConfig() error {
 	if midtransServerKey() == "" {
-		return fmt.Errorf("MIDTRANS_SERVER_KEY is required — without it every Midtrans webhook answers 503 and Midtrans retries; set it to the server key from the Midtrans dashboard")
+		log.Printf("WARNING: MIDTRANS_SERVER_KEY not set — Midtrans webhook and Snap checkout are disabled (the server starts without them; set the key to enable Midtrans payments)")
+		return nil
 	}
 	m, err := midtransPriceTiers()
 	if err != nil {

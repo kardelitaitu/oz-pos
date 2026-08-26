@@ -10,12 +10,9 @@ import rehypeMermaid from 'rehype-mermaid';
 
 // Static marketing site — two locales, path-prefixed (/en/, /id/), no
 // server runtime. See website-plan.md §10 for the Cloudflare Pages settings.
-// NOTE: live at a workers.dev URL until the oz-pos.com domain is bought;
-// swap `site` to https://oz-pos.com (and robots.txt) when the custom
-// domain goes live — canonical, og:url, sitemap, and hreflang all derive
-// from this value.
+// Canonical, og:url, sitemap, and hreflang all derive from `site`.
 export default defineConfig({
-  site: 'https://oz-pos.adikaradwiatmaja.workers.dev',
+  site: 'https://ozpos.my.id',
   integrations: [
     react(),
     sitemap({
