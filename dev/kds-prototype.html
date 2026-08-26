@@ -695,10 +695,11 @@
   }
   .kds-order-notes {
     opacity: 0.55; font-style: italic; font-size: 11px;
-    padding: 0 13px 6px; /* no border-top — the divider lives on the last
+    padding: 0 13px; /* no border-top — the divider lives on the last
        category, so a note-less order still gets the separation.
-       Top spacing comes from .kds-card-footer's padding-top, so the
-       note-less footer (buttons only) keeps the same rhythm. */
+       Top AND bottom spacing come from .kds-card-footer (padding-top
+       + gap), so the note-less and note-ful footers keep the same
+       rhythm: 6px above content, 6px between rows. */
   }
 
   .kds-card-footer {
