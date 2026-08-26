@@ -964,10 +964,12 @@
 
   <!-- SCREEN FOOTER -->
   <div class="kds-screen-footer">
-    <span>192.168.1.42</span><span class="sep">|</span>
+    <span id="footer-user">dika</span><span class="sep">|</span>
+    <span id="footer-workspace">OZ POS</span><span class="sep">|</span>
+    <span id="footer-ip">192.168.1.42</span><span class="sep">|</span>
     <span id="clock">14 Aug 14:55</span><span class="sep">|</span>
-    <span>Last synced: 2s ago</span><span class="sep">|</span>
-    <span>Connected</span>
+    <span id="footer-sync">Last sync: 2s ago</span><span class="sep">|</span>
+    <span id="footer-status">Connected</span>
   </div>
 
   <!-- Confirm modal — styled replacement for window.confirm (P4).
@@ -1099,6 +1101,10 @@
      (the kitchen finished; a waiter team closes them out). Mutually
      exclusive with category filtering — picking a category clears it. */
   let filterMode = 'all';
+  /* Completed-tab filter: 'all' | 'dinein' | 'takeaway' — the recall
+     surface has its own mode row (All / Dine in / Takeaway), separate
+     from the Open tab's category + prepared filters. */
+  let completedFilter = 'all';
   /* Stable columns: every order is born into a column ONCE and never
      moves sideways — only up as cards above it complete. RUSH → column
      0 (top-left). Others → the shortest column at birth. */
@@ -1532,6 +1538,22 @@
   }
   function buildFilterPanel() {
     const panel = document.getElementById('filter-panel');
+    /* Completed tab: its own mode row — All / Dine in / Takeaway */
+    if (tab === 'completed') {
+      const modes = [
+        { v: 'all', label: 'All' },
+        { v: 'dinein', label: 'Dine in' },
+        { v: 'takeaway', label: 'Takeaway' },
+      ];
+      panel.innerHTML = `
+      <div class="kds-filter-modes">
+        ${modes.map(m => `
+        <div class="kds-filter-option mode${completedFilter === m.v ? ' checked' : ''}" data-mode="${m.v}" role="option" tabindex="-1" aria-selected="${completedFilter === m.v}">
+          <span>${m.label}</span>
+        </div>`).join('')}
+      </div>`;
+      return;
+    }
     const cats = allCategories();
     const allActive = filterMode !== 'prepared' && (!filterCats || filterCats.size === 0);
     const procActive = filterMode === 'prepared';
@@ -1559,7 +1581,11 @@
        category names safe from HTML injection. */
     btn.classList.add('all');
     let label;
-    if (filterMode === 'prepared') label = 'Prepared';
+    if (tab === 'completed') {
+      /* recall surface: All / Dine in / Takeaway */
+      label = completedFilter === 'dinein' ? 'Dine in'
+        : completedFilter === 'takeaway' ? 'Takeaway' : 'All';
+    } else if (filterMode === 'prepared') label = 'Prepared';
     else if (!filterCats || filterCats.size === 0) label = 'All Categories';
     else if (filterCats.size === 1) label = plainName(filterCats.values().next().value);
     else label = filterCats.size + ' selected';
@@ -1589,10 +1615,15 @@
     const opt = e.target.closest('.kds-filter-option');
     if (!opt) return;
     if (opt.dataset.mode) {
-      /* view modes: All (everything) vs Prepared (kitchen done) —
-         both clear any category selection */
-      if (opt.dataset.mode === 'prepared') { filterMode = 'prepared'; filterCats = null; }
-      else { filterMode = 'all'; filterCats = null; }
+      if (tab === 'completed') {
+        /* recall surface modes: All / Dine in / Takeaway */
+        completedFilter = opt.dataset.mode;
+      } else {
+        /* view modes: All (everything) vs Prepared (kitchen done) —
+           both clear any category selection */
+        if (opt.dataset.mode === 'prepared') { filterMode = 'prepared'; filterCats = null; }
+        else { filterMode = 'all'; filterCats = null; }
+      }
     } else {
       /* category toggle — switching to category mode clears 'Prepared' */
       const cat = opt.dataset.cat;
@@ -1835,9 +1866,12 @@
         if (a.priority !== b.priority) return a.priority ? -1 : 1;
         return a.received - b.received; // oldest first
       });
-    const done = orders.filter(o => o.status === 'completed');
+    const allDone = orders.filter(o => o.status === 'completed');
+    const done = completedFilter === 'all'
+      ? allDone
+      : allDone.filter(o => (completedFilter === 'dinein') === o.dineIn);
     document.getElementById('count-open').textContent = open.length;
-    document.getElementById('count-completed').textContent = done.length;
+    document.getElementById('count-completed').textContent = allDone.length;
 
     if (tab === 'open') {
       main.className = 'kds-main' + (open.length === 0 ? ' empty' : '') + (prevTab !== 'open' ? ' slide-right' : '') + (filterMode === 'prepared' ? ' prepared-filter' : '');
@@ -2104,15 +2138,13 @@
       tab = btn.dataset.tab;
       try { localStorage.setItem(TAB_KEY, tab); } catch {}
       document.querySelectorAll('.kds-tab').forEach(b => b.classList.toggle('active', b === btn));
-      /* category filter belongs to the Open work surface — hide it on
-         the Completed tab (with the leave animation), restore on Open */
+      /* the filter is tab-aware: Open gets All/Prepared + categories,
+         Completed gets All / Dine in / Takeaway. Keep the button
+         visible on both; just refresh its label and close the panel. */
       const filterWrap = document.getElementById('filter-wrap');
-      if (tab === 'completed') {
-        toggleFilterPanel(false); // close any open dropdown first
-        animateHide(filterWrap);
-      } else {
-        animateShow(filterWrap);
-      }
+      toggleFilterPanel(false); // close any open dropdown first
+      refreshFilterBtn();
+      animateShow(filterWrap);
       render();
       moveTabIndicator();
     });
@@ -2375,13 +2407,31 @@
   moveThemeIndicator();
   updateThemeTag();
 
-  /* ── live clock in footer ───────────────────────── */
+  /* ── live clock + sync counter in footer ─────────── */
+  let footerSyncAt = Date.now() - 2000; // mock: last kds:orders-changed 2s ago
+  const footerStatusEl = document.getElementById('footer-status');
+  const footerSyncEl = document.getElementById('footer-sync');
+  function fmtSyncAgo(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return s + 's';
+    return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+  }
   function tick() {
     const now = new Date();
     document.getElementById('clock').textContent =
       now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' +
       now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    /* mock sync age: counts up live; every ~40s a new kds:orders-changed
+       event resets it to ~0s (mirrors the 30s order-arrival cadence) */
+    const age = Date.now() - footerSyncAt;
+    footerSyncEl.textContent = 'Last sync: ' + fmtSyncAgo(age) + ' ago';
+    if (age > 40000) footerSyncAt = Date.now();
   }
+  /* connectivity: mostly Connected, brief offline blips */
+  setInterval(() => {
+    const offline = Math.random() < 0.06; // ~6% of ticks are a blip
+    footerStatusEl.textContent = offline ? 'Disconnected' : 'Connected';
+  }, 15000);
   setInterval(tick, 1000);
   tick();
 
@@ -2406,6 +2456,7 @@
   }
   setInterval(tickCardTimers, 1000);
   buildColorPanel();
+  refreshFilterBtn(); // label matches the restored tab (All / All Categories)
   render();
   /* measure the tab pill AFTER the first render: the count badge starts
      as '0' in the static HTML, so measuring earlier would lock the blue
