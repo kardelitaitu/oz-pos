@@ -793,21 +793,21 @@
   .kds-screen-footer .sep { opacity: 0.5; }
 
   /* Reusable switch (used for sound, auto-accept, animations) — the
-     design-language settings-toggle-slider pattern, scaled up for the
-     KDS touchscreen: track 48×28, knob 22px, translate 20px on
+     design-language settings-toggle-slider pattern, scaled for the
+     KDS touchscreen: track 48×25, knob 20px, translate 23px on
      toggle, bounce ease cubic-bezier(0.34, 1.56, 0.64, 1). */
   .kds-switch {
-    position: relative; width: 48px; height: 28px; border-radius: 14px; border: none;
+    position: relative; width: 48px; height: 25px; border-radius: 12.5px; border: none;
     background: rgba(255,255,255,0.12); cursor: pointer; transition: background 0.2s;
     -webkit-tap-highlight-color: transparent;
   }
   .kds-switch::after {
-    content: ''; position: absolute; top: 3px; left: 3px;
-    width: 22px; height: 22px; border-radius: 50%; background: #fff;
+    content: ''; position: absolute; top: 2.5px; left: 2.5px;
+    width: 20px; height: 20px; border-radius: 50%; background: #fff;
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   .kds-switch.on { background: #147EFB; }
-  .kds-switch.on::after { transform: translateX(20px); }
+  .kds-switch.on::after { transform: translateX(23px); }
   /* light theme: darken the switch track so it is visible on white */
   .kds-screen.light .kds-switch { background: rgba(0,0,0,0.08); }
   .kds-screen.light .kds-switch.on { background: #147EFB; }
