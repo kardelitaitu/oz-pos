@@ -15,12 +15,6 @@
      transforms never flash a fallback font. */
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
-  /* Apple-style superellipse corners — gated by body class so old
-     hardware can fall back to round corners (Graphics setting in the
-     hamburger). True circles (50%) are exempted below. */
-  body.graphics-high * { corner-shape: squircle; }
-  body.graphics-high .kds-switch, body.graphics-high .kds-switch::after { corner-shape: round; }
-
   /* Touch-screen modern scrollbar: thin, transparent, no visible track */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -910,21 +904,6 @@
               </div>
             </div>
           </div>
-          <!-- GRAPHICS: corner quality — High = superellipse (squircle),
-               Normal = round (old-hardware friendly) -->
-          <div class="kds-panel-section">
-            <h3>Graphics</h3>
-            <div class="kds-setting-card">
-              <div class="kds-setting-row">
-                <span class="kds-setting-label">Quality</span>
-                <button class="kds-theme-toggle" id="graphics-toggle" title="Toggle corner quality" aria-label="Toggle graphics quality">
-                  <span class="kds-theme-indicator" id="graphics-indicator"></span>
-                  <span class="kds-theme-option" data-gfx="normal">Normal</span>
-                  <span class="kds-theme-option on" data-gfx="high">High</span>
-                </button>
-              </div>
-            </div>
-          </div>
           <!-- CARD COLOURS: per-theme config, accordion groups + scoped reset -->
           <div class="kds-panel-section">
             <div class="kds-section-head">
@@ -1021,15 +1000,6 @@
   document.getElementById('screen').classList.toggle('light', theme === 'light');
   document.querySelectorAll('#theme-toggle .kds-theme-option').forEach(o =>
     o.classList.toggle('on', o.dataset.theme === theme));
-
-  /* Graphics quality: High = superellipse corners, Normal = round
-     (old-hardware friendly). Persisted like the other settings. */
-  const GFX_KEY = 'kds-proto-graphics';
-  let graphicsQuality = 'high';
-  try { if (localStorage.getItem(GFX_KEY) === 'normal') graphicsQuality = 'normal'; } catch {}
-  document.body.classList.toggle('graphics-high', graphicsQuality === 'high');
-  document.querySelectorAll('#graphics-toggle .kds-theme-option').forEach(o =>
-    o.classList.toggle('on', o.dataset.gfx === graphicsQuality));
 
   /* Per-theme colour configs — one set for dark, one for light, so the
      kitchen tunes colours against each theme independently. The ACTIVE
@@ -2213,10 +2183,9 @@
       const first = panel.querySelector('button, input, [tabindex]:not([tabindex="-1"])');
       if (first) first.focus();
       /* indicator offsets are only valid once the panel is visible —
-         re-measure ALL the slider pills (theme, graphics, orientation);
-         they are zero-width while the panel is display:none at init */
+         re-measure the theme slider pill (it is zero-width while the
+         panel is display:none at init) */
       moveThemeIndicator();
-      if (typeof moveGfxIndicator === 'function') moveGfxIndicator();
     } else if (panel._lastFocus) {
       panel._lastFocus.focus();
       panel._lastFocus = null;
@@ -2383,31 +2352,6 @@
   });
   moveThemeIndicator();
   updateThemeTag();
-
-  /* ── graphics quality slider (High / Normal) ─────── */
-  function moveGfxIndicator() {
-    const toggle = document.getElementById('graphics-toggle');
-    const on = toggle ? toggle.querySelector('.kds-theme-option.on') : null;
-    const ind = document.getElementById('graphics-indicator');
-    if (!on || !ind) return;
-    ind.style.left = on.offsetLeft + 'px';
-    ind.style.width = on.offsetWidth + 'px';
-    ind.animate([
-      { transform: 'scale(1, 1)' },
-      { transform: 'scale(0.82, 0.85)', offset: 0.45 },
-      { transform: 'scale(1.08, 1.18)', offset: 0.85 },
-      { transform: 'scale(1, 1)' },
-    ], { duration: 340, easing: 'ease-in-out' });
-  }
-  document.getElementById('graphics-toggle').addEventListener('click', () => {
-    graphicsQuality = graphicsQuality === 'high' ? 'normal' : 'high';
-    try { localStorage.setItem(GFX_KEY, graphicsQuality); } catch {}
-    document.body.classList.toggle('graphics-high', graphicsQuality === 'high');
-    document.querySelectorAll('#graphics-toggle .kds-theme-option').forEach(o =>
-      o.classList.toggle('on', o.dataset.gfx === graphicsQuality));
-    moveGfxIndicator();
-  });
-  moveGfxIndicator();
 
   /* ── live clock in footer ───────────────────────── */
   function tick() {
