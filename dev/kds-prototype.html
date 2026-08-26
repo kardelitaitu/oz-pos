@@ -445,9 +445,10 @@
   /* the value is a clickable reset-to-100% button — underline on hover
      makes the reset affordance discoverable without a tooltip */
   .kds-zoom-value {
-    flex: 1; height: 36px; padding: 0 14px; text-align: center;
+    width: 80px; height: 36px; padding: 0 14px; text-align: center;
+    flex-shrink: 0;
     font-size: 13px; font-weight: 600; color: var(--text); opacity: 0.85;
-    cursor: pointer; border-radius: var(--r-sm); min-width: 60px;
+    cursor: pointer; border-radius: var(--r-sm);
   }
   .kds-zoom-value:hover { opacity: 1; background: var(--border); text-decoration: underline; text-underline-offset: 3px; }
 
