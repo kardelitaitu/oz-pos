@@ -24,6 +24,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 
@@ -294,6 +295,19 @@ func main() {
 			log.Printf("warning: failed to create trial_email_log collection: %v", err)
 		}
 		go startTrialEmailScheduler(app)
+
+		// ── Root → PocketBase admin UI redirect ───────────────────
+		// The bare domain (https://license.ozpos.my.id) 301-redirects to
+		// the PocketBase admin console at /_/ — which then auto-navigates
+		// to #/login when no session exists. Done server-side so the
+		// redirect can't be confused with a proxy loop (Cloudflare Page
+		// Rules reject this exact target for that reason).
+		se.Router.BindFunc(func(e *core.RequestEvent) error {
+			if e.Request.URL.Path == "/" || e.Request.URL.Path == "" {
+				return e.Redirect(http.StatusMovedPermanently, "/_/")
+			}
+			return e.Next()
+		})
 
 		return se.Next()
 	})
