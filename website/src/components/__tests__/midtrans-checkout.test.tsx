@@ -104,8 +104,10 @@ describe('openMidtransCheckout', () => {
 describe('CheckoutButton market routing', () => {
   it('opens Midtrans Snap for the id locale and never Paddle', async () => {
     vi.doMock('../midtrans', () => ({ openMidtransCheckout: vi.fn().mockResolvedValue(undefined) }));
+    vi.doMock('../../lib/region', () => ({ getRegion: () => 'id' }));
     const { openMidtransCheckout } = await import('../midtrans');
     sessionStorage.setItem('oz_session', 'sess-1');
+    sessionStorage.setItem('oz_region', 'id');
 
     const { container, root } = await renderButton('id', {
       tierKey: 'plus',
@@ -123,8 +125,10 @@ describe('CheckoutButton market routing', () => {
 
   it('carries the selected bundle into the Midtrans snap request', async () => {
     vi.doMock('../midtrans', () => ({ openMidtransCheckout: vi.fn().mockResolvedValue(undefined) }));
+    vi.doMock('../../lib/region', () => ({ getRegion: () => 'id' }));
     const { openMidtransCheckout } = await import('../midtrans');
     sessionStorage.setItem('oz_session', 'sess-1');
+    sessionStorage.setItem('oz_region', 'id');
 
     const { container, root } = await renderButton('id', {
       tierKey: 'plus',
@@ -141,6 +145,7 @@ describe('CheckoutButton market routing', () => {
 
   it('opens Paddle for the en locale', async () => {
     vi.doMock('../midtrans', () => ({ openMidtransCheckout: vi.fn() }));
+    vi.doMock('../../lib/region', () => ({ getRegion: () => 'global' }));
     vi.doMock('../paddle', () => ({
       hasSession: () => true,
       isPaddleConfigured: () => true,
@@ -166,6 +171,7 @@ describe('CheckoutButton market routing', () => {
 
   it('carries the selected bundle into the Paddle checkout custom data', async () => {
     vi.doMock('../midtrans', () => ({ openMidtransCheckout: vi.fn() }));
+    vi.doMock('../../lib/region', () => ({ getRegion: () => 'global' }));
     vi.doMock('../paddle', () => ({
       hasSession: () => true,
       isPaddleConfigured: () => true,
