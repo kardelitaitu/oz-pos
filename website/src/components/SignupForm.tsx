@@ -202,7 +202,7 @@ export default function SignupForm({ locale }: Props) {
                   type="button"
                   onClick={() => handleRegionChange(opt.value)}
                   className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors duration-150 ${
-                    region === opt.value ? 'bg-accent/10 text-link font-medium' : 'text-ink hover:bg-ink/5'
+                    region === opt.value ? 'text-link font-medium' : 'text-ink hover:bg-ink/5'
                   }`}
                 >
                   <span>{opt.flag}</span>
