@@ -32,6 +32,7 @@ type Step = 'form' | 'code';
 export default function SignupForm({ locale }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [email, setEmail] = useState('');
+  const [emailTouched, setEmailTouched] = useState(false);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [code, setCode] = useState('');
@@ -148,15 +149,28 @@ export default function SignupForm({ locale }: Props) {
       <form onSubmit={register} className="space-y-4" aria-label={t(locale, 'signup.title')}>
         <label className="block">
           <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.email')}</span>
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder={t(locale, 'signup.emailPlaceholder')}
-            className={inputClass}
-          />
+          <span className="relative block">
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailTouched(true);
+              }}
+              onBlur={() => setEmailTouched(true)}
+              placeholder={t(locale, 'signup.emailPlaceholder')}
+              className={`${inputClass} pr-10`}
+            />
+            {emailTouched && email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500" aria-label="Valid email">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3.5 8 6.5 11 12.5 5" />
+                </svg>
+              </span>
+            )}
+          </span>
         </label>
         <PasswordField
           locale={locale}
