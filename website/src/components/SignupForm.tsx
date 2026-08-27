@@ -42,12 +42,12 @@ export default function SignupForm({ locale }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [email, setEmail] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
-  const [region, setRegionState] = useState<Region>(() => {
-    if (typeof window !== 'undefined') {
-      return (sessionStorage.getItem('oz_region') as Region) || 'global';
-    }
-    return 'global';
-  });
+  const [region, setRegionState] = useState<Region>('global');
+  // Read from localStorage after hydration to avoid SSR/client mismatch
+  useEffect(() => {
+    const saved = localStorage.getItem('oz_region') as Region | null;
+    if (saved && saved !== region) setRegionState(saved);
+  }, []);
   const [regionOpen, setRegionOpen] = useState(false);
   const handleRegionChange = (r: Region) => {
     setRegionState(r);
@@ -117,7 +117,7 @@ export default function SignupForm({ locale }: Props) {
       // round-trip to /me (see paddle.getSessionEmail).
       sessionStorage.setItem('oz_email', email);
       // Persist region for pricing and checkout routing.
-      sessionStorage.setItem('oz_region', region);
+      localStorage.setItem('oz_region', region);
       redirectAfterAuth();
     } catch {
       setError(t(locale, 'login.errorVerify'));
