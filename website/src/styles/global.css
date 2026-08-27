@@ -113,15 +113,14 @@ body {
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.35s cubic-bezier(0.2, 0, 0, 1), color 0.35s cubic-bezier(0.2, 0, 0, 1);
+  transition: background-color 1s cubic-bezier(0.2, 0, 0, 1), color 1s cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Smooth crossfade for themed elements — design language: slow = 350ms.
+/* Smooth crossfade for themed elements — 1s duration for visible transition.
    Only animate transform/opacity per design language (GPU compositor).
-   background-color and color are theme-critical, so we allow them but keep
-   durations within the slow token (350ms). */
+   background-color and color are theme-critical, so we allow them. */
 header, main, footer, section, nav, div, span, p, h1, h2, h3, h4, a, button, article {
-  transition: background-color 0.35s cubic-bezier(0.2, 0, 0, 1), color 0.35s cubic-bezier(0.2, 0, 0, 1), border-color 0.35s cubic-bezier(0.2, 0, 0, 1), opacity 0.35s cubic-bezier(0.2, 0, 0, 1);
+  transition: background-color 1s cubic-bezier(0.2, 0, 0, 1), color 1s cubic-bezier(0.2, 0, 0, 1), border-color 1s cubic-bezier(0.2, 0, 0, 1), opacity 1s cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* Theme transitions always run — reduced motion only disables non-essential animations. */
@@ -288,12 +287,17 @@ button:not(:disabled):active {
 
 @media (prefers-reduced-motion: reduce) {
   /* Design language rule 09: honor reduced motion — collapse durations to 0,
-     skip entrance/spin/shake, but the after-state must still confirm. */
+     skip entrance/spin/shake, but the after-state must still confirm.
+     Theme transitions are exempt — they're a core UX affordance. */
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  /* Restore theme transition for all elements */
+  header, main, footer, section, nav, div, span, p, h1, h2, h3, h4, a, button, article, html, body {
+    transition: background-color 1s cubic-bezier(0.2, 0, 0, 1), color 1s cubic-bezier(0.2, 0, 0, 1), border-color 1s cubic-bezier(0.2, 0, 0, 1), opacity 1s cubic-bezier(0.2, 0, 0, 1) !important;
   }
   [data-reveal] {
     opacity: 1 !important;
