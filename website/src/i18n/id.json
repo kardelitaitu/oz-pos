@@ -210,7 +210,7 @@
     "createAccount": "Buat akun",
     "resetTitle": "Atur ulang kata sandi",
     "sendResetCode": "Kirim kode reset",
-    "resetCodeSent": "Kami mengirim kode reset ke email Anda. Masukkan bersama kata sandi baru.",
+    "resetCodeSent": "Kami mengirim kode reset ke email Anda. Silakan periksa inbox atau folder spam.",
     "newPassword": "Kata sandi baru",
     "resetPassword": "Atur ulang kata sandi",
     "backToLogin": "Kembali ke masuk",

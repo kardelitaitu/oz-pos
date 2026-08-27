@@ -160,16 +160,20 @@ export default function AuthForm({ locale }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: resetEmail }),
       });
-      if (!res.ok) throw new Error('request-password-reset failed');
-      const data = (await res.json()) as { cooldown_until?: string };
-      // Always advance to code step — the email was sent regardless of cooldown.
-      // Show cooldown as informational if present.
+      const data = await res.json() as { cooldown_until?: string; error?: string };
+      if (!res.ok) {
+        // Show error with HTTP status code for debugging
+        setError(`${t(locale, 'login.errorResetRequest')} Code ${res.status}`);
+        return;
+      }
+      // Email was sent — advance to code step
       if (data.cooldown_until) {
         setResetCooldown(data.cooldown_until);
       }
       setResetStep('code');
-    } catch {
-      setError(t(locale, 'login.errorResetRequest'));
+    } catch (err) {
+      // Network error or parse failure
+      setError(`${t(locale, 'login.errorResetRequest')} Code 0`);
     } finally {
       setLoading(false);
     }

@@ -210,7 +210,7 @@
     "createAccount": "Create an account",
     "resetTitle": "Reset password",
     "sendResetCode": "Send reset code",
-    "resetCodeSent": "We sent a reset code to your email. Enter it with your new password.",
+    "resetCodeSent": "We sent a reset code to your email. Please check your inbox or spam folder.",
     "newPassword": "New password",
     "resetPassword": "Reset password",
     "backToLogin": "Back to sign in",
