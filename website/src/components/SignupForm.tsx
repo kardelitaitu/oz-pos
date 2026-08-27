@@ -33,9 +33,9 @@ type Step = 'form' | 'code';
 const INPUT_CLASS =
   'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
 
-const regionOptions: { value: Region; flag: string; labelKey: string }[] = [
-  { value: 'global', flag: '🌍', labelKey: 'signup.regionGlobal' },
-  { value: 'id', flag: '🇮🇩', labelKey: 'signup.regionIndonesia' },
+const regionOptions: { value: Region; labelKey: string }[] = [
+  { value: 'global', labelKey: 'signup.regionGlobal' },
+  { value: 'id', labelKey: 'signup.regionIndonesia' },
 ];
 
 export default function SignupForm({ locale }: Props) {
@@ -178,10 +178,7 @@ export default function SignupForm({ locale }: Props) {
             onBlur={() => setTimeout(() => setRegionOpen(false), 150)}
             className="w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-left outline-none transition focus:border-accent flex items-center justify-between"
           >
-            <span className="flex items-center gap-2">
-              <span>{regionOptions.find((o) => o.value === region)?.flag}</span>
-              <span>{t(locale, regionOptions.find((o) => o.value === region)?.labelKey ?? 'signup.regionGlobal')}</span>
-            </span>
+            <span>{t(locale, regionOptions.find((o) => o.value === region)?.labelKey ?? 'signup.regionGlobal')}</span>
             <svg
               className={`w-4 h-4 text-muted transition-transform duration-200 ${regionOpen ? 'rotate-180' : ''}`}
               viewBox="0 0 16 16"
@@ -205,7 +202,6 @@ export default function SignupForm({ locale }: Props) {
                     region === opt.value ? 'text-link font-medium' : 'text-ink hover:bg-ink/5'
                   }`}
                 >
-                  <span>{opt.flag}</span>
                   <span>{t(locale, opt.labelKey)}</span>
                 </button>
               ))}

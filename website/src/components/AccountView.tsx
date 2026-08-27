@@ -398,10 +398,7 @@ export default function AccountView({ locale }: Props) {
               onBlur={() => setTimeout(() => setRegionOpen(false), 150)}
               className="w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-left outline-none transition focus:border-accent flex items-center justify-between"
             >
-              <span className="flex items-center gap-2">
-                <span>{region === 'id' ? '🇮🇩' : '🌍'}</span>
-                <span>{t(locale, region === 'id' ? 'signup.regionIndonesia' : 'signup.regionGlobal')}</span>
-              </span>
+              <span>{t(locale, region === 'id' ? 'signup.regionIndonesia' : 'signup.regionGlobal')}</span>
               <svg
                 className={`w-4 h-4 text-muted transition-transform duration-200 ${regionOpen ? 'rotate-180' : ''}`}
                 viewBox="0 0 16 16"
@@ -417,8 +414,8 @@ export default function AccountView({ locale }: Props) {
             {regionOpen && (
               <div className="absolute z-50 mt-1 w-full rounded-md border border-ink/10 bg-surface shadow-lg overflow-hidden">
                 {([
-                  { value: 'global' as Region, flag: '🌍', label: t(locale, 'signup.regionGlobal') },
-                  { value: 'id' as Region, flag: '🇮🇩', label: t(locale, 'signup.regionIndonesia') },
+                  { value: 'global' as Region, label: t(locale, 'signup.regionGlobal') },
+                  { value: 'id' as Region, label: t(locale, 'signup.regionIndonesia') },
                 ]).map((opt) => (
                   <button
                     key={opt.value}
@@ -434,7 +431,6 @@ export default function AccountView({ locale }: Props) {
                       region === opt.value ? 'text-link font-medium' : 'text-ink hover:bg-ink/5'
                     }`}
                   >
-                    <span>{opt.flag}</span>
                     <span>{opt.label}</span>
                   </button>
                 ))}
