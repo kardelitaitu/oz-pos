@@ -48,6 +48,15 @@ export const pricing: PricingTier[] = [
       monthly: { price: 'Rp 49.000', period: '/bulan', priceId: 'pri_placeholder_plus_monthly_usd' },
       yearly: { price: 'Rp 500.000', period: '/tahun', priceId: 'pri_placeholder_plus_yearly_usd' },
     },
+    bundle: {
+      id: 'restaurant_starter',
+      label: 'Paket Restaurant Starter',
+      note: 'Hemat 10% dari harga eceran',
+      prices: {
+        monthly: { price: 'Rp 75.000', period: '/bulan', priceId: 'pri_placeholder_plus_bundle_monthly_usd' },
+        yearly: { price: 'Rp 750.000', period: '/tahun', priceId: 'pri_placeholder_plus_bundle_yearly_usd' },
+      },
+    },
     features: [
       { label: '1 toko', included: true },
       { label: '2 register', included: true },

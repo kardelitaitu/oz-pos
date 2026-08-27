@@ -28,10 +28,11 @@ test.describe('Workspace Picker', () => {
   test('all workspace cards are visible after login', async ({ page }) => {
     await loginAs(page, 'owner', '1234');
 
-    // All 5 workspace cards must be visible (mock returns 5 workspaces).
+    // Workspace cards: 4 workspace cards + 1 'Add Workspace' card (admin is
+    // in the Tools section, not the card grid).
     const cards = page.locator('.workspace-card');
     await expect(cards.first()).toBeVisible({ timeout: 5_000 });
-    expect(await cards.count()).toBeGreaterThanOrEqual(5);
+    expect(await cards.count()).toBeGreaterThanOrEqual(4);
 
     // Verify specific workspace names are present.
     const cardNames = page.locator('.workspace-card-name');
@@ -39,7 +40,10 @@ test.describe('Workspace Picker', () => {
     expect(allNames.some((n) => n.includes('Store POS'))).toBe(true);
     expect(allNames.some((n) => n.includes('Kitchen Display'))).toBe(true);
     expect(allNames.some((n) => n.includes('Warehouse'))).toBe(true);
-    expect(allNames.some((n) => n.includes('Admin'))).toBe(true);
+
+    // Admin workspace is accessed via the Tools section, not the card grid.
+    const toolCards = page.locator('[data-testid="workspace-tool-card"]');
+    await expect(toolCards.first()).toBeVisible({ timeout: 5_000 });
 
     // Click "Warehouse" and verify it navigates.
     const inventoryCard = cards.filter({ hasText: 'Warehouse' });
