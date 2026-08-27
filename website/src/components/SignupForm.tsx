@@ -22,7 +22,6 @@ import { licenseApiUrl } from '../lib/runtime-config';
  * user is sent to ?next= or the account dashboard. Degrades to a "not
  * configured" notice when PUBLIC_LICENSE_API_URL is unset.
  */
-const API = licenseApiUrl();
 
 interface Props {
   locale: string;
@@ -39,6 +38,8 @@ const regionOptions: { value: Region; labelKey: string }[] = [
 ];
 
 export default function SignupForm({ locale }: Props) {
+  // Read API at component level so window.__OZ_CONFIG__ is available after hydration
+  const [API] = useState(() => licenseApiUrl());
   const [step, setStep] = useState<Step>('form');
   const [email, setEmail] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
@@ -59,6 +60,21 @@ export default function SignupForm({ locale }: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Resend cooldown
+  const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  useEffect(() => {
+    if (!otpSentAt) return;
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - otpSentAt) / 1000);
+      const remaining = Math.max(0, 120 - elapsed);
+      setResendCooldown(remaining);
+      if (remaining <= 0) clearInterval(id);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [otpSentAt]);
   // SSR-safe: never render the not-configured notice in server HTML (the
   // Worker's runtime config can supply the URL at hydration even when the
   // build-time PUBLIC_LICENSE_API_URL is unset) — that caused a visible
@@ -91,6 +107,7 @@ export default function SignupForm({ locale }: Props) {
       });
       if (res.status === 409) throw new Error('exists');
       if (!res.ok) throw new Error('register failed');
+      setOtpSentAt(Date.now());
       setStep('code');
     } catch (err) {
       setError(err instanceof Error && err.message === 'exists' ? t(locale, 'signup.errorExists') : t(locale, 'signup.errorRegister'));
@@ -155,6 +172,36 @@ export default function SignupForm({ locale }: Props) {
           >
             {loading ? '…' : t(locale, 'signup.verify')}
           </button>
+          {resendCooldown > 0 ? (
+            <p className="text-center text-xs text-muted">Resend code in {resendCooldown}s</p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  setError('');
+                  setLoading(true);
+                  try {
+                    const res = await fetch(`${API}/api/v1/web/request-otp`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email }),
+                    });
+                    if (!res.ok) throw new Error('resend failed');
+                    setOtpSentAt(Date.now());
+                  } catch {
+                    setError(t(locale, 'login.errorSend'));
+                  } finally {
+                    setLoading(false);
+                  }
+                })();
+              }}
+              disabled={loading}
+              className="w-full text-center text-xs text-link transition hover:underline"
+            >
+              Resend code
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setStep('form')}

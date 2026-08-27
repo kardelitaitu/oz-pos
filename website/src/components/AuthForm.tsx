@@ -20,7 +20,6 @@ import { licenseApiUrl } from '../lib/runtime-config';
  * account dashboard by default. Degrades to a "not configured" notice when
  * PUBLIC_LICENSE_API_URL is unset.
  */
-const API = licenseApiUrl();
 
 interface Props {
   locale: string;
@@ -32,6 +31,8 @@ type View = 'login' | 'reset';
 type ResetStep = 'email' | 'code';
 
 export default function AuthForm({ locale }: Props) {
+  // Read API at component level so window.__OZ_CONFIG__ is available after hydration
+  const API = licenseApiUrl();
   const [view, setView] = useState<View>('login');
   const [mode, setMode] = useState<Mode>('otp');
   const [step, setStep] = useState<Step>('form');
@@ -40,6 +41,21 @@ export default function AuthForm({ locale }: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Resend cooldown: tracks when the OTP was last sent
+  const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  useEffect(() => {
+    if (!otpSentAt) return;
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - otpSentAt) / 1000);
+      const remaining = Math.max(0, 120 - elapsed);
+      setResendCooldown(remaining);
+      if (remaining <= 0) clearInterval(id);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [otpSentAt]);
 
   // Forgot-password flow state.
   const [resetStep, setResetStep] = useState<ResetStep>('email');
@@ -118,6 +134,7 @@ export default function AuthForm({ locale }: Props) {
         body: JSON.stringify({ email }),
       });
       if (!res.ok) throw new Error('request-otp failed');
+      setOtpSentAt(Date.now());
       setStep('code');
     } catch {
       setError(t(locale, 'login.errorSend'));
@@ -335,6 +352,36 @@ export default function AuthForm({ locale }: Props) {
           >
             {loading ? '…' : t(locale, 'login.verify')}
           </button>
+          {resendCooldown > 0 ? (
+            <p className="text-center text-xs text-muted">Resend code in {resendCooldown}s</p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  setError('');
+                  setLoading(true);
+                  try {
+                    const res = await fetch(`${API}/api/v1/web/request-otp`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email }),
+                    });
+                    if (!res.ok) throw new Error('resend failed');
+                    setOtpSentAt(Date.now());
+                  } catch {
+                    setError(t(locale, 'login.errorSend'));
+                  } finally {
+                    setLoading(false);
+                  }
+                })();
+              }}
+              disabled={loading}
+              className="w-full text-center text-xs text-link transition hover:underline"
+            >
+              Resend code
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setStep('form')}

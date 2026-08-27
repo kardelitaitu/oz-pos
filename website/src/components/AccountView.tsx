@@ -36,7 +36,6 @@ import { licenseApiUrl } from '../lib/runtime-config';
  * The signup vertical is **not** carried — trial segmentation is a
  * desktop-activation concern, not a billing one.
  */
-const API = licenseApiUrl();
 
 interface MeResponse {
   tenant?: {
@@ -88,6 +87,8 @@ function statusLabel(locale: string, status: string | undefined): string {
 }
 
 export default function AccountView({ locale }: Props) {
+  // Read API at component level so window.__OZ_CONFIG__ is available after hydration
+  const API = licenseApiUrl();
   const [state, setState] = useState<'loading' | 'anon' | 'error' | 'ready'>('loading');
   const [me, setMe] = useState<MeResponse | null>(null);
   const [subscribing, setSubscribing] = useState<string | null>(null);
