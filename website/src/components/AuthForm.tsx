@@ -40,6 +40,21 @@ export default function AuthForm({ locale }: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Resend cooldown: tracks when the OTP was last sent
+  const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  useEffect(() => {
+    if (!otpSentAt) return;
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - otpSentAt) / 1000);
+      const remaining = Math.max(0, 120 - elapsed);
+      setResendCooldown(remaining);
+      if (remaining <= 0) clearInterval(id);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [otpSentAt]);
 
   // Forgot-password flow state.
   const [resetStep, setResetStep] = useState<ResetStep>('email');
@@ -117,7 +132,21 @@ export default function AuthForm({ locale }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      if (!res.ok) throw new Error('request-otp failed');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        const msg = body.error || `HTTP ${res.status}`;
+        if (res.status === 429) {
+          setError(t(locale, 'login.errorRateLimit'));
+        } else if (res.status === 403) {
+          setError(t(locale, 'login.errorCors'));
+        } else if (res.status === 503) {
+          setError(t(locale, 'login.errorSmtp'));
+        } else {
+          setError(`${t(locale, 'login.errorSend')} (${msg})`);
+        }
+        return;
+      }
+      setOtpSentAt(Date.now());
       setStep('code');
     } catch {
       setError(t(locale, 'login.errorSend'));
@@ -331,6 +360,51 @@ export default function AuthForm({ locale }: Props) {
           >
             {loading ? '…' : t(locale, 'login.verify')}
           </button>
+          {resendCooldown > 0 ? (
+            <p className="text-center text-xs text-muted" role="timer" aria-live="polite" aria-atomic="true">
+              {t(locale, 'login.resendCooldown')} {resendCooldown}s
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  setError('');
+                  setLoading(true);
+                  try {
+                    const res = await fetch(`${API}/api/v1/web/request-otp`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email }),
+                    });
+                    if (!res.ok) {
+                      const body = await res.json().catch(() => ({})) as { error?: string };
+                      if (res.status === 429) {
+                        setError(t(locale, 'login.errorRateLimit'));
+                      } else if (res.status === 403) {
+                        setError(t(locale, 'login.errorCors'));
+                      } else if (res.status === 503) {
+                        setError(t(locale, 'login.errorSmtp'));
+                      } else {
+                        setError(t(locale, 'login.errorSend'));
+                      }
+                      return;
+                    }
+                    setOtpSentAt(Date.now());
+                  } catch {
+                    setError(t(locale, 'login.errorSend'));
+                  } finally {
+                    setLoading(false);
+                  }
+                })();
+              }}
+              disabled={loading}
+              className="w-full text-center text-xs text-link transition hover:underline"
+              aria-label={t(locale, 'login.resendCode')}
+            >
+              {t(locale, 'login.resendCode')}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setStep('form')}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { t } from '../index';
+import { t, dict, locales } from '../index';
 
 /**
  * The i18n helper. Full en/id parity is enforced separately by
@@ -21,5 +21,31 @@ describe('t()', () => {
 
   it('falls back to English for unknown locales', () => {
     expect(t('fr', 'login.tabEmailCode')).toBe('Email code');
+  });
+});
+
+describe('dict()', () => {
+  it('returns the full dictionary for a known locale', () => {
+    const d = dict('en');
+    expect(d).toHaveProperty('nav');
+    expect(d).toHaveProperty('hero');
+  });
+
+  it('falls back to English for an unknown locale', () => {
+    const d = dict('fr');
+    expect(d).toEqual(dict('en'));
+  });
+
+  it('enables structured access for arrays', () => {
+    const d = dict('en') as Record<string, unknown>;
+    const features = (d.features as Record<string, unknown>).items as unknown[];
+    expect(Array.isArray(features)).toBe(true);
+    expect(features.length).toBe(6);
+  });
+});
+
+describe('locales constant', () => {
+  it('contains exactly en and id', () => {
+    expect(locales).toEqual(['en', 'id']);
   });
 });
