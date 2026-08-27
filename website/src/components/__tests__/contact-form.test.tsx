@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -28,9 +28,6 @@ function getSubmitButton(container: HTMLElement): HTMLButtonElement {
   return container.querySelector('button[type="submit"]') as HTMLButtonElement;
 }
 
-function getInputByName(container: HTMLElement, name: string): HTMLInputElement {
-  return container.querySelector(`input[name="${name}"], textarea[name="${name}"], input[type="${name}"], input[type="${name}"]`) as HTMLInputElement;
-}
 
 function getInputByPlaceholder(container: HTMLElement, placeholder: string): HTMLInputElement {
   const inputs = container.querySelectorAll('input, textarea');

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 
 // React 19 requires the act environment flag for async act() to work.
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -89,9 +89,7 @@ function assertText(container: HTMLElement, text: string): void {
   expect(container.textContent).toContain(text);
 }
 
-function assertNoText(container: HTMLElement, text: string): void {
-  expect(container.textContent).not.toContain(text);
-}
+
 
 beforeEach(() => {
   vi.clearAllMocks();

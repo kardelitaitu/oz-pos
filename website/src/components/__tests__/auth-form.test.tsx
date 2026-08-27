@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 
 // React 19 requires the act environment flag for async act() to work.
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -39,15 +39,6 @@ async function renderAuthForm(locale: string) {
     await new Promise((r) => setTimeout(r, 10));
   });
   return { container, root };
-}
-
-function setText(container: HTMLElement, testId: string, value: string): void {
-  const el = container.querySelector(`[data-testid="${testId}"]`) as HTMLInputElement | null;
-  if (!el) throw new Error(`[data-testid="${testId}"] not found`);
-  act(() => {
-    Object.defineProperty(el, 'value', { value, configurable: true });
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-  });
 }
 
 function setNativeValue(el: HTMLInputElement, value: string): void {
@@ -96,9 +87,7 @@ function assertText(container: HTMLElement, text: string): void {
   expect(container.textContent).toContain(text);
 }
 
-function assertNoText(container: HTMLElement, text: string): void {
-  expect(container.textContent).not.toContain(text);
-}
+
 
 beforeEach(() => {
   vi.clearAllMocks();
