@@ -133,7 +133,20 @@ export default function AuthForm({ locale }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      if (!res.ok) throw new Error('request-otp failed');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        const msg = body.error || `HTTP ${res.status}`;
+        if (res.status === 429) {
+          setError(t(locale, 'login.errorRateLimit'));
+        } else if (res.status === 403) {
+          setError(t(locale, 'login.errorCors'));
+        } else if (res.status === 503) {
+          setError(t(locale, 'login.errorSmtp'));
+        } else {
+          setError(`${t(locale, 'login.errorSend')} (${msg})`);
+        }
+        return;
+      }
       setOtpSentAt(Date.now());
       setStep('code');
     } catch {
@@ -353,7 +366,9 @@ export default function AuthForm({ locale }: Props) {
             {loading ? '…' : t(locale, 'login.verify')}
           </button>
           {resendCooldown > 0 ? (
-            <p className="text-center text-xs text-muted">Resend code in {resendCooldown}s</p>
+            <p className="text-center text-xs text-muted" role="timer" aria-live="polite" aria-atomic="true">
+              {t(locale, 'login.resendCooldown')} {resendCooldown}s
+            </p>
           ) : (
             <button
               type="button"
@@ -367,7 +382,19 @@ export default function AuthForm({ locale }: Props) {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ email }),
                     });
-                    if (!res.ok) throw new Error('resend failed');
+                    if (!res.ok) {
+                      const body = await res.json().catch(() => ({})) as { error?: string };
+                      if (res.status === 429) {
+                        setError(t(locale, 'login.errorRateLimit'));
+                      } else if (res.status === 403) {
+                        setError(t(locale, 'login.errorCors'));
+                      } else if (res.status === 503) {
+                        setError(t(locale, 'login.errorSmtp'));
+                      } else {
+                        setError(t(locale, 'login.errorSend'));
+                      }
+                      return;
+                    }
                     setOtpSentAt(Date.now());
                   } catch {
                     setError(t(locale, 'login.errorSend'));
@@ -378,8 +405,9 @@ export default function AuthForm({ locale }: Props) {
               }}
               disabled={loading}
               className="w-full text-center text-xs text-link transition hover:underline"
+              aria-label={t(locale, 'login.resendCode')}
             >
-              Resend code
+              {t(locale, 'login.resendCode')}
             </button>
           )}
           <button

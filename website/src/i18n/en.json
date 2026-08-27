@@ -216,7 +216,12 @@
     "backToLogin": "Back to sign in",
     "errorResetRequest": "Couldn't send the reset code. Please try again.",
     "errorReset": "Couldn't reset the password. Check the code and try again.",
-    "cooldown": "You recently reset your password. New resets are blocked until"
+    "cooldown": "You recently reset your password. New resets are blocked until",
+    "resendCode": "Resend code",
+    "resendCooldown": "Resend code in",
+    "errorRateLimit": "Too many requests — please wait a few minutes before trying again.",
+    "errorCors": "Request blocked by the server. Please contact support.",
+    "errorSmtp": "Email delivery is not configured on this deployment. Please contact support."
   },
   "account": {
     "title": "Account",

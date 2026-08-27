@@ -39,7 +39,7 @@ const regionOptions: { value: Region; labelKey: string }[] = [
 
 export default function SignupForm({ locale }: Props) {
   // Read API at component level so window.__OZ_CONFIG__ is available after hydration
-  const [API] = useState(() => licenseApiUrl());
+  const API = licenseApiUrl();
   const [step, setStep] = useState<Step>('form');
   const [email, setEmail] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
@@ -105,12 +105,28 @@ export default function SignupForm({ locale }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, password_confirm: confirm }),
       });
-      if (res.status === 409) throw new Error('exists');
-      if (!res.ok) throw new Error('register failed');
+      if (res.status === 409) {
+        setError(t(locale, 'signup.errorExists'));
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        const msg = body.error || `HTTP ${res.status}`;
+        if (res.status === 429) {
+          setError(t(locale, 'login.errorRateLimit'));
+        } else if (res.status === 403) {
+          setError(t(locale, 'login.errorCors'));
+        } else if (res.status === 503) {
+          setError(t(locale, 'login.errorSmtp'));
+        } else {
+          setError(`${t(locale, 'signup.errorRegister')} (${msg})`);
+        }
+        return;
+      }
       setOtpSentAt(Date.now());
       setStep('code');
-    } catch (err) {
-      setError(err instanceof Error && err.message === 'exists' ? t(locale, 'signup.errorExists') : t(locale, 'signup.errorRegister'));
+    } catch {
+      setError(t(locale, 'signup.errorRegister'));
     } finally {
       setLoading(false);
     }
@@ -144,7 +160,6 @@ export default function SignupForm({ locale }: Props) {
   };
 
   const inputClass = INPUT_CLASS;
-    'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
 
   if (step === 'code') {
     return (
@@ -173,7 +188,9 @@ export default function SignupForm({ locale }: Props) {
             {loading ? '…' : t(locale, 'signup.verify')}
           </button>
           {resendCooldown > 0 ? (
-            <p className="text-center text-xs text-muted">Resend code in {resendCooldown}s</p>
+            <p className="text-center text-xs text-muted" role="timer" aria-live="polite" aria-atomic="true">
+              {t(locale, 'login.resendCooldown')} {resendCooldown}s
+            </p>
           ) : (
             <button
               type="button"
@@ -187,7 +204,19 @@ export default function SignupForm({ locale }: Props) {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ email }),
                     });
-                    if (!res.ok) throw new Error('resend failed');
+                    if (!res.ok) {
+                      const body = await res.json().catch(() => ({})) as { error?: string };
+                      if (res.status === 429) {
+                        setError(t(locale, 'login.errorRateLimit'));
+                      } else if (res.status === 403) {
+                        setError(t(locale, 'login.errorCors'));
+                      } else if (res.status === 503) {
+                        setError(t(locale, 'login.errorSmtp'));
+                      } else {
+                        setError(t(locale, 'login.errorSend'));
+                      }
+                      return;
+                    }
                     setOtpSentAt(Date.now());
                   } catch {
                     setError(t(locale, 'login.errorSend'));
@@ -198,8 +227,9 @@ export default function SignupForm({ locale }: Props) {
               }}
               disabled={loading}
               className="w-full text-center text-xs text-link transition hover:underline"
+              aria-label={t(locale, 'login.resendCode')}
             >
-              Resend code
+              {t(locale, 'login.resendCode')}
             </button>
           )}
           <button
