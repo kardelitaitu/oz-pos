@@ -216,7 +216,12 @@
     "backToLogin": "Kembali ke masuk",
     "errorResetRequest": "Tidak dapat mengirim kode reset. Silakan coba lagi.",
     "errorReset": "Tidak dapat mengatur ulang kata sandi. Periksa kode dan coba lagi.",
-    "cooldown": "Anda baru saja mengatur ulang kata sandi. Reset baru diblokir hingga"
+    "cooldown": "Anda baru saja mengatur ulang kata sandi. Reset baru diblokir hingga",
+    "resendCode": "Kirim ulang kode",
+    "resendCooldown": "Kirim ulang kode dalam",
+    "errorRateLimit": "Terlalu banyak permintaan — silakan tunggu beberapa menit sebelum mencoba lagi.",
+    "errorCors": "Permintaan diblokir oleh server. Silakan hubungi dukungan.",
+    "errorSmtp": "Pengiriman email belum dikonfigurasi pada deployment ini. Silakan hubungi dukungan."
   },
   "account": {
     "title": "Akun",
