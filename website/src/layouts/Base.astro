@@ -30,11 +30,15 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
          move needs no rebuild (see worker.ts); absent locally → falls back
          to the build-time PUBLIC_LICENSE_API_URL. -->
     <script is:inline src="/__oz/runtime-config.js"></script>
-    <!-- Apply the stored theme before first paint (dark is the default). -->
+    <!-- Inter variable font (design language primary typeface) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+    <!-- Apply the stored theme before first paint (light is the default). -->
     <script is:inline>
       (() => {
         const t = localStorage.getItem('oz_theme');
-        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
       })();
     </script>
     <meta name="description" content={desc} />
