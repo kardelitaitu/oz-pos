@@ -73,6 +73,12 @@ toast-warning = Silakan periksa input Anda
 toast-info = Ini adalah pesan informasional
 toast-dismiss-aria = Tutup notifikasi
 toast-notifications-aria = Notifikasi
+toast-show-detail = Tampilkan detail
+toast-hide-detail = Sembunyikan detail
+toast-copy = Salin
+toast-copied = Disalin!
+toast-copy-aria = Salin detail kesalahan
+app-error-global-title = Kesalahan tidak terduga
 modal-close-aria = Tutup dialog
 
 # Empty state

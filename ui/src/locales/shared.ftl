@@ -150,6 +150,12 @@ update-banner-rollback-aria = Download previous version from GitHub
 # Toast
 toast-dismiss-aria = Dismiss notification
 toast-notifications-aria = Notifications
+toast-show-detail = Show detail
+toast-hide-detail = Hide detail
+toast-copy = Copy
+toast-copied = Copied!
+toast-copy-aria = Copy error details
+app-error-global-title = Unexpected error
 
 # Modal
 modal-close-aria = Close dialog
