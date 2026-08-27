@@ -43,12 +43,13 @@ export default function PricingGrid({ tiers, tiersAlt, locale, downloadHref }: P
     };
   }, []);
 
-  // Use region-appropriate pricing tiers
-  const activeTiers = (region === 'id' && tiersAlt)
-    ? tiersAlt
-    : (region !== 'id' && locale === 'id' && tiersAlt)
-      ? tiersAlt
-      : tiers;
+  // Use region-appropriate pricing tiers:
+  // - Region 'id' → always show IDR pricing
+  // - Region 'global' (or unset) → show locale-based pricing (en=USD, id=IDR)
+  const wantsIDR = region === 'id';
+  const activeTiers = wantsIDR
+    ? (locale === 'id' ? tiers : tiersAlt)   // IDR: use tiers if already ID, else swap
+    : (locale === 'id' ? tiersAlt : tiers);  // USD: use alt if ID locale, else keep
   const trackRef = useRef<HTMLDivElement>(null);
   const monthlyBtnRef = useRef<HTMLButtonElement>(null);
   const yearlyBtnRef = useRef<HTMLButtonElement>(null);
