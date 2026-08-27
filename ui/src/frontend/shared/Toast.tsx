@@ -1,9 +1,8 @@
-/* eslint-disable react-refresh/only-export-components */
-import {
-
+/* eslint-disable react-refresh/only-export-components */import {
   createContext,
   useContext,
   useCallback,
+  useState,
   type ReactNode,
 } from 'react';
 import { useLocalization } from '@fluent/react';
@@ -23,6 +22,10 @@ export interface Toast {
   title?: string;
   /** Auto-dismiss duration in ms. 0 = persistent. @default 4000 */
   duration?: number;
+  /** Expandable detail text (error codes, stack traces, diagnostics). Shown behind a toggle on error toasts. */
+  detail?: string;
+  /** Unix timestamp (ms) when the toast was created. Shown in the detail section. */
+  timestamp?: number;
 }
 
 interface ToastContextValue {
@@ -94,7 +97,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const addToast = useCallback(
     (t: Omit<Toast, 'id'> & { id?: string }) => {
       const id = t.id ?? generateId();
-      enqueue({ ...t, id });
+      enqueue({ ...t, id, timestamp: t.timestamp ?? Date.now() });
       return id;
     },
     [enqueue],
@@ -191,7 +194,30 @@ function ToastItem({
   onDismiss: (id: string) => void;
 }) {
   const { l10n } = useLocalization();
-  const { id, type, title, message } = toast;
+  const { id, type, title, message, detail, timestamp } = toast;
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    const parts = [
+      `Toast: ${type.toUpperCase()}`,
+      `Time: ${timestamp ? new Date(timestamp).toISOString() : 'unknown'}`,
+      `Message: ${message}`,
+      title ? `Title: ${title}` : null,
+      detail ? `Detail: ${detail}` : null,
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard.writeText(parts.join('\n'));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API may fail in restricted contexts
+    }
+  }, [type, timestamp, message, title, detail]);
+
+  const formattedTime = timestamp
+    ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null;
 
   return (
     <div
@@ -209,27 +235,65 @@ function ToastItem({
           <div className="toast__title">{title}</div>
         )}
         <div className="toast__message">{message}</div>
+        {detail && (
+          <>
+            <button
+              type="button"
+              className="toast__detail-toggle"
+              onClick={() => setDetailOpen((o) => !o)}
+              aria-expanded={detailOpen}
+            >
+              {detailOpen
+                ? l10n.getString('toast-hide-detail', null, 'Hide detail')
+                : l10n.getString('toast-show-detail', null, 'Show detail')}
+            </button>
+            {detailOpen && (
+              <pre className="toast__detail">
+                {detail}
+              </pre>
+            )}
+          </>
+        )}
+        {formattedTime && (
+          <div className="toast__timestamp">
+            {formattedTime}
+          </div>
+        )}
       </div>
-      <button
-        type="button"
-        className="toast__dismiss"
-        onClick={() => onDismiss(id)}
-        disabled={isExiting}
-        aria-label={l10n.getString('toast-dismiss-aria')}
-      >
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          aria-hidden="true"
+      <div className="toast__actions">
+        {detail && (
+          <button
+            type="button"
+            className="toast__action-btn"
+            onClick={handleCopy}
+            aria-label={l10n.getString('toast-copy-aria', null, 'Copy error details')}
+          >
+            {copied
+              ? l10n.getString('toast-copied', null, 'Copied!')
+              : l10n.getString('toast-copy', null, 'Copy')}
+          </button>
+        )}
+        <button
+          type="button"
+          className="toast__dismiss"
+          onClick={() => onDismiss(id)}
+          disabled={isExiting}
+          aria-label={l10n.getString('toast-dismiss-aria')}
         >
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      </button>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
