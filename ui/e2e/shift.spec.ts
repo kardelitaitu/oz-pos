@@ -239,7 +239,7 @@ test.describe('Shift Management', () => {
     await expect(payoutModal).toBeVisible({ timeout: 3_000 });
 
     // Modal header must say "Record Cash Payout" or "Payout".
-    const payoutHeader = page.locator('.shift-mgmt-modal-header h2');
+    const payoutHeader = payoutModal.locator('.shift-mgmt-modal-header h2');
     await expect(payoutHeader).toBeVisible({ timeout: 3_000 });
 
     // Fill payout amount.

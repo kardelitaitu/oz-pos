@@ -368,6 +368,8 @@ test.describe('ADR #22 — Topology canvas', () => {
 
     const canvas = page.locator('.node-canvas-container');
     await expect(canvas).toBeVisible({ timeout: 8_000 });
+    // Wait for canvas nodes to fully settle after layout (animation may lag in CI).
+    await page.waitForTimeout(1_500);
     const { canvasBox, cards } = await measureCanvasCards(page, canvas);
 
     const { box, contained, touched } = buildMarqueeBox(cards);
@@ -378,14 +380,14 @@ test.describe('ADR #22 — Topology canvas', () => {
     expect(box.x1).toBeLessThan(canvasBox!.width);
     expect(box.y1).toBeLessThan(canvasBox!.height);
 
-    // Drag FORWARD (left→right) over the box.
+    // Drag FORWARD (left→right) over the box with extra steps for smoothness.
     await page.mouse.move(canvasBox!.x + box.x0, canvasBox!.y + box.y0);
     await page.mouse.down();
-    await page.mouse.move(canvasBox!.x + box.x1, canvasBox!.y + box.y1, { steps: 10 });
+    await page.mouse.move(canvasBox!.x + box.x1, canvasBox!.y + box.y1, { steps: 20 });
     await page.mouse.up();
 
-    // Wait briefly for selection state to settle (canvas rendering may lag).
-    await page.waitForTimeout(300);
+    // Wait for selection state to settle (canvas rendering may lag).
+    await page.waitForTimeout(500);
 
     // Exactly the fully-contained cards are selected; the poking-out card is NOT.
     await assertSelection(page, cards, contained);
