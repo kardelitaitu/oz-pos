@@ -186,7 +186,7 @@ describe('AccountView — subscription display', () => {
 
   it('shows subscribe section when no subscription exists', async () => {
     sessionStorage.setItem('oz_session', 'tok-no-sub');
-    stubMe(null);
+    stubMe();
     const { container, root } = await renderAccount('en');
     try {
       assertText(container, "You don't have an active subscription yet");
