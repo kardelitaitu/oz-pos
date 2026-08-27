@@ -188,7 +188,7 @@ export default function SignupForm({ locale }: Props) {
         {error && <p className="text-sm text-link" role="alert">{error}</p>}
         <button
           type="submit"
-          disabled={loading || !isStrongPassword(password) || !passwordsMatch(password, confirm)}
+          disabled={loading || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !isStrongPassword(password) || !passwordsMatch(password, confirm)}
           className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
         >
           {loading ? '…' : t(locale, 'signup.createAccount')}
