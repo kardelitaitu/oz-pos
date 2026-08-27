@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useLocalization } from '@fluent/react';
-import { parseAppError, redactedDiagnostic, userErrorKey } from '@/utils/app-error';
+import { parseAppError, redactedDiagnostic, userErrorKey, errorDetail } from '@/utils/app-error';
 
 /**
  * ERR-01 — global async-failure reporting layer.
@@ -47,6 +47,14 @@ export function GlobalErrorReporter() {
       }
       // Unexpected defect: redacted log + recoverable notification.
       console.error(`[global-error] ${source}`, redactedDiagnostic(err));
+      // Build diagnostic detail for copy-to-clipboard
+      const detailParts = [
+        `Source: ${source}`,
+        `Time: ${new Date().toISOString()}`,
+      ];
+      const errDetail = errorDetail(err);
+      if (errDetail) detailParts.push(errDetail);
+
       addToast({
         message: l10n.getString(
           'app-error-global',
@@ -54,7 +62,9 @@ export function GlobalErrorReporter() {
           'Something unexpected happened. If this keeps happening, restart the app.',
         ),
         type: 'error',
-        duration: 8000,
+        duration: 10000,
+        title: l10n.getString('app-error-global-title', null, 'Unexpected error'),
+        detail: detailParts.join('\n'),
       });
     };
 
