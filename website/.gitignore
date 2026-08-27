@@ -6,3 +6,5 @@ dist/
 !.env.example
 # Generated docs portal copy (see scripts/import-portal.sh) — rebuilt from docs/book/
 public/docs-portal/
+# Synced from repo-root dev/ during prebuild — source of truth is dev/
+public/dev/
