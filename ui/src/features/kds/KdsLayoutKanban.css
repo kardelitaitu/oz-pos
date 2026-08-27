@@ -1,22 +1,24 @@
-/* ── Kanban layout: three-column ───────────────────────────────────── */
+/* ── Kanban layout: three-column ─────────────────────────────────────
+ * Prototype .kds-main language: 14px padding, 12px gap, columns as
+ * flex rows of cards. Column = subtle surface panel with a top accent. */
 
 .kds-columns {
   display: flex;
   flex: 1;
-  gap: var(--space-4);
-  padding: var(--space-4);
+  gap: 12px;
+  padding: 14px;
   overflow: hidden;
 }
 
 .kds-column {
   position: relative;
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--kds-column-bg);
-  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--kds-bg-surface) 60%, transparent);
+  border-radius: var(--kds-r-md);
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
 }
 
 .kds-column--pending {
@@ -36,8 +38,8 @@
   align-items: center;
   gap: var(--space-3);
   margin: 0;
-  padding: var(--space-4) var(--space-5);
-  font-size: var(--text-xl);
+  padding: 10px 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--kds-text);
   user-select: none;
@@ -52,8 +54,8 @@
   min-width: 2rem;
   height: 2rem;
   padding: 0 var(--space-2);
-  border-radius: var(--radius-2xl);
-  font-size: var(--text-lg);
+  border-radius: var(--kds-r-sm);
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -67,33 +69,17 @@
 }
 
 @keyframes kds-count-up {
-  0% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(1.35);
-  }
-  70% {
-    transform: scale(0.9);
-  }
-  100% {
-    transform: scale(1);
-  }
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); }
 }
 
 @keyframes kds-count-down {
-  0% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(0.75);
-  }
-  70% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-  }
+  0% { transform: scale(1); }
+  40% { transform: scale(0.75); }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -105,36 +91,35 @@
 
 .kds-column--pending .kds-column-count {
   background: var(--kds-pending);
-  color: var(--color-fg-inverse);
+  color: #1a1a1a;
 }
 
 .kds-column--preparing .kds-column-count {
   background: var(--kds-preparing);
-  color: var(--kds-badge-text);
+  color: #fff;
 }
 
 .kds-column--ready .kds-column-count {
   background: var(--kds-ready);
-  color: var(--kds-badge-text);
+  color: #1a1a1a;
 }
 
 .kds-tickets {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-3) var(--space-3) var(--space-4);
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 12px;
 }
 
 .kds-empty {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
   color: var(--kds-dim);
-  font-size: var(--text-md);
+  font-size: 14px;
   padding: var(--space-10) var(--space-4);
   min-height: 8rem;
 }

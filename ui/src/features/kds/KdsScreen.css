@@ -1,18 +1,42 @@
-/* ── Kitchen Display System: shell ─────────────────────────────────── */
+/* ── Kitchen Display System: shell ───────────────────────────────────
+ * Visual language applied from dev/kds-prototype.html (Design Language):
+ *   - Inter + JetBrains Mono via platform stack (--font-sans/--font-mono)
+ *   - Radius scale: panels 20 · cards 14 · controls 10 · tiny chips 5
+ *   - Primary #147EFB (matches the design-language blue)
+ *   - Dark default, light override via [data-theme="light"]
+ * Existing class names (.kds-header, .kds-ticket, .kds-zone-chip …)
+ * are kept for the current React structure; the prototype classes
+ * (.kds-btn, .kds-tabs, .kds-card-*, .kds-category-*, .kds-item-*,
+ * .kds-filter-*, .kds-hamburger-panel, .kds-screen-footer) are added
+ * alongside so later phases can adopt them without touching this file.
+ * =================================================================== */
 
 .kds {
-  --kds-bg: var(--color-bg);
-  --kds-text: var(--color-fg);
-  --kds-header-bg: var(--color-bg-elevated);
-  --kds-header-border: var(--color-border);
-  --kds-column-bg: var(--color-bg-surface);
-  --kds-ticket-bg: var(--color-bg-elevated);
-  --kds-ticket-border: var(--color-border);
-  --kds-ticket-hover-border: var(--color-border-hover);
+  /* ── Radius scale (one source of truth) ─────────────────────── */
+  --kds-r-lg: 20px;   /* panels, modals */
+  --kds-r-md: 14px;   /* cards */
+  --kds-r-sm: 10px;   /* controls */
+  --kds-r-xs: 5px;    /* tiny chips */
+
+  /* ── Theme surfaces ─────────────────────────────────────────── */
+  --kds-bg: #0f0f14;
+  --kds-bg-top: #1a1a25;             /* topbar / hamburger panel */
+  --kds-bg-surface: #181825;         /* cards */
+  --kds-bg-tabs: rgba(255, 255, 255, 0.06);
+  --kds-bg-tab-active: rgba(255, 255, 255, 0.14);
+  --kds-bg-hover: rgba(255, 255, 255, 0.08);
+  --kds-bg-active: rgba(255, 255, 255, 0.09);
+  --kds-border: rgba(255, 255, 255, 0.06);
+  --kds-border-strong: rgba(255, 255, 255, 0.15);
+  --kds-text: #e6e6e6;
+  --kds-accent: #147EFB;
+  --kds-accent-hover: #1168D4;
+  --kds-accent-active: #0D52AD;
+
+  /* ── Semantic ───────────────────────────────────────────────── */
   --kds-muted: var(--color-fg-secondary);
   --kds-subtle: var(--color-fg-tertiary);
   --kds-dim: var(--color-fg-disabled);
-  --kds-accent: var(--color-fg);
   --kds-error-bg: var(--color-danger-bg);
   --kds-error-border: var(--color-danger);
   --kds-error-text: var(--color-danger-dim);
@@ -26,116 +50,628 @@
   --kds-ticket-number: var(--color-fg-primary);
   --kds-shadow: rgba(0, 0, 0, 0.3);
 
+  /* ── Back-compat aliases (older KDS components still reference these) ── */
+  --kds-ticket-bg: var(--kds-bg-surface);
+  --kds-ticket-border: var(--kds-border);
+  --kds-ticket-hover-border: var(--kds-border-strong);
+  --kds-column-bg: var(--kds-bg-tabs);
+  --kds-header-bg: var(--kds-bg-top);
+  --kds-header-border: var(--kds-border);
+
   display: flex;
   flex-direction: column;
   height: 100vh;
+  width: 100%;
   background: var(--kds-bg);
   color: var(--kds-text);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans, 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif);
   overflow: hidden;
+  user-select: none;
 }
 
-/* ── Header ────────────────────────────────────────────────────────── */
+/* Light theme: all the dark-only white-alpha tokens flip to dark. */
+[data-theme='light'] .kds {
+  --kds-bg: #f2f2f5;
+  --kds-bg-top: #ffffff;
+  --kds-bg-surface: #ffffff;
+  --kds-bg-tabs: rgba(0, 0, 0, 0.06);
+  --kds-bg-tab-active: rgba(0, 0, 0, 0.12);
+  --kds-bg-hover: rgba(0, 0, 0, 0.06);
+  --kds-bg-active: rgba(0, 0, 0, 0.1);
+  --kds-border: rgba(0, 0, 0, 0.08);
+  --kds-border-strong: rgba(0, 0, 0, 0.18);
+  --kds-text: #1a1a1a;
+}
 
+/* ── Touch-screen modern scrollbar: thin, transparent, no visible track ── */
+.kds ::-webkit-scrollbar { width: 4px; height: 4px; }
+.kds ::-webkit-scrollbar-track { background: transparent; }
+.kds ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: var(--kds-r-xs); }
+.kds ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+.kds { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.15) transparent; }
+[data-theme='light'] .kds ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); }
+[data-theme='light'] .kds ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.35); }
+[data-theme='light'] .kds { scrollbar-color: rgba(0, 0, 0, 0.2) transparent; }
+
+/* ── Header (prototype .kds-topmenu: 3-column grid) ─────────────── */
 .kds-header {
-  display: flex;
-  justify-content: space-between;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding: var(--space-4) var(--space-6);
-  background: var(--kds-header-bg);
-  border-bottom: 2px solid var(--kds-header-border);
+  gap: 12px;
+  padding: 10px 18px;
+  background: var(--kds-bg-top);
+  border-bottom: 1px solid var(--kds-border);
   user-select: none;
-  gap: var(--space-4);
 }
 
 .kds-header-left {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: 10px;
+  color: var(--kds-text);
+  justify-self: start;
+  min-width: 0;
 }
 
 .kds-header-center {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  flex: 1;
-  justify-content: center;
+  gap: 8px;
+  justify-self: center;
+  min-width: 0;
 }
 
 .kds-header-right {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 8px;
+  justify-self: end;
   position: relative;
+  min-width: 0;
 }
 
 .kds-title {
   margin: 0;
-  font-size: var(--text-2xl);
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  color: var(--kds-text);
 }
 
 .kds-order-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.5rem;
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-lg);
-  font-weight: 700;
+  min-width: 2rem;
+  padding: 0 0.5rem;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--kds-text);
-  background: var(--kds-column-bg);
-  border-radius: var(--radius-2xl);
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-sm);
   user-select: none;
+  opacity: 0.6;
 }
 
-/* ── 3a: Zone-switching chips ──────────────────────────────────────── */
+/* ── Back / icon buttons (prototype .kds-btn--icon: 40×40) ───────── */
+.kds-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  color: var(--kds-text);
+  opacity: 0.7;
+  border: none;
+  border-radius: var(--kds-r-sm);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, opacity 0.15s;
+}
+.kds-back-btn:hover { background: var(--kds-bg-hover); opacity: 1; }
+.kds-back-btn:active { background: var(--kds-bg-active); transform: translateY(1px); }
+.kds-back-btn svg { width: 18px; height: 18px; }
+[data-theme='light'] .kds-back-btn:hover { background: var(--kds-bg-hover); }
 
+/* ── 3a: Zone-switching chips (prototype tab language) ───────────── */
 .kds-zone-chips {
   display: flex;
-  gap: var(--space-2);
+  gap: 4px;
   align-items: center;
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-sm);
+  padding: 3px;
 }
 
 .kds-zone-chip {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
-  min-height: 2.75rem;
-  padding: var(--space-1_5) var(--space-3);
-  font-size: var(--text-sm);
+  min-height: 34px;
+  padding: 5px 16px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.4;
-  color: var(--kds-muted);
+  line-height: 18px;
+  color: var(--kds-text);
+  opacity: 0.5;
   background: transparent;
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-2xl);
+  border: none;
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
-  transition: background var(--duration-100), color var(--duration-100), border-color var(--duration-100);
+  transition: opacity 0.15s;
   touch-action: manipulation;
 }
 
-.kds-zone-chip:hover {
-  background: var(--kds-ticket-bg);
-  color: var(--kds-text);
-  border-color: var(--kds-ticket-hover-border);
-}
+.kds-zone-chip:hover { opacity: 0.8; }
 
 .kds-zone-chip:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
 .kds-zone-chip--active {
-  color: var(--color-accent-fg);
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  font-weight: 700;
+  opacity: 1;
+  color: #fff;
+  background: var(--kds-accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+[data-theme='light'] .kds-zone-chip--active { color: #fff; }
+
+/* ── Open/Completed tabs (prototype .kds-tabs + sliding indicator) ──
+   Added for Phase 2; identical language to the zone chips but with the
+   blue pill indicator sliding between tabs. */
+.kds-tabs {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-sm);
+  padding: 3px;
+  justify-self: center;
 }
 
-/* ── Error banner (dismissible + retry) ────────────────────────── */
+.kds-tab-indicator {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--kds-accent);
+  border-radius: var(--kds-r-sm);
+  transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
+  pointer-events: none;
+  transform-origin: center;
+}
 
+.kds-tab {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 16px;
+  border-radius: var(--kds-r-sm);
+  border: none;
+  background: transparent;
+  color: var(--kds-text);
+  opacity: 0.5;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 34px;
+  line-height: 18px;
+  transition: opacity 0.15s;
+}
+.kds-tab:hover { opacity: 0.8; }
+.kds-tab.active { opacity: 1; color: #fff; }
+.kds-tab-count { opacity: 0.6; font-size: 13px; }
+.kds-tab.active .kds-tab-count { opacity: 0.8; }
+.kds-tab:focus-visible { outline: 2px solid var(--kds-accent); outline-offset: 1px; }
+
+/* ── Button helper (prototype .kds-btn family) ─────────────────────
+   Added for Phase 2. Geometry + states owned here; variants set tokens.
+   inline-flex is required so hover scale() transforms apply to children. */
+.kds-btn {
+  --btn-bg: #147EFB;
+  --btn-fg: #fff;
+  --btn-hover: #1168D4;
+  --btn-active: #0D52AD;
+  --btn-state: #147EFB;
+  --btn-state-hover: #ef4444;
+  padding: 3px 16px;
+  border-radius: var(--kds-r-sm);
+  border: none;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  opacity: 1;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s, transform 0.06s;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 22px;
+  will-change: transform;
+}
+.kds-btn:hover { background: var(--btn-hover); transform: scale(1.04); }
+.kds-btn:active { background: var(--btn-active); transform: translateY(1px); }
+.kds-btn.is-active { background: var(--btn-state); }
+.kds-btn.is-active:hover { background: var(--btn-state-hover); }
+
+/* --stack: labels share one grid cell → width = widest label */
+.kds-btn--stack { display: inline-grid; grid-template-areas: 'l'; align-items: center; justify-items: center; }
+.kds-btn--stack > span { grid-area: l; opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+.kds-btn--stack > span.visible { opacity: 1; }
+
+/* --icon: square transparent icon button, 40×40 */
+.kds-btn--icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  color: var(--kds-text);
+  opacity: 0.7;
+}
+.kds-btn--icon:hover { background: var(--kds-bg-hover); opacity: 1; }
+.kds-btn--icon:active { background: var(--kds-bg-active); transform: translateY(1px); }
+.kds-btn--icon svg { width: 18px; height: 18px; }
+
+/* --filter: caret + blue 'all' state — 34px to match tab track */
+.kds-btn--filter {
+  min-height: 34px;
+  --btn-bg: rgba(255, 255, 255, 0.06);
+  --btn-fg: var(--kds-text);
+  --btn-hover: rgba(255, 255, 255, 0.08);
+  --btn-active: rgba(255, 255, 255, 0.12);
+}
+.kds-btn--filter.all { background: var(--kds-accent); color: #fff; opacity: 1; }
+.kds-btn--filter.all .caret { opacity: 0.7; }
+.kds-btn--filter .caret { opacity: 0.5; display: inline-flex; align-items: center; transition: transform 0.2s; }
+.kds-btn--filter .caret svg { width: 18px; height: 18px; }
+.kds-btn--filter.open .caret { transform: rotate(180deg); }
+
+/* --shift: blue rest; green hover starting; red hover stopping */
+.kds-btn--shift {
+  min-height: 34px;
+  --btn-hover: #22c55e;
+  --btn-active: #16a34a;
+  --btn-state: #147EFB;
+  --btn-state-hover: #ef4444;
+}
+
+/* --muted: translucent (tabs, idle controls) */
+.kds-btn--muted {
+  --btn-bg: rgba(255, 255, 255, 0.06);
+  --btn-fg: var(--kds-text);
+  --btn-hover: rgba(255, 255, 255, 0.08);
+  --btn-active: rgba(255, 255, 255, 0.12);
+  --btn-state: rgba(255, 255, 255, 0.14);
+  --btn-state-hover: rgba(255, 255, 255, 0.18);
+}
+[data-theme='light'] .kds-btn--muted {
+  --btn-bg: rgba(0, 0, 0, 0.05);
+  --btn-hover: rgba(0, 0, 0, 0.09);
+  --btn-active: rgba(0, 0, 0, 0.12);
+  --btn-state: rgba(0, 0, 0, 0.1);
+  --btn-state-hover: rgba(0, 0, 0, 0.14);
+}
+
+/* ── Filter dropdown (prototype .kds-filter + panel) ────────────────
+   Added for Phase 2. */
+.kds-filter { position: relative; display: flex; align-items: center; }
+
+.kds-filter-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  background: var(--kds-bg-top);
+  border: 1px solid var(--kds-border-strong);
+  border-radius: var(--kds-r-md);
+  padding: 10px;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: kds-drop-in 0.18s ease-out;
+  transform-origin: top center;
+}
+
+.kds-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--kds-r-sm);
+  cursor: pointer;
+  font-size: 13px;
+  min-height: 34px;
+  color: var(--kds-text);
+  opacity: 0.85;
+  transition: all 0.1s;
+  white-space: nowrap;
+}
+.kds-filter-option:not(.checked):hover { background: var(--kds-bg-hover); }
+.kds-filter-option.checked { background: var(--kds-accent); color: #fff; opacity: 1; }
+.kds-filter-modes { display: flex; gap: 6px; margin-bottom: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--kds-border); }
+.kds-filter-modes.no-sep { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.kds-filter-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 6px; justify-content: start; }
+
+/* ── Hamburger settings panel (prototype .kds-hamburger-panel) ──────
+   Added for Phase 2. iOS grouped-settings: panel is the page, groups
+   float lighter above it. */
+.kds-hamburger-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 375px;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+  background: var(--kds-bg);
+  --bg-surface: #1c1c1e;
+  border: 1px solid var(--kds-border-strong);
+  border-radius: var(--kds-r-lg);
+  padding: 0;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: kds-drop-in 0.18s ease-out;
+  transform-origin: top right;
+}
+[data-theme='light'] .kds-hamburger-panel { --bg-surface: #ffffff; }
+
+.kds-panel-body {
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px;
+  scrollbar-width: thin;
+}
+.kds-panel-section { margin-bottom: 14px; }
+.kds-panel-section:last-child { margin-bottom: 0; }
+.kds-panel-section h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kds-text);
+  opacity: 0.5;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.kds-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.kds-section-head h3 { margin-bottom: 0; }
+.kds-theme-tag {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--kds-text);
+  opacity: 0.45;
+  padding: 2px 8px;
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-sm);
+  background: var(--bg-surface);
+}
+
+.kds-setting-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-md);
+  overflow: hidden;
+}
+.kds-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 44px;
+  position: relative;
+}
+.kds-setting-row + .kds-setting-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 0;
+  border-top: 1px solid var(--kds-border);
+}
+.kds-setting-label { font-size: 15px; font-weight: 500; color: var(--kds-text); opacity: 0.85; }
+.kds-setting-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.kds-setting-caption { font-size: 13px; color: var(--kds-text); opacity: 0.45; }
+.kds-panel-body button:focus-visible,
+.kds-hamburger-panel button:focus-visible {
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
+}
+
+/* Reusable switch — design-language settings-toggle-slider: 48×25, knob 20, bounce */
+.kds-switch {
+  position: relative;
+  width: 48px;
+  height: 25px;
+  border-radius: 12.5px;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: background 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.kds-switch::after {
+  content: '';
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.kds-switch.on { background: var(--kds-accent); }
+.kds-switch.on::after { transform: translateX(23px); }
+[data-theme='light'] .kds-switch { background: rgba(0, 0, 0, 0.08); }
+[data-theme='light'] .kds-switch.on { background: var(--kds-accent); }
+
+/* Theme toggle — slider pill between Dark/Light, same as tabs */
+.kds-theme-toggle {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-sm);
+  padding: 3px;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.kds-theme-indicator {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--kds-accent);
+  border-radius: 7px;
+  transition: left 0.28s cubic-bezier(0.33, 1, 0.68, 1), width 0.28s cubic-bezier(0.33, 1, 0.68, 1);
+  pointer-events: none;
+  transform-origin: center;
+}
+.kds-theme-option {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 9px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--kds-text);
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+.kds-theme-option svg { width: 14px; height: 14px; }
+.kds-theme-option:hover { opacity: 0.8; }
+.kds-theme-option.on { opacity: 1; color: #fff; }
+
+/* Zoom / column steppers */
+.kds-zoom-row { display: flex; align-items: center; gap: 4px; }
+.kds-zoom-btn { width: 36px; height: 36px; padding: 0; font-size: 14px; font-weight: 600; border-radius: var(--kds-r-sm); }
+.kds-zoom-value {
+  width: 80px;
+  height: 36px;
+  padding: 0 14px;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--kds-text);
+  opacity: 0.85;
+  cursor: pointer;
+  border-radius: var(--kds-r-sm);
+}
+.kds-zoom-value:hover { opacity: 1; background: var(--kds-border); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Card-colour accordion (in hamburger) */
+.kds-acc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 14px;
+  min-height: 44px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--kds-text);
+  opacity: 0.85;
+  font-family: inherit;
+  position: relative;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.kds-acc-head:hover { background: var(--kds-border); }
+.kds-acc-head:active { background: var(--kds-bg-hover); }
+.kds-acc-head:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 0;
+  border-top: 1px solid var(--kds-border);
+}
+.kds-acc-head svg { width: 14px; height: 14px; opacity: 0.35; transition: transform 0.2s; }
+.kds-acc-head[aria-expanded='true'] svg { transform: rotate(180deg); }
+.kds-acc-body { padding: 6px 12px 12px; }
+.kds-color-group { margin-bottom: 12px; }
+.kds-color-group:last-child { margin-bottom: 0; }
+.kds-color-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.kds-color-head label { font-size: 15px; color: var(--kds-text); opacity: 0.85; flex: 1; min-width: 0; }
+.kds-native {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--kds-border-strong);
+  border-radius: var(--kds-r-sm);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.kds-native::-webkit-color-swatch-wrapper { padding: 3px; }
+.kds-native::-webkit-color-swatch { border-radius: 6px; border: none; }
+.kds-hex-input {
+  width: 64px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: var(--kds-r-sm);
+  font-size: 13px;
+  border: 1px solid var(--kds-border-strong);
+  background: var(--bg-surface);
+  color: var(--kds-text);
+  opacity: 0.8;
+  text-align: center;
+  font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.kds-hex-input:focus {
+  outline: 2px solid var(--kds-accent);
+  outline-offset: -2px;
+  border-color: var(--kds-accent);
+  opacity: 1;
+}
+.kds-reset-card { margin-top: 14px; }
+.kds-reset-btn {
+  width: 100%;
+  padding: 12px 14px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.kds-reset-btn:hover { background: var(--kds-bg-hover); }
+.kds-reset-btn:active { background: var(--kds-bg-active); }
+.kds-reset-btn svg { width: 14px; height: 14px; opacity: 0.8; }
+
+/* ── Error banner (dismissible + retry) ────────────────────────── */
 .kds-error-banner {
   display: flex;
   align-items: center;
@@ -144,7 +680,7 @@
   padding: var(--space-2) var(--space-4);
   background: var(--kds-error-bg);
   border: 1px solid var(--kds-error-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--kds-r-md);
   color: var(--kds-error-text);
   font-size: var(--text-sm);
   font-weight: 500;
@@ -165,10 +701,10 @@
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--color-accent-fg);
-  background: var(--color-accent);
+  color: #fff;
+  background: var(--kds-accent);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
   transition: filter var(--duration-100);
   flex-shrink: 0;
@@ -180,8 +716,8 @@
 }
 
 .kds-error-retry-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
 .kds-error-dismiss-btn {
@@ -194,7 +730,7 @@
   color: var(--kds-dim);
   background: transparent;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
   transition: color var(--duration-100), background var(--duration-100);
   flex-shrink: 0;
@@ -207,85 +743,68 @@
 }
 
 .kds-error-dismiss-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
-/* ── Shared ticket card styles (used by all layouts) ───────────────── */
+/* ── Shared ticket card styles (used by all layouts) ────────────────
+   Prototype .kds-card language: radius --kds-r-sm (10px), surface bg,
+   border, no compositor promotion (ClearType on Windows). */
 
 .kds-ticket {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-5);
-  background: var(--kds-ticket-bg);
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-xl);
+  background: var(--kds-bg-surface);
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
   text-align: left;
-  color: inherit;
+  color: var(--kds-text);
   font-family: inherit;
   font-size: inherit;
   width: 100%;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .kds-ticket {
-    transition: transform var(--duration-100), box-shadow var(--duration-100), border-color var(--duration-150);
-  }
+  max-width: 100%;
+  transition: border-color 0.2s, filter 0.18s ease;
 }
 
 .kds-ticket:hover {
-  transform: translateY(-0.0625rem);
-  box-shadow: 0 4px 16px var(--kds-shadow);
-  border-color: var(--kds-ticket-hover-border);
+  border-color: var(--kds-border-strong);
 }
 
 .kds-ticket:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
-/* ── 2d: Keyboard-selected ticket highlight ──────────────────────────── */
-
+/* ── 2d: Keyboard-selected ticket highlight ──────────────────────── */
 .kds-ticket--selected {
   outline: none;
-  box-shadow: 0 0 0 3px var(--color-accent, #3b82f6), 0 0 16px color-mix(in srgb, var(--color-accent, #3b82f6) 40%, transparent);
-  transform: translateY(-0.125rem);
+  box-shadow: 0 0 0 3px var(--kds-accent, #147EFB), 0 0 16px color-mix(in srgb, var(--kds-accent, #147EFB) 40%, transparent);
   z-index: 1;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .kds-ticket--selected {
-    transition: box-shadow var(--duration-100), transform var(--duration-100);
-  }
-}
-
 .kds-ticket:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 8px var(--kds-shadow);
+  filter: brightness(0.98);
 }
 
 .kds-ticket--green {
-  --sla-glow: rgba(16, 185, 129, 0.25);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--kds-border);
 }
 
 .kds-ticket--yellow {
-  --sla-glow: rgba(245, 158, 11, 0.35);
   border-color: var(--kds-pending);
-  box-shadow: 0 0 8px var(--sla-glow);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.35);
 }
 
 .kds-ticket--red {
-  --sla-glow: rgba(239, 68, 68, 0.5);
   border-color: var(--kds-red);
-  box-shadow: 0 0 12px var(--sla-glow);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .kds-ticket--red {
-    /* P3-1: Combine pulse glow + border flash + shake for 10+ min overdue tickets */
     animation: kds-pulse var(--duration-2000) var(--ease-in-out) infinite,
                kds-red-border-flash 2s var(--ease-in-out) infinite,
                kds-shake 0.5s var(--ease-out) 4;
@@ -293,12 +812,8 @@
 }
 
 @keyframes kds-pulse {
-  0%, 100% {
-    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.7);
-  }
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.7); }
 }
 
 @keyframes kds-shake {
@@ -311,18 +826,16 @@
   60% { transform: translateX(1px); }
 }
 
-/* ── P3-1: Urgent escalation (15+ min) — red background + badge ───── */
-
+/* ── P3-1: Urgent escalation (15+ min) — red background + badge ──── */
 .kds-ticket--urgent {
-  --sla-glow: rgba(220, 38, 38, 0.6);
-  background: linear-gradient(135deg, var(--kds-error-bg, #742a2a) 0%, #4a1a1a 100%);
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.35) 0%, rgba(74, 26, 26, 0.6) 100%);
   border-color: var(--kds-error-border, #e53e3e);
-  box-shadow: 0 0 20px var(--sla-glow), inset 0 0 30px rgba(239, 68, 68, 0.05);
+  box-shadow: 0 0 20px rgba(220, 38, 38, 0.6), inset 0 0 30px rgba(239, 68, 68, 0.05);
   position: relative;
   overflow: hidden;
 }
 
-/* Urgent blink: ALWAYS runs (critical for kitchen awareness, even with reduced-motion) */
+/* Urgent blink: ALWAYS runs (critical for kitchen awareness) */
 .kds-ticket--urgent {
   animation: kds-urgent-blink 2s var(--ease-in-out) infinite;
 }
@@ -368,12 +881,8 @@
 }
 
 @keyframes kds-rush-pulse {
-  0%, 100% {
-    box-shadow: 0 0 4px color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 12px color-mix(in srgb, var(--color-warning, #f59e0b) 50%, transparent);
-  }
+  0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent); }
+  50% { box-shadow: 0 0 12px color-mix(in srgb, var(--color-warning, #f59e0b) 50%, transparent); }
 }
 
 .kds-ticket-rush-badge {
@@ -384,11 +893,10 @@
   min-height: 1.5rem;
   font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  /* Contrast: dark text on yellow/orange background (WCAG AA) */
-  color: var(--color-warning-fg);
+  letter-spacing: 0.03em;
+  color: #1a1a1a;
   background: var(--color-warning, #f59e0b);
-  border-radius: var(--radius-sm);
+  border-radius: var(--kds-r-xs);
   text-transform: uppercase;
   align-self: flex-start;
   box-shadow: var(--shadow-md);
@@ -403,11 +911,10 @@
   min-height: 1.5rem;
   font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  /* Contrast: white text on red background (WCAG AAA) */
-  color: var(--color-danger-fg);
+  letter-spacing: 0.03em;
+  color: #fff;
   background: var(--kds-error-border, #e53e3e);
-  border-radius: var(--radius-sm);
+  border-radius: var(--kds-r-xs);
   text-transform: uppercase;
   align-self: flex-start;
   box-shadow: var(--shadow-md);
@@ -421,12 +928,8 @@
 }
 
 @keyframes kds-urgent-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger, #ef4444) 30%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-danger, #ef4444) 70%, transparent);
-  }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger, #ef4444) 30%, transparent); }
+  50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-danger, #ef4444) 70%, transparent); }
 }
 
 .kds-ticket-header {
@@ -446,8 +949,8 @@
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--kds-text);
-  background: var(--kds-column-bg);
-  border-radius: var(--radius-2xl);
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-sm);
 }
 
 .kds-ticket-id-group {
@@ -466,18 +969,18 @@
   font-size: var(--text-base);
   font-weight: 600;
   color: var(--kds-subtle);
-  background: var(--kds-column-bg);
+  background: var(--kds-bg-tabs);
   padding: var(--space-0_5) var(--space-2);
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-xs);
 }
 
 .kds-ticket-time {
   font-size: var(--text-lg);
   font-weight: 700;
   color: var(--kds-text);
-  background: var(--kds-column-bg);
+  background: var(--kds-bg-tabs);
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-3xl);
+  border-radius: var(--kds-r-sm);
   flex-shrink: 0;
   min-width: 5rem;
   text-align: center;
@@ -486,17 +989,17 @@
 
 .kds-ticket-time--green {
   color: var(--kds-ready);
-  background: color-mix(in srgb, var(--kds-ready) 12%, var(--kds-column-bg));
+  background: color-mix(in srgb, var(--kds-ready) 12%, var(--kds-bg-surface));
 }
 
 .kds-ticket-time--yellow {
   color: var(--kds-pending);
-  background: color-mix(in srgb, var(--kds-pending) 12%, var(--kds-column-bg));
+  background: color-mix(in srgb, var(--kds-pending) 12%, var(--kds-bg-surface));
 }
 
 .kds-ticket-time--red {
   color: var(--kds-red);
-  background: color-mix(in srgb, var(--kds-red) 12%, var(--kds-column-bg));
+  background: color-mix(in srgb, var(--kds-red) 12%, var(--kds-bg-surface));
   font-weight: 700;
 }
 
@@ -517,38 +1020,37 @@
   padding: var(--space-1_5) var(--space-4);
   font-size: var(--text-sm);
   font-weight: 600;
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
   transition: background var(--duration-100), color var(--duration-100), border-color var(--duration-100);
-  /* WCAG 2.5.5: 44px minimum touch target */
   touch-action: manipulation;
 }
 
 .kds-ticket-edit-btn {
   color: var(--kds-subtle);
   background: transparent;
-  border: 1px solid var(--kds-ticket-border);
+  border: 1px solid var(--kds-border);
 }
 
 .kds-ticket-edit-btn:hover {
   color: var(--kds-text);
-  background: var(--kds-column-bg);
+  background: var(--kds-bg-tabs);
 }
 
 .kds-ticket-add-btn {
-  color: var(--color-accent-fg);
-  background: var(--color-accent);
-  border: 1px solid var(--color-accent);
+  color: #fff;
+  background: var(--kds-accent);
+  border: 1px solid var(--kds-accent);
 }
 
 .kds-ticket-add-btn:hover {
-  filter: brightness(1.15);
+  background: var(--kds-accent-hover);
 }
 
 .kds-ticket-edit-btn:focus-visible,
 .kds-ticket-add-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
 .kds-ticket-edit {
@@ -556,8 +1058,8 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-2);
-  background: var(--kds-column-bg);
-  border-radius: var(--radius-md);
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-sm);
 }
 
 .kds-ticket-edit-input {
@@ -566,16 +1068,16 @@
   font-size: var(--text-base);
   font-family: inherit;
   color: var(--kds-text);
-  background: var(--kds-ticket-bg);
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-md);
+  background: var(--kds-bg-surface);
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-sm);
   outline: none;
   box-sizing: border-box;
 }
 
 .kds-ticket-edit-input:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-subtle);
+  border-color: var(--kds-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--kds-accent) 15%, transparent);
 }
 
 .kds-ticket-edit-row {
@@ -599,17 +1101,17 @@
   font-size: var(--text-sm);
   font-family: inherit;
   color: var(--kds-text);
-  background: var(--kds-ticket-bg);
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-md);
+  background: var(--kds-bg-surface);
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-sm);
   outline: none;
   text-align: center;
   box-sizing: border-box;
 }
 
 .kds-ticket-edit-count:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--color-accent-subtle);
+  border-color: var(--kds-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--kds-accent) 15%, transparent);
 }
 
 .kds-ticket-edit-actions {
@@ -622,19 +1124,19 @@
   padding: var(--space-0_5) var(--space-2);
   font-size: var(--text-xs);
   font-weight: 600;
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
   transition: background var(--duration-100);
 }
 
 .kds-ticket-edit-save {
-  color: var(--color-accent-fg);
-  background: var(--color-accent);
-  border: 1px solid var(--color-accent);
+  color: #fff;
+  background: var(--kds-accent);
+  border: 1px solid var(--kds-accent);
 }
 
 .kds-ticket-edit-save:hover {
-  filter: brightness(1.1);
+  background: var(--kds-accent-hover);
 }
 
 .kds-ticket-edit-save:disabled {
@@ -645,12 +1147,12 @@
 .kds-ticket-edit-cancel {
   color: var(--kds-subtle);
   background: transparent;
-  border: 1px solid var(--kds-ticket-border);
+  border: 1px solid var(--kds-border);
 }
 
 .kds-ticket-edit-cancel:hover {
   color: var(--kds-text);
-  background: var(--kds-column-bg);
+  background: var(--kds-bg-tabs);
 }
 
 .kds-ticket-items {
@@ -664,8 +1166,7 @@
   overflow: hidden;
 }
 
-/* ── 2a: Course-grouped line items ────────────────────────────────── */
-
+/* ── 2a: Course-grouped line items ───────────────────────────────── */
 .kds-ticket-line-items {
   display: flex;
   flex-direction: column;
@@ -682,7 +1183,7 @@
 .kds-ticket-course-group + .kds-ticket-course-group {
   padding-top: var(--space-3);
   margin-top: var(--space-2);
-  border-top: 2px solid var(--kds-ticket-border);
+  border-top: 1px solid var(--kds-border);
 }
 
 .kds-ticket-course-header {
@@ -691,13 +1192,13 @@
   gap: var(--space-1);
   font-size: var(--text-sm);
   font-weight: 700;
-  letter-spacing: var(--tracking-wider);
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--kds-text);
   padding: var(--space-1_5) var(--space-3);
-  background: var(--kds-column-bg);
-  border-left: 3px solid var(--color-accent);
-  border-radius: var(--radius-sm);
+  background: var(--kds-bg-tabs);
+  border-left: 3px solid var(--kds-accent);
+  border-radius: var(--kds-r-xs);
   align-self: flex-start;
   margin-bottom: var(--space-2);
   user-select: none;
@@ -710,8 +1211,8 @@
   gap: var(--space-0_5);
   padding: var(--space-1_5);
   margin-bottom: var(--space-1);
-  background: var(--kds-column-bg);
-  border-radius: var(--radius-md);
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-sm);
 }
 
 /* Per-item status dot + label (TODO 3e) */
@@ -721,14 +1222,13 @@
   touch-action: manipulation;
 }
 .kds-ticket-item-row--actionable:hover {
-  background: var(--color-bg-hover);
+  background: var(--kds-bg-hover);
 }
 .kds-ticket-item-row--actionable:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: -1px;
 }
 
-/* Status indicator row — wraps name + label horizontally */
 .kds-ticket-item-status-row {
   display: flex;
   align-items: center;
@@ -776,9 +1276,9 @@
   padding: 0 var(--space-2);
   font-size: var(--text-sm);
   font-weight: 700;
-  color: var(--color-accent-fg);
-  background: var(--color-accent);
-  border-radius: var(--radius-2xl);
+  color: #fff;
+  background: var(--kds-accent);
+  border-radius: var(--kds-r-sm);
   vertical-align: middle;
   line-height: 1;
   flex-shrink: 0;
@@ -809,7 +1309,7 @@
   color: var(--kds-note-text);
   background: var(--kds-note-bg);
   padding: var(--space-1_5) var(--space-2);
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-sm);
   font-style: italic;
   line-height: 1.4;
   border-left: 3px solid var(--kds-note-text);
@@ -821,15 +1321,263 @@
   color: var(--kds-subtle);
 }
 
+/* ── Phase 3: category + item row language (prototype) ──────────────
+   Added now so Phase 3's restructured ticket card adopts them directly. */
+
+.kds-category {
+  border-bottom: 1px solid var(--kds-border);
+  padding: 3px 0 2px 0;
+  transition: background 0.15s;
+}
+.kds-category:last-child { padding-bottom: 2px; }
+.kds-category:has(.kds-category-header:hover) { background: var(--kds-bg-hover); }
+.kds-category:has(.kds-category-header:active) { background: var(--kds-bg-active); }
+
+.kds-category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 13px;
+  border: none;
+  background: transparent;
+  color: var(--kds-text);
+  opacity: 0.85;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  transition: background 0.1s;
+  text-align: left;
+  min-height: 30px;
+  line-height: 1.2;
+  font-family: inherit;
+}
+.kds-category-header:has(.kds-cat-check.done) { font-weight: 600; }
+.kds-category-header.static { cursor: default; }
+.kds-cat-label {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kds-cat-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.kds-cat-check.done { opacity: 1; color: #22c55e; }
+.kds-cat-check.done svg { stroke-width: 4; }
+
+.kds-item { padding: 0 6px; }
+.kds-item-row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 4px 7px;
+  border: none;
+  background: transparent;
+  color: var(--kds-text);
+  opacity: 0.85;
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: var(--kds-r-sm);
+  transition: background 0.1s;
+  text-align: left;
+  min-height: 28px;
+  line-height: 1.3;
+  font-family: inherit;
+}
+.kds-item-row-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+  gap: 6px;
+}
+.kds-item-row:hover { background: var(--kds-bg-hover); }
+.kds-item-row:active { background: var(--kds-bg-active); }
+.kds-item-row.done { opacity: 0.4; }
+.kds-item-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.kds-item-qty { opacity: 0.6; font-size: 13px; flex-shrink: 0; width: 20px; font-weight: 600; }
+.kds-item-row.done .kds-item-qty { opacity: 0.6; font-weight: 400; }
+.kds-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.kds-item-row.done .kds-item-name { font-weight: 500; }
+.kds-item-done-time { opacity: 0.45; font-size: 12px; flex-shrink: 0; }
+.kds-item-note {
+  opacity: 0.5;
+  font-style: italic;
+  font-size: 12px;
+  padding: 2px 0 3px 27px;
+  overflow: hidden;
+  text-align: left;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Card footer + status action buttons (Phase 3) */
+.kds-card-footer {
+  flex: 0 0 auto;
+  padding: 6px 10px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kds-footer-actions { display: flex; gap: 6px; }
+.kds-footer-actions .kds-status-btn { flex: 1; }
+.kds-status-btn {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 0;
+  border-radius: var(--kds-r-sm);
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-family: inherit;
+}
+.kds-status-btn svg { display: block; }
+.kds-status-btn:hover { opacity: 0.85; }
+.kds-status-btn.finish {
+  background: transparent;
+  border: 1px solid var(--kds-border-strong);
+  color: var(--kds-text);
+  opacity: 0.55;
+  font-size: 12px;
+}
+.kds-status-btn.finish:hover { opacity: 1; background: var(--kds-border); }
+.kds-status-btn.reopen {
+  background: transparent;
+  border: 1px solid var(--kds-border-strong);
+  color: var(--kds-text);
+  opacity: 0.65;
+  font-size: 12px;
+}
+.kds-status-btn.reopen:hover { opacity: 1; background: var(--kds-border); }
+
+/* Order notes (Phase 3) — the divider lives on the last category, so
+   a note-less order still gets its separation. */
+.kds-order-notes {
+  opacity: 0.55;
+  font-style: italic;
+  font-size: 12px;
+  padding: 0 13px;
+}
+
+/* ── Collapsible card (Phase 3) — animates height via grid rows ──── */
+.kds-card-collapsible {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
+}
+.kds-card-collapsible-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform-origin: top center;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.kds-card.collapsed .kds-card-collapsible { grid-template-rows: 0fr; opacity: 0; }
+.kds-card.collapsed .kds-card-collapsible-inner { transform: scaleY(0.85); }
+
+/* ── Screen footer (Phase 4) ────────────────────────────────────── */
+.kds-screen-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 3px 14px;
+  color: var(--kds-text);
+  opacity: 0.4;
+  font-size: 11px;
+  border-top: 1px solid var(--kds-border);
+  pointer-events: none;
+  flex-wrap: wrap;
+}
+.kds-screen-footer .sep { opacity: 0.5; }
+
+/* ── Completed view + bucket headers (Phase 5) ───────────────────── */
+.kds-main.completed-view {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+.kds-main.completed-view > .kds-col {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kds-main.completed-view > .kds-col > .kds-card { width: 100%; max-width: 100%; }
+.kds-main.completed-view .kds-card { content-visibility: auto; contain-intrinsic-size: 60px; }
+.kds-main.completed-view .kds-category-header,
+.kds-main.completed-view .kds-item-row,
+.kds-main.completed-view .kds-item-row.done { opacity: 1; }
+.kds-completed-col-head {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--kds-text);
+  opacity: 0.7;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--kds-bg-tabs);
+  border: none;
+  border-radius: var(--kds-r-sm);
+  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s, opacity 0.15s;
+}
+.kds-completed-col-head:hover { background: var(--kds-bg-hover); opacity: 0.8; }
+.kds-completed-col-count { opacity: 0.6; font-weight: 600; }
+.kds-completed-col-chev { opacity: 0.5; transition: transform 0.2s; flex-shrink: 0; }
+.kds-completed-col-head[aria-expanded='true'] .kds-completed-col-chev { transform: rotate(180deg); }
+
+/* ── Empty state ────────────────────────────────────────────────── */
 .kds-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: var(--kds-dim);
-  font-size: var(--text-md);
-  margin-top: var(--space-10);
+  font-size: 14px;
+  flex: 1;
+  align-self: stretch;
 }
 
 /* ── Pull-to-refresh indicator ────────────────────────────────── */
-
 .kds-pull-indicator {
   display: flex;
   align-items: center;
@@ -846,12 +1594,12 @@
   height: 1.25rem;
   border: 2px solid var(--kds-dim);
   border-top-color: var(--kds-accent);
-  border-radius: var(--radius-full);
+  border-radius: 50%;
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .kds-refresh-spinner {
-    animation: kds-spin var(--duration-600) var(--ease-linear) infinite;
+    animation: kds-spin var(--duration-600) linear infinite;
   }
 }
 
@@ -859,10 +1607,7 @@
   to { transform: rotate(360deg); }
 }
 
-/* ── 2b: History panel ───────────────────────────────────────────── */
-
 /* ── 3b: Offline banner ──────────────────────────────────────────── */
-
 .kds-offline-banner {
   display: flex;
   align-items: center;
@@ -886,28 +1631,12 @@
   line-height: 1.4;
 }
 
-/* OFF-08: storage unavailable — persistence is broken, show a stronger state */
 .kds-offline-banner--storage {
   background: var(--color-danger-bg);
   border-bottom-color: var(--color-danger-border);
   color: var(--color-danger);
 }
 
-/* OFF-05: dead-letter actions need operator attention */
-.kds-offline-banner--deadletter {
-  background: var(--color-danger-bg);
-  border-bottom-color: var(--color-danger-border);
-  color: var(--color-danger);
-}
-
-/* OFF-08: storage unavailable — queued actions are not durable */
-.kds-offline-banner--storage {
-  background: var(--color-info-bg);
-  border-bottom-color: var(--color-info);
-  color: var(--color-info);
-}
-
-/* OFF-05: dead-letter actions exhausted retries — need operator attention */
 .kds-offline-banner--deadletter {
   background: var(--color-danger-bg);
   border-bottom-color: var(--color-danger);
@@ -921,10 +1650,10 @@
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--color-accent-fg);
-  background: var(--color-accent);
+  color: #fff;
+  background: var(--kds-accent);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
   transition: filter var(--duration-100);
   flex-shrink: 0;
@@ -935,8 +1664,8 @@
 }
 
 .kds-offline-retry-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
 .kds-offline-dismiss-btn {
@@ -950,224 +1679,58 @@
   color: var(--kds-muted);
   background: transparent;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
   transition: background var(--duration-100), color var(--duration-100);
   flex-shrink: 0;
 }
 
 .kds-offline-dismiss-btn:hover {
-  background: var(--kds-ticket-bg);
+  background: var(--kds-bg-surface);
   color: var(--kds-text);
 }
 
 .kds-offline-dismiss-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
-.kds-history-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  color: var(--kds-muted);
-  background: transparent;
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--duration-100), color var(--duration-100), border-color var(--duration-100);
-}
-
-.kds-history-toggle:hover {
-  color: var(--kds-text);
-  background: var(--kds-ticket-bg);
-  border-color: var(--kds-ticket-hover-border);
-}
-
-.kds-history-toggle--active {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-  background: var(--color-accent-subtle);
-}
-
-.kds-history-toggle:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
-}
-
-/* ── History in-place refresh (LOAD-04) ────────────────────── */
-
-.kds-history-refreshing {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: var(--space-2) 0;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--kds-muted);
-  background: var(--kds-ticket-bg);
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-md);
-}
-
-/* ── History error + retry (LOAD-08) ───────────────────────── */
-
-.kds-history-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: var(--space-2) 0;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--color-danger);
-  background: var(--color-danger-bg);
-  border: 1px solid var(--color-danger-border);
-  border-radius: var(--radius-md);
-}
-
-.kds-history-retry {
-  margin-left: auto;
-  min-height: 1.75rem;
-  padding: var(--space-1) var(--space-3);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-fg-inverse);
-  background: var(--color-danger);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: filter var(--duration-100);
-}
-
-.kds-history-retry:hover {
-  filter: brightness(1.08);
-}
-
-.kds-history-retry:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
-}
-
-/* ── Loading skeleton ───────────────────────────────────────── */
-
-.kds-loading-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-4) var(--space-6);
-}
-
-.kds-loading-columns {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-4);
-  height: 100%;
-}
-
-.kds-loading-column {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.kds-loading-header {
-  height: 1.75rem;
-  width: 60%;
-  background: var(--color-bg-surface);
-  border-radius: var(--radius-md);
-  position: relative;
-  overflow: hidden;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .kds-loading-header,
-  .kds-loading-line,
-  .kds-loading-card {
-    animation: kds-shimmer 1.8s var(--ease-in-out) infinite;
-  }
-}
-
-@keyframes kds-shimmer {
-  0% { opacity: 0.4; }
-  50% { opacity: 0.8; }
-  100% { opacity: 0.4; }
-}
-
-.kds-loading-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-5);
-  background: var(--kds-ticket-bg);
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-xl);
-}
-
-.kds-loading-line {
-  height: 0.75rem;
-  background: var(--color-bg-surface);
-  border-radius: var(--radius-sm);
-}
-
-.kds-loading-line--short { width: 40%; }
-.kds-loading-line--medium { width: 65%; }
-.kds-loading-line--long { width: 85%; }
-
-/* ── Keyboard shortcuts popover ──────────────────────────────── */
-
-.kds-shortcuts-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  color: var(--kds-muted);
-  background: transparent;
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--duration-100), color var(--duration-100), border-color var(--duration-100);
-}
-
-.kds-shortcuts-btn:hover {
-  color: var(--kds-text);
-  background: var(--kds-ticket-bg);
-  border-color: var(--kds-ticket-hover-border);
-}
-
-.kds-shortcuts-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
-}
-
-/* KDS device enrollment button */
+/* ── Header action buttons (shortcuts / history / enroll / device) ── */
+.kds-history-toggle,
+.kds-shortcuts-btn,
 .kds-enroll-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  color: var(--kds-muted);
-  background: transparent;
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--duration-100), color var(--duration-100), border-color var(--duration-100);
-}
-
-.kds-enroll-btn:hover {
+  width: 40px;
+  height: 40px;
   color: var(--kds-text);
-  background: var(--kds-ticket-bg);
-  border-color: var(--kds-ticket-hover-border);
+  opacity: 0.7;
+  background: transparent;
+  border: none;
+  border-radius: var(--kds-r-sm);
+  cursor: pointer;
+  transition: background var(--duration-100), color var(--duration-100), opacity var(--duration-100);
 }
-
+.kds-history-toggle:hover,
+.kds-shortcuts-btn:hover,
+.kds-enroll-btn:hover {
+  background: var(--kds-bg-hover);
+  opacity: 1;
+}
+.kds-history-toggle--active {
+  opacity: 1;
+  color: #fff;
+  background: var(--kds-accent);
+}
+.kds-history-toggle:focus-visible,
+.kds-shortcuts-btn:focus-visible,
 .kds-enroll-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
+/* ── Shortcuts popover ──────────────────────────────────────────── */
 .kds-shortcuts-popover {
   position: absolute;
   top: 100%;
@@ -1178,10 +1741,12 @@
   gap: var(--space-1);
   min-width: 16rem;
   padding: var(--space-3);
-  background: var(--kds-ticket-bg);
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-xl);
+  background: var(--kds-bg-top);
+  border: 1px solid var(--kds-border-strong);
+  border-radius: var(--kds-r-md);
   box-shadow: 0 8px 24px var(--kds-shadow);
+  animation: kds-drop-in 0.18s ease-out;
+  transform-origin: top right;
 }
 
 .kds-shortcut-row {
@@ -1189,12 +1754,12 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-1_5) var(--space-2);
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-sm);
   transition: background var(--duration-100);
 }
 
 .kds-shortcut-row:hover {
-  background: var(--kds-column-bg);
+  background: var(--kds-bg-tabs);
 }
 
 .kds-shortcut-key {
@@ -1209,9 +1774,9 @@
   font-size: var(--text-xs);
   font-weight: 700;
   color: var(--kds-text);
-  background: var(--kds-column-bg);
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-sm);
+  background: var(--kds-bg-tabs);
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-xs);
   line-height: 1;
   box-shadow: var(--shadow-sm);
 }
@@ -1222,8 +1787,7 @@
   color: var(--kds-subtle);
 }
 
-/* ── Urgent ticket: always-on blink (accessibility) ──────────────── */
-
+/* ── Urgent: always-on blink keyframe (accessibility) ────────────── */
 @keyframes kds-urgent-blink {
   0%, 100% {
     border-color: var(--kds-error-border, #e53e3e);
@@ -1238,7 +1802,7 @@
 @keyframes kds-red-border-flash {
   0%, 100% {
     border-color: var(--kds-red);
-    box-shadow: 0 0 12px var(--sla-glow);
+    box-shadow: 0 0 12px var(--sla-glow, rgba(239, 68, 68, 0.5));
   }
   50% {
     border-color: color-mix(in srgb, var(--kds-red) 60%, transparent);
@@ -1255,24 +1819,21 @@
   }
 }
 
-/* ── New-ticket arrival animation ────────────────────────────── */
-
-
-
+/* ── New-ticket arrival animation ──────────────────────────────── */
 .kds-ticket--new {
   animation: kds-new-ticket 3s var(--ease-out) forwards;
 }
 
 @keyframes kds-new-ticket {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 50%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--kds-accent) 50%, transparent);
     transform: scale(1.01);
   }
   30% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 40%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--kds-accent) 40%, transparent);
   }
   60% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--kds-accent) 20%, transparent);
     transform: scale(1);
   }
   100% {
@@ -1281,8 +1842,44 @@
   }
 }
 
-/* ── History panel ──────────────────────────────────────────────── */
+/* ── Generic dropdown show/hide (prototype SOTA motion) ──────────── */
+.kds-anim-showing { animation: kds-in 0.25s cubic-bezier(0.2, 0, 0, 1); }
+.kds-anim-hiding { animation: kds-out 0.18s cubic-bezier(0.4, 0, 1, 1) forwards; pointer-events: none; }
 
+@keyframes kds-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes kds-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(4px); }
+}
+@keyframes kds-drop-in {
+  from { opacity: 0; transform: translateY(-6px) scaleY(0.95); }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes kds-slide-in-right { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes kds-slide-in-left { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: translateX(0); } }
+.kds-main.slide-right { animation: kds-slide-in-right 0.25s ease-out; }
+.kds-main.slide-left { animation: kds-slide-in-left 0.25s ease-out; }
+
+/* ── Card lifecycle (prototype FLIP spawn / leave / move) ─────────── */
+@keyframes kds-card-in {
+  from { opacity: 0; transform: scale(0.9) translateY(14px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.kds-card-spawn { animation: kds-card-in 0.3s cubic-bezier(0.2, 0, 0, 1); }
+.kds-card.leaving {
+  pointer-events: none;
+  animation: kds-card-out 0.25s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+@keyframes kds-card-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.85) translateY(10px); }
+}
+.kds-moving { will-change: transform; transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important; }
+
+/* ── History panel ──────────────────────────────────────────────── */
 .kds-history {
   flex: 1;
   overflow-y: auto;
@@ -1295,7 +1892,7 @@
 .kds-history-tabs {
   display: flex;
   gap: var(--space-2);
-  border-bottom: 1px solid var(--kds-ticket-border);
+  border-bottom: 1px solid var(--kds-border);
   padding-bottom: var(--space-2);
 }
 
@@ -1307,27 +1904,27 @@
   font-weight: 600;
   color: var(--kds-muted);
   background: transparent;
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
   transition: background var(--duration-100), color var(--duration-100), border-color var(--duration-100);
 }
 
 .kds-history-tab:hover {
   color: var(--kds-text);
-  background: var(--kds-ticket-bg);
-  border-color: var(--kds-ticket-hover-border);
+  background: var(--kds-bg-tabs);
+  border-color: var(--kds-border-strong);
 }
 
 .kds-history-tab--active {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-  background: var(--color-accent-subtle);
+  color: #fff;
+  border-color: var(--kds-accent);
+  background: var(--kds-accent);
 }
 
 .kds-history-tab:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
 .kds-history-loading {
@@ -1352,9 +1949,9 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4);
-  background: var(--kds-ticket-bg);
-  border: 1px solid var(--kds-ticket-border);
-  border-radius: var(--radius-xl);
+  background: var(--kds-bg-surface);
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-sm);
 }
 
 .kds-history-card-header {
@@ -1374,8 +1971,8 @@
   font-size: var(--text-xs);
   font-weight: 600;
   padding: var(--space-0_25) var(--space-1_5);
-  border-radius: var(--radius-full);
-  background: var(--kds-column-bg);
+  border-radius: var(--kds-r-sm);
+  background: var(--kds-bg-tabs);
   color: var(--kds-muted);
 }
 
@@ -1398,9 +1995,122 @@
   color: var(--kds-subtle);
 }
 
+/* ── History in-place refresh (LOAD-04) ───────────────────────── */
+.kds-history-refreshing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--kds-muted);
+  background: var(--kds-bg-surface);
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-sm);
+}
+
+/* ── History error + retry (LOAD-08) ─────────────────────────── */
+.kds-history-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--kds-r-sm);
+}
+
+.kds-history-retry {
+  margin-left: auto;
+  min-height: 1.75rem;
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-danger);
+  border: 1px solid transparent;
+  border-radius: var(--kds-r-sm);
+  cursor: pointer;
+  transition: filter var(--duration-100);
+}
+
+.kds-history-retry:hover {
+  filter: brightness(1.08);
+}
+
+.kds-history-retry:focus-visible {
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
+}
+
+/* ── Loading skeleton ───────────────────────────────────────── */
+.kds-loading-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-6);
+}
+
+.kds-loading-columns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  height: 100%;
+}
+
+.kds-loading-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.kds-loading-header {
+  height: 1.75rem;
+  width: 60%;
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .kds-loading-header,
+  .kds-loading-line,
+  .kds-loading-card {
+    animation: kds-shimmer 1.8s var(--ease-in-out) infinite;
+  }
+}
+
+@keyframes kds-shimmer {
+  0% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+  100% { opacity: 0.4; }
+}
+
+.kds-loading-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--kds-bg-surface);
+  border: 1px solid var(--kds-border);
+  border-radius: var(--kds-r-sm);
+}
+
+.kds-loading-line {
+  height: 0.75rem;
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-xs);
+}
+
+.kds-loading-line--short { width: 40%; }
+.kds-loading-line--medium { width: 65%; }
+.kds-loading-line--long { width: 85%; }
 
 /* ── Action cooldown visual feedback ─────────────────────────── */
-
 .kds-ticket--cooldown {
   opacity: 0.85;
   pointer-events: none;
@@ -1414,7 +2124,6 @@
 }
 
 /* ── Workspace wrapper (used by AppShell when KDS is standalone) ──── */
-
 .kds-workspace {
   display: flex;
   flex-direction: column;
@@ -1426,8 +2135,8 @@
   display: flex;
   align-items: center;
   padding: var(--space-2) var(--space-4);
-  background: var(--kds-header-bg, #16213e);
-  border-bottom: 1px solid var(--kds-header-border, #0f3460);
+  background: var(--kds-bg-top, #1a1a25);
+  border-bottom: 1px solid var(--kds-border, rgba(255, 255, 255, 0.06));
 }
 
 .kds-workspace-back {
@@ -1440,7 +2149,7 @@
   color: var(--kds-text, #e0e0e0);
   background: color-mix(in srgb, var(--color-fg-primary) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-fg-primary) 15%, transparent);
-  border-radius: var(--radius-md);
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
   transition: background var(--duration-150);
 }
@@ -1450,8 +2159,8 @@
 }
 
 .kds-workspace-back:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-accent);
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
 .kds-workspace-back:active {
@@ -1460,4 +2169,52 @@
 
 .kds-workspace .kds {
   flex: 1;
+}
+
+/* ── Visible keyboard focus across the whole screen ───────────────── */
+.kds button:focus-visible,
+.kds [role='option']:focus-visible,
+.kds input:focus-visible {
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
+}
+
+/* ── Modal (confirm / anchored force-finish) — Phase 3 ────────────── */
+.kds-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  animation: kds-drop-in 0.18s ease-out;
+}
+.kds-modal-backdrop[hidden] { display: none; }
+.kds-modal-backdrop.anchored { background: transparent; }
+.kds-modal-anchor { display: contents; }
+.kds-modal-anchor.anchored { display: block; position: fixed; z-index: 301; transform: translate(-50%, -50%); }
+.kds-modal {
+  width: min(360px, calc(100vw - 48px));
+  background: var(--kds-bg-top);
+  border: 1px solid var(--kds-border-strong);
+  border-radius: var(--kds-r-lg);
+  padding: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.kds-card.blurred { filter: blur(5px); pointer-events: none; }
+.kds-modal-title { font-size: 14px; font-weight: 700; color: var(--kds-text); margin-bottom: 8px; }
+.kds-modal-msg { font-size: 12px; color: var(--kds-text); opacity: 0.7; line-height: 1.5; margin-bottom: 16px; }
+.kds-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.kds-modal-actions .kds-btn { min-height: 28px; }
+.kds-modal-actions .kds-btn.danger { --btn-bg: #ef4444; --btn-hover: #dc2626; --btn-active: #b91c1c; }
+
+/* Visually-hidden live region (P4: aria-live) */
+.kds-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

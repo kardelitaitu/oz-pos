@@ -5,8 +5,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: var(--space-4);
-  gap: var(--space-4);
+  padding: 14px;
+  gap: 12px;
 }
 
 .kds-focus-filters {
@@ -14,35 +14,40 @@
   gap: var(--space-3);
   flex-shrink: 0;
   padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--kds-ticket-border);
+  border-bottom: 1px solid var(--kds-border);
 }
 
 .kds-focus-filter-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 2.75rem;
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--text-base);
+  min-height: 34px;
+  padding: 5px 16px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--kds-muted);
+  color: var(--kds-text);
+  opacity: 0.5;
   background: transparent;
-  border: 2px solid transparent;
-  border-radius: var(--radius-lg);
+  border: none;
+  border-radius: var(--kds-r-sm);
   cursor: pointer;
-  transition: background var(--duration-100), color var(--duration-100), border-color var(--duration-100);
+  transition: opacity var(--duration-100);
 }
 
 .kds-focus-filter-btn:hover {
-  background: var(--kds-ticket-bg);
-  color: var(--kds-text);
-  border-color: var(--kds-ticket-border);
+  opacity: 0.8;
+}
+
+.kds-focus-filter-btn:focus-visible {
+  outline: 2px solid var(--kds-accent);
+  outline-offset: 1px;
 }
 
 .kds-focus-filter-btn--active {
-  background: var(--kds-ticket-bg);
-  color: var(--kds-text);
-  border-color: var(--color-accent);
+  opacity: 1;
+  color: #fff;
+  background: var(--kds-accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .kds-focus-filter-count {
@@ -52,16 +57,16 @@
   min-width: 1.5rem;
   height: 1.5rem;
   padding: 0 var(--space-2);
-  border-radius: var(--radius-2xl);
-  font-size: var(--text-sm);
+  border-radius: var(--kds-r-sm);
+  font-size: 12px;
   font-weight: 700;
-  background: var(--kds-column-bg);
+  background: var(--kds-bg-tabs);
   color: var(--kds-muted);
 }
 
 .kds-focus-filter-btn--active .kds-focus-filter-count {
-  background: var(--color-accent);
-  color: var(--color-accent-fg);
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
 }
 
 .kds-focus-tickets {
@@ -69,5 +74,5 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 12px;
 }
