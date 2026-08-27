@@ -20,6 +20,8 @@ interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
   /** Runtime backend URL — overrides the build-time PUBLIC_LICENSE_API_URL. */
   LICENSE_API_URL?: string;
+  /** Discord webhook URL for the support contact form (secret — never exposed to the browser). */
+  CONTACT_WEBHOOK_URL?: string;
 }
 
 const RUNTIME_CONFIG_PATH = '/__oz/runtime-config.js';
@@ -33,6 +35,7 @@ export default {
     if (url.pathname === RUNTIME_CONFIG_PATH) {
       const body = `window.__OZ_CONFIG__=${JSON.stringify({
         licenseApiUrl: env.LICENSE_API_URL ?? null,
+        contactEndpoint: '/api/contact',
       })};`;
       return new Response(body, {
         headers: {
@@ -40,6 +43,66 @@ export default {
           'Cache-Control': 'no-store',
         },
       });
+    }
+
+    // Contact form → Discord webhook. The webhook URL is a Worker secret
+    // so it never reaches the browser. The form sends { name, email, message }.
+    if (url.pathname === '/api/contact' && request.method === 'POST') {
+      const corsHeaders = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      };
+      // Handle preflight
+      if (request.method === 'OPTIONS') {
+        return new Response(null, { headers: corsHeaders });
+      }
+      try {
+        const body = await request.json() as { name?: string; email?: string; message?: string };
+        const { name, email, message } = body;
+        if (!name || !email || !message) {
+          return new Response(JSON.stringify({ error: 'Missing fields' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        if (!env.CONTACT_WEBHOOK_URL) {
+          return new Response(JSON.stringify({ error: 'Webhook not configured' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        // Format Discord embed
+        const embed = {
+          title: '📩 New Support Message',
+          fields: [
+            { name: 'Name', value: name, inline: true },
+            { name: 'Email', value: email, inline: true },
+            { name: 'Message', value: message.slice(0, 1024) },
+          ],
+          color: 0x147efb, // OZ-POS blue
+          timestamp: new Date().toISOString(),
+        };
+        const discordRes = await fetch(env.CONTACT_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ embeds: [embed] }),
+        });
+        if (!discordRes.ok) {
+          return new Response(JSON.stringify({ error: 'Discord send failed' }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid request' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
     }
 
     // Everything else: serve the static site (the assets binding honors

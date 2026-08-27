@@ -11,7 +11,7 @@ import { t } from '../i18n';
  * When the endpoint is unset the form degrades to a mailto: link with the
  * entered fields pre-filled, so the UI stays fully usable.
  */
-const API = import.meta.env.PUBLIC_CONTACT_ENDPOINT as string | undefined;
+const API = '/api/contact';
 const SUPPORT_EMAIL = 'support@ozpos.my.id';
 
 interface Props {
@@ -40,14 +40,7 @@ export default function ContactForm({ locale }: Props) {
     }
     setStatus('sending');
 
-    if (!API) {
-      // No endpoint configured — open the user's mail client instead.
-      const subject = encodeURIComponent(`[OZ-POS Support] ${name}`);
-      const body = encodeURIComponent(`${message}\n\n— ${name} <${email}>`);
-      window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
-      setStatus('idle');
-      return;
-    }
+
 
     try {
       const res = await fetch(API, {

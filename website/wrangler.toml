@@ -29,6 +29,7 @@ compatibility_date = "2026-08-16"
 # Update this (dashboard → Worker → Settings → Variables, or wrangler.toml)
 # when the Northflank host changes; no site rebuild required.
 LICENSE_API_URL = "https://license.ozpos.my.id"
+CONTACT_WEBHOOK_URL = "https://discord.com/api/webhooks/154258447961xxxxxx"
 
 # PUBLIC_* env vars are baked into the JS at BUILD time (import.meta.env),
 # so they are NOT bindings — set them when running `npm run build`:
