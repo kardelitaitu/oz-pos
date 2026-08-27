@@ -62,12 +62,19 @@ export default function CheckoutButton({ tier, locale }: Props) {
   const priceId = tier.priceId;
   // Region-based payment routing: Indonesia region uses Midtrans Snap
   // (fixed IDR, QRIS/VA/e-wallet — ADR #39 D1). Paddle stays for global.
-  const [useMidtrans, setUseMidtrans] = useState(() => getRegion() === 'id');
+  // When region is unset, fall back to locale (id → Midtrans).
+  const [useMidtrans, setUseMidtrans] = useState(() => {
+    const r = getRegion();
+    return r === 'id' || (r !== 'global' && locale === 'id');
+  });
   useEffect(() => {
-    const check = () => setUseMidtrans(getRegion() === 'id');
+    const check = () => {
+      const r = getRegion();
+      setUseMidtrans(r === 'id' || (r !== 'global' && locale === 'id'));
+    };
     window.addEventListener('storage', check);
     return () => window.removeEventListener('storage', check);
-  }, []);
+  }, [locale]);
 
   // No checkout path for this locale — degrade to the mailto fallback
   // instead of sending the user through login into a dead checkout.
