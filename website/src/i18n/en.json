@@ -247,7 +247,7 @@
     "passwordSaved": "Password saved. Use it to sign in next time.",
     "passwordError": "Couldn't save the password. Please try again.",
     "region": "Region",
-    "regionHint": "Affects pricing and payment method",
+    "regionHint": "Affects payment method",
     "regionSaved": "Region updated.",
     "checkingSubscription": "Checking your subscription…",
     "subscriptionPending": "Your purchase is confirmed, but the subscription isn't visible yet — it can take a minute. Reload to check.",
