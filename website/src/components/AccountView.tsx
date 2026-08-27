@@ -396,7 +396,7 @@ export default function AccountView({ locale }: Props) {
               type="button"
               onClick={() => setRegionOpen(!regionOpen)}
               onBlur={() => setTimeout(() => setRegionOpen(false), 150)}
-              className="w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-left outline-none transition focus:border-accent flex items-center justify-between"
+              className="w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-left outline-none transition focus:border-accent flex items-center justify-between"
             >
               <span className="flex items-center gap-2">
                 <span>{region === 'id' ? '🇮🇩' : '🌍'}</span>
