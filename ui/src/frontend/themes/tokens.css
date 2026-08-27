@@ -112,12 +112,12 @@
   --color-accent-active-fg:#07111d;
   --color-accent-subtle-fg:var(--neutral-800);
 
-  /* Blue-tinted borders for hue resonance */
-  --color-border:          rgba(90, 159, 212, 0.12);
-  --color-border-hover:    rgba(90, 159, 212, 0.22);
-  --color-border-strong:   rgba(90, 159, 212, 0.32);
-  --color-border-focus:    #5a9fd4;
-  --color-border-subtle:   rgba(16, 82, 188, 0.08);
+  /* Neutral borders — design language uses gray, not blue-tinted */
+  --color-border:          #dfe1e6;
+  --color-border-hover:    #c1c5cc;
+  --color-border-strong:   #a8adb6;
+  --color-border-focus:    var(--color-accent);
+  --color-border-subtle:   rgba(0, 0, 0, 0.06);
 
   --color-success:         #4ade80;
   --color-success-bg:      rgba(74, 222, 128, 0.08);
@@ -366,11 +366,11 @@
   --color-accent-active-fg:#ffffff;
   --color-accent-subtle-fg:var(--neutral-800);
 
-  --color-border:          rgba(16, 82, 188, 0.12);
-  --color-border-hover:    rgba(16, 82, 188, 0.22);
-  --color-border-strong:   rgba(16, 82, 188, 0.32);
-  --color-border-focus:    var(--primary-500);
-  --color-border-subtle:   rgba(16, 82, 188, 0.06);
+  --color-border:          #dfe1e6;
+  --color-border-hover:    #c1c5cc;
+  --color-border-strong:   #a8adb6;
+  --color-border-focus:    var(--color-accent);
+  --color-border-subtle:   rgba(0, 0, 0, 0.06);
 
   --color-success:         #15803d;
   --color-success-bg:      #f0fdf4;
@@ -405,10 +405,10 @@
   --color-bg-primary:      #ffffff;
   --color-bg-secondary:    var(--neutral-200);
   --color-bg-popover:      #ffffff;
-  --color-bg-hover:        rgba(16, 82, 188, 0.06);
+  --color-bg-hover:        rgba(0, 0, 0, 0.04);
 
-  --color-accent-dim:      rgba(16, 82, 188, 0.1);
-  --color-accent-alpha:    rgba(16, 82, 188, 0.18);
+  --color-accent-dim:      rgba(20, 126, 251, 0.08);
+  --color-accent-alpha:    rgba(20, 126, 251, 0.15);
   --color-accent-secondary: var(--primary-400);
 
   /* Shadows — single size (8px), normal elevation curve */

@@ -18,11 +18,11 @@
   align-items: center;
   justify-content: center;
 
-  /* Subtle gradient background tinted with the accent colour */
+  /* Clean corporate background — subtle gradient, no accent tint */
   background:
     radial-gradient(
       ellipse 80% 60% at 50% 30%,
-      var(--color-accent-dim),
+      color-mix(in srgb, var(--color-accent) 6%, transparent),
       transparent 70%
     ),
     var(--color-bg);
@@ -45,11 +45,11 @@
   width: min(90vw, 26.25rem);
   min-height: 33.75rem;
 
-  /* Elevated look */
-  background: var(--color-bg-elevated);
+  /* Corporate elevated card — clean surface, subtle border */
+  background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-3xl);
-  box-shadow: var(--shadow-xl);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.12);
   overflow: hidden;
 }
 
@@ -117,13 +117,13 @@
   height: 2rem;
   padding: 0;
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-fg-tertiary);
   cursor: pointer;
   transition:
-    color var(--duration-150) var(--ease-out),
-    background var(--duration-150) var(--ease-out);
+    color var(--duration-120) var(--ease-out),
+    background var(--duration-120) var(--ease-out);
 }
 
 .staff-login-close-btn:hover {
@@ -212,16 +212,17 @@
 }
 
 .staff-login-logo svg {
-  width: clamp(72px, 15vw, 96px);
-  height: clamp(72px, 15vw, 96px);
+  width: clamp(56px, 12vw, 72px);
+  height: clamp(56px, 12vw, 72px);
   color: var(--color-accent);
+  opacity: 0.8;
 }
 
 .staff-login-logo-img {
-  /* Fluid: smaller on tight screens, 256px max */
-  width: clamp(120px, 35vw, 256px);
-  height: clamp(120px, 35vw, 256px);
-  border-radius: clamp(16px, 3vw, 32px);
+  /* Fluid: smaller on tight screens, 192px max — more contained */
+  width: clamp(96px, 28vw, 192px);
+  height: clamp(96px, 28vw, 192px);
+  border-radius: clamp(12px, 2.5vw, 24px);
   object-fit: contain;
 }
 
@@ -252,24 +253,25 @@
   box-sizing: border-box;
   /* P7-2: 44px touch-target floor. The rem-based padding/font shrink under
      ZoomContext scaling, so enforce a px-based min-height. */
-  min-height: 44px;
+  min-height: 48px;
   padding: clamp(var(--space-3), 2vw, var(--space-4));
   padding-right: calc(clamp(var(--space-3), 2vw, var(--space-4)) + 1.25rem + var(--space-2));
-  font-size: clamp(var(--text-md), 3vw, var(--text-xl));
-  font-weight: var(--font-weight-medium);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-input);
+  font-size: clamp(var(--text-md), 3vw, var(--text-lg));
+  font-weight: var(--font-weight-normal);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
   color: var(--color-fg);
   text-align: center;
+  letter-spacing: var(--tracking-wide);
   transition:
     border-color var(--duration-150) var(--ease-out),
-    box-shadow   var(--duration-150) var(--ease-out);
+    outline var(--duration-150) var(--ease-out);
 }
 
 .staff-login-input:focus-visible {
-  border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .staff-login-input::placeholder {
@@ -301,47 +303,44 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  /* P7-2: 44px touch-target floor — px-based so ZoomContext rem scaling
-     can never shrink the target below the WCAG minimum. Height only: the
-     button is absolutely positioned inside the input, and widening it past
-     the input's padding-right would overlap the typed text. 48px matches
-     the --tablet-tap-target token and leaves headroom so fractional
-     centering can't round the rendered height below the 44px floor. */
-  min-height: 48px;
+  width: 2.5rem;
+  height: 2.5rem;
+  min-width: 40px;
+  min-height: 40px;
   padding: 0;
   border: none;
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--color-fg-tertiary);
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
   cursor: pointer;
   transition:
-    color    var(--duration-150) var(--ease-out),
-    opacity  var(--duration-150) var(--ease-out);
+    background var(--duration-120) var(--ease-out),
+    transform  var(--duration-120) var(--ease-out),
+    opacity    var(--duration-120) var(--ease-out);
 }
 
 @media (pointer: coarse) {
   .staff-login-submit-btn {
-    /* 48px (matches the --tablet-tap-target token) instead of the 2rem
-       desktop size: guarantees the ≥44px WCAG touch-target floor even
-       after devicePixelRatio sub-pixel rounding on tablet screens. */
     width: 3rem;
     height: 3rem;
+    min-width: 48px;
+    min-height: 48px;
   }
 }
 
 .staff-login-submit-btn:hover:not(:disabled) {
-  color: var(--color-accent);
+  background: var(--color-accent-hover);
 }
 
 .staff-login-submit-btn:active:not(:disabled) {
-  transform: translateY(-50%) scale(0.9);
+  transform: translateY(-50%) scale(0.93);
+  background: var(--color-accent-active);
 }
 
 .staff-login-submit-btn:disabled {
-  opacity: 0.3;
+  opacity: 0.45;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* Spinner inside inline icon button while checking */
@@ -391,20 +390,21 @@
 }
 
 .staff-login-pin-dot {
-  width:  clamp(10px, 2vw, 14px);
-  height: clamp(10px, 2vw, 14px);
+  width:  clamp(8px, 1.5vw, 12px);
+  height: clamp(8px, 1.5vw, 12px);
   border-radius: var(--radius-full);
-  border: 2px solid var(--color-border);
+  border: 1.5px solid var(--color-border-strong);
   background: transparent;
   transition:
-    background var(--duration-150) var(--ease-out),
-    border-color var(--duration-150) var(--ease-out);
+    background var(--duration-120) var(--ease-out),
+    border-color var(--duration-120) var(--ease-out),
+    transform var(--duration-120) var(--ease-out);
 }
 
 .staff-login-pin-dot--filled {
   background: var(--color-accent);
   border-color: var(--color-accent);
-  transform: scale(1.1);
+  transform: scale(1.15);
 }
 
 /* ── PIN pad ─────────────────────────────────────────────────────── */
@@ -437,31 +437,32 @@
 
   font-size: clamp(var(--text-lg), 3.5vw, var(--text-2xl));
   font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
 
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
   color: var(--color-fg);
 
   cursor: pointer;
   transition:
-    background var(--duration-100) var(--ease-out),
-    border-color var(--duration-100) var(--ease-out),
-    transform var(--duration-100) var(--ease-out);
+    background var(--duration-120) var(--ease-out),
+    border-color var(--duration-120) var(--ease-out),
+    transform var(--duration-120) var(--ease-out);
 
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 .staff-login-pad-key:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent-alpha);
+  background: var(--color-bg-surface);
+  border-color: var(--color-border-hover);
 }
 
 .staff-login-pad-key:active:not(:disabled) {
-  transform: scale(0.93);
+  transform: scale(0.95);
   background: var(--color-accent-subtle);
+  border-color: var(--color-accent);
 }
 
 .staff-login-pad-key:focus-visible {
@@ -495,8 +496,8 @@
 }
 
 .staff-login-step-dot {
-  width:  clamp(8px, 1.5vw, 10px);
-  height: clamp(8px, 1.5vw, 10px);
+  width:  clamp(6px, 1.2vw, 8px);
+  height: clamp(6px, 1.2vw, 8px);
   border-radius: var(--radius-full);
   background: var(--color-border);
   transition:
@@ -506,7 +507,7 @@
 
 .staff-login-step-dot--active {
   background: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-dim);
+  box-shadow: 0 0 0 2px var(--color-accent-subtle);
 }
 
 .staff-login-step-dot--done {
@@ -564,9 +565,9 @@
 
 .staff-login-footer-version {
   font-size: clamp(11px, 1.5vw, var(--text-xs));
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-normal);
   color: var(--color-fg-tertiary);
-  letter-spacing: var(--tracking-tight);
+  letter-spacing: var(--tracking-wide);
 }
 
 .staff-login-footer-copyright {
@@ -599,14 +600,14 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-lg);
-  font-size: var(--text-sm);
-  color: var(--color-fg);
-  opacity: 0.7;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  opacity: 0.8;
   appearance: none;
-  transition: all var(--duration-200);
+  transition: all var(--duration-200) var(--ease-out);
   user-select: none;
 }
 

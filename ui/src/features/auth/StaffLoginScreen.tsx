@@ -593,10 +593,8 @@ export default function StaffLoginScreen() {
       {/* ── Footer: version + copyright + sync status ────── */}
       <div className="staff-login-footer">
         <div className="staff-login-footer-left">
-          <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.31</span>
-          <Localized id="staff-login-copyright">
-            <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
-          </Localized>
+          <span className="staff-login-footer-version">v0.0.31</span>
+          <span className="staff-login-footer-copyright">&copy; OZ-POS. All rights reserved.</span>
         </div>
         <div className="staff-login-footer-right">
           <div className="staff-login-connection-group">
