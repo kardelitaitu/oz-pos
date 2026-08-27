@@ -12,6 +12,7 @@ members = [
     "crates/oz-reporting",
     "crates/oz-logging",
     "crates/oz-cli",
+    "crates/oz-media",
     "foundation",
     "platform/core",
     "platform/kernel",
@@ -54,6 +55,7 @@ oz-notification = { path = "crates/oz-notification" }
 oz-payment = { path = "crates/oz-payment" }
 oz-reporting = { path = "crates/oz-reporting" }
 oz-logging = { path = "crates/oz-logging" }
+oz-media = { path = "crates/oz-media" }
 oz-cli = { path = "crates/oz-cli" }
 foundation = { path = "foundation" }
 platform-core = { path = "platform/core" }

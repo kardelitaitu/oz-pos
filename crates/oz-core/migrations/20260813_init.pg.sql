@@ -1834,6 +1834,56 @@ VALUES ('01926b3a-0000-7000-8000-000000000002',
         'System-managed pseudo-location for in-flight stock between source and destination during a transfer.')
 ON CONFLICT DO NOTHING;
 
+-- PLANNED (stubs): media assets (images) + EDC terminal registry.
+-- Hand-ported from migration 20260824_media_edc.sql so the PG surface
+-- stays in parity with the SQLite registry.
+
+CREATE TABLE IF NOT EXISTS media_assets (
+    id          TEXT PRIMARY KEY,
+    owner_type  TEXT NOT NULL,
+    owner_id    TEXT NOT NULL,
+    file_path   TEXT NOT NULL,
+    mime_type   TEXT NOT NULL,
+    width       BIGINT,
+    height      BIGINT,
+    size_bytes  BIGINT NOT NULL DEFAULT 0,
+    original_name TEXT,
+    created_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    updated_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_assets_owner
+    ON media_assets(owner_type, owner_id);
+
+CREATE TABLE IF NOT EXISTS media_thumbnails (
+    id          TEXT PRIMARY KEY,
+    asset_id    TEXT NOT NULL,
+    preset      TEXT NOT NULL,
+    file_path   TEXT NOT NULL,
+    width       BIGINT NOT NULL,
+    height      BIGINT NOT NULL,
+    size_bytes  BIGINT NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    FOREIGN KEY (asset_id) REFERENCES media_assets(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_thumbnails_asset
+    ON media_thumbnails(asset_id);
+
+CREATE TABLE IF NOT EXISTS edc_terminals (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    connection_type TEXT NOT NULL
+                    CHECK (connection_type IN ('wired', 'wireless')),
+    transport       TEXT NOT NULL,
+    address         TEXT NOT NULL,
+    vendor          TEXT,
+    model           TEXT,
+    is_active       BIGINT NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    updated_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+);
+
 -- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
 -- See the appendix source in scripts/generate-pg-migration.py.
 DO $$

@@ -1,0 +1,17 @@
+[package]
+name = "oz-media"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Image processing for OZ-POS — thumbnails, compression, auto-crop. PLANNED (stubs)."
+
+[dependencies]
+foundation = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+tokio = { workspace = true }

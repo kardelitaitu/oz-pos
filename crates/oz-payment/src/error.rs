@@ -29,6 +29,11 @@ pub enum PaymentError {
     /// The transaction is a duplicate of a previously processed transaction.
     #[error("duplicate transaction: {0}")]
     Duplicate(String),
+
+    /// The operation is not implemented by this driver yet (planned feature
+    /// or gateway capability that has not been built).
+    #[error("not implemented by this driver: {0}")]
+    Unsupported(String),
 }
 
 #[cfg(test)]
