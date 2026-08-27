@@ -4,6 +4,7 @@ import type { CheckoutTier } from '../content/pricing/types';
 import { hasSession, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout, getSessionEmail } from './paddle';
 import { openMidtransCheckout } from './midtrans';
 import { licenseApiUrl } from '../lib/runtime-config';
+import { getRegion } from '../lib/region';
 
 /**
  * Pricing-page checkout button (website-plan.md §7). Payment is
@@ -59,10 +60,14 @@ export default function CheckoutButton({ tier, locale }: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const priceId = tier.priceId;
-  // Indonesian market: the id-locale pages bill through Midtrans Snap
-  // (fixed IDR, QRIS/VA/e-wallet — ADR #39 D1). Paddle stays for every
-  // other locale.
-  const useMidtrans = locale === 'id';
+  // Region-based payment routing: Indonesia region uses Midtrans Snap
+  // (fixed IDR, QRIS/VA/e-wallet — ADR #39 D1). Paddle stays for global.
+  const [useMidtrans, setUseMidtrans] = useState(() => getRegion() === 'id');
+  useEffect(() => {
+    const check = () => setUseMidtrans(getRegion() === 'id');
+    window.addEventListener('storage', check);
+    return () => window.removeEventListener('storage', check);
+  }, []);
 
   // No checkout path for this locale — degrade to the mailto fallback
   // instead of sending the user through login into a dead checkout.

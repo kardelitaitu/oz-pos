@@ -7,12 +7,13 @@ import FeatureTable from '../../components/FeatureTable.astro';
 import PricingGrid from '../../components/PricingGrid.tsx';
 import { getRelativeLocaleUrl } from 'astro:i18n';
 import { t } from '../../i18n';
-import { pricingFor, featureRowsFor } from '../../content/pricing';
+import { pricing as enPricing, featureRows as enRows } from '../../content/pricing/en';
+import { pricing as idPricing, featureRows as idRows } from '../../content/pricing/id';
 
 const locale = Astro.currentLocale ?? 'en';
 const pageTitle = `OZ-POS — ${t(locale, 'pricingPage.title')}`;
-const pricing = pricingFor(locale);
-const rows = featureRowsFor(locale);
+const pricing = locale === 'id' ? idPricing : enPricing;
+const rows = locale === 'id' ? idRows : enRows;
 const downloadHref = getRelativeLocaleUrl(locale, 'download');
 const contactHref = 'mailto:sales@ozpos.my.id';
 ---
@@ -25,7 +26,7 @@ const contactHref = 'mailto:sales@ozpos.my.id';
     </div>
 
     <div data-reveal>
-      <PricingGrid client:load tiers={pricing} locale={locale} downloadHref={downloadHref} contactHref={contactHref} />
+      <PricingGrid client:load tiers={pricing} tiersAlt={locale === 'id' ? enPricing : idPricing} locale={locale} downloadHref={downloadHref} contactHref={contactHref} />
     </div>
 
     <div data-reveal class="mt-6 flex flex-wrap justify-center gap-6 text-sm text-muted">

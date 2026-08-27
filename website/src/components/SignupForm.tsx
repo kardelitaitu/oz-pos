@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
+import { type Region, setRegion } from '../lib/region';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -29,10 +30,23 @@ interface Props {
 
 type Step = 'form' | 'code';
 
+const SELECT_CLASS =
+  'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
+
 export default function SignupForm({ locale }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [email, setEmail] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
+  const [region, setRegionState] = useState<Region>(() => {
+    if (typeof window !== 'undefined') {
+      return (sessionStorage.getItem('oz_region') as Region) || 'global';
+    }
+    return 'global';
+  });
+  const handleRegionChange = (r: Region) => {
+    setRegionState(r);
+    setRegion(r);
+  };
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [code, setCode] = useState('');
@@ -95,6 +109,8 @@ export default function SignupForm({ locale }: Props) {
       // Cache the verified email so checkout can prefill it without a
       // round-trip to /me (see paddle.getSessionEmail).
       sessionStorage.setItem('oz_email', email);
+      // Persist region for pricing and checkout routing.
+      sessionStorage.setItem('oz_region', region);
       redirectAfterAuth();
     } catch {
       setError(t(locale, 'login.errorVerify'));
@@ -147,6 +163,18 @@ export default function SignupForm({ locale }: Props) {
   return (
     <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
       <form onSubmit={register} className="space-y-4" aria-label={t(locale, 'signup.title')}>
+        <label className="block">
+          <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.region')}</span>
+          <select
+            value={region}
+            onChange={(e) => handleRegionChange(e.target.value as Region)}
+            className={SELECT_CLASS}
+          >
+            <option value="global">{t(locale, 'signup.regionGlobal')}</option>
+            <option value="id">{t(locale, 'signup.regionIndonesia')}</option>
+          </select>
+          <span className="mt-1 block text-xs text-muted">{t(locale, 'signup.regionHint')}</span>
+        </label>
         <label className="block">
           <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.email')}</span>
           <span className="relative block">

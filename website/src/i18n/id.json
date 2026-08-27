@@ -314,7 +314,11 @@
     "haveAccount": "Sudah punya akun?",
     "signInLink": "Masuk",
     "agreeBefore": "Dengan mendaftar, Anda menyetujui",
-    "agreeSeparator": "dan"
+    "agreeSeparator": "dan",
+    "region": "Wilayah",
+    "regionGlobal": "Global",
+    "regionIndonesia": "Indonesia",
+    "regionHint": "Menentukan harga dan metode pembayaran"
   },
   "vertical": {
     "positioning": "OZ-POS — kasir native QRIS dengan keandalan offline-first, harga untuk pasar Indonesia.",

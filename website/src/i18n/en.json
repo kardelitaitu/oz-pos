@@ -314,7 +314,11 @@
     "haveAccount": "Already have an account?",
     "signInLink": "Sign in",
     "agreeBefore": "By signing up, you agree to the",
-    "agreeSeparator": "and"
+    "agreeSeparator": "and",
+    "region": "Region",
+    "regionGlobal": "Global",
+    "regionIndonesia": "Indonesia",
+    "regionHint": "Affects pricing and payment method"
   },
   "vertical": {
     "positioning": "OZ-POS is the QRIS-native POS with offline-first reliability — priced for the Indonesian market.",

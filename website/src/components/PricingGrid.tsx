@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BillingPeriod, CheckoutTier, PricingTier } from '../content/pricing/types';
 import { t } from '../i18n';
+import { getRegion, type Region } from '../lib/region';
 import CheckoutButton from './CheckoutButton';
 
 /**
@@ -19,13 +20,35 @@ import CheckoutButton from './CheckoutButton';
  */
 interface Props {
   tiers: PricingTier[];
+  /** Alternative pricing tiers for the other region (e.g., IDR when showing USD). */
+  tiersAlt?: PricingTier[];
   locale: string;
   downloadHref: string;
   contactHref: string;
 }
 
-export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
+export default function PricingGrid({ tiers, tiersAlt, locale, downloadHref }: Props) {
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
+  const [region, setRegion] = useState<Region>(() => getRegion());
+
+  // Sync region from sessionStorage (set during signup or by region picker)
+  useEffect(() => {
+    const check = () => setRegion(getRegion());
+    window.addEventListener('storage', check);
+    // Also poll in case sessionStorage was set in another tab
+    const interval = setInterval(check, 1000);
+    return () => {
+      window.removeEventListener('storage', check);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Use region-appropriate pricing tiers
+  const activeTiers = (region === 'id' && tiersAlt)
+    ? tiersAlt
+    : (region !== 'id' && locale === 'id' && tiersAlt)
+      ? tiersAlt
+      : tiers;
   const trackRef = useRef<HTMLDivElement>(null);
   const monthlyBtnRef = useRef<HTMLButtonElement>(null);
   const yearlyBtnRef = useRef<HTMLButtonElement>(null);
@@ -102,7 +125,7 @@ export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
       </div>
 
       <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-        {tiers.map((tier) => {
+        {activeTiers.map((tier) => {
           const isFree = tier.tierKey === 'free';
           const isEnterprise = tier.tierKey === 'enterprise';
           let price = tier.prices[billing];
