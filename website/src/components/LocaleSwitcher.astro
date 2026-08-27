@@ -9,15 +9,15 @@ const activeIndex = locales.indexOf(locale);
 ---
 
 <div
-  class="lang-switcher relative flex items-center rounded-lg p-[3px] bg-ghost-bg"
+  class="lang-switcher relative flex items-center rounded-lg bg-ghost-bg p-[3px]"
   role="group"
   aria-label={t(locale, 'nav.language')}
   data-active-index={activeIndex}
 >
   <!-- Sliding blue pill indicator — design-language: ms-indicator -->
   <div
-    class="pill absolute top-[3px] bottom-[3px] rounded-lg bg-primary transition-all duration-[280ms] ease-[cubic-bezier(0.33,1,0.68,1)]"
-    style={`left: calc(${activeIndex} * 50% + 3px); width: calc(50% - 3px);`}
+    class="pill absolute rounded-lg bg-primary transition-all duration-[280ms] ease-[cubic-bezier(0.33,1,0.68,1)]"
+    style={`top: 3px; bottom: 3px; left: ${activeIndex === 1 ? 'calc(50% + 0.5px)' : '3px'}; width: calc(50% - 3.5px);`}
     aria-hidden="true"
   ></div>
 
@@ -27,7 +27,7 @@ const activeIndex = locales.indexOf(locale);
         href={getRelativeLocaleUrl(code, target)}
         aria-current={locale === code ? 'page' : undefined}
         class:list={[
-          'relative z-10 flex-1 px-[9px] py-[5px] rounded-lg text-[13px] font-semibold transition-opacity duration-200 text-center',
+          'relative z-10 flex-1 min-w-[40px] px-3 py-[5px] rounded-lg text-[13px] font-semibold transition-opacity duration-200 text-center',
           locale === code ? 'text-white opacity-100' : 'text-muted opacity-50 hover:opacity-100',
         ]}
         data-index={i}
@@ -48,8 +48,13 @@ const activeIndex = locales.indexOf(locale);
     if (!pill || !links.length) return;
 
     function updatePillPosition(index: number) {
-      pill!.style.left = `calc(${index} * 50% + 3px)`;
-      pill!.style.width = 'calc(50% - 3px)';
+      // Position pill over the active button using getBoundingClientRect
+      const switcherRect = switcher!.getBoundingClientRect();
+      const btn = links[index] as HTMLElement;
+      const btnRect = btn.getBoundingClientRect();
+      const gap = 3; // matches p-[3px] padding
+      pill!.style.left = `${btnRect.left - switcherRect.left - 1}px`;
+      pill!.style.width = `${btnRect.width + 2}px`;
     }
 
     // Intercept clicks: animate pill first, then navigate after transition
