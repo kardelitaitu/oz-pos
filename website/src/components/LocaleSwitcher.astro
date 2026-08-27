@@ -69,6 +69,9 @@ const activeIndex = locales.indexOf(locale);
         }
         // Prevent immediate navigation
         e.preventDefault();
+        // Save language preference to localStorage
+        const lang = idx === 0 ? 'en' : 'id';
+        localStorage.setItem('oz_language', lang);
         // Slide pill to clicked option
         switcher!.dataset.activeIndex = String(idx);
         updatePillPosition(idx);
