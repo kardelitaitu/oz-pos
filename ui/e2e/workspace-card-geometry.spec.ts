@@ -38,7 +38,9 @@ test.describe('Workspace card geometry stability', () => {
       rows.map((r) => r.getBoundingClientRect().width),
     );
 
-    expect(widths.length).toBeGreaterThanOrEqual(6);
+    // Admin workspace is excluded from the card grid (accessed via Tools section).
+    // 4 workspace cards + 1 'Add Workspace' card = 5 total for owner/admin.
+    expect(widths.length).toBeGreaterThanOrEqual(5);
 
     const first = widths[0];
     for (const w of widths) {
@@ -60,7 +62,9 @@ test.describe('Workspace card geometry stability', () => {
       })),
     );
 
-    expect(clipped.length).toBeGreaterThanOrEqual(6);
+    // Admin workspace is excluded from the card grid (accessed via Tools section).
+    // 4 workspace cards + 1 'Add Workspace' card = 5 total for owner/admin.
+    expect(clipped.length).toBeGreaterThanOrEqual(5);
     for (const t of clipped) {
       expect(t.overflow, `title "${t.text}" is clipped`).toBeLessThanOrEqual(1);
     }

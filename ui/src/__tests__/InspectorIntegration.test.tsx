@@ -131,8 +131,8 @@ const renderEditor = () =>
 /** Open a tool-rack panel by clicking its icon button (the redesign collapsed
  *  the always-visible sidebar into click-to-open panels). Idempotent. */
 const openRackPanel = (panel: 'add' | 'edit' | 'view' | 'share') => {
-  const title = `topology-rack-${panel}-title`;
-  const btn = document.querySelector(`.rack-icon-btn[title="${title}"]`) as HTMLElement | null;
+  const label = `topology-rack-${panel}-title`;
+  const btn = document.querySelector(`.rack-icon-btn[aria-label="${label}"]`) as HTMLElement | null;
   if (!btn) throw new Error(`rack icon button for '${panel}' panel not found`);
   if (btn.classList.contains('is-active')) return;
   fireEvent.click(btn);

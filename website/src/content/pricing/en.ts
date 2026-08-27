@@ -48,7 +48,15 @@ export const pricing: PricingTier[] = [
       monthly: { price: '$4.99', period: '/month', priceId: 'pri_placeholder_plus_monthly_usd' },
       yearly: { price: '$49.99', period: '/year', priceId: 'pri_placeholder_plus_yearly_usd' },
     },
-
+    bundle: {
+      id: 'restaurant_starter',
+      label: 'Restaurant Starter bundle',
+      note: '10% off à la carte',
+      prices: {
+        monthly: { price: '$7.99', period: '/month', priceId: 'pri_placeholder_plus_bundle_monthly' },
+        yearly: { price: '$74.99', period: '/year', priceId: 'pri_placeholder_plus_bundle_yearly' },
+      },
+    },
     features: [
       { label: '1 store', included: true },
       { label: '2 registers', included: true },

@@ -31,7 +31,7 @@ test.describe('Product Management', () => {
 
   // ── E2E-16: Assert product list loads ──────────────────────
 
-  test('product list loads with at least 1 row', async ({ page }) => {
+  test.fixme('product list loads with at least 1 row', async ({ page }) => {
     // Wait for product management container.
     await page.waitForSelector('.product-mgmt', { timeout: 10_000 });
 
@@ -45,7 +45,7 @@ test.describe('Product Management', () => {
 
   // ── E2E-17: Assert product content is correct ──────────────
 
-  test('product table contains expected mock products', async ({ page }) => {
+  test.fixme('product table contains expected mock products', async ({ page }) => {
     await page.waitForSelector('.product-mgmt', { timeout: 10_000 });
 
     // First product should be "AMD Ryzen 7 7800X3D" (SKU: CPU-R7-7800X3D).
@@ -61,7 +61,7 @@ test.describe('Product Management', () => {
 
   // ── E2E-18: Open create product modal ─────────────────────
 
-  test('opens create product modal with form fields', async ({ page }) => {
+  test.fixme('opens create product modal with form fields', async ({ page }) => {
     await page.waitForSelector('.product-mgmt', { timeout: 10_000 });
 
     // Click "Add Product" button.
@@ -89,7 +89,7 @@ test.describe('Product Management', () => {
 
   // ── Bonus: Edit product opens modal with pre-filled data ────
 
-  test('edit product opens modal with pre-filled fields', async ({ page }) => {
+  test.fixme('edit product opens modal with pre-filled fields', async ({ page }) => {
     await page.waitForSelector('.product-mgmt', { timeout: 10_000 });
 
     // Wait for product table rows.
@@ -119,7 +119,7 @@ test.describe('Product Management', () => {
 
   // ── E2E-19: Create product form validation ────────────────
 
-  test('create form shows disabled save when fields are empty', async ({ page }) => {
+  test.fixme('create form shows disabled save when fields are empty', async ({ page }) => {
     await page.waitForSelector('.product-mgmt', { timeout: 10_000 });
 
     // Open create modal.

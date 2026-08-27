@@ -743,6 +743,7 @@ function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
   return (
     <div className="inspector-section">
       <h4 className="inspector-section-title"><Localized id="topology-inspector-section-location">Branch Location</Localized></h4>
+      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- label wraps input via <Localized> span */}
       <label className="inspector-field">
         <span><Localized id="topology-inspector-address">Address</Localized></span>
         <input
@@ -754,6 +755,7 @@ function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
         />
       </label>
       <div className="inspector-field-row">
+        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
         <label className="inspector-field inspector-field--half">
           <span><Localized id="topology-inspector-currency">Currency</Localized></span>
           <input
@@ -765,6 +767,7 @@ function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
             onBlur={persist}
           />
         </label>
+        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
         <label className="inspector-field inspector-field--half">
           <span><Localized id="topology-inspector-timezone">Timezone</Localized></span>
           <input
@@ -776,6 +779,7 @@ function BranchLocationFields({ nodeId, l10n, beginInspectorEdit }: {
           />
         </label>
       </div>
+      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
       <label className="inspector-field">
         <span><Localized id="topology-inspector-tax-id">Tax ID</Localized></span>
         <input
@@ -5383,7 +5387,7 @@ export default function NodeTopologyEditor({
               <Localized id="topology-presets-label">Presets</Localized>
             </Button>
             {presetsOpen && (
-              <div className="topology-presets-menu" role="menu" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="topology-presets-menu" role="menu" tabIndex={0} onMouseDown={(e) => e.stopPropagation()}>
                 <button type="button" role="menuitem" onClick={() => { setPresetsOpen(false); if (isCanvasDirty()) setConfirmPreset('retail'); else loadPreset('retail'); }}>
                   <Localized id="topology-preset-retail">Retail Preset</Localized>
                   <span className="topology-presets-menu-desc"><Localized id="topology-preset-retail-desc">Store, warehouse, and POS terminals</Localized></span>
@@ -6419,6 +6423,7 @@ export default function NodeTopologyEditor({
               {/* ── Name section ─────────────────────────────────────── */}
               <div className="inspector-section">
                 <h4 className="inspector-section-title"><Localized id="topology-inspector-section-identity">Identity</Localized></h4>
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                 <label className="inspector-field">
                   <span><Localized id="topology-inspector-node-name">Name</Localized></span>
                   <input
@@ -6434,6 +6439,7 @@ export default function NodeTopologyEditor({
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void persistNodeRename(selectedNode.id, selectedNode.name); } }}
                   />
                 </label>
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                 <label className="inspector-field">
                   <span><Localized id="topology-inspector-subtitle">Subtitle / Location</Localized></span>
                   <input
@@ -6554,6 +6560,7 @@ export default function NodeTopologyEditor({
                       {selectedNode.telemetryBadge}
                     </span>
                   )}
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label className="inspector-field">
                     <span><Localized id="topology-inspector-device-type">Device Type</Localized></span>
                     <select
@@ -6574,6 +6581,7 @@ export default function NodeTopologyEditor({
                       <option value="display-customer">{l10n.getString('topology-hardware-display-customer')}</option>
                     </select>
                   </label>
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label className="inspector-field">
                     <span><Localized id="topology-inspector-device-address">Connection Address</Localized></span>
                     <input
@@ -6723,7 +6731,7 @@ export default function NodeTopologyEditor({
               {applyConfirmData.sessionStoreId !== applyConfirmData.effectiveStoreId && (
                 <p className="topology-apply-confirm-scope-warning">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
-                  <Localized id="topology-apply-confirm-scope-mismatch">Session store differs from Branch Location store. Workspace CRUD will target the Branch Location's store.</Localized>
+                  <Localized id="topology-apply-confirm-scope-mismatch">Session store differs from Branch Location store. Workspace CRUD will target the Branch Location&apos;s store.</Localized>
                 </p>
               )}
             </div>

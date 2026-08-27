@@ -215,6 +215,7 @@ function TopologyNodeCardImpl({
             portal
             showDelay={300}
           >
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
             <span
               className="node-validation-note node-validation-chip"
               role="status"

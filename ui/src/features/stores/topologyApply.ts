@@ -120,7 +120,6 @@ export async function applyTopologyWithDiagram(
   );
 
   // ── Step 4: Atomic apply ──────────────────────────────────────────
-  // eslint-disable-next-line no-console
   console.groupCollapsed('%c[Topology Apply] IPC Payload', 'color: #3b82f6; font-weight: bold');
   console.log('sessionToken:', ctx.sessionToken?.slice(0, 8) + '…');
   console.log('branchId:', ctx.branchId);
@@ -130,50 +129,45 @@ export async function applyTopologyWithDiagram(
   console.log('archives:', archives);
   console.log('resolvedIssueKeys:', ctx.resolvedIssueKeys);
   console.groupEnd();
+  const result = await applyTopologyDiff(
+    ctx.sessionToken,
+    creations,
+    updates,
+    archives,
+    diagramNodes,
+    diagramWires,
+    ctx.branchId,
+    ctx.baseRevision ?? 0,
+    crypto.randomUUID(),
+    ctx.resolvedIssueKeys ?? [],
+  );
+
+  if (!result || !Number.isSafeInteger(result.revision) || result.revision < 0) {
+    throw new Error('topology Apply returned no committed revision');
+  }
+
+  // ── Step 5: Success toast ─────────────────────────────────────
+  const created = creations.length;
+  const updated = updates.length;
+  const archived = archives.length;
+  const typeChangeCount = typeChanges.size;
+  const parts = [
+    `${created} created`,
+    `${updated} updated`,
+    `${archived} archived`,
+  ];
+  if (typeChangeCount > 0) {
+    parts.push(`${typeChangeCount} type-changed`);
+  }
+  toast(l10n.getString('topology-toast-saved', { detail: parts.join(', ') }), 'success');
+
+  // ── Step 6: Refresh instances ──────────────────────────────────
   try {
-    const result = await applyTopologyDiff(
-      ctx.sessionToken,
-      creations,
-      updates,
-      archives,
-      diagramNodes,
-      diagramWires,
-      ctx.branchId,
-      ctx.baseRevision ?? 0,
-      crypto.randomUUID(),
-      ctx.resolvedIssueKeys ?? [],
-    );
-
-    if (!result || !Number.isSafeInteger(result.revision) || result.revision < 0) {
-      throw new Error('topology Apply returned no committed revision');
-    }
-
-    // ── Step 5: Success toast ─────────────────────────────────────
-    const created = creations.length;
-    const updated = updates.length;
-    const archived = archives.length;
-    const typeChangeCount = typeChanges.size;
-    const parts = [
-      `${created} created`,
-      `${updated} updated`,
-      `${archived} archived`,
-    ];
-    if (typeChangeCount > 0) {
-      parts.push(`${typeChangeCount} type-changed`);
-    }
-    toast(l10n.getString('topology-toast-saved', { detail: parts.join(', ') }), 'success');
-
-    // ── Step 6: Refresh instances ──────────────────────────────────
-    try {
-      const refreshed = (await listWorkspacesScoped(ctx.sessionToken)).filter(isTopologyInstance);
-      return { ...result, refreshedInstances: refreshed, ...(Object.keys(idMap).length > 0 ? { idMap } : {}) };
-    } catch {
-      // Non-fatal: return result without refreshed instances.
-      return { ...result, ...(Object.keys(idMap).length > 0 ? { idMap } : {}) };
-    }
-  } catch (err) {
-    // Re-throw without showing a toast — the caller handles error display.
-    throw err;
+    const refreshed = (await listWorkspacesScoped(ctx.sessionToken)).filter(isTopologyInstance);
+    return { ...result, refreshedInstances: refreshed, ...(Object.keys(idMap).length > 0 ? { idMap } : {}) };
+  } catch {
+    // Non-fatal: return result without refreshed instances.
+    return { ...result, ...(Object.keys(idMap).length > 0 ? { idMap } : {}) };
   }
 }
 
