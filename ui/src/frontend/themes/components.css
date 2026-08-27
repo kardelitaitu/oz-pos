@@ -964,17 +964,24 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  width: min(90vw, 26rem);
+  width: min(90vw, 24rem);
   pointer-events: none;
 }
 
+/*
+ * Corporate toast — Design Language "Alerts" anatomy:
+ * icon (16px) + title (semibold) + caption (muted) on a
+ * 10% semantic bg tint + 25% semantic border tint.
+ * Flex row: icon | body | dismiss, each with proper padding.
+ * No gradient, no thick accent bar. Tight radius (--radius-md).
+ */
 .toast {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   /* Fully opaque panel — no alpha channel on background */
   background: var(--color-toast-bg);
   border: 1px solid var(--color-toast-border);
@@ -983,19 +990,43 @@
   will-change: transform, opacity;
   transform: translateZ(0);
   pointer-events: auto;
-  /* Left accent border is set per-variant below */
-  border-left-width: 4px;
-  border-left-style: solid;
 }
 
-.toast__message {
+.toast__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1);
+  /* Default muted; each variant tints it via `.toast--x .toast__icon`. */
+  color: var(--color-toast-fg-muted);
+}
+
+.toast__body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+  padding: var(--space-0_5) 0;
+}
+
+.toast__title {
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--font-weight-semibold);
   line-height: var(--leading-normal);
   /* Locked foreground — won't bleed through from a transparent parent */
   color: var(--color-toast-fg);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.toast__message {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--leading-normal);
+  /* Locked foreground — won't bleed through from a transparent parent */
+  color: var(--color-toast-fg-muted);
   word-break: break-word;
   overflow-wrap: anywhere;
 }
@@ -1005,11 +1036,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--touch-target-min);
-  height: var(--touch-target-min);
-  margin-right: calc(-1 * var(--space-2));
-  margin-top: calc(-1 * var(--space-2));
-  margin-bottom: calc(-1 * var(--space-2));
+  padding: var(--space-1);
   border-radius: var(--radius-sm);
   /* Locked colour — independent of parent opacity */
   color: var(--color-toast-fg-muted);
@@ -1024,22 +1051,34 @@
   color: var(--color-toast-fg);
 }
 
-/* ── Per-variant accent colours (left border + icon tint) ── */
+/* ── Per-variant: 10% bg tint + 25% border tint + icon tint ── */
 .toast--success {
-  border-left-color: var(--color-toast-accent-success);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-success) 12%, transparent) 0%, var(--color-toast-bg) 40%);
+  background: color-mix(in srgb, var(--color-toast-accent-success) 10%, var(--color-toast-bg));
+  border-color: color-mix(in srgb, var(--color-toast-accent-success) 25%, transparent);
+}
+.toast--success .toast__icon {
+  color: var(--color-toast-accent-success);
 }
 .toast--error {
-  border-left-color: var(--color-toast-accent-error);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-error) 12%, transparent) 0%, var(--color-toast-bg) 40%);
+  background: color-mix(in srgb, var(--color-toast-accent-error) 10%, var(--color-toast-bg));
+  border-color: color-mix(in srgb, var(--color-toast-accent-error) 25%, transparent);
+}
+.toast--error .toast__icon {
+  color: var(--color-toast-accent-error);
 }
 .toast--warning {
-  border-left-color: var(--color-toast-accent-warning);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-warning) 12%, transparent) 0%, var(--color-toast-bg) 40%);
+  background: color-mix(in srgb, var(--color-toast-accent-warning) 10%, var(--color-toast-bg));
+  border-color: color-mix(in srgb, var(--color-toast-accent-warning) 25%, transparent);
+}
+.toast--warning .toast__icon {
+  color: var(--color-toast-accent-warning);
 }
 .toast--info {
-  border-left-color: var(--color-toast-accent-info);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-info) 12%, transparent) 0%, var(--color-toast-bg) 40%);
+  background: color-mix(in srgb, var(--color-toast-accent-info) 10%, var(--color-toast-bg));
+  border-color: color-mix(in srgb, var(--color-toast-accent-info) 25%, transparent);
+}
+.toast--info .toast__icon {
+  color: var(--color-toast-accent-info);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1049,21 +1088,21 @@
   @keyframes toast-slide-in {
     from {
       opacity: 0;
-      transform: translateY(0.5rem) scale(0.97) translateZ(0);
+      transform: translateY(0.5rem) translateZ(0);
     }
     to {
       opacity: 1;
-      transform: translateY(0) scale(1) translateZ(0);
+      transform: translateY(0) translateZ(0);
     }
   }
   @keyframes toast-slide-out {
     from {
       opacity: 1;
-      transform: translateY(0) scale(1) translateZ(0);
+      transform: translateY(0) translateZ(0);
     }
     to {
       opacity: 0;
-      transform: translateY(0.5rem) scale(0.97) translateZ(0);
+      transform: translateY(0.5rem) translateZ(0);
     }
   }
   .toast--exiting {

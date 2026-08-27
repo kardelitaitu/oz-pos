@@ -19,6 +19,8 @@ export interface Toast {
   id: string;
   type: ToastType;
   message: string;
+  /** Optional bold headline above the message. @default none */
+  title?: string;
   /** Auto-dismiss duration in ms. 0 = persistent. @default 4000 */
   duration?: number;
 }
@@ -121,6 +123,62 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// ── Variant icon ─────────────────────────────────────────────────
+
+/**
+ * 16px stroke icon per toast variant, matching the Design Language
+ * alert icons (Feedback: "never colour alone — every tone carries its
+ * icon"). Coloured via `currentColor` from `.toast__icon` so the
+ * variant CSS owns the tint.
+ */
+function ToastIcon({ type }: { type: ToastType }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  } as const;
+
+  switch (type) {
+    case 'success':
+      return (
+        <svg {...common}>
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+      );
+    case 'error':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+      );
+    case 'warning':
+      return (
+        <svg {...common}>
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+      );
+    case 'info':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+      );
+  }
+}
+
 // ── Individual Toast ────────────────────────────────────────────────
 
 function ToastItem({
@@ -133,7 +191,7 @@ function ToastItem({
   onDismiss: (id: string) => void;
 }) {
   const { l10n } = useLocalization();
-  const { id, type, message } = toast;
+  const { id, type, title, message } = toast;
 
   return (
     <div
@@ -143,7 +201,15 @@ function ToastItem({
       aria-busy={isExiting}
       data-toast-id={id}
     >
-      <span className="toast__message">{message}</span>
+      <div className="toast__icon" aria-hidden="true">
+        <ToastIcon type={type} />
+      </div>
+      <div className="toast__body">
+        {title !== undefined && title !== '' && (
+          <div className="toast__title">{title}</div>
+        )}
+        <div className="toast__message">{message}</div>
+      </div>
       <button
         type="button"
         className="toast__dismiss"
