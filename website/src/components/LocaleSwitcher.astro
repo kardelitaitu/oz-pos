@@ -48,17 +48,29 @@ const activeIndex = locales.indexOf(locale);
     if (!pill || !links.length) return;
 
     function updatePillPosition(index: number) {
-      // Fixed 50% positioning: each option takes half the track
       pill!.style.left = `calc(${index} * 50% + 3px)`;
       pill!.style.width = 'calc(50% - 3px)';
     }
 
-    // On click: slide pill to the clicked option
+    // Intercept clicks: animate pill first, then navigate after transition
     links.forEach((link) => {
-      link.addEventListener('click', () => {
+      link.addEventListener('click', (e) => {
         const idx = parseInt((link as HTMLElement).dataset.index || '0');
-        switcher.dataset.activeIndex = String(idx);
+        const currentIdx = parseInt(switcher!.dataset.activeIndex || '0');
+        // If already on this language, do nothing
+        if (idx === currentIdx) {
+          e.preventDefault();
+          return;
+        }
+        // Prevent immediate navigation
+        e.preventDefault();
+        // Slide pill to clicked option
+        switcher!.dataset.activeIndex = String(idx);
         updatePillPosition(idx);
+        // Navigate after pill animation completes (280ms matches CSS transition)
+        setTimeout(() => {
+          window.location.href = link.getAttribute('href') || '#';
+        }, 280);
       });
     });
   }
