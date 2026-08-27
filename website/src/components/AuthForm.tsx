@@ -162,10 +162,10 @@ export default function AuthForm({ locale }: Props) {
       });
       if (!res.ok) throw new Error('request-password-reset failed');
       const data = (await res.json()) as { cooldown_until?: string };
+      // Always advance to code step — the email was sent regardless of cooldown.
+      // Show cooldown as informational if present.
       if (data.cooldown_until) {
-        // 7-day cooldown active — surface when a new reset is allowed.
         setResetCooldown(data.cooldown_until);
-        return;
       }
       setResetStep('code');
     } catch {
