@@ -977,7 +977,10 @@
  */
 .toast {
   display: flex;
-  align-items: center;
+  /* Top-align: the icon and close hug the first text line so a tall,
+     multi-line toast keeps them at the corners instead of floating
+     mid-card (Design Language Alerts use the same flex-start pattern). */
+  align-items: flex-start;
   gap: var(--space-3);
   width: 100%;
   padding: var(--space-3) var(--space-4);
@@ -997,7 +1000,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-1);
+  /* 2px top padding optically aligns the 16px icon with the first
+     text line (12px font × 1.5 line-height, 2px body padding). */
+  padding: var(--space-0_5) var(--space-1);
   /* Default muted; each variant tints it via `.toast--x .toast__icon`. */
   color: var(--color-toast-fg-muted);
 }
@@ -1037,6 +1042,9 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-1);
+  /* Hug the first text line with the icon instead of centering in a
+     tall card. */
+  margin-top: var(--space-0_5);
   border-radius: var(--radius-sm);
   /* Locked colour — independent of parent opacity */
   color: var(--color-toast-fg-muted);
