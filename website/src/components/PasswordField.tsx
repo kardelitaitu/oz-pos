@@ -73,6 +73,7 @@ export default function PasswordField({
           />
           <button
             type="button"
+            tabIndex={-1}
             aria-label={visible ? t(locale, 'password.hide') : t(locale, 'password.show')}
             onClick={() => setVisible((v) => !v)}
             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-muted transition hover:text-ink"
