@@ -358,7 +358,7 @@ interface ThemeInfo {
 }
 
 const THEMES: ThemeInfo[] = [
-  { selector: ':root', label: 'Default (Dark Glassmorphism)' },
+  { selector: ':root', label: 'Default (Dark)' },
   { selector: "[data-theme='light']", label: 'Light' },
   { selector: "[data-theme='dark']", label: 'Dark Solid' },
 ];

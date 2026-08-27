@@ -66,9 +66,8 @@ describe('DevToolbar', () => {
     expect(container.querySelector('.dev-toolbar')).not.toBeNull();
   });
 
-  it('renders three theme buttons', () => {
+  it('renders two theme buttons', () => {
     renderToolbar();
-    expect(screen.getByLabelText('Glass theme')).toBeInTheDocument();
     expect(screen.getByLabelText('Light theme')).toBeInTheDocument();
     expect(screen.getByLabelText('Dark theme')).toBeInTheDocument();
   });
@@ -77,7 +76,7 @@ describe('DevToolbar', () => {
     renderToolbar();
     const badge = document.querySelector('.dev-toolbar-badge');
     expect(badge).not.toBeNull();
-    expect(badge?.textContent).toMatch(/glass|light|dark/i);
+    expect(badge?.textContent).toMatch(/light|dark/i);
   });
 
   it('switches theme when a theme button is clicked', () => {
@@ -100,14 +99,14 @@ describe('DevToolbar', () => {
 
   it('allows switching between themes and back', () => {
     renderToolbar();
-    const glassBtn = screen.getByLabelText('Glass theme');
+    const lightBtn = screen.getByLabelText('Light theme');
     const darkBtn = screen.getByLabelText('Dark theme');
 
-    fireEvent.click(glassBtn);
-    expect(glassBtn).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(lightBtn);
+    expect(lightBtn).toHaveAttribute('aria-checked', 'true');
 
     fireEvent.click(darkBtn);
     expect(darkBtn).toHaveAttribute('aria-checked', 'true');
-    expect(glassBtn).not.toHaveAttribute('aria-checked', 'true');
+    expect(lightBtn).not.toHaveAttribute('aria-checked', 'true');
   });
 });

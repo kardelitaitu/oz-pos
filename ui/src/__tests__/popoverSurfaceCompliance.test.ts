@@ -5,8 +5,8 @@
  * surface that overlays content (side drawers, canvas HUDs, sticky table
  * headers) — must use the dedicated `--color-bg-popover` token, which is
  * OPAQUE in every theme.
- * (--color-bg-surface and --color-bg-elevated are alpha tints in the glass
- * theme — 5% / 8% — so any floating text surface using them blends with the
+ * (--color-bg-surface and --color-bg-elevated may be semi-transparent in some
+ * themes, so any floating text surface using them could blend with the
  * content it floats over.)
  *
  * Two guarantees, enforced here:
@@ -60,7 +60,7 @@ const POPOVER_SURFACES: ReadonlyArray<{ selector: string; file: string }> = [
 ];
 
 const THEME_BLOCKS: ReadonlyArray<{ label: string; open: RegExp }> = [
-  { label: 'default (glass)', open: /:root\s*\{/ },
+  { label: 'dark', open: /:root\s*\{/ },
   { label: 'light', open: /\[data-theme=['"]light['"]\]\s*\{/ },
   { label: 'dark', open: /\[data-theme=['"]dark['"]\]\s*\{/ },
 ];
