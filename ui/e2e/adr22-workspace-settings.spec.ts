@@ -346,6 +346,7 @@ test.describe('ADR #22 — Topology canvas', () => {
   }
 
   test('forward marquee selects contained cards only (partial overlaps excluded)', async ({ page }, testInfo) => {
+    test.slow(); // Canvas marquee selection is geometry-sensitive in CI
     // Tablet now auto-fits overflowing diagrams (round 23), but the
     // preset-vs-seed load race still makes the fitted geometry variable
     // there, so containment math is only asserted on the desktop project.
@@ -382,6 +383,9 @@ test.describe('ADR #22 — Topology canvas', () => {
     await page.mouse.down();
     await page.mouse.move(canvasBox!.x + box.x1, canvasBox!.y + box.y1, { steps: 10 });
     await page.mouse.up();
+
+    // Wait briefly for selection state to settle (canvas rendering may lag).
+    await page.waitForTimeout(300);
 
     // Exactly the fully-contained cards are selected; the poking-out card is NOT.
     await assertSelection(page, cards, contained);

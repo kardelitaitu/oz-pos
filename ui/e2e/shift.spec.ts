@@ -57,11 +57,11 @@ test.describe('Shift Management', () => {
       await expect(closeShiftBtn).toBeVisible({ timeout: 5_000 });
       await closeShiftBtn.click();
 
-      const closingInput = page.locator('#close-balance');
+      const closingInput = page.locator('.shift-mgmt-overlay').last().locator('#close-balance');
       await expect(closingInput).toBeVisible({ timeout: 3_000 });
       await closingInput.fill('0');
 
-      await page.locator(
+      await page.locator('.shift-mgmt-overlay').last().locator(
         '.shift-mgmt-modal-actions button:has-text("Close Shift"), ' +
         '.shift-mgmt-modal-actions button:has-text("Tutup")',
       ).click();
@@ -70,9 +70,9 @@ test.describe('Shift Management', () => {
       await expect(page.locator('.shift-mgmt-summary-grid')).toBeVisible({ timeout: 5_000 });
 
       // Dismiss the summary dialog.
-      const doneBtn = page.locator(
-        '.shift-mgmt-overlay .shift-mgmt-modal-actions button:has-text("Done"), ' +
-        '.shift-mgmt-overlay .shift-mgmt-modal-actions button:has-text("Selesai")',
+      const doneBtn = page.locator('.shift-mgmt-overlay').last().locator(
+        '.shift-mgmt-modal-actions button:has-text("Done"), ' +
+        '.shift-mgmt-modal-actions button:has-text("Selesai")',
       );
       await expect(doneBtn).toBeVisible({ timeout: 3_000 });
       await doneBtn.click();
@@ -132,15 +132,15 @@ test.describe('Shift Management', () => {
     const openBtn = page.locator('button:has-text("Open Shift"), button:has-text("Buka")').first();
     await openBtn.click();
     // Wait for the modal to appear.
-    const modal = page.locator('.shift-mgmt-overlay');
+    const modal = page.locator('.shift-mgmt-overlay').last();
     await expect(modal).toBeVisible({ timeout: 3_000 });
 
     // Modal header should say "Open Shift".
-    const modalHeader = page.locator('.shift-mgmt-modal-header h2');
+    const modalHeader = modal.locator('.shift-mgmt-modal-header h2');
     await expect(modalHeader).toBeVisible({ timeout: 3_000 });
 
     // Fill opening balance.
-    const balanceInput = page.locator('#open-balance');
+    const balanceInput = modal.locator('#open-balance');
     await expect(balanceInput).toBeVisible();
     await balanceInput.fill('50000');
 
@@ -167,10 +167,10 @@ test.describe('Shift Management', () => {
     // Open shift first (mock always returns null for active shift).
     const openBtn = page.locator('button:has-text("Open Shift"), button:has-text("Buka")').first();
     await openBtn.click();
-    const openModal = page.locator('.shift-mgmt-overlay');
+    const openModal = page.locator('.shift-mgmt-overlay').last();
     await expect(openModal).toBeVisible({ timeout: 3_000 });
 
-    const balanceInput = page.locator('#open-balance');
+    const balanceInput = openModal.locator('#open-balance');
     await expect(balanceInput).toBeVisible();
     await balanceInput.fill('50000');
 
@@ -184,11 +184,11 @@ test.describe('Shift Management', () => {
     await expect(closeBtn).toBeVisible({ timeout: 5_000 });
     await closeBtn.click();
     // Wait for the Close Shift modal to appear.
-    const closeModal = page.locator('.shift-mgmt-overlay');
+    const closeModal = page.locator('.shift-mgmt-overlay').last();
     await expect(closeModal).toBeVisible({ timeout: 3_000 });
 
     // Fill closing balance.
-    const closingInput = page.locator('#close-balance');
+    const closingInput = closeModal.locator('#close-balance');
     await expect(closingInput).toBeVisible();
     await closingInput.fill('55000');
 
@@ -217,10 +217,10 @@ test.describe('Shift Management', () => {
     // Open shift first.
     const openBtn = page.locator('button:has-text("Open Shift"), button:has-text("Buka")').first();
     await openBtn.click();
-    const openModal = page.locator('.shift-mgmt-overlay');
+    const openModal = page.locator('.shift-mgmt-overlay').last();
     await expect(openModal).toBeVisible({ timeout: 3_000 });
 
-    const balanceInput = page.locator('#open-balance');
+    const balanceInput = openModal.locator('#open-balance');
     await expect(balanceInput).toBeVisible();
     await balanceInput.fill('50000');
 
@@ -235,7 +235,7 @@ test.describe('Shift Management', () => {
     await expect(payoutBtn).toBeVisible({ timeout: 5_000 });
     await payoutBtn.click();
     // Wait for the payout modal to appear.
-    const payoutModal = page.locator('.shift-mgmt-overlay');
+    const payoutModal = page.locator('.shift-mgmt-overlay').last();
     await expect(payoutModal).toBeVisible({ timeout: 3_000 });
 
     // Modal header must say "Record Cash Payout" or "Payout".
@@ -243,12 +243,12 @@ test.describe('Shift Management', () => {
     await expect(payoutHeader).toBeVisible({ timeout: 3_000 });
 
     // Fill payout amount.
-    const amountInput = page.locator('#payout-amount');
+    const amountInput = payoutModal.locator('#payout-amount');
     await expect(amountInput).toBeVisible();
     await amountInput.fill('20000');
 
     // Fill payout reason.
-    const reasonInput = page.locator('#payout-reason');
+    const reasonInput = payoutModal.locator('#payout-reason');
     await expect(reasonInput).toBeVisible();
     await reasonInput.fill('Safe drop');
 
