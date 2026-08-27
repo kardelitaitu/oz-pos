@@ -195,7 +195,7 @@ export default function SignupForm({ locale }: Props) {
             </svg>
           </button>
           {regionOpen && (
-            <div className="absolute z-50 mt-1 w-full rounded-md border border-ink/10 bg-primary shadow-lg overflow-hidden">
+            <div className="absolute z-50 mt-1 w-full rounded-md border border-ink/10 bg-surface shadow-lg overflow-hidden">
               {regionOptions.map((opt) => (
                 <button
                   key={opt.value}
