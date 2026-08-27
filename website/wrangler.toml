@@ -33,3 +33,19 @@ LICENSE_API_URL = "https://license.ozpos.my.id"
 # PUBLIC_* env vars are baked into the JS at BUILD time (import.meta.env),
 # so they are NOT bindings — set them when running `npm run build`:
 #   PUBLIC_LICENSE_API_URL=… PUBLIC_PADDLE_CLIENT_TOKEN=… npm run build
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+redact_query_string = false
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+persist = true
+head_sampling_rate = 1
