@@ -17,18 +17,21 @@ const verticals = dict(locale).vertical as Record<(typeof verticalKeys)[number],
     <nav class="flex flex-wrap justify-center gap-4 text-xs text-muted" aria-label={t(locale, 'footer.business')}>
       {
         verticalKeys.map((key) => (
-          <a href={getRelativeLocaleUrl(locale, `untuk-${key}`)} class="transition hover:text-ink">
+          <a href={getRelativeLocaleUrl(locale, `untuk-${key}`)} class="footer-link relative transition-colors duration-200 hover:text-ink">
             {verticals[key].label}
+            <span class="footer-underline absolute -bottom-0.5 left-0 h-px w-0 bg-primary transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
           </a>
         ))
       }
     </nav>
     <nav class="flex gap-4 text-xs text-muted" aria-label={t(locale, 'footer.legal')}>
-      <a href={getRelativeLocaleUrl(locale, 'legal/privacy')} class="transition hover:text-ink">
+      <a href={getRelativeLocaleUrl(locale, 'legal/privacy')} class="footer-link relative transition-colors duration-200 hover:text-ink">
         {t(locale, 'footer.privacy')}
+        <span class="footer-underline absolute -bottom-0.5 left-0 h-px w-0 bg-primary transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
       </a>
-      <a href={getRelativeLocaleUrl(locale, 'legal/terms')} class="transition hover:text-ink">
+      <a href={getRelativeLocaleUrl(locale, 'legal/terms')} class="footer-link relative transition-colors duration-200 hover:text-ink">
         {t(locale, 'footer.terms')}
+        <span class="footer-underline absolute -bottom-0.5 left-0 h-px w-0 bg-primary transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
       </a>
     </nav>
   </div>

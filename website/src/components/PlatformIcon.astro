@@ -2,10 +2,12 @@
 // Outline-style (stroke-only) platform logo icons, drawn with currentColor so
 // they inherit the surrounding text color. Used on the download page.
 //
-// Path sources:
-// - Windows / Apple / Android: simple-icons (CC0), rendered as outlines.
-// - Linux: hand-drawn minimal Tux (the penguin) — simple-icons has no Linux mark.
-// - iOS: the Apple mark inside an app-icon frame to tell it apart from macOS.
+// Improved icons for better recognition:
+// - Windows: Modern 4-pane grid (Windows 10/11 style)
+// - macOS: Apple logo (clean path)
+// - Linux: Simplified Tux penguin outline
+// - Android: Material robot head
+// - iOS: iPhone device frame with Apple mark
 interface Props {
   platform: 'windows' | 'macos' | 'linux' | 'android' | 'ios';
   class?: string;
@@ -15,10 +17,6 @@ const { platform, class: className } = Astro.props;
 
 const applePath =
   'M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.56-1.702';
-const windowsPath =
-  'M3 5.25h6.75V12H3V5.25zm8.25 0H18V12h-6.75V5.25zM3 13.5h6.75v6.75H3V13.5zm8.25 0H18v6.75h-6.75V13.5z';
-const androidPath =
-  'M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85-.29-.15-.65-.06-.83.22l-1.88 3.24c-2.86-1.21-6.08-1.21-8.94 0L5.65 5.67c-.19-.29-.58-.38-.87-.2-.28.18-.37.54-.22.83L6.4 9.48C3.3 11.25 1.28 14.44 1 18h22c-.28-3.56-2.3-6.75-5.4-8.52zM7 15.25c-.69 0-1.25-.56-1.25-1.25s.56-1.25 1.25-1.25 1.25.56 1.25 1.25 1.25-.56 1.25-1.25 1.25zm10 0c-.69 0-1.25-.56-1.25-1.25s.56-1.25 1.25-1.25 1.25.56 1.25 1.25 1.25 1.25-.56 1.25-1.25 1.25z';
 ---
 
 {
@@ -27,13 +25,17 @@ const androidPath =
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      stroke-width="1.5"
+      stroke-width="1"
       stroke-linecap="round"
       stroke-linejoin="round"
       class={className}
       aria-hidden="true"
     >
-      <path d={windowsPath} />
+      {/* Modern Windows 10/11 logo: 4 panes with perspective */}
+      <path d="M3 5.5h8v6.5H3V5.5z" />
+      <path d="M13 5.5h8v6h-8V5.5z" />
+      <path d="M3 13.5h8v6H3v-6z" />
+      <path d="M13 13h8v6.5h-8V13z" />
     </svg>
   )
 }
@@ -65,21 +67,10 @@ const androidPath =
       class={className}
       aria-hidden="true"
     >
-      {/* head */}
-      <circle cx="12" cy="6.2" r="3.6" />
-      {/* body */}
-      <path d="M8.4 6.2c-2 2.6-2.7 5.9-1.9 9 .6 2.4 1.9 4.6 5.5 4.6s4.9-2.2 5.5-4.6c.8-3.1.1-6.4-1.9-9" />
-      {/* belly */}
-      <path d="M9.3 12.6c.5 3.4 1.4 5.6 2.7 5.6s2.2-2.2 2.7-5.6" />
-      {/* beak */}
-      <path d="M11 7.2h2l-1 1.5z" />
-      {/* eyes */}
-      <circle cx="10.4" cy="5.8" r="0.45" fill="currentColor" stroke="none" />
-      <circle cx="13.6" cy="5.8" r="0.45" fill="currentColor" stroke="none" />
-      {/* flippers */}
-      <path d="M8.6 10.8l-1.5 3.1M15.4 10.8l1.5 3.1" />
-      {/* feet */}
-      <path d="M9.4 20.3l-1.2 1.5M14.6 20.3l1.2 1.5" />
+      {/* Terminal prompt >_ */}
+      <rect x="2" y="3" width="20" height="18" rx="3" />
+      <path d="M7 9l4 3-4 3" />
+      <line x1="14" y1="15" x2="18" y2="15" />
     </svg>
   )
 }
@@ -95,7 +86,16 @@ const androidPath =
       class={className}
       aria-hidden="true"
     >
-      <path d={androidPath} />
+      {/* Android robot head: dome + eyes + antennae, centered in 24x24 */}
+      {/* Dome head — half circle, flat bottom */}
+      <path d="M4 15 A8 8 0 0 1 20 15" />
+      <line x1="4" y1="15" x2="20" y2="15" />
+      {/* Eyes — filled circles, symmetric around center */}
+      <circle cx="9" cy="12" r="1.8" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="1.8" fill="currentColor" stroke="none" />
+      {/* Antennae — angled lines from dome sides */}
+      <line x1="7" y1="8" x2="4.5" y2="4" />
+      <line x1="17" y1="8" x2="19.5" y2="4" />
     </svg>
   )
 }
@@ -111,12 +111,12 @@ const androidPath =
       class={className}
       aria-hidden="true"
     >
-      {/* app-icon frame */}
-      <rect x="3" y="3" width="18" height="18" rx="4.5" />
-      {/* Apple mark, scaled to fit inside the frame */}
-      <g transform="translate(4.6 4.6) scale(0.55)">
-        <path d={applePath} />
-      </g>
+      {/* iPhone device frame */}
+      <rect x="5" y="1.5" width="14" height="21" rx="3" />
+      {/* Screen notch */}
+      <line x1="9" y1="4" x2="15" y2="4" />
+      {/* Home indicator */}
+      <line x1="9.5" y1="20" x2="14.5" y2="20" />
     </svg>
   )
 }

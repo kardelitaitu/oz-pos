@@ -203,7 +203,7 @@ export default function AuthForm({ locale }: Props) {
 
   const tabClass = (active: boolean) =>
     `rounded-md px-3 py-1.5 text-sm font-medium transition ${
-      active ? 'bg-primary text-ink shadow-sm' : 'text-muted hover:text-ink'
+      active ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-ink'
     }`;
 
   // ── Forgot-password view ─────────────────────────────────────────
@@ -239,7 +239,7 @@ export default function AuthForm({ locale }: Props) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+              className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
             >
               {loading ? '…' : t(locale, 'login.sendResetCode')}
             </button>
@@ -288,7 +288,7 @@ export default function AuthForm({ locale }: Props) {
           <button
             type="submit"
             disabled={loading || !isStrongPassword(resetPassword) || !passwordsMatch(resetPassword, resetConfirm)}
-            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.resetPassword')}
           </button>
@@ -327,7 +327,7 @@ export default function AuthForm({ locale }: Props) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.verify')}
           </button>
@@ -396,7 +396,7 @@ export default function AuthForm({ locale }: Props) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.signIn')}
           </button>
@@ -425,7 +425,7 @@ export default function AuthForm({ locale }: Props) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+            className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.sendCode')}
           </button>

@@ -19,22 +19,28 @@ const contactHref = 'mailto:sales@ozpos.my.id';
 
 <Base title={pageTitle} description={t(locale, 'pageDesc.pricing')}>
   <section class="mx-auto max-w-6xl px-4 py-16">
-    <div class="text-center">
+    <div data-reveal class="text-center">
       <h1 class="text-4xl font-bold">{t(locale, 'pricingPage.title')}</h1>
       <p class="mx-auto mt-3 max-w-2xl text-muted">{t(locale, 'pricingPage.subtitle')}</p>
     </div>
 
-    <PricingGrid client:load tiers={pricing} locale={locale} downloadHref={downloadHref} contactHref={contactHref} />
-
-    <div class="mt-6 flex justify-center gap-6 text-sm text-muted">
-      <span>✓ {t(locale, 'pricingPage.trust1')}</span>
-      <span>✓ {t(locale, 'pricingPage.trust2')}</span>
+    <div data-reveal>
+      <PricingGrid client:load tiers={pricing} locale={locale} downloadHref={downloadHref} contactHref={contactHref} />
     </div>
 
-    <div class="mt-16">
+    <div data-reveal class="mt-6 flex flex-wrap justify-center gap-6 text-sm text-muted">
+      <span class="flex items-center gap-2 transition-colors duration-200 hover:text-ink">
+        <span class="text-success">✓</span> {t(locale, 'pricingPage.trust1')}
+      </span>
+      <span class="flex items-center gap-2 transition-colors duration-200 hover:text-ink">
+        <span class="text-success">✓</span> {t(locale, 'pricingPage.trust2')}
+      </span>
+    </div>
+
+    <div data-reveal class="mt-16">
       <FeatureTable rows={rows} columns={pricing} />
     </div>
 
-    <p class="mt-6 text-center text-xs text-muted">{t(locale, 'pricingPage.note')}</p>
+    <p data-reveal class="mt-6 text-center text-xs text-muted">{t(locale, 'pricingPage.note')}</p>
   </section>
 </Base>

@@ -210,7 +210,7 @@ function SettingsPageContent() {
 
   const { refreshBrandSettings } = useBrand();
   const themeCtx = useOptionalTheme();
-  const theme: Theme = themeCtx?.theme ?? 'default';
+  const theme: Theme = themeCtx?.theme ?? 'dark';
   const toggleTheme = themeCtx?.toggleTheme ?? (() => {});
 
   const [receipt, setReceipt] = useState<ReceiptSettingsDto>({

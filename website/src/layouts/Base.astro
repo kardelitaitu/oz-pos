@@ -30,11 +30,15 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
          move needs no rebuild (see worker.ts); absent locally → falls back
          to the build-time PUBLIC_LICENSE_API_URL. -->
     <script is:inline src="/__oz/runtime-config.js"></script>
-    <!-- Apply the stored theme before first paint (dark is the default). -->
+    <!-- Inter variable font (design language primary typeface) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+    <!-- Apply the stored theme before first paint (light is the default). -->
     <script is:inline>
       (() => {
         const t = localStorage.getItem('oz_theme');
-        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
       })();
     </script>
     <meta name="description" content={desc} />
@@ -58,11 +62,48 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
     <meta name="twitter:card" content="summary_large_image" />
     <title>{title}</title>
   </head>
-  <body class="flex min-h-screen flex-col bg-primary text-ink antialiased">
+  <body class="flex min-h-screen flex-col bg text-ink antialiased">
     <Header />
     <main class="flex-1">
       <slot />
     </main>
     <Footer />
+    <script>
+      // Scroll-reveal: observe elements with [data-reveal] and add .revealed class
+      function initScrollReveal() {
+        const elements = document.querySelectorAll('[data-reveal]:not(.revealed)');
+        if (!elements.length) return;
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('revealed');
+                observer.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.05, rootMargin: '0px 0px -20px 0px' }
+        );
+
+        elements.forEach((el) => {
+          // Check if element is already in viewport on load
+          const rect = el.getBoundingClientRect();
+          const isInView = rect.top < window.innerHeight + 20 && rect.bottom > -20;
+          if (isInView) {
+            // Small delay to ensure smooth animation on page load
+            setTimeout(() => el.classList.add('revealed'), 50);
+          } else {
+            observer.observe(el);
+          }
+        });
+      }
+
+      document.addEventListener('DOMContentLoaded', initScrollReveal);
+      document.addEventListener('astro:page-load', () => {
+        // Small delay to ensure DOM is ready after Astro navigation
+        setTimeout(initScrollReveal, 100);
+      });
+    </script>
   </body>
 </html>

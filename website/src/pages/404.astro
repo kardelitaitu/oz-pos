@@ -8,17 +8,26 @@ const locale = 'en';
 
 <Base title="404 — OZ-POS">
   <section class="mx-auto max-w-6xl px-4 py-24 text-center">
-    <p class="text-7xl font-bold text-accent">404</p>
-    <h1 class="mt-4 text-2xl font-semibold">{t(locale, 'notFound.title')}</h1>
-    <p class="mt-2 text-muted">{t(locale, 'notFound.subtitle')}</p>
-    <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+    <div data-reveal>
+      <p class="text-7xl font-bold text-accent">404</p>
+    </div>
+    <div data-reveal style="transition-delay: 100ms">
+      <h1 class="mt-4 text-2xl font-semibold">{t(locale, 'notFound.title')}</h1>
+    </div>
+    <div data-reveal style="transition-delay: 200ms">
+      <p class="mt-2 text-muted">{t(locale, 'notFound.subtitle')}</p>
+    </div>
+    <div data-reveal style="transition-delay: 300ms" class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
       <a
         href="/en/"
-        class="rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-black transition hover:opacity-90"
+        class="rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:opacity-90 hover:scale-[1.03] active:scale-[0.97]"
       >
         {t(locale, 'notFound.home')}
       </a>
-      <a href="/id/" class="rounded-md border border-ink/15 px-5 py-2.5 text-sm font-semibold text-ink transition hover:bg-ink/5">
+      <a
+        href="/id/"
+        class="rounded-md border border-ink/15 px-5 py-2.5 text-sm font-semibold text-ink transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-ink/5 hover:scale-[1.03] active:scale-[0.97]"
+      >
         Bahasa Indonesia
       </a>
     </div>

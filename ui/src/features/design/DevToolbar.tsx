@@ -29,16 +29,6 @@ function MoonIcon() {
   );
 }
 
-function GlassIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="4" fill="currentColor" opacity="0.2" />
-      <path d="M12 2v0M22 12v0M12 22v0M2 12v0" opacity="0.5" />
-    </svg>
-  );
-}
-
 interface ThemeOption {
   key: Theme;
   label: string;
@@ -47,7 +37,6 @@ interface ThemeOption {
 }
 
 const THEMES: ThemeOption[] = [
-  { key: 'default', label: 'Glass', icon: <GlassIcon />, swatches: ['#132540', '#5a9fd4', '#f0f6ff'] },
   { key: 'light', label: 'Light', icon: <SunIcon />, swatches: ['#f1f5f9', '#1052bc', '#1e293b'] },
   { key: 'dark', label: 'Dark', icon: <MoonIcon />, swatches: ['#080e16', '#5a9fd4', '#cddff0'] },
 ];

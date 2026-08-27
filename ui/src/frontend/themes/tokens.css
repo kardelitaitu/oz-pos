@@ -10,12 +10,11 @@
  *   e.g. --color-bg-elevated, --space-4, --font-size-lg
  *
  * THEMES
- *   Default (:root) is Steel Blue Glassmorphism (Dark)
+ *   Default (:root) is Steel Blue Solid (Dark)
  *   [data-theme="light"] is Steel Blue Elevated (Light)
- *   [data-theme="dark"] is Steel Blue Solid (Dark)
  *   ============================================================ */
 
-/* ── Default Theme (Steel Blue Glassmorphism) ──────────────────── */
+/* ── Default Theme (Steel Blue Solid Dark) ──────────────────────── */
 :root {
   /* ── Font ─────────────────────────────────────── */
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
@@ -51,18 +50,18 @@
   --tracking-wide:   0.02em;
 
   /* ── Colour palette ────────────────────────────── */
-  /* Neutral (Dark Navy Tint) */
-  --neutral-50:  #0d0d14;
-  --neutral-100: #13131c;
-  --neutral-200: #1a1a2e;
-  --neutral-300: #2a2a40;
-  --neutral-400: #475569;
-  --neutral-500: #64748b;
-  --neutral-600: #94a3b8;
-  --neutral-700: #cbd5e1;
-  --neutral-800: #e2e8f0;
-  --neutral-900: #f1f5f9;
-  --neutral-950: #ffffff;
+  /* Neutral — Steel Blue tinted darks for cohesive depth */
+  --neutral-50:  #080e16;
+  --neutral-100: #0e1826;
+  --neutral-200: #152133;
+  --neutral-300: #1f3045;
+  --neutral-400: #2e4560;
+  --neutral-500: #4a6a8a;
+  --neutral-600: #7a9ec0;
+  --neutral-700: #a8c4de;
+  --neutral-800: #cddff0;
+  --neutral-900: #e8f1f9;
+  --neutral-950: #f5f9fd;
 
   /* Brand / Primary — Steel Blue (matches light theme) */
   --primary-50:  #f0f5fa;
@@ -89,46 +88,36 @@
   --danger-800:  #991b1b;
   --info-500:    #3b82f6;
 
-  /* ── Semantic colour tokens (Steel Blue Glassmorphism) ────────────── */
-  /* Radial bloom — extra colour stops for 8-bit GPU banding reduction */
-  --color-bg: radial-gradient(ellipse at 50% -10%,
-    #132540 0%,
-    #111f33 15%,
-    #0e1a2b 28%,
-    #0c1523 40%,
-    #09111d 52%,
-    #070e19 65%,
-    #060c16 78%,
-    #040a12 100%);
-  /* Blue-tinted glass surfaces — hue resonance with the background */
-  --color-bg-elevated:     rgba(16, 82, 188, 0.08);
-  --color-bg-surface:      rgba(16, 82, 188, 0.05);
+  /* ── Semantic colour tokens (Steel Blue Solid) ──────────────────── */
+  --color-bg:              var(--neutral-50);
+  --color-bg-elevated:     var(--neutral-100);
+  --color-bg-surface:      var(--neutral-200);
   --color-bg-overlay:      rgba(0, 0, 0, 0.55);
-  --color-bg-input:        rgba(0, 0, 0, 0.25);
+  --color-bg-input:        var(--neutral-200);
 
-  --color-fg:              #f0f6ff;
-  --color-fg-primary:      #ffffff;
-  --color-fg-secondary:    #a8c4e0;
-  --color-fg-tertiary:     #6b92b4;
-  --color-fg-disabled:     #6b92b4;
+  --color-fg:              var(--neutral-800);
+  --color-fg-primary:      var(--neutral-900);
+  --color-fg-secondary:    var(--neutral-700);
+  --color-fg-tertiary:     var(--neutral-600);
+  --color-fg-disabled:     var(--neutral-600);
   --color-fg-inverse:      #07111d;
 
-  /* Luminous accent — lighter steel blue pops on dark backgrounds */
+  /* Luminous accent for dark surfaces */
   --color-accent:          #5a9fd4;
   --color-accent-hover:    #73b2e0;
   --color-accent-active:   #3d88c4;
-  --color-accent-subtle:   rgba(16, 82, 188, 0.18);
+  --color-accent-subtle:   rgba(16, 82, 188, 0.2);
   --color-accent-fg:       #07111d;
   --color-accent-hover-fg: #07111d;
   --color-accent-active-fg:#07111d;
-  --color-accent-subtle-fg:#f0f6ff;
+  --color-accent-subtle-fg:var(--neutral-800);
 
   /* Blue-tinted borders for hue resonance */
   --color-border:          rgba(90, 159, 212, 0.12);
-  --color-border-hover:    rgba(90, 159, 212, 0.25);
-  --color-border-strong:   rgba(90, 159, 212, 0.35);
+  --color-border-hover:    rgba(90, 159, 212, 0.22);
+  --color-border-strong:   rgba(90, 159, 212, 0.32);
   --color-border-focus:    #5a9fd4;
-  --color-border-subtle:   rgba(16, 82, 188, 0.06);
+  --color-border-subtle:   rgba(16, 82, 188, 0.08);
 
   --color-success:         #4ade80;
   --color-success-bg:      rgba(74, 222, 128, 0.08);
@@ -141,10 +130,7 @@
   --color-danger-bg:       rgba(220, 38, 38, 0.12);
   --color-danger-dim:      #fca5a5;
   --color-danger-fg:       #ffffff;
-  /* Status surface foreground pairs (TBL-11) — contrast-safe text on the
-     status gradients. Dark text on the luminous bright fills used by the
-     default/dark themes; light text on the saturated deep fills of the
-     light theme. */
+  /* Status surface foreground pairs (TBL-11) — dark text on luminous fills. */
   --color-success-fg:      #07111d;
   --color-warning-fg:      #07111d;
   --color-cleaning-fg:     #ffffff;
@@ -155,30 +141,26 @@
   --color-link-hover:      #93c5fd;
   --color-link-visited:    #a78bfa;
 
-  /* Muted foreground + subtle status surfaces (THM-05) — formally ghost
-     tokens that components referenced with hardcoded fallbacks. */
+  /* Muted foreground + subtle status surfaces (THM-05) — dark-theme values. */
   --color-fg-muted:        #94a3b8;
   --color-purple:          #9333ea;
   --color-warning-border:  #ffc107;
   --color-danger-subtle:   #fee2e2;
   --color-warning-subtle:  #fef3c7;
 
-  --color-bg-primary:      var(--neutral-50);
-  --color-bg-secondary:    var(--neutral-100);
-  /* Floating menus/dropdowns/popovers (THM-08) — opaque in EVERY theme so
-     menu text never blends with the content it floats over (--color-bg-surface
-     and --color-bg-elevated are alpha tints in the glass theme). */
+  --color-bg-primary:      var(--neutral-100);
+  --color-bg-secondary:    var(--neutral-200);
+  /* Floating menus/dropdowns/popovers (THM-08) */
   --color-bg-popover:      var(--neutral-200);
-  --color-bg-hover:        rgba(90, 159, 212, 0.1);
+  --color-bg-hover:        rgba(90, 159, 212, 0.08);
 
   --color-accent-dim:      rgba(90, 159, 212, 0.12);
   --color-accent-alpha:    rgba(90, 159, 212, 0.2);
   --color-accent-secondary: #5a9fd4;
 
-  /* Glassmorphism Controls */
-  --blur-amount: 20px;
-  /* Blue-tinted glow shadow for hue-resonant depth */
-  --shadow-glow: 0 8px 32px rgba(4, 10, 18, 0.7), inset 0 1px 0 rgba(90, 159, 212, 0.15);
+  /* Solid dark: no blur, no glow */
+  --blur-amount: 0px;
+  --shadow-glow: none;
 
   /* ── Spacing scale (rem) ───────────────────────── */
   --space-0:   0;
@@ -217,13 +199,13 @@
 
   /* ── Single shadow size (8px) across all levels ─ */
   /* Normal elevation curve: smallest elements get lightest shadow */
-  --shadow-xs:   0 0 12px rgba(4,10,18,0.00);
-  --shadow-sm:   0 0 12px rgba(4,10,18,0.08);
-  --shadow-md:   0 0 12px rgba(4,10,18,0.16);
-  --shadow-lg:   0 0 12px rgba(4,10,18,0.24);
-  --shadow-xl:   0 0 12px rgba(4,10,18,0.32);
-  --shadow-2xl:  0 0 12px rgba(4,10,18,0.40);
-  --shadow-inner: inset 0 2px 4px rgba(4, 10, 18, 0.20);
+  --shadow-xs:   0 0 12px rgba(8,14,22,0.00);
+  --shadow-sm:   0 0 12px rgba(8,14,22,0.08);
+  --shadow-md:   0 0 12px rgba(8,14,22,0.16);
+  --shadow-lg:   0 0 12px rgba(8,14,22,0.24);
+  --shadow-xl:   0 0 12px rgba(8,14,22,0.32);
+  --shadow-2xl:  0 0 12px rgba(8,14,22,0.40);
+  --shadow-inner: inset 0 2px 4px rgba(8, 14, 22, 0.25);
   /* Status-glow shadows — used by ConnectionStatus and status indicators */
   --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
   --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
@@ -293,34 +275,34 @@
   --color-dark-bg-pos:        #0d131f;
   --color-dark-border-pos:    #1f2937;
 
-  /* ── POS Surface Tokens ─── Default = Steel Blue Glassmorphism ── */
-  --color-bg-pos:             var(--color-bg);
+  /* ── POS Surface Tokens ─── Default = Steel Blue Solid ── */
+  --color-bg-pos:             var(--neutral-50);
   --color-ink:                #000000;
   /* Text on POS primary-coloured surfaces — always light for contrast. */
   --color-pos-on-primary:     #ffffff;
 
   /* ── POS Modal Tokens (theme-aware, replaces hardcoded Tailwind greys) ─ */
   --color-pos-modal-overlay:      rgba(0, 0, 0, 0.8);
-  --color-pos-modal-bg:           #111827;
-  --color-pos-modal-border:       #374151;
-  --color-pos-modal-fg:           #f9fafb;
-  --color-pos-modal-heading:      #f9fafb;
-  --color-pos-modal-label:        #9ca3af;
-  --color-pos-modal-input-bg:     #1f2937;
-  --color-pos-modal-input-border: #374151;
-  --color-pos-modal-input-fg:     #f9fafb;
-  --color-pos-modal-btn-bg:       #374151;
-  --color-pos-modal-btn-fg:       #f3f4f6;
-  --color-pos-modal-btn-border:   #4b5563;
-  --color-pos-modal-btn-hover-bg: #4b5563;
-  --color-pos-modal-btn-hover-fg: #ffffff;
+  --color-pos-modal-bg:           var(--neutral-100);
+  --color-pos-modal-border:       var(--neutral-300);
+  --color-pos-modal-fg:           var(--neutral-900);
+  --color-pos-modal-heading:      var(--neutral-900);
+  --color-pos-modal-label:        var(--neutral-600);
+  --color-pos-modal-input-bg:     var(--neutral-200);
+  --color-pos-modal-input-border: var(--neutral-300);
+  --color-pos-modal-input-fg:     var(--neutral-800);
+  --color-pos-modal-btn-bg:       var(--neutral-300);
+  --color-pos-modal-btn-fg:       var(--neutral-800);
+  --color-pos-modal-btn-border:   var(--neutral-400);
+  --color-pos-modal-btn-hover-bg: var(--neutral-400);
+  --color-pos-modal-btn-hover-fg: var(--neutral-950);
   --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.9);
 
   /* ── Toast Tokens (default = dark panel, always-on contrast) ─ */
-  --color-toast-bg:            #1e2535;
-  --color-toast-border:        #374151;
-  --color-toast-fg:            #f9fafb;
-  --color-toast-fg-muted:      #9ca3af;
+  --color-toast-bg:            var(--neutral-100);
+  --color-toast-border:        var(--neutral-300);
+  --color-toast-fg:            var(--neutral-900);
+  --color-toast-fg-muted:      var(--neutral-600);
   --color-toast-hover-bg:      rgba(255, 255, 255, 0.1);
   --color-toast-shadow:        0 10px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
   --color-toast-accent-success: #10b981;
@@ -476,152 +458,6 @@
   --color-toast-accent-error:   #dc2626;
   --color-toast-accent-warning: #d97706;
   --color-toast-accent-info:    #2563eb;
-}
-
-/* ── Dark mode (Steel Blue Solid) ──────────────── */
-[data-theme='dark'] {
-  --blur-amount: 0px;
-  --shadow-glow: none;
-
-  /* Neutral — steel blue tinted darks for cohesive depth */
-  --neutral-50:  #080e16;
-  --neutral-100: #0e1826;
-  --neutral-200: #152133;
-  --neutral-300: #1f3045;
-  --neutral-400: #2e4560;
-  --neutral-500: #4a6a8a;
-  --neutral-600: #7a9ec0;
-  --neutral-700: #a8c4de;
-  --neutral-800: #cddff0;
-  --neutral-900: #e8f1f9;
-  --neutral-950: #f5f9fd;
-
-  /* Brand / Primary — Steel Blue */
-  --primary-50:  #f0f5fa;
-  --primary-100: #dbeafe;
-  --primary-200: #bfdbfe;
-  --primary-300: #93c5fd;
-  --primary-400: #5a9fd4;
-  --primary-500: #2b5c8f;
-  --primary-600: #224b75;
-  --primary-700: #1a3a5c;
-  --primary-800: #122945;
-  --primary-900: #0b1a2e;
-  --primary-950: #060d17;
-
-  /* Semantic tokens (dark solid) */
-  --color-bg:              var(--neutral-50);
-  --color-bg-elevated:     var(--neutral-100);
-  --color-bg-surface:      var(--neutral-200);
-  --color-bg-overlay:      rgba(0, 0, 0, 0.55);
-  --color-bg-input:        var(--neutral-200);
-
-  --color-fg:              var(--neutral-800);
-  --color-fg-primary:      var(--neutral-900);
-  --color-fg-secondary:    var(--neutral-700);
-  --color-fg-tertiary:     var(--neutral-600);
-  --color-fg-disabled:     var(--neutral-600);
-  --color-fg-inverse:      #07111d;
-
-  /* Luminous accent for dark surfaces */
-  --color-accent:          #5a9fd4;
-  --color-accent-hover:    #73b2e0;
-  --color-accent-active:   #3d88c4;
-  --color-accent-subtle:   rgba(16, 82, 188, 0.2);
-  --color-accent-fg:       #07111d;
-  --color-accent-hover-fg: #07111d;
-  --color-accent-active-fg:#07111d;
-  --color-accent-subtle-fg:var(--neutral-800);
-
-  --color-border:          rgba(90, 159, 212, 0.12);
-  --color-border-hover:    rgba(90, 159, 212, 0.22);
-  --color-border-strong:   rgba(90, 159, 212, 0.32);
-  --color-border-focus:    #5a9fd4;
-  --color-border-subtle:   rgba(16, 82, 188, 0.08);
-
-  --color-success:         #4ade80;
-  --color-success-bg:      rgba(74, 222, 128, 0.08);
-  --color-warning:         #fbbf24;
-  --color-warning-bg:      rgba(251, 191, 36, 0.08);
-  --color-danger:          #dc2626;
-  --color-danger-hover:    #b91c1c;
-  --color-danger-bg:       rgba(220, 38, 38, 0.12);
-  --color-danger-fg:       #ffffff;
-  /* Status surface foreground pairs (TBL-11) — same contrast logic as the
-     default theme: dark text on luminous fills. */
-  --color-success-fg:      #07111d;
-  --color-warning-fg:      #07111d;
-  --color-cleaning-fg:     #ffffff;
-  --color-info:            #60a5fa;
-  --color-info-bg:         rgba(96, 165, 250, 0.08);
-
-  --color-link:            #73b2e0;
-  --color-link-hover:      #93c5fd;
-  --color-link-visited:    #a78bfa;
-
-  /* Muted foreground + subtle status surfaces (THM-05) — dark-theme values. */
-  --color-fg-muted:        #94a3b8;
-  --color-purple:          #9333ea;
-  --color-warning-border:  #ffc107;
-  --color-danger-subtle:   #fee2e2;
-  --color-warning-subtle:  #fef3c7;
-
-  --color-bg-primary:      var(--neutral-100);
-  --color-bg-secondary:    var(--neutral-200);
-  --color-bg-popover:      var(--neutral-200);
-  --color-bg-hover:        rgba(90, 159, 212, 0.08);
-
-  --color-accent-dim:      rgba(90, 159, 212, 0.12);
-  --color-accent-alpha:    rgba(90, 159, 212, 0.2);
-  --color-accent-secondary: #5a9fd4;
-
-  /* Shadows — single size (8px), normal elevation curve */
-  --shadow-xs:   0 0 12px rgba(8,14,22,0.00);
-  --shadow-sm:   0 0 12px rgba(8,14,22,0.08);
-  --shadow-md:   0 0 12px rgba(8,14,22,0.16);
-  --shadow-lg:   0 0 12px rgba(8,14,22,0.24);
-  --shadow-xl:   0 0 12px rgba(8,14,22,0.32);
-  --shadow-2xl:  0 0 12px rgba(8,14,22,0.40);
-  --shadow-inner: inset 0 2px 4px rgba(8, 14, 22, 0.25);
-  /* Status-glow shadows */
-  --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
-  --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
-  --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
-
-  /* ── POS Surface Tokens (Dark = Steel Blue Solid) ──────────── */
-  --color-bg-pos:             var(--neutral-50);
-  --color-ink:                #000000;
-  /* Text on POS primary-coloured surfaces — always light for contrast. */
-  --color-pos-on-primary:     #ffffff;
-
-  /* ── POS Modal Tokens (dark) ─ */
-  --color-pos-modal-overlay:      rgba(0, 0, 0, 0.8);
-  --color-pos-modal-bg:           var(--neutral-100);
-  --color-pos-modal-border:       var(--neutral-300);
-  --color-pos-modal-fg:           var(--neutral-900);
-  --color-pos-modal-heading:      var(--neutral-900);
-  --color-pos-modal-label:        var(--neutral-600);
-  --color-pos-modal-input-bg:     var(--neutral-200);
-  --color-pos-modal-input-border: var(--neutral-300);
-  --color-pos-modal-input-fg:     var(--neutral-800);
-  --color-pos-modal-btn-bg:       var(--neutral-300);
-  --color-pos-modal-btn-fg:       var(--neutral-800);
-  --color-pos-modal-btn-border:   var(--neutral-400);
-  --color-pos-modal-btn-hover-bg: var(--neutral-400);
-  --color-pos-modal-btn-hover-fg: var(--neutral-950);
-  --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.9);
-
-  /* ── Toast Tokens (dark = dark panel, always-on contrast) ─ */
-  --color-toast-bg:            var(--neutral-100);
-  --color-toast-border:        var(--neutral-300);
-  --color-toast-fg:            var(--neutral-900);
-  --color-toast-fg-muted:      var(--neutral-600);
-  --color-toast-hover-bg:      rgba(255, 255, 255, 0.1);
-  --color-toast-shadow:        0 10px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
-  --color-toast-accent-success: #10b981;
-  --color-toast-accent-error:   #ef4444;
-  --color-toast-accent-warning: #f59e0b;
-  --color-toast-accent-info:    #3b82f6;
 }
 
 /* ── Smooth theme transitions ──────────────────── */

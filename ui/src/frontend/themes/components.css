@@ -692,10 +692,6 @@
   align-items: center;
   justify-content: center;
   background: var(--color-pos-modal-overlay);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  will-change: backdrop-filter;
-  transform: translateZ(0);
   animation: modal-fade-in var(--duration-300) var(--ease-out);
 }
 

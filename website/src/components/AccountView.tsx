@@ -248,7 +248,7 @@ export default function AccountView({ locale }: Props) {
         <p className="text-muted">{t(locale, 'account.notSignedIn')}</p>
         <a
           href={`/${locale}/login`}
-          className="mt-4 inline-block rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-black transition hover:opacity-90"
+          className="mt-4 inline-block rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
         >
           {t(locale, 'account.signIn')}
         </a>
@@ -373,7 +373,7 @@ export default function AccountView({ locale }: Props) {
             <button
               type="submit"
               disabled={pwSaving || !isStrongPassword(pw) || !passwordsMatch(pw, pwConfirm)}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
             >
               {pwSaving ? '…' : t(locale, 'account.passwordSave')}
             </button>
@@ -437,7 +437,7 @@ export default function AccountView({ locale }: Props) {
                 type="button"
                 onClick={() => void subscribe(bundleYearly?.priceId ?? '', 'plus', plusBundle.id)}
                 disabled={subscribing !== null}
-                className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+                className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
               >
                 {subscribing === 'plus' ? '…' : t(locale, 'account.bundleUpgrade')}
               </button>
@@ -463,7 +463,7 @@ export default function AccountView({ locale }: Props) {
                     type="button"
                     onClick={() => void subscribe(plan.priceId, plan.tierKey)}
                     disabled={subscribing !== null}
-                    className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+                    className="mt-3 block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
                   >
                     {subscribing === plan.tierKey ? '…' : t(locale, 'account.subscribe')}
                   </button>

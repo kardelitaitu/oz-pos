@@ -17,16 +17,17 @@ const home = getRelativeLocaleUrl(locale, '/');
 const login = getRelativeLocaleUrl(locale, 'login');
 ---
 
-<header class="sticky top-0 z-40 border-b border-ink/5 bg-primary/90 backdrop-blur">
+<header class="sticky top-0 z-40 border-b border-ink/10 bg-surface/90 backdrop-blur">
   <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
     <a href={home} class="text-lg font-bold tracking-tight" aria-label={t(locale, 'nav.homeAria')}>
-      <span class="text-accent">OZ</span>-POS
+      <span class="text-primary">OZ</span>-POS
     </a>
     <nav class="hidden items-center gap-6 md:flex" aria-label={t(locale, 'nav.mainNav')}>
       {
         nav.map((item) => (
-          <a href={item.href} class="text-sm text-muted transition hover:text-ink">
+          <a href={item.href} class="nav-link relative text-sm text-muted transition-colors duration-200 hover:text-ink">
             {item.label}
+            <span class="nav-underline absolute -bottom-1 left-0 h-0.5 w-0 bg-primary rounded-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]"></span>
           </a>
         ))
       }
@@ -36,7 +37,7 @@ const login = getRelativeLocaleUrl(locale, 'login');
       <LocaleSwitcher />
       <a
         href={login}
-        class="hidden rounded-md bg-accent px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90 sm:inline-block"
+        class="hidden rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary sm:inline-block opacity-90 hover:opacity-100"
       >
         {t(locale, 'nav.login')}
       </a>
@@ -66,7 +67,7 @@ const login = getRelativeLocaleUrl(locale, 'login');
           }
           <a
             href={login}
-            class="mt-1 block rounded-md bg-accent px-3 py-2 text-center text-sm font-semibold text-black transition hover:opacity-90"
+            class="mt-1 block rounded-md bg-primary px-3 py-2 text-center text-sm font-semibold text-white transition opacity-90 hover:opacity-100"
           >
             {t(locale, 'nav.login')}
           </a>

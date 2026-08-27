@@ -14,13 +14,13 @@ const price = tier.prices.yearly;
 
 <article
   class:list={[
-    'flex flex-col rounded-xl border p-6',
-    tier.highlight ? 'border-accent bg-surface' : 'border-ink/10 bg-surface/40',
+    'pricing-card flex flex-col rounded-xl border p-6 transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)]',
+    tier.highlight ? 'border-accent bg-surface hover:shadow-lg hover:-translate-y-1' : 'border-ink/10 bg-surface/40 hover:border-ink/20 hover:shadow-md hover:-translate-y-0.5',
   ]}
 >
   {
     tier.highlight && (
-      <span class="mb-3 inline-flex w-fit items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-black">
+      <span class="mb-3 inline-flex w-fit items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-white">
         {t(locale, 'pricingPage.mostPopular')}
       </span>
     )

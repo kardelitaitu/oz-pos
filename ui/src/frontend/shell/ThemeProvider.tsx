@@ -17,8 +17,8 @@ import { deriveAccentPalette, applyAccentPalette, applyThemeContrasts } from '@/
 
 // ── Types ──────────────────────────────────────────────────────────
 
-/** Application colour-scheme theme. */
-export type Theme = 'default' | 'light' | 'dark';
+/** Application colour-scheme theme — exactly two: light and dark. */
+export type Theme = 'light' | 'dark';
 
 interface ThemeContextValue {
   /** Current resolved theme. */
@@ -44,23 +44,26 @@ interface ThemeProviderProps {
 /**
  * Provides the active theme and a toggle function to the component
  * tree. On first render it reads the persisted override from
- * `localStorage` and otherwise falls back to the default (dark glass)
- * theme — it deliberately does NOT follow the OS `prefers-color-scheme`,
+ * `localStorage` and otherwise falls back to the default dark theme —
+ * it deliberately does NOT follow the OS `prefers-color-scheme`,
  * because the default theme is itself dark regardless of the OS.
  *
  * Sets `data-theme` on `<html>` so the CSS theme selectors work
- * (`:root:not([data-theme='light'])` covers default + dark).
+ * (`:root` is dark; `[data-theme='light']` overrides to light).
+ * Legacy `oz-pos-theme-v4` values of `'default'` are migrated to
+ * `'dark'` (the old glass default is gone — dark is now solid).
  * Also reactively applies the brand accent palette from BrandContext
  * whenever the primary colour changes.
  */
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(() => {
-    // 1. Check localStorage
+    // 1. Check localStorage (migrate legacy 'default' → 'dark')
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'default' || stored === 'light' || stored === 'dark') return stored as Theme;
-
-    // 2. Fall back to default theme
-    return 'default';
+    if (stored === 'light') return 'light';
+    if (stored === 'dark') return 'dark';
+    if (stored === 'default') return 'dark'; // legacy glass default → solid dark
+    // 2. Fall back to dark theme
+    return 'dark';
   });
 
   // Sync `data-theme` attribute and localStorage whenever theme changes.
@@ -71,12 +74,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
     // Add transitioning class to animate the theme change.
     html.classList.add('is-theme-transitioning');
-    if (theme === 'default') {
-      html.removeAttribute('data-theme');
-    } else {
-      html.setAttribute('data-theme', theme);
-    }
-    
+    html.setAttribute('data-theme', theme);
+
     localStorage.setItem(STORAGE_KEY, theme);
 
     // Remove the class after transitions complete so subsequent
@@ -108,11 +107,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [brandSettings.primary_colour]);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => {
-      if (prev === 'default') return 'light';
-      if (prev === 'light') return 'dark';
-      return 'default';
-    });
+    setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
   }, []);
 
   const setTheme = useCallback((t: Theme) => {

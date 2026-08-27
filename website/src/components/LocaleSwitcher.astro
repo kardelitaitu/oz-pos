@@ -3,31 +3,66 @@ import { getRelativeLocaleUrl } from 'astro:i18n';
 import { locales, t } from '../i18n';
 
 const locale = (Astro.currentLocale ?? 'en') as 'en' | 'id';
-// Strip the locale prefix so the toggle keeps the same page in the other locale.
 const path = Astro.url.pathname.replace(/^\/(?:en|id)(?:\/|$)/, '');
-// The 404 page is served at /404 (no locale prefix; Astro builds it from
-// /404, /404/, or /404.html depending on version). Linking the toggle to
-// /en/404/ or /id/404/ would point at non-existent pages — fall back home.
 const target = !path || path.replace(/^\/+/, '').startsWith('404') ? '/' : path;
+const activeIndex = locales.indexOf(locale);
 ---
 
 <div
-  class="flex items-center rounded-full border border-ink/10 bg-primary p-0.5"
+  class="lang-switcher relative flex items-center rounded-lg p-[3px] bg-ghost-bg"
   role="group"
   aria-label={t(locale, 'nav.language')}
+  data-active-index={activeIndex}
 >
+  <!-- Sliding blue pill indicator — design-language: ms-indicator -->
+  <div
+    class="pill absolute top-[3px] bottom-[3px] rounded-lg bg-primary transition-all duration-[280ms] ease-[cubic-bezier(0.33,1,0.68,1)]"
+    style={`left: calc(${activeIndex} * 50% + 3px); width: calc(50% - 3px);`}
+    aria-hidden="true"
+  ></div>
+
   {
-    locales.map((code) => (
+    locales.map((code, i) => (
       <a
         href={getRelativeLocaleUrl(code, target)}
         aria-current={locale === code ? 'page' : undefined}
         class:list={[
-          'rounded-full px-3 py-1.5 text-xs font-semibold transition',
-          locale === code ? 'bg-accent text-black' : 'text-muted hover:text-ink',
+          'relative z-10 flex-1 px-[9px] py-[5px] rounded-lg text-[13px] font-semibold transition-opacity duration-200 text-center',
+          locale === code ? 'text-white opacity-100' : 'text-muted opacity-50 hover:opacity-100',
         ]}
+        data-index={i}
       >
         {code.toUpperCase()}
       </a>
     ))
   }
 </div>
+
+<script>
+  function initLangSwitcher() {
+    const switcher = document.querySelector('.lang-switcher') as HTMLElement | null;
+    if (!switcher) return;
+
+    const pill = switcher.querySelector('.pill') as HTMLElement | null;
+    const links = switcher.querySelectorAll('a[data-index]');
+    if (!pill || !links.length) return;
+
+    function updatePillPosition(index: number) {
+      // Fixed 50% positioning: each option takes half the track
+      pill!.style.left = `calc(${index} * 50% + 3px)`;
+      pill!.style.width = 'calc(50% - 3px)';
+    }
+
+    // On click: slide pill to the clicked option
+    links.forEach((link) => {
+      link.addEventListener('click', () => {
+        const idx = parseInt((link as HTMLElement).dataset.index || '0');
+        switcher.dataset.activeIndex = String(idx);
+        updatePillPosition(idx);
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', initLangSwitcher);
+  document.addEventListener('astro:page-load', initLangSwitcher);
+</script>

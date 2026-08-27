@@ -12,13 +12,11 @@
 
 .create-pin-card {
   background: var(--color-bg-elevated);
-  backdrop-filter: blur(1.25rem);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-3xl);
   padding: var(--space-12);
   width: 100%;
   max-width: 31.25rem;
-  box-shadow: var(--shadow-glow);
 }
 
 @media (prefers-reduced-motion: no-preference) {

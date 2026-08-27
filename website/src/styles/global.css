@@ -1,54 +1,263 @@
 @import "tailwindcss";
 
-/* Design tokens — absolute black + Freebuff-style lime accent
-   (website-plan.md §9; ink = the plan's --color-text).
-   Dark is the DEFAULT theme regardless of OS preference; a light theme is
-   layered on via :root[data-theme="light"] (set by the ThemeToggle header
-   icon + a small inline script in each layout head, stored in localStorage).
-   Components use ink/* utilities for borders and faint fills (never
-   white/*) so they adapt to both themes automatically. */
+/* ── OZ-POS Design Language Tokens ─────────────────────────────
+   Applied from dev/design-language.html (UX Guidelines).
+   Light is the DEFAULT theme; dark is layered via [data-theme="dark"].
+   Components consume semantic tokens only — never raw hex. */
 @theme {
-  --color-primary: #000000;
-  --color-surface: #0a0a0a;
-  --color-accent: #7cff3f;
-  /* link/text accent — same lime in dark, darker green in light so links
-     and labels keep WCAG AA contrast on white (see light override below) */
-  --color-link: #7cff3f;
-  --color-ink: #ffffff;
-  --color-muted: #a1a1a1;
+  /* Brand colors */
+  --color-blue: #147EFB;
+  --color-sky: #5FC9F8;
+  --color-yellow: #FECB2E;
+  --color-orange: #FD9426;
+  --color-pink: #FC3158;
+  --color-green: #53D769;
+  --color-red: #FC3D39;
+  --color-gray: #8E8E93;
+  /* Semantic — light theme (default) */
+  --color-primary: #147EFB;
+  --color-primary-hover: #1168D4;
+  --color-success: #53D769;
+  --color-danger: #FC3D39;
+  --color-warning: #FD9426;
+  --color-info: #5FC9F8;
+  --color-alert: #FC3158;
+  --color-accent: #FECB2E; /* Yellow — decorative only, never for actions */
+  /* Surfaces — light */
+  --color-bg: #F4F5F7;
+  --color-surface: #FFFFFF;
+  --color-ghost-bg: #F0F1F3;
+  --color-chip-bg: #E8E9EC;
+  --color-border: #DFE1E6;
+  /* Text — light */
+  --color-ink: #1A1D23;
+  --color-muted: #8E8E93;
+  --color-link: #147EFB;
+  /* Callout variants */
+  --callout-info: #5FC9F8;
+  --callout-warning: #FD9426;
+  --callout-tip: #53D769;
+  --callout-danger: #FC3D39;
 }
 
-/* Form controls and scrollbars match the active theme. */
 :root {
-  color-scheme: dark;
-  /* callout variant colors (dark values; overridden for light below) */
-  --callout-info: #38bdf8;
-  --callout-warning: #fbbf24;
-  --callout-tip: #34d399;
-  --callout-danger: #f87171;
+  color-scheme: light;
+  /* Inter font stack */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
+  /* Spacing (4px base) */
+  --sp-1: 0.25rem;  /* 4px */
+  --sp-2: 0.5rem;   /* 8px */
+  --sp-3: 0.75rem;  /* 12px */
+  --sp-4: 1rem;     /* 16px */
+  --sp-5: 1.5rem;   /* 24px */
+  --sp-6: 2rem;     /* 32px */
+  --sp-7: 2.5rem;   /* 40px */
+  --sp-8: 3rem;     /* 48px */
+  --sp-10: 4rem;    /* 64px */
+  /* Border radius */
+  --r-sm: 8px;
+  --r-md: 10px;
+  --r-lg: 12px;
+  --r-pill: 999px;
+  /* Elevation / shadows — from design-language.html */
+  --shadow-sm: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1);
+  --shadow-md: 0 4px 6px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.06);
+  --shadow-lg: 0 10px 15px rgba(16,24,40,.08), 0 4px 6px rgba(16,24,40,.05);
+  /* Tooltip */
+  --tooltip-bg: #1A1D23;
+  /* Tailwind utility aliases — map old names to design language tokens
+     so existing bg-accent, text-muted, border-ink/* classes keep working */
+  --color-accent: #147EFB; /* Alias: accent tokens map to primary for backwards compat */
+  --color-link: #147EFB;
 }
 
-:root[data-theme="light"] {
-  color-scheme: light;
-  --color-primary: #ffffff;
-  --color-surface: #fafafa;
-  /* darker green — the lime is unreadable as text on white. The accent stays
-     green-600 for BUTTON backgrounds (black text reads well); --color-link is
-     green-700 so text keeps AA contrast (≥4.5:1) on white. */
-  --color-accent: #16a34a;
-  --color-link: #15803d;
-  --color-ink: #0a0a0a;
-  --color-muted: #525252;
-  /* callout label colors darkened to ≥4.5:1 on white */
-  --callout-info: #0369a1;
-  --callout-warning: #b45309;
-  --callout-tip: #047857;
-  --callout-danger: #dc2626;
+/* ── Dark theme overrides ─────────────────────────────────────── */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-primary: #147EFB;
+  --color-primary-hover: #1A8FFF;
+  --color-success: #6FE884;
+  --color-danger: #FF6B68;
+  --color-warning: #FFA94D;
+  --color-info: #7DD6FB;
+  --color-alert: #FC3158;
+  /* Surfaces — dark (inverted ladder: lighter surfaces on dark page) */
+  --color-bg: #12141A;
+  --color-surface: #1C1F27;
+  --color-ghost-bg: #262A34;
+  --color-chip-bg: #2A2E39;
+  --color-border: #2A2E39;
+  /* Text — dark */
+  --color-ink: #E8EAEF;
+  --color-muted: #8B93A3;
+  --color-link: #147EFB;
+  /* Tooltip */
+  --tooltip-bg: #3A3F4C;
+  /* Callout variants (brighter for dark bg) */
+  --callout-info: #7DD6FB;
+  --callout-warning: #FFA94D;
+  --callout-tip: #6FE884;
+  --callout-danger: #FF6B68;
+  /* Tailwind utility aliases — dark mode overrides */
+  --color-accent: #1A8FFF;
+  --color-link: #147EFB;
+}
+
+/* ── Base typography (design language) ────────────────────────── */
+body {
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-ink);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.35s cubic-bezier(0.2, 0, 0, 1), color 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Smooth crossfade for themed elements — design language: slow = 350ms.
+   Only animate transform/opacity per design language (GPU compositor).
+   background-color and color are theme-critical, so we allow them but keep
+   durations within the slow token (350ms). */
+header, main, footer, section, nav, div, span, p, h1, h2, h3, h4, a, button, article {
+  transition: background-color 0.35s cubic-bezier(0.2, 0, 0, 1), color 0.35s cubic-bezier(0.2, 0, 0, 1), border-color 0.35s cubic-bezier(0.2, 0, 0, 1), opacity 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Theme transitions always run — reduced motion only disables non-essential animations. */
+
+/* Button press feedback — design language: fast = 120ms, scale .97 */
+.btn-press {
+  transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 120ms ease;
+}
+.btn-press:hover {
+  transform: scale(1.03);
+}
+.btn-press:active {
+  transform: scale(0.97);
+  transition-duration: 60ms;
+}
+
+/* Nav link underline animation — design language: base = 200ms */
+.nav-link:hover .nav-underline {
+  width: 100%;
+}
+
+/* Scroll-reveal animation — design language: slow = 350ms, standard easing */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.35s cubic-bezier(0.2, 0, 0, 1), transform 0.35s cubic-bezier(0.2, 0, 0, 1);
+}
+[data-reveal].revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Footer link underline animation — design language: base = 200ms */
+.footer-link:hover .footer-underline {
+  width: 100%;
+}
+
+/* ═══ Design Language Component Styles ═══════════════════════════════════
+   Forms, inputs, buttons, toggles, cards, badges, alerts, and tooltips.
+   All built from semantic tokens only — never raw hex. */
+
+/* ── Form Inputs ──────────────────────────────────────────────────────── */
+input, textarea, select {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--r-sm);
+  height: 36px;
+  padding: 0 0.75rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+input::placeholder, textarea::placeholder {
+  color: var(--color-muted);
+}
+input:focus, input:focus-visible,
+textarea:focus, textarea:focus-visible,
+select:focus, select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-color: var(--primary);
+}
+/* Checkbox and radio: use accent-color, suppress outer focus ring */
+input[type="checkbox"]:focus, input[type="radio"]:focus,
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--primary);
+}
+/* Disabled inputs */
+input:disabled, textarea:disabled, select:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  background: var(--color-ghost-bg);
+}
+/* Validation states */
+input.validate { border-width: 2px; transition: border-color 0.2s ease; }
+input.validate:focus { border-color: var(--primary) !important; outline: 2px solid var(--primary); outline-offset: -2px; }
+input.input-field--error { border-color: var(--danger); }
+input.input-field--success { border-color: var(--success); }
+input.input-field--warning { border-color: var(--warning); }
+/* Textarea */
+textarea {
+  height: auto;
+  min-height: 80px;
+  padding: 0.5rem 0.75rem;
+  resize: vertical;
+}
+/* Range slider */
+input[type="range"] {
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  border: none;
+  background: var(--color-chip-bg);
+}
+input[type="range"]:focus { outline: none; box-shadow: none; }
+
+/* ── Toggle Switch ────────────────────────────────────────────────────── */
+/* Track: 2.5rem × 1.375rem, knob: 1.125rem, bounce easing */
+input[role="switch"]:checked ~ .toggle-track {
+  background: var(--primary);
+}
+input[role="switch"]:checked ~ .toggle-knob {
+  transform: translateX(1.125rem);
+}
+
+/* ── Buttons (design language emphasis ladder) ─────────────────────────── */
+/* Disabled = 45% opacity + pointer-events: none */
+button:disabled, a[aria-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+/* Focus ring for keyboard navigation */
+button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+/* Global press feedback — design language: fast = 120ms, scale .97 */
+button:not(:disabled):active {
+  transform: scale(0.97);
+  transition: transform 60ms ease;
+}
+
+/* ── Tooltip ──────────────────────────────────────────────────────────── */
+:root {
+  --tooltip-arrow: var(--tooltip-bg);
 }
 
 /* Theme toggle icon: both icons overlap absolutely inside the button;
-   the moon shows in dark mode and the sun in light mode, cross-fading
-   with a slight rotate/scale on the incoming icon. */
+   the sun shows in light mode (default) and the moon in dark mode,
+   cross-fading with a slight rotate/scale on the incoming icon. */
 .theme-toggle {
   position: relative;
 }
@@ -56,28 +265,44 @@
   position: absolute;
   inset: 0;
   margin: auto;
-  transition: opacity 200ms ease, transform 300ms ease;
+  transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1), transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.theme-toggle .icon-moon {
+/* Light is default: sun visible, moon hidden */
+.theme-toggle .icon-sun {
   opacity: 1;
   transform: rotate(0deg) scale(1);
 }
-.theme-toggle .icon-sun {
-  opacity: 0;
-  transform: rotate(90deg) scale(0.5);
-}
-:root[data-theme="light"] .theme-toggle .icon-moon {
+.theme-toggle .icon-moon {
   opacity: 0;
   transform: rotate(-90deg) scale(0.5);
 }
-:root[data-theme="light"] .theme-toggle .icon-sun {
+/* Dark mode: moon visible, sun hidden */
+:root[data-theme="dark"] .theme-toggle .icon-moon {
   opacity: 1;
   transform: rotate(0deg) scale(1);
 }
+:root[data-theme="dark"] .theme-toggle .icon-sun {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.5);
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .theme-toggle svg {
-    transition: none;
+  /* Design language rule 09: honor reduced motion — collapse durations to 0,
+     skip entrance/spin/shake, but the after-state must still confirm. */
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  [data-reveal].revealed {
+    opacity: 1;
+    transform: none;
   }
 }
 

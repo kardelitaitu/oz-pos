@@ -70,19 +70,25 @@ describe('ThemeProvider', () => {
 
   // ── Initial theme detection ────────────────────────────────────
 
-  it('defaults to default theme when localStorage is empty and OS is light', () => {
+  it('defaults to dark theme when localStorage is empty and OS is light', () => {
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
-    expect(result.current.theme).toBe('default');
+    expect(result.current.theme).toBe('dark');
   });
 
-  it('defaults to default theme even when prefers-color-scheme is dark', () => {
+  it('defaults to dark theme even when prefers-color-scheme is dark', () => {
     setMatchMedia(true);
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
-    expect(result.current.theme).toBe('default');
+    expect(result.current.theme).toBe('dark');
   });
 
   it('reads stored theme from localStorage', () => {
     localStorage.setItem(STORAGE_KEY, 'dark');
+    const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
+    expect(result.current.theme).toBe('dark');
+  });
+
+  it('migrates legacy default value to dark', () => {
+    localStorage.setItem(STORAGE_KEY, 'default');
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
     expect(result.current.theme).toBe('dark');
   });
@@ -96,27 +102,19 @@ describe('ThemeProvider', () => {
 
   // ── toggleTheme ────────────────────────────────────────────────
 
-  it('toggleTheme switches from default to light', () => {
+  it('toggleTheme switches from dark to light', () => {
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
-    expect(result.current.theme).toBe('default');
+    expect(result.current.theme).toBe('dark');
     act(() => result.current.toggleTheme());
     expect(result.current.theme).toBe('light');
   });
 
-  it('toggleTheme switches from light to dark', () => {
+  it('toggleTheme switches from light back to dark', () => {
     localStorage.setItem(STORAGE_KEY, 'light');
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
     expect(result.current.theme).toBe('light');
     act(() => result.current.toggleTheme());
     expect(result.current.theme).toBe('dark');
-  });
-
-  it('toggleTheme switches from dark to default', () => {
-    localStorage.setItem(STORAGE_KEY, 'dark');
-    const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
-    expect(result.current.theme).toBe('dark');
-    act(() => result.current.toggleTheme());
-    expect(result.current.theme).toBe('default');
   });
 
   // ── setTheme ───────────────────────────────────────────────────
@@ -136,20 +134,20 @@ describe('ThemeProvider', () => {
 
   // ── DOM side-effects ───────────────────────────────────────────
 
-  it('removes data-theme attribute on html element for default theme', () => {
+  it('sets data-theme="dark" on html element by default', () => {
     const html = document.documentElement;
     render(
       <BrandProvider>
         <ThemeProvider><div /></ThemeProvider>
       </BrandProvider>,
     );
-    expect(html.hasAttribute('data-theme')).toBe(false);
+    expect(html.getAttribute('data-theme')).toBe('dark');
   });
 
   it('updates data-theme when theme changes', () => {
     const html = document.documentElement;
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
-    act(() => result.current.toggleTheme()); // default -> light
+    act(() => result.current.toggleTheme()); // dark -> light
     expect(html.getAttribute('data-theme')).toBe('light');
   });
 

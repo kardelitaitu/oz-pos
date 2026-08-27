@@ -127,7 +127,7 @@ describe('Theme CSS Token Regression', () => {
 
   // ── Token resolution per theme ──────────────────────────────────
 
-  it('all core CSS tokens resolve to a defined value under default theme', () => {
+  it('all core CSS tokens resolve to a defined value under dark theme', () => {
     const html = document.documentElement;
     // With injected styles, getComputedStyle should resolve the tokens.
     for (const token of THEME_TOKENS) {
@@ -175,18 +175,14 @@ describe('Theme CSS Token Regression', () => {
     const html = document.documentElement;
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
 
-    // Start: default → no data-theme
-    expect(html.hasAttribute('data-theme')).toBe(false);
+    // Start: dark → data-theme="dark"
+    expect(html.getAttribute('data-theme')).toBe('dark');
 
-    // Cycle through all themes.
     act(() => result.current.setTheme('light'));
     expect(html.getAttribute('data-theme')).toBe('light');
 
     act(() => result.current.setTheme('dark'));
     expect(html.getAttribute('data-theme')).toBe('dark');
-
-    act(() => result.current.setTheme('default'));
-    expect(html.hasAttribute('data-theme')).toBe(false);
   });
 
   it('theme switching toggles localStorage correctly', () => {
@@ -197,9 +193,6 @@ describe('Theme CSS Token Regression', () => {
 
     act(() => result.current.setTheme('light'));
     expect(localStorage.getItem(STORAGE_KEY)).toBe('light');
-
-    act(() => result.current.setTheme('default'));
-    expect(localStorage.getItem(STORAGE_KEY)).toBe('default');
   });
 
   // ── Theme persists across re-mounts ─────────────────────────────
@@ -212,12 +205,10 @@ describe('Theme CSS Token Regression', () => {
 
   // ── Common components render under each theme without errors ────
 
-  it.each(['default', 'light', 'dark'] as const)(
+  it.each(['light', 'dark'] as const)(
     'renders themed UI elements without error under %s theme',
     (theme) => {
-      if (theme !== 'default') {
-        localStorage.setItem(STORAGE_KEY, theme);
-      }
+      localStorage.setItem(STORAGE_KEY, theme);
       const html = document.documentElement;
 
       render(
@@ -231,11 +222,7 @@ describe('Theme CSS Token Regression', () => {
       );
 
       // Verify theme attribute.
-      if (theme === 'default') {
-        expect(html.hasAttribute('data-theme')).toBe(false);
-      } else {
-        expect(html.getAttribute('data-theme')).toBe(theme);
-      }
+      expect(html.getAttribute('data-theme')).toBe(theme);
 
       // Verify elements render.
       expect(screen.getByTestId('themed-btn')).toBeInTheDocument();

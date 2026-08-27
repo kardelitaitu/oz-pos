@@ -125,7 +125,7 @@ export default function CheckoutButton({ tier, locale }: Props) {
         type="button"
         onClick={() => void handleClick()}
         disabled={loading}
-        className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
+        className="block w-full rounded-md bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
       >
         {loading ? '…' : mounted && hasSession() ? tier.cta : t(locale, 'checkout.signInToSubscribe')}
       </button>
