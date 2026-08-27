@@ -4,6 +4,7 @@ import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import { clearSession, getSessionEmail, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout } from './paddle';
 import { openMidtransCheckout } from './midtrans';
+import { type Region, getRegion, setRegion } from '../lib/region';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -123,6 +124,10 @@ export default function AccountView({ locale }: Props) {
   const [pwConfirm, setPwConfirm] = useState('');
   const [pwMsg, setPwMsg] = useState<'idle' | 'saved' | 'error'>('idle');
   const [pwSaving, setPwSaving] = useState(false);
+  // Region state
+  const [region, setRegionState] = useState<Region>(() => getRegion());
+  const [regionMsg, setRegionMsg] = useState(false);
+  const [regionOpen, setRegionOpen] = useState(false);
 
   useEffect(() => {
     if (!API) {
@@ -378,6 +383,67 @@ export default function AccountView({ locale }: Props) {
               {pwSaving ? '…' : t(locale, 'account.passwordSave')}
             </button>
           </form>
+        </section>
+      )}
+
+      {/* Region selector */}
+      {tenant && (
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6" aria-label={t(locale, 'account.region')}>
+          <h2 className="text-lg font-semibold">{t(locale, 'account.region')}</h2>
+          <p className="mt-1 text-sm text-muted">{t(locale, 'account.regionHint')}</p>
+          <div className="relative mt-3">
+            <button
+              type="button"
+              onClick={() => setRegionOpen(!regionOpen)}
+              onBlur={() => setTimeout(() => setRegionOpen(false), 150)}
+              className="w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-left outline-none transition focus:border-accent flex items-center justify-between"
+            >
+              <span className="flex items-center gap-2">
+                <span>{region === 'id' ? '🇮🇩' : '🌍'}</span>
+                <span>{t(locale, region === 'id' ? 'signup.regionIndonesia' : 'signup.regionGlobal')}</span>
+              </span>
+              <svg
+                className={`w-4 h-4 text-muted transition-transform duration-200 ${regionOpen ? 'rotate-180' : ''}`}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="4 6 8 10 12 6" />
+              </svg>
+            </button>
+            {regionOpen && (
+              <div className="absolute z-50 mt-1 w-full rounded-md border border-ink/10 bg-primary shadow-lg overflow-hidden">
+                {([
+                  { value: 'global' as Region, flag: '🌍', label: t(locale, 'signup.regionGlobal') },
+                  { value: 'id' as Region, flag: '🇮🇩', label: t(locale, 'signup.regionIndonesia') },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setRegionState(opt.value);
+                      setRegion(opt.value);
+                      setRegionOpen(false);
+                      setRegionMsg(true);
+                      setTimeout(() => setRegionMsg(false), 3000);
+                    }}
+                    className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors duration-150 ${
+                      region === opt.value ? 'bg-accent/10 text-link font-medium' : 'text-ink hover:bg-ink/5'
+                    }`}
+                  >
+                    <span>{opt.flag}</span>
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {regionMsg && (
+            <p className="mt-2 text-sm text-link" role="status">{t(locale, 'account.regionSaved')}</p>
+          )}
         </section>
       )}
 
