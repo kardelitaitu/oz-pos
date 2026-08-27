@@ -40,7 +40,7 @@ interface BrandProviderProps {
  * AppearanceSettings can trigger a re-fetch after saving.
  */
 const DEFAULT_SETTINGS: BrandSettings = {
-  primary_colour: '#10b981',
+  primary_colour: '#147EFB',
   logo_path: null,
   store_name: '',
 };

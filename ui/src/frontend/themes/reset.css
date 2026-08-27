@@ -112,12 +112,12 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;
-  border-color: var(--color-border-focus, #10b981);
+  border-color: var(--color-border-focus, #3b82f6);
 }
 
 /* ── Focus ring (keyboard only) ────────────────── */
 :focus-visible {
-  outline: 2px solid var(--color-border-focus, #10b981);
+  outline: 2px solid var(--color-border-focus, #3b82f6);
   outline-offset: 2px;
 }
 
@@ -180,7 +180,7 @@ pre {
 
 /* ── Selection ─────────────────────────────────── */
 ::selection {
-  background: var(--color-accent, #10b981);
+  background: var(--color-accent, #147EFB);
   color: var(--color-fg-inverse, #ffffff);
 }
 

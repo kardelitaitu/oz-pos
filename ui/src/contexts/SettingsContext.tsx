@@ -106,7 +106,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     hasApiKey: false,
     enabled: false,
   },
-  brand: { colour: '#10b981', storeName: '' },
+  brand: { colour: '#147EFB', storeName: '' },
   preferences: { cardSize: 0, fontSize: 0, fontSmoothing: 'antialiased' },
   currencies: [],
   appVersion: '',

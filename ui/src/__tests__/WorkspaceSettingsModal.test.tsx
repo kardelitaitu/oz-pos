@@ -159,7 +159,7 @@ vi.mock('@/api/currency', () => ({
 
 vi.mock('@/api/branding', () => ({
   getBrandSettingsScoped: vi.fn(() => Promise.resolve({
-    primary_colour: '#10b981', logo_path: null, store_name: '',
+    primary_colour: '#147EFB', logo_path: null, store_name: '',
   })),
 }));
 

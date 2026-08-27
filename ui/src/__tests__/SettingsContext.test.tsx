@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
   ],
   syncSettings: { serverUrl: 'https://sync.example.com', hasApiKey: false, enabled: false } as { serverUrl: string | null; hasApiKey: boolean; enabled: boolean },
   userPreferences: { cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' as string },
-  brandSettings: { primary_colour: '#10b981', logo_path: null as string | null, store_name: 'My Store' },
+  brandSettings: { primary_colour: '#147EFB', logo_path: null as string | null, store_name: 'My Store' },
   versionInfo: { name: 'oz-pos' as string, version: '0.0.19', rustVersion: '1.80', target: 'x86_64' },
   // Snapshots for reset between tests
   _snapshots: null as Record<string, unknown> | null,
@@ -181,7 +181,7 @@ function resetFailures() {
   });
   Object.assign(mocks.syncSettings, { serverUrl: 'https://sync.example.com', hasApiKey: false, enabled: false });
   Object.assign(mocks.userPreferences, { cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' });
-  Object.assign(mocks.brandSettings, { primary_colour: '#10b981', logo_path: null, store_name: 'My Store' });
+  Object.assign(mocks.brandSettings, { primary_colour: '#147EFB', logo_path: null, store_name: 'My Store' });
   Object.assign(mocks.versionInfo, { name: 'oz-pos', version: '0.0.19', rustVersion: '1.80', target: 'x86_64' });
   identityMocks.deviceId = 'test-device-id';
   identityMocks.terminals = [];
@@ -218,7 +218,7 @@ describe('SettingsContext', () => {
     expect(result.current.settings.receipt.showTax).toBe(true);
     expect(result.current.settings.currencies).toHaveLength(2);
     expect(result.current.settings.sync.enabled).toBe(false);
-    expect(result.current.settings.brand.colour).toBe('#10b981');
+    expect(result.current.settings.brand.colour).toBe('#147EFB');
     expect(result.current.settings.preferences.cardSize).toBe(2);
     expect(result.current.settings.appVersion).toBe('0.0.19');
   });

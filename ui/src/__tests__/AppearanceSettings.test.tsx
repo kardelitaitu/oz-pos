@@ -34,7 +34,7 @@ vi.mock('@/contexts/HardwareAccelContext', () => ({
 vi.mock('@/contexts/BrandContext', () => ({
   useBrand: () => ({
     settings: {
-      primary_colour: '#10b981',
+      primary_colour: '#147EFB',
       logo_path: null,
       store_name: '',
     },
@@ -101,7 +101,7 @@ vi.mock('@/components/Button', () => ({
 // ── Default brand settings ────────────────────────────────────────
 
 const defaultBrandResponse = {
-  primary_colour: '#10b981',
+  primary_colour: '#147EFB',
   logo_path: null,
   store_name: '',
 };
@@ -174,7 +174,7 @@ describe('AppearanceSettings', () => {
     });
 
     const colourInput = screen.getByLabelText('Primary colour picker') as HTMLInputElement;
-    expect(colourInput.value).toBe('#10b981');
+    expect(colourInput.value).toBe('#147efb');
   });
 
   it('renders hex text input with initial value', async () => {
@@ -184,7 +184,7 @@ describe('AppearanceSettings', () => {
     });
 
     const hexInput = screen.getByLabelText('Colour hex value') as HTMLInputElement;
-    expect(hexInput.value).toBe('#10b981');
+    expect(hexInput.value).toBe('#147EFB');
   });
 
   it('updates colour picker value when user changes hex input', async () => {
@@ -344,7 +344,7 @@ describe('AppearanceSettings', () => {
     await user.click(screen.getByLabelText('Save appearance'));
 
     await waitFor(() => {
-      expect(mockSetBrandPrimaryColour).toHaveBeenCalledWith('#10b981');
+      expect(mockSetBrandPrimaryColour).toHaveBeenCalledWith('#147EFB');
       expect(mockSetBrandStoreName).toHaveBeenCalledWith('');
       expect(mockRefreshBrandSettings).toHaveBeenCalled();
     });

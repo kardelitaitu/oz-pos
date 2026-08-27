@@ -475,9 +475,9 @@ impl Settings {
 
     // ── Brand / White-label ─────────────────────────────────────
 
-    /// Get the primary brand colour (hex). Defaults to `"#10b981"`.
+    /// Get the primary brand colour (hex). Defaults to `"#147EFB"`.
     pub fn get_brand_primary_colour(conn: &Connection) -> Result<String, PlatformError> {
-        Ok(Self::get(conn, keys::BRAND_PRIMARY_COLOUR)?.unwrap_or_else(|| "#10b981".into()))
+        Ok(Self::get(conn, keys::BRAND_PRIMARY_COLOUR)?.unwrap_or_else(|| "#147EFB".into()))
     }
 
     /// Set the primary brand colour.

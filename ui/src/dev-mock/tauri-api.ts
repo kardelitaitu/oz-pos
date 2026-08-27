@@ -1777,13 +1777,13 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'get_brand_settings': () => ({
-    primary_colour: '#10b981',
+    primary_colour: '#147EFB',
     logo_path: null,
     store_name: 'OZ-POS Demo',
     colour_hover: null,
   }),
   'get_brand_settings_scoped': () => ({
-    primary_colour: '#10b981',
+    primary_colour: '#147EFB',
     logo_path: null,
     store_name: 'OZ-POS Demo',
     colour_hover: null,

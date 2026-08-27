@@ -48,7 +48,7 @@ describe('BrandContext', () => {
   it('renders defaults before API resolves', async () => {
     mockGetBrandSettings.mockImplementation(() => new Promise(() => {}));
     await renderProvider();
-    expect(screen.getByTestId('colour').textContent).toBe('#10b981'); // default
+    expect(screen.getByTestId('colour').textContent).toBe('#147EFB'); // default
     expect(screen.getByTestId('store').textContent).toBe(''); // default
     expect(screen.getByTestId('logo').textContent).toBe('no-logo'); // default null
   });
@@ -69,7 +69,7 @@ describe('BrandContext', () => {
     // Wait for the error to be swallowed
     await waitFor(() => {
       // Defaults remain
-      expect(screen.getByTestId('colour').textContent).toBe('#10b981');
+      expect(screen.getByTestId('colour').textContent).toBe('#147EFB');
     });
 
     // Settings should still be defaults

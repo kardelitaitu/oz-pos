@@ -82,7 +82,7 @@ export interface AccentPalette {
   activeFg: string;
 }
 
-const DEFAULT_ACCENT = '#10b981';
+const DEFAULT_ACCENT = '#147EFB';
 
 /**
  * Return black or white text that contrasts with the given hex colour.

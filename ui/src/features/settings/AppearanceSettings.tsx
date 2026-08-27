@@ -19,7 +19,7 @@ import './AppearanceSettings.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const DEFAULT_COLOUR = '#10b981';
+const DEFAULT_COLOUR = '#147EFB';
 
 /**
  * Normalise a hex colour string to `#rrggbb` lowercase format.
@@ -55,7 +55,7 @@ export function AppearanceSettings({
   onStoreNameChange,
 }: AppearanceSettingsProps) {
   const { refreshBrandSettings } = useBrand();
-  const [colour, setColour] = useState('#10b981');
+  const [colour, setColour] = useState('#147EFB');
   const [logoPath, setLogoPath] = useState<string | null>(null);
   const [storeName, setStoreName] = useState('');
   const [saving, setSaving] = useState(false);

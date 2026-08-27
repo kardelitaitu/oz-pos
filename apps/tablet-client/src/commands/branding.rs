@@ -15,7 +15,7 @@ use crate::state::AppState;
 /// All brand settings in one shot.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BrandSettingsDto {
-    /// Primary brand colour as a hex string (e.g. `"#10b981"`).
+    /// Primary brand colour as a hex string (e.g. `"#147EFB"`).
     pub primary_colour: String,
     /// Filesystem path to the store logo, if set.
     pub logo_path: Option<String>,

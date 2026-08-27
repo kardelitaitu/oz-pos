@@ -268,7 +268,7 @@ function SettingsPageContent() {
   const [displayCardSize, setDisplayCardSize] = useState(0);
   const [displayFontSize, setDisplayFontSize] = useState(0);
   const [displayFontSmoothing, setDisplayFontSmoothing] = useState('antialiased');
-  const [brandColour, setBrandColour] = useState('#10b981');
+  const [brandColour, setBrandColour] = useState('#147EFB');
   const [brandStoreName, setBrandStoreName] = useState('');
 
   const cm = useContextMenu();
