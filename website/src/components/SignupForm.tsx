@@ -30,8 +30,13 @@ interface Props {
 
 type Step = 'form' | 'code';
 
-const SELECT_CLASS =
+const INPUT_CLASS =
   'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
+
+const regionOptions: { value: Region; flag: string; labelKey: string }[] = [
+  { value: 'global', flag: '🌍', labelKey: 'signup.regionGlobal' },
+  { value: 'id', flag: '🇮🇩', labelKey: 'signup.regionIndonesia' },
+];
 
 export default function SignupForm({ locale }: Props) {
   const [step, setStep] = useState<Step>('form');
@@ -43,9 +48,11 @@ export default function SignupForm({ locale }: Props) {
     }
     return 'global';
   });
+  const [regionOpen, setRegionOpen] = useState(false);
   const handleRegionChange = (r: Region) => {
     setRegionState(r);
     setRegion(r);
+    setRegionOpen(false);
   };
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -119,7 +126,7 @@ export default function SignupForm({ locale }: Props) {
     }
   };
 
-  const inputClass =
+  const inputClass = INPUT_CLASS;
     'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
 
   if (step === 'code') {
@@ -163,18 +170,49 @@ export default function SignupForm({ locale }: Props) {
   return (
     <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
       <form onSubmit={register} className="space-y-4" aria-label={t(locale, 'signup.title')}>
-        <label className="block">
+        <div className="relative">
           <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.region')}</span>
-          <select
-            value={region}
-            onChange={(e) => handleRegionChange(e.target.value as Region)}
-            className={SELECT_CLASS}
+          <button
+            type="button"
+            onClick={() => setRegionOpen(!regionOpen)}
+            onBlur={() => setTimeout(() => setRegionOpen(false), 150)}
+            className="w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-left outline-none transition focus:border-accent flex items-center justify-between"
           >
-            <option value="global">{t(locale, 'signup.regionGlobal')}</option>
-            <option value="id">{t(locale, 'signup.regionIndonesia')}</option>
-          </select>
+            <span className="flex items-center gap-2">
+              <span>{regionOptions.find((o) => o.value === region)?.flag}</span>
+              <span>{t(locale, regionOptions.find((o) => o.value === region)?.labelKey ?? 'signup.regionGlobal')}</span>
+            </span>
+            <svg
+              className={`w-4 h-4 text-muted transition-transform duration-200 ${regionOpen ? 'rotate-180' : ''}`}
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="4 6 8 10 12 6" />
+            </svg>
+          </button>
+          {regionOpen && (
+            <div className="absolute z-50 mt-1 w-full rounded-md border border-ink/10 bg-primary shadow-lg overflow-hidden">
+              {regionOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleRegionChange(opt.value)}
+                  className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors duration-150 ${
+                    region === opt.value ? 'bg-accent/10 text-link font-medium' : 'text-ink hover:bg-ink/5'
+                  }`}
+                >
+                  <span>{opt.flag}</span>
+                  <span>{t(locale, opt.labelKey)}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <span className="mt-1 block text-xs text-muted">{t(locale, 'signup.regionHint')}</span>
-        </label>
+        </div>
         <label className="block">
           <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.email')}</span>
           <span className="relative block">
