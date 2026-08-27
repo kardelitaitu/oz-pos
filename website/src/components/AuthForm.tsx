@@ -359,6 +359,8 @@ export default function AuthForm({ locale }: Props) {
         </button>
       </div>
 
+      {/* Min-height prevents layout shift when switching tabs (password is taller) */}
+      <div className="min-h-[320px]">
       {mode === 'password' ? (
         <form onSubmit={loginPassword} className="space-y-4" aria-label={t(locale, 'login.tabPassword')}>
           <label className="block">
@@ -439,6 +441,7 @@ export default function AuthForm({ locale }: Props) {
           </p>
         </form>
       )}
+      </div>
     </div>
   );
 }
