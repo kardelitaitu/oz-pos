@@ -53,6 +53,7 @@ export default function PasswordField({
 }: Props) {
   const [visible, setVisible] = useState(false);
   const mismatch = showConfirm && confirmValue !== '' && confirmValue !== value;
+  const match = showConfirm && confirmValue.length >= 8 && confirmValue === value;
 
   return (
     <>
@@ -87,18 +88,27 @@ export default function PasswordField({
           <span className="mb-1 block text-sm text-muted">
             {confirmLabel ?? t(locale, 'password.confirmLabel')}
           </span>
-          <input
-            id={`${id}-confirm`}
-            type={visible ? 'text' : 'password'}
-            required
-            autoComplete={autoComplete}
-            minLength={8}
-            maxLength={72}
-            value={confirmValue}
-            onChange={(e) => onConfirmChange?.(e.target.value)}
-            placeholder={confirmPlaceholder ?? t(locale, 'password.confirmPlaceholder')}
-            className={inputClass}
-          />
+          <span className="relative block">
+            <input
+              id={`${id}-confirm`}
+              type={visible ? 'text' : 'password'}
+              required
+              autoComplete={autoComplete}
+              minLength={8}
+              maxLength={72}
+              value={confirmValue}
+              onChange={(e) => onConfirmChange?.(e.target.value)}
+              placeholder={confirmPlaceholder ?? t(locale, 'password.confirmPlaceholder')}
+              className={`${inputClass} pr-10`}
+            />
+            {match && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500" aria-label="Passwords match">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3.5 8 6.5 11 12.5 5" />
+                </svg>
+              </span>
+            )}
+          </span>
         </label>
       )}
       {mismatch && (
