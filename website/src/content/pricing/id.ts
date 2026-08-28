@@ -149,6 +149,7 @@ export const featureRows: FeatureRow[] = [
   { label: 'Sinkron cloud', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Dasbor Penjualan Harian', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Laporan & analitik', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },
+  { label: 'Log audit lengkap', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Branding whitelabel', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Email laporan terjadwal', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Program loyalitas', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },

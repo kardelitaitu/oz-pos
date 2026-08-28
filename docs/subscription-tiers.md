@@ -138,6 +138,7 @@ history preview with an upgrade CTA, not a hard error.
 | **Daily Sales Dashboard** (Laporan Harian) — Plus hero; show blurred teaser to Free | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Reports & analytics (`analytics:view`) | ✗ | ✗ | ✓ | ✓ | ✓ |
 | Scheduled report emails | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Full audit logging & review (`audit:view`) | ✗ | ✗ | ✗ | ✓ | ✓ |
 | Product bundles | ✗ | ✓ | ✓ | ✓ | ✓ |
 | Lua scripting | ✗ | ✗ | ✗ | ✓ | ✓ |
 | **Loyalty tiers & points** — show locked animated teaser to Pro users | ✗ | ✗ | ✗ | ✓ | ✓ |
@@ -163,7 +164,7 @@ history preview with an upgrade CTA, not a hard error.
 | Priority support | ✗ | ✗ | ✗ | ✓ | ✓ |
 | Support response SLA | — | 24h | 8h | 1h (24/7) | account manager |
 | Software updates | minor + major | minor + major | minor + major | minor + major | minor + major |
-| White-label branding | ✗ | ✗ | ✗ | ✗ | ✓ |
+| White-label branding | ✗ | ✗ | ✗ | ✓ | ✓ |
 | Offline grace period | 7 days | 14 days | 14 days | 30 days | custom |
 | Enterprise services (dedicated hosting, ERP adaptors, account manager) | ✗ | ✗ | ✗ | ✗ | ✓ |
 
