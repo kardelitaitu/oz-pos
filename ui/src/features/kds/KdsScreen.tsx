@@ -625,7 +625,7 @@ export default function KdsScreen() {
     }
 
     return (
-      <div {...pullRefreshProps}>
+      <div className="kds-content-wrap" {...pullRefreshProps}>
         <KdsLayoutMasonry
           orders={filteredOrders}
           filtered={boardFiltered}

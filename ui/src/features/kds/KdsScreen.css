@@ -1605,6 +1605,7 @@
 /* ── Screen footer (Phase 4) ────────────────────────────────────── */
 .kds-screen-footer {
   flex: 0 0 auto;
+  margin-top: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1619,11 +1620,22 @@
 }
 .kds-screen-footer .sep { opacity: 0.5; }
 
+/* ── Content wrap (pull-to-refresh container) ─────────────────── */
+.kds-content-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
 /* ── Main masonry view (prototype .kds-main + .kds-col) ───────────────
    Single KDS view: all orders flow into N equal-width columns. Cards
    are .kds-ticket today; Phase 3 restructures them into .kds-card. */
 .kds-main {
   flex: 1 1 auto;
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
