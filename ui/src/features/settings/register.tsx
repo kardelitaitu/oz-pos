@@ -24,7 +24,7 @@ export function registerSettingsFeature() {
     label: 'Features',
     requiredRole: 'owner',
     i18nKey: 'nav-features',
-    section: 'management',
+    section: 'settings',
     icon: icon('M13 2 3 14h9l-1 8 10-12h-9z'),
   });
 
@@ -34,7 +34,7 @@ export function registerSettingsFeature() {
     label: 'Data',
     requiredRole: 'owner',
     i18nKey: 'nav-data',
-    section: 'management',
+    section: 'settings',
     icon: icon('M12 5c-5 0-9 1.34-9 3s4 3 9 3 9-1.34 9-3-4-3-9-3z', <ellipse cx="12" cy="5" rx="9" ry="3" />, <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />, <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />),
   });
 }

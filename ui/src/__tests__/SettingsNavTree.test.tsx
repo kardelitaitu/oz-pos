@@ -27,18 +27,10 @@ vi.mock('@fluent/react', () => ({
           'settings-nav-email': 'Email Reports',
           'settings-nav-about': 'About',
           'settings-nav-license': 'License',
-          'settings-nav-features': 'Features',
-          'settings-nav-data': 'Data',
-          'settings-nav-staff': 'Staff',
-          'settings-nav-terminals': 'Terminals',
-          'settings-nav-stores': 'Stores',
           'settings-nav-topology': 'Topology',
-          'settings-nav-audit': 'Audit Log',
-          'settings-nav-offline': 'Offline Queue',
-          'settings-nav-shifts': 'Shifts',
-          'settings-nav-tax': 'Tax Rates',
-          'settings-nav-exchange': 'Exchange Rates',
-          'settings-nav-promotions': 'Promotions',
+          'settings-nav-store-pos': 'Store POS',
+          'settings-nav-restaurant-pos': 'Restaurant POS',
+          'settings-nav-inventory': 'Inventory',
         };
         return keyMap[key] ?? key;
       },
@@ -125,11 +117,11 @@ describe('SettingsNavTree', () => {
   it('shows count badges with correct item counts', () => {
     render(<SettingsNavTree {...defaultProps} />);
 
-    // 2 items in Business, 4 in Operations, 7 in System, 10 in Management
+    // 2 items in Business, 6 in Operations, 2 in System, 1 in Management
     const badges = screen.getAllByText(/^\d+$/);
     expect(badges.length).toBe(4);
     const counts = badges.map((b) => Number(b.textContent)).sort((a, b) => a - b);
-    expect(counts).toEqual([2, 4, 7, 10]);
+    expect(counts).toEqual([1, 2, 2, 6]);
   });
 
   it('highlights the active section nav item', () => {
@@ -345,12 +337,12 @@ describe('SettingsNavTree', () => {
 
     it('ArrowDown wraps around from last to first item', () => {
       const onNavigate = vi.fn();
-      // Active section is promotions (last in Management category, which is last)
-      render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="promotions" />);
+      // Active section is topology (last in Management category, which is last)
+      render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="topology" />);
 
       fireKey('ArrowDown');
 
-      // promotions → wraps around to first item: general
+      // topology → wraps around to first item: general
       expect(onNavigate).toHaveBeenCalledWith('general');
     });
 
@@ -360,8 +352,8 @@ describe('SettingsNavTree', () => {
 
       fireKey('ArrowUp');
 
-      // general → wraps around to last item: promotions
-      expect(onNavigate).toHaveBeenCalledWith('promotions');
+      // general → wraps around to last item: topology
+      expect(onNavigate).toHaveBeenCalledWith('topology');
     });
 
     it('ArrowDown is no-op when focused on an input element', () => {

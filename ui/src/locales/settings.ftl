@@ -194,18 +194,7 @@ settings-nav-appearance = Appearance
 settings-nav-receipt = Receipt
 settings-nav-sync = Cloud Sync
 settings-nav-about = About
-settings-nav-features = Features
-settings-nav-data = Data
-settings-nav-staff = Staff
-settings-nav-terminals = Terminals
-settings-nav-stores = Stores
-settings-nav-audit = Audit Log
-settings-nav-offline = Offline Queue
-settings-nav-shifts = Shifts
-settings-nav-tax = Tax Rates
 settings-nav-license = License
-settings-nav-exchange = Exchange Rates
-settings-nav-promotions = Promotions
 settings-nav-topology = Topology
 settings-nav-email = Email Reports
 settings-category-operations = Operations
@@ -810,7 +799,6 @@ workspace-type-selector-label = Workspace Type
 # ── Phase 3 workspace nav items ──
 settings-nav-store-pos = Store POS
 settings-nav-restaurant-pos = Restaurant POS
-settings-nav-kds = Kitchen Display
 settings-nav-inventory = Inventory
 
 # ── Workspace Settings Modal (ADR #22 Phase 4) ──

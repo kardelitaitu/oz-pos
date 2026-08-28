@@ -48,17 +48,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { useOptionalTheme, type Theme } from '@/frontend/shell/ThemeProvider';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
-import FeatureToggleScreen from './FeatureToggleScreen';
-import DataManagementScreen from './DataManagementScreen';
-import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
-import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
-import { MultiStoreDashboardScreen, TopologyScreen } from '@/features/stores';
-import AuditLogScreen from '@/features/audit/AuditLogScreen';
-import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
-import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
-import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
-import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
-import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
+import { TopologyScreen } from '@/features/stores';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
 const GeneralSection = lazy(() => import('./sections/GeneralSection'));
@@ -81,9 +71,6 @@ const WorkspaceStorePosSettings = lazy(() =>
 );
 const WorkspaceRestaurantPosSettings = lazy(() =>
   import('./workspace-cards/WorkspaceRestaurantPosSettings').then((m) => ({ default: m.WorkspaceRestaurantPosSettings })),
-);
-const WorkspaceKdsSettings = lazy(() =>
-  import('./workspace-cards/WorkspaceKdsSettings').then((m) => ({ default: m.WorkspaceKdsSettings })),
 );
 const WorkspaceInventorySettings = lazy(() =>
   import('./workspace-cards/WorkspaceInventorySettings').then((m) => ({ default: m.WorkspaceInventorySettings })),
@@ -805,39 +792,6 @@ function SettingsPageContent() {
       case 'license':
         return <LicenseSettings />;
 
-      case 'features':
-        return <FeatureToggleScreen />;
-
-      case 'data':
-        return <DataManagementScreen />;
-
-      case 'staff':
-        return <StaffManagementScreen />;
-
-      case 'terminals':
-        return <TerminalManagementScreen />;
-
-      case 'stores':
-        return <MultiStoreDashboardScreen />;
-
-      case 'audit':
-        return <AuditLogScreen />;
-
-      case 'offline':
-        return <OfflineQueueScreen />;
-
-      case 'shifts':
-        return <ShiftManagementScreen />;
-
-      case 'tax':
-        return <TaxConfigurationScreen />;
-
-      case 'exchange':
-        return <ExchangeRateScreen />;
-
-      case 'promotions':
-        return <PromotionManagementScreen />;
-
       case 'topology':
         return <TopologyScreen />;
 
@@ -852,13 +806,6 @@ function SettingsPageContent() {
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
             <WorkspaceRestaurantPosSettings variant="full-page" terminalId={terminalId} userId={userId} {...(sessionToken ? { sessionToken } : {})} />
-          </Suspense>
-        );
-
-      case 'kds':
-        return (
-          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
-            <WorkspaceKdsSettings variant="full-page" userId={userId} />
           </Suspense>
         );
 

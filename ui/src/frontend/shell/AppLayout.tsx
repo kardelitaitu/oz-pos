@@ -26,18 +26,17 @@ const SECTION_ORDER: SectionName[] = [
   'customers',
   'reports',
   'inventory',
-  'management',
   'settings',
   'dev',
 ];
 
 /** Group nav items by sidebar section in canonical SECTION_ORDER; items
- *  without a section fall back to 'management'. Exported for unit tests. */
+ *  without a section fall back to 'settings'. Exported for unit tests. */
 export function groupBySection<T extends { section?: SectionName }>(items: T[]): { section: SectionName; items: T[] }[] {
   const map = new Map<SectionName, T[]>();
   const seen = new Set<SectionName>();
   for (const item of items) {
-    const s = item.section ?? 'management';
+    const s = item.section ?? 'settings';
     if (!map.has(s)) {
       map.set(s, []);
       seen.add(s);

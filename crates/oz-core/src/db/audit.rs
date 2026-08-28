@@ -419,6 +419,57 @@ impl Store<'_> {
         )?;
         Ok(n.max(0) as u64)
     }
+
+    /// Aggregate audit metrics for the analytics-style summary strip.
+    ///
+    /// Returns total entries, success/failure counts, and a per-day event
+    /// histogram over the trailing `days` window (each `created_at` ISO
+    /// date truncated to `YYYY-MM-DD`). All counts are computed in SQL over
+    /// the full table, not over a loaded page.
+    #[allow(clippy::type_complexity)]
+    pub fn audit_summary(
+        &self,
+        days: u64,
+    ) -> Result<(u64, u64, u64, Vec<(String, u64)>), CoreError> {
+        let total: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM audit_log", [], |row| row.get(0))?;
+
+        let success: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM audit_log WHERE outcome = 'success'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let failures: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM audit_log WHERE outcome = 'failure'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Day histogram over the trailing window: bucket by the leading
+        // 10 chars of the ISO-8601 created_at (the date portion).
+        let mut stmt = self.conn.prepare(
+            "SELECT substr(created_at, 1, 10) AS day, COUNT(*)
+             FROM audit_log
+             WHERE created_at >= ?1
+             GROUP BY day ORDER BY day",
+        )?;
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(days as i64);
+        let rows = stmt
+            .query_map(
+                rusqlite::params![cutoff.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64)),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok((
+            total.max(0) as u64,
+            success.max(0) as u64,
+            failures.max(0) as u64,
+            rows,
+        ))
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
