@@ -366,6 +366,64 @@ async fn snapshot_cache_hit_returns_200() {
     assert_eq!(json1, json2, "cache hit must serve the identical JSON");
 }
 
+#[tokio::test]
+async fn snapshot_returns_etag_and_handles_if_none_match_304() {
+    let app = test_router();
+
+    // 1. Initial snapshot request returns 200 OK with an ETag and Cache-Control
+    let req1 = authed(axum::http::Method::GET, "/api/sync/snapshot", None);
+    let resp1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(resp1.status(), StatusCode::OK);
+    let etag = resp1
+        .headers()
+        .get("etag")
+        .expect("snapshot response must include ETag header")
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(etag.starts_with('"') && etag.ends_with('"'));
+    assert_eq!(
+        resp1
+            .headers()
+            .get("cache-control")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "public, max-age=60"
+    );
+
+    // 2. Request with matching If-None-Match returns 304 Not Modified with zero body
+    let token = test_token(None);
+    let req2 = Request::builder()
+        .method("GET")
+        .uri("/api/sync/snapshot")
+        .header("Authorization", format!("Bearer {token}"))
+        .header("If-None-Match", &etag)
+        .body(Body::empty())
+        .unwrap();
+
+    let resp2 = app.clone().oneshot(req2).await.unwrap();
+    assert_eq!(resp2.status(), StatusCode::NOT_MODIFIED);
+    assert_eq!(
+        resp2.headers().get("etag").unwrap().to_str().unwrap(),
+        etag.as_str()
+    );
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    assert!(body2.is_empty(), "304 response body must be empty");
+
+    // 3. Request with non-matching If-None-Match returns 200 OK
+    let req3 = Request::builder()
+        .method("GET")
+        .uri("/api/sync/snapshot")
+        .header("Authorization", format!("Bearer {token}"))
+        .header("If-None-Match", "\"non-matching-etag\"")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp3 = app.oneshot(req3).await.unwrap();
+    assert_eq!(resp3.status(), StatusCode::OK);
+}
+
 /// A cache hit must serve the stored bytes with ZERO database access —
 /// the whole point of the raw-bytes cache (SOTA finding C). Warm the
 /// cache, then DELETE every product from the DB: a hit that touched the
