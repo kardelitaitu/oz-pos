@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
@@ -917,5 +917,31 @@ describe('KdsScreen', () => {
       expect(document.querySelector('.kds-modal')).toBeNull();
     });
     expect(screen.getByText('Start Shift')).toBeTruthy();
+  });
+
+  // ── Card colours pickers ───────────────────────────────────────
+
+  it('renders card colour pickers in the hamburger and updates a colour', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-settings')).not.toBeNull();
+    });
+
+    // Open the hamburger panel.
+    await userEvent.click(screen.getByTestId('kds-topbar-settings'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-hamburger-panel')).not.toBeNull();
+    });
+
+    // Card Colours section with native + hex pickers for dinein.
+    const native = document.querySelector('[data-testid="kds-settings-colors-native-dinein"]') as HTMLInputElement;
+    expect(native).not.toBeNull();
+    const hex = document.querySelector('[data-testid="kds-settings-colors-hex-dinein"]') as HTMLInputElement;
+    expect(hex).not.toBeNull();
+
+    // Changing the native picker updates the hex field.
+    fireEvent.change(native, { target: { value: '#ff00aa' } });
+    expect(hex.value).toBe('#ff00aa');
   });
 });

@@ -203,8 +203,7 @@ export function KdsHamburgerPanel({
               </div>
             </div>
 
-            {/* ── Card Colours (prototype accordion — hidden until colour-config API is wired) ── */}
-            {false && (
+            {/* ── Card Colours — per-theme pickers (prototype) ── */}
             <div className="kds-panel-section">
               <div className="kds-section-head">
                 <h3><Localized id="kds-settings-card-colours">Card Colours</Localized></h3>
@@ -252,7 +251,6 @@ export function KdsHamburgerPanel({
                 </button>
               </div>
             </div>
-            )}
 
             {/* ── Behaviour ──────────────────────────────── */}
             <div className="kds-panel-section">
