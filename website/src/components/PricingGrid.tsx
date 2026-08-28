@@ -151,13 +151,15 @@ export default function PricingGrid({ tiers, tiersAlt, locale, downloadHref }: P
               key={tier.id}
               id={tier.id}
               className={[
-                'relative flex scroll-mt-24 flex-col rounded-xl border p-6 h-full',
-                tier.highlight ? 'border-accent bg-surface' : 'border-ink/10 bg-surface/40',
+                'relative flex scroll-mt-24 flex-col rounded-2xl p-6 h-full transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] hover:shadow-lg',
+                tier.highlight
+                  ? 'border-2 border-primary bg-surface shadow-md popular-glow-border scale-[1.02] z-10'
+                  : 'border border-ink/10 bg-surface/50 hover:border-ink/20',
               ].join(' ')}
             >
               {tier.highlight && (
-                <span className="absolute -top-3 right-4 z-10 inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-white shadow-md">
-                  {t(locale, 'pricingPage.mostPopular')}
+                <span className="absolute -top-3.5 right-6 z-10 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-0.5 text-xs font-bold text-white shadow-md uppercase tracking-wider text-[10px]">
+                  ★ {t(locale, 'pricingPage.mostPopular')}
                 </span>
               )}
               {/* Row 1: Title */}
