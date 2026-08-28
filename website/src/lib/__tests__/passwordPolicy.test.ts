@@ -31,9 +31,17 @@ describe('password policy (mirrors the server gate)', () => {
     expect(isStrongPassword('Abcdef12')).toBe(true); // upper + lower + digit = 3
   });
 
+  it('requires at least 8 runes even if byte length >= 8', () => {
+    // 7 multi-byte characters (2 bytes each = 14 bytes) — rejected because < 8 runes
+    expect(isStrongPassword('ÉÉÉÉ1a!')).toBe(false); // 7 runes (11 bytes) -> false
+    expect(isStrongPassword('ÉÉÉ1a!')).toBe(false); // 6 runes (9 bytes) -> false
+    expect(isStrongPassword('ÉÉÉÉÉ1a!')).toBe(true); // 8 runes (13 bytes) with upper + lower + digit + symbol
+  });
+
   it('passwordsMatch requires non-empty identical values', () => {
     expect(passwordsMatch('Abcdef12!', 'Abcdef12!')).toBe(true);
     expect(passwordsMatch('Abcdef12!', 'Abcdef12?')).toBe(false);
     expect(passwordsMatch('', '')).toBe(false);
   });
 });
+
