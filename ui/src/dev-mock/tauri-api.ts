@@ -1408,6 +1408,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'destroy_session': () => null,
 
+  'session_keepalive': () => ({ expires_at: Math.floor(Date.now() / 1000) + 86400 }),
+
   // ═══════════════════════════════════════════════════════════════
   // BOOT / SETUP
   // ═══════════════════════════════════════════════════════════════

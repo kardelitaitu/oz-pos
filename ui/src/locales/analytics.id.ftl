@@ -246,3 +246,8 @@ analytics-card-desc-voids = Item yang di-void atau dihapus dari pesanan.
 analytics-upgrade-required = Analytics adalah fitur Pro
 analytics-upgrade-message = Buka laporan pendapatan, kategori, dan per jam di semua toko Anda. Tingkatkan ke Pro untuk melihat dasbor analytics lengkap.
 analytics-upgrade-cta = Tingkatkan ke Pro
+
+# Session expired banner
+analytics-session-expired-title = Sesi berakhir
+analytics-session-expired-message = Sesi Anda telah berakhir. Silakan masuk kembali untuk melanjutkan melihat analytics.
+analytics-sign-in-again = Masuk kembali
