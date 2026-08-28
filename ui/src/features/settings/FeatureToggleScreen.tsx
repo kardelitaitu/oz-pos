@@ -14,6 +14,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useToast, useContextMenu, ContextMenu } from '@/frontend/shared';
 import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
 import { l10nErrorMessage } from '@/utils/app-error';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listAllFeatures,
   setFeature,
@@ -106,6 +107,7 @@ export default function FeatureToggleScreen() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [togglingBatch, setTogglingBatch] = useState<string | null>(null);
   const { addToast } = useToast();
+  const { sessionToken } = useWorkspace();
   const cm = useContextMenu();
   const cmInput = useMemo(() => ({
     autoComplete: 'off' as const,
@@ -175,7 +177,7 @@ export default function FeatureToggleScreen() {
     const newValue = !current;
     setToggling(key);
     try {
-      const result = await setFeature(key, newValue);
+      const result = await setFeature(sessionToken, key, newValue);
       setFeatures(result.features);
       triggerFlash(key, newValue ? 'enabled' : 'disabled');
 
@@ -198,7 +200,7 @@ export default function FeatureToggleScreen() {
     } finally {
       setToggling(null);
     }
-  }, [l10n, addToast, triggerFlash]);
+  }, [l10n, addToast, triggerFlash, sessionToken]);
 
   // ── Active feature set for preview ───────────────────────────
 
@@ -247,7 +249,7 @@ export default function FeatureToggleScreen() {
     try {
       // Toggle all features in a single atomic SQLite transaction via
       // set_features_bulk — avoids N individual IPC round-trips.
-      const result = await setFeaturesBulk(keys, enable);
+      const result = await setFeaturesBulk(sessionToken, keys, enable);
       setFeatures(result.features);
       // Trigger flash on each toggled feature.
       keys.forEach((k) => triggerFlash(k, enable ? 'enabled' : 'disabled'));
@@ -266,7 +268,7 @@ export default function FeatureToggleScreen() {
     } finally {
       setTogglingBatch(null);
     }
-  }, [l10n, addToast, triggerFlash]);
+  }, [l10n, addToast, triggerFlash, sessionToken]);
 
   // ── Render ────────────────────────────────────────────────────
 

@@ -26,10 +26,10 @@ export interface SetFeatureResult {
 export const listAllFeatures = (): Promise<ListAllFeaturesResult> =>
   loggedInvoke<ListAllFeaturesResult>('list_all_features');
 
-/** Toggle a single feature flag on or off. */
-export const setFeature = (key: string, enabled: boolean): Promise<SetFeatureResult> =>
-  loggedInvoke<SetFeatureResult>('set_feature', { args: { key, enabled } });
+/** Toggle a single feature flag on or off. Requires SETTINGS_EDIT permission. */
+export const setFeature = (sessionToken: string, key: string, enabled: boolean): Promise<SetFeatureResult> =>
+  loggedInvoke<SetFeatureResult>('set_feature', { sessionToken, args: { key, enabled } });
 
-/** Bulk-toggle multiple feature flags. */
-export const setFeaturesBulk = (keys: string[], enabled: boolean): Promise<ListAllFeaturesResult> =>
-  loggedInvoke<ListAllFeaturesResult>('set_features_bulk', { args: { keys, enabled } });
+/** Bulk-toggle multiple feature flags. Requires SETTINGS_EDIT permission. */
+export const setFeaturesBulk = (sessionToken: string, keys: string[], enabled: boolean): Promise<ListAllFeaturesResult> =>
+  loggedInvoke<ListAllFeaturesResult>('set_features_bulk', { sessionToken, args: { keys, enabled } });
