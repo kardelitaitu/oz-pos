@@ -8,6 +8,11 @@
 -- 20260813_init.pg.sql). Local single-tenant SQLite rows use the
 -- 'default' tenant.
 
+-- Drop draft tables if re-applying due to DB-02 drift on existing dev DBs
+DROP TABLE IF EXISTS media_thumbnails;
+DROP TABLE IF EXISTS media_assets;
+DROP TABLE IF EXISTS edc_terminals;
+
 -- 1. Media assets — one row per uploaded image/file (product photos,
 --    category icons, store logos, KDS images, etc.).
 CREATE TABLE IF NOT EXISTS media_assets (
