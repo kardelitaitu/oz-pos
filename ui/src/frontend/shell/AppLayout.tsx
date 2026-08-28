@@ -26,6 +26,7 @@ const SECTION_ORDER: SectionName[] = [
   'customers',
   'reports',
   'inventory',
+  'tools',
   'settings',
   'dev',
 ];

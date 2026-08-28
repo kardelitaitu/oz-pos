@@ -29,6 +29,7 @@ export type SectionName =
   | 'customers'
   | 'reports'
   | 'inventory'
+  | 'tools'
   | 'settings'
   | 'dev';
 
@@ -41,6 +42,7 @@ export const SECTION_LABELS: Record<SectionName, string> = {
   customers: 'nav-section-customers',
   reports: 'nav-section-reports',
   inventory: 'nav-section-inventory',
+  tools: 'nav-section-tools',
   settings: 'nav-section-settings',
   dev: 'nav-section-dev',
 };

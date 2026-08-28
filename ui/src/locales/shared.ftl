@@ -202,6 +202,7 @@ nav-section-finance = Finance
 nav-section-customers = Customers
 nav-section-reports = Reports
 nav-section-inventory = Inventory
+nav-section-tools = Tools
 nav-section-settings = Settings
 nav-section-dev = Dev
 

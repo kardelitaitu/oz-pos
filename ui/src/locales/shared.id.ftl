@@ -166,6 +166,7 @@ nav-section-finance = Keuangan
 nav-section-customers = Pelanggan
 nav-section-reports = Laporan
 nav-section-inventory = Persediaan
+nav-section-tools = Alat
 nav-section-settings = Pengaturan
 nav-section-dev = Pengembang
 

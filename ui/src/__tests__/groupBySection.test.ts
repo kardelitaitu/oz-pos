@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { groupBySection } from '@/frontend/shell/AppLayout';
 
-type Section = 'operations' | 'sales' | 'products' | 'finance' | 'customers' | 'reports' | 'inventory' | 'settings' | 'dev';
+type Section = 'operations' | 'sales' | 'products' | 'finance' | 'customers' | 'reports' | 'inventory' | 'tools' | 'settings' | 'dev';
 
 const item = (route: string, section?: Section): { route: string; section?: Section } =>
   section === undefined ? { route } : { route, section };
