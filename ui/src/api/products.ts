@@ -316,6 +316,10 @@ export const updateProductVariant = (args: UpdateProductVariantArgs): Promise<{ 
 export const deleteProductVariant = (sku: string): Promise<void> =>
   loggedInvoke('delete_product_variant', { sku });
 
+/** Delete a product variant by SKU (scoped). */
+export const deleteProductVariantScoped = (sessionToken: string, sku: string): Promise<void> =>
+  loggedInvoke('delete_product_variant_scoped', { sessionToken, sku });
+
 // ── Categories ────────────────────────────────────────────────────
 
 export interface CategoryDto {

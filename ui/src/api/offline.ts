@@ -94,6 +94,10 @@ export const retryOfflineSync = (): Promise<SyncResult> =>
 export const deleteOfflineItem = (id: string): Promise<void> =>
   loggedInvoke('delete_offline_item', { args: { id } });
 
+/** Delete an offline queue item (scoped). */
+export const deleteOfflineItemScoped = (sessionToken: string, id: string): Promise<void> =>
+  loggedInvoke('delete_offline_item_scoped', { sessionToken, args: { id } });
+
 // ── Remote Dead-Letter (quarantined pulls) ────────────────────────
 
 /**
@@ -138,6 +142,10 @@ export const listRemoteFailures = (): Promise<RemoteSyncFailureDto[]> =>
  */
 export const requeueRemoteFailure = (itemId: string): Promise<void> =>
   loggedInvoke('requeue_remote_failure', { args: { itemId } });
+
+/** Requeue a dead-lettered remote item (scoped). */
+export const requeueRemoteFailureScoped = (sessionToken: string, itemId: string): Promise<void> =>
+  loggedInvoke('requeue_remote_failure_scoped', { sessionToken, args: { itemId } });
 
 // ── Cloud Sync Settings ──────────────────────────────────────────
 
