@@ -32,6 +32,33 @@ export interface KdsTicketCardProps {
   isNew?: boolean;
 }
 
+/** Fork-and-knife SVG for dine-in orders (matches prototype DINE_ICON). */
+const DINE_ICON = (
+  <svg className="kds-service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+    <path d="M7 2v20" />
+    <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7" />
+  </svg>
+);
+
+/** Shopping-bag SVG for takeaway orders (matches prototype TAKEAWAY_ICON). */
+const TAKEAWAY_ICON = (
+  <svg className="kds-service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+    <path d="M3 6h18" />
+    <path d="M16 10a4 4 0 0 1-8 0" />
+  </svg>
+);
+
+/** Format duration in seconds as a human-readable string (e.g. "3m 12s", "1h 5m"). */
+function fmtDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const min = Math.floor(seconds / 60);
+  if (min < 60) return `${min}m ${seconds % 60 ? `${seconds % 60}s` : ''}`;
+  const h = Math.floor(min / 60);
+  return `${h}h ${min % 60}m`;
+}
+
 /** Course display order — items without a course map to "other" at the end. */
 const COURSE_ORDER = ['appetizer', 'main', 'side', 'dessert', 'beverage'] as const;
 
@@ -254,9 +281,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
         data-testid={`kds-order-card-${order.display_number ?? order.id}-header`}
       >
         <span className="kds-card-header-icon" aria-hidden="true">
-          <svg className="kds-service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
+          {order.table_number ? DINE_ICON : TAKEAWAY_ICON}
         </span>
         <span className="kds-card-header-left">
           <span className="kds-card-header-row">
@@ -343,6 +368,11 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                               <span className="kds-ticket-item-status-label">
                                 {requiredLocalized(l10n, `kds-item-status-${item.item_status}`)}
                               </span>
+                              {done && item.served_at && (
+                                <span className="kds-item-done-time" aria-hidden="true">
+                                  {fmtDuration(Math.floor((new Date(item.served_at).getTime() - new Date(order.received_at).getTime()) / 1000))}
+                                </span>
+                              )}
                             </span>
                             {item.modifiers.length > 0 && (
                               <span className="kds-ticket-modifiers">
