@@ -9,8 +9,8 @@ const mockListTerminals = vi.fn<() => Promise<TerminalDto[]>>();
 const mockGetTerminalProfile = vi.fn<(arg: string) => Promise<TerminalProfileDto | null>>();
 
 vi.mock('@/api/terminals', () => ({
-  listTerminals: () => mockListTerminals(),
-  getTerminalProfile: (id: string) => mockGetTerminalProfile(id),
+  listTerminalsScoped: (_sessionToken: string) => mockListTerminals(),
+  getTerminalProfileScoped: (_sessionToken: string, id: string) => mockGetTerminalProfile(id),
 }));
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ function makeProfile(overrides: Partial<TerminalProfileDto> = {}): TerminalProfi
 describe('useTerminalProfile', () => {
   it('starts in loading state', () => {
     mockListTerminals.mockReturnValue(new Promise(() => {})); // never resolves
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
     expect(result.current.loading).toBe(true);
     expect(result.current.profile).toBeNull();
     expect(result.current.error).toBeNull();
@@ -53,7 +53,7 @@ describe('useTerminalProfile', () => {
 
   it('returns null when no terminals are available', async () => {
     mockListTerminals.mockResolvedValue([]);
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -70,7 +70,7 @@ describe('useTerminalProfile', () => {
     mockListTerminals.mockResolvedValue([terminal]);
     mockGetTerminalProfile.mockResolvedValue(profile);
 
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -88,7 +88,7 @@ describe('useTerminalProfile', () => {
     mockListTerminals.mockResolvedValue([terminal]);
     mockGetTerminalProfile.mockResolvedValue(profile);
 
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -101,7 +101,7 @@ describe('useTerminalProfile', () => {
   it('handles listTerminals error', async () => {
     mockListTerminals.mockRejectedValue(new Error('Network error'));
 
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -117,7 +117,7 @@ describe('useTerminalProfile', () => {
     mockListTerminals.mockResolvedValue([terminal]);
     mockGetTerminalProfile.mockRejectedValue(new Error('Profile load failed'));
 
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -130,7 +130,7 @@ describe('useTerminalProfile', () => {
   it('handles non-Error rejection with fallback message', async () => {
     mockListTerminals.mockRejectedValue('string error');
 
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -147,7 +147,7 @@ describe('useTerminalProfile', () => {
     mockListTerminals.mockResolvedValue([t1, t2]);
     mockGetTerminalProfile.mockResolvedValue(profile);
 
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -165,7 +165,7 @@ describe('useTerminalProfile', () => {
     mockListTerminals.mockResolvedValue([inactive, active]);
     mockGetTerminalProfile.mockResolvedValue(profile);
 
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -180,7 +180,7 @@ describe('useTerminalProfile', () => {
     mockListTerminals.mockResolvedValue([terminal]);
     mockGetTerminalProfile.mockResolvedValue(null);
 
-    const { result } = renderHook(() => useTerminalProfile());
+    const { result } = renderHook(() => useTerminalProfile('tok'));
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -200,7 +200,7 @@ describe('useTerminalProfile', () => {
     mockListTerminals.mockReturnValue(listPromise);
     mockGetTerminalProfile.mockResolvedValue(makeProfile());
 
-    const { result, unmount } = renderHook(() => useTerminalProfile());
+    const { result, unmount } = renderHook(() => useTerminalProfile('tok'));
 
     // Hook starts loading.
     expect(result.current.loading).toBe(true);

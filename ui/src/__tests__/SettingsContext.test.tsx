@@ -94,7 +94,7 @@ vi.mock('@/api/system', () => ({
 }));
 
 vi.mock('@/api/terminals', () => ({
-  listTerminals: vi.fn(() => Promise.resolve([...identityMocks.terminals])),
+  listTerminalsScoped: vi.fn((_sessionToken: string) => Promise.resolve([...identityMocks.terminals])),
 }));
 
 // ── Tauri event listener mock ───────────────────────────────────

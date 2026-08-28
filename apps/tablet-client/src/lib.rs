@@ -418,6 +418,9 @@ pub fn run() {
                 commands::tax::get_tax_rate_dependency_counts_scoped,
                 commands::tax::list_category_tax_rates_scoped,
                 commands::tax::set_category_tax_rates_scoped,
+                // TODO(L-1): these unscoped terminal commands are spoofable
+                // (client-supplied user_id). Add scoped variants with session
+                // tokens and unregister the unscoped band (parity with desktop).
                 commands::terminals::list_terminals,
                 commands::terminals::get_terminal,
                 commands::terminals::register_terminal,
