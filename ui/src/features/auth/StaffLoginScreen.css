@@ -283,16 +283,6 @@
   cursor: not-allowed;
 }
 
-/* Prevent browser autofill background colour override */
-.staff-login-input:-webkit-autofill,
-.staff-login-input:-webkit-autofill:hover,
-.staff-login-input:-webkit-autofill:focus-visible,
-.staff-login-input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px var(--color-bg-input) inset !important;
-  -webkit-text-fill-color: var(--color-fg) !important;
-  transition: background-color 5000s ease-in-out 0s;
-}
-
 /* ── Submit button (inside input) ────────────────────────────────── */
 
 .staff-login-submit-btn {
