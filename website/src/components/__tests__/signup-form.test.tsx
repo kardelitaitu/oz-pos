@@ -42,7 +42,7 @@ function setEmail(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[type="email"]') as HTMLInputElement | null;
   if (!el) throw new Error('email input not found');
   act(() => {
-    Object.defineProperty(el, 'value', { value, configurable: true });
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
   });
@@ -52,7 +52,7 @@ function setPassword(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[type="password"]') as HTMLInputElement | null;
   if (!el) throw new Error('password input not found');
   act(() => {
-    Object.defineProperty(el, 'value', { value, configurable: true });
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
@@ -61,7 +61,7 @@ function setConfirmPassword(container: HTMLElement, value: string): void {
   const el = container.querySelectorAll('input[type="password"]')[1] as HTMLInputElement | undefined;
   if (!el) throw new Error('confirm password input not found');
   act(() => {
-    Object.defineProperty(el, 'value', { value, configurable: true });
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
@@ -70,7 +70,7 @@ function setCode(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[inputmode="numeric"]') as HTMLInputElement | null;
   if (!el) throw new Error('code input not found');
   act(() => {
-    Object.defineProperty(el, 'value', { value, configurable: true });
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }

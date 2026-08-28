@@ -3,6 +3,7 @@ import { t } from '../i18n';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
+import OtpInput from './OtpInput';
 import { licenseApiUrl } from '../lib/runtime-config';
 
 /**
@@ -41,6 +42,7 @@ export default function AuthForm({ locale }: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
   // Resend cooldown: tracks when the OTP was last sent
   const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -289,22 +291,22 @@ export default function AuthForm({ locale }: Props) {
       );
     }
     return (
-      <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+      <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
         <p className="mb-4 text-sm text-muted">{t(locale, 'login.resetCodeSent')}</p>
         <form onSubmit={submitResetPassword} className="space-y-4" aria-label={t(locale, 'login.resetTitle')}>
-          <label className="block">
-            <span className="mb-1 block text-sm text-muted">{t(locale, 'login.code')}</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              required
-              autoComplete="one-time-code"
+          <div>
+            <span className="mb-2 block text-sm text-muted">{t(locale, 'login.code')}</span>
+            <OtpInput
               value={resetCode}
-              onChange={(e) => setResetCode(e.target.value)}
-              placeholder={t(locale, 'login.codePlaceholder')}
-              className={inputClass}
+              onChange={(val) => {
+                setResetCode(val);
+                if (error) setError('');
+              }}
+              error={!!error}
+              disabled={loading}
+              idPrefix="reset-otp-digit"
             />
-          </label>
+          </div>
           <PasswordField
             locale={locale}
             id="reset-password"
@@ -321,7 +323,7 @@ export default function AuthForm({ locale }: Props) {
           {error && <p className="text-sm text-link" role="alert">{error}</p>}
           <button
             type="submit"
-            disabled={loading || !isStrongPassword(resetPassword) || !passwordsMatch(resetPassword, resetConfirm)}
+            disabled={loading || resetCode.length < 6 || !isStrongPassword(resetPassword) || !passwordsMatch(resetPassword, resetConfirm)}
             className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.resetPassword')}
@@ -341,26 +343,31 @@ export default function AuthForm({ locale }: Props) {
   // ── OTP code step ────────────────────────────────────────────────
   if (step === 'code') {
     return (
-      <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+      <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
         <p className="mb-4 text-sm text-muted">{t(locale, 'login.codeSent')}</p>
         <form onSubmit={verifyOtp} className="space-y-4" aria-label={t(locale, 'login.title')}>
-          <label className="block">
-            <span className="mb-1 block text-sm text-muted">{t(locale, 'login.code')}</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              required
-              autoComplete="one-time-code"
+          <div>
+            <span className="mb-2 block text-sm text-muted">{t(locale, 'login.code')}</span>
+            <OtpInput
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder={t(locale, 'login.codePlaceholder')}
-              className={inputClass}
+              onChange={(val) => {
+                setCode(val);
+                if (error) setError('');
+              }}
+              error={!!error}
+              disabled={loading}
+              idPrefix="login-otp-digit"
             />
-          </label>
+          </div>
+          {resendSuccess && (
+            <p className="text-center text-xs font-medium text-green-500" role="status">
+              ✓ {t(locale, 'login.codeResent')}
+            </p>
+          )}
           {error && <p className="text-sm text-link" role="alert">{error}</p>}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || code.length < 6}
             className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.verify')}
@@ -397,6 +404,8 @@ export default function AuthForm({ locale }: Props) {
                       return;
                     }
                     setOtpSentAt(Date.now());
+                    setResendSuccess(true);
+                    setTimeout(() => setResendSuccess(false), 4000);
                   } catch {
                     setError(t(locale, 'login.errorSend'));
                   } finally {
@@ -425,7 +434,7 @@ export default function AuthForm({ locale }: Props) {
 
   // ── Sign-in view (tabs) ──────────────────────────────────────────
   return (
-    <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+    <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
       <div
         role="tablist"
         aria-label={t(locale, 'login.title')}

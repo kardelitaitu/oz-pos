@@ -478,3 +478,14 @@ button:not(:disabled):active {
   max-width: 100%;
   height: auto;
 }
+
+/* Tactile shake animation for form errors */
+@keyframes formShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.animate-shake {
+  animation: formShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+

@@ -219,6 +219,7 @@
     "cooldown": "Anda baru saja mengatur ulang kata sandi. Reset baru diblokir hingga",
     "resendCode": "Kirim ulang kode",
     "resendCooldown": "Kirim ulang kode dalam",
+    "codeResent": "Kode verifikasi baru telah dikirim ke email Anda.",
     "errorRateLimit": "Terlalu banyak permintaan — silakan tunggu beberapa menit sebelum mencoba lagi.",
     "errorCors": "Permintaan diblokir oleh server. Silakan hubungi dukungan.",
     "errorSmtp": "Pengiriman email belum dikonfigurasi pada deployment ini. Silakan hubungi dukungan."

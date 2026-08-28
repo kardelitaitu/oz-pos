@@ -219,6 +219,7 @@
     "cooldown": "You recently reset your password. New resets are blocked until",
     "resendCode": "Resend code",
     "resendCooldown": "Resend code in",
+    "codeResent": "A new verification code was sent to your email.",
     "errorRateLimit": "Too many requests — please wait a few minutes before trying again.",
     "errorCors": "Request blocked by the server. Please contact support.",
     "errorSmtp": "Email delivery is not configured on this deployment. Please contact support."

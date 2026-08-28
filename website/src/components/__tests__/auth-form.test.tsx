@@ -45,7 +45,7 @@ function setText(container: HTMLElement, testId: string, value: string): void {
   const el = container.querySelector(`[data-testid="${testId}"]`) as HTMLInputElement | null;
   if (!el) throw new Error(`[data-testid="${testId}"] not found`);
   act(() => {
-    Object.defineProperty(el, 'value', { value, configurable: true });
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
@@ -54,7 +54,7 @@ function setEmail(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[type="email"]') as HTMLInputElement | null;
   if (!el) throw new Error('email input not found');
   act(() => {
-    Object.defineProperty(el, 'value', { value, configurable: true });
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
@@ -64,7 +64,7 @@ function setPassword(container: HTMLElement, value: string): void {
   const el = inputs[0] as HTMLInputElement | undefined;
   if (!el) throw new Error('password input not found');
   act(() => {
-    Object.defineProperty(el, 'value', { value, configurable: true });
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
@@ -73,7 +73,7 @@ function setCode(container: HTMLElement, value: string): void {
   const el = container.querySelector('input[inputmode="numeric"]') as HTMLInputElement | null;
   if (!el) throw new Error('code input not found');
   act(() => {
-    Object.defineProperty(el, 'value', { value, configurable: true });
+    Object.defineProperty(el, 'value', { value, configurable: true, writable: true });
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }

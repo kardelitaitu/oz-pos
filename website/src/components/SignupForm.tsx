@@ -4,6 +4,7 @@ import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import { type Region, setRegion } from '../lib/region';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
+import OtpInput from './OtpInput';
 import { licenseApiUrl } from '../lib/runtime-config';
 
 /**
@@ -60,6 +61,7 @@ export default function SignupForm({ locale }: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
   // Resend cooldown
   const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -163,26 +165,31 @@ export default function SignupForm({ locale }: Props) {
 
   if (step === 'code') {
     return (
-      <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+      <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
         <p className="mb-4 text-sm text-muted">{t(locale, 'signup.codeSent')}</p>
         <form onSubmit={verify} className="space-y-4" aria-label={t(locale, 'signup.title')}>
-          <label className="block">
-            <span className="mb-1 block text-sm text-muted">{t(locale, 'login.code')}</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              required
-              autoComplete="one-time-code"
+          <div>
+            <span className="mb-2 block text-sm text-muted">{t(locale, 'login.code')}</span>
+            <OtpInput
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder={t(locale, 'login.codePlaceholder')}
-              className={inputClass}
+              onChange={(val) => {
+                setCode(val);
+                if (error) setError('');
+              }}
+              error={!!error}
+              disabled={loading}
+              idPrefix="signup-otp-digit"
             />
-          </label>
+          </div>
+          {resendSuccess && (
+            <p className="text-center text-xs font-medium text-green-500" role="status">
+              ✓ {t(locale, 'login.codeResent')}
+            </p>
+          )}
           {error && <p className="text-sm text-link" role="alert">{error}</p>}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || code.length < 6}
             className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'signup.verify')}
@@ -219,6 +226,8 @@ export default function SignupForm({ locale }: Props) {
                       return;
                     }
                     setOtpSentAt(Date.now());
+                    setResendSuccess(true);
+                    setTimeout(() => setResendSuccess(false), 4000);
                   } catch {
                     setError(t(locale, 'login.errorSend'));
                   } finally {
@@ -246,7 +255,7 @@ export default function SignupForm({ locale }: Props) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+    <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
       <form onSubmit={register} className="space-y-4" aria-label={t(locale, 'signup.title')}>
         <div className="relative">
           <span className="mb-1 block text-sm text-muted">{t(locale, 'signup.region')}</span>
