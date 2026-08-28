@@ -235,6 +235,7 @@ kds-settings-card-colours = Warna Kartu
 kds-settings-color-dinein = Makan di tempat
 kds-settings-color-takeaway = Bawa pulang
 kds-settings-color-rush = Mendesak
+kds-settings-color-pending = Menunggu
 kds-settings-color-preparing = Memasak
 kds-settings-color-ready = Siap
 kds-settings-color-complete = Selesai

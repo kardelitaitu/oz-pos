@@ -12,6 +12,7 @@ import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { isEditableTarget } from '@/utils/isEditableTarget';
 import { isAnyAriaModalOpen } from '@/utils/modal-guard';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { KdsLayoutMasonry } from '@/features/kds/KdsLayoutMasonry';
 import { KdsHamburgerPanel } from '@/features/kds/KdsHamburgerPanel';
 import { KdsCardColorsProvider } from '@/features/kds/KdsCardColorsContext';
@@ -108,6 +109,8 @@ export default function KdsScreen() {
   // Confirm modal state — generic confirmation dialog for destructive actions.
   const [confirm, setConfirm] = useState<{ title: string; message: string; onOk: () => void; danger?: boolean } | null>(null);
   const confirmRef = useRef<HTMLDivElement>(null);
+  const closeConfirm = useCallback(() => setConfirm(null), []);
+  useFocusTrap(confirmRef, confirm !== null, closeConfirm);
   const { prefs, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
 
   // Track previous order IDs for new-ticket arrival animation.

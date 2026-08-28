@@ -233,6 +233,7 @@ kds-settings-card-colours = Card Colours
 kds-settings-color-dinein = Dine in
 kds-settings-color-takeaway = Takeaway
 kds-settings-color-rush = Rush
+kds-settings-color-pending = Pending
 kds-settings-color-preparing = Preparing
 kds-settings-color-ready = Ready
 kds-settings-color-complete = Complete

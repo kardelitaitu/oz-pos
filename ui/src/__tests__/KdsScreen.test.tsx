@@ -880,4 +880,42 @@ describe('KdsScreen', () => {
       expect(filter.textContent).toMatch(/all/i);
     });
   });
+
+  // ── Shift button + confirm modal ───────────────────────────────
+
+  it('starts a shift directly and ends it via the confirm modal', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-shift')).not.toBeNull();
+    });
+
+    // Start shift — direct, no confirmation.
+    await userEvent.click(screen.getByTestId('kds-topbar-shift'));
+    expect(screen.getByText('End Shift')).toBeTruthy();
+
+    // End shift — opens the confirm modal.
+    await userEvent.click(screen.getByTestId('kds-topbar-shift'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-modal')).not.toBeNull();
+    });
+
+    // Cancel keeps the shift active.
+    await userEvent.click(screen.getByTestId('kds-confirm-cancel'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-modal')).toBeNull();
+    });
+    expect(screen.getByText('End Shift')).toBeTruthy();
+
+    // Confirm ends the shift.
+    await userEvent.click(screen.getByTestId('kds-topbar-shift'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-modal')).not.toBeNull();
+    });
+    await userEvent.click(screen.getByTestId('kds-confirm-ok'));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-modal')).toBeNull();
+    });
+    expect(screen.getByText('Start Shift')).toBeTruthy();
+  });
 });
