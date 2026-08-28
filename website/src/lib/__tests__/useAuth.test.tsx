@@ -111,4 +111,84 @@ describe('useAuth hook', () => {
     expect(harness.current.error).not.toBe('');
     await harness.unmount();
   });
+
+  it('handles new tenant registration successfully', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+
+    const harness = await renderHookHarness(() => useAuth({ locale: 'en' }));
+
+    let success = false;
+    await act(async () => {
+      success = await harness.current.register('newuser@example.com', 'SecurePass123!', 'SecurePass123!');
+    });
+
+    expect(success).toBe(true);
+    expect(harness.current.error).toBe('');
+    expect(harness.current.otpSentAt).not.toBeNull();
+    await harness.unmount();
+  });
+
+  it('handles rate limiting (429) correctly', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ error: 'Too many requests' }),
+    });
+
+    const harness = await renderHookHarness(() => useAuth({ locale: 'en' }));
+
+    let success = true;
+    await act(async () => {
+      success = await harness.current.requestOtp('rate-limited@example.com');
+    });
+
+    expect(success).toBe(false);
+    expect(harness.current.error).toContain('Too many requests');
+    await harness.unmount();
+  });
+
+  it('handles full password reset flow with verification code', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ cooldown_until: '2026-08-28T09:10:00Z' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token: 'reset-token-789' }),
+      });
+
+    const onAuthSuccess = vi.fn();
+    const harness = await renderHookHarness(() => useAuth({ locale: 'en', onAuthSuccess }));
+
+    // Step 1: Request reset code
+    let codeReqResult: { success: boolean; cooldownUntil?: string } = { success: false };
+    await act(async () => {
+      codeReqResult = await harness.current.requestResetCode('forgot@example.com');
+    });
+    expect(codeReqResult.success).toBe(true);
+    expect(codeReqResult.cooldownUntil).toBe('2026-08-28T09:10:00Z');
+
+    // Step 2: Submit new password with code
+    let resetRes: { success: boolean; token?: string } = { success: false };
+    await act(async () => {
+      resetRes = await harness.current.resetPassword(
+        'forgot@example.com',
+        '654321',
+        'NewSecurePass999!',
+        'NewSecurePass999!'
+      );
+    });
+
+    expect(resetRes.success).toBe(true);
+    expect(resetRes.token).toBe('reset-token-789');
+    expect(sessionStorage.getItem('oz_session')).toBe('reset-token-789');
+    expect(onAuthSuccess).toHaveBeenCalledWith('reset-token-789', 'forgot@example.com');
+    await harness.unmount();
+  });
 });
+

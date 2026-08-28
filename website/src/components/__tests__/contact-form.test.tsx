@@ -228,4 +228,42 @@ describe('ContactForm', () => {
       container.remove();
     }
   });
+
+  it('trims whitespace and lowercases email on submit', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container, root } = await renderContact('en');
+    try {
+      const nameInput = getInputByPlaceholder(container, 'Your name');
+      const emailInput = getInputByPlaceholder(container, 'you@example.com');
+      const messageInput = container.querySelector('textarea') as HTMLTextAreaElement;
+
+      await act(async () => {
+        setNativeValue(nameInput, '  Padded Name  ');
+        setNativeValue(emailInput, '  USER@EXAMPLE.COM  ');
+        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+        nativeSetter.call(messageInput, '   Padded message body.   ');
+        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+
+      await act(async () => {
+        const form = container.querySelector('form') as HTMLFormElement;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Padded Name',
+          email: 'user@example.com',
+          message: 'Padded message body.',
+        }),
+      });
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
+
