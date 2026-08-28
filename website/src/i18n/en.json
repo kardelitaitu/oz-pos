@@ -112,8 +112,8 @@
         "description": "Sales, checkout, and inventory keep working 100% without internet. Never lose a sale or halt checkout during outages."
       },
       {
-        "title": "SOTA Stack for Lowest-End Hardware",
-        "description": "Built with an ultra-lean Rust and embedded SQLite engine. Blazing fast even on budget tablets, laptops, and legacy POS terminals."
+        "title": "No Hardware Barrier",
+        "description": "Built on a state-of-the-art tech stack (lean Rust & embedded SQLite) for extreme efficiency. Runs blazing fast on budget tablets, laptops, and legacy POS hardware."
       },
       {
         "title": "Multi-Store & Multi-Terminal",
@@ -128,19 +128,19 @@
         "description": "Accept dynamic QRIS and digital wallet payments directly on screen with instant verification and zero extra hardware fees."
       },
       {
-        "title": "Debit & Credit Card Support",
+        "title": "Debit & Credit Card",
         "description": "Seamless EDC and payment gateway integrations for chip, contactless tap, and swipe card transactions."
       },
       {
-        "title": "Whitelabel Without Enterprise Fees",
+        "title": "Whitelabel",
         "description": "Full branding control over receipts, business logos, and print layouts included on regular plans without enterprise surcharges."
       },
       {
-        "title": "Lua Scripting Automation",
+        "title": "Lua Scripting",
         "description": "Embedded Lua engine for limitless flexibility: tiered discounts, happy-hour promos, BOGO deals, and custom tax rules."
       },
       {
-        "title": "Full Audit Logging & Shift Control",
+        "title": "Full Audit Logging & Shift",
         "description": "Tamper-evident audit trail for every cash drawer event, line void, manager override, and shift reconciliation."
       }
     ],

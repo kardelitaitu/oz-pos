@@ -112,35 +112,35 @@
         "description": "Penjualan, kasir, dan stok tetap bekerja 100% tanpa koneksi internet. Transaksi dan data Anda tidak pernah hilang."
       },
       {
-        "title": "SOTA Stack untuk Hardware Terendah",
-        "description": "Arsitektur ultra-ringan berbasis Rust & SQLite tertanam. Berjalan sangat cepat bahkan pada PC, tablet, atau hardware kasir lawas."
+        "title": "No Hardware Barrier",
+        "description": "Dibangun dengan stack teknologi state-of-the-art (Rust & SQLite tertanam) yang sangat ringan dan efisien. Berjalan mulus pada PC, tablet, maupun hardware kasir spesifikasi paling rendah."
       },
       {
-        "title": "Multi-Toko & Multi-Terminal",
+        "title": "Multi-Store & Multi-Terminal",
         "description": "Kelola banyak cabang toko, register kasir, dan gudang dalam satu topologi terpadu dengan sinkronisasi instan."
       },
       {
-        "title": "Laporan & Analitik Lanjutan",
+        "title": "Advanced Reports & Analytics",
         "description": "Wawasan mendalam seputar tren penjualan, produk terlaris, analisis jam sibuk (rush-hour), dan margin laba bersih."
       },
       {
-        "title": "E-Wallet & QRIS Native",
+        "title": "E-Wallets & Native QRIS",
         "description": "Terima pembayaran QRIS langsung di layar dan berbagai dompet digital tanpa perlu sewa perangkat EDC tambahan."
       },
       {
-        "title": "Dukungan Kartu Debit & Kredit",
+        "title": "Debit & Credit Card",
         "description": "Integrasi mulus dengan terminal EDC dan payment gateway modern untuk kartu chip, contactless, dan gesek."
       },
       {
-        "title": "Whitelabel Tanpa Langganan Enterprise",
+        "title": "Whitelabel",
         "description": "Kustomisasi penuh untuk logo bisnis, header struk belanja, dan format cetak kasir Anda tanpa biaya lisensi korporat."
       },
       {
-        "title": "Otomasi Skrip Lua",
+        "title": "Lua Scripting",
         "description": "Mesin skrip Lua tertanam untuk fleksibilitas tanpa batas: logika diskon bertingkat, promo happy hour, BOGO, dan aturan pajak kustom."
       },
       {
-        "title": "Audit Trail & Keamanan Shift",
+        "title": "Full Audit Logging & Shift",
         "description": "Catatan riwayat lengkap dan anti-manipulasi untuk setiap pembukaan laci kas, void, pembatalan, dan pergantian shift kasir."
       }
     ],

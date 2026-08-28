@@ -41,8 +41,7 @@ const pricing = getRelativeLocaleUrl(locale, 'pricing');
             style={`transition-delay: ${i * 60}ms`}
             class="feature-card group rounded-xl border border-ink/10 bg-surface/40 p-6 transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] hover:border-ink/20 hover:shadow-md hover:-translate-y-0.5"
           >
-            <p class="text-sm font-bold text-link">{String(i + 1).padStart(2, '0')}</p>
-            <h2 class="mt-2 text-xl font-semibold transition-colors duration-200 group-hover:text-link">{f.title}</h2>
+            <h2 class="text-xl font-semibold transition-colors duration-200 group-hover:text-link">{f.title}</h2>
             <p class="mt-2 text-sm text-muted">{f.description}</p>
           </article>
         ))
