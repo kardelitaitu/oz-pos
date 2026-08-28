@@ -4,7 +4,7 @@ import type { CheckoutTier } from '../content/pricing/types';
 import { hasSession, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout, getSessionEmail } from './paddle';
 import { openMidtransCheckout } from './midtrans';
 import { licenseApiUrl } from '../lib/runtime-config';
-import { getRegion } from '../lib/region';
+import { getExplicitRegion } from '../lib/region';
 
 /**
  * Pricing-page checkout button (website-plan.md §7). Payment is
@@ -64,13 +64,13 @@ export default function CheckoutButton({ tier, locale }: Props) {
   // (fixed IDR, QRIS/VA/e-wallet — ADR #39 D1). Paddle stays for global.
   // When region is unset, fall back to locale (id → Midtrans).
   const [useMidtrans, setUseMidtrans] = useState(() => {
-    const r = getRegion();
-    return r === 'id' || (r !== 'global' && locale === 'id');
+    const r = getExplicitRegion();
+    return r === 'id' || (!r && locale === 'id');
   });
   useEffect(() => {
     const check = () => {
-      const r = getRegion();
-      setUseMidtrans(r === 'id' || (r !== 'global' && locale === 'id'));
+      const r = getExplicitRegion();
+      setUseMidtrans(r === 'id' || (!r && locale === 'id'));
     };
     window.addEventListener('storage', check);
     return () => window.removeEventListener('storage', check);
