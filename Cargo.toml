@@ -47,6 +47,7 @@ readme = "README.md"
 # all crates import from here: oz-core = { workspace = true }
 oz-api = { path = "crates/oz-api" }
 oz-core = { path = "crates/oz-core" }
+oz-crypto = { path = "crates/oz-crypto" }
 oz-hal = { path = "crates/oz-hal" }
 oz-lua = { path = "crates/oz-lua" }
 oz-plugin = { path = "crates/oz-plugin" }
