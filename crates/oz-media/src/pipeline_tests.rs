@@ -1,9 +1,95 @@
-//! Media pipeline — STUB test placeholder + functional hash test.
+//! Media pipeline — transform composition + content hash tests.
 //!
-//! The pipeline is a stub until the real stages land; the content-hash
-//! helper is functional and covered here.
+//! The transform stages are implemented; storage persistence is PLANNED.
 
-use crate::pipeline::content_hash;
+use std::io::Cursor;
+
+use image::RgbImage;
+
+use super::{MediaPipeline, content_hash};
+use crate::compress::Quality;
+use crate::crop::CropMode;
+use crate::storage::LocalStorage;
+use crate::thumbnail::ThumbnailPreset;
+use crate::{ImageDimensions, ImageFormat};
+
+/// Build a 400×300 RGB source image.
+fn source_image() -> Vec<u8> {
+    let img = RgbImage::from_pixel(400, 300, image::Rgb([200u8, 30, 30]));
+    let mut buf = Vec::new();
+    img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
+        .unwrap();
+    buf
+}
+
+#[test]
+fn transform_produces_original_plus_thumbnails() {
+    let storage = LocalStorage::new("/tmp/media");
+    let pipeline = MediaPipeline::new(storage);
+    let src = source_image();
+
+    let variants = pipeline
+        .transform(
+            "photo.png",
+            &src,
+            CropMode::TrimBorders,
+            ImageFormat::Jpeg,
+            Quality::Medium,
+            &[ThumbnailPreset::Small, ThumbnailPreset::Large],
+        )
+        .unwrap();
+
+    // original + 2 presets.
+    assert_eq!(variants.len(), 3);
+    assert_eq!(variants[0].key, "photo.png");
+    assert_eq!(variants[1].key, "photo.png_small");
+    assert_eq!(variants[2].key, "photo.png_large");
+
+    // Thumbnail dims respect their presets (400×300 → 128×96, 512×384).
+    assert_eq!(variants[1].dimensions, ImageDimensions::new(128, 96));
+    assert_eq!(variants[2].dimensions, ImageDimensions::new(512, 384));
+}
+
+#[test]
+fn process_applies_transforms_without_persisting() {
+    // process() is a stub for persistence but must apply the real
+    // transforms and return the same variants as transform().
+    let storage = LocalStorage::new("/tmp/media");
+    let pipeline = MediaPipeline::new(storage);
+    let src = source_image();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let variants = rt
+        .block_on(pipeline.process(
+            "products/abc",
+            "photo.png",
+            &src,
+            CropMode::TrimBorders,
+            ImageFormat::Jpeg,
+            Quality::Low,
+            &[ThumbnailPreset::Icon],
+        ))
+        .unwrap();
+
+    assert_eq!(variants.len(), 2);
+    assert_eq!(variants[1].dimensions, ImageDimensions::new(64, 48));
+}
+
+#[test]
+fn transform_rejects_oversized_input() {
+    let storage = LocalStorage::new("/tmp/media");
+    let pipeline = MediaPipeline::new(storage);
+    let big = vec![0u8; 21 * 1024 * 1024]; // > 20 MiB default limit.
+    let result = pipeline.transform(
+        "big.bin",
+        &big,
+        CropMode::TrimBorders,
+        ImageFormat::Jpeg,
+        Quality::Low,
+        &[],
+    );
+    assert!(result.is_err(), "oversized input must be rejected");
+}
 
 #[test]
 fn content_hash_is_stable_sha256() {

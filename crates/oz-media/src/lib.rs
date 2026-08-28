@@ -1,28 +1,32 @@
 /*
-PLANNED — Media & image processing crate for OZ-POS.
+Media & image processing crate for OZ-POS.
 
-Status: STUB — all operations return Err(MediaError::NotImplemented).
+Status: transform stages (thumbnail / compress / crop) IMPLEMENTED.
+Persistence (MediaStorage backends + DB metadata) PLANNED.
 
-When the real implementations land, this crate will handle:
-- Image storage (local filesystem + DB metadata)
-- Thumbnail generation (maintain aspect ratio, configurable sizes)
-- Image compression (JPEG quality / WebP / PNG optimization)
-- Auto-crop (content-aware cropping for product photos)
+Implemented:
+- Thumbnail generation (maintain aspect ratio, preset sizes)
+- Image compression (JPEG quality / WebP pass-through / PNG)
+- Auto-crop (border trim / centre-crop / smart bias)
+
+PLANNED:
+- Image storage (local filesystem + object storage + DB metadata)
+- Pipeline persistence (store + record media_assets rows)
 
 Depends on the `image` crate (0.25) for pixel-level operations.
 */
 
-//! Image processing utilities for OZ-POS — PLANNED (stubs).
+//! Image processing utilities for OZ-POS.
 //!
-//! `oz-media` provides image storage, thumbnail generation, compression,
-//! and auto-crop operations for product photos, category icons, and
-//! store logos.
+//! `oz-media` provides image thumbnail generation, compression, and
+//! auto-crop operations for product photos, category icons, and
+//! store logos, plus a pipeline orchestrator and metrics.
 //!
 //! # Status
 //!
-//! Every function is a **stub** returning [`MediaError::NotImplemented`].
-//! The API surface is designed to match the real implementation's
-//! signature so callers can be written today.
+//! The transform functions ([`thumbnail`], [`compress`], [`crop`]) are
+//! implemented. Storage backends and DB metadata persistence are
+//! PLANNED stubs ([`storage`], [`MediaPipeline::process`]).
 
 pub mod compress;
 pub mod crop;

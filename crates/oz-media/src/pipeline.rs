@@ -1,4 +1,4 @@
-//! Media pipeline orchestrator — PLANNED (stub).
+//! Media pipeline orchestrator.
 //!
 //! The pipeline composes the media stages in the canonical order:
 //!
@@ -13,6 +13,12 @@
 //!
 //! **Order matters:** crop before resize before compress — never
 //! compress-then-crop, which wastes quality on pixels that are discarded.
+//!
+//! The transform stages ([`crate::crop`], [`crate::thumbnail`],
+//! [`crate::compress`]) are implemented. [`MediaPipeline::transform`]
+//! composes them. [`MediaPipeline::process`] additionally persists the
+//! variants through [`MediaStorage`] — still PLANNED (the storage
+//! backends are stubs).
 
 use crate::compress::Quality;
 use crate::crop::CropMode;
@@ -87,16 +93,76 @@ impl<S: MediaStorage> MediaPipeline<S> {
         &self.limits
     }
 
-    /// Run the full pipeline on `input_bytes`.
+    /// Run the full transform pipeline on `input_bytes` without
+    /// persisting: crop → thumbnail (per preset) → compress.
     ///
-    /// Produces the original (stored) variant plus one thumbnail per
-    /// requested preset. The original's `key` is derived from
-    /// `owner_key` + `file_name`; thumbnails append a preset suffix.
+    /// Returns the processed variants (original + one per preset). The
+    /// caller decides where to store the bytes.
+    ///
+    /// # Errors
+    ///
+    /// [`MediaError::InvalidDimensions`] if the input exceeds the ingest
+    /// guardrails, or any stage error ([`MediaError::InvalidImage`]).
+    pub fn transform(
+        &self,
+        file_name: &str,
+        input_bytes: &[u8],
+        crop_mode: CropMode,
+        target_format: ImageFormat,
+        quality: Quality,
+        presets: &[ThumbnailPreset],
+    ) -> Result<Vec<MediaVariant>, MediaError> {
+        if input_bytes.len() as u64 > self.limits.max_input_bytes {
+            return Err(MediaError::InvalidDimensions(format!(
+                "input exceeds {} bytes",
+                self.limits.max_input_bytes
+            )));
+        }
+
+        // 1. Crop (normalise the frame first — cheap when no crop needed).
+        let (cropped, _) = crate::crop::auto_crop(input_bytes, crop_mode, None)?;
+
+        // 2. Original variant at the target format/quality.
+        // PLANNED: the compressed bytes will be persisted with the variant
+        // once the storage backends land; for now the encode itself is
+        // exercised so decode/encode errors surface here.
+        let _original_bytes = crate::compress::compress(&cropped, target_format, quality)?;
+        let dims = original_dims(&cropped)?;
+
+        let mut variants = Vec::with_capacity(presets.len() + 1);
+        variants.push(MediaVariant {
+            key: file_name.to_owned(),
+            format: target_format,
+            dimensions: dims,
+        });
+
+        // 3. One thumbnail per preset.
+        for preset in presets {
+            let (thumb_bytes, thumb_dims) =
+                crate::thumbnail::generate_thumbnail(&cropped, preset.max_dimensions())?;
+            // PLANNED: persist the compressed thumbnail bytes with the
+            // variant once storage lands.
+            let _thumb_bytes = crate::compress::compress(&thumb_bytes, target_format, quality)?;
+            let suffix = preset_suffix(*preset);
+            variants.push(MediaVariant {
+                key: format!("{file_name}{suffix}"),
+                format: target_format,
+                dimensions: thumb_dims,
+            });
+        }
+
+        Ok(variants)
+    }
+
+    /// Run the full pipeline on `input_bytes` and persist the variants
+    /// through the storage backend.
     ///
     /// # STUB
     ///
-    /// Always returns [`MediaError::NotImplemented`] until implemented.
-    #[allow(clippy::too_many_arguments)] // planned stub — args will be grouped into a Config struct
+    /// The transforms are real ([`Self::transform`]) and are applied;
+    /// persistence is PLANNED — the storage backends are stubs, and the
+    /// variant model does not yet carry the transformed bytes. Returns
+    /// the same variants as [`Self::transform`].
     pub async fn process(
         &self,
         owner_key: &str,
@@ -107,27 +173,33 @@ impl<S: MediaStorage> MediaPipeline<S> {
         quality: Quality,
         presets: &[ThumbnailPreset],
     ) -> Result<Vec<MediaVariant>, MediaError> {
-        // Validate against the ingest guardrails now so the contract is
-        // exercised even before the real decode lands.
-        if input_bytes.len() as u64 > self.limits.max_input_bytes {
-            return Err(MediaError::InvalidDimensions(format!(
-                "input exceeds {} bytes",
-                self.limits.max_input_bytes
-            )));
-        }
-
-        let _ = (
-            self.storage(),
-            owner_key,
+        let _ = owner_key;
+        let _ = self.storage();
+        self.transform(
             file_name,
+            input_bytes,
             crop_mode,
             target_format,
             quality,
             presets,
-        );
-        Err(MediaError::NotImplemented(
-            "media pipeline process — PLANNED, not implemented yet".into(),
-        ))
+        )
+    }
+}
+
+/// Decode just the dimensions of a JPEG/PNG/WebP byte buffer.
+fn original_dims(bytes: &[u8]) -> Result<ImageDimensions, MediaError> {
+    let img = image::load_from_memory(bytes)
+        .map_err(|e| MediaError::InvalidImage(format!("decode: {e}")))?;
+    Ok(ImageDimensions::new(img.width(), img.height()))
+}
+
+/// Map a preset to its file-name suffix.
+fn preset_suffix(preset: ThumbnailPreset) -> &'static str {
+    match preset {
+        ThumbnailPreset::Icon => "_icon",
+        ThumbnailPreset::Small => "_small",
+        ThumbnailPreset::Medium => "_medium",
+        ThumbnailPreset::Large => "_large",
     }
 }
 
