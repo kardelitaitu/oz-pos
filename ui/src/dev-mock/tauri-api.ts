@@ -1410,6 +1410,38 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'session_keepalive': () => ({ expires_at: Math.floor(Date.now() / 1000) + 86400 }),
 
+  // ── EDC card-present terminal ──────────────────────────────────────
+  'edc_terminal_status': () => ({ status: 'ready' }),
+  'edc_sale': (args) => {
+    const a = args as { args: { amountMinor: number; currency: string } };
+    const { amountMinor, currency } = a.args ?? a;
+    return {
+      success: true,
+      transactionId: `mock-edc-${Date.now()}`,
+      authCode: 'MOCKAUTH',
+      cardScheme: 'Visa',
+      cardLast4: '1111',
+      message: `approved ${amountMinor} ${currency}`,
+    };
+  },
+  'edc_refund': (args) => {
+    const a = args as { args: { transactionId: string; amountMinor: number; currency: string } };
+    const { transactionId, amountMinor, currency } = a.args ?? a;
+    return {
+      success: true,
+      transactionId,
+      authCode: 'MOCKREF',
+      cardScheme: null,
+      cardLast4: null,
+      message: `refund approved ${amountMinor} ${currency}`,
+    };
+  },
+  'edc_void': (args) => {
+    const a = args as { args: { transactionId: string } };
+    const { transactionId } = a.args ?? a;
+    return { success: true, transactionId, authCode: null, cardScheme: null, cardLast4: null, message: 'void approved' };
+  },
+
   // ═══════════════════════════════════════════════════════════════
   // BOOT / SETUP
   // ═══════════════════════════════════════════════════════════════
