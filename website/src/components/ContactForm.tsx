@@ -128,7 +128,19 @@ export default function ContactForm({ locale }: Props) {
           onChange={(e) => setWebsite(e.target.value)}
         />
       </label>
-      {status === 'error' && <p className="mt-3 text-sm text-link" role="alert">{t(locale, 'support.formError')}</p>}
+      {status === 'error' && (
+        <div className="mt-3 text-sm text-link" role="alert">
+          <p>{t(locale, 'support.formError')}</p>
+          <p className="mt-1 text-xs text-muted">
+            <a
+              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Support: ${name || 'Inquiry'}`)}&body=${encodeURIComponent(message)}`}
+              className="text-link underline"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+          </p>
+        </div>
+      )}
       <button
         type="submit"
         disabled={status === 'sending'}

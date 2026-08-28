@@ -213,7 +213,8 @@ export default function SignupForm({ locale }: Props) {
                       } else if (res.status === 503) {
                         setError(t(locale, 'login.errorSmtp'));
                       } else {
-                        setError(t(locale, 'login.errorSend'));
+                        const msg = body.error;
+                        setError(msg ? `${t(locale, 'login.errorSend')} (${msg})` : t(locale, 'login.errorSend'));
                       }
                       return;
                     }

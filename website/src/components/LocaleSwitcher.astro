@@ -52,7 +52,6 @@ const activeIndex = locales.indexOf(locale);
       const switcherRect = switcher!.getBoundingClientRect();
       const btn = links[index] as HTMLElement;
       const btnRect = btn.getBoundingClientRect();
-      const gap = 3; // matches p-[3px] padding
       pill!.style.left = `${btnRect.left - switcherRect.left - 1}px`;
       pill!.style.width = `${btnRect.width + 2}px`;
     }
@@ -83,6 +82,10 @@ const activeIndex = locales.indexOf(locale);
     });
   }
 
-  document.addEventListener('DOMContentLoaded', initLangSwitcher);
+  if (document.readyState !== 'loading') {
+    initLangSwitcher();
+  } else {
+    document.addEventListener('DOMContentLoaded', initLangSwitcher);
+  }
   document.addEventListener('astro:page-load', initLangSwitcher);
 </script>

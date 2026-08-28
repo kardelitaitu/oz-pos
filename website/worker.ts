@@ -47,7 +47,7 @@ export default {
 
     // Contact form → Discord webhook. The webhook URL is a Worker secret
     // so it never reaches the browser. The form sends { name, email, message }.
-    if (url.pathname === '/api/contact' && request.method === 'POST') {
+    if (url.pathname === '/api/contact') {
       const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -56,6 +56,12 @@ export default {
       // Handle preflight
       if (request.method === 'OPTIONS') {
         return new Response(null, { headers: corsHeaders });
+      }
+      if (request.method !== 'POST') {
+        return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
+          status: 405,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
       }
       try {
         const body = await request.json() as { name?: string; email?: string; message?: string };
