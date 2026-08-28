@@ -159,9 +159,11 @@ describe('KdsScreen', () => {
     testKdsState.kdsZone = ''; // Reset zone state between tests
   });
 
-  it('renders the title', async () => {
+  it('renders the KDS region with aria-label', async () => {
     renderScreen();
-    await waitFor(() => expect(screen.getByText('Kitchen Display')).toBeDefined());
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: /kitchen display/i })).toBeDefined();
+    });
   });
 
   it('renders the masonry order view (single layout)', async () => {
@@ -172,14 +174,12 @@ describe('KdsScreen', () => {
     });
   });
 
-  it('shows order count in the header', async () => {
+  it('shows order count in the Open tab', async () => {
     mockGetKdsQueue.mockResolvedValue([makeOrder(), makeOrder({ id: 'o-2' })]);
     renderScreen();
-    await waitFor(() => expect(screen.getByText('Kitchen Display')).toBeDefined());
-    const countEl = document.querySelector('.kds-order-count');
-    expect(countEl).toBeDefined();
-    // Fluent renders "2 orders" with Bidi chars, match pattern
-    expect(countEl?.textContent).toMatch(/2/);
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-tab-open').textContent).toMatch(/2/);
+    });
   });
 
   it('shows an empty state when no orders', async () => {
@@ -447,9 +447,8 @@ describe('KdsScreen', () => {
     });
     // Mall order should be filtered out
     expect(screen.queryByText('Mall Order')).toBeNull();
-    // Header count should show 2 orders
-    const countEl = document.querySelector('.kds-order-count');
-    expect(countEl?.textContent).toMatch(/2/);
+    // Open tab count should show 2 orders
+    expect(screen.getByTestId('kds-tab-open').textContent).toMatch(/2/);
   });
 
   // ── 2d: Keyboard shortcuts tests ─────────────────────────────────
@@ -871,8 +870,7 @@ describe('KdsScreen', () => {
       expect(screen.getByText('Fries')).toBeDefined();
     });
 
-    // Topbar header and Open tab count reflect filtered orders count (1 order)
-    expect(document.querySelector('.kds-order-count')?.textContent).toMatch(/1.*orders/i);
+    // Open tab count reflects filtered orders count (1 order)
     expect(screen.getByTestId('kds-tab-open').textContent).toContain('1');
   });
 

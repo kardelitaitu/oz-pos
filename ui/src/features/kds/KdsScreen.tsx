@@ -743,8 +743,6 @@ export default function KdsScreen() {
               )}
             </div>
           )}
-          <h1 className="kds-title"><Localized id="kds-title">Kitchen Display</Localized></h1>
-          <span className="kds-order-count"><Localized id="kds-order-count" vars={{ count: filteredOrders.length }}><span>{filteredOrders.length} orders</span></Localized></span>
         </div>
 
         {/* Open/Completed tabs — prototype .kds-tabs */}
