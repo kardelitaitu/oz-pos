@@ -98,7 +98,7 @@ export const pricing: PricingTier[] = [
     tierKey: 'premium',
     name: 'Premium',
     currency: 'IDR',
-    description: 'Untuk jaringan multi-toko — loyalitas dan otomatisasi.',
+    description: 'Untuk jaringan multi-toko — whitelabel, loyalitas, dan otomatisasi.',
     cta: 'Pilih Premium',
     prices: {
       monthly: { price: 'Rp 399.000', period: '/m', priceId: 'pri_placeholder_premium_monthly_usd' },
@@ -107,8 +107,8 @@ export const pricing: PricingTier[] = [
     features: [
       { label: '5 toko', included: true },
       { label: 'Register tanpa batas', included: true },
+      { label: 'Branding whitelabel', included: true },
       { label: 'Program loyalitas', included: true },
-      { label: 'Email laporan terjadwal', included: true },
       { label: 'Skrip Lua', included: true },
       { label: 'Dukungan prioritas (1 jam)', included: true },
     ],
@@ -118,7 +118,7 @@ export const pricing: PricingTier[] = [
     tierKey: 'enterprise',
     name: 'Enterprise',
     currency: 'IDR',
-    description: 'White-label, perangkat keras khusus, dan account manager khusus.',
+    description: 'Perangkat keras khusus, SLA kustom, dan account manager khusus.',
     cta: 'Hubungi kami',
     prices: {
       monthly: { price: 'Kustom', period: '' },
@@ -149,6 +149,7 @@ export const featureRows: FeatureRow[] = [
   { label: 'Sinkron cloud', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Dasbor Penjualan Harian', values: { free: false, plus: true, pro: true, premium: true, enterprise: true } },
   { label: 'Laporan & analitik', values: { free: false, plus: false, pro: true, premium: true, enterprise: true } },
+  { label: 'Branding whitelabel', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Email laporan terjadwal', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Program loyalitas', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
   { label: 'Skrip Lua', values: { free: false, plus: false, pro: false, premium: true, enterprise: true } },
