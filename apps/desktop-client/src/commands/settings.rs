@@ -1234,6 +1234,17 @@ pub async fn get_setting_scoped(
     run_get_setting(&conn, &key)
 }
 
+/// Get hardware settings (scoped — multi-phase with session validation).
+#[tauri::command]
+pub async fn get_hardware_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<HardwareSettingsDto, AppError> {
+    // Validate session; hardware profiles use the global db.
+    state.resolve_scope(&session_token)?;
+    get_hardware_settings(state).await
+}
+
 #[cfg(test)]
 #[path = "settings_tests.rs"]
 mod tests;
