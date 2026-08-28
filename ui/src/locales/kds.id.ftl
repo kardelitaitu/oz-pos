@@ -183,4 +183,10 @@ kds-tablist-aria = Lihat pesanan
 kds-tab-open = Terbuka
 kds-tab-completed = Selesai
 
+# ── Ticket card footer actions ──
+kds-advance-start = Mulai
+kds-advance-ready = Tandai Siap
+kds-advance-serve = Sajikan
+kds-toggle-card-aria = Buka/tutup detail pesanan { $number }
+
 # ── Kiosk (remaining) ──

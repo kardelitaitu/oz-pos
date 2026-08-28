@@ -795,12 +795,10 @@
 .kds-ticket {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-5);
   background: var(--kds-bg-surface);
   border: 1px solid var(--kds-border);
   border-radius: var(--kds-r-sm);
-  cursor: pointer;
+  overflow: hidden; /* clip the coloured header to the card radius */
   text-align: left;
   color: var(--kds-text);
   font-family: inherit;
@@ -814,9 +812,74 @@
   border-color: var(--kds-border-strong);
 }
 
-.kds-ticket:focus-visible {
+.kds-ticket:focus-within {
   outline: 2px solid var(--kds-accent);
   outline-offset: 1px;
+}
+
+/* ── Card header (prototype .kds-card-header) ───────────────────────
+   The whole header is a collapse-toggle button. Layout: 3 flex
+   children — icon | left column (order no) | right column (meta). */
+.kds-card-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  width: 100%;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--kds-text);
+  background: color-mix(in srgb, var(--kds-bg-tabs) 80%, var(--kds-bg-surface));
+  transition: background 0.2s, filter 0.18s;
+  -webkit-tap-highlight-color: transparent;
+}
+.kds-card-header:hover { background: var(--kds-bg-tabs); }
+.kds-ticket.kds-card.collapsed .kds-card-header { border-radius: var(--kds-r-sm); }
+.kds-card-header:focus-visible { outline: 2px solid var(--kds-accent); outline-offset: -1px; }
+.kds-card-header-icon { display: flex; align-items: center; flex-shrink: 0; padding-right: 2px; }
+.kds-service-icon { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.8; }
+.kds-card-header-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.kds-card-header-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.kds-card-header-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.kds-card-header .order-no { font-weight: 700; }
+.kds-card-header .status {
+  opacity: 0.7;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: var(--kds-r-xs);
+  background: var(--kds-bg-tabs);
+  line-height: 1.4;
+}
+.kds-card-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+}
+.kds-rush-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--kds-r-xs);
+  letter-spacing: 0.5px;
+  color: #1a1a1a;
+  background: var(--color-warning, #f59e0b);
+}
+
+/* ── Card body (prototype .kds-card-main) ─────────────────────────── */
+.kds-card-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 0 0;
+  position: relative;
 }
 
 /* ── 2d: Keyboard-selected ticket highlight ──────────────────────── */
@@ -1346,14 +1409,12 @@
 }
 
 .kds-ticket-notes {
-  font-size: var(--text-base);
-  color: var(--kds-note-text);
-  background: var(--kds-note-bg);
-  padding: var(--space-1_5) var(--space-2);
-  border-radius: var(--kds-r-sm);
+  font-size: 12px;
   font-style: italic;
+  opacity: 0.55;
+  color: var(--kds-text);
+  padding: 0 13px;
   line-height: 1.4;
-  border-left: 3px solid var(--kds-note-text);
 }
 
 .kds-ticket-count {

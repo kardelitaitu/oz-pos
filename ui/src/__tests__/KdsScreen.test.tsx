@@ -235,8 +235,9 @@ describe('KdsScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
 
-    const ticket = document.querySelector('.kds-ticket')!;
-    await userEvent.click(ticket);
+    const advanceBtn = document.querySelector('[data-testid="kds-order-card-101-status-advance"]') as HTMLButtonElement;
+    expect(advanceBtn).not.toBeNull();
+    await userEvent.click(advanceBtn);
 
     await waitFor(() =>
       expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'preparing'),
@@ -250,8 +251,9 @@ describe('KdsScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
 
-    const ticket = document.querySelector('.kds-ticket')!;
-    await userEvent.click(ticket);
+    const advanceBtn = document.querySelector('[data-testid="kds-order-card-101-status-advance"]') as HTMLButtonElement;
+    expect(advanceBtn).not.toBeNull();
+    await userEvent.click(advanceBtn);
 
     await waitFor(() =>
       expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'ready'),
@@ -746,8 +748,9 @@ describe('KdsScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('#42')).toBeDefined());
 
-    const ticket = document.querySelector('.kds-ticket')!;
-    await userEvent.click(ticket);
+    const advanceBtn = document.querySelector('[data-testid="kds-order-card-42-status-advance"]') as HTMLButtonElement;
+    expect(advanceBtn).not.toBeNull();
+    await userEvent.click(advanceBtn);
 
     await waitFor(() =>
       expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'ready'),
@@ -768,8 +771,9 @@ describe('KdsScreen', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('#42')).toBeDefined());
 
-    const ticket = document.querySelector('.kds-ticket')!;
-    await userEvent.click(ticket);
+    const advanceBtn = document.querySelector('[data-testid="kds-order-card-42-status-advance"]') as HTMLButtonElement;
+    expect(advanceBtn).not.toBeNull();
+    await userEvent.click(advanceBtn);
 
     await waitFor(() =>
       expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'preparing'),

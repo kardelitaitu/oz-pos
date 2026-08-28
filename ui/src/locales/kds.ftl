@@ -180,3 +180,9 @@ kds-back-aria = Back to workspaces
 kds-tablist-aria = View orders
 kds-tab-open = Open
 kds-tab-completed = Completed
+
+# ── Ticket card footer actions ──
+kds-advance-start = Start
+kds-advance-ready = Mark Ready
+kds-advance-serve = Serve
+kds-toggle-card-aria = Toggle order { $number } details

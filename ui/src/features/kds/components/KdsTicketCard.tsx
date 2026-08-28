@@ -66,13 +66,33 @@ function groupByCourse(items: KdsLineItem[]): { course: string | null; items: Kd
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
 
+/** An item is "done" when it has been served (or cancelled — off the board). */
+function itemDone(item: KdsLineItem): boolean {
+  return item.item_status === 'served' || item.item_status === 'cancelled';
+}
+
+/** Next-action label key for the footer advance button, or null when terminal. */
+function nextActionKey(status: string): string | null {
+  switch (status) {
+    case 'pending': return 'kds-advance-start';
+    case 'preparing': return 'kds-advance-ready';
+    case 'ready': return 'kds-advance-serve';
+    default: return null; // served / cancelled — no advance
+  }
+}
+
 /**
- * KdsTicketCard renders a single KDS ticket with SLA aging indicators,
- * course-grouped line items (Phase 2), and audio alerts at escalation thresholds.
+ * KdsTicketCard renders a single KDS ticket with the design-language
+ * prototype anatomy (dev/kds-prototype.html):
  *
- * Line items are lazy-fetched via getKdsOrderLinesScoped when the card mounts
- * and cached for the lifetime of the component. Falls back to the flat
- * items_summary string when line items are unavailable (old orders, loading).
+ *   header (icon + order# + SLA time + status)  → collapses the card
+ *   body: category headers (n/M Course + check) → collapse per course,
+ *         item rows (qty× name, status dot, modifiers)
+ *   footer: order notes + advance/edit/add action buttons
+ *
+ * Functionality preserved: SLA aging + audio alerts, lazy line-item
+ * fetch + course grouping, per-item status advance, edit mode, product
+ * picker, and click-to-advance (now on the footer Advance button).
  */
 export const KdsTicketCard = memo(function KdsTicketCard({
   order, onAdvance, showOrderId = true, showTableNumber = true,
@@ -84,6 +104,11 @@ export const KdsTicketCard = memo(function KdsTicketCard({
   const { playAlert } = useSound();
   const prevLevel = useRef<'green' | 'yellow' | 'red' | null>(null);
   const prevUrgent = useRef(false);
+
+  // Card-level collapse (prototype: header toggles the whole body).
+  const [collapsed, setCollapsed] = useState(false);
+  // Per-category collapse keyed by course (prototype: category header toggles).
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
 
   // Play audio alert when ticket transitions into the red threshold.
   useEffect(() => {
@@ -165,16 +190,32 @@ export const KdsTicketCard = memo(function KdsTicketCard({
     if (e.key === 'Escape') handleCancelEdit();
   }, [handleSaveEdit, handleCancelEdit]);
 
-  const handleClick = useMemo(
+  // ── Advance (footer button) — cooldown-guarded like the old card tap ──
+  const canAdvance = STATUS_ORDER.indexOf(order.status as KdsStatus) < STATUS_ORDER.length - 1;
+  const nextKey = nextActionKey(order.status);
+  const handleAdvance = useMemo(
     () => createCooldownWrapper(() => {
       if (editing) return;
-      const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
-      if (currentIdx >= 0 && currentIdx < STATUS_ORDER.length - 1) {
-        onAdvance(order);
-      }
+      onAdvance(order);
     }, 200),
     [editing, order, onAdvance],
   );
+
+  // Toggle the whole card body (prototype: header button).
+  const toggleCollapsed = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsed((c) => !c);
+  }, []);
+
+  // Toggle one category's items.
+  const toggleCategoryCollapsed = useCallback((key: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
 
   const startEditing = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -189,179 +230,238 @@ export const KdsTicketCard = memo(function KdsTicketCard({
     return requiredLocalized(l10n, 'kds-course-other');
   }, [l10n]);
 
+  const advanceLabel = nextKey ? requiredLocalized(l10n, nextKey) : '';
+
   return (
-    <button
-      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}${order.priority ? ' kds-ticket--rush' : ''}${isNew ? ' kds-ticket--new' : ''}`}
-      onClick={handleClick}
-      aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? `, ${requiredLocalized(l10n, 'kds-urgent-badge')}` : ''}${order.priority ? `, ${requiredLocalized(l10n, 'kds-rush-badge')}` : ''}, ${display}`}
+    <div
+      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}${order.priority ? ' kds-ticket--rush' : ''}${isNew ? ' kds-ticket--new' : ''}${collapsed ? ' kds-card collapsed' : ''}`}
+      data-testid={`kds-order-card-${order.display_number ?? order.id}`}
     >
-      <div className="kds-ticket-header">
-        <span className="kds-ticket-id-group">
-          {showOrderId && <span className="kds-ticket-number">#{order.display_number}</span>}
-          {showTableNumber && order.table_number && (
-            <span className="kds-ticket-table">{order.table_number}</span>
-          )}
-          <span className="kds-ticket-item-count-badge">{order.item_count}</span>
+      {/* ── Card header — collapse toggle ─────────────────────────── */}
+      <button
+        className="kds-card-header"
+        onClick={toggleCollapsed}
+        aria-expanded={!collapsed}
+        aria-label={`${requiredLocalized(l10n, 'kds-toggle-card-aria', { number: order.display_number ?? 0 })}${collapsed ? ' — collapsed' : ''}`}
+        data-testid={`kds-order-card-${order.display_number ?? order.id}-header`}
+      >
+        <span className="kds-card-header-icon" aria-hidden="true">
+          <svg className="kds-service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
         </span>
-        <span className={`kds-ticket-time kds-ticket-time--${level}`}>{display}</span>
-      </div>
-      {order.priority && (
-        <span className="kds-ticket-rush-badge">
-          <Localized id="kds-rush-badge">RUSH</Localized>
+        <span className="kds-card-header-left">
+          <span className="kds-card-header-row">
+            {showOrderId && <span className="order-no">#{order.display_number}</span>}
+            {showTableNumber && order.table_number && (
+              <span className="kds-ticket-table">{order.table_number}</span>
+            )}
+            {order.priority && (
+              <span className="kds-rush-badge">
+                <Localized id="kds-rush-badge">RUSH</Localized>
+              </span>
+            )}
+          </span>
         </span>
-      )}
-      {urgent && (
-        <span className="kds-ticket-urgent-badge">
-          <Localized id="kds-urgent-badge">URGENT</Localized>
+        <span className="kds-card-header-right">
+          <span className="kds-card-header-meta">
+            <span className={`kds-ticket-time kds-ticket-time--${level}`}>{display}</span>
+            {urgent && (
+              <span className="kds-ticket-urgent-badge">
+                <Localized id="kds-urgent-badge">URGENT</Localized>
+              </span>
+            )}
+            <span className={`status status--${order.status}`}>
+              {requiredLocalized(l10n, `kds-${order.status}`)}
+            </span>
+          </span>
         </span>
-      )}
+      </button>
 
-      {/* ── Course-grouped line items ─────────────────────────────── */}
-      {courseGroups ? (
-        <div className="kds-ticket-line-items">
-          {courseGroups.map((group) => (
-            <div key={group.course ?? '__other__'} className="kds-ticket-course-group">
-              <span className="kds-ticket-course-header">{courseLabel(group.course)}</span>
-              {group.items.map((item) => {
-                const canAdvanceItem = item.item_status !== 'served' && item.item_status !== 'cancelled';
+      {/* ── Collapsible body ──────────────────────────────────────── */}
+      <div className="kds-card-collapsible">
+        <div className="kds-card-collapsible-inner">
+          <div className="kds-card-main">
+            {/* ── Course-grouped line items as categories ─────────── */}
+            {courseGroups ? (
+              courseGroups.map((group) => {
+                const key = group.course ?? '__other__';
+                const doneCount = group.items.filter(itemDone).length;
+                const allDone = doneCount === group.items.length;
+                const catCollapsed = collapsedCats.has(key);
                 return (
-                <div
-                  key={item.id}
-                  className={`kds-ticket-item-row${canAdvanceItem ? ' kds-ticket-item-row--actionable' : ''}`}
-                  onClick={(e) => {
-                    if (canAdvanceItem && onAdvanceItem) {
-                      e.stopPropagation();
-                      createCooldownWrapper(() => onAdvanceItem(item), 200)();
-                    }
-                  }}
-                  role={canAdvanceItem ? 'button' : undefined}
-                  tabIndex={canAdvanceItem ? 0 : undefined}
-                  onKeyDown={canAdvanceItem ? (e) => {
-                    // Satisfy jsx-a11y/click-events-have-key-events —
-                    // role="button" handles Enter natively via onClick.
-                    if (e.key === 'Enter') {
-                      e.stopPropagation();
-                    }
-                  } : undefined}
-                  aria-label={canAdvanceItem ? `${item.display_name} — ${requiredLocalized(l10n, `kds-item-status-${item.item_status}`)}` : undefined}
-                >
-                  <div className="kds-ticket-item-status-row">
-                    <span className={`kds-ticket-item-status-dot kds-ticket-item-status-dot--${item.item_status}`} aria-hidden="true" />
-                    <span className="kds-ticket-item-name">
-                      {item.display_name}
-                      {item.qty > 1 && (
-                        <span className="kds-ticket-item-qty">×{item.qty}</span>
-                      )}
-                    </span>
-                    <span className="kds-ticket-item-status-label">
-                      {requiredLocalized(l10n, `kds-item-status-${item.item_status}`)}
-                    </span>
+                  <div key={key} className="kds-category">
+                    <button
+                      className={`kds-category-header${allDone ? ' done' : ''}`}
+                      onClick={toggleCategoryCollapsed(key)}
+                      aria-expanded={!catCollapsed}
+                      data-testid={`kds-order-card-${order.display_number ?? order.id}-cat-${key}`}
+                    >
+                      <span className="kds-cat-label">
+                        {doneCount}/{group.items.length} {courseLabel(group.course)}
+                      </span>
+                      <span className={`kds-cat-check${allDone ? ' done' : ''}`} aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ width: 10, height: 10 }}>
+                          <path d="M4 12.5l5 5L20 6.5" />
+                        </svg>
+                      </span>
+                    </button>
+                    {!catCollapsed && group.items.map((item) => {
+                      const done = itemDone(item);
+                      const canAdvanceItem = !done;
+                      return (
+                        <div className="kds-item" key={item.id}>
+                          <button
+                            className={`kds-item-row${done ? ' done' : ''}${canAdvanceItem ? ' kds-ticket-item-row--actionable' : ''}`}
+                            onClick={(e) => {
+                              if (canAdvanceItem && onAdvanceItem) {
+                                e.stopPropagation();
+                                createCooldownWrapper(() => onAdvanceItem(item), 200)();
+                              }
+                            }}
+                            onKeyDown={canAdvanceItem ? (e) => {
+                              // role="button" handles Enter natively via onClick.
+                              if (e.key === 'Enter') e.stopPropagation();
+                            } : undefined}
+                            aria-label={canAdvanceItem ? `${item.display_name} — ${requiredLocalized(l10n, `kds-item-status-${item.item_status}`)}` : undefined}
+                            data-testid={`kds-order-card-${order.display_number ?? order.id}-item-${item.id}`}
+                          >
+                            <span className="kds-item-row-inner">
+                              <span className="kds-item-left">
+                                <span className="kds-item-qty">{item.qty}×</span>
+                                <span className="kds-item-name">{item.display_name}</span>
+                              </span>
+                              <span className={`kds-ticket-item-status-dot kds-ticket-item-status-dot--${item.item_status}`} aria-hidden="true" />
+                              <span className="kds-ticket-item-status-label">
+                                {requiredLocalized(l10n, `kds-item-status-${item.item_status}`)}
+                              </span>
+                            </span>
+                            {item.modifiers.length > 0 && (
+                              <span className="kds-ticket-modifiers">
+                                {item.modifiers.map((mod, mi) => (
+                                  <span key={mi} className="kds-ticket-modifier-row">{mod.choice}</span>
+                                ))}
+                              </span>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                  {item.modifiers.length > 0 && (
-                    <span className="kds-ticket-modifiers">
-                      {item.modifiers.map((mod, mi) => (
-                        <span key={mi} className="kds-ticket-modifier-row">
-                          {mod.choice}
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                </div>);
-              })}
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* ── Fallback: flat items_summary (loading, old orders) ──── */
-        <span className="kds-ticket-items">
-          {lineItemsLoading
-            ? requiredLocalized(l10n, 'kds-course-loading')
-            : order.items_summary}
-        </span>
-      )}
+                );
+              })
+            ) : (
+              /* ── Fallback: flat items_summary (loading, old orders) ── */
+              <span className="kds-ticket-items">
+                {lineItemsLoading
+                  ? requiredLocalized(l10n, 'kds-course-loading')
+                  : order.items_summary}
+              </span>
+            )}
+          </div>
 
-      {order.notes && <span className="kds-ticket-notes">{order.notes}</span>}
-      {editing && (
-        <div
-          className="kds-ticket-edit"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => { if (e.key === 'Escape') handleCancelEdit(); }}
-          role="presentation"
-          tabIndex={-1}
-        >
-          <input
-            ref={inputRef}
-            className="kds-ticket-edit-input"
-            type="text"
-            value={editSummary}
-            onChange={(e) => setEditSummary(e.target.value)}
-            onKeyDown={handleKeyDown}
-            aria-label={requiredLocalized(l10n, 'kds-edit-items-aria')}
-          />
-          <div className="kds-ticket-edit-row">
-            <label className="kds-ticket-edit-label">
-              <Localized id="kds-edit-count-label">Count</Localized>:
-              <input
-                className="kds-ticket-edit-count"
-                type="number"
-                min={1}
-                value={editCount}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  if (e.target.value === '' || (Number.isInteger(v) && v >= 1)) setEditCount(e.target.value);
-                }}
-                onKeyDown={handleKeyDown}
-                aria-label={requiredLocalized(l10n, 'kds-edit-count-aria')}
-              />
-            </label>
-            <div className="kds-ticket-edit-actions">
-              <button
-                className="kds-ticket-edit-save"
-                onClick={handleSaveEdit}
-                disabled={!editSummary.trim() || parseInt(editCount, 10) <= 0}
-                aria-label={requiredLocalized(l10n, 'kds-edit-save-aria')}
+          {/* ── Card footer: notes + actions ──────────────────────── */}
+          <div className="kds-card-footer">
+            {order.notes && (
+              <span className="kds-ticket-notes">{order.notes}</span>
+            )}
+
+            {editing && (
+              <div
+                className="kds-ticket-edit"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => { if (e.key === 'Escape') handleCancelEdit(); }}
+                role="presentation"
+                tabIndex={-1}
               >
-                <Localized id="kds-edit-save">Save</Localized>
-              </button>
-              <button
-                className="kds-ticket-edit-cancel"
-                onClick={handleCancelEdit}
-                aria-label={requiredLocalized(l10n, 'kds-edit-cancel-aria')}
-              >
-                <Localized id="kds-edit-cancel">Cancel</Localized>
-              </button>
+                <input
+                  ref={inputRef}
+                  className="kds-ticket-edit-input"
+                  type="text"
+                  value={editSummary}
+                  onChange={(e) => setEditSummary(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  aria-label={requiredLocalized(l10n, 'kds-edit-items-aria')}
+                />
+                <div className="kds-ticket-edit-row">
+                  <label className="kds-ticket-edit-label">
+                    <Localized id="kds-edit-count-label">Count</Localized>:
+                    <input
+                      className="kds-ticket-edit-count"
+                      type="number"
+                      min={1}
+                      value={editCount}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (e.target.value === '' || (Number.isInteger(v) && v >= 1)) setEditCount(e.target.value);
+                      }}
+                      onKeyDown={handleKeyDown}
+                      aria-label={requiredLocalized(l10n, 'kds-edit-count-aria')}
+                    />
+                  </label>
+                  <div className="kds-ticket-edit-actions">
+                    <button
+                      className="kds-ticket-edit-save"
+                      onClick={handleSaveEdit}
+                      disabled={!editSummary.trim() || parseInt(editCount, 10) <= 0}
+                      aria-label={requiredLocalized(l10n, 'kds-edit-save-aria')}
+                    >
+                      <Localized id="kds-edit-save">Save</Localized>
+                    </button>
+                    <button
+                      className="kds-ticket-edit-cancel"
+                      onClick={handleCancelEdit}
+                      aria-label={requiredLocalized(l10n, 'kds-edit-cancel-aria')}
+                    >
+                      <Localized id="kds-edit-cancel">Cancel</Localized>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="kds-footer-actions">
+              {!editing && canAdvance && nextKey && (
+                <button
+                  className="kds-status-btn advance"
+                  onClick={handleAdvance}
+                  aria-label={`${advanceLabel} ${order.display_number ?? ''}`.trim()}
+                  data-testid={`kds-order-card-${order.display_number ?? order.id}-status-advance`}
+                >
+                  {advanceLabel}
+                </button>
+              )}
+              {onSaveItems && !editing && (
+                <button
+                  className="kds-ticket-edit-btn"
+                  onClick={startEditing}
+                  aria-label={requiredLocalized(l10n, 'kds-edit-items-btn-aria')}
+                >
+                  <Localized id="kds-edit-items-btn">Edit Items</Localized>
+                </button>
+              )}
+              {onAddItems && !editing && (
+                <button
+                  className="kds-ticket-add-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddItems(order.id);
+                  }}
+                  aria-label={requiredLocalized(l10n, 'kds-add-items-btn-aria')}
+                >
+                  <Localized id="kds-add-items-btn">Add Items</Localized>
+                </button>
+              )}
             </div>
+
+            <span className="kds-ticket-count">
+              <Localized id="kds-items" vars={{ count: order.item_count }}>
+                {`${order.item_count} items`}
+              </Localized>
+            </span>
           </div>
         </div>
-      )}
-      <span className="kds-ticket-count">
-        <Localized id="kds-items" vars={{ count: order.item_count }}>
-          {`${order.item_count} items`}
-        </Localized>
-      </span>
-      <div className="kds-ticket-actions">
-        {onSaveItems && !editing && (
-          <button
-            className="kds-ticket-edit-btn"
-            onClick={startEditing}
-            aria-label={requiredLocalized(l10n, 'kds-edit-items-btn-aria')}
-          >
-            <Localized id="kds-edit-items-btn">Edit Items</Localized>
-          </button>
-        )}
-        {onAddItems && !editing && (
-          <button
-            className="kds-ticket-add-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddItems(order.id);
-            }}
-            aria-label={requiredLocalized(l10n, 'kds-add-items-btn-aria')}
-          >
-            <Localized id="kds-add-items-btn">Add Items</Localized>
-          </button>
-        )}
       </div>
-    </button>
+    </div>
   );
 });
