@@ -1,7 +1,14 @@
 import { useMemo } from 'react';
+import { Localized } from '@fluent/react';
 import { KdsTicketCard } from '@/features/kds/components/KdsTicketCard';
 import type { KdsLayoutProps } from './KdsScreen';
 import type { KdsOrder } from '@/api/kds';
+
+interface KdsLayoutMasonryProps extends KdsLayoutProps {
+  /** True when a filter (Prepared / zone categories) is active — changes
+   *  the empty-state copy to "no match" instead of "no orders yet". */
+  filtered?: boolean;
+}
 
 /**
  * KdsLayoutMasonry — the single KDS view (design-language prototype:
@@ -27,7 +34,8 @@ export function KdsLayoutMasonry({
   onAdvanceItem,
   onAddItems,
   newOrderIds,
-}: KdsLayoutProps) {
+  filtered = false,
+}: KdsLayoutMasonryProps) {
   // Distribute orders round-robin across the column count so no single
   // column grows unboundedly as new tickets arrive.
   const columns = useMemo(() => {
@@ -42,7 +50,11 @@ export function KdsLayoutMasonry({
   if (orders.length === 0) {
     return (
       <div className="kds-main empty">
-        <p className="kds-empty" role="status">No orders yet</p>
+        <p className="kds-empty" role="status">
+          <Localized id={filtered ? 'kds-no-orders-filtered' : 'kds-no-orders'}>
+            <span>{filtered ? 'No orders in this status' : 'No orders yet'}</span>
+          </Localized>
+        </p>
       </div>
     );
   }

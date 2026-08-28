@@ -15,6 +15,18 @@ interface KdsHamburgerPanelProps {
   showTableNumber: boolean;
   onToggleOrderId: (show: boolean) => void;
   onToggleTableNumber: (show: boolean) => void;
+  /** Current page zoom percentage (100 = default). */
+  pageZoom?: number;
+  /** Called when zoom changes (percentage). */
+  onChangePageZoom?: (zoom: number) => void;
+  /** Current column count override (0 = auto). */
+  columns?: number;
+  /** Called when column count changes (0 = auto). */
+  onChangeColumns?: (cols: number) => void;
+  /** Whether card animations are enabled. */
+  cardAnimations?: boolean;
+  /** Called when card animations toggle changes. */
+  onChangeCardAnimations?: (enabled: boolean) => void;
 }
 
 /**
@@ -39,6 +51,12 @@ export function KdsHamburgerPanel({
   showTableNumber,
   onToggleOrderId,
   onToggleTableNumber,
+  pageZoom = 100,
+  onChangePageZoom,
+  columns = 0,
+  onChangeColumns,
+  cardAnimations = true,
+  onChangeCardAnimations,
 }: KdsHamburgerPanelProps) {
   const { l10n } = useLocalization();
   const themeCtx = useOptionalTheme();
@@ -116,6 +134,26 @@ export function KdsHamburgerPanel({
                   </div>
                 )}
 
+                {onChangePageZoom && (
+                  <div className="kds-setting-row">
+                    <span className="kds-setting-label"><Localized id="kds-settings-display-scale">Display scale</Localized></span>
+                    <div className="kds-zoom-row">
+                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangePageZoom(Math.max(50, pageZoom - 10))} aria-label="Zoom out" data-testid="kds-settings-zoom-out">−</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-value" onClick={() => onChangePageZoom(100)} title="Reset to 100%" aria-label="Reset zoom to 100%" data-testid="kds-settings-zoom-value">{pageZoom}%</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangePageZoom(Math.min(200, pageZoom + 10))} aria-label="Zoom in" data-testid="kds-settings-zoom-in">+</button>
+                    </div>
+                  </div>
+                )}
+                {onChangeColumns && (
+                  <div className="kds-setting-row">
+                    <span className="kds-setting-label"><Localized id="kds-settings-columns">Columns</Localized></span>
+                    <div className="kds-zoom-row">
+                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangeColumns(Math.max(1, columns - 1))} aria-label="Fewer columns" data-testid="kds-settings-cols-out">−</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-value" onClick={() => onChangeColumns(0)} title="Reset to auto" aria-label="Reset columns to auto" data-testid="kds-settings-cols-value">{columns === 0 ? 'Auto' : columns}</button>
+                      <button className="kds-btn kds-btn--muted kds-zoom-btn" onClick={() => onChangeColumns(columns + 1)} aria-label="More columns" data-testid="kds-settings-cols-in">+</button>
+                    </div>
+                  </div>
+                )}
                 <div className="kds-setting-row">
                   <span className="kds-setting-label"><Localized id="kds-settings-density">Density</Localized></span>
                   <div className="kds-zoom-row">
@@ -162,6 +200,39 @@ export function KdsHamburgerPanel({
               </div>
             </div>
 
+            {/* ── Card Colours (prototype accordion — hidden until colour-config API is wired) ── */}
+            {false && (
+            <div className="kds-panel-section">
+              <div className="kds-section-head">
+                <h3><Localized id="kds-settings-card-colours">Card Colours</Localized></h3>
+                <span className="kds-theme-tag" data-testid="kds-settings-colors-theme-tag">{themeCtx?.theme ?? 'dark'}</span>
+              </div>
+              <div className="kds-setting-card">
+                <div className="kds-color-group">
+                  <div className="kds-color-head">
+                    <label><Localized id="kds-settings-color-pending">Pending</Localized></label>
+                  </div>
+                </div>
+                <div className="kds-color-group">
+                  <div className="kds-color-head">
+                    <label><Localized id="kds-settings-color-preparing">Preparing</Localized></label>
+                  </div>
+                </div>
+                <div className="kds-color-group">
+                  <div className="kds-color-head">
+                    <label><Localized id="kds-settings-color-ready">Ready</Localized></label>
+                  </div>
+                </div>
+              </div>
+              <div className="kds-setting-card kds-reset-card">
+                <button className="kds-reset-btn" data-testid="kds-settings-colors-reset">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
+                  <Localized id="kds-settings-reset-colours">Reset colours</Localized>
+                </button>
+              </div>
+            </div>
+            )}
+
             {/* ── Behaviour ──────────────────────────────── */}
             <div className="kds-panel-section">
               <h3>Behaviour</h3>
@@ -193,6 +264,23 @@ export function KdsHamburgerPanel({
                     aria-label={l10n.getString('kds-settings-auto-ack') ?? 'Auto-acknowledge'}
                   />
                 </div>
+
+                {onChangeCardAnimations && (
+                  <div className="kds-setting-row">
+                    <div className="kds-setting-text">
+                      <span className="kds-setting-label"><Localized id="kds-settings-card-animations">Card animations</Localized></span>
+                      <span className="kds-setting-caption"><Localized id="kds-settings-card-animations-caption">Spawn and reorder effects</Localized></span>
+                    </div>
+                    <button
+                      className={`kds-switch${cardAnimations ? ' on' : ''}`}
+                      role="switch"
+                      aria-checked={cardAnimations}
+                      onClick={() => onChangeCardAnimations(!cardAnimations)}
+                      aria-label={l10n.getString('kds-settings-card-animations') ?? 'Card animations'}
+                      data-testid="kds-settings-anim-toggle"
+                    />
+                  </div>
+                )}
 
                 {/* SLA thresholds */}
                 <div className="kds-setting-row">

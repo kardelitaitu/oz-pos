@@ -79,6 +79,7 @@ export default function KdsScreen() {
   const [tabIndicator, setTabIndicator] = useState<{ left: number; width: number }>({ left: 3, width: 0 });
   // Filter dropdown — view mode (All / Prepared) matching the prototype filter.
   const [filterMode, setFilterMode] = useState<'all' | 'prepared'>('all');
+  const [filterCats, setFilterCats] = useState<Set<string> | null>(null);
   const [showFilter, setShowFilter] = useState(false);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const filterPanelRef = useRef<HTMLDivElement>(null);
@@ -94,6 +95,10 @@ export default function KdsScreen() {
   // render timing between two rapid taps.
   const pickerSavingRef = useRef(false);
   const [pickerSaving, setPickerSaving] = useState(false);
+  // Shift state — tracks whether the kitchen shift is active.
+  const [inShift, setInShift] = useState(false);
+  // Confirm modal state — generic confirmation dialog for destructive actions.
+  const [confirm, setConfirm] = useState<{ title: string; message: string; onOk: () => void; danger?: boolean } | null>(null);
   const { prefs, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
 
   // Track previous order IDs for new-ticket arrival animation.
@@ -412,9 +417,12 @@ export default function KdsScreen() {
     });
   }, [activeTab]);
 
-  // Filter dropdown: close on outside click.
+  // Filter dropdown: close on outside click and Escape.
   useEffect(() => {
     if (!showFilter) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowFilter(false);
+    };
     const handleClickOutside = (e: MouseEvent) => {
       if (
         filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node) &&
@@ -423,15 +431,29 @@ export default function KdsScreen() {
         setShowFilter(false);
       }
     };
+    document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [showFilter]);
 
-  // Filtered orders: All = all open orders; Prepared = only ready orders.
+  /** All unique kitchen zones across current orders — drives the filter category grid. */
+  const allZones = useMemo(() => {
+    const zones = new Set<string>();
+    orders.forEach((o) => { if (o.kitchen_zone) zones.add(o.kitchen_zone); });
+    return [...zones].sort();
+  }, [orders]);
+
+  // Filtered orders: All = all open orders; Prepared = only ready orders; Categories = zone filter.
   const filteredOrders = useMemo(() => {
     if (filterMode === 'prepared') return orders.filter((o) => o.status === 'ready');
+    if (filterCats && filterCats.size > 0) {
+      return orders.filter((o) => o.kitchen_zone && filterCats.has(o.kitchen_zone));
+    }
     return orders;
-  }, [orders, filterMode]);
+  }, [orders, filterMode, filterCats]);
 
   // ── Initial loading skeleton ──────────────────────────────────
   const renderContent = () => {
@@ -466,6 +488,7 @@ export default function KdsScreen() {
       <div {...pullRefreshProps}>
         <KdsLayoutMasonry
           orders={filteredOrders}
+          filtered={filterMode === 'prepared' || (filterCats !== null && filterCats.size > 0)}
           onAdvance={advanceStatus}
           showOrderId={prefs.showOrderId}
           showTableNumber={prefs.showTableNumber}
@@ -513,7 +536,7 @@ export default function KdsScreen() {
               aria-expanded={showFilter}
               data-testid="kds-topbar-filter"
             >
-              <span>{requiredLocalized(l10n, filterMode === 'prepared' ? 'kds-filter-prepared' : 'kds-filter-all')}</span>
+              <span>{filterMode === 'prepared' ? requiredLocalized(l10n, 'kds-filter-prepared') : filterCats && filterCats.size > 0 ? (filterCats.size === 1 ? [...filterCats][0] : `${filterCats.size} selected`) : requiredLocalized(l10n, 'kds-filter-all')}</span>
               <span className="caret" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 9h12l-6 7z" /></svg>
               </span>
@@ -525,12 +548,12 @@ export default function KdsScreen() {
                 role="listbox"
                 aria-label={requiredLocalized(l10n, 'kds-filter-aria')}
               >
-                <div className="kds-filter-modes no-sep">
+                <div className="kds-filter-modes">
                   <button
-                    className={`kds-filter-option${filterMode === 'all' ? ' checked' : ''}`}
+                    className={`kds-filter-option${filterMode === 'all' && (!filterCats || filterCats.size === 0) ? ' checked' : ''}`}
                     role="option"
-                    aria-selected={filterMode === 'all'}
-                    onClick={() => { setFilterMode('all'); setShowFilter(false); }}
+                    aria-selected={filterMode === 'all' && (!filterCats || filterCats.size === 0)}
+                    onClick={() => { setFilterMode('all'); setFilterCats(null); setShowFilter(false); }}
                     data-testid="kds-filter-mode-all"
                   >
                     <Localized id="kds-filter-all">All orders</Localized>
@@ -539,12 +562,36 @@ export default function KdsScreen() {
                     className={`kds-filter-option${filterMode === 'prepared' ? ' checked' : ''}`}
                     role="option"
                     aria-selected={filterMode === 'prepared'}
-                    onClick={() => { setFilterMode('prepared'); setShowFilter(false); }}
+                    onClick={() => { setFilterMode('prepared'); setFilterCats(null); setShowFilter(false); }}
                     data-testid="kds-filter-mode-prepared"
                   >
                     <Localized id="kds-filter-prepared">Prepared</Localized>
                   </button>
                 </div>
+                {allZones.length > 0 && (
+                  <div className="kds-filter-grid">
+                    {allZones.map((zone) => (
+                      <button
+                        key={zone}
+                        className={`kds-filter-option${filterCats?.has(zone) ? ' checked' : ''}`}
+                        role="option"
+                        aria-selected={filterCats?.has(zone) ?? false}
+                        onClick={() => {
+                          setFilterMode('all');
+                          setFilterCats((prev) => {
+                            const next = new Set(prev ?? []);
+                            if (next.has(zone)) next.delete(zone); else next.add(zone);
+                            return next.size === 0 ? null : next;
+                          });
+                          setShowFilter(false);
+                        }}
+                        data-testid={`kds-filter-zone-${zone}`}
+                      >
+                        <span>{zone}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -579,6 +626,26 @@ export default function KdsScreen() {
         </div>
 
         <div className="kds-header-right">
+          {/* Shift start/stop button — prototype .kds-btn--shift .kds-btn--stack */}
+          <button
+            className={`kds-btn kds-btn--shift kds-btn--stack${inShift ? ' is-active' : ''}`}
+            onClick={() => {
+              if (inShift) {
+                setConfirm({
+                  title: requiredLocalized(l10n, 'kds-shift-end-title'),
+                  message: requiredLocalized(l10n, 'kds-shift-end-msg'),
+                  onOk: () => setInShift(false),
+                  danger: true,
+                });
+              } else {
+                setInShift(true);
+              }
+            }}
+            data-testid="kds-topbar-shift"
+          >
+            <span className={!inShift ? 'visible' : ''}><Localized id="kds-shift-start">Start Shift</Localized></span>
+            <span className={inShift ? 'visible' : ''}><Localized id="kds-shift-end">End Shift</Localized></span>
+          </button>
           {/* Shortcut help button */}
           <button
             ref={shortcutsBtnRef}
@@ -852,6 +919,31 @@ export default function KdsScreen() {
 
       {/* Screen footer status bar */}
       <KdsScreenFooter />
+
+      {/* Confirm modal — prototype .kds-modal-backdrop */}
+      {confirm && (
+        <div className="kds-modal-backdrop" onClick={() => setConfirm(null)}>
+          <div className="kds-modal-anchor">
+            <div className="kds-modal" role="dialog" aria-modal="true" aria-labelledby="kds-confirm-title" aria-describedby="kds-confirm-msg" onClick={(e) => e.stopPropagation()}>
+              <h2 className="kds-modal-title" id="kds-confirm-title">{confirm.title}</h2>
+              <p className="kds-modal-msg" id="kds-confirm-msg">{confirm.message}</p>
+              <div className="kds-modal-actions">
+                <button className="kds-btn kds-btn--muted" type="button" onClick={() => setConfirm(null)} data-testid="kds-confirm-cancel">
+                  <Localized id="kds-confirm-cancel">Cancel</Localized>
+                </button>
+                <button
+                  className={`kds-btn${confirm.danger ? ' danger' : ''}`}
+                  type="button"
+                  onClick={() => { confirm.onOk(); setConfirm(null); }}
+                  data-testid="kds-confirm-ok"
+                >
+                  <Localized id="kds-confirm-ok">Confirm</Localized>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </Profiler>
   );
