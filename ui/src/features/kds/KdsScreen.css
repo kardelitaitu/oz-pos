@@ -363,6 +363,8 @@
 }
 .kds-btn--filter--all { background: var(--kds-accent); color: var(--kds-fg-inverse); opacity: 1; }
 .kds-btn--filter--all .caret { opacity: 0.7; }
+.kds-btn--filter--active { background: var(--kds-accent); color: var(--kds-fg-inverse); opacity: 1; }
+.kds-btn--filter--active .caret { opacity: 0.85; }
 .kds-btn--filter .caret { opacity: 0.5; display: inline-flex; align-items: center; transition: transform 0.2s; }
 .kds-btn--filter .caret svg { width: 18px; height: 18px; }
 .kds-btn--filter--open .caret { transform: rotate(180deg); }
@@ -427,6 +429,11 @@
   white-space: nowrap;
 }
 .kds-filter-option:not(.checked):hover { background: var(--kds-bg-hover); }
+.kds-filter-option:focus-visible,
+.kds-filter-option:focus {
+  outline: 2px solid var(--kds-accent);
+  outline-offset: -1px;
+}
 .kds-filter-option.checked { background: var(--kds-accent); color: var(--kds-fg-inverse); opacity: 1; }
 .kds-filter-modes { display: flex; gap: 6px; margin-bottom: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--kds-border); }
 .kds-filter-grid { display: grid; grid-template-columns: repeat(3, max-content); gap: 6px; justify-content: start; }

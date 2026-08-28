@@ -191,6 +191,7 @@ kds-toggle-card-aria = Toggle order { $number } details
 kds-filter-aria = Filter orders
 kds-filter-all = All orders
 kds-filter-prepared = Prepared
+kds-filter-selected = { $count } selected
 
 # ── Screen footer status bar ──
 kds-footer-aria = Terminal status

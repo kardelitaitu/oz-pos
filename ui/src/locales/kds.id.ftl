@@ -193,6 +193,7 @@ kds-toggle-card-aria = Buka/tutup detail pesanan { $number }
 kds-filter-aria = Filter pesanan
 kds-filter-all = Semua pesanan
 kds-filter-prepared = Siap
+kds-filter-selected = { $count } dipilih
 
 # ── Screen footer status bar ──
 kds-footer-aria = Status terminal

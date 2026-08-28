@@ -30,7 +30,9 @@ function loadColors(theme: string): KdsCardColors {
       const all = JSON.parse(saved) as Record<string, KdsCardColors>;
       return all[theme] ?? (theme === 'light' ? DEFAULT_COLORS_LIGHT : DEFAULT_COLORS_DARK);
     }
-  } catch {}
+  } catch {
+    // Fall back to default colors if storage is unreadable or malformed.
+  }
   return theme === 'light' ? DEFAULT_COLORS_LIGHT : DEFAULT_COLORS_DARK;
 }
 
@@ -40,7 +42,9 @@ function saveColors(theme: string, colors: KdsCardColors): void {
     const all = saved ? JSON.parse(saved) as Record<string, KdsCardColors> : {};
     all[theme] = colors;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-  } catch {}
+  } catch {
+    // Ignore storage write errors (e.g. private browsing or storage quota).
+  }
 }
 
 /** Provider for KDS card colours — wraps the KDS screen. */

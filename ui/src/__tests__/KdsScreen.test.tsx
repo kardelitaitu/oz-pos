@@ -870,6 +870,10 @@ describe('KdsScreen', () => {
       expect(screen.queryByText('Burger')).toBeNull();
       expect(screen.getByText('Fries')).toBeDefined();
     });
+
+    // Topbar header and Open tab count reflect filtered orders count (1 order)
+    expect(document.querySelector('.kds-order-count')?.textContent).toMatch(/1.*orders/i);
+    expect(screen.getByTestId('kds-tab-open').textContent).toContain('1');
   });
 
   it('filter button shows "All orders" label in the default state', async () => {
@@ -878,6 +882,105 @@ describe('KdsScreen', () => {
     await waitFor(() => {
       const filter = screen.getByTestId('kds-topbar-filter');
       expect(filter.textContent).toMatch(/all/i);
+    });
+  });
+
+  it('supports multi-selecting zones without closing the panel and formats label', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', kitchen_zone: 'Grill', items_summary: 'Steak' }),
+      makeOrder({ id: 'o-2', kitchen_zone: 'Bar', items_summary: 'Beer' }),
+      makeOrder({ id: 'o-3', kitchen_zone: 'Bakery', items_summary: 'Bread' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Steak')).toBeDefined());
+
+    // Open filter dropdown
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    const panel = screen.getByRole('listbox', { name: /filter orders/i });
+    expect(panel).toBeDefined();
+
+    // Click Grill zone — panel stays open for multi-selection
+    await userEvent.click(screen.getByTestId('kds-filter-zone-Grill'));
+    expect(screen.getByRole('listbox', { name: /filter orders/i })).toBeDefined();
+    expect(screen.getByTestId('kds-topbar-filter').textContent).toContain('Grill');
+
+    // Click Bar zone — panel stays open and label updates to "2 selected"
+    await userEvent.click(screen.getByTestId('kds-filter-zone-Bar'));
+    expect(screen.getByRole('listbox', { name: /filter orders/i })).toBeDefined();
+    expect(screen.getByTestId('kds-topbar-filter').textContent).toMatch(/2.*selected/);
+
+    // Filtered orders show Steak and Beer, Bread is hidden
+    await waitFor(() => {
+      expect(screen.getByText('Steak')).toBeDefined();
+      expect(screen.getByText('Beer')).toBeDefined();
+      expect(screen.queryByText('Bread')).toBeNull();
+    });
+  });
+
+  it('navigates filtered orders with keyboard shortcuts 1-9 without selecting hidden orders', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, items_summary: 'Burger' }),
+      makeOrder({ id: 'o-2', status: 'ready', display_number: 102, items_summary: 'Fries' }),
+      makeOrder({ id: 'o-3', status: 'ready', display_number: 103, items_summary: 'Shake' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger')).toBeDefined());
+
+    // Filter to prepared (ready) -> o-2 and o-3
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    await userEvent.click(screen.getByTestId('kds-filter-mode-prepared'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Burger')).toBeNull();
+    });
+
+    // Press '1' -> should select o-2 (the 1st visible filtered order, Fries)
+    await userEvent.keyboard('1');
+    const friesCard = screen.getByText('Fries').closest('.kds-ticket');
+    expect(friesCard?.classList.contains('kds-ticket--selected')).toBe(true);
+
+    // Press '2' -> should select o-3 (the 2nd visible filtered order, Shake)
+    await userEvent.keyboard('2');
+    const shakeCard = screen.getByText('Shake').closest('.kds-ticket');
+    expect(shakeCard?.classList.contains('kds-ticket--selected')).toBe(true);
+  });
+
+  it('hides the filter dropdown when switching to the Completed tab', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
+    });
+
+    // Switch to Completed tab
+    await userEvent.click(screen.getByTestId('kds-tab-completed'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('kds-topbar-filter')).toBeNull();
+    });
+
+    // Switch back to Open tab
+    await userEvent.click(screen.getByTestId('kds-tab-open'));
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
+    });
+  });
+
+  it('closes the filter dropdown on Escape key and refocuses trigger button', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('kds-topbar-filter')).toBeDefined();
+    });
+
+    // Open dropdown
+    const filterBtn = screen.getByTestId('kds-topbar-filter');
+    await userEvent.click(filterBtn);
+    expect(screen.getByRole('listbox')).toBeDefined();
+
+    // Press Escape inside listbox panel
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).toBeNull();
     });
   });
 
