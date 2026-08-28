@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "OZ-POS Currency/Exchange Module: ISO-4217 currencies, exchange rates, multi-currency support."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 foundation = { workspace = true }
 platform-core = { workspace = true }

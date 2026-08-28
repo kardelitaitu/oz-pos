@@ -6,7 +6,6 @@ findings: #![deny(unsafe_code)] at crate root. Pure CLI orchestration (migration
 next: None | perf: CLI runs are ephemeral; no long-lived allocations.
 */
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
 
 //! Command-line tools for OZ-POS — migrations, backup, export, smoke tests.
 //!

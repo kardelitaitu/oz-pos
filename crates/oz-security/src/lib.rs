@@ -22,7 +22,6 @@ next: none | perf: N/A
 //! - **Fallback**: In-memory store (development only)
 
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
 
 pub mod error;
 #[cfg(target_os = "linux")]

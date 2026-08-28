@@ -1,0 +1,44 @@
+//! Error type for the promotions domain.
+//!
+//! Mirrors the shape used by the other module crates (`Db`, `NotFound`,
+//! `Validation`) so that promoting this stub to an owning module does not
+//! change the error surface its callers already match on.
+
+use thiserror::Error;
+
+/// Errors that can originate in the promotions domain.
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum PromotionsError {
+    /// A database operation failed.
+    #[error("database error: {0}")]
+    Db(#[from] rusqlite::Error),
+
+    /// A lookup by id returned no row.
+    #[error("not found: {entity} {id}")]
+    NotFound {
+        /// The kind of entity that was being looked up.
+        entity: &'static str,
+        /// The id that was looked up.
+        id: String,
+    },
+
+    /// Input validation failure.
+    #[error("validation error on {field}: {message}")]
+    Validation {
+        /// The field that failed validation.
+        field: &'static str,
+        /// Human-readable description of the failure.
+        message: String,
+    },
+}
+
+impl PromotionsError {
+    /// Create a validation error for a specific field.
+    pub fn validation(field: &'static str, message: impl Into<String>) -> Self {
+        Self::Validation {
+            field,
+            message: message.into(),
+        }
+    }
+}

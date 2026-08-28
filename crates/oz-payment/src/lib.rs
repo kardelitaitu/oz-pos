@@ -7,7 +7,6 @@ findings: #![deny(unsafe_code)] at crate root. All payment processors (Stripe, S
 next: None | perf: HTTP calls are async/tokio; mock is in-memory with AtomicUsize counters.
 */
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
 
 //! Payment processor abstraction for OZ-POS.
 //!

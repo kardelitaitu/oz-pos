@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 //! Tauri v2 application entry point.
 //!
 //! Wires the [`AppState`] (DB connection, driver registry, config) into the
@@ -360,6 +358,7 @@ pub fn run() {
             commands::auth::has_users,
             commands::auth::create_session,
             commands::auth::destroy_session,
+            commands::auth::session_keepalive,
             commands::auth::verify_pin,
             commands::branding::get_brand_settings,
             commands::branding::get_brand_settings_scoped,

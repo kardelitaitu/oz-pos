@@ -156,7 +156,7 @@ oz-pos/
   - `Feature` — 32 toggleable feature flags with dependency resolution and 4 store presets.
   - `Store<'a>` — typed CRUD facade over `&Connection`. All writes inside transactions.
 - **Migrations**: 98 embedded SQL files in `crates/oz-core/migrations/`. Registered and run by `migrations.rs`; executed on startup by `platform-startup`.
-- **Rules**: `#![deny(unsafe_code)]`, `#![warn(missing_docs)]`.
+- **Rules**: `#![deny(unsafe_code)]` in `lib.rs`; `missing_docs = "warn"` comes from the root `[workspace.lints]` via `[lints] workspace = true` in every member manifest.
 
 ### oz-hal
 - **Responsibilities**: Uniform async API for all peripheral devices.

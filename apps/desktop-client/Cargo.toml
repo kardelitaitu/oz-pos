@@ -15,6 +15,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "oz-pos-app"
 path = "src/main.rs"
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [build-dependencies]
 tauri-build = { workspace = true }
 

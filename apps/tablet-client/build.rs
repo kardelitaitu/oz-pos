@@ -1,3 +1,8 @@
+//! Tablet-client build script: runs `tauri_build::build()`.
+//!
+//! Windows manifest embedding for test binaries is deliberately NOT done
+//! here — see the comment inside `main` for why it lives in `src/lib.rs`.
+
 fn main() {
     tauri_build::build();
 

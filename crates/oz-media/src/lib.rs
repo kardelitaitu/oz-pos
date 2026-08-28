@@ -11,7 +11,6 @@ When the real implementations land, this crate will handle:
 
 Depends on the `image` crate (0.25) for pixel-level operations.
 */
-#![warn(missing_docs)]
 
 //! Image processing utilities for OZ-POS — PLANNED (stubs).
 //!

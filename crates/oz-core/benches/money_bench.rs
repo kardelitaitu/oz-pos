@@ -1,3 +1,12 @@
+//! Criterion benchmarks for `Money` arithmetic and formatting.
+//!
+//! Measures add, subtract, compare, and formatting performance to
+//! catch regressions in the hot-path monetary calculations.
+
+// `criterion_group!` expands to a public function it does not document,
+// so the workspace-wide `missing_docs` lint cannot be satisfied here.
+#![allow(missing_docs)]
+
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use foundation::money::{Currency, Money};
 

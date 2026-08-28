@@ -6,7 +6,6 @@ findings: Zero unsafe code. Pure value-objects, contracts, enums, and shared err
   Minimal dependency footprint — designed to be used everywhere without heavy transitive deps.
 next: None | perf: No allocations in hot paths; all types are Copy or lightweight.
 */
-#![warn(missing_docs)]
 
 //! Foundation crate for OZ-POS.
 //!

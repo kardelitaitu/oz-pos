@@ -1,3 +1,9 @@
+//! Criterion benchmarks for sale-commit transaction throughput.
+
+// `criterion_group!` expands to a public function it does not document, so
+// the workspace-wide `missing_docs` warning cannot be satisfied here.
+#![allow(missing_docs)]
+
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use oz_core::db::Store;
 use oz_core::{Cart, CartLine, Money, Sale, Sku};

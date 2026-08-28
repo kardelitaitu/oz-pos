@@ -5,7 +5,6 @@ findings: Transitional module implementing Module trait. No unsafe code. Re-expo
   oz-core. 7 unit tests pass covering lifecycle and kernel registration.
 next: Migrate DB CRUD + Tauri commands into this module | perf: N/A — no hot paths yet.
 */
-#![warn(missing_docs)]
 
 //! CRM Module — customer relationship management.
 //!

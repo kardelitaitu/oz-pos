@@ -10,6 +10,10 @@ description = "Headless OZ-POS cloud sync server — no Tauri, no WebView, no GU
 name = "oz-cloud-server"
 path = "src/main.rs"
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 oz-api = { workspace = true }
 oz-core = { workspace = true }

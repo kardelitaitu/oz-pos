@@ -6,7 +6,6 @@ findings: No unsafe code. PluginDb enforces namespace-isolated SQL via regex-bas
   8 unit tests pass including SQL validator, PluginDb CRUD, archive parsing.
 next: None | perf: SQL validation uses compiled regexes — negligible overhead.
 */
-#![warn(missing_docs)]
 
 //! Plugin discovery, loading, and sandboxing.
 //!

@@ -17,7 +17,6 @@
 //! - **Linux**: Syslog output is available via the `syslog` module.
 //! - **Windows**: Event Log output is available via the `eventlog` module.
 
-#![warn(missing_docs)]
 // Note: unsafe blocks are permitted for platform-specific FFI
 // calls (libc syslog, Windows Event Log).
 

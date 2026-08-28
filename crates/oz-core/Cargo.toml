@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "Domain types for OZ-POS: money, currency, cart, sale, inventory."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 foundation = { workspace = true }
 platform-core = { workspace = true }

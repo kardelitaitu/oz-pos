@@ -1,3 +1,9 @@
+//! Tauri build script for the desktop client.
+//!
+//! Delegates to `tauri_build::build()` for code generation and resource bundling.
+//! Manifest embedding for test binaries is handled in `src/lib.rs` via a
+//! `.drectve` linker directive section.
+
 fn main() {
     tauri_build::build();
 

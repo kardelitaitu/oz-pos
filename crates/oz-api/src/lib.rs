@@ -5,7 +5,6 @@ findings: No unsafe code. Axum HTTP server with JWT auth middleware. SQLite conn
   Arc<Mutex<>> for handler safety. 104 unit tests pass covering health, tokens, products, sales.
 next: None | perf: Arc<Mutex<Connection>> is the standard axum+rusqlite pattern; one connection per server.
 */
-#![warn(missing_docs)]
 
 //! OZ-POS OpenAPI REST server.
 //!

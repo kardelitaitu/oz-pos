@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "Analytics and CSV export engine for OZ-POS — daily summaries, sales reports, inventory movement."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 oz-core = { workspace = true }
 rusqlite = { workspace = true }

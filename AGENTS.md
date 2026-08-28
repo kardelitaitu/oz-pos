@@ -9,6 +9,7 @@
 - Never create new branches unless explicitly asked by the user.
 - Always use codebase-memory-mcp to quickly explore the area you looking for
 - Always read file using 100 lines of chunks
+- When calling search or file tools on Windows, ALWAYS use forward slashes (/) in path arguments (e.g., C:/My Script/project). Always handle paths with spaces by using workspace-relative paths or forward-slashed paths.
 
 ## Quick Setup
 

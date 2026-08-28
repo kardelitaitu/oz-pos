@@ -5,7 +5,6 @@ findings: Transitional module implementing Module trait. No unsafe code. Re-expo
   SaleStatus from oz-core. 8 unit tests pass covering lifecycle and kernel integration.
 next: Migrate cart/sales logic into this module | perf: N/A.
 */
-#![warn(missing_docs)]
 
 //! Sales Module — core point-of-sale functionality.
 //!
@@ -78,6 +77,12 @@ impl Module for SalesModule {
         "sales"
     }
 
+    fn dependencies(&self) -> &'static [&'static str] {
+        // Mirrors `dependencies` in modules/sales/manifest.json: a
+        // checkout decrements stock, so inventory loads and starts first.
+        &["inventory"]
+    }
+
     fn on_load(&mut self) -> ModuleResult {
         info!("sales module: on_load — validating configuration");
         // In future phases, this will:
@@ -111,6 +116,28 @@ mod tests {
     use super::*;
     use platform_kernel::Kernel;
 
+    /// Minimal stand-in for a module `sales` depends on.
+    ///
+    /// `SalesModule::dependencies()` declares `inventory`, so any test that
+    /// drives `load_all`/`start_all` must register that id or dependency
+    /// resolution fails with `MissingDependency`.
+    #[derive(Debug)]
+    struct StubModule(&'static str);
+
+    impl Module for StubModule {
+        fn id(&self) -> &'static str {
+            self.0
+        }
+    }
+
+    fn kernel_with_deps() -> Kernel {
+        let mut kernel = Kernel::new();
+        kernel
+            .register(Box::new(StubModule("inventory")))
+            .expect("register inventory stub");
+        kernel
+    }
+
     #[test]
     fn sales_module_id() {
         let module = SalesModule::new();
@@ -118,11 +145,36 @@ mod tests {
     }
 
     #[test]
-    fn sales_module_lifecycle() {
+    fn sales_module_declares_inventory_dependency() {
+        assert_eq!(SalesModule::new().dependencies(), &["inventory"]);
+    }
+
+    #[test]
+    fn sales_module_manifest_matches_declaration() {
+        let parsed: serde_json::Value = serde_json::from_str(include_str!("../manifest.json"))
+            .expect("manifest.json must be valid JSON");
+        let declared: Vec<&str> = parsed["dependencies"]
+            .as_array()
+            .expect("dependencies must be an array")
+            .iter()
+            .map(|v| v.as_str().expect("dependency must be a string"))
+            .collect();
+        assert_eq!(declared, SalesModule::new().dependencies().to_vec());
+    }
+
+    #[test]
+    fn sales_module_load_fails_without_inventory() {
         let mut kernel = Kernel::new();
         kernel.register(Box::new(SalesModule::new())).unwrap();
+        assert!(kernel.load_all().is_err());
+    }
+
+    #[test]
+    fn sales_module_lifecycle() {
+        let mut kernel = kernel_with_deps();
+        kernel.register(Box::new(SalesModule::new())).unwrap();
         assert!(kernel.is_registered("sales"));
-        assert_eq!(kernel.module_count(), 1);
+        assert_eq!(kernel.module_count(), 2);
 
         kernel.load_all().unwrap();
         assert!(kernel.is_loaded());
@@ -163,7 +215,7 @@ mod tests {
 
     #[test]
     fn sales_module_full_lifecycle_with_kernel() {
-        let mut kernel = Kernel::new();
+        let mut kernel = kernel_with_deps();
         kernel.register(Box::new(SalesModule::new())).unwrap();
 
         // load → start → stop

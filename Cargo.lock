@@ -3556,6 +3556,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "modules-giftcards"
+version = "0.0.31"
+dependencies = [
+ "anyhow",
+ "foundation",
+ "platform-kernel",
+ "rusqlite",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "modules-inventory"
 version = "0.0.31"
 dependencies = [
@@ -3573,6 +3586,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "modules-kitchen"
+version = "0.0.31"
+dependencies = [
+ "anyhow",
+ "foundation",
+ "platform-kernel",
+ "rusqlite",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "modules-loyalty"
 version = "0.0.31"
 dependencies = [
@@ -3587,6 +3613,32 @@ dependencies = [
  "thiserror 1.0.69",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "modules-promotions"
+version = "0.0.31"
+dependencies = [
+ "anyhow",
+ "foundation",
+ "platform-kernel",
+ "rusqlite",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "modules-purchasing"
+version = "0.0.31"
+dependencies = [
+ "anyhow",
+ "foundation",
+ "platform-kernel",
+ "rusqlite",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]
@@ -4390,11 +4442,13 @@ dependencies = [
 name = "oz-media"
 version = "0.0.31"
 dependencies = [
+ "async-trait",
  "chrono",
  "foundation",
  "image",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
  "tokio",
  "uuid",
@@ -4856,7 +4910,12 @@ dependencies = [
  "foundation",
  "modules-crm",
  "modules-currency",
+ "modules-giftcards",
  "modules-inventory",
+ "modules-kitchen",
+ "modules-loyalty",
+ "modules-promotions",
+ "modules-purchasing",
  "modules-reporting",
  "modules-sales",
  "modules-settings",

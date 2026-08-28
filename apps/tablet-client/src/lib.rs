@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 //! OZ-POS tablet shell (Tauri v2 mobile).
 //!
 //! Registers the same business modules as the desktop client but
@@ -223,6 +221,7 @@ pub fn run() {
                 commands::auth::staff_check_username,
                 commands::auth::create_session,
                 commands::auth::destroy_session,
+                commands::auth::session_keepalive,
                 commands::branding::get_brand_settings,
                 commands::branding::set_brand_primary_colour,
                 commands::branding::set_brand_logo_path,

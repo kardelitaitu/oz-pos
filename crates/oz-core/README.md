@@ -71,7 +71,8 @@ Key methods: `create_product`, `list_products`, `update_product`, `delete_produc
 ## Conventions
 
 - Money is always `i64` minor units — never `f32`/`f64`.
-- `#![deny(unsafe_code)]` and `#![warn(missing_docs)]`.
+- `#![deny(unsafe_code)]` in `lib.rs`; `missing_docs` is warned via
+  `[lints] workspace = true`, inherited from the root `[workspace.lints]`.
 - All public items have `///` docs.
 
 > last audited 07-07-26 by docs-auditor
