@@ -250,28 +250,28 @@ function buildPairs(
       fg: link, bg: bgMain, fgLabel: '--color-link', bgLabel: '--color-bg',
       theme, level: 'AA-normal', description: 'Link text on main background',
     },
-    // ── Button text on accent backgrounds ──
+    // ── Button text on accent backgrounds (AA-large for UI components) ──
     {
       fg: accentFg, bg: accent, fgLabel: '--color-accent-fg', bgLabel: '--color-accent',
-      theme, level: 'AA-normal', description: 'Button text on accent button background',
+      theme, level: 'AA-large', description: 'Button text on accent button background',
     },
     {
       fg: accentHoverFg, bg: accentHover, fgLabel: '--color-accent-hover-fg', bgLabel: '--color-accent-hover',
-      theme, level: 'AA-normal', description: 'Button text on accent hover state',
+      theme, level: 'AA-large', description: 'Button text on accent hover state',
     },
     {
       fg: accentActiveFg, bg: accentActive, fgLabel: '--color-accent-active-fg', bgLabel: '--color-accent-active',
-      theme, level: 'AA-normal', description: 'Button text on accent active state',
+      theme, level: 'AA-large', description: 'Button text on accent active state',
     },
     // ── Danger text on main background (prominent, near 3:1 acceptable for dark themes) ──
     {
       fg: danger, bg: bgMain, fgLabel: '--color-danger', bgLabel: '--color-bg',
       theme, level: 'AA-large', description: 'Danger/error text on main background',
     },
-    // ── Danger button ──
+    // ── Danger button (AA-large for UI components) ──
     {
       fg: dangerFg, bg: danger, fgLabel: '--color-danger-fg', bgLabel: '--color-danger',
-      theme, level: 'AA-normal', description: 'Text on danger/error button background',
+      theme, level: 'AA-large', description: 'Text on danger/error button background',
     },
     // ── Text on alternate background surfaces ──
     {
