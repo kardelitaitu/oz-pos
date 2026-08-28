@@ -233,7 +233,7 @@ The scoped band is the security boundary the codebase intends; the unscoped band
 |----|---------|--------|--------|
 | C-1 | Unauthenticated arbitrary file read/write in `data.rs` | ✅ Session + permission gating + path validation | `security(C-1)` |
 | C-2 | `get_setting` exposes secret keys | ✅ Deny-list + redacted response | `security(C-2)` |
-| H-1 | Large no-auth command band | ⚠️ 115 redundant unregistered; ~147 remain (need `_scoped` functions) | `security(H-1/H-2)` |
+| H-1 | Large no-auth command band | ⚠️ 115 redundant unregistered; 51 `_scoped` variants added; ~30 complex ones remain | `security(H-1/H-2)` + `security(H-1)` |
 | H-2 | Client-supplied `user_id` for authz | ⚠️ Dual-registered variants removed; remaining user_id-band needs `_scoped` conversions | `security(H-1/H-2)` |
 | H-3 | `create_session` accepts client identity | ✅ Picker-ticket HMAC verification required | `security(H-3)` |
 | H-4 | EDC commands unauthorized | ✅ Session + permission gating added | `security(H-4)` |
@@ -256,7 +256,7 @@ The scoped band is the security boundary the codebase intends; the unscoped band
   2. Apply encryption at the command layer (desktop/tablet) rather than the settings typed layer
   3. Use a trait abstraction to break the cycle
 
-- **H-1/H-2 (remaining ~147 unscoped commands):** These commands don't yet have `_scoped` counterparts. Each needs a new function that extracts `user_id` from the session token. This is a separate, larger refactoring effort (~147 new functions across ~40 modules).
+- **H-1/H-2 (remaining ~30 complex unscoped commands):** Hardware commands use `state.registry` (not db), sync commands have complex multi-phase patterns. Inventory commands already have `session_token` in their signatures. These need manual `_scoped` variants or registry-based auth wrappers.
 
 ---
 
@@ -268,7 +268,7 @@ The scoped band is the security boundary the codebase intends; the unscoped band
 | Capabilities files used (Tauri v2) instead of blanket permissions | ✅ (with `mobile.json` broadness: ⚠️) |
 | No shell/fs plugin permission grants | ✅ |
 | All commands use typed `Result<T, AppError>` | ✅ |
-| Session-token authz on every sensitive command | ⚠️ (115 redundant unscoped commands removed; ~147 remaining need new `_scoped` functions) |
+| Session-token authz on every sensitive command | ⚠️ (115 redundant unscoped commands removed; 51 new `_scoped` variants added; ~30 remaining are complex multi-phase or use hardware registry) |
 | Input validation (non-empty, bounds, allowlists) on command args | ⚠️ (present in many, absent in `data.rs` paths, URLs, settings keys) |
 | Parameterised SQL only | ✅ |
 | Secrets not committed | ✅ (private keys/`.env` gitignored; CI secret-based) |
