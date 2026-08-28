@@ -27,6 +27,40 @@ import './KdsScreen.css';
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
 
+/**
+ * PERF-KDS-01: shallow structural comparison of two ticket boards.
+ *
+ * `kds:orders-changed` fires for every write anywhere in the order
+ * pipeline, so most re-fetches return a payload identical to what is
+ * already on screen. Replacing state unconditionally re-rendered every
+ * ticket card (each running a 1 Hz SLA timer and a line-item fetch), which
+ * on WebView2 saturated the PostMessage queue. Only the fields the board
+ * actually renders are compared.
+ */
+function sameOrders(a: KdsOrder[], b: KdsOrder[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (
+      x.id !== y.id ||
+      x.status !== y.status ||
+      x.items_summary !== y.items_summary ||
+      x.item_count !== y.item_count ||
+      x.display_number !== y.display_number ||
+      x.received_at !== y.received_at ||
+      x.kitchen_zone !== y.kitchen_zone ||
+      x.table_number !== y.table_number ||
+      x.notes !== y.notes ||
+      x.priority !== y.priority
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Props passed to every KDS layout component. */
 export interface KdsLayoutProps {
   orders: KdsOrder[];
@@ -153,6 +187,13 @@ export default function KdsScreen() {
   useNewTicketSound(orders, settings.soundEnabled);
   const { speak } = useSound();
 
+  // PERF-KDS-01: the pending-queue length is only read inside the post-fetch
+  // flush, never rendered from `fetchOrders`. Keeping it in a ref (instead of
+  // the callback's dependency list) is what stops every queue mutation from
+  // re-creating `fetchOrders` and therefore re-running the subscribe effect.
+  const pendingQueueLengthRef = useRef(pendingQueueLength);
+  pendingQueueLengthRef.current = pendingQueueLength;
+
   const fetchOrders = useCallback(async () => {
     const zone = prefs.kdsZone || undefined;
     const { orders: fetchedOrders, fromCache } = await wrapFetch(() =>
@@ -185,11 +226,15 @@ export default function KdsScreen() {
       arrivalTimerRef.current = setTimeout(() => setNewOrderIds(new Set()), 3000);
     }
 
-    setOrders(filtered);
+    // PERF-KDS-01: replace the board only when the payload actually differs.
+    // The kitchen board re-fetches on every `kds:orders-changed` push, and an
+    // unconditional setOrders re-rendered every ticket card (each of which
+    // runs a 1 Hz SLA timer) even when nothing changed.
+    setOrders((prev) => (sameOrders(prev, filtered) ? prev : filtered));
     setInitialLoading(false);
 
     // On reconnect (fetch succeeded, not from cache), flush pending queue.
-    if (!fromCache && pendingQueueLength > 0) {
+    if (!fromCache && pendingQueueLengthRef.current > 0) {
       retryPending(async (action) => {
         try {
           await updateKdsStatusScoped(sessionToken, action.orderId, action.targetStatus);
@@ -203,37 +248,57 @@ export default function KdsScreen() {
         }
       });
     }
-  }, [sessionToken, workspaceScope?.storeId, prefs.kdsZone, wrapFetch, pendingQueueLength, retryPending, speak, l10n]);
+  }, [sessionToken, workspaceScope?.storeId, prefs.kdsZone, wrapFetch, retryPending, speak, l10n]);
+
+  // PERF-KDS-01: the realtime subscription must not be torn down and rebuilt
+  // whenever `fetchOrders` changes identity — each rebuild costs two extra
+  // WebView2 IPC round trips (`plugin:event|listen` + `unlisten`), and the
+  // old code re-subscribed on every fetch. The listener reads the latest
+  // fetch through this ref instead.
+  const fetchOrdersRef = useRef(fetchOrders);
+  fetchOrdersRef.current = fetchOrders;
 
   // 1a: Real-time push via Tauri events — replaces adaptive polling.
   // Listens for kds:orders-changed emitted by the Rust backend after
   // order creation or status updates. Falls back to re-fetch on tab
   // visibility change to catch any events missed while hidden.
+  // Subscribes exactly once per mount.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-
-    // Initial fetch on mount.
-    fetchOrders();
+    let cancelled = false;
 
     // Subscribe to real-time KDS order changes (push, not poll).
     listen<null>('kds:orders-changed', () => {
-      fetchOrders();
-    }).then((fn) => { unlisten = fn; });
+      void fetchOrdersRef.current();
+    }).then((fn) => {
+      // The component may already have unmounted while `listen` was in
+      // flight; without this guard the subscription would leak.
+      if (cancelled) fn();
+      else unlisten = fn;
+    }).catch(() => {
+      /* event plugin unavailable (e.g. plain browser) — push is optional */
+    });
 
     // Visibility change fallback — re-fetch when tab becomes visible
     // to catch any events missed while the tab was hidden.
     const onVisibilityChange = () => {
       if (!document.hidden) {
-        fetchOrders();
+        void fetchOrdersRef.current();
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
+      cancelled = true;
       if (unlisten) unlisten();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       if (arrivalTimerRef.current !== null) clearTimeout(arrivalTimerRef.current);
     };
+  }, []);
+
+  // Fetch whenever the query inputs change (mount, session, store, zone).
+  useEffect(() => {
+    void fetchOrders();
   }, [fetchOrders]);
 
   const clearError = useCallback(() => setError(null), []);
@@ -467,6 +532,19 @@ export default function KdsScreen() {
     return orders;
   }, [orders, filterMode, filterCats]);
 
+  // PERF-KDS-01: stable identity so `KdsTicketCard`'s memo actually holds.
+  // An inline arrow here changed on every KdsScreen render, which invalidated
+  // every card's props and re-rendered the whole board.
+  const handleSaveItems = useCallback(async (orderId: string, itemsSummary: string, itemCount: number) => {
+    try {
+      await updateKdsOrderItemsScoped(sessionToken, { id: orderId, items_summary: itemsSummary, item_count: itemCount });
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [sessionToken]);
+
+  const boardFiltered = filterMode === 'prepared' || (filterCats !== null && filterCats.size > 0);
+
   // ── Initial loading skeleton ──────────────────────────────────
   const renderContent = () => {
     if (initialLoading) {
@@ -500,19 +578,13 @@ export default function KdsScreen() {
       <div {...pullRefreshProps}>
         <KdsLayoutMasonry
           orders={filteredOrders}
-          filtered={filterMode === 'prepared' || (filterCats !== null && filterCats.size > 0)}
+          filtered={boardFiltered}
           onAdvance={advanceStatus}
           showOrderId={prefs.showOrderId}
           showTableNumber={prefs.showTableNumber}
           selectedOrderId={selectedOrderId}
           sessionToken={sessionToken}
-          onSaveItems={async (orderId, itemsSummary, itemCount) => {
-            try {
-              await updateKdsOrderItemsScoped(sessionToken, { id: orderId, items_summary: itemsSummary, item_count: itemCount });
-            } catch (e) {
-              setError(String(e));
-            }
-          }}
+          onSaveItems={handleSaveItems}
           onAdvanceItem={advanceItemStatus}
           onAddItems={setPickerOrderId}
           newOrderIds={newOrderIds}

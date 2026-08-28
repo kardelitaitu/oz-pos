@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
@@ -943,5 +943,73 @@ describe('KdsScreen', () => {
     // Changing the native picker updates the hex field.
     fireEvent.change(native, { target: { value: '#ff00aa' } });
     expect(hex.value).toBe('#ff00aa');
+  });
+
+  // ── PERF-KDS-01: the realtime subscription / fetch loop ────────────
+  //
+  // The board used to re-create `fetchOrders` on every successful fetch
+  // (because `wrapFetch` closed over the cache it had just written, and the
+  // callback also depended on the pending-queue length). The subscribe effect
+  // depended on `fetchOrders`, so each fetch tore down and rebuilt the Tauri
+  // event listener and fired another fetch — an unbounded loop that exhausted
+  // the WebView2 PostMessage queue on Windows (0x80070718, "Not enough quota
+  // is available to process this command") and made opening KDS lag.
+
+  it('subscribes to kds:orders-changed exactly once per mount', async () => {
+    const { listen } = await import('@tauri-apps/api/event');
+    const listenMock = vi.mocked(listen);
+    listenMock.mockClear();
+
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+
+    const kdsSubscriptions = listenMock.mock.calls.filter(
+      ([event]) => event === 'kds:orders-changed',
+    );
+    expect(kdsSubscriptions).toHaveLength(1);
+  });
+
+  it('does not re-fetch the queue in a loop after the initial load', async () => {
+    // A fresh array per call is what the real IPC boundary returns — every
+    // `invoke` deserializes a new object graph. That identity change is what
+    // made the old `wrapFetch` (which closed over the cache it had just
+    // written) produce a new callback, re-run the subscribe effect, and fetch
+    // again. With `mockResolvedValue` the identity is stable and the loop
+    // stays hidden, so this test must build the payload per call.
+    mockGetKdsQueue.mockImplementation(() => Promise.resolve([makeOrder()]));
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+
+    const afterFirstPaint = mockGetKdsQueue.mock.calls.length;
+    // Let every already-scheduled microtask/effect settle. The pre-fix board
+    // issued ~900 fetches per second here.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(mockGetKdsQueue.mock.calls.length).toBe(afterFirstPaint);
+  });
+
+  it('re-fetches when the realtime event fires', async () => {
+    const { listen } = await import('@tauri-apps/api/event');
+    const listenMock = vi.mocked(listen);
+    listenMock.mockClear();
+
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
+
+    const subscription = listenMock.mock.calls.find(
+      ([event]) => event === 'kds:orders-changed',
+    );
+    expect(subscription).toBeDefined();
+    const handler = subscription![1] as (payload: unknown) => void;
+
+    const before = mockGetKdsQueue.mock.calls.length;
+    await act(async () => {
+      handler({ event: 'kds:orders-changed', id: 1, payload: null });
+    });
+
+    // Push still drives a refresh — the loop fix must not disable realtime.
+    expect(mockGetKdsQueue.mock.calls.length).toBeGreaterThan(before);
   });
 });
