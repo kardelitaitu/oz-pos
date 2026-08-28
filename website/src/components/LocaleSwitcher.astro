@@ -39,6 +39,8 @@ const activeIndex = locales.indexOf(locale);
 </div>
 
 <script>
+  import { navigate } from 'astro:transitions/client';
+
   function initLangSwitcher() {
     const switcher = document.querySelector('.lang-switcher') as HTMLElement | null;
     if (!switcher) return;
@@ -48,21 +50,24 @@ const activeIndex = locales.indexOf(locale);
     if (!pill || !links.length) return;
 
     function updatePillPosition(index: number) {
-      // Position pill over the active button using getBoundingClientRect
       const switcherRect = switcher!.getBoundingClientRect();
       const btn = links[index] as HTMLElement;
+      if (!btn) return;
       const btnRect = btn.getBoundingClientRect();
       pill!.style.left = `${btnRect.left - switcherRect.left - 1}px`;
       pill!.style.width = `${btnRect.width + 2}px`;
     }
 
+    const currentIdx = parseInt(switcher.dataset.activeIndex || '0');
+    updatePillPosition(currentIdx);
+
     // Intercept clicks: animate pill first, then navigate after transition
     links.forEach((link) => {
       link.addEventListener('click', (e) => {
         const idx = parseInt((link as HTMLElement).dataset.index || '0');
-        const currentIdx = parseInt(switcher!.dataset.activeIndex || '0');
+        const currentActive = parseInt(switcher!.dataset.activeIndex || '0');
         // If already on this language, do nothing
-        if (idx === currentIdx) {
+        if (idx === currentActive) {
           e.preventDefault();
           return;
         }
@@ -76,7 +81,10 @@ const activeIndex = locales.indexOf(locale);
         updatePillPosition(idx);
         // Navigate after pill animation completes (280ms matches CSS transition)
         setTimeout(() => {
-          window.location.href = link.getAttribute('href') || '#';
+          const href = link.getAttribute('href');
+          if (href) {
+            navigate(href);
+          }
         }, 280);
       });
     });

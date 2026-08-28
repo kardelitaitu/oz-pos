@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from 'astro:transitions';
 import { getAbsoluteLocaleUrl } from 'astro:i18n';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
@@ -33,13 +34,18 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
 <!doctype html>
 <html lang={locale}>
   <head>
+    <ClientRouter />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Apply the stored theme before first paint (dark is the default). -->
+    <!-- Apply the stored theme before first paint and on SPA swaps. -->
     <script is:inline>
       (() => {
-        const t = localStorage.getItem('oz_theme');
-        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+        const applyTheme = () => {
+          const t = localStorage.getItem('oz_theme');
+          document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+        };
+        applyTheme();
+        document.addEventListener('astro:after-swap', applyTheme);
       })();
     </script>
     <meta name="description" content={description ?? t(locale, 'docs.title')} />

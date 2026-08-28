@@ -38,12 +38,12 @@ const locale = Astro.currentLocale ?? 'en';
 </button>
 
 <script>
-  document.querySelectorAll('[data-theme-toggle]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const html = document.documentElement;
-      const next = html.dataset.theme === 'light' ? 'dark' : 'light';
-      html.dataset.theme = next;
-      localStorage.setItem('oz_theme', next);
-    });
+  document.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement)?.closest('[data-theme-toggle]');
+    if (!btn) return;
+    const html = document.documentElement;
+    const next = html.dataset.theme === 'light' ? 'dark' : 'light';
+    html.dataset.theme = next;
+    localStorage.setItem('oz_theme', next);
   });
 </script>

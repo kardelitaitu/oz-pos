@@ -11,8 +11,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>OZ-POS</title>
     <script is:inline>
-      // Privacy-friendly: browser language only, never geo-tracking.
-      const lang = (navigator.language || 'en').toLowerCase();
+      // Privacy-friendly: stored user preference first, browser language fallback.
+      const saved = localStorage.getItem('oz_language');
+      const lang = (saved || navigator.language || 'en').toLowerCase();
       const target = lang.startsWith('id') ? '/id/' : '/en/';
       window.location.replace(target);
     </script>

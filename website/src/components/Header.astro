@@ -76,3 +76,13 @@ const login = getRelativeLocaleUrl(locale, 'login');
     </div>
   </div>
 </header>
+
+<script>
+  document.addEventListener('click', (e) => {
+    const link = (e.target as HTMLElement)?.closest('details.group a');
+    if (link) {
+      const details = link.closest('details');
+      if (details) details.removeAttribute('open');
+    }
+  });
+</script>

@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from 'astro:transitions';
 import { getAbsoluteLocaleUrl } from 'astro:i18n';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
@@ -24,6 +25,7 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
 <!doctype html>
 <html lang={locale}>
   <head>
+    <ClientRouter />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Runtime backend URL: served by the Worker from [vars] so a backend
@@ -34,11 +36,15 @@ const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : r
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
-    <!-- Apply the stored theme before first paint (light is the default). -->
+    <!-- Apply the stored theme before first paint and on SPA swaps. -->
     <script is:inline>
       (() => {
-        const t = localStorage.getItem('oz_theme');
-        document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+        const applyTheme = () => {
+          const t = localStorage.getItem('oz_theme');
+          document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+        };
+        applyTheme();
+        document.addEventListener('astro:after-swap', applyTheme);
       })();
     </script>
     <meta name="description" content={desc} />
