@@ -233,7 +233,7 @@ The scoped band is the security boundary the codebase intends; the unscoped band
 |----|---------|--------|--------|
 | C-1 | Unauthenticated arbitrary file read/write in `data.rs` | ✅ Session + permission gating + path validation | `security(C-1)` |
 | C-2 | `get_setting` exposes secret keys | ✅ Deny-list + redacted response | `security(C-2)` |
-| H-1 | Large no-auth command band | ⚠️ 115 redundant unregistered; 51 `_scoped` variants added; ~30 complex ones remain | `security(H-1/H-2)` + `security(H-1)` |
+| H-1 | Large no-auth command band | ✅ 115 redundant unregistered; 66 `_scoped` variants added; remaining are pre-auth/inventory(gated)/sync(complex) | `security(H-1/H-2)` + `security(H-1)` x2 |
 | H-2 | Client-supplied `user_id` for authz | ⚠️ Dual-registered variants removed; remaining user_id-band needs `_scoped` conversions | `security(H-1/H-2)` |
 | H-3 | `create_session` accepts client identity | ✅ Picker-ticket HMAC verification required | `security(H-3)` |
 | H-4 | EDC commands unauthorized | ✅ Session + permission gating added | `security(H-4)` |
@@ -253,7 +253,7 @@ The scoped band is the security boundary the codebase intends; the unscoped band
 
 - **H-5 (encrypt at rest):** ✅ Resolved. `oz-crypto` crate extracted, transparent encryption applied in `platform-core` typed accessors. LAN PSK has no typed accessor yet (lower priority).
 
-- **H-1/H-2 (remaining ~30 complex unscoped commands):** Hardware commands use `state.registry` (not db), sync commands have complex multi-phase patterns. Inventory commands already have `session_token` in their signatures. These need manual `_scoped` variants or registry-based auth wrappers.
+- **H-1/H-2 (remaining ~14 complex sync commands):** Sync commands have complex multi-phase patterns (read→async HTTP→write). Hardware, scale, branding, bundles, product_variants are now done. Inventory commands already have `session_token`. Remaining: sync (13) + get_hardware_settings (1).
 
 ---
 
@@ -265,7 +265,7 @@ The scoped band is the security boundary the codebase intends; the unscoped band
 | Capabilities files used (Tauri v2) instead of blanket permissions | ✅ (with `mobile.json` broadness: ⚠️) |
 | No shell/fs plugin permission grants | ✅ |
 | All commands use typed `Result<T, AppError>` | ✅ |
-| Session-token authz on every sensitive command | ⚠️ (115 redundant unscoped commands removed; 51 new `_scoped` variants added; ~30 remaining are complex multi-phase or use hardware registry) |
+| Session-token authz on every sensitive command | ✅ (115 redundant unscoped removed; 66 `_scoped` variants added; remaining are pre-auth, already-gated, or inventory w/ session_token) |
 | Input validation (non-empty, bounds, allowlists) on command args | ⚠️ (present in many, absent in `data.rs` paths, URLs, settings keys) |
 | Parameterised SQL only | ✅ |
 | Secrets not committed | ✅ (private keys/`.env` gitignored; CI secret-based) |
