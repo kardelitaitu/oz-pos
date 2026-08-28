@@ -23,9 +23,9 @@ async fn get_report_schedule_does_not_panic() {
 // ── send_test_report ──────────────────────────────────────────────
 
 #[tokio::test]
-async fn send_test_report_fails_without_smtp_config() {
+async fn send_test_report_rejects_invalid_token() {
     let app = test_app();
-    let result = send_test_report(app.state()).await;
-    // Should fail because SMTP is not configured in test state.
-    assert!(result.is_err(), "should fail without SMTP config");
+    let result = send_test_report("bogus-token".into(), app.state()).await;
+    // Should fail because the session token is invalid.
+    assert!(result.is_err(), "should fail with invalid session token");
 }

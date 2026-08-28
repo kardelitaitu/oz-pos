@@ -899,8 +899,36 @@ pub async fn get_setting(
 }
 
 /// Business logic for `get_setting` (extracted for testing).
+///
+/// C-2: Secret keys are denied — never return plaintext credentials,
+/// API keys, passwords, or PSKs to the IPC surface.
 fn run_get_setting(conn: &rusqlite::Connection, key: &str) -> Result<Option<String>, AppError> {
+    if is_secret_key(key) {
+        return Ok(None);
+    }
     Ok(Settings::get(conn, key)?)
+}
+
+/// Keys or key prefixes that must never be returned via the raw
+/// `get_setting` IPC command. These contain credentials, API keys,
+/// passwords, or pre-shared keys (C-2: CWE-200 information disclosure).
+const SECRET_KEY_DENY_LIST: &[&str] = &[
+    "sync_api_key",
+    "sync.terminal_secret",
+    "pg_sync.password",
+    "rate_sync.api_key",
+    "lan_server.psk",
+    "smtp_config",
+    "license.api_key",
+    "license.payload",
+    "license.signature",
+    "license.tenant_id",
+];
+
+/// Returns `true` if the given settings key should be blocked from
+/// the raw `get_setting` IPC surface.
+fn is_secret_key(key: &str) -> bool {
+    SECRET_KEY_DENY_LIST.iter().any(|denied| key == *denied)
 }
 /// **Deprecated — use `set_setting_scoped` (ADR #7).**
 ///
