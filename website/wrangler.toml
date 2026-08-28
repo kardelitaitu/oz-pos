@@ -35,18 +35,7 @@ CONTACT_WEBHOOK_URL = "https://discord.com/api/webhooks/154258447961xxxxxx"
 # so they are NOT bindings — set them when running `npm run build`:
 #   PUBLIC_LICENSE_API_URL=… PUBLIC_PADDLE_CLIENT_TOKEN=… npm run build
 
-[observability]
-enabled = false
-head_sampling_rate = 1
-redact_query_string = false
-
 [observability.logs]
 enabled = true
-head_sampling_rate = 1
-persist = true
 invocation_logs = true
 
-[observability.traces]
-enabled = true
-persist = true
-head_sampling_rate = 1

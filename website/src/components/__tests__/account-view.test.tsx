@@ -38,7 +38,7 @@ function badRequest(status: number) {
   return { ok: false, status, json: async () => ({}) };
 }
 
-function stubMe(subscription?: Record<string, unknown>): void {
+function stubMe(subscription?: Record<string, unknown> | null): void {
   mockFetch(() =>
     okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
