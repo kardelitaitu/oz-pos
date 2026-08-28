@@ -5,7 +5,6 @@ import { activateLicense, getHardwareFingerprint, getMachineId } from '@/api/lic
 import { detectTrialVertical } from '@/utils/trial-vertical';
 import { detectBundleId } from '@/utils/bundle';
 import { getVersion, getLocalIp } from '@/api/system';
-import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import MachineIdStatus from '@/components/MachineIdStatus';
 import { Localized, useLocalization } from '@fluent/react';
@@ -155,7 +154,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   const handlePaste = async () => {
     if (!contextMenu) return;
     try {
-      const text = await readText();
+      const text = await navigator.clipboard.readText();
       if (text) {
         if (contextMenu.field === 'email') setEmail(text);
         if (contextMenu.field === 'phone') setPhone(text);
