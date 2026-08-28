@@ -1,57 +1,37 @@
-# Delete the Old Settings — Definitive Plan
+# Settings Consolidation — Plan & Status
 
 ## Architectural principle
 
-**Tools** (staff, audit, terminals, stores, shifts, tax, exchange, promotions, offline, features, data, kds, analytics, reports) → home "Tools" area, each with a dedicated full page. Visibility gated by subscription tier + user role.
+> **If it's a page/tool → home "Tools" area + dedicated full page.**
+> **If it's a configuration → stay on Settings.**
+>
+> Home "Tools" tiles can be shown or hidden based on **subscription tier**
+> (C2.2 capabilities) and **user role**.
 
-**Configuration** (general, appearance, receipt, sync, email, about, license, topology, store-pos, restaurant-pos, inventory) → stays on Settings (route `settings`).
+## Status: DONE
 
-## What is already done
+| Item | Change | Commit |
+|---|---|---|
+| 12 management tabs removed from settings hub | features, data, staff, terminals, stores, audit, offline, shifts, tax, exchange, promotions, kds cases deleted | `9196fb69` |
+| Deep-link hash reader whitelisted | `#/settings/<section>` only resolves to the 11 kept tabs | `a4265229` |
+| Settings hub categories | Management removed; topology folded into System | `a4265229` |
+| New `tools` sidebar section | SectionName + SECTION_LABELS + SECTION_ORDER added; 8 nav items re-homed from `settings` to `tools` | `ffbcd5e2` |
+| `settings` section now contains ONLY the hub | route `settings` (General) is the only item | `ffbcd5e2` |
+| Home "Tools" area expanded | 10 missing tools added (terminals, stores, shifts, tax-config, exchange-rates, promotions, offline-queue, features, data-management, kds) | `4de55e4d` |
+| Home tool gating | New `cap` field gates each tool by subscription capability; existing `minRole` gates by role | `4de55e4d` |
+| FTL keys | `nav-section-tools` (EN/ID) + 20 `workspace-home-<tool>-{title,desc}` keys (EN/ID) | `ffbcd5e2`, `4de55e4d` |
+| Tests | groupBySection, SettingsNavTree, WorkspaceHome all updated + passing | various |
 
-| Change | Commit |
-|---|---|
-| 12 management tabs removed from settings hub | `9196fb69` |
-| `management` sidebar section deleted; 8 nav items re-homed to `settings` | `9196fb69` |
-| Deep-link hash reader whitelisted (only 11 real tabs respond) | `a4265229` |
-| Settings hub categories: Management folded into System | `a4265229` |
-| Tests and FTL keys updated | both |
+## Final architecture
 
-## What remains to do
+- **Settings** (route `settings`) — the hub with 11 configuration tabs:
+  Business (general, appearance) · Operations (receipt, sync, email, store-pos, restaurant-pos, inventory) · System (about, license, topology)
+- **Tools** — each a dedicated full page with its own route, reachable from:
+  1. Home screen "Tools" area (role + subscription gated)
+  2. Sidebar `tools` section (staff, audit, terminals, stores, shifts, offline, features, data) + their original sections (tax → finance, exchange → finance, promotions → finance, kds → operations)
+- **No management screen is a settings tab anymore.**
 
-### Step 1: Expand home "Tools" area
+## Remaining (optional / not blocking)
 
-The home screen (`WorkspaceHome.tsx`) has a hardcoded `TOOLS` array with 5 tools. Add all the missing tools:
-
-**Already there:** analytics, reports (→dashboard), staff, settings, audit-log
-
-**Add:** terminals, stores, shifts, tax-config, exchange-rates, promotions, offline-queue, features, data-management, kds
-
-Each needs:
-- `route` (already exists — terminals, stores, shifts, etc.)
-- `minRole` gating (already exists in their register files)
-- Subscription-tier gating (via `useSubscription` — check if the tool's feature is enabled)
-- SVG icon, label FTL key, description FTL key
-
-### Step 2: Move tools out of the sidebar `settings` section
-
-Currently the sidebar `settings` section has: General, Features, Data, Audit, Offline, Shifts, Staff, Stores, Terminals.
-
-Per the concept: only configuration (General) belongs in `settings`. The tools should NOT be in the `settings` section.
-
-**Option A (recommended):** Remove the 8 tool nav items from the sidebar entirely. The home "Tools" area is their canonical entry point. The sidebar `settings` section shows only "General" (the settings hub).
-
-**Option B:** Keep them in the sidebar under a different section name.
-
-### Step 3: Verify the Settings hub
-
-The 11 configuration tabs are correct. No changes needed.
-
-### Step 4: Clean up
-
-- Remove the 8 re-homed nav items' `section: 'settings'` → delete them from sidebar (if Option A)
-- Remove orphaned sidebar nav keys from FTL bundles
-- Verify all tests pass
-
-## Key decision
-
-**Step 2:** Option A removes tools from sidebar entirely (home Tools area is the entry). Option B keeps them in sidebar under a different section. Which one?
+- The audit page KPI strip front-end (backend `Store::audit_summary` is staged).
+- `AnalyticsScreen.tsx` has an in-progress "no workspace selected" feature from concurrent work that currently breaks `npm run typecheck` (unbalanced JSX) — unrelated to this consolidation; fix when that work lands.
