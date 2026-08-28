@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { t } from '../i18n';
 
 export interface SearchItem {
@@ -19,6 +20,12 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const searchItems: SearchItem[] = useMemo(
     () => [
@@ -97,10 +104,24 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose, filteredItems, selectedIndex]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [isOpen, onClose]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4 sm:pt-24">
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4 sm:pt-24"
+      onClick={onClose}
+    >
       {/* Backdrop */}
       <div
         data-backdrop="true"
@@ -111,10 +132,12 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
 
       {/* Modal Dialog */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={t(locale, 'search.placeholder')}
-        className="relative w-full max-w-lg rounded-2xl border border-ink/15 bg-surface p-4 shadow-2xl transition-all"
+        className="relative z-10 w-full max-w-lg rounded-2xl border border-ink/15 bg-surface p-4 shadow-2xl transition-all"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Search Bar Input */}
         <div className="relative flex items-center border-b border-ink/10 pb-3">
@@ -190,6 +213,7 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
           {t(locale, 'search.shortcutHint')}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

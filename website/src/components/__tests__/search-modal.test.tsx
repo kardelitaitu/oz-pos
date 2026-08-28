@@ -38,23 +38,23 @@ describe('SearchModal Component', () => {
   }
 
   it('does not render when isOpen is false', async () => {
-    const { container, unmount } = await renderModal(false);
-    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    const { unmount } = await renderModal(false);
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
     await unmount();
   });
 
   it('renders search input and initial results when open', async () => {
-    const { container, unmount } = await renderModal(true);
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
-    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
+    const { unmount } = await renderModal(true);
+    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+    const input = document.body.querySelector('input[type="search"]') as HTMLInputElement;
     expect(input).not.toBeNull();
     expect(input.placeholder).toContain('Search');
     await unmount();
   });
 
   it('filters results based on query', async () => {
-    const { container, unmount } = await renderModal(true);
-    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
+    const { unmount } = await renderModal(true);
+    const input = document.body.querySelector('input[type="search"]') as HTMLInputElement;
 
     await act(async () => {
       const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
@@ -62,7 +62,7 @@ describe('SearchModal Component', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
-    const results = container.querySelectorAll('a[role="option"]');
+    const results = document.body.querySelectorAll('a[role="option"]');
     expect(results.length).toBeGreaterThan(0);
     const titles = Array.from(results).map((r) => r.textContent);
     expect(titles.some((t) => t?.toLowerCase().includes('pricing'))).toBe(true);
@@ -70,8 +70,8 @@ describe('SearchModal Component', () => {
   });
 
   it('shows no results message for unmatched query', async () => {
-    const { container, unmount } = await renderModal(true);
-    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
+    const { unmount } = await renderModal(true);
+    const input = document.body.querySelector('input[type="search"]') as HTMLInputElement;
 
     await act(async () => {
       const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
@@ -79,15 +79,15 @@ describe('SearchModal Component', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
-    expect(container.textContent).toContain('No matching results found');
+    expect(document.body.textContent).toContain('No matching results found');
     await unmount();
   });
 
   it('calls onClose when Escape key is pressed or backdrop is clicked', async () => {
     const onClose = vi.fn();
-    const { container, unmount } = await renderModal(true, onClose);
+    const { unmount } = await renderModal(true, onClose);
 
-    const backdrop = container.querySelector('[data-backdrop="true"]') as HTMLElement;
+    const backdrop = document.body.querySelector('[data-backdrop="true"]') as HTMLElement;
     if (backdrop) {
       await act(async () => {
         backdrop.click();
@@ -97,6 +97,18 @@ describe('SearchModal Component', () => {
 
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+    expect(onClose).toHaveBeenCalled();
+
+    await unmount();
+  });
+
+  it('calls onClose on mousedown outside the dialog', async () => {
+    const onClose = vi.fn();
+    const { unmount } = await renderModal(true, onClose);
+
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
     expect(onClose).toHaveBeenCalled();
 

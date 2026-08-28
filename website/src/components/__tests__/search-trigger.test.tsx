@@ -61,24 +61,24 @@ describe('SearchTrigger Component', () => {
       btn.click();
     });
 
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
     await unmount();
   });
 
   it('toggles search modal on Cmd+K or Ctrl+K keypress', async () => {
-    const { container, unmount } = await renderTrigger('en');
+    const { unmount } = await renderTrigger('en');
 
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
     });
 
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
 
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     });
 
-    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
     await unmount();
   });
 });
