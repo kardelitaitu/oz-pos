@@ -1,135 +1,77 @@
-# Settings Consolidation Plan — "Old Settings" → "New Settings"
+# Delete the Old Settings — Definitive Plan
 
-> Status: **ACTIVE** · Owner: agent + maintainer review · Target: only the
-> new settings remain; every legacy settings entry point is deleted or
-> re-routed.
+## 1. What are the "2 different settings"?
 
-## 1. The problem
+| Surface | What it is | User's label | Status |
+|---|---|---|---|
+| The **clean hub** at `#/settings` (11 genuine settings tabs) | The SettingsPage shown when you click "Settings" on the home screen | **NEW settings** | ✅ KEEP |
+| The **deep-link pattern** `#/settings/staff`, `#/settings/audit`, etc. | The legacy behavior where management screens opened INSIDE the settings hub as a tab | **OLD settings** | ❌ DELETE |
 
-Users and code have two mental models of "settings":
+**The core confusion:** Both were the **same page** (SettingsPage component). The only difference was whether you reached it via the home screen "Settings" tile (clean hub, new) or via a management tile like "Staff Management" (deep-linked to a management tab, old). The user saw the same page and couldn't tell why it showed different things.
 
-| Surface | What it is | Status |
+## 2. What is "old settings" exactly?
+
+The OLD settings = the **SettingsPage hub (route `settings`) when used as a tabbed container for management screens**. This was the legacy pattern where:
+- Staff, Audit, Terminals, Stores, Shifts, Tax, Exchange, Promotions, Offline, Features, Data, and KDS all lived as **tabs inside the settings page**
+- Clicking "Staff Management" on the home screen navigated to `#/settings/staff` (the settings page with the staff tab selected)
+- The settings page had 23 tabs total — 12 management screens + 11 genuine settings
+
+**This is confusing because:** the same page hosted management screens AND settings, making it impossible to tell which "settings" you were in.
+
+## 3. What is "new settings"?
+
+The NEW settings = **the SettingsPage hub (route `settings`) containing ONLY genuine settings** (11 tabs) + **standalone pages for each management screen** (staff, audit, etc., each with its own route).
+
+When you click "Settings" on the home screen → `#/settings` → clean hub (11 tabs under Business/Operations/System).
+When you click "Staff Management" on the home screen → `#/staff` → standalone StaffManagementScreen.
+
+## 4. What is already deleted (commits 9196fb69 + a4265229)
+
+| Item | Change |
+|---|---|
+| **12 management tabs** removed from SettingsPage | cases for `features`, `data`, `staff`, `terminals`, `stores`, `audit`, `offline`, `shifts`, `tax`, `exchange`, `promotions`, `kds` deleted |
+| **21 import lines** removed | unused imports for the removed components |
+| **`management` sidebar section** deleted | `SectionName` type, `SECTION_LABELS`, `SECTION_ORDER`, `groupBySection` fallback (now `'settings'`), FTL keys |
+| **8 nav items re-homed** from `management` to `settings` section | audit, offline, features, data, shifts, staff, stores, terminals — each now routes to its standalone page |
+| **Deep-link hash reader whitelisted** | `#/settings/<section>` only resolves to the 11 kept tabs; stale links to removed tabs fall back to the default view |
+| **SettingsNavTree categories** | Management category removed; topology folded into System |
+| **Orphaned FTL keys** removed | 12 `settings-nav-*` keys + `nav-section-management` + `settings-category-management` from both EN and ID bundles |
+| **Tests updated** | `SettingsNavTree.test.tsx`, `groupBySection.test.ts` |
+| **Plan document created** | this file |
+
+## 5. Verification: is the old settings fully gone?
+
+After the two commits above, the old settings pattern (deep-linking into the hub on a management tab) is **impossible**:
+
+- `#/settings/staff` → ignored (staff not in KEPT_SECTIONS whitelist) → falls back to the `general` tab (the default hub view)
+- `#/settings/audit` → same — ignored
+- All 12 management routes → navigate to their standalone pages via the home screen tiles and sidebar
+- The home screen "Staff Management" tile → `#/staff` → standalone StaffManagementScreen
+- The home screen "Audit" tile → `#/audit-log` → standalone AuditLogScreen
+
+**To verify this is working in your running build:**
+1. Open the app → click "Settings" on the home screen → should show the hub with 11 tabs (General, Appearance, etc.)
+2. Click "Staff Management" on the home screen → should go to the standalone Staff page (NOT the settings hub)
+3. Click "Audit Log" on the home screen → should go to the standalone Audit Log page
+4. Manually navigate to `#/settings/staff` in the URL bar → should show the settings hub on the default (General) tab, NOT an empty body
+
+## 6. Remaining items (optional)
+
+| Item | Decision | Rationale |
 |---|---|---|
-| **New settings** | The clean settings hub at route `settings` (SettingsPage) — **only** real settings tabs (general, appearance, receipt, sync, email, about, license, topology, store-pos, restaurant-pos, inventory) | ✅ Keep |
-| **Old settings** | The legacy tabbed hub that hosted **management screens as tabs** (staff, audit, terminals, stores, shifts, tax, exchange, promotions, offline, features, data, kds) reachable by deep-links like `#/settings/staff` | ❌ Delete |
+| **Topology** — keep in the hub? | ✅ **Keep in hub** under System category | Topology has no standalone route. It's a config editor, not a management screen. The "Add Workspace" card on the home screen deep-links `settings/topology` — this is fine since topology is a real kept tab |
+| **Workspace card duplication** — hub (full-page) vs F10 modal | ✅ **Keep both** | Intentional: Tier 1 (hub, admin) vs Tier 2 (modal, in-workspace context). ADR #22 |
+| **Remove the hash reader entirely** (not just whitelist it) | ❌ **Keep it** | `settings/topology` deep-link is used by the Add Workspace card. The whitelist ensures only real tabs respond |
 
-The confusion: clicking "Staff Management" on the home screen used to land on
-the settings page with the *staff tab* open (the old settings), while clicking
-"Settings" landed on the same page in its default state (the new settings).
-Both were the same component — the only difference was the deep-linked tab.
+## 7. Definition of done
 
-## 2. Target architecture (definition of done)
+The old settings is properly deleted when:
+- [ ] No management screen can be reached as a tab inside the settings hub
+- [ ] All 12 management screens have standalone routes (already true)
+- [ ] The home screen tiles route to standalone pages (already true)
+- [ ] The deep-link hash `#/settings/<section>` only works for the 11 real tabs (whitelist done)
+- [ ] The sidebar "settings" section correctly lists all re-homed items (done)
+- [ ] `npm run typecheck` passes (verified)
+- [ ] All affected tests pass (verified)
 
-1. **One settings hub** — route `settings` (SettingsPage) contains only the 11
-   genuine settings tabs. No management screens as tabs.
-2. **Every management screen is its own page** with its own route, reachable
-   from the home screen / sidebar by its real name:
-   - `audit-log` (Audit Log)
-   - `features` (Features)
-   - `data-management` (Data)
-   - `staff` (Staff)
-   - `terminals` (Terminals)
-   - `stores` (Stores)
-   - `offline-queue` (Offline Queue)
-   - `shifts` (Shifts)
-   - `tax-config` (Tax Rates)
-   - `exchange-rates` (Exchange Rates)
-   - `promotions` (Promotions)
-   - `kds` (Kitchen Display)
-3. **No deep-links** into the settings hub on a removed tab (`#/settings/staff`,
-   `#/settings/audit`, …). The only valid deep-link target left is
-   `#/settings/topology` (topology is a real, kept tab).
-4. **Sidebar section**: the `management` section is gone; the 8 re-homed items
-   live in the `settings` section (already done).
-
-## 3. What is already done
-
-Committed as `9196fb69`:
-
-- **12 legacy tabs removed** from SettingsPage.tsx (features, data, staff,
-  terminals, stores, audit, offline, shifts, tax, exchange, promotions, kds).
-  Each already had a standalone route, so no functionality was lost.
-- **Nav tree reduced** — SettingsNavTree.tsx `NAV_ITEMS`, `CATEGORIES`, and
-  `NAV_L10N_KEYS` only list the 11 kept tabs.
-- **`management` section deleted** from `SectionName`, `SECTION_LABELS`,
-  `SECTION_ORDER`; `groupBySection` fallback now `'settings'`.
-- **8 register files re-homed** to `section: 'settings'` with their standalone
-  routes: audit, offline, staff, terminals, stores, shifts (in
-  `features/*/register.tsx`) and features + data-management
-  (in `features/settings/register.tsx`).
-- **Orphaned FTL keys removed** from `shared.ftl` / `shared.id.ftl`
-  (`nav-section-management`) and `settings.ftl` / `settings.id.ftl`
-  (the 12 removed `settings-nav-*` keys).
-- **Tests updated**: `groupBySection.test.ts`, `SettingsNavTree.test.tsx`.
-- **Typecheck + affected tests green** (SettingsNavTree 41, groupBySection,
-  pageRegistry, AuditLogScreen, FeatureToggleScreen, LicenseSettings).
-- Backend: added `Store::audit_summary` in `crates/oz-core/src/db/audit.rs`
-  (KPI aggregates for the standalone audit page).
-
-## 4. Remaining work
-
-### 4.1 Remove the legacy deep-link hash reader (SettingsPage)
-
-`ui/src/features/settings/SettingsPage.tsx` lines ~312–323 still parse
-`#/settings/<section>` on mount and force an active tab. All removed tabs
-render `null` now, so a stale deep-link (e.g. `#/settings/staff`) opens the
-hub with an empty body — a dead "old settings" entry point.
-
-- [ ] Replace the hash reader with a **whitelist** of the 11 kept sections
-      (or drop it entirely and let the nav tree own active section state).
-- [ ] Decide: keep `#/settings/topology` deep-link support (used by the home
-      screen "Add Workspace" card) — recommendation: **keep it**, it targets a
-      real tab of the new hub.
-
-### 4.2 Home screen "Add Workspace" card deep-link
-
-`ui/src/features/workspaces/WorkspaceHome.tsx` lines 728 + 886 call
-`handleShortcutNav('settings/topology')`. This is a legitimate deep-link into
-a kept tab, so it can stay. Verify it still resolves after 4.1.
-
-- [ ] Verify `settings/topology` deep-link works with the new whitelist.
-
-### 4.3 Topology placement (open question)
-
-`TopologyScreen` has **no standalone route** — it is only reachable via the
-settings hub tab. Options:
-
-- **A (recommended): keep it in the hub.** Topology is a settings-style
-  configuration tool (it configures workspaces), so it belongs with the
-  settings. The hub's "Management" category currently holds only topology —
-  rename the category to something meaningful or fold it into another.
-- **B: give it a standalone route** (`topology`) like stores/audit. More
-  consistent with the "every management screen is a page" rule, but topology
-  is a config editor, not a management screen, so it fits the hub better.
-
-### 4.4 Workspace settings duplication (no change needed)
-
-`WorkspaceStorePosSettings` / `WorkspaceRestaurantPosSettings` /
-`WorkspaceInventorySettings` are intentionally rendered in two contexts:
-
-1. **Tier 1 hub** (SettingsPage, `variant="full-page"`) — admin, cross-workspace.
-2. **Tier 2 modal** (WorkspaceSettingsModal, `variant="modal"`, F10 in a
-   workspace, ADR #22) — in-context, scoped to the active workspace.
-
-Both are the same shared card components; the duplication is a *rendering
-context*, not a code fork. **No change required.** (The KDS card remains in the
-modal + topology inspector only — the hub tab was removed.)
-
-## 5. Verification checklist
-
-- [ ] `#/settings` opens the hub with 11 tabs, no empty sections.
-- [ ] `#/settings/staff` (or any removed tab) does **not** deep-link; it falls
-      back to the default hub state (or a safe section).
-- [ ] Home screen: Settings → `#/settings`; Staff → `#/staff`; Audit →
-      `#/audit-log`; Add Workspace → `#/settings/topology`.
-- [ ] Sidebar "settings" section lists the 8 re-homed items + Settings, each
-      navigating to its own route.
-- [ ] `npm run typecheck` and affected vitest suites pass in `ui/`.
-- [ ] i18n gates pass (no orphaned keys, bundle parity).
-
-## 6. Out of scope
-
-- Building the standalone audit page KPI strip (backend `audit_summary` is
-  staged, front-end not yet built) — separate task.
-- Renaming/restructuring the `settings` sidebar section.
-- The Tier 2 WorkspaceSettingsModal flow (ADR #22) — already the modern path.
+**The old settings is already deleted in code.** If you're still seeing the old behavior, the app needs a rebuild to pick up the new commits.
