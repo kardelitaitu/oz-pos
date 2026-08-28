@@ -17,6 +17,12 @@ export function getRegion(): Region {
   return (localStorage.getItem(STORAGE_KEY) as Region) || 'global';
 }
 
+export function getExplicitRegion(): Region | null {
+  if (typeof window === 'undefined') return null;
+  const stored = localStorage.getItem(STORAGE_KEY);
+  return stored === 'id' || stored === 'global' ? stored : null;
+}
+
 export function setRegion(region: Region): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, region);

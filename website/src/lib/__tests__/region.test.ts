@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { getRegion, setRegion, isIndonesia } from '../region';
+import { getRegion, getExplicitRegion, setRegion, isIndonesia } from '../region';
 
 describe('region helpers (localStorage get/set)', () => {
   afterEach(() => {
@@ -9,18 +9,22 @@ describe('region helpers (localStorage get/set)', () => {
 
   it('returns "global" when no value is stored (default)', () => {
     expect(getRegion()).toBe('global');
+    expect(getExplicitRegion()).toBeNull();
   });
 
   it('returns the stored region after setRegion', () => {
     setRegion('id');
     expect(getRegion()).toBe('id');
+    expect(getExplicitRegion()).toBe('id');
   });
 
   it('overwrites a previously stored region', () => {
     setRegion('global');
     expect(getRegion()).toBe('global');
+    expect(getExplicitRegion()).toBe('global');
     setRegion('id');
     expect(getRegion()).toBe('id');
+    expect(getExplicitRegion()).toBe('id');
   });
 
   it('reads the oz_region key from localStorage', () => {

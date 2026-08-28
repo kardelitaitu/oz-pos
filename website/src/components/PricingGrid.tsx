@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BillingPeriod, CheckoutTier, PricingTier } from '../content/pricing/types';
 import { t } from '../i18n';
-import { getRegion, type Region } from '../lib/region';
+import { getExplicitRegion, type Region } from '../lib/region';
 import CheckoutButton from './CheckoutButton';
 
 /**
@@ -29,13 +29,13 @@ interface Props {
 
 export default function PricingGrid({ tiers, tiersAlt, locale, downloadHref }: Props) {
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
-  const [region, setRegion] = useState<Region>(() => getRegion());
+  const [region, setRegion] = useState<Region | null>(() => getExplicitRegion());
 
-  // Sync region from sessionStorage (set during signup or by region picker)
+  // Sync region from localStorage (set during signup or by region picker)
   useEffect(() => {
-    const check = () => setRegion(getRegion());
+    const check = () => setRegion(getExplicitRegion());
     window.addEventListener('storage', check);
-    // Also poll in case sessionStorage was set in another tab
+    // Also poll in case localStorage was set in another tab
     const interval = setInterval(check, 1000);
     return () => {
       window.removeEventListener('storage', check);
@@ -47,8 +47,7 @@ export default function PricingGrid({ tiers, tiersAlt, locale, downloadHref }: P
   // - Region explicitly set to 'id' → always show IDR pricing
   // - Region explicitly set to 'global' → always show USD pricing
   // - Region unset (default) → use locale-based pricing (en=USD, id=IDR)
-  const hasExplicitRegion = region === 'id' || region === 'global';
-  const wantsIDR = region === 'id' || (!hasExplicitRegion && locale === 'id');
+  const wantsIDR = region === 'id' || (!region && locale === 'id');
   const activeTiers = (wantsIDR
     ? (locale === 'id' ? tiers : (tiersAlt ?? tiers))   // IDR: use tiers if already ID, else swap
     : (locale === 'id' ? (tiersAlt ?? tiers) : tiers)) ?? tiers;  // USD: use alt if ID locale, else keep
