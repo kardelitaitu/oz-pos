@@ -6,6 +6,7 @@ import ThemeToggle from './ThemeToggle.astro';
 import SearchTrigger from './SearchTrigger';
 
 const locale = Astro.currentLocale ?? 'en';
+const isDocs = Astro.url.pathname.includes('/docs');
 const nav = [
   { href: getRelativeLocaleUrl(locale, '/'), label: t(locale, 'nav.home') },
   { href: getRelativeLocaleUrl(locale, 'features'), label: t(locale, 'nav.features') },
@@ -34,7 +35,7 @@ const login = getRelativeLocaleUrl(locale, 'login');
       }
     </nav>
     <div class="flex items-center gap-2.5">
-      <SearchTrigger client:load locale={locale} />
+      {isDocs && <SearchTrigger client:load locale={locale} />}
       <ThemeToggle />
       <LocaleSwitcher />
       <a
