@@ -40,7 +40,7 @@ describe('dict()', () => {
     const d = dict('en') as Record<string, unknown>;
     const features = (d.features as Record<string, unknown>).items as unknown[];
     expect(Array.isArray(features)).toBe(true);
-    expect(features.length).toBe(6);
+    expect(features.length).toBe(9);
   });
 });
 

@@ -8,22 +8,37 @@ import { getRelativeLocaleUrl } from 'astro:i18n';
 
 const locale = Astro.currentLocale ?? 'en';
 const pageTitle = `OZ-POS — ${t(locale, 'nav.features')}`;
-const features = (dict(locale).features as { items: { title: string; description: string }[] }).items;
+const featuresData = dict(locale).features as {
+  title: string;
+  subtitle: string;
+  items: { title: string; description: string }[];
+  comparisonTitle: string;
+  comparisonSubtitle: string;
+  comparisonOzPos: string;
+  comparisonOthers: string;
+  comparisonHeaderFeature: string;
+  comparisonRows: { feature: string; ozPos: string; others: string; highlight: boolean }[];
+};
+const features = featuresData.items;
+const comparisonRows = featuresData.comparisonRows;
 const download = getRelativeLocaleUrl(locale, 'download');
+const pricing = getRelativeLocaleUrl(locale, 'pricing');
 ---
 
 <Base title={pageTitle} description={t(locale, 'pageDesc.features')}>
   <section class="mx-auto max-w-6xl px-4 py-16">
     <div data-reveal class="text-center">
       <h1 class="text-4xl font-bold">{t(locale, 'features.title')}</h1>
-      <p class="mt-3 text-muted">{t(locale, 'features.subtitle')}</p>
+      <p class="mt-3 text-muted max-w-2xl mx-auto">{t(locale, 'features.subtitle')}</p>
     </div>
+
+    <!-- 9 Features Grid -->
     <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {
         features.map((f, i) => (
           <article
             data-reveal
-            style={`transition-delay: ${i * 80}ms`}
+            style={`transition-delay: ${i * 60}ms`}
             class="feature-card group rounded-xl border border-ink/10 bg-surface/40 p-6 transition-all duration-200 ease-[cubic-bezier(0.2,0,0,1)] hover:border-ink/20 hover:shadow-md hover:-translate-y-0.5"
           >
             <p class="text-sm font-bold text-link">{String(i + 1).padStart(2, '0')}</p>
@@ -33,12 +48,61 @@ const download = getRelativeLocaleUrl(locale, 'download');
         ))
       }
     </div>
-    <div data-reveal class="mt-12 text-center">
+
+    <!-- Comparison Against Competitors Section -->
+    <div data-reveal class="mt-24">
+      <div class="text-center">
+        <h2 class="text-3xl font-bold">{t(locale, 'features.comparisonTitle')}</h2>
+        <p class="mt-3 text-muted max-w-2xl mx-auto">{t(locale, 'features.comparisonSubtitle')}</p>
+      </div>
+
+      <div class="mt-10 overflow-x-auto rounded-2xl border border-ink/10 bg-surface/60 shadow-sm">
+        <table class="w-full min-w-[640px] border-collapse text-left text-sm">
+          <thead>
+            <tr class="border-b border-ink/10 bg-ink/5">
+              <th scope="col" class="px-6 py-4 font-semibold text-ink">{t(locale, 'features.comparisonHeaderFeature')}</th>
+              <th scope="col" class="px-6 py-4 font-bold text-primary">{t(locale, 'features.comparisonOzPos')}</th>
+              <th scope="col" class="px-6 py-4 font-semibold text-muted">{t(locale, 'features.comparisonOthers')}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-ink/5">
+            {
+              comparisonRows.map((row) => (
+                <tr class={row.highlight ? 'bg-primary/[0.04]' : 'hover:bg-ink/[0.02]'}>
+                  <td class="px-6 py-4 font-medium text-ink">{row.feature}</td>
+                  <td class="px-6 py-4 font-semibold text-primary">
+                    <div class="flex items-center gap-2">
+                      <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-success/15 text-xs text-success font-bold shrink-0">✓</span>
+                      <span>{row.ozPos}</span>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 text-muted">
+                    <div class="flex items-center gap-2">
+                      <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-danger/15 text-xs text-danger font-bold shrink-0">✗</span>
+                      <span>{row.others}</span>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CTA Bottom Section -->
+    <div data-reveal class="mt-16 text-center flex flex-col sm:flex-row items-center justify-center gap-4">
       <a
         href={download}
-        class="inline-block rounded-md bg-accent px-6 py-3 font-semibold text-white transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:opacity-90 hover:scale-[1.03] active:scale-[0.97]"
+        class="rounded-md bg-primary px-6 py-3 font-semibold text-white transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:opacity-90 hover:scale-[1.03] active:scale-[0.97]"
       >
         {t(locale, 'hero.ctaPrimary')}
+      </a>
+      <a
+        href={pricing}
+        class="rounded-md border border-ink/15 px-6 py-3 font-semibold text-ink transition-all duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] hover:bg-ink/5 hover:scale-[1.03] active:scale-[0.97]"
+      >
+        {t(locale, 'hero.ctaSecondary')}
       </a>
     </div>
   </section>

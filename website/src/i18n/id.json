@@ -98,38 +98,99 @@
     }
   },
   "hero": {
-    "title": "Platform POS Offline-First",
-    "subtitle": "Tetap jualan saat gangguan koneksi. OZ-POS berjalan penuh di perangkat Anda dan sinkron ke cloud begitu koneksi kembali.",
+    "title": "Fitur Kelas Enterprise, Tanpa Biaya Enterprise",
+    "subtitle": "Sistem POS kelas korporasi yang dapat diakses siapa saja. Tetap jualan saat internet mati dengan inti offline-first ultra-ringan, tanpa biaya per-fitur tersembunyi.",
     "ctaPrimary": "Unduh Gratis",
     "ctaSecondary": "Lihat Harga"
   },
   "features": {
-    "title": "Dibangun untuk dunia nyata",
-    "subtitle": "Kasir yang tidak berhenti saat internet mati.",
+    "title": "Fitur Kelas Enterprise, Tanpa Biaya Enterprise",
+    "subtitle": "Sembilan kapabilitas inti yang dirancang untuk efisiensi maksimal, keandalan tanpa henti, dan pertumbuhan bisnis Anda.",
     "items": [
       {
-        "title": "Offline-first",
-        "description": "Penjualan, shift, dan stok tetap berjalan tanpa koneksi sama sekali — tidak ada yang hilang."
+        "title": "Offline-First",
+        "description": "Penjualan, kasir, dan stok tetap bekerja 100% tanpa koneksi internet. Transaksi dan data Anda tidak pernah hilang."
       },
       {
-        "title": "Sinkron cloud",
-        "description": "Perubahan tergabung ke cloud begitu kembali online, lintas toko dan register."
+        "title": "SOTA Stack untuk Hardware Terendah",
+        "description": "Arsitektur ultra-ringan berbasis Rust & SQLite tertanam. Berjalan sangat cepat bahkan pada PC, tablet, atau hardware kasir lawas."
       },
       {
-        "title": "Pembayaran QRIS",
-        "description": "Terima QRIS secara native, tanpa perangkat tambahan."
+        "title": "Multi-Toko & Multi-Terminal",
+        "description": "Kelola banyak cabang toko, register kasir, dan gudang dalam satu topologi terpadu dengan sinkronisasi instan."
       },
       {
-        "title": "Multi-toko",
-        "description": "Gudang, register, dan cabang dalam satu topologi yang bisa diedit secara visual."
+        "title": "Laporan & Analitik Lanjutan",
+        "description": "Wawasan mendalam seputar tren penjualan, produk terlaris, analisis jam sibuk (rush-hour), dan margin laba bersih."
       },
       {
-        "title": "Skrip Lua",
-        "description": "Otomatiskan harga, diskon, dan alur dengan permukaan skrip yang kecil."
+        "title": "E-Wallet & QRIS Native",
+        "description": "Terima pembayaran QRIS langsung di layar dan berbagai dompet digital tanpa perlu sewa perangkat EDC tambahan."
       },
       {
-        "title": "Shift & rekonsiliasi",
-        "description": "Shift kasir ditutup rapi, dengan riwayat audit lengkap untuk setiap perubahan."
+        "title": "Dukungan Kartu Debit & Kredit",
+        "description": "Integrasi mulus dengan terminal EDC dan payment gateway modern untuk kartu chip, contactless, dan gesek."
+      },
+      {
+        "title": "Whitelabel Tanpa Langganan Enterprise",
+        "description": "Kustomisasi penuh untuk logo bisnis, header struk belanja, dan format cetak kasir Anda tanpa biaya lisensi korporat."
+      },
+      {
+        "title": "Otomasi Skrip Lua",
+        "description": "Mesin skrip Lua tertanam untuk fleksibilitas tanpa batas: logika diskon bertingkat, promo happy hour, BOGO, dan aturan pajak kustom."
+      },
+      {
+        "title": "Audit Trail & Keamanan Shift",
+        "description": "Catatan riwayat lengkap dan anti-manipulasi untuk setiap pembukaan laci kas, void, pembatalan, dan pergantian shift kasir."
+      }
+    ],
+    "comparisonTitle": "OZ-POS vs POS Cloud Konvensional",
+    "comparisonSubtitle": "Lihat mengapa arsitektur offline-first dan paket all-inclusive membuat OZ-POS unggul jauh.",
+    "comparisonOzPos": "OZ-POS",
+    "comparisonOthers": "POS Cloud Konvensional",
+    "comparisonHeaderFeature": "Fitur & Kapabilitas",
+    "comparisonRows": [
+      {
+        "feature": "Keandalan Saat Internet Mati",
+        "ozPos": "100% Berjalan Penuh (Local SQLite di tiap perangkat)",
+        "others": "Macet / Transaksi gagal saat offline",
+        "highlight": true
+      },
+      {
+        "feature": "Efisiensi Hardware",
+        "ozPos": "SOTA Rust engine — lancar di hardware termurah & hemat RAM",
+        "others": "Aplikasi web berat, butuh hardware mahal",
+        "highlight": false
+      },
+      {
+        "feature": "Kitchen Display System (KDS)",
+        "ozPos": "Sudah termasuk gratis di browser & tablet",
+        "others": "Biaya add-on mahal per-layar / bulan",
+        "highlight": true
+      },
+      {
+        "feature": "Multi-Toko & Gudang",
+        "ozPos": "Tersedia langsung di paket reguler",
+        "others": "Terkunci di paket Enterprise jutaan rupiah",
+        "highlight": false
+      },
+      {
+        "feature": "Kustomisasi Aturan Bisnis",
+        "ozPos": "Mesin Skrip Lua bebas atur promo kustom",
+        "others": "Kaku, harus menunggu vendor update",
+        "highlight": true
+      },
+      {
+        "feature": "Audit Trail & Fraud Prevention",
+        "ozPos": "Full audit logging tamper-evident untuk tiap aksi kasir",
+        "others": "Laporan dasar tanpa log aksi sensitif",
+        "highlight": false
+      },
+      {
+        "feature": "Struktur Biaya",
+        "ozPos": "Transparan & bayar sesuai skala, bukan mengunci fitur",
+        "others": "Banyak biaya tersembunyi per-fitur tambahan",
+        "highlight": false
       }
     ]
   },
