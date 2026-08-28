@@ -237,7 +237,7 @@ The scoped band is the security boundary the codebase intends; the unscoped band
 | H-2 | Client-supplied `user_id` for authz | ⚠️ Dual-registered variants removed; remaining user_id-band needs `_scoped` conversions | `security(H-1/H-2)` |
 | H-3 | `create_session` accepts client identity | ✅ Picker-ticket HMAC verification required | `security(H-3)` |
 | H-4 | EDC commands unauthorized | ✅ Session + permission gating added | `security(H-4)` |
-| H-5 | Secrets plaintext at rest | ⚠️ `oz_core::crypto` functions added; transparent encryption blocked by cyclic dep (`platform-core` → `oz-core`) | `security(H-5)` |
+| H-5 | Secrets plaintext at rest | ✅ `oz-crypto` crate extracted; transparent encryption for sync/PG/rate secrets | `security(H-5)` |
 | H-6 | Arbitrary-URL sync commands | ✅ Free-form URL params removed | `security(H-6)` |
 | M-1 | `withGlobalTauri` + broad mobile.json | ✅ Removed; capabilities narrowed | `security(M-1)` |
 | M-2 | Dev origins in production CSP | ✅ Stripped; `upgrade-insecure-requests` added | `security(M-2)` |
@@ -251,10 +251,7 @@ The scoped band is the security boundary the codebase intends; the unscoped band
 
 ### Blocked Items
 
-- **H-5 (encrypt at rest):** Adding `oz-core` as a dependency to `platform-core` creates a cyclic dependency. Resolution options:
-  1. Move `oz_core::crypto` to a separate `oz-crypto` crate
-  2. Apply encryption at the command layer (desktop/tablet) rather than the settings typed layer
-  3. Use a trait abstraction to break the cycle
+- **H-5 (encrypt at rest):** ✅ Resolved. `oz-crypto` crate extracted, transparent encryption applied in `platform-core` typed accessors. LAN PSK has no typed accessor yet (lower priority).
 
 - **H-1/H-2 (remaining ~30 complex unscoped commands):** Hardware commands use `state.registry` (not db), sync commands have complex multi-phase patterns. Inventory commands already have `session_token` in their signatures. These need manual `_scoped` variants or registry-based auth wrappers.
 
@@ -272,7 +269,7 @@ The scoped band is the security boundary the codebase intends; the unscoped band
 | Input validation (non-empty, bounds, allowlists) on command args | ⚠️ (present in many, absent in `data.rs` paths, URLs, settings keys) |
 | Parameterised SQL only | ✅ |
 | Secrets not committed | ✅ (private keys/`.env` gitignored; CI secret-based) |
-| Secrets encrypted at rest | ❌ (sync/PG/rate/LAN secrets plaintext in SQLite; `oz_core::crypto` functions added, but cyclic dep blocks transparent encryption at `platform-core` layer) |
+| Secrets encrypted at rest | ✅ (sync/PG/rate secrets encrypted via `oz-crypto` in `platform-core` typed accessors; LAN PSK key exists but no typed accessor yet) |
 | Path traversal defences (canonicalise + containment) | ⚠️ (branding ✅, data ⚠️ session+permission gated) |
 | Login rate limiting + uniform errors | ✅ |
 | Session TTL + revocation | ✅ |
