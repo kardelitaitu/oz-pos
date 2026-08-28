@@ -186,3 +186,11 @@ kds-advance-start = Start
 kds-advance-ready = Mark Ready
 kds-advance-serve = Serve
 kds-toggle-card-aria = Toggle order { $number } details
+
+# ── Screen footer status bar ──
+kds-footer-aria = Terminal status
+kds-footer-last-sync = Last sync: { $time }
+kds-footer-never = never
+kds-footer-seconds = { $count }s ago
+kds-footer-minutes = { $count }m ago
+kds-footer-hours = { $count }h ago

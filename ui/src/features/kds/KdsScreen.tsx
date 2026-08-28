@@ -20,6 +20,7 @@ import { KdsProductPickerModal } from '@/features/kds/components/KdsProductPicke
 import type { ProductPickerResult } from '@/features/kds/components/KdsProductPickerModal';
 import { KdsDeviceStatusIndicator } from '@/features/kds/components/KdsDeviceStatusIndicator';
 import { KdsEnrollmentModal } from '@/features/kds/components/KdsEnrollmentModal';
+import { KdsScreenFooter } from '@/features/kds/KdsScreenFooter';
 import './KdsScreen.css';
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
@@ -773,6 +774,9 @@ export default function KdsScreen() {
         }}
         onClose={() => setShowEnrollment(false)}
       />
+
+      {/* Screen footer status bar */}
+      <KdsScreenFooter />
     </div>
     </Profiler>
   );

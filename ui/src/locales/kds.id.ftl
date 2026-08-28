@@ -189,4 +189,12 @@ kds-advance-ready = Tandai Siap
 kds-advance-serve = Sajikan
 kds-toggle-card-aria = Buka/tutup detail pesanan { $number }
 
+# ── Screen footer status bar ──
+kds-footer-aria = Status terminal
+kds-footer-last-sync = Sinkron terakhir: { $time }
+kds-footer-never = tidak pernah
+kds-footer-seconds = { $count }d yang lalu
+kds-footer-minutes = { $count }m yang lalu
+kds-footer-hours = { $count }j yang lalu
+
 # ── Kiosk (remaining) ──
