@@ -13,6 +13,7 @@ use tauri::State;
 
 use oz_payment::drivers::edc::TerminalStatus;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -80,10 +81,13 @@ pub async fn edc_terminal_status(state: State<'_, AppState>) -> Result<EdcStatus
 /// rupiah for IDR). `currency` is an ISO-4217 code.
 #[tauri::command]
 pub async fn edc_sale(
+    session_token: String,
     state: State<'_, AppState>,
     amount_minor: i64,
     currency: String,
 ) -> Result<EdcResultDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let currency = currency
         .parse::<foundation::Currency>()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
@@ -102,11 +106,14 @@ pub async fn edc_sale(
 /// Refund a previously captured card transaction.
 #[tauri::command]
 pub async fn edc_refund(
+    session_token: String,
     state: State<'_, AppState>,
     transaction_id: String,
     amount_minor: i64,
     currency: String,
 ) -> Result<EdcResultDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_REFUND).await?;
     let currency = currency
         .parse::<foundation::Currency>()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
@@ -125,9 +132,12 @@ pub async fn edc_refund(
 /// Void a pending authorisation before capture.
 #[tauri::command]
 pub async fn edc_void(
+    session_token: String,
     state: State<'_, AppState>,
     transaction_id: String,
 ) -> Result<EdcResultDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_VOID).await?;
     let result = state
         .edc_terminal
         .void(&transaction_id)
