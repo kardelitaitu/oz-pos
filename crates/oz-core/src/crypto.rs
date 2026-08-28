@@ -36,6 +36,21 @@ const SMTP_DOMAIN: &[u8] = b"oz-pos.smtp-password.v1:";
 /// API key domain-separation prefix.
 const API_KEY_DOMAIN: &[u8] = b"oz-pos.api-key.v1:";
 
+/// Sync API key domain-separation prefix.
+const SYNC_API_KEY_DOMAIN: &[u8] = b"oz-pos.sync-api-key.v1:";
+
+/// Sync terminal secret domain-separation prefix.
+const SYNC_TERMINAL_SECRET_DOMAIN: &[u8] = b"oz-pos.sync-terminal-secret.v1:";
+
+/// PG sync password domain-separation prefix.
+const PG_SYNC_PASSWORD_DOMAIN: &[u8] = b"oz-pos.pg-sync-password.v1:";
+
+/// Rate sync API key domain-separation prefix.
+const RATE_API_KEY_DOMAIN: &[u8] = b"oz-pos.rate-api-key.v1:";
+
+/// LAN server PSK domain-separation prefix.
+const LAN_PSK_DOMAIN: &[u8] = b"oz-pos.lan-psk.v1:";
+
 /// Encrypt `plaintext` with a key derived from `machine_id`.
 ///
 /// Returns a base64-encoded ciphertext containing the nonce,
@@ -104,6 +119,69 @@ fn derive_static_key() -> [u8; 32] {
     let mut key = [0u8; 32];
     key.copy_from_slice(&hash);
     key
+}
+
+/// Encrypt a sync API key for at-rest storage.
+///
+/// Uses a static key (not machine-bound) so the database can be
+/// copied between machines without losing access to the sync API key.
+pub fn encrypt_sync_api_key(plaintext: &str) -> Result<String, CoreError> {
+    let key = derive_key(SYNC_API_KEY_DOMAIN, "static");
+    encrypt(plaintext, &key)
+}
+
+/// Decrypt a sync API key previously encrypted with [`encrypt_sync_api_key`].
+pub fn decrypt_sync_api_key(encrypted_b64: &str) -> Result<String, CoreError> {
+    let key = derive_key(SYNC_API_KEY_DOMAIN, "static");
+    decrypt(encrypted_b64, &key)
+}
+
+/// Encrypt a sync terminal secret for at-rest storage.
+pub fn encrypt_sync_terminal_secret(plaintext: &str) -> Result<String, CoreError> {
+    let key = derive_key(SYNC_TERMINAL_SECRET_DOMAIN, "static");
+    encrypt(plaintext, &key)
+}
+
+/// Decrypt a sync terminal secret previously encrypted with [`encrypt_sync_terminal_secret`].
+pub fn decrypt_sync_terminal_secret(encrypted_b64: &str) -> Result<String, CoreError> {
+    let key = derive_key(SYNC_TERMINAL_SECRET_DOMAIN, "static");
+    decrypt(encrypted_b64, &key)
+}
+
+/// Encrypt a PG sync password for at-rest storage.
+pub fn encrypt_pg_sync_password(plaintext: &str) -> Result<String, CoreError> {
+    let key = derive_key(PG_SYNC_PASSWORD_DOMAIN, "static");
+    encrypt(plaintext, &key)
+}
+
+/// Decrypt a PG sync password previously encrypted with [`encrypt_pg_sync_password`].
+pub fn decrypt_pg_sync_password(encrypted_b64: &str) -> Result<String, CoreError> {
+    let key = derive_key(PG_SYNC_PASSWORD_DOMAIN, "static");
+    decrypt(encrypted_b64, &key)
+}
+
+/// Encrypt a rate sync API key for at-rest storage.
+pub fn encrypt_rate_api_key(plaintext: &str) -> Result<String, CoreError> {
+    let key = derive_key(RATE_API_KEY_DOMAIN, "static");
+    encrypt(plaintext, &key)
+}
+
+/// Decrypt a rate sync API key previously encrypted with [`encrypt_rate_api_key`].
+pub fn decrypt_rate_api_key(encrypted_b64: &str) -> Result<String, CoreError> {
+    let key = derive_key(RATE_API_KEY_DOMAIN, "static");
+    decrypt(encrypted_b64, &key)
+}
+
+/// Encrypt a LAN server PSK for at-rest storage.
+pub fn encrypt_lan_psk(plaintext: &str) -> Result<String, CoreError> {
+    let key = derive_key(LAN_PSK_DOMAIN, "static");
+    encrypt(plaintext, &key)
+}
+
+/// Decrypt a LAN server PSK previously encrypted with [`encrypt_lan_psk`].
+pub fn decrypt_lan_psk(encrypted_b64: &str) -> Result<String, CoreError> {
+    let key = derive_key(LAN_PSK_DOMAIN, "static");
+    decrypt(encrypted_b64, &key)
 }
 
 /// Derive a static 256-bit key for user-profile at-rest encryption.
