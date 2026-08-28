@@ -5,7 +5,7 @@ import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized } from '@/frontend/shared';
 import { getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
 import { createCooldownWrapper } from '@/features/kds/hooks/useActionCooldown';
-import { contrastText, type KdsCardColors } from '@/features/kds/kdsCardColors';
+import { contrastText } from '@/features/kds/kdsCardColors';
 import { useKdsCardColors } from '@/features/kds/KdsCardColorsContext';
 
 /** Props for the KdsTicketCard component. */
@@ -462,7 +462,12 @@ export const KdsTicketCard = memo(function KdsTicketCard({
               {!editing && canAdvance && nextKey && (
                 <button
                   className="kds-status-btn advance"
-                  style={{ background: colors[order.status as keyof KdsCardColors] ?? colors.processing, color: contrastText(colors[order.status as keyof KdsCardColors] ?? colors.processing) }}
+                  style={{
+                    // Ready orders get the green complete colour; anything
+                    // still in progress stays amber (processing).
+                    background: order.status === 'ready' ? colors.complete : colors.processing,
+                    color: contrastText(order.status === 'ready' ? colors.complete : colors.processing),
+                  }}
                   onClick={handleAdvance}
                   aria-label={`${advanceLabel} ${order.display_number ?? ''}`.trim()}
                   data-testid={`kds-order-card-${order.display_number ?? order.id}-status-advance`}
