@@ -1,0 +1,90 @@
+/**
+ * KDS Card Colours Context.
+ *
+ * Provides per-theme card colours to all KDS components.
+ * The hamburger panel updates colours; ticket cards read them.
+ */
+
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
+import {
+  DEFAULT_COLORS_DARK,
+  DEFAULT_COLORS_LIGHT,
+  type KdsCardColors,
+} from '@/features/kds/kdsCardColors';
+
+interface KdsCardColorsContextValue {
+  colors: KdsCardColors;
+  updateColor: (key: keyof KdsCardColors, value: string) => void;
+  resetColors: () => void;
+}
+
+const KdsCardColorsContext = createContext<KdsCardColorsContextValue | null>(null);
+
+const STORAGE_KEY = 'kds-card-colors-v1';
+
+function loadColors(theme: string): KdsCardColors {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const all = JSON.parse(saved) as Record<string, KdsCardColors>;
+      return all[theme] ?? (theme === 'light' ? DEFAULT_COLORS_LIGHT : DEFAULT_COLORS_DARK);
+    }
+  } catch {}
+  return theme === 'light' ? DEFAULT_COLORS_LIGHT : DEFAULT_COLORS_DARK;
+}
+
+function saveColors(theme: string, colors: KdsCardColors): void {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const all = saved ? JSON.parse(saved) as Record<string, KdsCardColors> : {};
+    all[theme] = colors;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+/** Provider for KDS card colours — wraps the KDS screen. */
+export function KdsCardColorsProvider({ children }: { children: React.ReactNode }) {
+  const themeCtx = useOptionalTheme();
+  const theme = themeCtx?.theme ?? 'dark';
+  const [colors, setColors] = useState<KdsCardColors>(() => loadColors(theme));
+
+  // Re-sync when theme changes.
+  useEffect(() => {
+    setColors(loadColors(theme));
+  }, [theme]);
+
+  const updateColor = useCallback(
+    (key: keyof KdsCardColors, value: string) => {
+      setColors((prev) => {
+        const next = { ...prev, [key]: value };
+        saveColors(theme, next);
+        return next;
+      });
+    },
+    [theme],
+  );
+
+  const resetColors = useCallback(() => {
+    const defaults = theme === 'light' ? DEFAULT_COLORS_LIGHT : DEFAULT_COLORS_DARK;
+    setColors(defaults);
+    saveColors(theme, defaults);
+  }, [theme]);
+
+  return (
+    <KdsCardColorsContext.Provider value={{ colors, updateColor, resetColors }}>
+      {children}
+    </KdsCardColorsContext.Provider>
+  );
+}
+
+/** Hook to access KDS card colours. Falls back to dark defaults outside a provider. */
+export function useKdsCardColors(): KdsCardColorsContextValue {
+  const ctx = useContext(KdsCardColorsContext);
+  if (ctx) return ctx;
+  return {
+    colors: DEFAULT_COLORS_DARK,
+    updateColor: () => {},
+    resetColors: () => {},
+  };
+}

@@ -213,3 +213,31 @@ kds-completed-older-empty = No orders
 kds-completed-status = Completed
 kds-completed-reopen = Reopen
 kds-completed-reopen-aria = Reopen order { $number }
+
+# ── Shift ──
+kds-shift-start = Start Shift
+kds-shift-end = End Shift
+kds-shift-end-title = End Shift?
+kds-shift-end-msg = Are you sure you want to end the current kitchen shift?
+
+# ── Confirm modal ──
+kds-confirm-cancel = Cancel
+kds-confirm-ok = Confirm
+
+# ── Display settings ──
+kds-settings-display-scale = Display scale
+kds-settings-columns = Columns
+
+# ── Card Colours ──
+kds-settings-card-colours = Card Colours
+kds-settings-color-dinein = Dine in
+kds-settings-color-takeaway = Takeaway
+kds-settings-color-rush = Rush
+kds-settings-color-preparing = Preparing
+kds-settings-color-ready = Ready
+kds-settings-color-complete = Complete
+kds-settings-reset-colours = Reset colours
+
+# ── Card Animations ──
+kds-settings-card-animations = Card animations
+kds-settings-card-animations-caption = Spawn and reorder effects

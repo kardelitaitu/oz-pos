@@ -887,6 +887,22 @@
   background: var(--kds-bg-tabs);
   line-height: 1.4;
 }
+/* Status badge: processing (amber blink) and prepared (green pill) */
+.kds-card-header .status--preparing {
+  opacity: 1;
+  background: var(--kds-pending);
+  color: var(--kds-ink);
+  animation: kds-blink 2.5s ease-in-out infinite;
+}
+.kds-card-header .status--ready {
+  opacity: 1;
+  background: var(--kds-ready);
+  color: var(--kds-ink);
+}
+@keyframes kds-blink {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.2; }
+}
 .kds-card-header-meta {
   display: flex;
   align-items: center;

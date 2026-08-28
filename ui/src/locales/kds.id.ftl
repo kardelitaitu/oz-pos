@@ -216,4 +216,32 @@ kds-completed-status = Selesai
 kds-completed-reopen = Buka Lagi
 kds-completed-reopen-aria = Buka lagi pesanan { $number }
 
+# ── Shift ──
+kds-shift-start = Mulai Shift
+kds-shift-end = Akhiri Shift
+kds-shift-end-title = Akhiri Shift?
+kds-shift-end-msg = Apakah Anda yakin ingin mengakhiri shift dapur saat ini?
+
+# ── Confirm modal ──
+kds-confirm-cancel = Batal
+kds-confirm-ok = Konfirmasi
+
+# ── Display settings ──
+kds-settings-display-scale = Skala tampilan
+kds-settings-columns = Kolom
+
+# ── Card Colours ──
+kds-settings-card-colours = Warna Kartu
+kds-settings-color-dinein = Makan di tempat
+kds-settings-color-takeaway = Bawa pulang
+kds-settings-color-rush = Mendesak
+kds-settings-color-preparing = Memasak
+kds-settings-color-ready = Siap
+kds-settings-color-complete = Selesai
+kds-settings-reset-colours = Atur ulang warna
+
+# ── Card Animations ──
+kds-settings-card-animations = Animasi kartu
+kds-settings-card-animations-caption = Efek muncul dan susun ulang
+
 # ── Kiosk (remaining) ──

@@ -3,6 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { DisplayDensity, KdsSettings } from '@/features/kds/KdsSettingsPanel';
+import { useKdsCardColors } from '@/features/kds/KdsCardColorsContext';
 
 interface KdsHamburgerPanelProps {
   settings: KdsSettings;
@@ -63,6 +64,8 @@ export function KdsHamburgerPanel({
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Card colours from shared context.
+  const { colors: cardColors, updateColor, resetColors } = useKdsCardColors();
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -208,24 +211,42 @@ export function KdsHamburgerPanel({
                 <span className="kds-theme-tag" data-testid="kds-settings-colors-theme-tag">{themeCtx?.theme ?? 'dark'}</span>
               </div>
               <div className="kds-setting-card">
-                <div className="kds-color-group">
-                  <div className="kds-color-head">
-                    <label><Localized id="kds-settings-color-pending">Pending</Localized></label>
+                {([
+                  { key: 'dinein' as const, labelId: 'kds-settings-color-dinein' },
+                  { key: 'takeaway' as const, labelId: 'kds-settings-color-takeaway' },
+                  { key: 'rush' as const, labelId: 'kds-settings-color-rush' },
+                  { key: 'processing' as const, labelId: 'kds-settings-color-preparing' },
+                  { key: 'prepared' as const, labelId: 'kds-settings-color-ready' },
+                  { key: 'complete' as const, labelId: 'kds-settings-color-complete' },
+                ]).map(({ key, labelId }) => (
+                  <div className="kds-color-group" key={key}>
+                    <div className="kds-color-head">
+                      <label><Localized id={labelId}>{key}</Localized></label>
+                      <input
+                        type="color"
+                        className="kds-native"
+                        value={cardColors[key]}
+                        onChange={(e) => updateColor(key, e.target.value)}
+                        aria-label={`${labelId} colour picker`}
+                        data-testid={`kds-settings-colors-native-${key}`}
+                      />
+                      <input
+                        type="text"
+                        className="kds-hex-input"
+                        value={cardColors[key]}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (/^#[0-9a-f]{6}$/i.test(v)) updateColor(key, v);
+                        }}
+                        maxLength={7}
+                        data-testid={`kds-settings-colors-hex-${key}`}
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="kds-color-group">
-                  <div className="kds-color-head">
-                    <label><Localized id="kds-settings-color-preparing">Preparing</Localized></label>
-                  </div>
-                </div>
-                <div className="kds-color-group">
-                  <div className="kds-color-head">
-                    <label><Localized id="kds-settings-color-ready">Ready</Localized></label>
-                  </div>
-                </div>
+                ))}
               </div>
               <div className="kds-setting-card kds-reset-card">
-                <button className="kds-reset-btn" data-testid="kds-settings-colors-reset">
+                <button className="kds-reset-btn" onClick={resetColors} data-testid="kds-settings-colors-reset">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
                   <Localized id="kds-settings-reset-colours">Reset colours</Localized>
                 </button>

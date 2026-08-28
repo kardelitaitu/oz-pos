@@ -14,6 +14,7 @@ import { isAnyAriaModalOpen } from '@/utils/modal-guard';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { KdsLayoutMasonry } from '@/features/kds/KdsLayoutMasonry';
 import { KdsHamburgerPanel } from '@/features/kds/KdsHamburgerPanel';
+import { KdsCardColorsProvider } from '@/features/kds/KdsCardColorsContext';
 import { KdsCompletedView } from '@/features/kds/KdsCompletedView';
 import { type KdsSettings, DEFAULT_SETTINGS } from '@/features/kds/KdsSettingsPanel';
 import { KdsProductPickerModal } from '@/features/kds/components/KdsProductPickerModal';
@@ -97,8 +98,16 @@ export default function KdsScreen() {
   const [pickerSaving, setPickerSaving] = useState(false);
   // Shift state — tracks whether the kitchen shift is active.
   const [inShift, setInShift] = useState(false);
+  // Card animations toggle — when false, adds body.no-anim to suppress spawn/move animations.
+  const [cardAnimations, setCardAnimations] = useState(true);
+  // Apply no-anim class to body when animations are disabled.
+  useEffect(() => {
+    document.body.classList.toggle('no-anim', !cardAnimations);
+    return () => { document.body.classList.remove('no-anim'); };
+  }, [cardAnimations]);
   // Confirm modal state — generic confirmation dialog for destructive actions.
   const [confirm, setConfirm] = useState<{ title: string; message: string; onOk: () => void; danger?: boolean } | null>(null);
+  const confirmRef = useRef<HTMLDivElement>(null);
   const { prefs, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
 
   // Track previous order IDs for new-ticket arrival animation.
@@ -510,6 +519,7 @@ export default function KdsScreen() {
   };
 
   return (
+    <KdsCardColorsProvider>
     <Profiler id="KdsScreen" onRender={(...args) => {
       if (typeof args[2] === 'number' && args[2] > 1) {
         console.debug('[Profiler] KdsScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
@@ -702,6 +712,8 @@ export default function KdsScreen() {
               showTableNumber={prefs.showTableNumber}
               onToggleOrderId={setShowOrderId}
               onToggleTableNumber={setShowTableNumber}
+              cardAnimations={cardAnimations}
+              onChangeCardAnimations={setCardAnimations}
             />
           )}
         </div>
@@ -924,7 +936,7 @@ export default function KdsScreen() {
       {confirm && (
         <div className="kds-modal-backdrop" onClick={() => setConfirm(null)}>
           <div className="kds-modal-anchor">
-            <div className="kds-modal" role="dialog" aria-modal="true" aria-labelledby="kds-confirm-title" aria-describedby="kds-confirm-msg" onClick={(e) => e.stopPropagation()}>
+            <div ref={confirmRef} className="kds-modal" role="dialog" aria-modal="true" aria-labelledby="kds-confirm-title" aria-describedby="kds-confirm-msg" onClick={(e) => e.stopPropagation()}>
               <h2 className="kds-modal-title" id="kds-confirm-title">{confirm.title}</h2>
               <p className="kds-modal-msg" id="kds-confirm-msg">{confirm.message}</p>
               <div className="kds-modal-actions">
@@ -946,5 +958,6 @@ export default function KdsScreen() {
       )}
     </div>
     </Profiler>
+    </KdsCardColorsProvider>
   );
 }

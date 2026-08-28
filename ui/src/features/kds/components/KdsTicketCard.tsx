@@ -5,6 +5,8 @@ import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized } from '@/frontend/shared';
 import { getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
 import { createCooldownWrapper } from '@/features/kds/hooks/useActionCooldown';
+import { contrastText, type KdsCardColors } from '@/features/kds/kdsCardColors';
+import { useKdsCardColors } from '@/features/kds/KdsCardColorsContext';
 
 /** Props for the KdsTicketCard component. */
 export interface KdsTicketCardProps {
@@ -232,14 +234,20 @@ export const KdsTicketCard = memo(function KdsTicketCard({
 
   const advanceLabel = nextKey ? requiredLocalized(l10n, nextKey) : '';
 
+  // Card header colour — from context (shared with hamburger panel)
+  const { colors } = useKdsCardColors();
+  const hdrBg = order.table_number ? colors.dinein : colors.takeaway;
+  const hdrText = contrastText(hdrBg);
+
   return (
     <div
-      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}${order.priority ? ' kds-ticket--rush' : ''}${isNew ? ' kds-ticket--new' : ''}${collapsed ? ' kds-card collapsed' : ''}`}
+      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}${order.priority ? ' kds-ticket--rush' : ''}${isNew ? ' kds-ticket--new kds-card-spawn' : ''}${collapsed ? ' kds-card collapsed' : ''}`}
       data-testid={`kds-order-card-${order.display_number ?? order.id}`}
     >
       {/* ── Card header — collapse toggle ─────────────────────────── */}
       <button
         className="kds-card-header"
+        style={{ background: hdrBg, color: hdrText }}
         onClick={toggleCollapsed}
         aria-expanded={!collapsed}
         aria-label={`${requiredLocalized(l10n, 'kds-toggle-card-aria', { number: order.display_number ?? 0 })}${collapsed ? ' — collapsed' : ''}`}
@@ -424,6 +432,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
               {!editing && canAdvance && nextKey && (
                 <button
                   className="kds-status-btn advance"
+                  style={{ background: colors[order.status as keyof KdsCardColors] ?? colors.processing, color: contrastText(colors[order.status as keyof KdsCardColors] ?? colors.processing) }}
                   onClick={handleAdvance}
                   aria-label={`${advanceLabel} ${order.display_number ?? ''}`.trim()}
                   data-testid={`kds-order-card-${order.display_number ?? order.id}-status-advance`}
