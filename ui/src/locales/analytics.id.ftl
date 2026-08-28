@@ -251,3 +251,8 @@ analytics-upgrade-cta = Tingkatkan ke Pro
 analytics-session-expired-title = Sesi berakhir
 analytics-session-expired-message = Sesi Anda telah berakhir. Silakan masuk kembali untuk melanjutkan melihat analytics.
 analytics-sign-in-again = Masuk kembali
+
+# Prompt saat tidak ada workspace terpilih
+analytics-no-workspace-title = Belum ada workspace dipilih
+analytics-no-workspace-message = Pilih workspace untuk melihat analytics
+analytics-select-workspace = Pilih workspace

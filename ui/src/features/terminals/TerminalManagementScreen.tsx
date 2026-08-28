@@ -23,7 +23,6 @@ import {
   type WorkspaceDto,
 } from '@/api/workspaces';
 import { FEATURES } from '@/hooks/useFeatures';
-import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { LocaleContext } from '@/i18n/LocaleContext';
@@ -162,8 +161,8 @@ export default function TerminalManagementScreen() {
   const locale = useContext(LocaleContext)?.locale ?? 'en';
   const atTerminalLimit =
     caps !== null && caps.maxPosInstances !== null && caps.terminalCount >= caps.maxPosInstances;
-  const { session } = useAuth();
-  const { sessionToken } = useWorkspace();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken ?? '';
   const { addToast } = useToast();
   // Timestamps follow the active Fluent locale (not the browser default).
   const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
