@@ -265,7 +265,13 @@
     "renewHint": "Langganan Anda tidak lagi aktif.",
     "renewLink": "Perpanjang di halaman harga",
     "bundleUpgrade": "Tingkatkan ke paket",
-    "bundleUpgradeHint": "Menambahkan Layar Dapur (KDS) ke paket Plus Anda."
+    "bundleUpgradeHint": "Menambahkan Layar Dapur (KDS) ke paket Plus Anda.",
+    "copyKey": "Salin kunci",
+    "copied": "Disalin!",
+    "quickActions": "Aksi cepat",
+    "downloadApp": "Unduh aplikasi",
+    "activationGuide": "Panduan aktivasi",
+    "contactSupport": "Hubungi bantuan"
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",

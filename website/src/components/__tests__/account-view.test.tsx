@@ -405,3 +405,30 @@ describe('AccountView — error state', () => {
     }
   });
 });
+
+// ── Quick actions & License Copy ──────────────────────────────────────
+
+describe('AccountView — Quick actions & License Copy', () => {
+  it('renders copy key button and quick action links when signed in', async () => {
+    sessionStorage.setItem('oz_session', 'tok-123');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Copy key');
+      assertText(container, 'Download app');
+      assertText(container, 'Activation guide');
+      assertText(container, 'Contact support');
+
+      const downloadLink = container.querySelector('a[href="/en/download"]');
+      expect(downloadLink).not.toBeNull();
+      const activationLink = container.querySelector('a[href="/en/docs/activation"]');
+      expect(activationLink).not.toBeNull();
+      const supportLink = container.querySelector('a[href="/en/support"]');
+      expect(supportLink).not.toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+

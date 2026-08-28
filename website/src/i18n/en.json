@@ -265,7 +265,13 @@
     "renewHint": "Your subscription is no longer active.",
     "renewLink": "Renew on the pricing page",
     "bundleUpgrade": "Upgrade to bundle",
-    "bundleUpgradeHint": "Adds the Kitchen Display (KDS) to your Plus plan."
+    "bundleUpgradeHint": "Adds the Kitchen Display (KDS) to your Plus plan.",
+    "copyKey": "Copy key",
+    "copied": "Copied!",
+    "quickActions": "Quick actions",
+    "downloadApp": "Download app",
+    "activationGuide": "Activation guide",
+    "contactSupport": "Contact support"
   },
   "footer": {
     "rights": "All rights reserved.",
