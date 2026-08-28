@@ -199,7 +199,6 @@ settings-nav-topology = Topology
 settings-nav-email = Email Reports
 settings-category-operations = Operations
 settings-category-system = System
-settings-category-management = Management
 settings-sidebar-nav-aria = Settings navigation
 settings-sidebar-expand-aria = Expand settings sidebar
 settings-sidebar-collapse-aria = Collapse settings sidebar

@@ -12,7 +12,6 @@ settings-nav-topology = Topologi
 settings-nav-email = Laporan Email
 settings-category-operations = Operasional
 settings-category-system = Sistem
-settings-category-management = Manajemen
 settings-sidebar-nav-aria = Navigasi pengaturan
 settings-sidebar-expand-aria = Buka bilah sisi pengaturan
 settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan

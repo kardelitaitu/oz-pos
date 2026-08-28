@@ -146,14 +146,12 @@ const CATEGORY_I18N_KEYS: Record<string, string> = {
   Business: 'settings-category-business',
   Operations: 'settings-category-operations',
   System: 'settings-category-system',
-  Management: 'settings-category-management',
 };
 
 const CATEGORIES: SettingsCategory[] = [
   { label: 'Business', keys: ['general', 'appearance'] },
   { label: 'Operations', keys: ['receipt', 'sync', 'email', 'store-pos', 'restaurant-pos', 'inventory'] },
-  { label: 'System', keys: ['about', 'license'] },
-  { label: 'Management', keys: ['topology'] },
+  { label: 'System', keys: ['about', 'license', 'topology'] },
 ];
 
 const NAV_L10N_KEYS: Record<string, string> = {

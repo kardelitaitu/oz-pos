@@ -310,11 +310,19 @@ function SettingsPageContent() {
   }, []);
 
   // ── Read section from URL hash on mount (e.g. #/settings/topology) ──
+  // Only sections that still exist in the kept hub are accepted; stale
+  // deep-links to removed management tabs (staff, audit, etc.) are ignored
+  // so the hub opens on its default (general) section instead of an empty
+  // body — the "old settings on <tab>" problem.
+  const KEPT_SECTIONS = new Set([
+    'general', 'appearance', 'receipt', 'sync', 'email',
+    'about', 'license', 'topology', 'store-pos', 'restaurant-pos', 'inventory',
+  ]);
   useEffect(() => {
     const hash = window.location.hash.replace(/^#\//, '');
     if (hash.startsWith('settings/')) {
       const section = hash.slice('settings/'.length);
-      if (section) {
+      if (section && KEPT_SECTIONS.has(section)) {
         setActiveSection(section);
         // Clear the hash after consuming it so stale sections don't persist
         window.history.replaceState(null, '', window.location.pathname);

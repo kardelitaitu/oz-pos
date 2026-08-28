@@ -19,7 +19,6 @@ vi.mock('@fluent/react', () => ({
           'settings-category-business': 'Business',
           'settings-category-operations': 'Operations',
           'settings-category-system': 'System',
-          'settings-category-management': 'Management',
           'settings-nav-general': 'General',
           'settings-nav-appearance': 'Appearance',
           'settings-nav-receipt': 'Receipt',
@@ -105,23 +104,22 @@ describe('SettingsNavTree', () => {
 
   // ── Render ─────────────────────────────────────────────────
 
-  it('renders all 4 category headers', () => {
+  it('renders all 3 category headers', () => {
     render(<SettingsNavTree {...defaultProps} />);
 
     expect(screen.getByText('Business')).toBeInTheDocument();
     expect(screen.getByText('Operations')).toBeInTheDocument();
     expect(screen.getByText('System')).toBeInTheDocument();
-    expect(screen.getByText('Management')).toBeInTheDocument();
   });
 
   it('shows count badges with correct item counts', () => {
     render(<SettingsNavTree {...defaultProps} />);
 
-    // 2 items in Business, 6 in Operations, 2 in System, 1 in Management
+    // 2 items in Business, 6 in Operations, 3 in System (topology moved here)
     const badges = screen.getAllByText(/^\d+$/);
-    expect(badges.length).toBe(4);
+    expect(badges.length).toBe(3);
     const counts = badges.map((b) => Number(b.textContent)).sort((a, b) => a - b);
-    expect(counts).toEqual([1, 2, 2, 6]);
+    expect(counts).toEqual([2, 3, 6]);
   });
 
   it('highlights the active section nav item', () => {
@@ -337,7 +335,7 @@ describe('SettingsNavTree', () => {
 
     it('ArrowDown wraps around from last to first item', () => {
       const onNavigate = vi.fn();
-      // Active section is topology (last in Management category, which is last)
+      // Active section is topology (last in System category, which is last)
       render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="topology" />);
 
       fireKey('ArrowDown');
