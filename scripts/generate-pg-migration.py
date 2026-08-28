@@ -65,7 +65,9 @@ DO $$
 DECLARE
     t text;
 BEGIN
-    FOREACH t IN ARRAY ARRAY['bundle_items','offline_queue','product_activity',
+    FOREACH t IN ARRAY ARRAY['bundle_items','edc_terminals','media_assets',
+                            'media_thumbnails','offline_queue','payment_gateways',
+                            'payment_settlements','product_activity',
                             'product_bundles','product_taxes','product_variants',
                             'products','sales','sent_reports','stripe_customers',
                             'sync_terminals','tax_rates','tenant_plans',

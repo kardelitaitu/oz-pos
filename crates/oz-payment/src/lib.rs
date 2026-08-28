@@ -38,11 +38,15 @@ next: None | perf: HTTP calls are async/tokio; mock is in-memory with AtomicUsiz
 pub mod drivers;
 pub mod error;
 pub mod processor;
+pub mod registry;
 pub mod types;
+pub mod webhook;
 
 pub use error::PaymentError;
 pub use processor::PaymentProcessor;
+pub use registry::PaymentProcessorRegistry;
 pub use types::{PaymentMethod, PaymentReceipt, PaymentRequest, PaymentResult};
+pub use webhook::{UnverifiedWebhookGuard, WebhookEvent, WebhookVerifier};
 
 #[cfg(test)]
 #[path = "lib_tests.rs"]

@@ -75,6 +75,10 @@ pub use offline::RemoteSyncFailure;
 pub mod edc_terminals;
 /// Media asset (image) CRUD — PLANNED (stubs).
 pub mod media;
+/// Payment gateway configuration CRUD — PLANNED (stubs).
+pub mod payment_gateways;
+/// Payment settlement ledger CRUD — PLANNED (stubs).
+pub mod payment_settlements;
 /// Payment CRUD (tenders, transactions).
 pub mod payments;
 /// Popularity recompute (ADR #37) — sale/activity aggregation + score writes.

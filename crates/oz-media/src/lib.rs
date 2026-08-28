@@ -27,7 +27,14 @@ Depends on the `image` crate (0.25) for pixel-level operations.
 
 pub mod compress;
 pub mod crop;
+pub mod metrics;
+pub mod pipeline;
+pub mod storage;
 pub mod thumbnail;
+
+pub use metrics::{MEDIA_METRICS, MediaMetrics, MediaMetricsSnapshot};
+pub use pipeline::{MediaLimits, MediaPipeline, MediaVariant};
+pub use storage::{LocalStorage, MediaStorage, ObjectStorage, StoredMedia};
 
 use thiserror::Error;
 

@@ -13,7 +13,9 @@ pub mod square;
 pub mod stripe;
 
 /// Paddle Billing payment processor — PLANNED (stub).
+#[cfg(feature = "paddle")]
 pub mod paddle;
 
 /// EDC (Electronic Data Capture) payment terminal drivers — PLANNED (stubs).
+#[cfg(feature = "edc")]
 pub mod edc;

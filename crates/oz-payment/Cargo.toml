@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "Payment processor abstraction for OZ-POS — Stripe, Square, EMV terminals behind a single trait."
 
+# Inherits [workspace.lints] from the root Cargo.toml (missing_docs = warn).
+[lints]
+workspace = true
+
 [dependencies]
 oz-core = { workspace = true }
 oz-hal = { workspace = true }
@@ -20,6 +24,13 @@ chrono = { workspace = true }
 base64 = "0.22"
 reqwest = { workspace = true }
 tracing = { workspace = true }
+
+[features]
+# `paddle` / `edc` gate the planned stub drivers. Defaults keep them
+# compiled so the API surface is always present; lean builds can disable.
+default = ["paddle", "edc"]
+paddle = []
+edc = []
 
 [dev-dependencies]
 wiremock = "0.6.5"

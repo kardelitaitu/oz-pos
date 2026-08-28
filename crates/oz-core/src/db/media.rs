@@ -42,6 +42,8 @@ pub struct MediaAsset {
     pub file_path: String,
     /// MIME type (e.g. "image/jpeg").
     pub mime_type: String,
+    /// SHA-256 content hash for dedup (nullable until indexed).
+    pub content_hash: Option<String>,
     /// Pixel width, if known.
     pub width: Option<i64>,
     /// Pixel height, if known.

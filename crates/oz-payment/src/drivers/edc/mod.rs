@@ -26,8 +26,15 @@
 //! trait so the cashier flow can use an EDC terminal as a drop-in
 //! replacement for Stripe/Paddle/Midtrans.
 
+pub mod mock;
+pub mod protocol;
 pub mod wired;
 pub mod wireless;
+
+pub use mock::MockEdcTerminal;
+pub use protocol::{
+    ProtocolCodec, ProtocolMessage, ingenico::IngenicoCodec, pax::PaxCodec, verifone::VerifoneCodec,
+};
 
 use async_trait::async_trait;
 

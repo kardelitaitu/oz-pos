@@ -147,3 +147,21 @@ pub const LAN_SERVER_BIND: &str = "lan_server.bind";
 /// Peers must send `{"op":"hello","psk":"<value>"}` as
 /// their first message or the connection is dropped.
 pub const LAN_SERVER_PSK: &str = "lan_server.psk";
+
+// ── Media (images) settings ───────────────────────────────
+/// Media storage backend: `"local"` (Tauri filesystem) or `"object"`
+/// (S3-compatible, cloud). Default `"local"`.
+pub const MEDIA_STORAGE_BACKEND: &str = "media.storage_backend";
+/// Root path for local media storage (relative or absolute).
+/// Default `"media"` under the app data dir.
+pub const MEDIA_ROOT_PATH: &str = "media.root_path";
+/// Max input file size for images, in bytes. Default `"20971520"` (20 MiB).
+pub const MEDIA_MAX_INPUT_BYTES: &str = "media.max_input_bytes";
+/// Max decodable pixels for images (decompression-bomb guard).
+/// Default `"40000000"` (40 MP).
+pub const MEDIA_MAX_PIXELS: &str = "media.max_pixels";
+
+// ── EDC terminals settings ────────────────────────────────
+/// Default EDC terminal ID used when the cashier flow picks a card
+/// terminal. Empty string = no default (user is prompted).
+pub const EDC_DEFAULT_TERMINAL: &str = "edc.default_terminal";
