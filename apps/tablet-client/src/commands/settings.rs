@@ -486,7 +486,7 @@ const SECRET_KEY_DENY_LIST: &[&str] = &[
 /// Returns `true` if the given settings key should be blocked from
 /// the raw `get_setting` IPC surface.
 fn is_secret_key(key: &str) -> bool {
-    SECRET_KEY_DENY_LIST.iter().any(|denied| key == *denied)
+    SECRET_KEY_DENY_LIST.contains(&key)
 }
 
 /// Write (or overwrite) a single setting value.
