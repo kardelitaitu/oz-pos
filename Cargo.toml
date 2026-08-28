@@ -141,15 +141,23 @@ console-subscriber = "0.4"
 # in its lib.rs. AGENTS.md requires a doc comment on every public item;
 # this makes that requirement structural rather than per-crate boilerplate.
 #
-# `unsafe_code` deliberately stays OUT of this table. Cargo rejects a
-# manifest that sets both `[lints] workspace = true` and a local
-# `[lints.rust]` override ("cannot override `workspace.lints` in `lints`"),
-# so a workspace-level `unsafe_code = "deny"` would leave the crates that
-# legitimately need `unsafe` — oz-hal (FFI), oz-logging (syslog/eventlog),
-# oz-lua (Send/Sync for LuaRuntime), oz-security (Windows CredRead) — with
-# no way to opt out except abandoning the shared table entirely. Those
-# crates keep their per-crate `#![deny(unsafe_code)]` inner attribute
-# instead, which remains the reviewable, file-local exception.
+# `unsafe_code` deliberately stays OUT of this table, for two reasons.
+#
+# First, Cargo rejects a manifest that sets both `[lints] workspace = true`
+# and a local `[lints.rust]` override ("cannot override `workspace.lints`
+# in `lints`"), so a crate cannot relax a workspace lint from its manifest.
+#
+# Second, and decisively: `unsafe_code` is not uniformly deniable here.
+# `oz-logging` calls syslog/eventlog through FFI (`syslog.rs`,
+# `eventlog.rs`) and `oz-notification` uses `unsafe` in its tests, and
+# neither currently carries a crate-level opt-out — adding a workspace-wide
+# deny would break both builds, which is out of scope for a plumbing change.
+#
+# The crates that DO deny it keep the file-local `#![deny(unsafe_code)]`
+# inner attribute, which stays the reviewable place for an exception:
+# `oz-lua` narrows two `unsafe impl Send/Sync` with `#[allow(unsafe_code)]`
+# plus a `// SAFETY:` rationale, and `oz-security` scopes its Windows
+# CredRead/CredWrite FFI behind `#![allow(unsafe_code)]` in `windows.rs`.
 [workspace.lints.rust]
 missing_docs = "warn"
 
