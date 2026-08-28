@@ -37,19 +37,18 @@ describe('SearchTrigger Component', () => {
     };
   }
 
-  it('renders trigger button with keyboard shortcut hint', async () => {
+  it('renders trigger icon button with keyboard shortcut title', async () => {
     const { container, unmount } = await renderTrigger('en');
     const btn = container.querySelector('button[aria-label="Search"]');
     expect(btn).not.toBeNull();
-    expect(btn?.textContent).toContain('Search…');
-    expect(btn?.textContent).toContain('⌘K');
+    expect(btn?.getAttribute('title')).toContain('⌘K');
     await unmount();
   });
 
-  it('renders Indonesian label when locale is id', async () => {
+  it('renders Indonesian title when locale is id', async () => {
     const { container, unmount } = await renderTrigger('id');
     const btn = container.querySelector('button[aria-label="Search"]');
-    expect(btn?.textContent).toContain('Cari…');
+    expect(btn?.getAttribute('title')).toContain('Cari');
     await unmount();
   });
 

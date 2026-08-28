@@ -140,8 +140,8 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Bar Input */}
-        <div className="relative flex items-center border-b border-ink/10 pb-3">
-          <svg className="w-5 h-5 text-muted ml-1 mr-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <div className="relative flex items-center border-b border-ink/10 pb-3 gap-3">
+          <svg className="w-5 h-5 text-muted ml-1 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -154,11 +154,11 @@ export default function SearchModal({ isOpen, onClose, locale }: Props) {
               setSelectedIndex(0);
             }}
             placeholder={t(locale, 'search.placeholder')}
-            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+            className="flex-1 min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-muted pr-2"
             autoComplete="off"
             spellCheck="false"
           />
-          <kbd className="hidden sm:inline-block rounded border border-ink/15 bg-ink/5 px-1.5 py-0.5 text-xs text-muted">
+          <kbd className="hidden sm:inline-block shrink-0 rounded border border-ink/15 bg-ink/5 px-2 py-0.5 text-xs text-muted font-mono ml-2">
             ESC
           </kbd>
         </div>
