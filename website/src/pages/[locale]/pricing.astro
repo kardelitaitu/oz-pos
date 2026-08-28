@@ -26,7 +26,7 @@ const contactHref = 'mailto:sales@ozpos.my.id';
     </div>
 
     <div data-reveal>
-      <PricingGrid client:load tiers={pricing} tiersAlt={locale === 'id' ? enPricing : idPricing} locale={locale} downloadHref={downloadHref} contactHref={contactHref} />
+      <PricingGrid client:load tiers={pricing} locale={locale} downloadHref={downloadHref} contactHref={contactHref} />
     </div>
 
     <div data-reveal class="mt-6 flex flex-wrap justify-center gap-6 text-sm text-muted">

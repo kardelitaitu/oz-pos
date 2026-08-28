@@ -74,7 +74,6 @@ describe('PricingGrid Component', () => {
   async function renderGrid(
     locale = 'en',
     tiers = locale === 'id' ? mockTiersIDR : mockTiersUSD,
-    tiersAlt = locale === 'id' ? mockTiersUSD : mockTiersIDR,
   ) {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -85,7 +84,6 @@ describe('PricingGrid Component', () => {
         <PricingGrid
           locale={locale}
           tiers={tiers}
-          tiersAlt={tiersAlt}
           downloadHref={`/${locale}/download`}
           contactHref={`/${locale}/support`}
         />,

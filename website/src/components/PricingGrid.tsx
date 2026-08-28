@@ -27,30 +27,9 @@ interface Props {
   contactHref: string;
 }
 
-export default function PricingGrid({ tiers, tiersAlt, locale, downloadHref }: Props) {
+export default function PricingGrid({ tiers, locale, downloadHref }: Props) {
   const [billing, setBilling] = useState<BillingPeriod>('yearly');
-  const [region, setRegion] = useState<Region | null>(() => getExplicitRegion());
-
-  // Sync region from localStorage (set during signup or by region picker)
-  useEffect(() => {
-    const check = () => setRegion(getExplicitRegion());
-    window.addEventListener('storage', check);
-    // Also poll in case localStorage was set in another tab
-    const interval = setInterval(check, 1000);
-    return () => {
-      window.removeEventListener('storage', check);
-      clearInterval(interval);
-    };
-  }, []);
-
-  // Use region-appropriate pricing tiers:
-  // - Region explicitly set to 'id' → always show IDR pricing
-  // - Region explicitly set to 'global' → always show USD pricing
-  // - Region unset (default) → use locale-based pricing (en=USD, id=IDR)
-  const wantsIDR = region === 'id' || (!region && locale === 'id');
-  const activeTiers = (wantsIDR
-    ? (locale === 'id' ? tiers : (tiersAlt ?? tiers))   // IDR: use tiers if already ID, else swap
-    : (locale === 'id' ? (tiersAlt ?? tiers) : tiers)) ?? tiers;  // USD: use alt if ID locale, else keep
+  const activeTiers = tiers;
   const trackRef = useRef<HTMLDivElement>(null);
   const monthlyBtnRef = useRef<HTMLButtonElement>(null);
   const yearlyBtnRef = useRef<HTMLButtonElement>(null);
