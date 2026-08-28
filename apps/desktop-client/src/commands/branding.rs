@@ -204,6 +204,24 @@ pub async fn set_brand_store_name_scoped(
     Ok(Settings::set_brand_store_name(&conn, &name)?)
 }
 
+/// Set the brand logo path (scoped — two-phase db access).
+#[tauri::command]
+pub async fn set_brand_logo_path_scoped(
+    path: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.resolve_scope(&session_token)?;
+    if let Some(ref app_handle) = state.app {
+        let validated = validate_logo_path(app_handle, &path)?;
+        let conn = state.db.lock().await;
+        Ok(Settings::set_brand_logo_path(&conn, &validated)?)
+    } else {
+        let conn = state.db.lock().await;
+        Ok(Settings::set_brand_logo_path(&conn, &path)?)
+    }
+}
+
 #[cfg(test)]
 #[path = "branding_tests.rs"]
 mod tests;
