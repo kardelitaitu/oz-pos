@@ -432,3 +432,29 @@ describe('AccountView — Quick actions & License Copy', () => {
   });
 });
 
+// ── Devices & Billing Invoices ───────────────────────────────────────
+
+describe('AccountView — Devices & Invoices', () => {
+  it('renders registered terminals section and billing invoices section', async () => {
+    sessionStorage.setItem('oz_session', 'tok-enterprise');
+    stubMe({
+      tierKey: 'enterprise',
+      status: 'active',
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Registered Terminals');
+      assertText(container, 'Unlimited terminals');
+      assertText(container, 'Billing & Receipts');
+      assertText(container, 'Access Billing Portal & Receipts');
+
+      const mailtoInvoice = container.querySelector('a[href^="mailto:sales@ozpos.my.id"]');
+      expect(mailtoInvoice).not.toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+

@@ -272,7 +272,17 @@
     "quickActions": "Quick actions",
     "downloadApp": "Download app",
     "activationGuide": "Activation guide",
-    "contactSupport": "Contact support"
+    "contactSupport": "Contact support",
+    "devices": "Registered Terminals",
+    "devicesHint": "Terminals authorized with this license key. Manage active POS registers.",
+    "terminalSlots": "Terminal Slots",
+    "terminalUnlimited": "Unlimited terminals",
+    "terminalCount": "1 terminal included",
+    "unbindHint": "To migrate to new hardware, enter your license key into the new OZ-POS terminal app.",
+    "billingInvoices": "Billing & Receipts",
+    "billingInvoicesHint": "View transaction receipts and tax invoice history for your account.",
+    "viewReceipts": "Access Billing Portal & Receipts",
+    "invoiceNote": "Need a formal corporate tax invoice? Contact sales@ozpos.my.id with your company NPWP/VAT details."
   },
   "footer": {
     "rights": "All rights reserved.",
@@ -296,6 +306,14 @@
   "docsSearch": {
     "placeholder": "Search docs…",
     "noResults": "No results"
+  },
+  "search": {
+    "placeholder": "Search docs, guides, and features…",
+    "noResults": "No matching results found for",
+    "docsTitle": "Documentation & Guides",
+    "pagesTitle": "Pages & Features",
+    "shortcutHint": "Press ESC to close, ↑↓ to navigate, ENTER to select",
+    "quickSearch": "Quick Search"
   },
   "checkout": {
     "signInToSubscribe": "Sign in to subscribe",

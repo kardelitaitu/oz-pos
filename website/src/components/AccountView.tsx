@@ -447,6 +447,68 @@ export default function AccountView({ locale }: Props) {
         </section>
       )}
 
+      {/* Device / Terminal Management */}
+      {tenant && (
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.devices')}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">{t(locale, 'account.devices')}</h2>
+            <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-link">
+              {license?.tierKey === 'pro' || license?.tierKey === 'enterprise' || license?.tierKey === 'premium'
+                ? t(locale, 'account.terminalUnlimited')
+                : t(locale, 'account.terminalCount')}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-muted">{t(locale, 'account.devicesHint')}</p>
+          <div className="mt-4 rounded-lg border border-ink/10 bg-surface p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-ink/5 flex items-center justify-center text-muted">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-ink">{t(locale, 'account.terminalSlots')}</p>
+                <p className="text-xs text-muted">{t(locale, 'account.unbindHint')}</p>
+              </div>
+            </div>
+            <a
+              href={`/${locale}/docs/activation`}
+              className="rounded-md border border-ink/15 bg-surface px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-ink/5"
+            >
+              {t(locale, 'account.activationGuide')}
+            </a>
+          </div>
+        </section>
+      )}
+
+      {/* Billing & Tax Invoices */}
+      {tenant && (
+        <section className="rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm" aria-label={t(locale, 'account.billingInvoices')}>
+          <h2 className="text-lg font-semibold">{t(locale, 'account.billingInvoices')}</h2>
+          <p className="mt-1 text-sm text-muted">{t(locale, 'account.billingInvoicesHint')}</p>
+          <div className="mt-4 rounded-lg border border-ink/10 bg-surface p-4 space-y-2">
+            <p className="text-xs text-muted leading-relaxed">{t(locale, 'account.invoiceNote')}</p>
+            <div className="pt-2 flex items-center gap-3">
+              <a
+                href={`mailto:sales@ozpos.my.id?subject=${encodeURIComponent('Invoice Request - ' + tenant.email)}`}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-link hover:underline"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+                {t(locale, 'account.viewReceipts')}
+              </a>
+            </div>
+          </div>
+        </section>
+      )}
+
       {tenant && (
         <section className="rounded-xl border border-ink/10 bg-surface/40 p-6" aria-label={t(locale, 'account.password')}>
           <h2 className="text-lg font-semibold">{t(locale, 'account.password')}</h2>

@@ -272,7 +272,17 @@
     "quickActions": "Aksi cepat",
     "downloadApp": "Unduh aplikasi",
     "activationGuide": "Panduan aktivasi",
-    "contactSupport": "Hubungi bantuan"
+    "contactSupport": "Hubungi bantuan",
+    "devices": "Terminal Terdaftar",
+    "devicesHint": "Terminal yang diotorisasi dengan kunci lisensi ini. Kelola mesin kasir aktif.",
+    "terminalSlots": "Slot Terminal",
+    "terminalUnlimited": "Terminal tanpa batas",
+    "terminalCount": "Termasuk 1 terminal",
+    "unbindHint": "Untuk migrasi ke perangkat baru, masukkan kunci lisensi Anda ke aplikasi terminal OZ-POS yang baru.",
+    "billingInvoices": "Tagihan & Kuitansi",
+    "billingInvoicesHint": "Lihat kuitansi transaksi dan riwayat faktur pajak untuk akun Anda.",
+    "viewReceipts": "Akses Portal Tagihan & Kuitansi",
+    "invoiceNote": "Butuh faktur pajak perusahaan resmi? Hubungi sales@ozpos.my.id dengan detail NPWP perusahaan Anda."
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",
@@ -296,6 +306,14 @@
   "docsSearch": {
     "placeholder": "Cari dokumentasi…",
     "noResults": "Tidak ada hasil"
+  },
+  "search": {
+    "placeholder": "Cari dokumentasi, panduan, dan fitur…",
+    "noResults": "Tidak ditemukan hasil yang cocok untuk",
+    "docsTitle": "Dokumentasi & Panduan",
+    "pagesTitle": "Halaman & Fitur",
+    "shortcutHint": "Tekan ESC untuk tutup, ↑↓ untuk memilih, ENTER untuk buka",
+    "quickSearch": "Pencarian Cepat"
   },
   "checkout": {
     "signInToSubscribe": "Masuk untuk berlangganan",
