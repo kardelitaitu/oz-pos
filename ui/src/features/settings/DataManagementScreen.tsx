@@ -24,6 +24,7 @@ import {
   pickExportPath,
   pickImportFile,
 } from '@/api/data';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { l10nErrorMessage } from '@/utils/app-error';
 import './DataManagementScreen.css';
 
@@ -145,6 +146,7 @@ function checkIcon(): React.ReactNode {
 /** Data management screen — encrypted export wizard, import wizard with dry-run preview, and one-click backup status. */
 export default function DataManagementScreen() {
   const { l10n } = useLocalization();
+  const { sessionToken } = useWorkspace();
   const [exportState, setExportState] = useState<ExportState>(INITIAL_EXPORT);
   const [importState, setImportState] = useState<ImportState>(INITIAL_IMPORT);
   const [backup, setBackup] = useState<BackupInfo>({
@@ -297,7 +299,7 @@ export default function DataManagementScreen() {
 
       setExportState((prev) => ({ ...prev, progress: 30 }));
 
-      const result = await exportData({
+      const result = await exportData(sessionToken, {
         types: Array.from(es.selectedTypes),
         password: es.password,
         outputPath: filePath,
@@ -323,7 +325,7 @@ export default function DataManagementScreen() {
     } finally {
       exportingRef.current = false;
     }
-  }, [addToast, l10n, triggerFlash]);
+  }, [addToast, l10n, sessionToken, triggerFlash]);
 
   const resetExport = useCallback(() => {
     setExportState(INITIAL_EXPORT);
@@ -362,7 +364,7 @@ export default function DataManagementScreen() {
     setImportState((prev) => ({ ...prev, progress: 10, error: null, analysing: true }));
 
     try {
-      const preview = await importPreview(is.selectedFile, is.password);
+      const preview = await importPreview(sessionToken, is.selectedFile, is.password);
       setImportState((prev) => ({
         ...prev,
         analysing: false,
@@ -394,7 +396,7 @@ export default function DataManagementScreen() {
         error: l10nErrorMessage(err, l10n, 'data-mgmt-toast-import-fail'),
       }));
     }
-  }, [addToast, l10n, triggerFlash]);
+  }, [addToast, l10n, sessionToken, triggerFlash]);
 
   const startImport = useCallback(async () => {
     const is = importStateRef.current;
@@ -418,7 +420,7 @@ export default function DataManagementScreen() {
 
     try {
       // Execute import (preview already done in analyse step)
-      const result = await importData(is.selectedFile, is.password);
+      const result = await importData(sessionToken, is.selectedFile, is.password);
 
       setImportState((prev) => ({
         ...prev,
@@ -446,7 +448,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: l10nErrorMessage(err, l10n, 'data-mgmt-toast-import-fail'), type: 'error' });
     }
-  }, [addToast, l10n, triggerFlash]);
+  }, [addToast, l10n, sessionToken, triggerFlash]);
 
   const resetImport = useCallback(() => {
     setImportState(INITIAL_IMPORT);
