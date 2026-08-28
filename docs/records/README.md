@@ -45,6 +45,7 @@ Unified registry for architectural decisions (ADRs), audits, verifications, and 
 | 38 | products | [ADR #38: Retail POS Row Context Menu — View Product Images in Browser](../decisions/2026-08-11-adr38-retail-row-context-menu-browser-images.md) | Implemented (2026-08-12) |
 | 39 | subscription | [ADR #39: Midtrans QRIS Subscription Payments (Phase 2)](../decisions/2026-08-18-adr39-midtrans-subscription-payments.md) | Approved — implementation tracked in `TODO.md` C3.1 |
 | 40 | topology | [ADR #40: Multi-Terminal Peer Model](../decisions/2026-08-20-adr40-multi-terminal-peer-model.md) | Implemented (2026-08-20) |
+| 41 | lifecycle / gating | [ADR #41: App Lifecycle, Device Onboarding, Dynamic Topology Workspaces, and Two-Layer Gated Home (Tier & RBAC)](../decisions/2026-08-28-adr41-app-lifecycle-device-onboarding-topology-home-gating.md) | Accepted (2026-08-28) |
 
 ### Research Notes
 
