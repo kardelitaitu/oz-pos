@@ -236,7 +236,7 @@ pub async fn staff_login(
 /// Arguments for `create_session`.
 #[derive(Debug, Deserialize)]
 pub struct CreateSessionArgs {
-    /// The authenticated user ID.
+    /// The authenticated user ID (must match the picker ticket).
     pub user_id: String,
     /// The user's active role ID.
     pub role_id: String,
@@ -248,6 +248,9 @@ pub struct CreateSessionArgs {
     pub type_key: String,
     /// The terminal/device ID.
     pub terminal_id: String,
+    /// HMAC-signed picker ticket from `staff_login`/`bootstrap_owner`.
+    /// Used to authenticate the caller's identity before minting a session.
+    pub picker_ticket: String,
 }
 
 /// Result of `create_session` — returns the opaque session token.
@@ -293,11 +296,42 @@ pub async fn create_session(
     args: CreateSessionArgs,
     state: State<'_, AppState>,
 ) -> Result<CreateSessionResult, AppError> {
-    // Validate required fields BEFORE any side effects.
+    // H-3: Validate required fields BEFORE any side effects.
     if args.store_id.is_empty() || args.instance_id.is_empty() || args.user_id.is_empty() {
         return Err(AppError::Invalid(
             "store_id, instance_id, and user_id must not be empty".into(),
         ));
+    }
+
+    // H-3: Verify the picker ticket to authenticate the caller's identity.
+    // The ticket was minted by staff_login/bootstrap_owner and bound to the
+    // authenticated user. We derive user_id from the ticket instead of
+    // trusting the caller-supplied value.
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let verified_user_id = picker_ticket::verify_picker_ticket(
+        &state.picker_ticket_secret,
+        &args.picker_ticket,
+        now_ts,
+    )
+    .ok_or_else(|| {
+        tracing::warn!(
+            user_id = %args.user_id,
+            "session creation denied — invalid or expired picker ticket"
+        );
+        AppError::Invalid("Invalid or expired picker ticket".into())
+    })?;
+
+    // Ensure the caller-supplied user_id matches the ticket-bound identity.
+    if verified_user_id != args.user_id {
+        tracing::warn!(
+            user_id = %args.user_id,
+            ticket_user_id = %verified_user_id,
+            "session creation denied — user_id mismatch with picker ticket"
+        );
+        return Err(AppError::Invalid("Invalid or expired picker ticket".into()));
     }
 
     // Server-side authorization: verify the user has a valid role assignment
@@ -324,12 +358,6 @@ pub async fn create_session(
     }
 
     let token = uuid::Uuid::now_v7().to_string();
-
-    // Snapshot the current time once for both expiry and creation timestamp.
-    let now_ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
 
     // Compute session expiry from the cached TTL setting.
     // 0 or negative means no expiry (development mode).

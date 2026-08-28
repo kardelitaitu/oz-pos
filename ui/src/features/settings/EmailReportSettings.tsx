@@ -41,7 +41,8 @@ const SMTP_CONFIG_KEY = 'smtp_config';
 export default function EmailReportSettings() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
-  const { sessionToken } = useWorkspace();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken ?? '';
   const userId = useAuth().session?.user_id ?? 'default';
 
   const [config, setConfig] = useState<SmtpConfigDto>(DEFAULT_SMTP);

@@ -107,7 +107,8 @@ export default function FeatureToggleScreen() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [togglingBatch, setTogglingBatch] = useState<string | null>(null);
   const { addToast } = useToast();
-  const { sessionToken } = useWorkspace();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken ?? '';
   const cm = useContextMenu();
   const cmInput = useMemo(() => ({
     autoComplete: 'off' as const,

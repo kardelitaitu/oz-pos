@@ -86,8 +86,9 @@ describe('features.ts API contract', () => {
 
   it('setFeature calls correct command', async () => {
     mockInvoke.mockResolvedValue({ success: true, features: [], auto_enabled: [] });
-    const result = await setFeature('kds', true);
+    const result = await setFeature('tok', 'kds', true);
     expect(mockInvoke).toHaveBeenCalledWith('set_feature', {
+      sessionToken: 'tok',
       args: { key: 'kds', enabled: true },
     });
     expect(result.success).toBe(true);
@@ -96,8 +97,9 @@ describe('features.ts API contract', () => {
   it('setFeaturesBulk calls correct command', async () => {
     const keys = ['kds', 'inventory'];
     mockInvoke.mockResolvedValue({ features: [], auto_enabled: [] });
-    await setFeaturesBulk(keys, false);
+    await setFeaturesBulk('tok', keys, false);
     expect(mockInvoke).toHaveBeenCalledWith('set_features_bulk', {
+      sessionToken: 'tok',
       args: { keys, enabled: false },
     });
   });
@@ -175,8 +177,8 @@ describe('email.ts API contract', () => {
 
   it('sendTestReport calls correct command (no args)', async () => {
     mockInvoke.mockResolvedValue('sent');
-    const result = await sendTestReport();
-    expect(mockInvoke).toHaveBeenCalledWith('send_test_report');
+    const result = await sendTestReport('tok');
+    expect(mockInvoke).toHaveBeenCalledWith('send_test_report', { sessionToken: 'tok' });
     expect(result).toBe('sent');
   });
 
@@ -190,8 +192,8 @@ describe('email.ts API contract', () => {
   it('saveReportSchedule calls correct command', async () => {
     const config = { enabled: false, cadence: 'daily', report_types: [], recipients: [], send_at_time: '09:00', timezone: 'UTC', lookback_days: 1 };
     mockInvoke.mockResolvedValue(undefined);
-    await saveReportSchedule(config);
-    expect(mockInvoke).toHaveBeenCalledWith('save_report_schedule', { config });
+    await saveReportSchedule('tok', config);
+    expect(mockInvoke).toHaveBeenCalledWith('save_report_schedule', { sessionToken: 'tok', config });
   });
 });
 

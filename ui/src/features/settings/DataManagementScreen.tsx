@@ -146,7 +146,8 @@ function checkIcon(): React.ReactNode {
 /** Data management screen — encrypted export wizard, import wizard with dry-run preview, and one-click backup status. */
 export default function DataManagementScreen() {
   const { l10n } = useLocalization();
-  const { sessionToken } = useWorkspace();
+  const { sessionToken: rawSessionToken } = useWorkspace();
+  const sessionToken = rawSessionToken ?? '';
   const [exportState, setExportState] = useState<ExportState>(INITIAL_EXPORT);
   const [importState, setImportState] = useState<ImportState>(INITIAL_IMPORT);
   const [backup, setBackup] = useState<BackupInfo>({

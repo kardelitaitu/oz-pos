@@ -283,6 +283,8 @@ export interface CreateSessionArgs {
   instance_id: string;
   type_key: string;
   terminal_id: string;
+  /** HMAC-signed picker ticket from staff_login / bootstrap_owner. */
+  picker_ticket: string;
 }
 
 /** Session context DTO returned alongside the opaque token. */

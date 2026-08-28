@@ -1,5 +1,16 @@
 use super::*;
 
+/// Test helper: sign a picker ticket for the given user using the test secret.
+fn test_picker_ticket(user_id: &str) -> String {
+    let secret = b"test-picker-ticket-secret";
+    let expiry = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        + 300; // 5 min from now
+    picker_ticket::sign_picker_ticket(secret, user_id, expiry)
+}
+
 // ── StaffLoginArgs ──────────────────────────────────────────────────
 
 #[test]
@@ -270,6 +281,7 @@ async fn create_session_rejects_forged_role_id() {
             instance_id: "default-restaurant-pos".into(),
             type_key: "restaurant-pos".into(),
             terminal_id: "terminal-1".into(),
+            picker_ticket: test_picker_ticket("user-cashier"),
         },
         app.state(),
     )
@@ -303,6 +315,7 @@ async fn create_session_rejects_unknown_user() {
             instance_id: "default-restaurant-pos".into(),
             type_key: "restaurant-pos".into(),
             terminal_id: "terminal-1".into(),
+            picker_ticket: test_picker_ticket("ghost-user"),
         },
         app.state(),
     )
@@ -332,6 +345,7 @@ async fn create_session_allows_real_owner() {
             instance_id: "default-restaurant-pos".into(),
             type_key: "restaurant-pos".into(),
             terminal_id: "terminal-1".into(),
+            picker_ticket: test_picker_ticket("user-owner"),
         },
         app.state(),
     )

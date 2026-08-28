@@ -34,20 +34,20 @@ describe('data.ts API contract', () => {
   it('exportData calls correct command', async () => {
     const args = { types: ['products'], password: 'secret', outputPath: '/tmp/export.csv' };
     mockInvoke.mockResolvedValue({ rows: 10 });
-    await exportData(args);
-    expect(mockInvoke).toHaveBeenCalledWith('export_data', { args });
+    await exportData('tok', args);
+    expect(mockInvoke).toHaveBeenCalledWith('export_data', { sessionToken: 'tok', args });
   });
 
   it('importPreview calls correct command', async () => {
     mockInvoke.mockResolvedValue({ rows: [], errors: [] });
-    await importPreview('/path/to/file.csv', 'pass');
-    expect(mockInvoke).toHaveBeenCalledWith('import_preview', { args: { file_path: '/path/to/file.csv', password: 'pass' } });
+    await importPreview('tok', '/path/to/file.csv', 'pass');
+    expect(mockInvoke).toHaveBeenCalledWith('import_preview', { sessionToken: 'tok', args: { file_path: '/path/to/file.csv', password: 'pass' } });
   });
 
   it('importData calls correct command', async () => {
     mockInvoke.mockResolvedValue({ imported: 5 });
-    await importData('/path/to/file.csv', 'pass');
-    expect(mockInvoke).toHaveBeenCalledWith('import_data', { args: { file_path: '/path/to/file.csv', password: 'pass' } });
+    await importData('tok', '/path/to/file.csv', 'pass');
+    expect(mockInvoke).toHaveBeenCalledWith('import_data', { sessionToken: 'tok', args: { file_path: '/path/to/file.csv', password: 'pass' } });
   });
 
   it('propagates errors', async () => {

@@ -736,7 +736,7 @@ describe('CloudSyncSettings', () => {
     await user.click(requestBtn);
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('request_sync_token', { url: 'http://localhost:3099' });
+      expect(invokeMock).toHaveBeenCalledWith('request_sync_token', undefined);
     });
   });
 

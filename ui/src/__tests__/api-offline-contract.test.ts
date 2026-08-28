@@ -114,20 +114,20 @@ describe('offline.ts IPC contract', () => {
 
   it('testSyncConnection invokes "test_sync_connection" with the candidate url', async () => {
     mockInvoke.mockResolvedValue({ ok: true, status: 'Connected', latencyMs: 12 });
-    await testSyncConnection('https://sync.example.com');
-    expect(mockInvoke).toHaveBeenCalledWith('test_sync_connection', { url: 'https://sync.example.com' });
+    await testSyncConnection();
+    expect(mockInvoke).toHaveBeenCalledWith('test_sync_connection', undefined);
   });
 
   it('testSyncConnection with no url passes null so the backend falls back to saved settings', async () => {
     mockInvoke.mockResolvedValue({ ok: false, status: 'nope', latencyMs: null });
     await testSyncConnection();
-    expect(mockInvoke).toHaveBeenCalledWith('test_sync_connection', { url: null });
+    expect(mockInvoke).toHaveBeenCalledWith('test_sync_connection', undefined);
   });
 
   it('requestSyncToken invokes "request_sync_token" with the candidate url', async () => {
     mockInvoke.mockResolvedValue({ ok: true, token: 'jwt', status: 'issued', expiresAt: null });
-    await requestSyncToken('https://sync.example.com');
-    expect(mockInvoke).toHaveBeenCalledWith('request_sync_token', { url: 'https://sync.example.com' });
+    await requestSyncToken();
+    expect(mockInvoke).toHaveBeenCalledWith('request_sync_token', undefined);
   });
 
   it('pendingSyncCount invokes "pending_sync_count" with no args', async () => {

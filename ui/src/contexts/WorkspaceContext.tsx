@@ -341,6 +341,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           instance_id: instance.instance_id,
           type_key: instance.type_key,
           terminal_id: await getDeviceId().catch(() => ""),
+          picker_ticket: pickerTicket ?? "",
         });
 
         setSessionToken(result.session_token);
@@ -463,6 +464,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         instance_id: activeInstance.instance_id,
         type_key: activeInstance.type_key,
         terminal_id: deviceId,
+        picker_ticket: pickerTicket ?? "",
       })
         .then((result) => {
           if (!cancelled) {
