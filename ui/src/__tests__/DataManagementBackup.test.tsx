@@ -67,7 +67,7 @@ vi.mock('@/components/Spinner', () => ({
 
 // ── Default API responses ────────────────────────────────────────
 
-const defaultBackupStatus = { lastBackup: null, lastBackupSize: null, dbPath: '/path/to/db.sqlite3' };
+const defaultBackupStatus = { lastBackup: null, lastBackupSize: null };
 
 beforeEach(() => {
   mockGetBackupStatus.mockResolvedValue(defaultBackupStatus);
@@ -110,7 +110,7 @@ describe('DataManagement — Backup', () => {
 
   it('shows last backup time when a backup exists', async () => {
     mockGetBackupStatus.mockResolvedValue({
-      lastBackup: '2026-07-13 14:30:00', lastBackupSize: '12.0 MB', dbPath: '/path/to/db.sqlite3',
+      lastBackup: '2026-07-13 14:30:00', lastBackupSize: '12.0 MB',
     });
     render(<DataManagementScreen />);
     await waitFor(() => expect(screen.getByText('Backup')).toBeInTheDocument());
@@ -122,7 +122,7 @@ describe('DataManagement — Backup', () => {
 
   it('shows backup size when available', async () => {
     mockGetBackupStatus.mockResolvedValue({
-      lastBackup: '2026-07-13 14:30:00', lastBackupSize: '15.7 MB', dbPath: '/path/to/db.sqlite3',
+      lastBackup: '2026-07-13 14:30:00', lastBackupSize: '15.7 MB',
     });
     render(<DataManagementScreen />);
     await waitFor(() => expect(screen.getByText('Backup')).toBeInTheDocument());

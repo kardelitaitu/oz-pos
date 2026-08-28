@@ -78,7 +78,7 @@ vi.mock('@/components/Spinner', () => ({
 
 // ── Default API responses ────────────────────────────────────────
 
-const defaultBackupStatus = { lastBackup: null, lastBackupSize: null, dbPath: '/path/to/db.sqlite3' };
+const defaultBackupStatus = { lastBackup: null, lastBackupSize: null };
 const defaultExportResult = { path: '/exports/export_2026.ozpkg', sizeBytes: 524_288, types: ['products', 'categories'] };
 
 beforeEach(() => {

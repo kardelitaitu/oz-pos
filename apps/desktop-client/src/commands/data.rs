@@ -21,8 +21,8 @@ pub struct BackupStatus {
     pub last_backup: Option<String>,
     /// Last Backup Size.
     pub last_backup_size: Option<String>,
-    /// Db Path.
-    pub db_path: String,
+    // Db Path intentionally omitted — leaks the filesystem path to
+    // any IPC caller (M-7: never expose db_path in unauth'd DTOs).
 }
 
 #[derive(Debug, Serialize)]
@@ -125,7 +125,6 @@ pub struct ImportDataResult {
 #[tauri::command]
 /// Get backup status.
 pub async fn get_backup_status(state: State<'_, AppState>) -> Result<BackupStatus, AppError> {
-    let db_path = state.db_path.display().to_string();
     let backup_path = default_backup_path(&state);
     let (last_backup, last_backup_size) = match std::fs::metadata(&backup_path) {
         Ok(meta) => {
@@ -141,7 +140,6 @@ pub async fn get_backup_status(state: State<'_, AppState>) -> Result<BackupStatu
     Ok(BackupStatus {
         last_backup,
         last_backup_size,
-        db_path,
     })
 }
 

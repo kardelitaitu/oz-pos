@@ -2931,7 +2931,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // DATA MANAGEMENT
   // ═══════════════════════════════════════════════════════════════
 
-  'get_backup_status': () => ({ lastBackup: null, lastBackupSize: null, dbPath: '/data/oz-pos.db' }),
+  'get_backup_status': () => ({ lastBackup: null, lastBackupSize: null }),
   'create_backup': () => ({ path: '/backups/backup.db', sizeBytes: 1024 }),
   'export_data': () => ({ path: '/exports/data.ozpkg', sizeBytes: 512, types: ['products'] }),
   'import_preview': () => ({ storeName: 'Test Store', appVersion: '0.0.9', exportedAt: new Date().toISOString(), types: ['products'], productCount: 10, categoryCount: 2, saleCount: null, customerCount: null, userCount: null, settingCount: null }),

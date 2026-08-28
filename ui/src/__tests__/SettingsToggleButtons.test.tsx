@@ -112,7 +112,7 @@ vi.mock('@/frontend/shared/Toast', () => ({
 }));
 
 vi.mock('@/api/data', () => ({
-  getBackupStatus: vi.fn().mockResolvedValue({ lastBackup: null, lastBackupSize: null, dbPath: '/path/to/db.sqlite3' }),
+  getBackupStatus: vi.fn().mockResolvedValue({ lastBackup: null, lastBackupSize: null }),
   createBackup: vi.fn().mockResolvedValue({ path: '/backups/backup.db', sizeBytes: 1000 }),
   exportData: vi.fn().mockResolvedValue({ path: '/path/to/export.ozpkg', sizeBytes: 500, types: ['products'] }),
   importPreview: vi.fn().mockResolvedValue({ storeName: 'Test Store', appVersion: '0.0.9', exportedAt: '2026-01-01', counts: {} }),

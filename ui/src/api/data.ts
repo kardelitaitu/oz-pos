@@ -9,7 +9,7 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 export interface BackupStatus {
   lastBackup: string | null;
   lastBackupSize: string | null;
-  dbPath: string;
+  // dbPath intentionally removed — M-7: never expose filesystem path in unauth'd DTO.
 }
 
 /** Result of a backup operation. */
