@@ -16,6 +16,7 @@ import Tooltip from '@/frontend/shell/Tooltip';
 import { getReportSchedule, saveReportSchedule, type ReportScheduleConfig } from '@/api/email';
 import { getSetting, setSetting } from '@/api/settings';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 interface SmtpConfigDto {
   host: string;
@@ -40,6 +41,7 @@ const SMTP_CONFIG_KEY = 'smtp_config';
 export default function EmailReportSettings() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { sessionToken } = useWorkspace();
   const userId = useAuth().session?.user_id ?? 'default';
 
   const [config, setConfig] = useState<SmtpConfigDto>(DEFAULT_SMTP);
@@ -129,7 +131,7 @@ export default function EmailReportSettings() {
       // Strip empty recipient entries before persisting.
       const cleaned = { ...schedule, recipients: schedule.recipients.filter((r) => r.trim() !== '') };
       setSchedule(cleaned);
-      await saveReportSchedule(cleaned);
+      await saveReportSchedule(sessionToken, cleaned);
       addToast({
         message: l10n.getString('settings-email-schedule-saved'),
         type: 'success',
@@ -142,7 +144,7 @@ export default function EmailReportSettings() {
     } finally {
       setScheduleSaving(false);
     }
-  }, [schedule, l10n, addToast]);
+  }, [schedule, l10n, addToast, sessionToken]);
 
   const updateSchedField = useCallback(
     <K extends keyof ReportScheduleConfig>(key: K, value: ReportScheduleConfig[K]) => {
@@ -156,7 +158,7 @@ export default function EmailReportSettings() {
     try {
       // Dynamically import the email API to avoid circular deps
       const { sendTestReport } = await import('@/api/email');
-      const message = await sendTestReport();
+      const message = await sendTestReport(sessionToken);
       addToast({ message, type: 'success' });
     } catch (err) {
       const errorMessage = typeof err === 'string' ? err : l10n.getString('settings-email-test-send-failed');
@@ -164,7 +166,7 @@ export default function EmailReportSettings() {
     } finally {
       setSending(false);
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, sessionToken]);
 
   const updateField = useCallback(
     <K extends keyof SmtpConfigDto>(key: K, value: SmtpConfigDto[K]) => {

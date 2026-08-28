@@ -5,6 +5,7 @@
 
 use tauri::State;
 
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -19,7 +20,12 @@ use crate::state::AppState;
 /// A success message string on completion, or an [`AppError`] on
 /// failure (invalid config, SMTP connection refused, etc.).
 #[tauri::command]
-pub async fn send_test_report(state: State<'_, AppState>) -> Result<String, AppError> {
+pub async fn send_test_report(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SETTINGS_EDIT).await?;
     let db = state.db.clone();
 
     let (smtp_config, recipients, report_email) = {
@@ -123,9 +129,12 @@ pub async fn get_report_schedule(
 /// Save the report schedule configuration.
 #[tauri::command]
 pub async fn save_report_schedule(
+    session_token: String,
     state: State<'_, AppState>,
     config: oz_core::export::ReportScheduleConfig,
 ) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SETTINGS_EDIT).await?;
     let conn = state.db.lock().await;
     let store = oz_core::Store::new(&conn);
     store
