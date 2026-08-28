@@ -163,6 +163,7 @@ impl<S: MediaStorage> MediaPipeline<S> {
     /// persistence is PLANNED — the storage backends are stubs, and the
     /// variant model does not yet carry the transformed bytes. Returns
     /// the same variants as [`Self::transform`].
+    #[allow(clippy::too_many_arguments)]
     pub async fn process(
         &self,
         owner_key: &str,
