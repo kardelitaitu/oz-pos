@@ -14,8 +14,8 @@ import { isAnyAriaModalOpen } from '@/utils/modal-guard';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { KdsLayoutMasonry } from '@/features/kds/KdsLayoutMasonry';
 import { KdsHamburgerPanel } from '@/features/kds/KdsHamburgerPanel';
+import { KdsCompletedView } from '@/features/kds/KdsCompletedView';
 import { type KdsSettings, DEFAULT_SETTINGS } from '@/features/kds/KdsSettingsPanel';
-import { KdsHistoryPanel } from '@/features/kds/KdsHistoryPanel';
 import { KdsProductPickerModal } from '@/features/kds/components/KdsProductPickerModal';
 import type { ProductPickerResult } from '@/features/kds/components/KdsProductPickerModal';
 import { KdsDeviceStatusIndicator } from '@/features/kds/components/KdsDeviceStatusIndicator';
@@ -433,7 +433,7 @@ export default function KdsScreen() {
     }
 
     if (activeTab === 'completed') {
-      return <KdsHistoryPanel />;
+      return <KdsCompletedView onReopen={() => setActiveTab('open')} />;
     }
 
     return (

@@ -197,4 +197,18 @@ kds-footer-seconds = { $count }d yang lalu
 kds-footer-minutes = { $count }m yang lalu
 kds-footer-hours = { $count }j yang lalu
 
+# ── Completed tab (bucket columns) ──
+kds-completed-aria = Pesanan selesai
+kds-completed-today = Hari Ini
+kds-completed-yesterday = Kemarin
+kds-completed-this-week = Minggu Ini
+kds-completed-older = Lebih Lama
+kds-completed-today-empty = Tidak ada pesanan
+kds-completed-yesterday-empty = Tidak ada pesanan
+kds-completed-this-week-empty = Tidak ada pesanan
+kds-completed-older-empty = Tidak ada pesanan
+kds-completed-status = Selesai
+kds-completed-reopen = Buka Lagi
+kds-completed-reopen-aria = Buka lagi pesanan { $number }
+
 # ── Kiosk (remaining) ──

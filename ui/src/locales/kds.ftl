@@ -194,3 +194,17 @@ kds-footer-never = never
 kds-footer-seconds = { $count }s ago
 kds-footer-minutes = { $count }m ago
 kds-footer-hours = { $count }h ago
+
+# ── Completed tab (bucket columns) ──
+kds-completed-aria = Completed orders
+kds-completed-today = Today
+kds-completed-yesterday = Yesterday
+kds-completed-this-week = This Week
+kds-completed-older = Older
+kds-completed-today-empty = No orders
+kds-completed-yesterday-empty = No orders
+kds-completed-this-week-empty = No orders
+kds-completed-older-empty = No orders
+kds-completed-status = Completed
+kds-completed-reopen = Reopen
+kds-completed-reopen-aria = Reopen order { $number }

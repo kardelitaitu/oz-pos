@@ -719,7 +719,7 @@ describe('KdsScreen', () => {
     });
   });
 
-  it('shows history panel when the Completed tab is clicked', async () => {
+  it('shows completed view when the Completed tab is clicked', async () => {
     mockGetKdsQueue.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
@@ -731,9 +731,9 @@ describe('KdsScreen', () => {
     const tab = document.querySelector('[data-testid="kds-tab-completed"]') as HTMLButtonElement;
     await userEvent.click(tab);
 
-    // History panel should render
+    // Completed view should render (prototype bucket columns)
     await waitFor(() => {
-      expect(document.querySelector('.kds-history')).not.toBeNull();
+      expect(document.querySelector('.kds-main.completed-view')).not.toBeNull();
     });
   });
 
