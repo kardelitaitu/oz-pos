@@ -129,7 +129,7 @@
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2_5) var(--kds-space-18);
+  padding: var(--space-2_5) 12px;
   background: var(--kds-bg-top);
   border-bottom: 1px solid var(--kds-border);
   user-select: none;
@@ -138,10 +138,11 @@
 .kds-header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   color: var(--kds-text);
   justify-self: start;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .kds-header-right {
@@ -182,8 +183,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
   padding: 0;
   background: transparent;
   color: var(--kds-text);
