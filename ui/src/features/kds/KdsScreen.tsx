@@ -615,7 +615,7 @@ export default function KdsScreen() {
           <div className="kds-filter">
             <button
               ref={filterBtnRef}
-              className={`kds-btn kds-btn--filter${filterMode === 'all' ? ' all' : ''}${showFilter ? ' open' : ''}`}
+              className={`kds-btn kds-btn--filter${filterMode === 'all' ? ' kds-btn--filter--all' : ''}${showFilter ? ' kds-btn--filter--open' : ''}`}
               onClick={() => setShowFilter((p) => !p)}
               aria-haspopup="listbox"
               aria-expanded={showFilter}

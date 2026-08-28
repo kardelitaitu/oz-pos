@@ -39,7 +39,9 @@ const POPOVER_SURFACES: ReadonlyArray<{ selector: string; file: string }> = [
   { selector: '.retail-menu', file: 'features/retail/RetailPosScreen.css' },
   { selector: '.settings-shortcuts-popover', file: 'features/settings/SettingsNavTree.css' },
   { selector: '.kds-settings-popover', file: 'features/kds/KdsSettingsPanel.css' },
-  { selector: '.kds-layout-popover', file: 'features/kds/KdsLayoutSwitcher.css' },
+  // `.kds-layout-popover` was listed here until the layout switcher was
+  // removed in the Phase 6 cleanup (fece7524). Its stylesheet went with it,
+  // so the entry threw ENOENT and failed both compliance tests.
   { selector: '.menu-eng-tooltip', file: 'features/reports/MenuEngineeringScreen.css' },
   { selector: '.retail-reminder-popup', file: 'features/retail/RetailPosScreen.css' },
   { selector: '.pos-cart-undo-bar', file: 'features/sales/CartPanel.css' },

@@ -461,7 +461,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
             <div className="kds-footer-actions">
               {!editing && canAdvance && nextKey && (
                 <button
-                  className="kds-status-btn advance"
+                  className="kds-status-btn"
                   style={{
                     // Ready orders get the green complete colour; anything
                     // still in progress stays amber (processing).
