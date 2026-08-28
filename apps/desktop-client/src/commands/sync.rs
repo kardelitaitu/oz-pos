@@ -402,18 +402,14 @@ pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppEr
 /// saved value from settings is used.
 #[tauri::command]
 pub async fn request_sync_token(
-    url: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<sync_client::TokenResult, AppError> {
-    // Resolve the URL first (may briefly lock DB), then drop the lock
-    // before making the async HTTP call.
-    let resolved = match url.filter(|u| !u.is_empty()) {
-        Some(u) => Some(u),
-        None => {
-            let db = state.db.lock().await;
-            Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty())
-        }
-    };
+    // H-6: Always resolve URL from stored settings — never accept a
+    // caller-supplied URL. A free-form URL parameter enables SSRF
+    // probes and credential exfiltration (OZ_ADMIN_KEY leak).
+    let db = state.db.lock().await;
+    let resolved = Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty());
+    drop(db);
     match resolved {
         Some(u) => {
             Ok(sync_client::request_token(&u, sync_client::admin_key_from_env().as_deref()).await)
@@ -508,24 +504,19 @@ fn resolve_sync_probe_url(
 /// saved value from settings is used.
 #[tauri::command]
 pub async fn test_sync_connection(
-    url: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<sync_client::PingResult, AppError> {
-    // Resolve the URL first (may briefly lock DB), then drop the lock
-    // before making the async HTTP call.
-    let (saved, allow_local_fallback) =
-        if url.as_ref().is_some_and(|value| !value.trim().is_empty()) {
-            (None, true)
-        } else {
-            let db = state.db.lock().await;
-            let saved = Settings::get_sync_server_url(&db)?;
-            let allow_local_fallback = saved
-                .as_deref()
-                .map(|value| value.trim().is_empty())
-                .unwrap_or(true);
-            (saved, allow_local_fallback)
-        };
-    let resolved = resolve_sync_probe_url(url, saved, allow_local_fallback);
+    // H-6: Always resolve URL from stored settings — never accept a
+    // caller-supplied URL. A free-form URL parameter enables SSRF
+    // probes of internal networks.
+    let db = state.db.lock().await;
+    let saved = Settings::get_sync_server_url(&db)?;
+    let allow_local_fallback = saved
+        .as_deref()
+        .map(|value| value.trim().is_empty())
+        .unwrap_or(true);
+    drop(db);
+    let resolved = resolve_sync_probe_url(None, saved, allow_local_fallback);
     match resolved {
         Some(u) => Ok(sync_client::ping_server(&u).await),
         None => Ok(sync_client::PingResult {

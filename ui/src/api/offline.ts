@@ -289,11 +289,9 @@ export interface PingResult {
   latencyMs: number | null;
 }
 
-/** Test connectivity to the configured cloud server.
- *  Pass the in-progress URL from the text field so users can
- *  test before saving. Falls back to saved settings if empty. */
-export const testSyncConnection = (url?: string): Promise<PingResult> =>
-  loggedInvoke<PingResult>('test_sync_connection', { url: url || null });
+/** Test connectivity to the configured cloud server (H-6: URL always resolved from saved settings). */
+export const testSyncConnection = (): Promise<PingResult> =>
+  loggedInvoke<PingResult>('test_sync_connection');
 
 // ── Token Request ────────────────────────────────────────────────
 
@@ -305,8 +303,6 @@ export interface TokenResult {
   expiresAt: string | null;
 }
 
-/** Request a new JWT token from the cloud server's
- *  POST /api/v1/tokens endpoint. Pass the in-progress URL
- *  so users can request a token before saving. */
-export const requestSyncToken = (url?: string): Promise<TokenResult> =>
-  loggedInvoke<TokenResult>('request_sync_token', { url: url || null });
+/** Request a new JWT token from the cloud server (H-6: URL always resolved from saved settings). */
+export const requestSyncToken = (): Promise<TokenResult> =>
+  loggedInvoke<TokenResult>('request_sync_token');
