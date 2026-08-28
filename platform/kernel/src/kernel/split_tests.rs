@@ -75,13 +75,38 @@ fn has_dependencies_trait_is_reachable() {
 }
 
 /// `collect_dependencies` is reachable from inside the same crate and
-/// returns an empty vector for a module that does not implement the
-/// trait. This is a crate-internal sanity check, not a public API test.
+/// returns an empty vector for a module that declares no dependencies
+/// (the `Module::dependencies()` default). This is a crate-internal
+/// sanity check, not a public API test.
 #[test]
 fn collect_dependencies_is_reachable_and_defaults_empty() {
     let module = DummyModule { id: "sales" };
     let deps = collect_dependencies(&module);
     assert!(deps.is_empty());
+}
+
+/// A module that overrides `Module::dependencies()` has those ids read
+/// back by `collect_dependencies` — the wiring that lets the kernel
+/// topologically sort modules by their declared edges.
+#[test]
+fn collect_dependencies_reads_module_declarations() {
+    #[derive(Debug)]
+    struct DependentModule;
+
+    impl Module for DependentModule {
+        fn id(&self) -> &'static str {
+            "reporting"
+        }
+
+        fn dependencies(&self) -> &'static [&'static str] {
+            &["inventory", "sales"]
+        }
+    }
+
+    assert_eq!(
+        collect_dependencies(&DependentModule),
+        vec!["inventory", "sales"]
+    );
 }
 
 /// The `dependency` submodule is public, so the `HasDependencies` trait

@@ -1,41 +1,40 @@
 //! Module dependency declaration helpers.
+//!
+//! Dependencies are declared on the [`Module`] trait itself via
+//! `Module::dependencies()`, which mirrors the `dependencies` array in a
+//! module's `manifest.json`. [`collect_dependencies`] is the kernel-side
+//! accessor used by the topological sort in
+//! [`Kernel::resolve_dependencies`](crate::Kernel).
+//!
+//! [`HasDependencies`] predates that trait method and is retained as a
+//! standalone opt-in for non-`Module` types; new modules should implement
+//! `Module::dependencies()` instead.
 
 use foundation::contracts::Module;
 
-/// Trait for modules that declare dependencies on other modules.
+/// Trait for types that declare dependencies on other modules.
 ///
-/// Modules that depend on other modules should implement this trait
-/// and return the IDs of their dependencies. The kernel uses this
-/// to resolve the correct load/start/stop ordering.
+/// # Deprecated in favour of `Module::dependencies()`
 ///
-/// Modules that do NOT implement this trait are assumed to have zero
-/// dependencies.
+/// `Module` now carries a `dependencies()` method with a `&[]` default, so
+/// a module declares its own edges directly and the kernel reads them
+/// without downcasting. This trait remains for non-`Module` types that
+/// still want to express a dependency list.
 pub trait HasDependencies {
-    /// Module IDs that this module depends on.
+    /// Module IDs that this type depends on.
     fn dependencies(&self) -> Vec<&'static str>;
 }
 
 /// Collect the dependency IDs declared by a module.
 ///
-/// Modules declare dependencies through the [`HasDependencies`] trait.
-/// If the module does not implement that trait, it is assumed to
-/// have zero dependencies.
-///
-/// Note: in this phase, dependency declaration is not yet integrated
-/// into the [`Module`] trait itself. The `HasDependencies` trait is
-/// a separate opt-in mechanism. A future upgrade will add a
-/// `dependencies()` method to `Module` directly.
-pub(crate) fn collect_dependencies(_module: &dyn Module) -> Vec<&'static str> {
-    // Downcasting from `&dyn Module` to `&dyn HasDependencies` is not
-    // directly possible without `Any` bounds on `Module`. In the next
-    // phase, `Module` will gain a `dependencies()` method that returns
-    // a `Vec<&'static str>`, making this simpler.
-    //
-    // For now, all modules are assumed to have zero dependencies.
-    Vec::new()
+/// Reads `Module::dependencies()`, which defaults to an empty slice, so a
+/// module that declares nothing is treated as a graph leaf. The returned
+/// order matches the module's own declaration order; the caller
+/// (`resolve_dependencies`) validates that every id is registered.
+pub(crate) fn collect_dependencies(module: &dyn Module) -> Vec<&'static str> {
+    module.dependencies().to_vec()
 }
 
-// DEPRECATED: HasDependencies trait and module_dependencies function
-// will be added in Phase 2.2 when the Module trait gains a
-// dependencies() method. Until then, all modules are assumed to
-// have zero dependencies.
+#[cfg(test)]
+#[path = "dependency_tests.rs"]
+mod tests;
