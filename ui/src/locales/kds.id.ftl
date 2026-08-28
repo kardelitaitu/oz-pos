@@ -189,6 +189,11 @@ kds-advance-ready = Tandai Siap
 kds-advance-serve = Sajikan
 kds-toggle-card-aria = Buka/tutup detail pesanan { $number }
 
+# ── Topbar filter dropdown ──
+kds-filter-aria = Filter pesanan
+kds-filter-all = Semua pesanan
+kds-filter-prepared = Siap
+
 # ── Screen footer status bar ──
 kds-footer-aria = Status terminal
 kds-footer-last-sync = Sinkron terakhir: { $time }

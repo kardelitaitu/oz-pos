@@ -77,6 +77,11 @@ export default function KdsScreen() {
   const tabOpenRef = useRef<HTMLButtonElement>(null);
   const tabCompletedRef = useRef<HTMLButtonElement>(null);
   const [tabIndicator, setTabIndicator] = useState<{ left: number; width: number }>({ left: 3, width: 0 });
+  // Filter dropdown — view mode (All / Prepared) matching the prototype filter.
+  const [filterMode, setFilterMode] = useState<'all' | 'prepared'>('all');
+  const [showFilter, setShowFilter] = useState(false);
+  const filterBtnRef = useRef<HTMLButtonElement>(null);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
   // 3f: Product picker state — which order is being edited.
   const [pickerOrderId, setPickerOrderId] = useState<string | null>(null);
   // KDS device enrollment modal state.
@@ -407,6 +412,27 @@ export default function KdsScreen() {
     });
   }, [activeTab]);
 
+  // Filter dropdown: close on outside click.
+  useEffect(() => {
+    if (!showFilter) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node) &&
+        filterBtnRef.current && !filterBtnRef.current.contains(e.target as Node)
+      ) {
+        setShowFilter(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showFilter]);
+
+  // Filtered orders: All = all open orders; Prepared = only ready orders.
+  const filteredOrders = useMemo(() => {
+    if (filterMode === 'prepared') return orders.filter((o) => o.status === 'ready');
+    return orders;
+  }, [orders, filterMode]);
+
   // ── Initial loading skeleton ──────────────────────────────────
   const renderContent = () => {
     if (initialLoading) {
@@ -439,7 +465,7 @@ export default function KdsScreen() {
     return (
       <div {...pullRefreshProps}>
         <KdsLayoutMasonry
-          orders={orders}
+          orders={filteredOrders}
           onAdvance={advanceStatus}
           showOrderId={prefs.showOrderId}
           showTableNumber={prefs.showTableNumber}
@@ -477,6 +503,51 @@ export default function KdsScreen() {
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19l-7-7 7-7" /></svg>
           </button>
+          {/* Filter dropdown — All / Prepared view mode */}
+          <div className="kds-filter">
+            <button
+              ref={filterBtnRef}
+              className={`kds-btn kds-btn--filter${filterMode === 'all' ? ' all' : ''}${showFilter ? ' open' : ''}`}
+              onClick={() => setShowFilter((p) => !p)}
+              aria-haspopup="listbox"
+              aria-expanded={showFilter}
+              data-testid="kds-topbar-filter"
+            >
+              <span>{requiredLocalized(l10n, filterMode === 'prepared' ? 'kds-filter-prepared' : 'kds-filter-all')}</span>
+              <span className="caret" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 9h12l-6 7z" /></svg>
+              </span>
+            </button>
+            {showFilter && (
+              <div
+                ref={filterPanelRef}
+                className="kds-filter-panel"
+                role="listbox"
+                aria-label={requiredLocalized(l10n, 'kds-filter-aria')}
+              >
+                <div className="kds-filter-modes no-sep">
+                  <button
+                    className={`kds-filter-option${filterMode === 'all' ? ' checked' : ''}`}
+                    role="option"
+                    aria-selected={filterMode === 'all'}
+                    onClick={() => { setFilterMode('all'); setShowFilter(false); }}
+                    data-testid="kds-filter-mode-all"
+                  >
+                    <Localized id="kds-filter-all">All orders</Localized>
+                  </button>
+                  <button
+                    className={`kds-filter-option${filterMode === 'prepared' ? ' checked' : ''}`}
+                    role="option"
+                    aria-selected={filterMode === 'prepared'}
+                    onClick={() => { setFilterMode('prepared'); setShowFilter(false); }}
+                    data-testid="kds-filter-mode-prepared"
+                  >
+                    <Localized id="kds-filter-prepared">Prepared</Localized>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <h1 className="kds-title"><Localized id="kds-title">Kitchen Display</Localized></h1>
           <span className="kds-order-count"><Localized id="kds-order-count" vars={{ count: orders.length }}><span>{orders.length} orders</span></Localized></span>
         </div>

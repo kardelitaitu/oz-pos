@@ -849,4 +849,35 @@ describe('KdsScreen', () => {
     // The second tap must NOT re-merge the picked items onto the ticket.
     expect(mockUpdateKdsOrderItems).toHaveBeenCalledTimes(1);
   });
+
+  // ── Topbar filter dropdown (All / Prepared) ────────────────────
+
+  it('renders the filter button and filters to prepared (ready) orders', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, items_summary: 'Burger' }),
+      makeOrder({ id: 'o-2', status: 'ready', display_number: 102, items_summary: 'Fries' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger')).toBeDefined());
+    expect(screen.getByText('Fries')).toBeDefined();
+
+    // Open the filter dropdown and pick "Prepared".
+    await userEvent.click(screen.getByTestId('kds-topbar-filter'));
+    await userEvent.click(screen.getByTestId('kds-filter-mode-prepared'));
+
+    // Only the ready order remains visible.
+    await waitFor(() => {
+      expect(screen.queryByText('Burger')).toBeNull();
+      expect(screen.getByText('Fries')).toBeDefined();
+    });
+  });
+
+  it('filter button shows "All orders" label in the default state', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const filter = screen.getByTestId('kds-topbar-filter');
+      expect(filter.textContent).toMatch(/all/i);
+    });
+  });
 });

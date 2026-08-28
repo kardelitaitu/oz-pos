@@ -187,6 +187,11 @@ kds-advance-ready = Mark Ready
 kds-advance-serve = Serve
 kds-toggle-card-aria = Toggle order { $number } details
 
+# ── Topbar filter dropdown ──
+kds-filter-aria = Filter orders
+kds-filter-all = All orders
+kds-filter-prepared = Prepared
+
 # ── Screen footer status bar ──
 kds-footer-aria = Terminal status
 kds-footer-last-sync = Last sync: { $time }
