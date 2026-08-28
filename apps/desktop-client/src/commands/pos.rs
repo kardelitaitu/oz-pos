@@ -1740,6 +1740,31 @@ pub async fn delete_held_cart_scoped(
 
 // ── Tests ─────────────────────────────────────────────────────────────
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `get_cart_deduction_location` (ADR #7).
+#[tauri::command]
+pub async fn get_cart_deduction_location_scoped(
+    cart_id: CartId,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<DeductionLocationInfo>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let result = store.get_active_cart_deduction_location_info(&cart_id)?;
+    drop(db);
+    Ok(
+        result.map(|(loc_id, loc_name, overridden_at)| DeductionLocationInfo {
+            location_id: loc_id,
+            location_name: loc_name,
+            overridden_at,
+        }),
+    )
+}
+
 #[cfg(test)]
 #[path = "pos_tests.rs"]
 mod tests;

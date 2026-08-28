@@ -283,6 +283,70 @@ pub async fn delete_product_variant(
     Ok(())
 }
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `list_product_variants` (ADR #7).
+#[tauri::command]
+pub async fn list_product_variants_scoped(
+    parent_sku: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProductVariantDto>, AppError> {
+    validate_not_empty("parent_sku", &parent_sku).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let variants = store.list_product_variants(&parent_sku)?;
+    drop(db);
+
+    let dtos: Vec<ProductVariantDto> = variants.into_iter().map(ProductVariantDto::from).collect();
+    Ok(dtos)
+}
+
+/// Scoped variant of `get_product_variant` (ADR #7).
+#[tauri::command]
+pub async fn get_product_variant_scoped(
+    sku: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<ProductVariantDto>, AppError> {
+    validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let variant = store.get_product_variant(&sku)?;
+    drop(db);
+
+    Ok(variant.map(ProductVariantDto::from))
+}
+
+/// Scoped variant of `delete_product_variant` (ADR #7).
+#[tauri::command]
+pub async fn delete_product_variant_scoped(
+    sku: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("sku", &sku).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    store.delete_product_variant(&sku)?;
+    drop(db);
+
+    tracing::info!(sku, "product variant deleted");
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "product_variants_tests.rs"]
 mod tests;

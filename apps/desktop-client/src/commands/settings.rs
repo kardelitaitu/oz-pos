@@ -1201,6 +1201,39 @@ pub async fn set_settings_scoped(
     Ok(())
 }
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `get_credit_settings` (ADR #7).
+#[tauri::command]
+pub async fn get_credit_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<CreditSettingsDto, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(CreditSettingsDto {
+        enabled: Settings::is_credit_enabled(&conn)?,
+        reminder_interval_hours: Settings::get_credit_reminder_interval(&conn)?,
+        max_limit_minor: Settings::get_credit_max_limit(&conn)?,
+    })
+}
+
+/// Scoped variant of `get_setting` (ADR #7).
+#[tauri::command]
+pub async fn get_setting_scoped(
+    key: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_get_setting(&conn, &key)
+}
+
 #[cfg(test)]
 #[path = "settings_tests.rs"]
 mod tests;

@@ -174,6 +174,36 @@ pub async fn pick_logo_file(app_handle: tauri::AppHandle) -> Result<Option<Strin
     Ok(file.map(|f| f.to_string()))
 }
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `set_brand_primary_colour` (ADR #7).
+#[tauri::command]
+pub async fn set_brand_primary_colour_scoped(
+    colour: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Settings::set_brand_primary_colour(&conn, &colour)?)
+}
+
+/// Scoped variant of `set_brand_store_name` (ADR #7).
+#[tauri::command]
+pub async fn set_brand_store_name_scoped(
+    name: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let conn = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Settings::set_brand_store_name(&conn, &name)?)
+}
+
 #[cfg(test)]
 #[path = "branding_tests.rs"]
 mod tests;

@@ -130,6 +130,87 @@ pub async fn lookup_bundle_by_sku(
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
+// ── Scoped variants (ADR #7) ────────────────────────────────────
+
+/// Scoped variant of `list_bundles` (ADR #7).
+#[tauri::command]
+pub async fn list_bundles_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<BundleWithItems>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    Ok(store.list_bundles()?)
+}
+
+/// Scoped variant of `get_bundle` (ADR #7).
+#[tauri::command]
+pub async fn get_bundle_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<BundleWithItems>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    Ok(store.get_bundle(&id)?)
+}
+
+/// Scoped variant of `update_bundle` (ADR #7).
+#[tauri::command]
+pub async fn update_bundle_scoped(
+    bundle: BundleWithItems,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<BundleWithItems, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    let mut updated = bundle.bundle;
+    updated.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+    Ok(store.update_bundle(&updated, &bundle.items)?)
+}
+
+/// Scoped variant of `delete_bundle` (ADR #7).
+#[tauri::command]
+pub async fn delete_bundle_scoped(
+    id: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    store.delete_bundle(&id)?;
+    Ok(())
+}
+
+/// Scoped variant of `lookup_bundle_by_sku` (ADR #7).
+#[tauri::command]
+pub async fn lookup_bundle_by_sku_scoped(
+    sku: String,
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Option<BundleWithItems>, AppError> {
+    let (_session, _conn) = state.resolve_scope(&session_token)?;
+    let db = _conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    Ok(store.get_bundle_by_sku(&sku)?)
+}
+
 #[cfg(test)]
 #[path = "bundles_tests.rs"]
 mod tests;
