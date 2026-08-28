@@ -111,6 +111,7 @@ export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) =>
               onClick={() => toggleBucket(key)}
               aria-expanded={!collapsed}
               aria-label={requiredLocalized(l10n, `kds-completed-${key}`)}
+              data-testid={`kds-completed-col-${key}`}
             >
               <span>
                 <Localized id={`kds-completed-${key}`}>{key}</Localized>
@@ -154,6 +155,7 @@ export function KdsCompletedView({ onReopen }: { onReopen?: (orderId: string) =>
                         className="kds-status-btn reopen"
                         onClick={(e) => { e.stopPropagation(); onReopen?.(order.id); }}
                         aria-label={requiredLocalized(l10n, 'kds-completed-reopen-aria', { number: order.display_number ?? 0 })}
+                        data-testid={`kds-order-card-${order.display_number ?? order.id}-status-reopen`}
                       >
                         <Localized id="kds-completed-reopen">Reopen</Localized>
                       </button>

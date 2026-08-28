@@ -516,6 +516,7 @@ export default function KdsScreen() {
             aria-label={requiredLocalized(l10n, 'kds-shortcuts-aria')}
             aria-expanded={showShortcuts}
             aria-controls="kds-shortcuts-popover"
+            data-testid="kds-topbar-shortcuts"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
@@ -544,6 +545,7 @@ export default function KdsScreen() {
             className="kds-enroll-btn"
             onClick={() => setShowEnrollment(true)}
             aria-label={requiredLocalized(l10n, 'kds-enrollment-title')}
+            data-testid="kds-topbar-enroll"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
               <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
@@ -577,6 +579,7 @@ export default function KdsScreen() {
             aria-selected={!prefs.kdsZone}
             tabIndex={!prefs.kdsZone ? 0 : -1}
             ref={(el) => { zoneTabRefs.current[0] = el; }}
+            data-testid="kds-zone-chip-all"
           >
             <Localized id="kds-zone-all">All</Localized>
           </button>
@@ -589,6 +592,7 @@ export default function KdsScreen() {
               aria-selected={prefs.kdsZone === zone}
               tabIndex={prefs.kdsZone === zone ? 0 : -1}
               ref={(el) => { zoneTabRefs.current[i + 1] = el; }}
+              data-testid={`kds-zone-chip-${zone}`}
             >
               {zone}
             </button>
