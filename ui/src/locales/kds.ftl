@@ -166,3 +166,17 @@ kds-device-status-disconnected = Disconnected
 kds-device-status-stale = Stale
 kds-device-status-aria = KDS devices: { $connected } of { $total } connected
 kds-device-list-aria = KDS device list
+
+# ── Hamburger settings panel ──
+kds-settings-theme = Theme
+kds-settings-theme-toggle-aria = Toggle light or dark theme
+kds-layout-order-id-caption = Show order number on cards
+kds-layout-table-number-caption = Show table number on cards
+kds-settings-sound-caption = Chime when an order arrives
+kds-settings-auto-ack-caption = New orders appear without tapping Accept
+
+# ── Topbar tabs + back ──
+kds-back-aria = Back to workspaces
+kds-tablist-aria = View orders
+kds-tab-open = Open
+kds-tab-completed = Completed

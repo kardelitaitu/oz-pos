@@ -169,4 +169,18 @@ kds-device-status-stale = Usang
 kds-device-status-aria = Perangkat KDS: { $connected } dari { $total } terhubung
 kds-device-list-aria = Daftar perangkat KDS
 
+# ── Hamburger settings panel ──
+kds-settings-theme = Tema
+kds-settings-theme-toggle-aria = Alihkan tema terang atau gelap
+kds-layout-order-id-caption = Tampilkan nomor pesanan di kartu
+kds-layout-table-number-caption = Tampilkan nomor meja di kartu
+kds-settings-sound-caption = Dering saat pesanan masuk
+kds-settings-auto-ack-caption = Pesanan baru muncul tanpa mengetuk Terima
+
+# ── Topbar tabs + back ──
+kds-back-aria = Kembali ke ruang kerja
+kds-tablist-aria = Lihat pesanan
+kds-tab-open = Terbuka
+kds-tab-completed = Selesai
+
 # ── Kiosk (remaining) ──

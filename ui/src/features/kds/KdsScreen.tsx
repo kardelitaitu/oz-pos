@@ -5,17 +5,16 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useKdsOffline } from '@/hooks/useKdsOffline';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
 import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, updateKdsLineItemStatusScoped, getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem, type CreateKdsLineItemInput } from '@/api/kds';
-import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
+import { useKdsPreferences } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { isEditableTarget } from '@/utils/isEditableTarget';
 import { isAnyAriaModalOpen } from '@/utils/modal-guard';
-import { KdsLayoutKanban } from '@/features/kds/KdsLayoutKanban';
-import { KdsLayoutFocus } from '@/features/kds/KdsLayoutFocus';
-import { KdsLayoutMetro } from '@/features/kds/KdsLayoutMetro';
-import { KdsLayoutSwitcher } from '@/features/kds/KdsLayoutSwitcher';
-import { KdsSettingsPanel, type KdsSettings, DEFAULT_SETTINGS } from '@/features/kds/KdsSettingsPanel';
+import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
+import { KdsLayoutMasonry } from '@/features/kds/KdsLayoutMasonry';
+import { KdsHamburgerPanel } from '@/features/kds/KdsHamburgerPanel';
+import { type KdsSettings, DEFAULT_SETTINGS } from '@/features/kds/KdsSettingsPanel';
 import { KdsHistoryPanel } from '@/features/kds/KdsHistoryPanel';
 import { KdsProductPickerModal } from '@/features/kds/components/KdsProductPickerModal';
 import type { ProductPickerResult } from '@/features/kds/components/KdsProductPickerModal';
@@ -45,12 +44,6 @@ export interface KdsLayoutProps {
   newOrderIds: ReadonlySet<string>;
 }
 
-const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
-  kanban: KdsLayoutKanban,
-  focus: KdsLayoutFocus,
-  metro: KdsLayoutMetro,
-};
-
 /** Keyboard shortcut descriptions for the help popover. */
 const SHORTCUTS: { key: string; id: string }[] = [
   { key: '1-9', id: 'kds-shortcut-select' },
@@ -59,23 +52,30 @@ const SHORTCUTS: { key: string; id: string }[] = [
   { key: 'Esc', id: 'kds-shortcut-deselect' },
 ];
 
-/** KDS (Kitchen Display System) screen — real-time order queue with switchable layouts and per-user preferences. */
+/** KDS (Kitchen Display System) screen — real-time order queue in a single masonry view, with Open/Completed tabs and per-user preferences. */
 export default function KdsScreen() {
   const workspaceScope = useWorkspaceScope();
   const { l10n } = useLocalization();
+  const { goToWorkspacePicker } = useWorkspaceNav();
   const { sessionToken: rawToken, terminalId } = useWorkspace();
   const sessionToken = rawToken || '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
-  const [showHistory, setShowHistory] = useState(false);
+  /** Open vs Completed view — the prototype's primary tab navigation. */
+  const [activeTab, setActiveTab] = useState<'open' | 'completed'>('open');
   const [initialLoading, setInitialLoading] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
   const shortcutsRef = useRef<HTMLDivElement>(null);
   // KEY-07: ARIA tabs pattern — zone chips get roving tabindex + arrow keys.
   const zoneTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  // Open/Completed tab indicator: measured from the track + active tab.
+  const tabsTrackRef = useRef<HTMLDivElement>(null);
+  const tabOpenRef = useRef<HTMLButtonElement>(null);
+  const tabCompletedRef = useRef<HTMLButtonElement>(null);
+  const [tabIndicator, setTabIndicator] = useState<{ left: number; width: number }>({ left: 3, width: 0 });
   // 3f: Product picker state — which order is being edited.
   const [pickerOrderId, setPickerOrderId] = useState<string | null>(null);
   // KDS device enrollment modal state.
@@ -88,7 +88,7 @@ export default function KdsScreen() {
   // render timing between two rapid taps.
   const pickerSavingRef = useRef(false);
   const [pickerSaving, setPickerSaving] = useState(false);
-  const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
+  const { prefs, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
 
   // Track previous order IDs for new-ticket arrival animation.
   const prevOrderIdsRef = useRef(new Set<string>());
@@ -394,7 +394,17 @@ export default function KdsScreen() {
     setKdsZone(next === 0 ? '' : (zones[next - 1] ?? ''));
   }, [zones, setKdsZone]);
 
-  const LayoutComponent = LAYOUT_MAP[prefs.layout];
+  // Open/Completed tab indicator: measure the active tab button inside
+  // the track and slide the blue pill to it (prototype .kds-tab-indicator).
+  useEffect(() => {
+    const track = tabsTrackRef.current;
+    const tab = activeTab === 'open' ? tabOpenRef.current : tabCompletedRef.current;
+    if (!track || !tab) return;
+    setTabIndicator({
+      left: tab.offsetLeft - track.offsetLeft,
+      width: tab.offsetWidth,
+    });
+  }, [activeTab]);
 
   // ── Initial loading skeleton ──────────────────────────────────
   const renderContent = () => {
@@ -421,13 +431,13 @@ export default function KdsScreen() {
         );
     }
 
-    if (showHistory) {
+    if (activeTab === 'completed') {
       return <KdsHistoryPanel />;
     }
 
     return (
       <div {...pullRefreshProps}>
-        <LayoutComponent
+        <KdsLayoutMasonry
           orders={orders}
           onAdvance={advanceStatus}
           showOrderId={prefs.showOrderId}
@@ -458,46 +468,46 @@ export default function KdsScreen() {
     <div ref={kdsRef} className="kds" tabIndex={-1} role="region" aria-label={requiredLocalized(l10n, 'kds-screen-aria')}>
       <div className="kds-header">
         <div className="kds-header-left">
+          <button
+            className="kds-back-btn"
+            onClick={goToWorkspacePicker}
+            aria-label={requiredLocalized(l10n, 'kds-back-aria')}
+            data-testid="kds-topbar-back"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19l-7-7 7-7" /></svg>
+          </button>
           <h1 className="kds-title"><Localized id="kds-title">Kitchen Display</Localized></h1>
           <span className="kds-order-count"><Localized id="kds-order-count" vars={{ count: orders.length }}><span>{orders.length} orders</span></Localized></span>
         </div>
-        <div className="kds-header-center">
-          {zones.length > 0 && (
-            <div
-              className="kds-zone-chips"
-              role="tablist"
-              aria-label={requiredLocalized(l10n, 'kds-zone-filter-aria')}
-              onKeyDown={handleZoneTablistKeyDown}
-              tabIndex={0}
-            >
-              <button
-                className={`kds-zone-chip${!prefs.kdsZone ? ' kds-zone-chip--active' : ''}`}
-                onClick={() => setKdsZone('')}
-                role="tab"
-                aria-selected={!prefs.kdsZone}
-                tabIndex={!prefs.kdsZone ? 0 : -1}
-                ref={(el) => { zoneTabRefs.current[0] = el; }}
-              >
-                <Localized id="kds-zone-all">All</Localized>
-              </button>
-              {zones.map((zone, i) => (
-                <button
-                  key={zone}
-                  className={`kds-zone-chip${prefs.kdsZone === zone ? ' kds-zone-chip--active' : ''}`}
-                  onClick={() => setKdsZone(zone)}
-                  role="tab"
-                  aria-selected={prefs.kdsZone === zone}
-                  tabIndex={prefs.kdsZone === zone ? 0 : -1}
-                  ref={(el) => { zoneTabRefs.current[i + 1] = el; }}
-                >
-                  {zone}
-                </button>
-              ))}
-            </div>
-          )}
+
+        {/* Open/Completed tabs — prototype .kds-tabs */}
+        <div className="kds-tabs" ref={tabsTrackRef} role="tablist" aria-label={requiredLocalized(l10n, 'kds-tablist-aria')}>
+          <span className="kds-tab-indicator" style={{ left: tabIndicator.left, width: tabIndicator.width }} />
+          <button
+            ref={tabOpenRef}
+            className={`kds-tab${activeTab === 'open' ? ' active' : ''}`}
+            onClick={() => setActiveTab('open')}
+            role="tab"
+            aria-selected={activeTab === 'open'}
+            data-testid="kds-tab-open"
+          >
+            <Localized id="kds-tab-open"><span>Open</span></Localized>
+            <span className="kds-tab-count">{orders.length}</span>
+          </button>
+          <button
+            ref={tabCompletedRef}
+            className={`kds-tab${activeTab === 'completed' ? ' active' : ''}`}
+            onClick={() => setActiveTab('completed')}
+            role="tab"
+            aria-selected={activeTab === 'completed'}
+            data-testid="kds-tab-completed"
+          >
+            <Localized id="kds-tab-completed"><span>Completed</span></Localized>
+          </button>
         </div>
+
         <div className="kds-header-right">
-          {/* Shortcut help button — always visible */}
+          {/* Shortcut help button */}
           <button
             ref={shortcutsBtnRef}
             className="kds-shortcuts-btn"
@@ -526,19 +536,7 @@ export default function KdsScreen() {
               ))}
             </div>
           )}
-          {/* History toggle — always visible when not loading */}
-          <button
-            className={`kds-history-toggle${showHistory ? ' kds-history-toggle--active' : ''}`}
-            onClick={() => setShowHistory((p) => !p)}
-            aria-label={requiredLocalized(l10n, 'kds-history-toggle-aria')}
-            aria-pressed={showHistory}
-            title={requiredLocalized(l10n, 'kds-history-toggle-title')}
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-            </svg>
-          </button>
-          {/* Device status indicator — shows connected device count */}
+          {/* Device status indicator */}
           <KdsDeviceStatusIndicator sessionToken={sessionToken} />
           {/* Enroll new KDS device button */}
           <button
@@ -550,27 +548,52 @@ export default function KdsScreen() {
               <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
             </svg>
           </button>
-          {/* Settings + layout — only when prefs loaded */}
-          {!prefsLoading && (<>
-            <KdsSettingsPanel
+          {/* Hamburger settings panel — only when prefs loaded */}
+          {!prefsLoading && (
+            <KdsHamburgerPanel
               settings={{ ...settings, autoAcknowledge: prefs.autoAcknowledge }}
               onChangeSound={(v) => setSettings((s) => ({ ...s, soundEnabled: v }))}
               onChangeYellowThreshold={(v) => setSettings((s) => ({ ...s, yellowThresholdMin: v }))}
               onChangeRedThreshold={(v) => setSettings((s) => ({ ...s, redThresholdMin: v }))}
               onChangeAutoAcknowledge={(v) => setAutoAcknowledge(v)}
               onChangeDensity={(v) => setSettings((s) => ({ ...s, density: v }))}
-            />
-            <KdsLayoutSwitcher
-              currentLayout={prefs.layout}
               showOrderId={prefs.showOrderId}
               showTableNumber={prefs.showTableNumber}
-              onSelectLayout={setLayout}
               onToggleOrderId={setShowOrderId}
               onToggleTableNumber={setShowTableNumber}
             />
-          </>)}
+          )}
         </div>
       </div>
+
+      {/* ── Zone chips — secondary filter row below the header ────── */}
+      {zones.length > 0 && (
+        <div className="kds-zone-chips" role="tablist" aria-label={requiredLocalized(l10n, 'kds-zone-filter-aria')} onKeyDown={handleZoneTablistKeyDown} tabIndex={0}>
+          <button
+            className={`kds-zone-chip${!prefs.kdsZone ? ' kds-zone-chip--active' : ''}`}
+            onClick={() => setKdsZone('')}
+            role="tab"
+            aria-selected={!prefs.kdsZone}
+            tabIndex={!prefs.kdsZone ? 0 : -1}
+            ref={(el) => { zoneTabRefs.current[0] = el; }}
+          >
+            <Localized id="kds-zone-all">All</Localized>
+          </button>
+          {zones.map((zone, i) => (
+            <button
+              key={zone}
+              className={`kds-zone-chip${prefs.kdsZone === zone ? ' kds-zone-chip--active' : ''}`}
+              onClick={() => setKdsZone(zone)}
+              role="tab"
+              aria-selected={prefs.kdsZone === zone}
+              tabIndex={prefs.kdsZone === zone ? 0 : -1}
+              ref={(el) => { zoneTabRefs.current[i + 1] = el; }}
+            >
+              {zone}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Error banner (dismissible + retry) ──────────────────── */}
       {error && (

@@ -164,12 +164,11 @@ describe('KdsScreen', () => {
     await waitFor(() => expect(screen.getByText('Kitchen Display')).toBeDefined());
   });
 
-  it('shows three columns: Pending, Preparing, Ready', async () => {
+  it('renders the masonry order view (single layout)', async () => {
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('Pending')).toBeDefined();
-      expect(screen.getByText('Preparing')).toBeDefined();
-      expect(screen.getByText('Ready')).toBeDefined();
+      // The prototype single view: cards flow into columns (.kds-main).
+      expect(document.querySelector('.kds-main')).not.toBeNull();
     });
   });
 
@@ -183,12 +182,11 @@ describe('KdsScreen', () => {
     expect(countEl?.textContent).toMatch(/2/);
   });
 
-  it('shows empty state in each column when no orders', async () => {
+  it('shows an empty state when no orders', async () => {
     renderScreen();
     await waitFor(() => {
-      const empties = screen.getAllByText('No orders yet');
-      // Three columns, each with an empty message
-      expect(empties.length).toBe(3);
+      // Single masonry view → one empty state (not one per status column).
+      expect(screen.getAllByText('No orders yet').length).toBe(1);
     });
   });
 
@@ -279,17 +277,17 @@ describe('KdsScreen', () => {
     expect(timeCell?.textContent).toMatch(/m/);
   });
 
-  it('shows column counts', async () => {
+  it('shows the Open tab count', async () => {
     mockGetKdsQueue.mockResolvedValue([
       makeOrder({ id: 'o-1', status: 'pending' }),
       makeOrder({ id: 'o-2', status: 'pending' }),
     ]);
     renderScreen();
     await waitFor(() => {
-      const counts = document.querySelectorAll('.kds-column-count');
-      expect(counts.length).toBe(3);
-      // Pending column should show count of 2
-      expect(counts[0]?.textContent).toBe('2');
+      // The Open tab shows the order count (prototype .kds-tab-count).
+      const tabCount = document.querySelector('.kds-tab-count');
+      expect(tabCount).not.toBeNull();
+      expect(tabCount?.textContent).toBe('2');
     });
   });
 
@@ -300,7 +298,7 @@ describe('KdsScreen', () => {
     );
   });
 
-  it('does not render cancelled orders in any column', async () => {
+  it('does not render cancelled orders in the masonry view', async () => {
     mockGetKdsQueue.mockResolvedValue([
       makeOrder({ id: 'o-1', status: 'cancelled', display_number: 999, items_summary: 'Cancel Item' }),
     ]);
@@ -309,7 +307,7 @@ describe('KdsScreen', () => {
       // Cancelled tickets are terminal history — the board is truly empty
       // (never surfaces on the kitchen board, history panel only).
       const empties = screen.getAllByText('No orders yet');
-      expect(empties.length).toBe(3);
+      expect(empties.length).toBe(1);
     });
     // Cancelled order should not be visible
     expect(screen.queryByText('#999')).toBeNull();
@@ -411,9 +409,9 @@ describe('KdsScreen', () => {
     ]);
     renderScreen();
     await waitFor(() => {
-      // The Mall order should be filtered out — all columns show empty state
+      // The Mall order should be filtered out — the masonry view is empty
       const empties = screen.getAllByText('No orders yet');
-      expect(empties.length).toBe(3);
+      expect(empties.length).toBe(1);
     });
     expect(screen.queryByText('Mall Order')).toBeNull();
   });
@@ -707,28 +705,29 @@ describe('KdsScreen', () => {
     expect(true).toBe(true);
   });
 
-  // ── 2b: History view tests ─────────────────────────────────────
+  // ── 2b: Open / Completed tab navigation ───────────────────────
 
-  it('renders history toggle button', async () => {
+  it('renders the Open/Completed tab bar', async () => {
     mockGetKdsQueue.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      const toggle = document.querySelector('.kds-history-toggle');
-      expect(toggle).not.toBeNull();
+      const tabs = document.querySelector('.kds-tabs');
+      expect(tabs).not.toBeNull();
+      expect(document.querySelector('.kds-tab')).not.toBeNull();
     });
   });
 
-  it('shows history panel when toggle is clicked', async () => {
+  it('shows history panel when the Completed tab is clicked', async () => {
     mockGetKdsQueue.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      const toggle = document.querySelector('.kds-history-toggle');
-      expect(toggle).not.toBeNull();
+      const tab = document.querySelector('[data-testid="kds-tab-completed"]');
+      expect(tab).not.toBeNull();
     });
 
-    // Click the history toggle
-    const toggle = document.querySelector('.kds-history-toggle') as HTMLButtonElement;
-    await userEvent.click(toggle);
+    // Click the Completed tab
+    const tab = document.querySelector('[data-testid="kds-tab-completed"]') as HTMLButtonElement;
+    await userEvent.click(tab);
 
     // History panel should render
     await waitFor(() => {
