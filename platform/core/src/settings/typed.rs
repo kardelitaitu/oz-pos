@@ -616,4 +616,19 @@ impl Settings {
     ) -> Result<(), PlatformError> {
         Self::set(conn, keys::CURRENCY_THOUSANDS_SEPARATOR, sep)
     }
+
+    // ── LAN Server PSK (secret — encrypted at rest) ─────────────
+
+    /// Get the LAN server pre-shared key (transparently decrypted).
+    pub fn get_lan_server_psk(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        let raw = Self::get(conn, keys::LAN_SERVER_PSK)?;
+        Ok(raw.map(|v| oz_crypto::decrypt_lan_psk(&v).unwrap_or(v)))
+    }
+
+    /// Set the LAN server pre-shared key (transparently encrypted at rest).
+    pub fn set_lan_server_psk(conn: &Connection, psk: &str) -> Result<(), PlatformError> {
+        let encrypted =
+            oz_crypto::encrypt_lan_psk(psk).map_err(|e| PlatformError::Internal(e.to_string()))?;
+        Self::set(conn, keys::LAN_SERVER_PSK, &encrypted)
+    }
 }
