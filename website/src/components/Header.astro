@@ -37,6 +37,10 @@ const login = getRelativeLocaleUrl(locale, 'login');
       <LocaleSwitcher />
       <a
         href={login}
+        data-auth-nav
+        data-locale={locale}
+        data-login-text={t(locale, 'nav.login')}
+        data-account-text={t(locale, 'nav.account')}
         class="hidden rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover sm:inline-block"
       >
         {t(locale, 'nav.login')}
@@ -67,6 +71,10 @@ const login = getRelativeLocaleUrl(locale, 'login');
           }
           <a
             href={login}
+            data-auth-nav
+            data-locale={locale}
+            data-login-text={t(locale, 'nav.login')}
+            data-account-text={t(locale, 'nav.account')}
             class="mt-1 block rounded-md bg-primary px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-primary-hover"
           >
             {t(locale, 'nav.login')}
@@ -78,6 +86,27 @@ const login = getRelativeLocaleUrl(locale, 'login');
 </header>
 
 <script>
+  function updateAuthNav() {
+    const isAuth = Boolean(sessionStorage.getItem('oz_session'));
+    const loginLinks = document.querySelectorAll<HTMLAnchorElement>('[data-auth-nav]');
+    loginLinks.forEach((link) => {
+      const loc = link.getAttribute('data-locale') || 'en';
+      if (isAuth) {
+        link.href = `/${loc}/account`;
+        link.textContent = link.getAttribute('data-account-text') || 'Account';
+      } else {
+        link.href = `/${loc}/login`;
+        link.textContent = link.getAttribute('data-login-text') || 'Sign in';
+      }
+    });
+  }
+
+  // Update on initial load, after SPA page swap, and on storage change
+  updateAuthNav();
+  document.addEventListener('astro:page-load', updateAuthNav);
+  document.addEventListener('astro:after-swap', updateAuthNav);
+  window.addEventListener('storage', updateAuthNav);
+
   document.addEventListener('click', (e) => {
     const link = (e.target as HTMLElement)?.closest('details.group a');
     if (link) {
