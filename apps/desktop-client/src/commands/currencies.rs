@@ -142,6 +142,17 @@ pub async fn set_default_currency_scoped(
     Ok(())
 }
 
+/// Session-scoped variant of [`currency_info`].
+#[tauri::command]
+pub async fn currency_info_scoped(
+    session_token: String,
+    code: String,
+    state: State<'_, AppState>,
+) -> Result<CurrencyInfo, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    currency_info(code).await
+}
+
 #[cfg(test)]
 #[path = "currencies_tests.rs"]
 mod tests;

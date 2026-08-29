@@ -82,6 +82,36 @@ pub async fn get_local_ip() -> Result<String, AppError> {
     Ok("127.0.0.1".into())
 }
 
+/// Session-scoped variant of [`ping`].
+#[tauri::command]
+pub async fn ping_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    ping().await
+}
+
+/// Session-scoped variant of [`get_device_id`].
+#[tauri::command]
+pub async fn get_device_id_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    get_device_id().await
+}
+
+/// Session-scoped variant of [`get_local_ip`].
+#[tauri::command]
+pub async fn get_local_ip_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    get_local_ip().await
+}
+
 #[cfg(test)]
 #[path = "health_tests.rs"]
 mod tests;
