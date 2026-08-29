@@ -616,3 +616,7 @@ pub async fn refresh_picker_ticket(
 #[cfg(test)]
 #[path = "auth_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "security_scoped_integration_tests.rs"]
+mod security_integration_tests;
