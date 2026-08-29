@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: PLANNED stub — construction validates config only, all ops fail closed with Unsupported
+next: none until serial/USB protocol handler | perf: N/A
+*/
 //! Wired EDC payment terminal driver — STUB (PLANNED).
 //!
 //! A card-present payment terminal connected over a serial (RS-232) or

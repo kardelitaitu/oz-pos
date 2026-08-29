@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: capture_method manual correctly maps authorize/capture model; PAY-2 no Idempotency-Key header sent; PAY-3 refund(_amount) ignores partial amount (always full refund); PAY-4 classifier sends most card_error declines to InvalidCard (message.contains("card") heuristic; "card_error => Declined" arm nearly unreachable); no confirm step — card-not-present intents stay requires_payment_method unless confirmed elsewhere
+next: Idempotency-Key header, partial refund, fix decline classification | perf: N/A
+*/
 //! Stripe payment processor — implements [`PaymentProcessor`] using the
 //! Stripe REST API directly via `reqwest`.
 //!

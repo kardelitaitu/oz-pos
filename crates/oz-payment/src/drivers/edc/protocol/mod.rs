@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: ProtocolCodec trait isolates wire format from transport — sound seam; stub_error helper keeps stub messages consistent
+next: none | perf: N/A
+*/
 //! EDC terminal protocol codec — PLANNED (stubs).
 //!
 //! Real EDC terminals (Ingenico, Verifone, PAX) do not speak REST. They

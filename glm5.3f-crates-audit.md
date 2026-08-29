@@ -32,7 +32,7 @@
 |---|---|---:|---|---|---|
 | 1 | crates/oz-crypto | 339 | ✅ DONE | 1 / 2 / 3 / 1 | `082e7f0f` |
 | 2 | crates/oz-security | 2,068 | ✅ DONE | 0 / 2 / 4 / 3 | (this commit) |
-| 3 | crates/oz-payment | 6,251 | ⬜ pending | — | — |
+| 3 | crates/oz-payment | 6,251 | ✅ DONE | 1 / 4 / 5 / 3 | (this commit) |
 | 4 | crates/oz-core (sliced by subsystem) | 80,216 | ⬜ pending | — | — |
 | 5 | crates/oz-api | 7,479 | ⬜ pending | — | — |
 | 6 | foundation | 6,326 | ⬜ pending | — | — |
@@ -207,6 +207,63 @@ backends + documented in-memory dev fallback; PCI-DSS masking helpers
    compare) → 3. SEC-5 (insecure flag guard) → 4. SEC-2 + SEC-9 (Linux
    platform pass, needs a Linux host) → 5. SEC-4 / SEC-6 / SEC-7 (design
    hygiene, can ride along with the CRY-5 zeroize work).
+
+---
+
+## 3. crates/oz-payment — ✅ audited 2026-07-25
+
+**Files:** 20 production (core 6, drivers 6, EDC 8) + 15 sibling test files + 7
+integration binaries + 9 recorded JSON fixtures · **Stamps:** all 20 production
+files stamped (replacing the 19-07-26 block in lib.rs) · **Status:** SAFE (zero
+unsafe)
+
+### Baseline evidence
+
+- `cargo check -p oz-payment` — **clean, 0 warnings**.
+- `cargo test -p oz-payment` — **136 unit + 91 integration + 5 doc-tests pass**
+  (re-verified after stamping). The integration rig is wiremock-based and
+  asserts exact request bodies per gateway, plus recorded success/decline/
+  timeout fixtures and full Stripe lifecycle tests.
+- `#![deny(unsafe_code)]`; zero unsafe anywhere.
+- Money handled as `foundation::Money` (i64 minor units) throughout; unknown
+  gateway currency codes are hard errors (PA-02) in Stripe/Square.
+- All PLANNED stubs (Paddle, EDC terminals, codecs, webhook verifiers,
+  registry `build_from_config`) **fail closed** with `Unsupported`.
+
+### Findings & proposed solutions
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| PAY-1 | 🔴 HIGH | qris.rs:255–257 (+ 420, 444, 532, 593) | **Midtrans amounts silently zero.** Midtrans `gross_amount` is documented as `"14500.00"`-style decimal strings; `parse_amount` does `s.parse::<i64>().unwrap_or(0)` → **`amount_charged = IDR 0`** on every real decimal-formatted response (authorize, capture, receipt; refund parses `refund_amount` the same way). Financial records/receipts carry 0. | Parse the decimal string properly (integer + fraction, round to minor units); return `PaymentError::InvalidResponse` on unparseable amounts instead of `0`. Add a unit test with `"14500.00"` (current `qris_parse_amount` only tests plain integers). |
+| PAY-2 | 🟠 MEDIUM | qris.rs:241–247, square.rs:321/376, stripe.rs (no header) | **`PaymentRequest.idempotency_key` ignored by all three live drivers.** QRIS generates a fresh `order_id` per call (order_id *is* Midtrans's idempotency mechanism → a network retry creates a second charge); Square generates a fresh `Uuid::now_v7()` per request (defeats its idempotency protection); Stripe sends no `Idempotency-Key` header. Trait doc promises: "If `None`, the processor will generate a fallback key" — the `Some` path is unimplemented everywhere. | Honor `request.idempotency_key`: Midtrans → order_id derived from it; Square → `idempotency_key` field; Stripe → `Idempotency-Key` header. Add retry-does-not-duplicate tests. |
+| PAY-3 | 🟠 MEDIUM | stripe.rs:381–387, qris.rs:493–502, square.rs:373 | **Refund amount contract violated in all three drivers.** Stripe and QRIS ignore `_amount` and always full-refund (merchant asks partial 50k of 500k → customer gets 500k back). Square does `amount.unwrap_or(Money::zero(USD))` — `None` (trait: "full amount") sends a zero-amount refund with a hardcoded USD currency, which Square rejects (amount_money required). | Stripe: pass `("amount", n)` when `Some`. QRIS: pass `"amount"` in refund body when `Some`. Square: fetch the payment to resolve the total when `None`; error on currency mismatch. |
+| PAY-4 | 🟠 MEDIUM | stripe.rs:262–274 | **Decline misclassification.** The first match arm sends any `card_error` whose message contains "card" (nearly all — "Your card was declined.") to `InvalidCard`; the `"card_error" => Declined` arm is effectively unreachable. UI/analytics would report "invalid card" for plain declines; inconsistent with Square (`CARD_DECLINED` → `Declined`). | Match `code == Some("card_declined")` (and fraud/processing codes) → `Declined` **before** the heuristic; drop the `message.contains("card")` catch-all. |
+| PAY-5 | 🟠 MEDIUM | square.rs:318–347 | **Square auto-capture vs trait lifecycle.** Square `CreatePayment` defaults `auto_capture=true`, so `authorize()` already captures; the default `sale()` (authorize → `/payments/{id}/complete`) then fails against the real API. Tests pass only because wiremock replays canned responses. | Send explicit `auto_capture: false` (Square: `autocomplete` field) in `CreatePaymentRequest`, or override `sale()` and document the one-step semantics. Verify against a real sandbox at go-live. |
+| PAY-6 | 🟡 LOW | qris.rs:458–490, 366–407 | **Stringly-typed QR protocol + timing gap.** `sale()` returns `SCAN_QR\|order_id\|url` inside `message` for the UI to parse; `success=true` means "QR issued", not paid. Poll window is 30×2 s = 60 s while the QR is valid 300 s → `Timeout` while the customer may still complete payment (reconciliation needed). | Add a structured QR field to `PaymentResult` (or a dedicated result type); align poll window with `QRIS_EXPIRY_SECS` and document the settle-later path. |
+| PAY-7 | 🟡 LOW | qris.rs:612–616 | `Default for QrisPaymentProcessor` constructs with an **empty server key** → every request 401s at runtime. | Remove the impl or document it as test-only; consider `new()` validating non-empty key. |
+| PAY-8 | 🟡 LOW | qris.rs:386–388 | QRIS `expire` status maps to `PaymentError::InvalidCard` — an expired QR is not an invalid card; taxonomy noise for callers. | Map to `Declined("QR expired")` or a dedicated variant. |
+| PAY-9 | 🟡 LOW | square.rs:45, stripe/qris headers | Gateway secrets live in heap `String`s / client headers indefinitely (Debug masking is correct and tested). | Fold into the CRY-5 / SEC-6 zeroize pass. |
+| PAY-10 | ℹ️ INFO | mock.rs:107, 117 | `// SAFETY:` comments annotate **safe** `.lock().unwrap()` calls — SAFETY is the convention for `unsafe` blocks; pollutes unsafe-code grep hygiene. | Reword as plain comments. |
+| PAY-11 | ℹ️ INFO | edc/mod.rs:114–129 | `edc::PaymentResult` shadows `crate::types::PaymentResult` with a different shape (adds `card_scheme`/`card_last4`). Deliberate but confusing. | Rename to `EdcPaymentResult` when the EDC work resumes. |
+| PAY-12 | ℹ️ INFO | registry.rs:55–63 | `build_from_config` still returns `Unsupported` — drivers are constructed directly by callers, so "switching gateways is a config change" is not yet true. | Implement during registry wiring (platform/startup or oz-core pass). |
+
+### Positives worth keeping
+
+- Zero unsafe; `#![deny(unsafe_code)]`.
+- Exceptional test rig: per-gateway wiremock suites asserting exact request
+  bodies, recorded fixtures (success/decline/timeout), full Stripe lifecycle,
+  and masking tests pinning that Debug never leaks keys.
+- Every stub fails closed (`Unsupported`), including the webhook guard — a
+  missing verifier can never silently accept a webhook.
+- `auth_value.set_sensitive(true)` on all auth headers; `no_proxy()` deliberate.
+- Currency hard-error (PA-02) instead of silent USD fallback in Stripe/Square.
+
+### Recommended fix order (when the user green-lights implementation)
+
+1. PAY-1 (amount parsing — data integrity, small diff + test) → 2. PAY-2
+   (idempotency across all three drivers) → 3. PAY-3 (partial refunds) →
+   4. PAY-4 + PAY-8 (error taxonomy) → 5. PAY-5 (Square lifecycle, needs
+   sandbox verification) → 6. PAY-6/7/9/10/11 hygiene batch.
 
 ---
 

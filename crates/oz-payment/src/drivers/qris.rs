@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: PAY-1 HIGH parse_amount unwrap_or(0) zeroes Midtrans "14500.00"-format amounts (authorize/capture/refund/receipt); PAY-2 fresh order_id per call defeats Midtrans idempotency on retry; PAY-3 refund ignores partial amount; PAY-6 sale() returns SCAN_QR protocol string in message, success = QR-issued not settled (60s poll vs 300s QR validity); PAY-7 Default constructs empty-key processor; PAY-8 expire mapped to InvalidCard
+next: fix amount parsing (PAY-1), honor idempotency (PAY-2), partial refund (PAY-3) | perf: poll loop sleeps between attempts, early-exits on settled status
+*/
 //! QRIS payment processor — implements [`PaymentProcessor`] using the
 //! Midtrans REST API for Indonesian QRIS (Quick Response Code Indonesian
 //! Standard) payments.

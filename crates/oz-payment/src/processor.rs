@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: async_trait Send+Sync; default sale() composes authorize->capture correctly (returns declined result, propagates infra errors); lifecycle doc sound
+next: none | perf: N/A
+*/
 //! [`PaymentProcessor`] trait — the interface every payment gateway
 //! (Stripe, Square, EMV terminal) implements.
 //!

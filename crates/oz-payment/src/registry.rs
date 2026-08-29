@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: RwLock catalogue sound; build_from_config PLANNED stub fails closed (PAY-12); "config change not code change" promise not yet real — drivers constructed directly by callers
+next: implement build_from_config when registry wiring lands | perf: N/A
+*/
 //! Payment processor registry — PLANNED (stub).
 //!
 //! The runtime catalogue of available payment processors, mirroring

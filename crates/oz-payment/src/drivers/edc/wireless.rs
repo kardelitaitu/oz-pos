@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: PLANNED stub — construction records target only, all ops fail closed with Unsupported
+next: none until BT/WiFi protocol handler | perf: N/A
+*/
 //! Wireless EDC payment terminal driver — STUB (PLANNED).
 //!
 //! A card-present payment terminal connected over Bluetooth (SPP/LE) or

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: one-shot decline/timeout via Mutex sound; PAY-10: two "// SAFETY:" comments annotate safe lock unwraps — mislabeled, hurts unsafe-code grep hygiene
+next: reword PAY-10 comments | perf: atomics + short mutex scopes
+*/
 //! Programmable mock for the [`PaymentProcessor`] trait.
 //!
 //! Use in unit tests to simulate approvals, declines, and network

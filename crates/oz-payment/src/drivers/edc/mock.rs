@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: programmable mock fails closed until set_success — good default; SeqCst counters fine for test double
+next: none | perf: N/A
+*/
 //! Mock EDC terminal for testing.
 //!
 //! Programmable behaviour mirroring [`crate::drivers::mock::MockPaymentProcessor`].
