@@ -27,7 +27,10 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 const TIMEOUT = 10_000;
 
 test.describe('Critical Path: POS → KDS', () => {
+  // This test does 4 workspace switches (Admin→POS→KDS→POS→KDS) plus a
+  // full sale flow — it needs more headroom than the default 30/45s.
   test('complete a sale in Restaurant POS and verify ticket appears on KDS', async ({ page }) => {
+    test.setTimeout(60_000);
     // ── Step 1: Log in and go to Restaurant POS ─────────────────────
     await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.RESTAURANT_POS);
