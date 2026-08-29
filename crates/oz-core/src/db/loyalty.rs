@@ -1,4 +1,10 @@
 //! Loyalty program CRUD — points, tiers, redemption.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B3: loyalty deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: points ledger exemplary — earn/redeem both idempotent per (account, sale_id, txn_type) with pre-check PLUS unique projection index as final guard (constraint-violation -> return winning row, the pattern COR-15 wants for gift cards); redeem validates sale server-side (ownership + completed status + cap at sale total) and re-checks balance inside the atomic conditional UPDATE; COR-18 INFO: list_loyalty_accounts prepares a new statement per account (N+1) — fine at desktop scale, batch when sync lands; points math i64-first with documented f64 /100 step (points are not currency — policy holds)
+next: none required | perf: COR-18 N+1 in list_loyalty_accounts
+*/
 
 use rusqlite::params;
 

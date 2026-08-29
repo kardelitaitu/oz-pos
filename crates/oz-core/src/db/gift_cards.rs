@@ -1,4 +1,10 @@
 //! Gift cards CRUD — issue, redeem, top-up, freeze, balance checks.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B3: gift cards deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: stored-value paths sound (PA-01 atomic conditional UPDATE both directions with i64::MAX overflow guard on top-up; in-tx balance re-read keeps ledger rows accurate under concurrency; expiry parse-fail treats card as expired — fail-safe; RUST-07 recoverable lookups documented); COR-15 LOW: redeem idempotency (card, sale_id) is check-then-act with NO unique index behind it — race-safe only under the single-connection mutex; loyalty earn/redeem has the unique projection index, gift cards do not — becomes MEDIUM under multi-terminal sync replay; COR-16 INFO: list_gift_cards search does not escape LIKE wildcards (customers/audit pattern does); COR-17 INFO: card PIN stored plaintext (acceptable local-POS threat model; revisit before cloud sync)
+next: partial UNIQUE index on gift_card_transactions(gift_card_id, sale_id) WHERE txn_type='redeem' (COR-15); escape LIKE search (COR-16) | perf: N+1 txn fetch in list_gift_cards is bounded at 5/card
+*/
 
 use rusqlite::params;
 

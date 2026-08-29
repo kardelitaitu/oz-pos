@@ -346,6 +346,23 @@ foot-gun — tracked upstream debt, no new finding.
 > present at HEAD; no history rewrite performed to avoid disturbing the
 > concurrent session.
 
+### Slice B3 findings — db/gift_cards.rs (666 lines) + db/loyalty.rs (721 lines), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-15 | 🟡 LOW | db/gift_cards.rs:373–399 + init.sql:1122–1128 | **Gift-card redeem idempotency is advisory-only.** The `(card_id, sale_id)` check-then-act has no UNIQUE index behind it (verified: `init.sql` indexes only `gift_card_id` and `sale_id` separately). Race-safe today only because all Store ops serialize on the process-wide connection mutex; a multi-terminal/offline-sync replay of two redemptions for the same sale double-deducts. Contrast: `loyalty_transactions` has exactly this unique projection index. | Forward-only migration adding `CREATE UNIQUE INDEX … ON gift_card_transactions(gift_card_id, sale_id) WHERE txn_type='redeem'`, then treat `ConstraintViolation` like `earn_points` does (return the winning row). |
+| COR-16 | ℹ️ INFO | db/gift_cards.rs:189, 204 | `list_gift_cards` search patterns don't escape LIKE wildcards (inconsistent with the escaped pattern in db/customers.rs and db/audit.rs) — searching "50%" over-matches. Injection-safe (bound param). | Reuse the escape+`ESCAPE '\'` helper. |
+| COR-17 | ℹ️ INFO | db/gift_cards.rs:43, 51 | Gift-card PINs stored in plaintext. Acceptable in the local-POS threat model (SQLite file access ⇒ game over anyway), but becomes a question if gift cards ever sync to cloud. | Note for the cloud-sync threat model; hash if cards go multi-terminal. |
+| COR-18 | ℹ️ INFO | db/loyalty.rs:265–283 | `list_loyalty_accounts` prepares + runs a 5-row transaction query per account (N+1). Fine at desktop scale. | Batch to a single window-function query when sync/reporting scale demands. |
+
+**Slice B3 positives:** `loyalty.rs` is the crate's concurrency reference
+implementation — earn/redeem idempotency with a unique projection index as
+the final guard, server-side sale validation before redemption (ownership,
+completed-status, cap-at-total), and atomic conditional balance UPDATEs.
+`gift_cards.rs` redeem/top-up use the PA-01 atomic-conditional pattern with
+in-transaction balance re-reads and an `i64::MAX` overflow guard; expiry
+parse-failure fails safe (card treated as expired).
+
 ### Slice B1 positives
 
 - The transaction contract (RUST-08) is not just documented — the code
