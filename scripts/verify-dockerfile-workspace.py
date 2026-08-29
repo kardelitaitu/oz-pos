@@ -28,6 +28,10 @@ DOCKERFILE = ROOT / "Dockerfile.server"
 # Docker build context by .dockerignore), so they are checked separately.
 INLINE_DUMMY_MEMBERS = {"apps/desktop-client", "apps/tablet-client"}
 
+# These workspace members are standalone fuzz/workspaces that are NOT
+# part of the cloud-server build and not included in the Docker context.
+SKIP_MEMBERS = {"fuzz", "fuzz/hfuzz"}
+
 
 def workspace_members() -> list[str]:
     text = CARGO_TOML.read_text(encoding="utf-8")
@@ -69,6 +73,8 @@ def main() -> int:
     errors: list[str] = []
 
     for member in members:
+        if member in SKIP_MEMBERS:
+            continue
         if member in INLINE_DUMMY_MEMBERS:
             # Inline dummy Cargo.toml is generated for these (printf ...)
             # because their real manifests are excluded from the build context.

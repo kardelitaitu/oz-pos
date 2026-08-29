@@ -65,8 +65,6 @@ COPY modules/giftcards/Cargo.toml modules/giftcards/
 COPY modules/kitchen/Cargo.toml modules/kitchen/
 COPY modules/promotions/Cargo.toml modules/promotions/
 COPY modules/purchasing/Cargo.toml modules/purchasing/
-COPY fuzz/Cargo.toml fuzz/
-COPY fuzz/hfuzz/Cargo.toml fuzz/hfuzz/
 COPY scripts/updater-compat-check/Cargo.toml scripts/updater-compat-check/
 COPY apps/cloud-server/Cargo.toml apps/cloud-server/
 
