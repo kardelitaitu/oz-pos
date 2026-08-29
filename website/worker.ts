@@ -85,6 +85,10 @@ export default {
           headers: {
             Location: cleanUrl,
             'Set-Cookie': setCookieHeader(tokenParam, 30 * 24 * 3600), // 30 days
+            // The URL briefly carried the session token — never cache it.
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'Referrer-Policy': 'no-referrer',
+            'Pragma': 'no-cache',
           },
         });
       }

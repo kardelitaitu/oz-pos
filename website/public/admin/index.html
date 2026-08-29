@@ -157,7 +157,15 @@
       const opts = { headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } };
       if (body) { opts.method = 'POST'; opts.body = body; }
       const res = await fetch(API + path, opts);
-      if (res.status === 401 || res.status === 403) { return null; }
+      if (res.status === 401 || res.status === 403) {
+        document.getElementById('content').innerHTML =
+          '<div class="card" style="text-align:center;padding:2rem">' +
+          '<h2 style="margin:0 0 .5rem;color:var(--bad)">Access denied</h2>' +
+          '<p class="empty">Your session is not authorized for the admin panel. ' +
+          'If you are the admin, please <a href="/" style="color:var(--accent)">sign in again</a>.</p>' +
+          '</div>';
+        return null;
+      }
       if (!res.ok) throw new Error(path + ' (' + res.status + ')');
       return res.json();
     }
