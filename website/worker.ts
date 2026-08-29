@@ -207,14 +207,15 @@ export default {
       // the Worker must expire it here (Max-Age=0). The SPA's Log out
       // button navigates to this endpoint.
       if (url.pathname === LOGOUT_PATH) {
-        // Redirect to the admin subdomain itself (not the marketing host),
-        // so the login page is served through the Worker with the /api/v1/
-        // proxy — the login.js uses relative API (API='') which requires
-        // the proxy to be on the same host. The marketing host (ozpos.my.id)
-        // does NOT have the proxy.
+        // Redirect to the same subdomain (admin/dashboard), so the login
+        // page is served through the Worker with the /api/v1/ proxy — the
+        // login.js uses relative API (API='') which requires the proxy on
+        // the same host. The marketing host (ozpos.my.id) does NOT have it.
         const loginUrl = hostname === 'admin.ozpos.my.id'
-          ? `https://admin.ozpos.my.id/`
-          : `https://${MARKETING_HOST}/en/login`;
+          ? 'https://admin.ozpos.my.id/'
+          : hostname === 'dashboard.ozpos.my.id'
+            ? 'https://dashboard.ozpos.my.id/'
+            : `https://${MARKETING_HOST}/en/login`;
         return new Response(null, {
           status: 302,
           headers: {
@@ -227,28 +228,22 @@ export default {
         });
       }
 
-      // Step 2: No session cookie — redirect to login.
-      // dashboard.ozpos.my.id → marketing login (customer login lives on the
-      // site). admin.ozpos.my.id → dedicated admin login page (same origin),
-      // which authenticates against the license server with the same tenant
-      // auth and returns via ?token= so the worker sets the cookie.
+      // Step 2: No session cookie — serve dedicated login page on the same
+      // subdomain (admin.ozpos.my.id → /admin/login, dashboard.ozpos.my.id
+      // → /dashboard/login), so the login.js relative API calls go through
+      // the Worker's /api/v1/ proxy. The marketing host has no proxy.
       if (!sessionCookie) {
-        if (hostname === 'admin.ozpos.my.id') {
-          // Static assets (CSS/JS/images) must be served as-is, not
-          // rewritten to the login page — otherwise the browser's asset
-          // requests return login HTML and the page renders unstyled.
+        if (hostname === 'admin.ozpos.my.id' || hostname === 'dashboard.ozpos.my.id') {
           const isStatic = /\.(css|js|svg|png|jpg|jpeg|webp|gif|ico|woff2?|ttf|map)$/i.test(url.pathname);
           if (isStatic) {
             const asset = new URL(request.url);
             asset.hostname = MARKETING_HOST;
             return env.ASSETS.fetch(new Request(asset.toString(), request));
           }
-          // Serve the dedicated admin login page (not the marketing bounce).
-          // Use the clean URL (ASSETS strips .html → /admin/login.html would
-          // 307 to /admin/login anyway).
+          const loginPath = hostname === 'admin.ozpos.my.id' ? '/admin/login' : '/dashboard/login';
           const rewritten = new URL(request.url);
           rewritten.hostname = MARKETING_HOST;
-          rewritten.pathname = '/admin/login';
+          rewritten.pathname = loginPath;
           rewritten.search = '';
           return withStrictCSP(await env.ASSETS.fetch(new Request(rewritten.toString(), request)));
         }

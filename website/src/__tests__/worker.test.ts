@@ -95,12 +95,12 @@ describe('Cloudflare Worker — worker.ts', () => {
 
   // ── Auth gate (ADR #42) ─────────────────────────────────────────
 
-  it('redirects dashboard.ozpos.my.id to login when no cookie', async () => {
+  it('serves dedicated dashboard login page when no cookie', async () => {
     const req = new Request('https://dashboard.ozpos.my.id/');
     const res = await worker.fetch(req, mockEnv);
 
-    expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/en\/login\?redirect=/);
+    expect(res.status).toBe(200);
+    expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
   });
 
   it('serves dedicated admin login page when no cookie', async () => {
