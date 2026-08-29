@@ -77,7 +77,7 @@ function withStrictCSP(resp: Response): Response {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
-    "connect-src 'self' https://*.code.run https://open.er-api.com",
+    "connect-src 'self' https://*.code.run https://*.ozpos.my.id https://open.er-api.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
