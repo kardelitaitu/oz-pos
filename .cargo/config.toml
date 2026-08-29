@@ -10,6 +10,12 @@
 # second run (38x speedup on a 32-thread dev machine).
 # CI also uses sccache via RUSTC_WRAPPER env var in .github/workflows/.
 rustc-wrapper = "sccache"
+#
+# NOTE: [profile.dev] incremental = true keeps tight edit->check loops
+# fast but makes dev-profile compiles non-cacheable for sccache. Clean
+# rebuilds, release builds, and CI still cache. Prefix a command with
+# CARGO_INCREMENTAL=0 when you want a fully cacheable baseline
+# (e.g. CARGO_INCREMENTAL=0 cargo check --workspace).
 
 # ------------------------------------------------------------------
 # Fast linkers (local dev only)
