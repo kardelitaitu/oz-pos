@@ -189,6 +189,15 @@ export default {
       // auth and returns via ?token= so the worker sets the cookie.
       if (!sessionCookie) {
         if (hostname === 'admin.ozpos.my.id') {
+          // Static assets (CSS/JS/images) must be served as-is, not
+          // rewritten to the login page — otherwise the browser's asset
+          // requests return login HTML and the page renders unstyled.
+          const isStatic = /\.(css|js|svg|png|jpg|jpeg|webp|gif|ico|woff2?|ttf|map)$/i.test(url.pathname);
+          if (isStatic) {
+            const asset = new URL(request.url);
+            asset.hostname = MARKETING_HOST;
+            return env.ASSETS.fetch(new Request(asset.toString(), request));
+          }
           // Serve the dedicated admin login page (not the marketing bounce).
           // Use the clean URL (ASSETS strips .html → /admin/login.html would
           // 307 to /admin/login anyway).
@@ -213,7 +222,11 @@ export default {
       const appBase = isAdmin ? '/admin' : '/dashboard';
       const rewritten = new URL(request.url);
       rewritten.hostname = MARKETING_HOST;
-      rewritten.pathname = appBase + (url.pathname === '/' ? '/' : url.pathname);
+      // The SPA HTML references its assets with the absolute /dashboard/ or
+      // /admin/ prefix (e.g. /dashboard/dashboard.css). Don't double-prefix:
+      // only add appBase for paths that don't already carry it.
+      const p = url.pathname;
+      rewritten.pathname = (p === '/' || !p.startsWith(appBase)) ? appBase + p : p;
       rewritten.search = '';
       const spaResp = await env.ASSETS.fetch(new Request(rewritten.toString(), request));
       return withStrictCSP(spaResp);
