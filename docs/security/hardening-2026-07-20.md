@@ -14,7 +14,7 @@ Additional hardening recommendations:
 | `staff_login` (was `check_login`) | Username: 1-100 chars, alphanumeric + `._-`. PIN: exactly 4-6 digits | ✅ `auth.rs:122` |
 | `start_sale` / `complete_sale` (was `create_sale`) | Cart validation: currency match, qty > 0, price ≥ 0. Payment amount ≤ total | ✅ `pos.rs` |
 | `import_data` | JSON schema validation, foreign key checks, size limit | ✅ `data.rs` |
-| `search_products` | Query length ≤ 200 chars, SQL injection prevented via parameterized queries | ✅ `products.rs` |
+| `list_products` (was `search_products`) | Query length ≤ 200 chars, SQL injection prevented via parameterized queries | ✅ `products.rs:219` |
 | `build_custom_report` | Column whitelist validation, parameterized date values | ✅ `reports.rs` |
 
 ### Guidelines for Future Commands
@@ -43,4 +43,4 @@ Middleware returns `429 Too Many Requests` with `Retry-After` header. Background
 
 ---
 
-> Last audited: 2026-08-08 by docs-auditor (repairs applied).
+> Last audited: 2026-08-29 by docs-auditor (repairs applied; `search_products` → `list_products`).
