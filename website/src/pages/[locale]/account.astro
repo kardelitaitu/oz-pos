@@ -11,8 +11,8 @@ const pageTitle = `OZ-POS — ${t(locale, 'account.title')}`;
 ---
 
 <Base title={pageTitle} description={t(locale, 'pageDesc.account')}>
-  <section class="mx-auto max-w-6xl px-4 py-20">
-    <h1 class="mb-10 text-center text-4xl font-bold">{t(locale, 'account.title')}</h1>
+  <section data-reveal class="mx-auto max-w-6xl px-4 py-20">
+    <h1 class="mb-10 text-center text-3xl font-bold">{t(locale, 'account.title')}</h1>
     <AccountView client:load locale={locale} />
   </section>
 </Base>
