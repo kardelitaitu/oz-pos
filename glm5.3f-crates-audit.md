@@ -472,6 +472,22 @@ audit-logged (access recorded, never values), and an incomplete-profile
 guard blocking sensitive-role assignment. `customers.rs` implements the
 CUST-06 PII-bounded search correctly (escaped LIKE + clamped page).
 
+### Slice B5 part 4 — db/tax.rs (435) + db/refunds.rs (457), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-25 | 🟠 MEDIUM | db/refunds.rs:41–80 | **Over-refund guard is fail-open and outside the transaction.** The cumulative-refunded SUM uses `.unwrap_or(0)` — a DB read error reads as "nothing refunded" and bypasses the guard — and the check-then-act runs before the tx opens (race-safe only under the single-connection mutex; sync replay could double-refund). This is a *money* guard, one class worse than COR-11's inventory guard. | Move the guard inside the tx, propagate the SUM error with `?`, and re-check the balance against the transaction's own view. |
+| COR-26 | 🟡 LOW | db/refunds.rs:81, 389–424 | Refund currency is never compared to the sale's currency — the comment defers to "the caller's checked_add" but nothing enforces it. A cross-currency refund passes the over-refund guard against the wrong unit, and `total_refunded_for_sale` silently excludes other-currency refunds from the balance. | Reject `refund.total.currency != sale.currency` with a structured error. |
+
+**Slice B5 part 4 positives:** `tax.rs` is exemplary across the board —
+TAX-02 default-flag swap atomic in one tx, TAX-03 archive-not-delete with a
+sale-line reference guard (receipts keep resolvable rate linkage), archived
+rates immutable and hidden from resolution, TAX-04 bounded `rate_bps` with
+an explicit overflow rationale, and a documented batch junction query
+(PROD-12) that kills the N+1. `refunds.rs` stock restoration implements
+ADR-19 §5.3 faithfully (FIFO for full refunds, reverse for partial, with a
+`qty ≤ total_deducted` guard and a warn-audited legacy fallback).
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs
