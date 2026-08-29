@@ -21,8 +21,10 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  *   .kds-column-title          — column heading
  *   .kds-column-count          — column count badge
  *   .kds-ticket                — clickable ticket card (button)
- *   .kds-ticket-number         — display number (e.g. "#101")
- *   .kds-ticket-items          — items summary text
+ *   .order-no                  — display number (e.g. "#101")
+ *   .kds-ticket-items          — items summary text (fallback)
+ *   .kds-category              — course-grouped items container
+ *   .kds-item-name             — individual item name
  *   .kds-ticket-time           — SLA time display
  *
  * Route: #/kds (available from the KDS workspace)
@@ -76,14 +78,16 @@ test.describe('Kitchen Display System', () => {
     await expect(ticket).toBeVisible({ timeout: 5_000 });
 
     // Display number (#101, #102, etc.).
-    const numberEl = page.locator('.kds-ticket-number').first();
+    // The component renders the order number inside .order-no (not .kds-ticket-number).
+    const numberEl = page.locator('.order-no').first();
     await expect(numberEl).toBeVisible({ timeout: 3_000 });
     expect(await numberEl.textContent()).toMatch(/#\d+/);
 
     // Items summary. Line items lazy-fetch via get_kds_order_lines_scoped,
-    // so the course-grouped .kds-ticket-line-items container renders; the
-    // flat .kds-ticket-items span is the loading/old-order fallback.
-    const itemsEl = page.locator('.kds-ticket-line-items, .kds-ticket-items').first();
+    // so the course-grouped .kds-category / .kds-item-name elements render;
+    // the flat .kds-ticket-items span is the loading/old-order fallback.
+    // Use a broad selector that covers both the structured and fallback views.
+    const itemsEl = page.locator('.kds-category, .kds-ticket-items, .kds-item-name').first();
     await expect(itemsEl).toBeVisible({ timeout: 3_000 });
     const itemsContent = await itemsEl.textContent();
     expect(itemsContent).toBeTruthy();
