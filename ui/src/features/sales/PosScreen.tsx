@@ -38,7 +38,7 @@ import {
 } from '@/api/sales';
 import { getReceiptSettingsScoped } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
-import { lookupByBarcodeScoped, lookupProductBySku } from '@/api/products';
+import { lookupByBarcodeScoped, lookupProductBySkuScoped } from '@/api/products';
 import { lookupBundleBySku } from '@/api/bundles';
 import { expandBundleItems } from './bundleExpansion';
 import type { BarcodeScannedPayload } from '@/api/hardware';
@@ -725,7 +725,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
             bundle.items,
             bundle.bundle.currency,
             bundle.bundle.bundle_price_minor,
-            lookupProductBySku,
+            (sku: string) => lookupProductBySkuScoped(sessionToken, sku),
           );
           for (const item of expanded) {
             handleAddProduct(item.product, item.qty);

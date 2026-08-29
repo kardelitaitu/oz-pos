@@ -3,11 +3,12 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import {
-  listProducts,
-  adjustStock,
+  listProductsScoped,
+  adjustStockScoped,
   type ProductDto,
 } from '@/api/products';
 import { formatMoney } from '@/types/domain';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -48,6 +49,8 @@ export default function InventoryAdjustmentScreen() {
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,7 +63,7 @@ export default function InventoryAdjustmentScreen() {
     setLoading(true);
     setLoadError(null);
     try {
-      const data = await listProducts();
+      const data = await listProductsScoped(sessionToken);
       if (mountedRef.current) setProducts(data);
     } catch {
       if (mountedRef.current) {
@@ -146,7 +149,7 @@ export default function InventoryAdjustmentScreen() {
     setError(null);
     setSuccess(null);
     try {
-      const newQty = await adjustStock({
+      const newQty = await adjustStockScoped(sessionToken, {
         sku: selectedProduct.sku,
         delta,
         reason: reasonText,

@@ -67,6 +67,10 @@ export interface OfflineQueueSummaryDto {
 export const getOfflineQueueStatusSummary = (): Promise<OfflineQueueSummaryDto> =>
   loggedInvoke<OfflineQueueSummaryDto>('offline_queue_status_summary');
 
+/** Get offline queue status summary (scoped — ADR #7). */
+export const getOfflineQueueStatusSummaryScoped = (sessionToken: string): Promise<OfflineQueueSummaryDto> =>
+  loggedInvoke<OfflineQueueSummaryDto>('offline_queue_status_summary_scoped', { sessionToken });
+
 /** Enqueue an action to be performed when back online. */
 export const enqueueOffline = (args: EnqueueOfflineArgs): Promise<OfflineQueueItemDto> =>
   loggedInvoke<OfflineQueueItemDto>('enqueue_offline', { args });
@@ -79,9 +83,17 @@ export const listPendingOffline = (): Promise<OfflineQueueItemDto[]> =>
 export const listAllOffline = (): Promise<OfflineQueueItemDto[]> =>
   loggedInvoke<OfflineQueueItemDto[]>('list_all_offline');
 
+/** List all offline actions (scoped — ADR #7). */
+export const listAllOfflineScoped = (sessionToken: string): Promise<OfflineQueueItemDto[]> =>
+  loggedInvoke<OfflineQueueItemDto[]>('list_all_offline_scoped', { sessionToken });
+
 /** Get the count of pending offline actions. */
 export const pendingOfflineCount = (): Promise<number> =>
   loggedInvoke<number>('pending_offline_count');
+
+/** Get the count of pending offline actions (scoped — ADR #7). */
+export const pendingOfflineCountScoped = (sessionToken: string): Promise<number> =>
+  loggedInvoke<number>('pending_offline_count_scoped', { sessionToken });
 
 /**
  * Retry syncing all pending offline actions through the real cloud sync
@@ -89,6 +101,10 @@ export const pendingOfflineCount = (): Promise<number> =>
  */
 export const retryOfflineSync = (): Promise<SyncResult> =>
   loggedInvoke<SyncResult>('retry_offline_sync');
+
+/** Retry syncing all pending offline actions (scoped — ADR #7). */
+export const retryOfflineSyncScoped = (sessionToken: string): Promise<SyncResult> =>
+  loggedInvoke<SyncResult>('retry_offline_sync_scoped', { sessionToken });
 
 /** Delete an offline queue item by its identifier. */
 export const deleteOfflineItem = (id: string): Promise<void> =>
@@ -131,6 +147,10 @@ export interface RemoteSyncFailureDto {
  */
 export const listRemoteFailures = (): Promise<RemoteSyncFailureDto[]> =>
   loggedInvoke<RemoteSyncFailureDto[]>('list_remote_failures');
+
+/** List remote failures (scoped — ADR #7). */
+export const listRemoteFailuresScoped = (sessionToken: string): Promise<RemoteSyncFailureDto[]> =>
+  loggedInvoke<RemoteSyncFailureDto[]>('list_remote_failures_scoped', { sessionToken });
 
 /**
  * Requeue a dead-lettered remote item so the next sync cycle retries it.
@@ -287,6 +307,10 @@ export interface SyncPlanResult {
 /** Read the caller's own sync plan via `GET /api/v1/tenants/me/plan`. */
 export const getSyncPlan = (): Promise<SyncPlanResult> =>
   loggedInvoke<SyncPlanResult>('get_sync_plan');
+
+/** Get sync plan (scoped — ADR #7). */
+export const getSyncPlanScoped = (sessionToken: string): Promise<SyncPlanResult> =>
+  loggedInvoke<SyncPlanResult>('get_sync_plan_scoped', { sessionToken });
 
 // ── Connection Test ──────────────────────────────────────────────
 
