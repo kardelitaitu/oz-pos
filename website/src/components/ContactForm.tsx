@@ -28,7 +28,7 @@ export default function ContactForm({ locale }: Props) {
   const [status, setStatus] = useState<Status>('idle');
 
   const inputClass =
-    'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
+    'w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
   const labelClass = 'mb-1 block text-sm text-muted';
 
   const submit = async (e: { preventDefault(): void }) => {
@@ -148,7 +148,7 @@ export default function ContactForm({ locale }: Props) {
       <button
         type="submit"
         disabled={status === 'sending'}
-        className="mt-5 w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 sm:w-auto"
+        className="mt-5 w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60 sm:w-auto"
       >
         {status === 'sending' ? t(locale, 'support.sending') : t(locale, 'support.submit')}
       </button>

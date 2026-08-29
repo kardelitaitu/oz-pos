@@ -84,7 +84,11 @@ describe('CheckoutButton Component', () => {
 
     // Mock window.location
     delete (window as { location?: unknown }).location;
-    window.location = { href: '' } as unknown as Location;
+    Object.defineProperty(window, 'location', {
+      value: { href: '' },
+      writable: true,
+      configurable: true,
+    });
 
     await act(async () => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
