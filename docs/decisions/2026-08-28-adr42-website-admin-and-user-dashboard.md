@@ -280,10 +280,19 @@ The login flow (`ozpos.my.id/login` → `AuthForm.tsx`) is updated to:
     - Uses the same SMTP relay as the trial email system (Brevo via `OZ_SMTP_*` env vars)
     - 5 tests covering seed, scanner, 30-day interval, and email content
 
+### Phase 2/3 — Dashboard SPAs + API (Implemented)
+
+18. **User dashboard API** (`apps/license-server/web_dashboard.go`): `GET /api/v1/web/usage` (device/subscription counts + entitlement limits), `GET /api/v1/web/devices` (tenant machines) — session-authed like `/me`.
+19. **Admin dashboard API** (`apps/license-server/admin_dashboard.go`): `GET /api/v1/admin/tenants`, `GET /tenants/{id}` (detail + devices), `POST /tenants/{id}/activate`, `/renew` (+N days), `/revoke`, `/tier-override` (with reason), `GET /api/v1/admin/health`. Auth: `OZ_ADMIN_KEY` bearer OR a web session of the admin tenant (`OZ_ADMIN_EMAIL`).
+20. **CORS**: default allowlist now includes `dashboard.ozpos.my.id` and `admin.ozpos.my.id`.
+21. **Worker** (`website/worker.ts`): `/__oz/session` endpoint returns the JWT from the httpOnly cookie (same-origin) so the SPAs can authenticate; dashboard/admin hostnames serve real SPAs from ASSETS (path-rewritten).
+22. **Dashboard SPAs** (`website/public/dashboard/`, `website/public/admin/`): user dashboard (account/license/subscription/usage/devices) and admin panel (tenant list, drill-down, activate/renew/revoke/upgrade, health).
+23. **Tests**: `dashboard_api_test.go` (6 tests) + worker tests (14). Full license-server suite passes.
+
 ---
 
 ## 5. Open Questions
 
-1. **Shared Worker vs separate Workers?** A single Cloudflare Worker can route by hostname (`request.url.hostname`) and serve the appropriate app. This simplifies deployment (one Worker, one CI pipeline). A separate Worker per subdomain is more isolated but doubles deployment complexity. **Recommendation:** single Worker with hostname-based routing.
-2. **Dashboard tech stack?** Same Astro + React setup as the existing website (shared components, i18n, styling). The dashboard SPAs can be Astro islands or full React SPAs mounted at [`client:only`](https://docs.astro.build/en/reference/directives-reference/#clientonly).
-3. **Invoice data source?** Paddle webhook events (stored in PocketBase `webhook_log` collection) or a new `invoices` collection. **Recommendation:** store processed invoice data in a dedicated `invoices` PocketBase collection, populated by the Paddle webhook handler.
+1. **Shared Worker vs separate Workers?** A single Cloudflare Worker can route by hostname (`request.url.hostname`) and serve the appropriate app. This simplifies deployment (one Worker, one CI pipeline). A separate Worker per subdomain is more isolated but doubles deployment complexity. **Recommendation:** single Worker with hostname-based routing. ✅ Chosen — implemented in worker.ts.
+2. **Dashboard tech stack?** Same Astro + React setup as the existing website (shared components, i18n, styling). The dashboard SPAs can be Astro islands or full React SPAs mounted at [`client:only`](https://docs.astro.build/en/reference/directives-reference/#clientonly). ✅ Chosen — standalone static SPAs served from ASSETS (no marketing-site coupling).
+3. **Invoice data source?** Paddle webhook events (stored in PocketBase `webhook_log` collection) or a new `invoices` collection. **Recommendation:** store processed invoice data in a dedicated `invoices` PocketBase collection, populated by the Paddle webhook handler. (Not yet built — the billing section shows license/subscription state; invoice history is future work.)

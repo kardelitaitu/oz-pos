@@ -122,7 +122,7 @@ export default {
       const appBase = isAdmin ? '/admin' : '/dashboard';
       const rewritten = new URL(request.url);
       rewritten.hostname = MARKETING_HOST;
-      rewritten.pathname = appBase + (url.pathname === '/' ? '/index.html' : url.pathname);
+      rewritten.pathname = appBase + (url.pathname === '/' ? '/' : url.pathname);
       rewritten.search = '';
       return env.ASSETS.fetch(new Request(rewritten.toString(), request));
     }
