@@ -1,4 +1,25 @@
 
+
+## 2026-08-29 — Gap analysis round 2: renew-badge thresholds + checkout feedback states (website AccountView)
+
+**Problem:** The systematic branch audit (objective item 1) found 3 more
+untested branches:
+
+1. `renderRenewBadge` — `d >= 30` (muted) branch and `d === 0` (expires
+   today, danger) boundary were untested; only <7 and ~10-day cases existed.
+2. Checkout feedback — `refreshState === 'checking'` ("Checking your
+   subscription…") and `refreshState === 'pending'` had zero coverage; the
+   post-checkout `pollAfterCheckout` callback path was never exercised.
+
+**Solution:** Branch-pinned with 3 new component tests:
+- 45-day expiry → "Renews in 45 days" with muted class (not warning).
+- Expires today (0 days) → danger class.
+- A completed checkout invokes the Midtrans onClosed callback → "Checking
+  your subscription…" status line renders.
+
+**Commits:** pending gap-analysis round-2 commit.
+**Test counts:** account-view.test.tsx 54→57; full suite 194→197.
+
 ## 2026-08-29 — Strategy shift: property tests catch fmtDate "Invalid Date" leak (website AccountView)
 
 **Strategy:** The user asked whether continuing ad-hoc TDD bug-hunting was the

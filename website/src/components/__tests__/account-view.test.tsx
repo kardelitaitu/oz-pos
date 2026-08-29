@@ -414,6 +414,50 @@ describe('AccountView — subscription display', () => {
       container.remove();
     }
   });
+
+  it('shows the checking-subscription status when a checkout completes', async () => {
+    // Regression: after a completed checkout, the onClosed callback fires
+    // pollAfterCheckout which sets refreshState='checking' and shows the
+    // "Checking your subscription…" status line. This branch was untested.
+    sessionStorage.setItem('oz_session', 'tok-checking');
+    localStorage.setItem('oz_region', 'id');
+    // Capture the onClosed callback the component passes to Midtrans.
+    let onClosed: ((completed: boolean) => void) | undefined;
+    midtrans.openMidtransCheckout.mockImplementation(async (_tier: string, _period: string, cb?: (c: boolean) => void) => {
+      onClosed = cb;
+    });
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      )!;
+      act(() => subscribeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(onClosed).toBeTypeOf('function');
+      // Simulate the checkout completing → pollAfterCheckout runs.
+      act(() => {
+        onClosed!(true);
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      // The status line must be visible.
+      assertText(container, 'Checking your subscription…');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── License display ───────────────────────────────────────────────────
@@ -1307,6 +1351,56 @@ describe('AccountView — renewal countdown', () => {
       assertText(container, 'Subscription');
       assertNoText(container, 'Renews in');
       assertNoText(container, 'NaN');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows a muted (non-urgent) renew badge when 30+ days remain', async () => {
+    // renderRenewBadge: d < 30 → warning; d >= 30 → muted. The muted branch
+    // was untested. Build an expiry 45 days out (local midnight so the
+    // calendar-day count is deterministic) and assert the badge exists and
+    // carries the muted class — not the warning class.
+    sessionStorage.setItem('oz_session', 'tok-renew-muted');
+    const far = new Date();
+    far.setDate(far.getDate() + 45);
+    far.setHours(0, 0, 0, 0);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: far.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Renews in 45 days');
+      const badges = Array.from(container.querySelectorAll('span.rounded-full'));
+      const renewBadge = badges.find((b) => b.textContent?.includes('Renews in'));
+      expect(renewBadge).not.toBeNull();
+      expect(renewBadge!.className).toContain('bg-ink/10');
+      expect(renewBadge!.className).not.toContain('bg-warning');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows a danger renew badge when the subscription expires today', async () => {
+    // d === 0 (expires today) is < 7 → danger. This boundary was untested.
+    sessionStorage.setItem('oz_session', 'tok-renew-today');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: today.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      const badges = Array.from(container.querySelectorAll('span.rounded-full'));
+      const renewBadge = badges.find((b) => b.textContent?.includes('Renews in'));
+      expect(renewBadge).not.toBeNull();
+      expect(renewBadge!.className).toContain('bg-danger/15');
     } finally {
       act(() => root.unmount());
       container.remove();
