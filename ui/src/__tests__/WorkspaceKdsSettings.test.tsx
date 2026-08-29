@@ -12,7 +12,7 @@ import type { ReactNode, ReactElement } from 'react';
 import { LocalizationProvider } from '@fluent/react';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceKdsSettings } from '@/features/settings/workspace-cards/WorkspaceKdsSettings';
-import { getSetting } from '@/api/settings';
+import { getSettingScoped } from '@/api/settings';
 
 const testL10n = {
   bundles: [], areBundlesEmpty: () => true,
@@ -82,8 +82,8 @@ vi.mock('../features/settings/SettingsSelect', () => ({
 // (which parses to the card defaults). The regression test below also
 // overrides a single call via mockImplementationOnce.
 vi.mock('@/api/settings', () => ({
-  getSetting: vi.fn(() => Promise.resolve(null)),
-  setSettings: vi.fn(() => Promise.resolve()),
+  getSettingScoped: vi.fn(() => Promise.resolve(null)),
+  setSettingsScoped: vi.fn(() => Promise.resolve()),
 }));
 
 function Wrapper({ children }: { children: ReactNode }) {
@@ -91,7 +91,7 @@ function Wrapper({ children }: { children: ReactNode }) {
 }
 function renderCard(overrides: Record<string, unknown> = {}) {
   return render(<Wrapper><WorkspaceKdsSettings
-    variant="full-page" onSaved={vi.fn()} {...overrides} /></Wrapper>);
+    sessionToken="test-token" variant="full-page" onSaved={vi.fn()} {...overrides} /></Wrapper>);
 }
 
 beforeEach(() => { mocks.fontSmoothing = 'antialiased'; });
@@ -172,7 +172,7 @@ describe('WorkspaceKdsSettings', () => {
     // stays in flight; the remaining four calls resolve via the default
     // mock (null). Releasing it as 'false' makes the *untouched* sound
     // toggle flip only once the load actually lands — our landing signal.
-    vi.mocked(getSetting).mockImplementationOnce(
+    vi.mocked(getSettingScoped).mockImplementationOnce(
       () => new Promise<string | null>((resolve) => { releaseLoad = resolve; }),
     );
 

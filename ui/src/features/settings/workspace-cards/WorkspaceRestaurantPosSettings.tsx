@@ -8,7 +8,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
-import { setReceiptSettingsScoped, getSetting, setSettings } from '@/api/settings';
+import { setReceiptSettingsScoped, getSettingScoped, setSettingsScoped } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -65,7 +65,7 @@ export function WorkspaceRestaurantPosSettings({
 
     // Load courseFiring from the backend settings table.
     let cancelled = false;
-    getSetting('restaurant.course_firing').then((raw) => {
+    getSettingScoped(sessionToken ?? null, 'restaurant.course_firing').then((raw) => {
       if (cancelled) return;
       const loaded = raw === 'true';
       if (!touchedRef.current.has('courseFiring')) setCourseFiring(loaded);
@@ -101,7 +101,7 @@ export function WorkspaceRestaurantPosSettings({
         }),
       );
       tasks.push(
-        setSettings({ 'restaurant.course_firing': String(courseFiring) }, userId ?? 'default'),
+        setSettingsScoped(sessionToken ?? null, { 'restaurant.course_firing': String(courseFiring) }),
       );
 
       if (terminalId && hw.profile) {

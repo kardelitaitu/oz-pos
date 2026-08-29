@@ -20,8 +20,8 @@ const mockSendTestReport = vi.fn();
 const mockAddToast = vi.fn();
 
 vi.mock('@/api/settings', () => ({
-  getSetting: (...args: unknown[]) => mockGetSetting(...args),
-  setSetting: (...args: unknown[]) => mockSetSetting(...args),
+  getSettingScoped: (...args: unknown[]) => mockGetSetting(...args),
+  setSettingScoped: (...args: unknown[]) => mockSetSetting(...args),
 }));
 
 vi.mock('@/api/email', () => ({
@@ -38,6 +38,13 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     session: { user_id: 'test-user' },
     loading: false,
+  }),
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    sessionToken: 'mock-session-token',
+    terminalId: 'test-terminal',
   }),
 }));
 
@@ -178,7 +185,7 @@ describe('EmailReportSettings — EN', () => {
         }),
       );
       await renderWithFluent(<EmailReportSettings />);
-      expect(mockGetSetting).toHaveBeenCalledWith('smtp_config');
+      expect(mockGetSetting).toHaveBeenCalledWith('mock-session-token', 'smtp_config');
       expect(screen.getByDisplayValue('mail.example.com')).toBeInTheDocument();
       expect(screen.getByDisplayValue('465')).toBeInTheDocument();
       expect(screen.getByDisplayValue('user')).toBeInTheDocument();
@@ -295,9 +302,9 @@ describe('EmailReportSettings — EN', () => {
 
       await waitFor(() => {
         expect(mockSetSetting).toHaveBeenCalledWith(
+          'mock-session-token',
           'smtp_config',
           expect.stringContaining('smtp.example.com'),
-          'test-user',
         );
         expect(mockAddToast).toHaveBeenCalledWith(
           expect.objectContaining({ type: 'success' }),

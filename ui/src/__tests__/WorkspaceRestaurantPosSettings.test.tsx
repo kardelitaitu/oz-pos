@@ -70,6 +70,13 @@ vi.mock('@/contexts/SettingsContext', () => ({
   }),
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    sessionToken: 'test-session-token',
+    terminalId: 'test-terminal',
+  }),
+}));
+
 vi.mock('@/hooks/useTerminalHardware', () => ({
   useTerminalHardware: (terminalId: string) => {
     if (!terminalId) return { profile: null, isLoading: false, error: mocks.hwError,
@@ -83,8 +90,8 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
 
 vi.mock('@/api/settings', () => ({
   setReceiptSettingsScoped: vi.fn().mockResolvedValue(undefined),
-  setSettings: vi.fn().mockResolvedValue(undefined),
-  getSetting: vi.fn(async (key: string) => {
+  setSettingsScoped: vi.fn().mockResolvedValue(undefined),
+  getSettingScoped: vi.fn(async (_sessionToken: string, key: string) => {
     if (key === 'restaurant.course_firing') return 'false';
     return null;
   }),

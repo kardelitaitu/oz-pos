@@ -14,7 +14,7 @@ import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { getReportSchedule, saveReportSchedule, type ReportScheduleConfig } from '@/api/email';
-import { getSetting, setSetting } from '@/api/settings';
+import { getSettingScoped, setSettingScoped } from '@/api/settings';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 
@@ -67,7 +67,7 @@ export default function EmailReportSettings() {
 
   const loadConfig = useCallback(async () => {
     try {
-      const raw = await getSetting(SMTP_CONFIG_KEY);
+      const raw = await getSettingScoped(sessionToken ?? null, SMTP_CONFIG_KEY);
       if (raw) {
         setConfig({ ...DEFAULT_SMTP, ...JSON.parse(raw) });
       }
@@ -113,7 +113,7 @@ export default function EmailReportSettings() {
         return;
       }
 
-      await setSetting(SMTP_CONFIG_KEY, JSON.stringify(config), userId);
+      await setSettingScoped(sessionToken, SMTP_CONFIG_KEY, JSON.stringify(config));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       addToast({ message: l10n.getString('settings-email-saved'), type: 'success' });

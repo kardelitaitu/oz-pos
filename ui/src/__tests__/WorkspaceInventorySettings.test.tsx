@@ -20,8 +20,8 @@ import { WorkspaceInventorySettings } from '@/features/settings/workspace-cards/
 // deterministic. `null` values parse back to the card's defaults (10,
 // false), so dirty tracking starts clean.
 vi.mock('@/api/settings', () => ({
-  getSetting: vi.fn(() => Promise.resolve(null)),
-  setSettings: vi.fn(() => Promise.resolve()),
+  getSettingScoped: vi.fn(() => Promise.resolve(null)),
+  setSettingsScoped: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('@/contexts/SettingsContext', () => ({
@@ -38,6 +38,13 @@ vi.mock('@/contexts/SettingsContext', () => ({
     },
     loading: false, error: null, hasPartialError: false,
     refetch: vi.fn(), lastChangedKeys: [], markSettingsUpdated: vi.fn(),
+  }),
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    sessionToken: 'test-session-token',
+    terminalId: 'test-terminal',
   }),
 }));
 

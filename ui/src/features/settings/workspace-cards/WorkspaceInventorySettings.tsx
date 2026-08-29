@@ -5,7 +5,7 @@ import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
 import { useSettings } from '@/contexts/SettingsContext';
-import { getSetting, setSettings } from '@/api/settings';
+import { getSettingScoped, setSettingsScoped } from '@/api/settings';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
 
@@ -18,6 +18,7 @@ import { hasChanges } from './helpers';
  * Consumes `useSettings()` for store-level inventory configuration.
  */
 export function WorkspaceInventorySettings({
+  sessionToken,
   userId,
   locationId,
   variant = 'full-page',
@@ -53,8 +54,8 @@ export function WorkspaceInventorySettings({
     if (loaded) return;
 
     Promise.all([
-      getSetting('inventory.low_stock_threshold'),
-      getSetting('inventory.deduction_prefer_warehouse'),
+      getSettingScoped(sessionToken ?? null, 'inventory.low_stock_threshold'),
+      getSettingScoped(sessionToken ?? null, 'inventory.deduction_prefer_warehouse'),
     ]).then(([thresholdRaw, preferWhRaw]) => {
       const t = parseInt(thresholdRaw ?? '', 10);
       if (!touchedRef.current.has('lowStockThreshold') && !isNaN(t) && t >= 0) {
@@ -79,10 +80,10 @@ export function WorkspaceInventorySettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      await setSettings({
+      await setSettingsScoped(sessionToken ?? null, {
         'inventory.low_stock_threshold': String(lowStockThreshold),
         'inventory.deduction_prefer_warehouse': String(deductionPreferWarehouse),
-      }, userId ?? 'default');
+      });
       originalsRef.current = { lowStockThreshold, deductionPreferWarehouse };
       setDirtyVersion((v) => v + 1);
 
