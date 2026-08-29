@@ -321,9 +321,28 @@ settings · **D** — export/subscription/license_verification/kds + remainder.
 | COR-9 | ℹ️ INFO | db/sales.rs:1950–1958 | Receipt-barcode lookup swallows DB errors via `.ok()` → a real I/O failure reads as "no sale". Lookup-only path, not money-moving. | Log the error before falling back to `None`. |
 | COR-10 | ℹ️ INFO | db/sales.rs:538–552 | Partial-stock result travels as JSON inside `CoreError::Validation.message` — documented in-file as a known tradeoff; the front-end parses the message. | Dedicated `PartialStock` error variant when the IPC error surface is next touched. |
 
-> **Provenance note:** the slice-B2 stamp and this section landed in commit
-> `11a6822b` (a parallel review session swept the working-tree changes into
-> its own commit) rather than a dedicated audit commit. Content verified
+### Slice B2 continued — db/products.rs (2,216 lines) + db/inventory.rs (757 lines)
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-11 | 🟡 LOW | db/inventory.rs:215, 233 | **Deactivation guard fail-open.** `deactivate_inventory_location` reads its zero-stock and zero-transfers constraints with `.unwrap_or(0)` — a DB read error yields count 0, constraints pass, and a location with a hidden ledger balance (or in-flight transfers) is deactivated. | Propagate with `?` (match `set_stock_threshold`'s own NoRows-vs-error discipline in the same file). |
+| COR-12 | 🟡 LOW | db/products.rs:607 vs 1091 | **Name-length asymmetry.** `create_product` rejects names >255 chars; `update_product` only checks non-empty — an over-long name can enter via update. | Apply the same 255 check in `update_product` (and `update_product_attributes`). |
+| COR-13 | ℹ️ INFO | db/inventory.rs:522/557/721; db/sales.rs:1519 | Read mappers coerce unknown stored enum values to defaults (`ManualAdjustment`, `SaleStatus::Pending`) — corrupt/forward-compat rows silently misclassify in reports. | Log-on-fallback at minimum; consider a `Unknown` variant for display. |
+| COR-14 | ℹ️ INFO | db/products.rs:2203 | Variant mapper converts an invalid stored barcode to `None` via `.ok()` — corrupt data renders as "no barcode" without any signal. | Log the parse failure. |
+
+**Slice B2 positives:** `update_product` implements *real* optimistic CAS
+(`WHERE sku = ? AND version = ?` → `Conflict`) — the exact pattern COR-8
+wants copied into `void_sale`. `create_product` is idempotent-with-payload-
+comparison (sync-replay safe, `ON CONFLICT(tenant_id, sku)` backstop).
+`adjust_stock_batch` pre-checks every location before executing any
+deduction, uses `checked_add` + typed `InsufficientStockAtLocation`, and its
+`allow_negative_stock` lookup fails safe to *deny*. The deprecated
+`adjust_stock_with_reason` self-documents its own ADR-19 §3.4 stale-source
+foot-gun — tracked upstream debt, no new finding.
+
+> **Provenance note:** the slice-B2 stamp and its findings section landed in
+> commit `11a6822b` (a parallel review session swept the working-tree changes
+> into its own commit) rather than a dedicated audit commit. Content verified
 > present at HEAD; no history rewrite performed to avoid disturbing the
 > concurrent session.
 
