@@ -42,7 +42,7 @@ apps/desktop-client/
     ├── lib.rs                       # the run() function, app setup
     └── commands/
         ├── mod.rs                   # pub use for each command module
-        ├── sales.rs                 # start_sale, add_line, complete_sale
+        ├── pos.rs                   # start_sale, add_line, complete_sale
         ├── inventory.rs             # lookup_sku, adjust_stock
         ├── payments.rs              # authorize, capture, void
         ├── hardware.rs              # open_cash_drawer, print_receipt
@@ -57,7 +57,7 @@ ui/
     ├── features/
     │   ├── sales/
     │   │   ├── CartScreen.tsx
-    │   │   └── useCart.ts           # uses pos.ts, not invoke()
+    │   │   └── usePosState.ts       # uses pos.ts, not invoke()
     │   └── inventory/
     │       └── StockScreen.tsx
     └── components/                  # presentational, no invoke()
@@ -68,7 +68,7 @@ ui/
 ## Defining a Rust command
 
 ```rust
- // apps/desktop-client/src/commands/sales.rs
+ // apps/desktop-client/src/commands/pos.rs
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -188,22 +188,22 @@ export async function addLine(args: AddLineArgs): Promise<AddLineResult> {
 
 ---
 
-## React hooks consume `pos.ts`, not `invoke()`
+## React hooks consume the api layer, not `invoke()`
 
 ```tsx
-// ui/src/features/sales/useCart.ts
+// ui/src/features/sales/usePosState.ts
 
 import { useState, useCallback } from 'react';
-import { addLine, completeSale } from '@/api/pos';
+import { startSale, addLine } from '@/api/sales';
 import type { Cart, CartId, Sku } from '@/types/domain';
 
-export function useCart(cartId: CartId) {
+export function usePosState(cartId: CartId) {
   const [cart, setCart] = useState<Cart | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const addLine = useCallback(async (sku: Sku, qty: number) => {
     try {
-      const result = await posAddLine({ cartId, sku, qty });
+      await addLine({ cartId, sku, qty });
       // refetch cart, or trust the lineTotal and optimistically update
     } catch (e) {
       setError(e instanceof Error ? e.message : 'unknown');
@@ -215,7 +215,7 @@ export function useCart(cartId: CartId) {
 ```
 
 **Rules:**
-- Hooks are the only place that knows how to talk to `pos.ts`. Components consume hooks.
+- Hooks are the only place that knows how to talk to the api layer. Components consume hooks.
 - Components never import from `@tauri-apps/api/core` — that's the line we don't cross.
 - Async errors are surfaced via local state, not thrown. Throw only in test code or top-level error boundaries.
 

@@ -35,7 +35,7 @@ The OZ-POS front-end is a Tauri v2 webview running React 18 + TypeScript. The UI
 
 ## I18n with `@fluent/react`
 
-Every user-visible string lives in `ui/src/locales/en-US.ftl` (and other locales). The component uses `<Localized>` or `useLocalization()` — never a string literal.
+Every user-visible string lives in a per-feature Fluent bundle under `ui/src/locales/` (e.g. `sales.ftl`, `sales.id.ftl` — English is the bare `*.ftl`, other locales get a `.<code>.ftl` suffix). The component uses `<Localized>` or `useLocalization()` — never a string literal.
 
 ```tsx
 import { Localized } from '@fluent/react';
@@ -52,7 +52,7 @@ export function PayButton({ onPay, disabled }: { onPay: () => void; disabled: bo
 ```
 
 ```fluent
-# ui/src/locales/en-US.ftl
+# ui/src/locales/sales.ftl
 sale-pay-button = Pay
 sale-pay-button-aria = Charge the customer for the current cart
 ```
@@ -62,7 +62,7 @@ sale-pay-button-aria = Charge the customer for the current cart
 - The fallback text inside `<Localized>` is **only** used by English developers in dev. The runtime always reads from the active locale.
 - Never `concat` translated strings. Use Fluent's `{ $count ->` plural variants and `{ $name }` substitutions.
 - For one-off strings in non-component code (e.g., a notification), call `useLocalization()` and use `l10n.getString('id')`.
-- Adding a new locale? Copy `en-US.ftl`, translate, and register the `LocalizationProvider` in `App.tsx`.
+- Adding a new locale? Create the matching `.<code>.ftl` for each bundle, and register the locale in `src/i18n/` and `src/main.tsx`.
 
 ---
 
@@ -296,12 +296,11 @@ ui/
     │       └── <Feature>.module.css
     ├── components/                # cross-feature presentational
     ├── hooks/                     # cross-feature hooks
-    ├── locales/                   # en-US.ftl, id-ID.ftl, ...
+    ├── locales/                   # per-feature bundles: sales.ftl, sales.id.ftl, ...
     ├── types/
     │   └── domain.ts              # CartId, Sku, Money, AppError
-    ├── styles/
-    │   ├── tokens.css
-    │   └── reset.css
+    ├── frontend/
+    │   └── themes/                # tokens.css, components.css, reset.css, responsive.css
     └── __tests__/
         └── <mirror of features/ and components/>
 ```

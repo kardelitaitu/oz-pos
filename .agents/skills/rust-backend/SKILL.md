@@ -239,7 +239,7 @@ cargo test --workspace --all-features
 - One public type per file when it's a major domain entity (`money.rs`, `currency.rs`, `cart.rs`).
 - Re-export from `mod.rs` so external code can do `use oz_core::Money;`.
 - Use `#[cfg(test)] mod tests { ... }` at the bottom of every file with testable logic.
-- Mock implementations of traits live in `hal/src/drivers/mock.rs` and are gated by `#[cfg(test)]` or a `mock` feature.
+- Mock implementations of traits live in `crates/oz-hal/src/drivers/mock.rs` and are gated by `#[cfg(test)]` or a `mock` feature.
 
 ---
 
