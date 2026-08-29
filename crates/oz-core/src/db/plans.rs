@@ -1,4 +1,10 @@
 //! Per-tenant sync plans (ADR sync-plan-gating).
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 6)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: fail-closed plan parsing (unknown -> Free), clean upsert; documented missing-row semantics
+next: none | perf: N/A
+*/
 //!
 //! Cloud sync is a paid feature: a tenant on the [`TenantPlan::Free`] plan
 //! can run the POS locally but cannot push/pull to the cloud server. The

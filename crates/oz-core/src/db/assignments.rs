@@ -1,4 +1,10 @@
 //! Role assignments with explicit-all scopes (ADR #35 D5 / spec 0048).
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 6)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: fail-closed scope evaluation (empty list never means all, unparsable mode = no assignment) — matches ADR #35 D5 exactly; multi-row writes in tx
+next: none | perf: N/A
+*/
 //!
 //! A user's single effective assignment pairs a role with a `scope_mode`:
 //! `global` (org-level roles — Owner, Admin, Auditor; branch/workspace scope

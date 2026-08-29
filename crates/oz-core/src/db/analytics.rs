@@ -1,4 +1,10 @@
 //! Per-staff analytics over a date range (analytics:view).
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 6)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: clean aggregation; DATE() bucketing is UTC (COR-21 family — day labels shift for UTC+7/+8)
+next: none here | perf: two grouped queries, no N+1
+*/
 //!
 //! Aggregates shift history and completed sales from the store-scoped DB,
 //! grouped per staff member. Shift days use `opened_at` (the shift's start),

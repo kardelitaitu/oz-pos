@@ -1,4 +1,10 @@
 //! Promotion CRUD — list, get, create, update, delete, and application recording.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 6)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: clean CRUD; update_promotion validates only the name while create also validates promo_type/value_minor/min_order_minor (COR-12-class asymmetry, INFO); window query uses SQLite strftime now()
+next: extend update validation | perf: N/A
+*/
 
 use rusqlite::params;
 
