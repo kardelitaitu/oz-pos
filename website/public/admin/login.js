@@ -291,5 +291,11 @@ if (form) {
   });
 }
 
+// Wire mode tabs (no inline handlers — strict CSP)
+const tabOtp = document.getElementById('tab-otp');
+const tabPwd = document.getElementById('tab-password');
+if (tabOtp) tabOtp.addEventListener('click', () => setAuthMode('otp'));
+if (tabPwd) tabPwd.addEventListener('click', () => setAuthMode('password'));
+
 // Initialize default mode
 setAuthMode('otp');
