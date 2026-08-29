@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: test counts updated to 228 files / 3476 tests · resolved F2: ui/src/locales/en-US.ftl -> per-feature .ftl bundles in ui/src/locales (48 files: en + id variants) · resolved F3: ui/src/styles/ -> ui/src/frontend/themes/ (reset.css/tokens.css/components.css/responsive.css) · resolved F4: "29 per-domain files" in api/ -> 34 .ts files · resolved F5: "Vite 5" -> ^6.0.0 in ui/package.json · verified accurate: React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
+<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (counts refreshed) · F1: test counts 228 files/3476 tests -> 400 files/~6700 tests · F2: api/ 34 -> 40 .ts files · F3: locales 48 -> 50 .ftl files (en + id variants) · verified accurate: ui/src/locales per-feature bundles; ui/src/frontend/themes/ (reset.css/tokens.css/components.css/responsive.css); Vite ^6.0.0 in ui/package.json; React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
 
 # `ui/` — OZ-POS Frontend
 
@@ -22,7 +22,7 @@ npm run dev            # vite dev server on http://localhost:1420
 npm run check:all      # chained validation: lint → typecheck → test → i18n → E2E*
 npm run typecheck      # tsc --noEmit
 npm run lint           # eslint .
-npm run test           # vitest run (228 files, 3476 tests)
+npm run test           # vitest run (400 files, ~6700 tests)
 npm run build          # tsc -b && vite build
 npm run e2e            # Full E2E suite: Docker → Vite → Playwright → cleanup
 npm run e2e:headed     # E2E with browser visible
@@ -59,7 +59,7 @@ CI skips postinstall scripts entirely via `npm ci --ignore-scripts`, so these lo
 ```
 ui/src/
 ├── api/
-│   └── (34 per-domain files)  # Typed invoke() wrappers — no invoke() in components
+│   └── (40 per-domain files)  # Typed invoke() wrappers — no invoke() in components
 ├── components/
 │   ├── AppLayout.tsx    # Sidebar navigation, route definitions, feature gates
 │   ├── Badge.tsx        # status/role badges
@@ -101,19 +101,19 @@ ui/src/
 │   ├── sales.ftl        # POS, cart, sales history
 │   ├── products.ftl     # Product management
 │   ├── settings.ftl     # Settings, setup wizard, sync
-│   ├── ...              # Per-feature Fluent bundles (en + id variants; 48 files total)
+│   ├── ...              # Per-feature Fluent bundles (en + id variants; 50 files total)
 │   └── index.ts         # Bundle loader
 ├── types/
 │   └── domain.ts        # Money, CartId, Sku, LineId, Product, formatMoney
-├── __tests__/           # Per-screen test files (228 files, 3476 tests)
+├── __tests__/           # Per-screen test files (400 files, ~6700 tests)
 ├── App.tsx              # Root: setup guard → auth guard → AppLayout
 └── main.tsx             # Entry: Fluent bundle registration + StrictMode
 ```
 
 ## IPC Rules
 
-- **No `invoke()` in components** — every Tauri command has a typed wrapper in `api/pos.ts`
-- Components call `pos.ts` functions; `pos.ts` owns the `invoke()` calls
+- **No `invoke()` in components** — every Tauri command has a typed wrapper in `ui/src/api/` (per-domain files)
+- Components call per-domain api functions (e.g. `sales.ts`, `products.ts`); the api layer owns the `invoke()` calls
 - All args/results are statically typed via exported interfaces
 
 ## i18n
@@ -130,7 +130,7 @@ ui/src/
 - Each feature screen has a `__tests__/<Screen>.test.tsx` file
 - IPC is mocked via `vi.hoisted()` → `vi.mock('@tauri-apps/api/core')`
 - Fluent strings are provided inline via `FluentBundle` + `FluentResource`
-- Run: `npm run test` (228 test files, 3476 tests, ~14s)
+- Run: `npm run test` (400 test files, ~6700 tests, ~14s)
 
 ## Conventions
 
@@ -143,4 +143,4 @@ ui/src/
 | Every screen has a test file | `__tests__/` audit |
 | Money displayed via `formatMoney()` | Import from `types/domain.ts` |
 
-> last audited 25-07-26 by Hermes-Agent
+> last audited 30-08-26 by docs-auditor
