@@ -792,6 +792,53 @@ describe('AccountView — Devices & Invoices', () => {
       container.remove();
     }
   });
+
+  it('keeps the device list visible after a successful revoke even when the refresh fetch fails', async () => {
+    // Regression: after a successful revoke POST, the follow-up GET /devices
+    // may fail (network error / server glitch). The device list must NOT
+    // collapse to the fallback hint — the just-revoked device should stay
+    // visible as "Revoked" even without a fresh list.
+    sessionStorage.setItem('oz_session', 'tok-revoke-refresh-fail');
+    let devicesGetCount = 0;
+    mockFetch((url, init) => {
+      if (url.includes('/devices') && init?.method === 'POST') {
+        return okJson({ status: 'revoked', revoked_at: '2026-08-29T00:00:00Z' });
+      }
+      if (url.includes('/devices') && !init?.method) {
+        devicesGetCount++;
+        // First GET (initial load) succeeds, second GET (refresh after
+        // revoke) fails with 500.
+        if (devicesGetCount === 1) {
+          return okJson({ devices: [{ id: 'mac-1', machine_id: 'MACHINE-001', created: '2026-08-01T00:00:00Z', revoked_at: null }] });
+        }
+        return badRequest(500);
+      }
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // The device is initially active with a Revoke button.
+      assertText(container, 'MACHINE-001');
+      const revokeBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Revoke');
+      expect(revokeBtn).not.toBeNull();
+      act(() => revokeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      // The device list must still be visible (not collapsed to the hint),
+      // and the device must show as "Revoked" (the optimistic stamp).
+      assertText(container, 'MACHINE-001');
+      assertText(container, 'Revoked');
+      assertNoText(container, 'Terminal Slots');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── Status pill colors ────────────────────────────────────────────────

@@ -391,13 +391,15 @@ export default function AccountView({ locale }: Props) {
       });
       if (!res.ok) throw new Error(`revoke failed (${res.status})`);
       // Mark this device revoked in local state immediately; refresh the
-      // full list so any server-side ordering is preserved.
+      // full list so any server-side ordering is preserved. If the refresh
+      // fails (null), keep the existing list and just stamp the revoked
+      // device — the list must not collapse to the fallback hint.
       const fresh = await fetchDevices();
       if (mountedRef.current) {
-        setDevices(fresh);
-        // Keep the just-revoked device visible as revoked even if the refresh
-        // raced ahead (fetchDevices can return before the revoke commit).
-        setDevices((prev) => prev?.map((d) => (d.id === device.id ? { ...d, revoked_at: d.revoked_at ?? new Date().toISOString() } : d)) ?? fresh);
+        setDevices((prev) => {
+          const list = fresh ?? prev ?? [];
+          return list.map((d) => (d.id === device.id ? { ...d, revoked_at: d.revoked_at ?? new Date().toISOString() } : d));
+        });
       }
     } catch (err) {
       if (mountedRef.current) setRevokeError(err instanceof Error ? err.message : String(err));

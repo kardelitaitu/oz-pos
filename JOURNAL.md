@@ -1,4 +1,27 @@
 
+## 2026-08-29 — TDD round 3: device list collapse after revoke-refresh failure (website AccountView)
+
+**Problem:** In `revokeDevice()`, after a successful revoke POST the code
+refreshed the device list via `fetchDevices()`. When that follow-up GET failed
+(network glitch / 500), `fetchDevices()` returned `null` and `setDevices(null)`
+was called — the whole device section collapsed to the "Terminal Slots" fallback
+hint even though the revoke had actually succeeded server-side. The user lost
+the device list (and the just-revoked row) on a transient refresh failure.
+
+The root cause was two stacked `setDevices` calls: the first unconditionally
+overwrote with `fresh` (possibly null), the second mapped over that result.
+
+**Solution:** TDD Red→Green (1 new test, account-view.test.tsx 43→44):
+- Red: reproduced — revoke POST succeeds, refresh GET returns 500, and the
+  assertion that `MACHINE-001` stays visible as "Revoked" (not "Terminal
+  Slots") failed.
+- Green: `revokeDevice()` now keeps the current list when the refresh fails —
+  one functional `setDevices` that uses `fresh ?? prev ?? []` and optimistically
+  stamps `revoked_at` on the revoked device.
+
+**Commits:** pending round-3 commit.
+**Test counts:** account-view.test.tsx 43→44; full component suite 165→166.
+
 ## 2026-08-29 — TDD round 2: grace-date raw ISO + region keyboard/subscribe pinning (website AccountView)
 
 **Problem:** Another date-rendering gap plus three untested interaction paths on
@@ -5668,7 +5691,7 @@ transaction ("current transaction is aborted") — every subsequent item
 failed, the final COMMIT errored, and the handler 500'd with ALL valid
 items silently lost. The doc comment claimed "a single bad item cannot
 roll back its siblings", which was only true for duplicates. Secondary:
-the Rejected reason used  ormat!("database error: {e}"), but
+the Rejected reason used ormat!("database error: {e}"), but
 tokio-postgres's Display is just "db error" — the real server message
 was discarded, so clients got no diagnostic.
 
@@ -5681,7 +5704,7 @@ was discarded, so clients got no diagnostic.
 - GREEN: each item runs inside a per-item SAVEPOINT — RELEASE on
   success/duplicate, ROLLBACK TO on a true error — so a data error
   isolates only that item and the batch COMMIT still succeeds. Rejected
-  reasons now extract the real message via  .as_db_error().message().
+  reasons now extract the real message via .as_db_error().message().
 - Refactor: clippy 	ype_complexity → BucketShard type alias in
   rate_limit.rs; serialized + table-cleaned the global tenant-count PG
   test (parallel PG tests skew the global aggregate); removed the
@@ -5804,7 +5827,7 @@ query touching a tenant table must run with SET LOCAL oz.tenant_id in a
 transaction. The webhook path was deliberately made oz_app-compatible; the
 email report path was NOT — daily_revenue_pg/weekly/monthly,
 	op_products_pg, hourly_heatmap_pg, category_breakdown_pg,
-low_stock_alerts_at_location_pg, ctive_stock_alerts_pg,
+low_stock_alerts_at_location_pg, ctive_stock_alerts_pg,
 category_popularity_pg, claim_period_pg, elease_period_pg all ran
 BARE queries with no transaction and no GUC. Post-cutover:
 - analytics reads → current_setting returns NULL → policy filters every
@@ -5838,7 +5861,7 @@ scoping).
 ## 2026-08-21 — TDD cycle: PG bug hunt round 6 (email tenant discovery vs RLS)
 
 **Problem:** Round 5 fixed the email analytics/claim functions' missing
-tenant GUC, but left ctive_tenants_pg — the loop's tenant DISCOVERY
+tenant GUC, but left ctive_tenants_pg — the loop's tenant DISCOVERY
 query — reading tenant_plans / offline_queue / sync_terminals with no
 GUC and no tenant (it's cross-tenant by nature). Post-cutover (oz_app +
 FORCE RLS) every row is hidden → discovery returns only 'default' → the
@@ -5868,9 +5891,9 @@ exposure is bounded to the email/webhook code paths.
 
 ## 2026-08-21 — TDD cycle: PG bug hunt round 7 (webhook finalize_sale never applied)
 
-**Problem:** The cloud webhook path enqueues  inalize_sale ({"sale_id":
+**Problem:** The cloud webhook path enqueues inalize_sale ({"sale_id":
 …}) into offline_queue after payment capture — but the sync client's
-apply_remote dispatchers had NO  inalize_sale arm. The atomic path
+apply_remote dispatchers had NO inalize_sale arm. The atomic path
 (apply_remote_in_tx) fell to the _ arm and returned
 "unsupported remote sync action: finalize_sale" → record_remote_failure →
 dead-lettered after 3 retries; the legacy path silently skipped. A sale
@@ -5938,7 +5961,7 @@ compiles — that agent may still be mid-change.
 
 ## 2026-08-21 — TDD cycle: PG bug hunt round 9 (terminal auth vs RLS cutover)
 
-**Problem:** erify_terminal_credentials reads sync_terminals — an RLS
+**Problem:** erify_terminal_credentials reads sync_terminals — an RLS
 FORCEd table — with no tenant GUC and no BYPASSRLS role. It is a
 PRE-tenant read (the whole point is to learn tenant_id), so the same
 class of bug as the webhook resolution and email tenant discovery: after
@@ -6055,7 +6078,7 @@ gate:
    binary crate — only tests call it (the bin cannot reach it). Marked
    #[cfg_attr(not(test), allow(dead_code))]; connect_postgres_with_
    retries remains the test-facing variant.
-2. ttempt as u32 — attempt is already u32 (from 1..=max_attempts),
+2. ttempt as u32 — attempt is already u32 (from 1..=max_attempts),
    so the cast was redundant; removed.
 
 Verification: oz-cloud-server clippy -D warnings clean; 211+5+2 green
