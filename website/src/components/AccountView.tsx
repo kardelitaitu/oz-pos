@@ -4,7 +4,7 @@ import { pricingFor } from '../content/pricing';
 import { isStrongPassword, passwordsMatch } from '../lib/passwordPolicy';
 import { clearSession, getSessionEmail, isPaddleConfigured, isPlaceholderPriceId, openPaddleCheckout } from './paddle';
 import { openMidtransCheckout } from './midtrans';
-import { type Region, getRegion, setRegion } from '../lib/region';
+import { type Region, getRegion, getExplicitRegion, setRegion } from '../lib/region';
 import PasswordField from './PasswordField';
 import PasswordStrength from './PasswordStrength';
 import { licenseApiUrl } from '../lib/runtime-config';
@@ -220,6 +220,17 @@ export default function AccountView({ locale }: Props) {
   const [regionMsg, setRegionMsg] = useState(false);
   const [regionOpen, setRegionOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+  // Payment routing follows the saved region (ADR #39 D1) exactly like the
+  // pricing-page CheckoutButton: Indonesia → Midtrans Snap, everything else
+  // → Paddle. Falls back to the locale only when region is unset.
+  const [useMidtrans, setUseMidtrans] = useState<boolean>(() => {
+    const r = getExplicitRegion();
+    return r === 'id' || (!r && locale === 'id');
+  });
+  useEffect(() => {
+    const r = getExplicitRegion();
+    setUseMidtrans(r === 'id' || (!r && locale === 'id'));
+  }, [region, locale]);
   // Device revoke state: record id currently being revoked, plus the last
   // failure message (shown inline on the device row).
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -301,8 +312,8 @@ export default function AccountView({ locale }: Props) {
     setSubscribing(tierKey);
     setSubscribeError(false);
     // Indonesian market bills through Midtrans Snap (ADR #39 D1); every
-    // other locale through Paddle.
-    const useMidtrans = locale === 'id';
+    // other region through Paddle. useMidtrans follows the saved region
+    // preference (see state init), same as the pricing-page CheckoutButton.
     try {
       if (useMidtrans) {
         // The bundle (C3.2) rides the snap request (custom_field4) so the
@@ -445,8 +456,8 @@ export default function AccountView({ locale }: Props) {
   // out and the section shows "checkout unavailable".
   // The id market bills through Midtrans (fixed Rp from the server's
   // MIDTRANS_PRICE_TIERS map), so Paddle price ids don't gate it; other
-  // locales need a real, non-placeholder Paddle price.
-  const useMidtrans = locale === 'id';
+  // markets need a real, non-placeholder Paddle price. useMidtrans is the
+  // region-derived state (see state init) — do not redeclare it here.
   const subscribable = (pricingFor(locale) ?? [])
     .filter((tier) => tier.tierKey === 'plus' || tier.tierKey === 'pro' || tier.tierKey === 'premium')
     .map((tier) => {
