@@ -923,7 +923,7 @@ export default function AccountView({ locale }: Props) {
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.grace')}</dt>
-              <dd>{subscription.graceUntil ?? '—'}</dd>
+              <dd>{fmtDate(subscription.graceUntil, locale)}</dd>
             </div>
           </dl>
           {subscription.status !== 'active' && (

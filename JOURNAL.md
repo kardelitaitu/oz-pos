@@ -1,4 +1,32 @@
 
+## 2026-08-29 — TDD round 2: grace-date raw ISO + region keyboard/subscribe pinning (website AccountView)
+
+**Problem:** Another date-rendering gap plus three untested interaction paths on
+the account dashboard:
+
+1. `graceUntil` was rendered raw (`{subscription.graceUntil ?? '—'}`) while
+   startsAt and `expiresAt went through `fmtDate — the grace date showed
+   the server's raw ISO string ("2027-01-15T00:00:00Z") to users.
+2. The region selector's keyboard navigation (ArrowDown/ArrowUp/Escape, focus
+   management) had zero test coverage — a regression there would ship silent.
+3. The subscribe buttons' payment routing (Paddle vs Midtrans) had no test
+   covering the en-locale path with real (non-placeholder) price ids.
+4. The saved-region → payment-provider routing fix (commit d65eeb98) had no
+   regression test.
+
+**Solution:** TDD Red→Green (7 new tests, account-view.test.tsx 36→43):
+- Green: graceUntil now renders via `fmtDate() (raw ISO → "Jan 15, 2027").
+- Pinned region keyboard nav: ArrowDown opens + focuses first option,
+  ArrowUp/Down move focus, Enter selects, Escape closes and refocuses the
+  trigger (aria-expanded asserted through the interaction).
+- Pinned subscribe routing: Paddle called with plan price id + account email
+  (non-placeholder), Midtrans called for id locale with period 'yearly'.
+- Pinned region-routing: an en-locale dashboard with saved region 'id' routes
+  the subscribe click through Midtrans, not Paddle.
+
+**Commits:** pending commit for round 2.
+**Test counts:** account-view.test.tsx 36→43; full component suite 158→165.
+
 
 ## 2026-08-29 — TDD cycle: dashboard date/countdown timezone bugs (website AccountView)
 
@@ -5640,7 +5668,7 @@ transaction ("current transaction is aborted") — every subsequent item
 failed, the final COMMIT errored, and the handler 500'd with ALL valid
 items silently lost. The doc comment claimed "a single bad item cannot
 roll back its siblings", which was only true for duplicates. Secondary:
-the Rejected reason used ormat!("database error: {e}"), but
+the Rejected reason used  ormat!("database error: {e}"), but
 tokio-postgres's Display is just "db error" — the real server message
 was discarded, so clients got no diagnostic.
 
@@ -5653,7 +5681,7 @@ was discarded, so clients got no diagnostic.
 - GREEN: each item runs inside a per-item SAVEPOINT — RELEASE on
   success/duplicate, ROLLBACK TO on a true error — so a data error
   isolates only that item and the batch COMMIT still succeeds. Rejected
-  reasons now extract the real message via .as_db_error().message().
+  reasons now extract the real message via  .as_db_error().message().
 - Refactor: clippy 	ype_complexity → BucketShard type alias in
   rate_limit.rs; serialized + table-cleaned the global tenant-count PG
   test (parallel PG tests skew the global aggregate); removed the
@@ -5840,9 +5868,9 @@ exposure is bounded to the email/webhook code paths.
 
 ## 2026-08-21 — TDD cycle: PG bug hunt round 7 (webhook finalize_sale never applied)
 
-**Problem:** The cloud webhook path enqueues inalize_sale ({"sale_id":
+**Problem:** The cloud webhook path enqueues  inalize_sale ({"sale_id":
 …}) into offline_queue after payment capture — but the sync client's
-apply_remote dispatchers had NO inalize_sale arm. The atomic path
+apply_remote dispatchers had NO  inalize_sale arm. The atomic path
 (apply_remote_in_tx) fell to the _ arm and returned
 "unsupported remote sync action: finalize_sale" → record_remote_failure →
 dead-lettered after 3 retries; the legacy path silently skipped. A sale

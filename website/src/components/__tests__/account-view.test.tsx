@@ -213,6 +213,108 @@ describe('AccountView — subscription display', () => {
       container.remove();
     }
   });
+
+  it('routes subscribe through Paddle with the plan price id once real prices land', async () => {
+    // Regression: when the Paddle catalog lands (non-placeholder price ids),
+    // the dashboard subscribe button must open the Paddle overlay with the
+    // plan's price id + the account email, and route /me refresh on close.
+    sessionStorage.setItem('oz_session', 'tok-sub-paddle');
+    paddle.isPlaceholderPriceId.mockReturnValue(false); // real catalog
+    paddle.openPaddleCheckout.mockResolvedValue(undefined);
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // With real price ids, the subscribe buttons render for the 3 paid tiers.
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(paddle.openPaddleCheckout).toHaveBeenCalled();
+      // The first call opens the yearly price of the first subscribable tier.
+      const call = paddle.openPaddleCheckout.mock.calls[0];
+      expect(call[1]).toBe('test@example.com');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('routes subscribe through Midtrans Snap for the id locale', async () => {
+    sessionStorage.setItem('oz_session', 'tok-sub-midtrans');
+    midtrans.openMidtransCheckout.mockResolvedValue(undefined);
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('id');
+    try {
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Berlangganan',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(midtrans.openMidtransCheckout).toHaveBeenCalled();
+      expect(paddle.openPaddleCheckout).not.toHaveBeenCalled();
+      const call = midtrans.openMidtransCheckout.mock.calls[0];
+      expect(call[1]).toBe('yearly');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('uses the saved region (id) to route an en-locale subscribe through Midtrans', async () => {
+    // Regression for the region-routing fix: a user on /en/account who saved
+    // the Indonesia region preference must get Midtrans, not Paddle — the
+    // payment provider follows getExplicitRegion(), not the URL locale.
+    localStorage.setItem('oz_region', 'id');
+    sessionStorage.setItem('oz_session', 'tok-sub-region-id');
+    midtrans.openMidtransCheckout.mockResolvedValue(undefined);
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // The subscribe button label is the en string even though the region
+      // is id — the label comes from locale, the provider from region.
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(midtrans.openMidtransCheckout).toHaveBeenCalled();
+      expect(paddle.openPaddleCheckout).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── License display ───────────────────────────────────────────────────
@@ -303,6 +405,110 @@ describe('AccountView — region selector', () => {
       });
       expect(localStorage.getItem('oz_region')).toBe('id');
       assertText(container, 'Region updated.');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('opens the listbox and focuses the first option on ArrowDown', async () => {
+    sessionStorage.setItem('oz_session', 'tok-region-keyboard');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      const trigger = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      );
+      expect(trigger).not.toBeNull();
+      expect(trigger!.getAttribute('aria-expanded')).toBe('false');
+
+      // ArrowDown on the closed trigger opens the listbox and moves focus
+      // to the first option.
+      act(() => {
+        trigger!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(trigger!.getAttribute('aria-expanded')).toBe('true');
+
+      // The first option (Global) should now have focus.
+      const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+      expect(options.length).toBe(2);
+      expect(document.activeElement).toBe(options[0]);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('moves focus between options with ArrowDown/ArrowUp and selects on Enter', async () => {
+    sessionStorage.setItem('oz_session', 'tok-region-keyboard2');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      const trigger = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      )!;
+      act(() => {
+        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+      expect(document.activeElement).toBe(options[0]);
+
+      // ArrowDown → second option; ArrowUp → back to first.
+      act(() => {
+        options[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      expect(document.activeElement).toBe(options[1]);
+      act(() => {
+        options[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      });
+      expect(document.activeElement).toBe(options[0]);
+
+      // Enter on the second option (Indonesia) selects it.
+      act(() => {
+        options[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(localStorage.getItem('oz_region')).toBe('id');
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('closes the listbox and refocuses the trigger on Escape', async () => {
+    sessionStorage.setItem('oz_session', 'tok-region-escape');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      const trigger = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      )!;
+      act(() => {
+        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+      act(() => {
+        options[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      // Listbox is closed and focus returns to the trigger.
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(container.querySelector('[data-region-option]')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
     } finally {
       act(() => root.unmount());
       container.remove();
@@ -848,6 +1054,30 @@ describe('AccountView — formatted dates', () => {
       // assert it's a sane positive count (singular 'day' or plural 'days').
       const text = container.textContent ?? '';
       expect(text).toMatch(/Renews in [0-9]+ day(s)?/);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Grace period date ────────────────────────────────────────────────
+
+describe('AccountView — grace period date', () => {
+  it('formats the grace until date instead of showing raw ISO', async () => {
+    // Regression: graceUntil was rendered as the raw string from the server
+    // while startsAt and expiresAt used fmtDate. This test pins the fix.
+    sessionStorage.setItem('oz_session', 'tok-grace-date');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'grace_period', startsAt: '2026-01-01', expiresAt: '2027-01-01', graceUntil: '2027-01-15T00:00:00Z' },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // Must show the formatted date, not the raw ISO value.
+      assertText(container, 'Jan 15, 2027');
+      assertNoText(container, '2027-01-15T00:00:00Z');
     } finally {
       act(() => root.unmount());
       container.remove();
