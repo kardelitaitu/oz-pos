@@ -100,7 +100,7 @@ describe('Cloudflare Worker — worker.ts', () => {
     const res = await worker.fetch(req, mockEnv);
 
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/login\?redirect=/);
+    expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/en\/login\?redirect=/);
   });
 
   it('redirects admin.ozpos.my.id to login when no cookie', async () => {
@@ -108,7 +108,7 @@ describe('Cloudflare Worker — worker.ts', () => {
     const res = await worker.fetch(req, mockEnv);
 
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/login\?redirect=/);
+    expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/en\/login\?redirect=/);
   });
 
   it('sets cookie from ?token= param and redirects to clean URL', async () => {

@@ -31,7 +31,7 @@ interface Props {
 type Step = 'form' | 'code';
 
 const INPUT_CLASS =
-  'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
+  'w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
 
 const regionOptions: { value: Region; labelKey: string }[] = [
   { value: 'global', labelKey: 'signup.regionGlobal' },

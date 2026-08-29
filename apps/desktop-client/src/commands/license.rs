@@ -735,6 +735,88 @@ pub struct PauseResumeDto {
     pub paused_until: Option<String>,
 }
 
+/// Session-scoped variant of [`get_machine_id`].
+#[tauri::command]
+pub async fn get_machine_id_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    get_machine_id(state).await
+}
+
+/// Session-scoped variant of [`get_hardware_fingerprint`].
+#[tauri::command]
+pub async fn get_hardware_fingerprint_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    get_hardware_fingerprint(state).await
+}
+
+/// Session-scoped variant of [`renew_license`].
+#[tauri::command]
+pub async fn renew_license_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+    new_key: String,
+) -> Result<bool, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    renew_license(state, new_key).await
+}
+
+/// Session-scoped variant of [`check_license_status`].
+#[tauri::command]
+pub async fn check_license_status_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<ServerLicenseStatusDto, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    check_license_status(state).await
+}
+
+/// Session-scoped variant of [`test_auth_connection`].
+#[tauri::command]
+pub async fn test_auth_connection_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<AuthPingResult, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    test_auth_connection().await
+}
+
+/// Session-scoped variant of [`get_license_status`].
+#[tauri::command]
+pub async fn get_license_status_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<LicenseStatusDto, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    get_license_status(state).await
+}
+
+/// Session-scoped variant of [`pause_subscription`].
+#[tauri::command]
+pub async fn pause_subscription_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+    pause_months: u8,
+) -> Result<PauseResumeDto, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    pause_subscription(state, pause_months).await
+}
+
+/// Session-scoped variant of [`resume_subscription`].
+#[tauri::command]
+pub async fn resume_subscription_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<PauseResumeDto, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    resume_subscription(state).await
+}
+
 #[cfg(test)]
 #[path = "license_tests.rs"]
 mod tests;

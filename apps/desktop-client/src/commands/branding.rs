@@ -222,6 +222,17 @@ pub async fn set_brand_logo_path_scoped(
     }
 }
 
+/// Session-scoped variant of [`pick_logo_file`].
+#[tauri::command]
+pub async fn pick_logo_file_scoped(
+    session_token: String,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    pick_logo_file(app_handle).await
+}
+
 #[cfg(test)]
 #[path = "branding_tests.rs"]
 mod tests;

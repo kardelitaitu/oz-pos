@@ -570,6 +570,26 @@ fn human_size(bytes: u64) -> String {
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
+/// Session-scoped variant of [`get_backup_status`].
+#[tauri::command]
+pub async fn get_backup_status_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<BackupStatus, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    get_backup_status(state).await
+}
+
+/// Session-scoped variant of [`create_backup`].
+#[tauri::command]
+pub async fn create_backup_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<BackupResult, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    create_backup(state).await
+}
+
 #[cfg(test)]
 #[path = "data_tests.rs"]
 mod tests;

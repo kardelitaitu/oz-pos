@@ -142,6 +142,16 @@ pub async fn save_report_schedule(
         .map_err(|e| AppError::Internal(format!("Failed to save report schedule: {e}")))
 }
 
+/// Session-scoped variant of [`get_report_schedule`].
+#[tauri::command]
+pub async fn get_report_schedule_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<oz_core::export::ReportScheduleConfig, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    get_report_schedule(state).await
+}
+
 #[cfg(test)]
 #[path = "email_tests.rs"]
 mod tests;
