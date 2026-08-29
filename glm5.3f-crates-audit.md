@@ -31,7 +31,7 @@
 | # | Target | .rs lines | Status | Findings (H/M/L/I) | Commit |
 |---|---|---:|---|---|---|
 | 1 | crates/oz-crypto | 339 | ✅ DONE | 1 / 2 / 3 / 1 | `082e7f0f` |
-| 2 | crates/oz-security | 2,068 | ⬜ pending | — | — |
+| 2 | crates/oz-security | 2,068 | ✅ DONE | 0 / 2 / 4 / 3 | (this commit) |
 | 3 | crates/oz-payment | 6,251 | ⬜ pending | — | — |
 | 4 | crates/oz-core (sliced by subsystem) | 80,216 | ⬜ pending | — | — |
 | 5 | crates/oz-api | 7,479 | ⬜ pending | — | — |
@@ -143,6 +143,70 @@ PG sync password, rate API key, LAN PSK, user-profile field (all static).
 1. CRY-7 (error variants) → 2. CRY-2 (fail-closed semantics + legacy
 migration) → 3. CRY-1 (key provider: keychain/env master key) → 4. CRY-3
 (HKDF) → 5. CRY-4 + CRY-5 + CRY-6 + CRY-8 (hygiene batch).
+
+---
+
+## 2. crates/oz-security — ✅ audited 2026-07-25
+
+**Files:** 8 production (lib, error, mask, tls, windows, linux, macos,
+test_helpers) + 7 sibling test files · **Stamps:** all 8 files stamped
+(replacing 19-07-26 blocks in lib.rs/windows.rs) · **Status:** SAFE (windows.rs
+UNSAFE-by-content, all blocks reviewed)
+
+### Baseline evidence
+
+- `cargo check -p oz-security` — **clean, 0 warnings**.
+- `cargo test -p oz-security` — **82 unit + 6 doc-tests pass** (re-verified
+  after stamping). Windows FFI tests run against the *real* Credential Manager
+  with RAII cleanup and nextest-safe unique names.
+- `#![deny(unsafe_code)]` at crate root; the only `unsafe` is 6 blocks in
+  `windows.rs` behind a scoped `#![allow(unsafe_code)]` — each carries an
+  accurate `// SAFETY:` comment, all six re-verified sound this pass.
+- Sibling `*_tests.rs` convention followed exactly (AGENTS.md-compliant).
+- Graph: `insecure_skip_verify` has **zero consumers outside this crate**
+  (raw-text search across all `.rs`) — TLS wiring presumably lands with
+  platform/sync (verify there).
+
+### What the crate does
+
+OS-credential-store abstraction (`Keyring` trait: get/set/delete/rotate) with
+Windows Credential Manager / Linux Secret Service (D-Bus) / macOS Keychain
+backends + documented in-memory dev fallback; PCI-DSS masking helpers
+(PAN/Luhn/name/CVV); TLS config type for cloud sync.
+
+### Findings & proposed solutions
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| SEC-1 | 🟠 MEDIUM | macos.rs:35–52, 63–72 | **Not-found detection by debug-string substring.** `format!("{e:?}").contains("-128")` — any OSStatus containing "-128" (e.g. **-12800**) is misclassified as item-not-found → real failures surface as `Ok(None)`; callers may treat a live key as absent (→ silent regeneration/data loss). | Compare numerically: `e.code() == -25300 \|\| e.code() == -128`. Delete the string matching. Platform-gated: needs a macOS host to exercise. |
+| SEC-2 | 🟠 MEDIUM | linux.rs:23–38 | **Private tokio `Runtime` embedded in the struct + `block_on` per op.** Panics ("Cannot start a runtime from within a runtime") if any `Keyring` method is called from an async context; heavy per-instance runtime + dedicated D-Bus connection. | Document the sync-context requirement in the type docs, or hold a `tokio::runtime::Handle` (created outside async) and `block_on` via it, or use zbus's blocking wrapper. Needs Linux host to validate. |
+| SEC-3 | 🟡 LOW | windows.rs:72–81 | **Zero-size blob edge in FFI read.** `from_raw_parts(ptr, 0)` requires a non-null pointer even for length 0; a credential with `CredentialBlobSize == 0` (e.g. written by another tool, or our own empty-string secret path) would be UB-adjacent. Everything else in the six unsafe blocks is sound. | Early-return `String::new()` when `CredentialBlobSize == 0` before the unsafe slice. One-line guard + a test storing an empty secret. |
+| SEC-4 | 🟡 LOW | lib.rs:107–129 | **Default `rotate_key` is non-atomic** (get → archive `{name}-prev` → write new → write timestamp). A crash mid-sequence can leave the archive updated but the new key missing. Single-process desktop risk is low; matters if sync ever rotates concurrently. | Optional: write new key under `{name}-next`, then swap the two names, then archive. Or document the residual window explicitly. |
+| SEC-5 | 🟡 LOW | tls.rs:37–42 | **`insecure_skip_verify` is serde-visible config with no guard, log, or `debug_assertions` gate.** Currently *latent* (no consumer reads it), but the moment sync wiring lands, a stray `true` in a config file silently disables TLS verification. | On `build()`/`validate()`: emit `warn!` when set; in release builds require an explicit env override (e.g. `OZ_POS_ALLOW_INSECURE_TLS=1`). |
+| SEC-6 | 🟡 LOW | lib.rs (trait API) | **Secrets returned as `String` without zeroization** (hex keys in memory indefinitely). Same hygiene gap as CRY-5 in oz-crypto. | `Zeroizing<String>` in the API (breaking) or zeroize-on-drop internally at each backend before returning. |
+| SEC-7 | ℹ️ INFO | error.rs:13–15 | `DecryptionFailed` variant has no producer in this crate (no decrypt path here) — presumably a mapping target for consumers. | Confirm during the oz-core pass; if unmapped, it's harmless (`#[non_exhaustive]`) but dead API surface. |
+| SEC-8 | ℹ️ INFO | mask.rs:114–129 | `mask_name` mixes byte length (`part.len()`) with char extraction — star count is off for multi-byte names. **Already known and pinned** by `mask_name_byte_vs_char_caveat`. | No action needed beyond keeping the pin; switch to `chars().count()` if cosmetic accuracy ever matters. |
+| SEC-9 | ℹ️ INFO | linux.rs:142–153, 48 | `set_secret` is delete-then-create (non-atomic; crash between loses the secret); per-item `Delete` errors are swallowed (`let _ =`); `OpenSession("plain")` sends secrets unencrypted over the (local-socket-protected) D-Bus session — standard libsecret uses DH. | Fold into the SEC-2 platform pass: propagate Delete errors, consider CreateItem-with-replace or DH session. |
+
+### Positives worth keeping
+
+- `#![deny(unsafe_code)]` crate-wide with a single reviewed, documented FFI
+  exception — exactly the pattern the root Cargo.toml comment describes.
+- Six `// SAFETY:` comments are accurate and complete (one hardening gap
+  logged as SEC-3).
+- Test hygiene is exemplary: sibling files, real-OS FFI tests with RAII
+  `CredentialGuard`, atomic counters for nextest-safe names, poll-based
+  `set_and_verify`, boundary/invariant tests that pin API contracts
+  (empty names, double-delete semantics, rotation chaining, concurrency).
+- PCI masking: digit-only pre-filter makes byte slicing panic-free; the
+  7–10-digit overlap case correctly avoids exposing the full PAN.
+
+### Recommended fix order (when the user green-lights implementation)
+
+1. SEC-3 (one-line Windows guard + test) → 2. SEC-1 (numeric macOS error
+   compare) → 3. SEC-5 (insecure flag guard) → 4. SEC-2 + SEC-9 (Linux
+   platform pass, needs a Linux host) → 5. SEC-4 / SEC-6 / SEC-7 (design
+   hygiene, can ride along with the CRY-5 zeroize work).
 
 ---
 

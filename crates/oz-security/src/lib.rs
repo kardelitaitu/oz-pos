@@ -1,8 +1,8 @@
 /*
-last audited 19-07-26 by RSA-Agent
-crate: oz-security | status: SAFE (crate root) | lint: CLEAN
-findings: #![deny(unsafe_code)] at crate root. windows.rs module has #![allow(unsafe_code)] override for FFI — see stamp in windows.rs. SAFETY comments added 19-07-26.
-next: none | perf: N/A
+last audited 25-07-26 by RSA-Agent
+crate: oz-security | status: SAFE | lint: CLEAN
+findings: Keyring trait + InMemoryKeyring + platform dispatch re-verified; default rotate_key is non-atomic get->archive->write (SEC-4); secrets returned as String without zeroize (SEC-6); 82 unit + 6 doc tests pass
+next: none this pass | perf: N/A
 */
 
 //! Encryption, secrets, and PCI-DSS helpers for OZ-POS.

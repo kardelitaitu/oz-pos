@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent
+crate: oz-security | status: SAFE | lint: CLEAN (cfg(test)-only)
+findings: RAII CredentialGuard + poll-based set_and_verify sound; unique names prevent nextest cross-test collisions
+next: none | perf: N/A
+*/
 //! Shared helpers for tests that touch the OS credential stores.
 //!
 //! These helpers are only compiled when running tests.

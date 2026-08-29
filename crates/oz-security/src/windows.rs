@@ -1,8 +1,8 @@
 /*
-last audited 19-07-26 by RSA-Agent
-crate: oz-security | status: UNSAFE | lint: CLEAN
-findings: 6 unsafe blocks (CredReadW, CredWriteW, CredDeleteW, GetLastError, from_raw_parts, CredFree, zeroed) — all FFI calls to wincred API, necessary. SAFETY comments added 19-07-26.
-next: none | perf: N/A — FFI overhead negligible
+last audited 25-07-26 by RSA-Agent
+crate: oz-security | status: UNSAFE (6 unsafe blocks reviewed) | lint: CLEAN
+findings: all unsafe blocks re-verified sound (CredReadW, CredWriteW, CredDeleteW, GetLastError, from_raw_parts+CredFree, zeroed FILETIME); SAFETY comments accurate; SEC-3: zero-size CredentialBlob would violate from_raw_parts non-null precondition
+next: guard CredentialBlobSize == 0 before slicing (SEC-3) | perf: FFI overhead negligible
 */
 
 //! Windows Credential Manager implementation of [`Keyring`].
