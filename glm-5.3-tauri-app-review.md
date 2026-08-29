@@ -573,7 +573,7 @@ HTTP nodes.
 
 ## S9 — Build, CI & Tooling
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** `scripts/` (~100), `.github/workflows/`, 4 pre-commit gates (fmt, i18n lint,
 bundle-parity, FTL dedupe) in `.githooks/`, `deny.toml`, `rust-toolchain.toml`,
@@ -587,7 +587,40 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 
 ### S9 Notes
 
-- (empty)
+**Checked:** .githooks gates + hooksPath config, ci.yml triggers + job inventory,
+check.sh ↔ CI parity, architecture-boundaries baseline, pre-push gate.
+
+- `core.hooksPath` = `.githooks` **is configured in this clone** — the 4 pre-commit
+  gates (fmt, i18n lint, bundle-parity, FTL dedupe) are active (observed running on
+  every review commit). A `pre-push` hook adds fast FTL quality checks mirroring the
+  CI ui-i18n gate.
+- `ci.yml`: triggers = `push` on `main` + `pull_request` (main) — AGENTS statement
+  accurate; the other 10 workflows are release/deploy/platform-specific (android, ios,
+  website, docker drift/persistence, nightly, security, e2e-pr). Consequence: commits
+  on the `0.0.33` feature branch (including all review commits) are NOT CI-validated —
+  only a PR to main would be.
+- 28 CI jobs, including: rust-fmt, rust-clippy, rust-test-fast/full/apps,
+  go, unified-healthcheck, **rust-panic-inventory** (ADR #33 fail-closed gate),
+  **rust-money-format** (IDR/JPY/KWD exp-2 guard), **architecture-boundaries**,
+  ui-lint/typecheck/test, lighthouse, docker, coverage, audit, security-pr, fuzz,
+  flaky-quarantine, windows-config, skill-drift-tests, ci-docs-drift, e2e-docker-image,
+  e2e.
+- `scripts/check.sh` mirrors the CI matrix locally (workspace clippy single-pass,
+  boundary checker, money-format gate, unwrap/panic scanner with
+  `--fail-on-recoverable`).
+- `scripts/architecture-boundaries-baseline.json`: versioned schema + entries list.
+
+### S9 Findings
+
+- **F-048 (INFO, S9)**: AGENTS invariants are machine-enforced end-to-end (hooks →
+  check.sh → 28-job CI). Resolves F-002's open question: "CI only on main" refers to
+  ci.yml specifically and is accurate.
+- **F-049 (INFO, S9)**: This review branch (`0.0.33`) receives no CI validation until a
+  PR opens — local gates are the only active enforcement here.
+- **F-050 (P2, S9)**: The one unpoliced invariant found in this review is the S1
+  command-registration parity (F-006/F-008): no gate asserts every UI `invoke` string
+  exists in each shell's `generate_handler`. Adding one would close the ADR #7 class
+  mechanically.
 
 ---
 
@@ -675,6 +708,9 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 | F-045 | 2026-07-25 | S8 | INFO | `website/worker.ts` | httpOnly cookie → JWT, token never in URL, no payment webhooks in worker |
 | F-046 | 2026-07-25 | S8 | INFO | `apps/cloud-server`, `scripts/rls-cutover.sql` | Query-layer tenant filters + per-tenant limits; RLS backstop script |
 | F-047 | 2026-07-25 | S8 | P3 | `apps/license-server/` | Another agent's uncommitted changes present — reviewed committed baseline only |
+| F-048 | 2026-07-25 | S9 | INFO | `.githooks/`, `.github/workflows/ci.yml` | Invariants machine-enforced: 4 commit gates + 28 CI jobs; "CI only main" accurate |
+| F-049 | 2026-07-25 | S9 | INFO | branch `0.0.33` | Feature branch gets no CI until PR — local gates only |
+| F-050 | 2026-07-25 | S9 | P2 | CI gap | No command→handler registration parity gate (the F-006/F-008 class) |
 
 ---
 
@@ -716,4 +752,7 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 - **S8 reviewed**: webhook verification + replay protection solid (F-044); worker auth
   model clean, no payment webhooks in worker (F-045); tenant isolation query-layer + RLS
   backstop (F-046); concurrent-agent caveat recorded (F-047). Committed.
-- Next: S9 build/CI/tooling.
+- **S9 reviewed**: hooks active in clone, 28-job CI, check.sh parity (F-048); branch
+  un-CI'd until PR (F-049); the one unpoliced invariant = IPC registration parity
+  (F-050). Committed.
+- Next: S10 docs & drift — final sector.
