@@ -33,7 +33,7 @@
 | 1 | crates/oz-crypto | 339 | ✅ DONE | 1 / 2 / 3 / 1 | `082e7f0f` |
 | 2 | crates/oz-security | 2,068 | ✅ DONE | 0 / 2 / 4 / 3 | (this commit) |
 | 3 | crates/oz-payment | 6,251 | ✅ DONE | 1 / 4 / 5 / 3 | (this commit) |
-| 4 | crates/oz-core (sliced by subsystem) | 80,216 | ⬜ pending | — | — |
+| 4 | crates/oz-core (sliced by subsystem) | 80,216 | 🟡 slice A done | 0 / 1 / 2 / 2 | (this commit) |
 | 5 | crates/oz-api | 7,479 | ⬜ pending | — | — |
 | 6 | foundation | 6,326 | ⬜ pending | — | — |
 | 7 | platform/kernel | 3,385 | ⬜ pending | — | — |
@@ -267,6 +267,53 @@ unsafe)
 
 ---
 
+## 4. crates/oz-core — 🟡 IN PROGRESS (sliced by subsystem)
+
+**Layout:** ~90 top-level modules (mostly thin documented re-export shims over
+`foundation` / `modules-*`) + **`db/` (81 files, 46,358 lines — rusqlite
+persistence)** + `export/` (3,121) + `sync/` (279). Heavy hitters:
+`sync_client.rs` 1,243 · `features.rs` 1,223 · `settings.rs` 706 ·
+`topology.rs` 681 · `subscription.rs` 621 · `license_verification.rs` 550.
+
+**Slice plan:** **A** — lib/error/session/audit/events/rate_limiter/
+config_validator/payment/cash_payout/crypto + shims ✅ · **B** — `db/` layer
+(transactions, migrations) · **C** — sync_client/topology/features/settings ·
+**D** — export/subscription/license_verification/kds + remainder.
+
+### Slice A baseline evidence (2026-07-25)
+
+- `cargo check -p oz-core` — clean (re-verified post-stamp).
+- `cargo test -p oz-core` — **2,536 tests pass** (2,026 unit + 510
+  integration across 24 suites), 0 warnings.
+- `#![deny(unsafe_code)]`; source sweep confirms **zero actual unsafe** (4
+  keyword hits are all comments/stamp text).
+- `new_id()` = UUIDv7 everywhere (ADR #6); Money stays `i64` minor units via
+  `foundation::money` re-export.
+
+### Slice A findings
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-1 | 🟡 LOW | audit.rs:16, payment.rs:22, cash_payout.rs:12 | **Stale "UUID v4" field docs** — constructors correctly generate v7 per ADR #6/house rule (`new_id()`), the docs lie. | Docs-only fix: change field docs to "UUID v7". |
+| COR-2 | 🟡 LOW | rate_limiter.rs:20 | **Unbounded per-username HashMap** in the login rate limiter — spamming the login form with random usernames grows memory without cap (desktop-local blast radius). | Cap map size / evict idle usernames on prune. |
+| COR-3 | 🟠 MEDIUM | config_validator.rs:110–119, 195–205 | **Credential leakage in validator errors.** On misconfiguration, the message embeds a `DATABASE_URL` prefix (typically `postgresql://user:password@…` within 40 chars) and the **full** `REDIS_URL` (may embed `redis://user:pass@host`). These land in tracing logs — retained long-term per logging policy. | Redact userinfo before embedding: print `scheme://[redacted]@host[:port]` only. |
+| COR-4 | ℹ️ INFO | error.rs:205 | `TopologyValidation` folds into `kind() == Validation`, so the front-end `AppError.subKind` cannot single out topology failures (the structured `code` field does carry specificity). | Acceptable; revisit if UI needs a distinct kind. |
+| COR-5 | ℹ️ INFO | session.rs:52–54 | `expires_at: None` = never-expiring session, available in production — enforcement lives with the settings layer. | Verify the production default TTL during slice C (settings.rs). |
+
+**Cross-crate threads confirmed:** `Payment.idempotency_key` is captured at
+the oz-core sale level → PAY-2's drop point is confirmed to be the
+oz-payment drivers, not oz-core. `crypto.rs` shim inherits CRY-1…8 verbatim.
+
+### Slice A positives
+
+- Honest, documented re-export shims (16 files) with zero logic.
+- `error.rs` is a model typed-error surface (UI discriminator + structured
+  payloads + `#[non_exhaustive]`).
+- Rate limiter logic is correct including the `max_attempts = 0` edge and
+  poison recovery on the hot path.
+
+---
+
 *This file is appended after each completed crate audit. Findings get IDs
-prefixed by crate (`CRY-`, `SEC-`, `PAY-`, …) so they can be referenced in
-commits and specs without ambiguity.*
+prefixed by crate (`CRY-`, `SEC-`, `PAY-`, `COR-`, …) so they can be referenced
+in commits and specs without ambiguity.*

@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice A)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: immutable scope struct, TTL via expires_at sound; COR-5: expires_at None means never-expires and the type cannot enforce dev-only — verify production default TTL during settings.rs slice
+next: verify default TTL enforcement in slice C | perf: N/A
+*/
 //! Session context — immutable scope resolved at login/startup.
 //!
 //! ADR #4: Every authenticated session carries a `SessionContext` that
