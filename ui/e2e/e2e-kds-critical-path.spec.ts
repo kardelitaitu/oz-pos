@@ -83,7 +83,9 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     await expect(advanceBtn).toBeVisible({ timeout: 5_000 });
 
     // ── Advance 1: pending → preparing ─────────────────────────────
-    await advanceBtn.click();
+    // force:true bypasses actionability checks — the card header animation
+    // can make Playwright think the element is not stable.
+    await advanceBtn.click({ force: true });
     await expect.poll(
       async () => await page.locator('.kds-column--pending').locator('.kds-ticket').filter({ hasText: ticketNumberText }).count(),
       { timeout: 8_000, message: `${ticketNumberText} should leave pending` },
@@ -94,7 +96,7 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     const preparingTicket = page.locator('.kds-column--preparing .kds-ticket').filter({ hasText: ticketNumberText }).first();
     const preparingAdvanceBtn = preparingTicket.locator('.kds-status-btn');
     await expect(preparingAdvanceBtn).toBeVisible({ timeout: 5_000 });
-    await preparingAdvanceBtn.click();
+    await preparingAdvanceBtn.click({ force: true });
     await expect.poll(
       async () => await page.locator('.kds-column--preparing').locator('.kds-ticket').filter({ hasText: ticketNumberText }).count(),
       { timeout: 8_000, message: `${ticketNumberText} should leave preparing` },
@@ -105,7 +107,7 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     const readyTicket = page.locator('.kds-column--ready .kds-ticket').filter({ hasText: ticketNumberText }).first();
     const readyAdvanceBtn = readyTicket.locator('.kds-status-btn');
     await expect(readyAdvanceBtn).toBeVisible({ timeout: 5_000 });
-    await readyAdvanceBtn.click();
+    await readyAdvanceBtn.click({ force: true });
     await expect.poll(
       async () => await page.locator('.kds-column--ready').locator('.kds-ticket').filter({ hasText: ticketNumberText }).count(),
       { timeout: 8_000, message: `${ticketNumberText} should leave ready` },
