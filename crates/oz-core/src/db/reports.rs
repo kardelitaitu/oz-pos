@@ -1,4 +1,10 @@
 //! Reporting queries: revenue summaries, top products, heatmap, low-stock alerts.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 part 2: reports deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: COR-21 MEDIUM: ALL date/hour bucketing uses UTC (DATE(created_at), strftime('%H')) with zero localtime adjustment while timestamps are written Utc::now() and the primary market is UTC+7/+8 — daily/weekly/monthly revenue, heatmap, occupancy, trends mis-bucket transactions outside 00:00-07:00 local; HourlyOccupancyRow doc claims "local store time as stored" — drift. Also: top_products limit unclamped (voided_items clamps — inconsistent); deprecated low_stock_alerts reads legacy inventory (see COR-19); COGS uses current product cost by documented reporting-layer semantics
+next: add store-timezone setting + bucket via chrono/SQLite offset modifier; clamp top_products limit (COR-21) | perf: correlated COGS subqueries are deliberate anti-multiplication design, documented
+*/
 
 use rusqlite::params;
 

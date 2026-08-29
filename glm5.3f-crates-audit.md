@@ -435,6 +435,21 @@ four are honest fail-fast PLANNED stubs; one forward note: when
 `payment_gateways.config_json` starts holding gateway API keys, it needs
 at-rest encryption (ties to CRY-1 remediation).
 
+### Slice B5 part 2 — db/reports.rs (1,042 lines), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-21 | 🟠 MEDIUM | db/reports.rs (all ~20 aggregations, e.g. :326–340, :371–386, :499–507, :1009–1017) | **UTC time-bucketing for a UTC+7/+8 market.** Every report buckets by `DATE(created_at)` / `strftime('%H', created_at)` / `strftime('%w', …)` with zero localtime adjustment, while all timestamps are written `Utc::now()` (verified: 0 `localtime` hits across the whole db layer; 11+13 `Utc::now()` call sites in sales/kds). Daily/weekly/monthly revenue, the hourly heatmap (UTC hour!), occupancy curves, inventory trends, and date-filtered exports mis-bucket every transaction outside 00:00–07:00 local time — for the primary Indonesian market that is a large share of operating hours. The `HourlyOccupancyRow` doc even claims "local store time as stored", which is drift. | Add a store-timezone setting; bucket either via SQLite offset modifiers (`created_at, '? hours'`) or in Rust through `chrono` with the configured TZ; fix the doc comment; backfill note for historical report semantics. |
+| COR-22 | ℹ️ INFO | db/reports.rs:449 vs :767 | `top_products` passes `limit` straight to SQL (`LIMIT ?3`, negative ⇒ unlimited) while `voided_items` clamps to `[1, 100]` — inconsistent boundary discipline. | Clamp in `top_products` too. |
+
+**Slice B5 part 2 positives:** the correlated-COGS subquery design is
+documented and deliberate (keyed on the same date/week/month expression so
+joining `sale_lines` never multiplies revenue counts); the Monday-first
+week-boundary idiom is explained inline (`'-6 days', 'weekday 1'`);
+`order_by` is a two-value whitelist (injection-safe); per-location low-stock
+alerts correctly use the canonical `stock_summary` with custom-threshold
+precedence.
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs
