@@ -580,6 +580,22 @@ tier defaults, the no-nesting transaction caveat is documented *and* pinned
 by a test, and the dynamic-SQL fragments interpolate only internal
 parameter markers (injection-safe).
 
+### Slice B final — db/kds.rs (1,431 lines), fully read — **SLICE B COMPLETE**
+
+Zero significant findings. The two flagged `format!`-SQL sites interpolate
+only match-derived internal timestamp columns (injection-safe — closes the
+B5-part-6 flag). Line-item status transitions are enforced by an explicit
+`allowed()` state machine (order-level updates rely on the frontend's fixed
+status set — INFO). Pairing tokens stored hashed, prep-time clamped ≥ 0,
+fan-out normalized via `kds_order_targets` (no duplicate tickets), stale
+devices auto-deactivated with logging.
+
+> **SLICE B COMPLETE: the entire `db/` layer — 44 files, ~21k production
+> lines — read and stamped.** oz-core remaining: slices C
+> (sync_client/topology/features/settings + location_resolver,
+> subscription, license_verification) and D (export/, cache, top-level kds,
+> and the remainder).
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs
