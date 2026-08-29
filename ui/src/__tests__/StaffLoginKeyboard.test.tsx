@@ -424,15 +424,27 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
       expect(document.querySelectorAll('.staff-login-pin-dot--filled').length).toBe(2);
     });
 
-    it('submits on Enter key when PIN has at least 1 digit', async () => {
+    it('submits on Enter key when PIN has exactly 4 digits', async () => {
+      const pinWrap = await setupPinStep();
+      fireEvent.keyDown(pinWrap!, { key: '1' });
+      fireEvent.keyDown(pinWrap!, { key: '2' });
+      fireEvent.keyDown(pinWrap!, { key: '3' });
+      fireEvent.keyDown(pinWrap!, { key: '4' });
+      fireEvent.keyDown(pinWrap!, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalledWith('alice', '1234');
+      });
+    });
+
+    it('does not submit on Enter with fewer than 4 digits', async () => {
       const pinWrap = await setupPinStep();
       fireEvent.keyDown(pinWrap!, { key: '1' });
       fireEvent.keyDown(pinWrap!, { key: '2' });
       fireEvent.keyDown(pinWrap!, { key: 'Enter' });
 
-      await waitFor(() => {
-        expect(mockLogin).toHaveBeenCalledWith('alice', '12');
-      });
+      // login must NOT have been called with only 2 digits.
+      expect(mockLogin).not.toHaveBeenCalled();
     });
 
     it('goes back on Escape key', async () => {
