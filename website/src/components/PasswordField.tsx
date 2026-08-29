@@ -19,7 +19,7 @@ import { t } from '../i18n';
  * password.* i18n keys or supply form-specific ones.
  */
 const inputClass =
-  'w-full rounded-md border border-ink/10 bg-primary px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
+  'w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
 
 interface Props {
   locale: string;

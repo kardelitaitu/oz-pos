@@ -1,6 +1,6 @@
 # oz-api
 
-<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (route table repaired) · F1: route table was missing 7 endpoints (terminals, tenant plan, settings, tax-rates, users, me/plan) and GET on products; all now present · verified accurate: oz_api::serve() exists, default port 3099 via OZ_API_PORT, all routes present (health/tokens public, rest JWT), Swagger/OpenAPI correctly absent here (lives in cloud-server) -->
+<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (route table repaired) · F1: route table was missing 7 endpoints (terminals, tenant plan, settings, tax-rates, users, me/plan) and GET on products; all now present · verified accurate: oz_api::serve() exists, default port 3099 via OZ_API_PORT, all routes present (health/tokens public, rest JWT), Swagger/OpenAPI correctly absent here (lives in cloud-server) -->
 
 REST API server for OZ-POS. Runs an axum HTTP server alongside the Tauri front-end for third-party scripts, kitchen displays, and inventory scanners.
 
@@ -50,4 +50,4 @@ curl http://localhost:3099/api/v1/products \
 
 `AppState` wraps SQLite in `Arc<Mutex<Connection>>`. CORS uses a configurable origin allowlist (`OZ_CORS_ORIGINS`, default `DEFAULT_CORS_ORIGINS`; `"*"` is an explicit dev opt-in, otherwise fail-closed). All JWT-protected routes return 401 without a valid token.
 
-> last audited 30-08-26 by docs-auditor
+> last audited 29-08-26 by docs-auditor

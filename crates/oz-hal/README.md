@@ -1,6 +1,6 @@
 # oz-hal
 
-<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (2 findings repaired) · F1: driver table "WeightScale" -> HidWeightScale (drivers/scale.rs struct name) · F2: added missing KdsChit driver entry (drivers/kds_chit.rs) · verified accurate: all traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp scanner+printer, drawer, serial_display, scale), mocks (MockBarcodeScanner/MockReceiptPrinter/MockCashDrawer in drivers/mock.rs), escpos consts (CUT_FULL/CUT_PARTIAL/ALIGN_CENTER/BOLD_ON/BOLD_OFF) + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, and DriverRegistry methods (discover/register_tcp_printer/scanner) all present; unsafe confined to lib.rs with SAFETY comment per convention -->
+<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (2 findings repaired) · F1: driver table "WeightScale" -> HidWeightScale (drivers/scale.rs struct name) · F2: added missing KdsChit driver entry (drivers/kds_chit.rs) · verified accurate: all traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp scanner+printer, drawer, serial_display, scale), mocks (MockBarcodeScanner/MockReceiptPrinter/MockCashDrawer in drivers/mock.rs), escpos consts (CUT_FULL/CUT_PARTIAL/ALIGN_CENTER/BOLD_ON/BOLD_OFF) + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, and DriverRegistry methods (discover/register_tcp_printer/scanner) all present; unsafe confined to lib.rs with SAFETY comment per convention -->
 
 Hardware Abstraction Layer — the seam between business logic and physical devices (USB, Bluetooth, serial, TCP).
 
@@ -82,4 +82,4 @@ scanner.push(Barcode::new("ABC123"));
 - No `unwrap()` in driver code — map errors to `HalError` at the trait boundary.
 - Wrap blocking I/O in `tokio::task::spawn_blocking`.
 
-> last audited 30-08-26 by docs-auditor
+> last audited 29-08-26 by docs-auditor

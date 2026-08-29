@@ -3,7 +3,7 @@ name: hal-drivers
 description: Hardware Abstraction Layer (HAL) conventions for OZ-POS — embedded-hal traits, drivers for barcode scanners, receipt printers, NFC readers, and payment terminals, plus mandatory mock implementations. Use when adding a new device driver or wiring hardware into a feature.
 ---
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (4 noted findings, doc-staleness) · F1: claims HAL built on embedded-hal traits + crate path hal/; actual oz-hal has NO embedded-hal dep and lives at crates/oz-hal/ (not hal/) · F2: layout lists traits nfc.rs + payment_terminal.rs — neither exists; actual traits dir has barcode/cash_drawer/customer_display/printer only (no NfcReader/PaymentTerminal trait) · F3: driver files shown as honeywell_barcode/star_printer/acr122u_nfc/idtech_payment — actual drivers are generic usb/bt/serial/tcp_scanner + usb/bt/tcp_printer + drawer/serial_display/scale (no vendor-specific named drivers) · F4: claims mocks gated by mock feature (cargo test --features mock) — no mock feature in Cargo.toml and mock.rs has no cfg(feature) gate (mocks always compiled) · verified accurate: BarcodeScanner trait signature matches code (connect/poll/cancel/device_info, &self/&mut self/Box<dyn>), register_scanner + register_tcp_printer + DriverRegistry::discover present, mocks in drivers/mock.rs, async Result<T,HalError> convention -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (4 noted findings, doc-staleness) · F1: claims HAL built on embedded-hal traits + crate path crates/oz-hal/; actual oz-hal has NO embedded-hal dep and lives at crates/oz-hal/ (not crates/oz-hal/) · F2: layout lists traits nfc.rs + payment_terminal.rs — neither exists; actual traits dir has barcode/cash_drawer/customer_display/printer only (no NfcReader/PaymentTerminal trait) · F3: driver files shown as honeywell_barcode/star_printer/acr122u_nfc/idtech_payment — actual drivers are generic usb/bt/serial/tcp_scanner + usb/bt/tcp_printer + drawer/serial_display/scale (no vendor-specific named drivers) · F4: claims mocks gated by mock feature (cargo test --features mock) — no mock feature in Cargo.toml and mock.rs has no cfg(feature) gate (mocks always compiled) · verified accurate: BarcodeScanner trait signature matches code (connect/poll/cancel/device_info, &self/&mut self/Box<dyn>), register_scanner + register_tcp_printer + DriverRegistry::discover present, mocks in drivers/mock.rs, async Result<T,HalError> convention -->
 
 # Hardware Abstraction Layer (HAL)
 
@@ -38,7 +38,7 @@ The HAL is implemented in Rust on top of `embedded-hal` traits. The rest of the 
 ## Crate layout
 
 ```
-hal/
+crates/oz-hal/
 ├── Cargo.toml
 └── src/
     ├── lib.rs
@@ -69,7 +69,7 @@ hal/
 ## Defining a trait
 
 ```rust
-// hal/src/traits/barcode.rs
+// crates/oz-hal/src/traits/barcode.rs
 
 use async_trait::async_trait;
 use crate::error::HalError;
@@ -107,7 +107,7 @@ pub trait BarcodeScanner: Send + Sync {
 ## Implementing a driver
 
 ```rust
-// hal/src/drivers/honeywell_barcode.rs
+// crates/oz-hal/src/drivers/honeywell_barcode.rs
 
 use async_trait::async_trait;
 use crate::error::HalError;
@@ -166,7 +166,7 @@ impl BarcodeScanner for HoneywellBarcode {
 Every trait must have a mock. The mock is used by every test in the rest of the codebase that touches hardware.
 
 ```rust
-// hal/src/drivers/mock.rs
+// crates/oz-hal/src/drivers/mock.rs
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};   // std::sync::Mutex — held only briefly, no .await between lock and unlock
@@ -232,7 +232,7 @@ impl BarcodeScanner for MockBarcodeScanner {
 Hardware is discovered at startup and exposed to the rest of the app through a single registry. Commands ask the registry for a device by category; the registry picks an available driver.
 
 ```rust
-// hal/src/registry.rs
+// crates/oz-hal/src/registry.rs
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -267,7 +267,7 @@ impl DriverRegistry {
 ## Error type
 
 ```rust
-// hal/src/error.rs
+// crates/oz-hal/src/error.rs
 
 use thiserror::Error;
 
@@ -332,11 +332,11 @@ async fn sale_completes_after_scan() {
 
 ## Adding a new device — checklist
 
-- [ ] Define the trait in `hal/src/traits/<device>.rs` with `async` methods returning `Result<T, HalError>`.
-- [ ] Re-export from `hal/src/traits/mod.rs`.
+- [ ] Define the trait in `crates/oz-hal/src/traits/<device>.rs` with `async` methods returning `Result<T, HalError>`.
+- [ ] Re-export from `crates/oz-hal/src/traits/mod.rs`.
 - [ ] Add the `HalError` variant(s) if needed.
-- [ ] Implement the driver in `hal/src/drivers/<vendor>_<device>.rs`.
-- [ ] Re-export the driver from `hal/src/drivers/mod.rs`.
+- [ ] Implement the driver in `crates/oz-hal/src/drivers/<vendor>_<device>.rs`.
+- [ ] Re-export the driver from `crates/oz-hal/src/drivers/mod.rs`.
 - [ ] **Add the mock to `crates/oz-hal/src/drivers/mock.rs`.** (Mandatory — CI will fail otherwise.)
 - [ ] Register the driver in `DriverRegistry::discover()`.
 - [ ] Add a Tauri command in `apps/desktop-client/src/commands/hardware.rs` that takes the registry from `State` and returns a `Result`.
@@ -366,4 +366,4 @@ async fn sale_completes_after_scan() {
 
 ---
 
-> last audited 19-08-26 by skill-drift-guard
+> last audited 29-08-26 by skill-drift-guard

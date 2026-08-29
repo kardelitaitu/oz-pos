@@ -221,8 +221,17 @@ jobs:
         continue-on-error: true
         run: bash scripts/build-docs.sh
       - run: cd website && npm run build
+        env:
+          PUBLIC_LICENSE_API_URL: ${{ secrets.PUBLIC_LICENSE_API_URL }}
+          PUBLIC_PADDLE_CLIENT_TOKEN: ${{ secrets.PUBLIC_PADDLE_CLIENT_TOKEN }}
+          PUBLIC_PADDLE_ENVIRONMENT: ${{ secrets.PUBLIC_PADDLE_ENVIRONMENT || 'sandbox' }}
       - name: Deploy with wrangler
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: cd website && npx wrangler deploy
+          DEPLOY_MESSAGE: "Coding Agent — ${{ github.sha }} (${{ github.ref_name }})"
+          DEPLOY_TAG: "${{ github.ref_name }}"
+          SKIP_BUILD: "1"   # already built above
+        run: bash scripts/wrangler-deploy.sh
+
+

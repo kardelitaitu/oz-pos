@@ -3,7 +3,7 @@ name: skill-drift-guard
 description: Meta-skill that detects and patches drift in the other OZ-POS skills. Use when a code change is made that touches a path, type, trait, or convention referenced in a skill; when onboarding a new contributor who might have added a crate or module; or as a periodic CI check. Always run before merging a change that touches `oz-*` crates, `apps/desktop-client/`, or `ui/`.
 ---
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 noted finding, doc-staleness) · F1 (internal path drift, recurring): references `hal/` in 3 places (lines 17, 307, 447) but no `hal/` dir exists in the repo; the crate is `crates/oz-hal` (same drift as hal-drivers F1) · verified accurate: scripts/detect.sh + scripts/run-tests.sh + tests/*.bats present, ui/src/locales/ exists (Check 7 path valid), taxonomy + detection workflow consistent with audit practice -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 noted finding, doc-staleness) · F1 (internal path drift, recurring): references `crates/oz-hal/` in 3 places (lines 17, 307, 447) but no `crates/oz-hal/` dir exists in the repo; the crate is `crates/oz-hal` (same drift as hal-drivers F1) · verified accurate: scripts/detect.sh + scripts/run-tests.sh + tests/*.bats present, ui/src/locales/ exists (Check 7 path valid), taxonomy + detection workflow consistent with audit practice -->
 
 # Skill Drift Guard
 
@@ -16,7 +16,7 @@ The drift guard audits each skill against the code it describes, classifies the 
 ## When to run
 
 - After any PR that changes a public API in an `oz-*` crate.
-- After any rename, move, or delete in `apps/desktop-client/`, `ui/`, `hal/`, or `crates/`.
+- After any rename, move, or delete in `apps/desktop-client/`, `ui/`, `crates/oz-hal/`, or `crates/`.
 - After a dependency bump (Tauri, React, `rusqlite`, etc.).
 - After a change to `AGENTS.md` (golden rules).
 - **As a CI job** that runs nightly or on changes to `.agents/skills/**`.
@@ -47,7 +47,7 @@ If a change is **not** in this list, the drift guard does not auto-patch it. Fil
 
 ## Detection workflow
 
-Run these checks in order. Each is a fast, mechanical pass. Stop after each pass to triage the output before running the next. (Checks 1–10 are implemented in `scripts/detect.sh`. Inline Check 2 covers taxonomy kinds 2 and 3 — the "removed" and "added" cases are both detected from the same `members` diff.)
+Run these checks in order. Each is a fast, mechanical pass. Stop after each pass to triage the output before running the next. (Checks 1–10 are implemented in `.agents/skills/skill-drift-guard/scripts/detect.sh`. Inline Check 2 covers taxonomy kinds 2 and 3 — the "removed" and "added" cases are both detected from the same `members` diff.)
 
 **Pre-code state:** when the corresponding code does not yet exist, each check silently no-ops:
 - Checks 2–4 (crates, API, dep versions) skip if `Cargo.toml` is missing.
@@ -230,7 +230,7 @@ rm -f "$pairs_file"
 ```bash
 # Same two-pass batched validation as Check 9, applied to every `*.md` file
 # outside `.agents/skills/`. Catches a future wrong-format or invalid-dated
-# footer in CONTRIBUTING.md, AGENTS.md, docs/QUICKSTART.md, or any crate/app/
+# footer in CONTRIBUTING.md, AGENTS.md, docs/archived/QUICKSTART.md, or any crate/app/
 # module/README.md — anywhere the convention is documented should also be
 # enforced. $AUDIT_RE, audit_date_of, and batch_validate_audit_dates are
 # defined at the top of detect.sh and shared with Check 9.
@@ -306,7 +306,7 @@ After running detection, produce a single report:
 ## Manual review needed (<n>)
 
 - `tauri-ipc/SKILL.md`: example uses `cart.add_line(sku, qty)` but `oz-core` now exposes `Cart::add_line_with_discount(sku, qty, discount)`. The example compiles but uses the old API.
-- `hal-drivers/SKILL.md`: new device `customer-display` was added to `hal/src/traits/`, but the skill does not list it. Add a row to the layout diagram.
+- `hal-drivers/SKILL.md`: new device `customer-display` was added to `crates/oz-hal/src/traits/`, but the skill does not list it. Add a row to the layout diagram.
 - `AGENTS.md` now requires `cargo audit` in CI. `project-scaffold/SKILL.md` does not mention it. Add to the security workflow.
 
 ## False positives (<n>)
@@ -389,7 +389,7 @@ Bats is the standard bash test framework. Pick one of:
 - Windows (scoop): `scoop install bats`
 - Cross-platform (npm): `npm install -g bats`
 
-(`scripts/run-tests.sh` prints the same list on hosts where bats is missing.)
+(`.agents/skills/skill-drift-guard/scripts/run-tests.sh` prints the same list on hosts where bats is missing.)
 
 #### Run the tests
 
@@ -446,7 +446,7 @@ The drift guard should be self-extending: every discovery becomes a new check, s
 ## Common pitfalls
 
 1. **Auto-patching code examples.** A broken example might be wrong in 3 ways; a script can only fix one. Manual review required.
-2. **Treating "missing file" as drift.** A skill may describe a planned path that doesn't exist yet (`hal/src/drivers/customer_display.rs` before the trait lands). Cross-check with the roadmap before flagging.
+2. **Treating "missing file" as drift.** A skill may describe a planned path that doesn't exist yet (`crates/oz-hal/src/drivers/customer_display.rs` before the trait lands). Cross-check with the roadmap before flagging.
 3. **Skipping the report.** Even if you auto-patch, produce the report. The next contributor needs the audit trail.
 4. **Running on `main` only.** Run the drift guard on every PR that touches `.agents/skills/**` or a referenced path. Catch drift at PR time, not after merge.
 5. **Trusting the workspace `members` list as ground truth.** It isn't. A crate in `members` can be an empty stub with no real code yet. The drift guard checks *what the code says*, not what the build manifest claims.
@@ -458,4 +458,4 @@ The drift guard should be self-extending: every discovery becomes a new check, s
 
 ---
 
-> last audited 19-08-26 by skill-drift-guard
+> last audited 29-08-26 by skill-drift-guard

@@ -13,7 +13,7 @@ description: Documentation-code audit and sync — keep technical docs accurate,
 
 Keep technical documentation accurate, traceable, and minimal. Prefer verified facts over assumptions. A document is a **claim about the code** — when the code changes and the doc doesn't, the doc becomes a lie that future agents and humans read, then propagate.
 
-This skill audits **any project document** (`README.md`, `ARCHITECTURE.md`, `docs/api-reference.md`, `docs/QUICKSTART.md`, spec files, admin guides, crate/app/module READMEs) against the **current codebase**. It is the sibling of `skill-drift-guard`, which audits the `.agents/skills/*/SKILL.md` files only — this skill covers everything else.
+This skill audits **any project document** (`README.md`, `ARCHITECTURE.md`, `docs/archived/api-reference.md`, `docs/archived/QUICKSTART.md`, spec files, admin guides, crate/app/module READMEs) against the **current codebase**. It is the sibling of `skill-drift-guard`, which audits the `.agents/skills/*/SKILL.md` files only — this skill covers everything else.
 
 ## 2. Trigger Conditions
 
@@ -72,7 +72,7 @@ This skill audits **any project document** (`README.md`, `ARCHITECTURE.md`, `doc
 ```bash
 python3 .agents/skills/docs-auditor/scripts/check-orphans.py            # all checks, repo-wide
 python3 .agents/skills/docs-auditor/scripts/check-orphans.py --check=b  # one check (a|b|c)
-python3 .agents/skills/docs-auditor/scripts/check-orphans.py --file docs/api-reference.md
+python3 .agents/skills/docs-auditor/scripts/check-orphans.py --file docs/archived/api-reference.md
 python3 .agents/skills/docs-auditor/scripts/check-orphans.py --quiet    # findings only
 ```
 
@@ -190,7 +190,7 @@ Findings: N major, N minor, N ambiguous
 
 ## 11b. Worked example (full audit of one anchor)
 
-Doc under audit: `docs/api-reference.md` — heading "Sessions", paragraph 2 claims `create_shift` returns a `Shift` struct with a `total` field of type `Money`.
+Doc under audit: `docs/archived/api-reference.md` — heading "Sessions", paragraph 2 claims `create_shift` returns a `Shift` struct with a `total` field of type `Money`.
 
 ```bash
 # 1. Find the command implementation and its return type
@@ -257,4 +257,4 @@ Two anchors verified, one drift found, one-line patch — that is the whole loop
 
 ---
 
-> last audited 08-08-26 by docs-auditor
+> last audited 29-08-26 by skill-drift-guard

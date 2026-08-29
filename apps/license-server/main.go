@@ -278,6 +278,8 @@ func main() {
 		se.Router.POST("/api/v1/admin/tenants/{id}/revoke", handleAdminRevoke(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/tier-override", handleAdminTierOverride(app))
 		se.Router.GET("/api/v1/admin/health", handleAdminHealth(app))
+		// Admin dashboard stats (ADR #42 Phase 3+) — real aggregates.
+		se.Router.GET("/api/v1/admin/stats", handleAdminStats(app))
 		// Midtrans Snap checkout (see midtrans_checkout.go) — session-authed
 		// web endpoint like /api/v1/web/*: the id-locale pricing button
 		// requests a snap token for a tier + period, which Snap.js opens.

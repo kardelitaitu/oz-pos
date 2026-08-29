@@ -118,7 +118,7 @@ Record the why, decisions, and remaining risks — while fresh.
 
 Sync anything the change affects.
 
-- The affected layer's README, `docs/api-reference.md`, `docs/user-guide.md`, examples, or the code's `///` doc comments.
+- The affected layer's README, `docs/archived/api-reference.md`, `docs/archived/user-guide.md`, examples, or the code's `///` doc comments.
 - If the change touches a path/type/trait/convention a skill describes, run the drift guard:
   ```bash
   bash .agents/skills/skill-drift-guard/scripts/detect.sh
@@ -234,4 +234,4 @@ npm run check:all            # lint → typecheck → test → i18n → E2E (Doc
 
 ---
 
-> last audited 07-08-26 by buffy
+> last audited 29-08-26 by skill-drift-guard

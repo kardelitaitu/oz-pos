@@ -106,8 +106,21 @@ export default {
       }
 
       // Step 2: No session cookie — redirect to login.
-      // Login pages are at /[locale]/login (Astro i18n). Default to /en/.
+      // dashboard.ozpos.my.id → marketing login (customer login lives on the
+      // site). admin.ozpos.my.id → dedicated admin login page (same origin),
+      // which authenticates against the license server with the same tenant
+      // auth and returns via ?token= so the worker sets the cookie.
       if (!sessionCookie) {
+        if (hostname === 'admin.ozpos.my.id') {
+          // Serve the dedicated admin login page (not the marketing bounce).
+          // Use the clean URL (ASSETS strips .html → /admin/login.html would
+          // 307 to /admin/login anyway).
+          const rewritten = new URL(request.url);
+          rewritten.hostname = MARKETING_HOST;
+          rewritten.pathname = '/admin/login';
+          rewritten.search = '';
+          return env.ASSETS.fetch(new Request(rewritten.toString(), request));
+        }
         const redirectTo = `${url.pathname}${url.search}`;
         const loginUrl = `https://${MARKETING_HOST}/en/login?redirect=${encodeURIComponent(redirectTo)}`;
         return new Response(null, {

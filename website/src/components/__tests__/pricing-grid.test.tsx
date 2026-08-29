@@ -12,6 +12,7 @@ const mockTiersUSD: PricingTier[] = [
     id: 'free',
     tierKey: 'free',
     name: 'Free',
+    currency: 'USD',
     description: 'Basic POS for small shops.',
     highlight: false,
     cta: 'Download free',
@@ -25,6 +26,7 @@ const mockTiersUSD: PricingTier[] = [
     id: 'pro',
     tierKey: 'pro',
     name: 'Pro',
+    currency: 'USD',
     description: 'For growing businesses.',
     highlight: true,
     cta: 'Get Pro',
@@ -41,6 +43,7 @@ const mockTiersIDR: PricingTier[] = [
     id: 'free',
     tierKey: 'free',
     name: 'Gratis',
+    currency: 'IDR',
     description: 'POS dasar untuk toko kecil.',
     highlight: false,
     cta: 'Unduh gratis',
@@ -54,6 +57,7 @@ const mockTiersIDR: PricingTier[] = [
     id: 'pro',
     tierKey: 'pro',
     name: 'Pro',
+    currency: 'IDR',
     description: 'Untuk bisnis berkembang.',
     highlight: true,
     cta: 'Pilih Pro',
@@ -123,7 +127,7 @@ describe('PricingGrid Component', () => {
   });
 
   it('renders IDR pricing when locale is id', async () => {
-    const { container, unmount } = await renderGrid('id', mockTiersIDR, mockTiersUSD);
+    const { container, unmount } = await renderGrid('id', mockTiersIDR);
     expect(container.textContent).toContain('Rp 990.000');
     expect(container.textContent).toContain('Unduh gratis');
     await unmount();

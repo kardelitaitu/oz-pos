@@ -449,3 +449,36 @@ describe('SignupForm — navigation', () => {
     }
   });
 });
+
+// ── Regression: input background colour ──────────────────────────────
+// Ensures inputs never use bg-primary (brand blue) as their background.
+// Root cause: SignupForm.tsx INPUT_CLASS had bg-primary instead of bg-surface,
+// turning every text input into a solid blue box (fixed in dda27e89).
+
+describe('SignupForm — input field styling regression', () => {
+  it('email input does not have a blue (bg-primary) background', async () => {
+    const { container, root } = await renderSignupForm('en');
+    try {
+      const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement | null;
+      expect(emailInput, 'email input should be rendered').not.toBeNull();
+      expect(emailInput!.className).not.toContain('bg-primary');
+      expect(emailInput!.className).toContain('bg-surface');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('password input does not have a blue (bg-primary) background', async () => {
+    const { container, root } = await renderSignupForm('en');
+    try {
+      const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement | null;
+      expect(passwordInput, 'password input should be rendered').not.toBeNull();
+      expect(passwordInput!.className).not.toContain('bg-primary');
+      expect(passwordInput!.className).toContain('bg-surface');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});

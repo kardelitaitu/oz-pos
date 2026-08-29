@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: "156 commands" -> 354 in generate_handler! (lib.rs:350) · F2: "42 files" -> 52 production modules / 102 .rs files (commands/) · F3: layout list updated (removed deleted sales.rs, added analytics/browser/edc/email/inventory/kds_device/kds_routing/license/picker_ticket/security/subscription/topology) · verified accurate: AppState fields (db, registry, app, scanner_cancel — state.rs:69-87), barcode:scanned via app.emit() (hardware.rs:415), app is Option<AppHandle>, add-command steps match tauri-ipc/SKILL.md -->
+<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: "156 commands" -> 354 in generate_handler! (lib.rs:350) · F2: "42 files" -> 52 production modules / 102 .rs files (commands/) · F3: layout list updated (removed deleted sales.rs, added analytics/browser/edc/email/inventory/kds_device/kds_routing/license/picker_ticket/security/subscription/topology) · verified accurate: AppState fields (db, registry, app, scanner_cancel — state.rs:69-87), barcode:scanned via app.emit() (hardware.rs:415), app is Option<AppHandle>, add-command steps match tauri-ipc/SKILL.md -->
 
 # `apps/desktop-client/` — OZ-POS desktop shell
 
@@ -107,4 +107,4 @@ cargo tauri dev               # Terminal 2: Tauri dev shell
 - Scanner background tasks emit `barcode:scanned` events via `app.emit()`.
 - The `app` handle is `Option<AppHandle>` — always unwrap via `if let Some(ref app)`.
 
-> last audited 30-08-26 by docs-auditor
+> last audited 29-08-26 by docs-auditor

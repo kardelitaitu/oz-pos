@@ -5,7 +5,7 @@ for merging the repo's hand-written guides with automated Rust (rustdoc) and
 TypeScript (TypeDoc) API references into a single local static documentation
 portal. It supersedes the ad-hoc `docs/html/` hub approach.
 
-> **⚠️ 2026-08-30 drift note (docs-auditor):** the 40 hand-written guides that
+> **⚠️ 2026-08-29 drift note (docs-auditor):** the 40 hand-written guides that
 > lived in `docs/*.md` were archived to `docs/archived/*.md` (commit `d0fe7481`,
 > 2026-08-29) as stale content. The copy step below (`docs/*.md` →
 > `docs/src/guides/`) therefore matches **zero** files today, so an mdBook build
@@ -88,7 +88,7 @@ repo root/
    first, then copy): `docs/*.md` → `docs/src/guides/` and
    `docs/decisions/*.md` → `docs/src/decisions/`. Canonical files never move,
    so the ADR conventions and relative links in `docs/decisions/` stay intact.
-   (⚠️ see the 2026-08-30 drift note: guides were archived to
+   (⚠️ see the 2026-08-29 drift note: guides were archived to
    `docs/archived/`; the copy source must be updated.)
    (Other `docs/` subfolders — benchmarks, operations, security, specs — can be
    pulled in the same way as needed.)

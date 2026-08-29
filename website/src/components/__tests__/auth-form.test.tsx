@@ -504,3 +504,41 @@ describe('AuthForm — not-configured state', () => {
     }
   });
 });
+
+// ── Regression: input background colour ──────────────────────────────
+// Ensures inputs never use bg-primary (brand blue) as their background.
+// Root cause: AuthForm.tsx inputClass had bg-primary instead of bg-surface,
+// turning every text input into a solid blue box (fixed in dda27e89).
+
+describe('AuthForm — input field styling regression', () => {
+  it('email input does not have a blue (bg-primary) background', async () => {
+    const { container, root } = await renderAuthForm('en');
+    try {
+      const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement | null;
+      expect(emailInput, 'email input should be rendered').not.toBeNull();
+      // The className must NOT contain bg-primary (the brand-blue token).
+      expect(emailInput!.className).not.toContain('bg-primary');
+      // And it MUST use bg-surface (white in light mode, dark card in dark).
+      expect(emailInput!.className).toContain('bg-surface');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('password input does not have a blue (bg-primary) background', async () => {
+    const { container, root } = await renderAuthForm('en');
+    try {
+      // Switch to password tab so the password input is rendered.
+      clickButton(container, 'Password');
+      await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+      const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement | null;
+      expect(passwordInput, 'password input should be rendered').not.toBeNull();
+      expect(passwordInput!.className).not.toContain('bg-primary');
+      expect(passwordInput!.className).toContain('bg-surface');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});

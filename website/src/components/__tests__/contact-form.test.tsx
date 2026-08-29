@@ -267,3 +267,49 @@ describe('ContactForm', () => {
   });
 });
 
+// ── Regression: input background colour ──────────────────────────────
+// Ensures ContactForm inputs/textarea never use bg-primary (brand blue).
+// Root cause: ContactForm.tsx inputClass had bg-primary instead of bg-surface,
+// making the support page name, email, and message fields solid blue (fixed in
+// the same sweep as AuthForm / SignupForm / PasswordField / DocSidebar).
+
+describe('ContactForm — input field styling regression', () => {
+  it('name input does not have a blue (bg-primary) background', async () => {
+    const { container, root } = await renderContact('en');
+    try {
+      const nameInput = container.querySelector('input[type="text"]') as HTMLInputElement | null;
+      expect(nameInput, 'name input should be rendered').not.toBeNull();
+      expect(nameInput!.className).not.toContain('bg-primary');
+      expect(nameInput!.className).toContain('bg-surface');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('email input does not have a blue (bg-primary) background', async () => {
+    const { container, root } = await renderContact('en');
+    try {
+      const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement | null;
+      expect(emailInput, 'email input should be rendered').not.toBeNull();
+      expect(emailInput!.className).not.toContain('bg-primary');
+      expect(emailInput!.className).toContain('bg-surface');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('message textarea does not have a blue (bg-primary) background', async () => {
+    const { container, root } = await renderContact('en');
+    try {
+      const textarea = container.querySelector('textarea') as HTMLTextAreaElement | null;
+      expect(textarea, 'message textarea should be rendered').not.toBeNull();
+      expect(textarea!.className).not.toContain('bg-primary');
+      expect(textarea!.className).toContain('bg-surface');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});

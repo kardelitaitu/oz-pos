@@ -1,6 +1,6 @@
 # oz-core
 
-<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: "Public modules (42)" -> 56 pub mod in lib.rs (table now complete) · F2: migrations "001-047" -> date-prefixed consolidated (20260813_init.sql etc.; 131 sequential migrations consolidated 2026-08-14) · F3: Money/Currency are defined in foundation/src/money.rs and re-exported from oz-core (pub use money::{Currency, Money}) -- already noted, now confirmed · verified accurate: #![deny(unsafe_code)] + #![warn(missing_docs)] present in lib.rs, Money-i64 policy, Store-transaction convention -->
+<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (3 findings repaired) · F1: "Public modules (42)" -> 56 pub mod in lib.rs (table now complete) · F2: migrations "001-047" -> date-prefixed consolidated (20260813_init.sql etc.; 131 sequential migrations consolidated 2026-08-14) · F3: Money/Currency are defined in foundation/src/money.rs and re-exported from oz-core (pub use money::{Currency, Money}) -- already noted, now confirmed · verified accurate: #![deny(unsafe_code)] + #![warn(missing_docs)] present in lib.rs, Money-i64 policy, Store-transaction convention -->
 
 Domain models, SQLite persistence, and migrations for OZ-POS. Every other crate builds on types defined here.
 
@@ -89,4 +89,4 @@ Key methods: `create_product`, `list_products`, `update_product`, `delete_produc
   `[lints] workspace = true`, inherited from the root `[workspace.lints]`.
 - All public items have `///` docs.
 
-> last audited 30-08-26 by docs-auditor
+> last audited 29-08-26 by docs-auditor

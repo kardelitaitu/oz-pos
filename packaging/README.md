@@ -34,4 +34,4 @@ cargo tauri build --bundles deb,appimage,msi,nsis,dmg
 - Auto-update uses Tauri's updater plugin; signing key pair in `oz-pos-updater.key` / `.key.pub`
 - Release workflow in `.github/workflows/release.yml` builds all platforms on tag push
 
-> last audited 30-08-26 by docs-auditor
+> last audited 29-08-26 by docs-auditor

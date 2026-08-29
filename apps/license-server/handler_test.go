@@ -274,6 +274,7 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/admin/tenants/{id}/revoke", handleAdminRevoke(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/tier-override", handleAdminTierOverride(app))
 		se.Router.GET("/api/v1/admin/health", handleAdminHealth(app))
+		se.Router.GET("/api/v1/admin/stats", handleAdminStats(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		// Midtrans webhook + Snap checkout (C3.1) — mirror production boot.
 		se.Router.POST(midtransWebhookPath, handleMidtransWebhook(app))
