@@ -64,6 +64,37 @@ function setCookieHeader(token: string, maxAge: number): string {
   return `${COOKIE_NAME}=${token}; Domain=.ozpos.my.id; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
+/**
+ * Wrap a response with the strict CSP for admin/dashboard subdomains
+ * (hardening F2): no inline scripts, no framing, no referrer leak.
+ * Applied to the SPA pages and the admin login page — never the marketing
+ * site (which needs 'unsafe-inline' for its Astro inline scripts).
+ */
+function withStrictCSP(resp: Response): Response {
+  const strictCSP = [
+    "default-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self' https://*.code.run https://open.er-api.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+  // Copy the asset response headers into a fresh Headers object and use
+  // .set() so the strict CSP REPLACES the marketing one instead of being
+  // appended as a second header (two CSPs would be enforced as an
+  // intersection, breaking connect-src for the FX rate API).
+  const headers = new Headers(resp.headers);
+  headers.set('Content-Security-Policy', strictCSP);
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  return new Response(resp.body, { status: resp.status, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -73,19 +104,61 @@ export default {
     if (DASHBOARD_HOSTS.has(hostname)) {
       const sessionCookie = getCookie(request.headers, COOKIE_NAME);
 
-      // Step 1: If the request carries a ?token= query param, set the
-      // httpOnly cookie from it and redirect to the clean URL (no token).
+      // Step 1: One-time exchange code (hardening F1). The login page
+      // authenticates at the license server, gets a short-lived single-use
+      // code via /exchange-issue, and redirects here with ?code=<code>.
+      // The Worker POSTs the code to /exchange-consume to receive the real
+      // session token, sets the httpOnly cookie, and redirects to clean URL.
+      // The real session token never appears in a URL.
+      const codeParam = url.searchParams.get('code');
+      if (codeParam) {
+        url.searchParams.delete('code');
+        const cleanUrl = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+        const apiUrl = (env.LICENSE_API_URL ?? 'https://license.ozpos.my.id') + '/api/v1/web/exchange-consume';
+        try {
+          const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: codeParam }),
+          });
+          if (res.status === 200) {
+            const body = await res.json() as { token?: string };
+            if (body.token) {
+              return new Response(null, {
+                status: 302,
+                headers: {
+                  Location: cleanUrl,
+                  'Set-Cookie': setCookieHeader(body.token, 30 * 24 * 3600),
+                  'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                  'Referrer-Policy': 'no-referrer',
+                  'Pragma': 'no-cache',
+                },
+              });
+            }
+          }
+        } catch {
+          // Exchange failed — fall through to redirect to login below.
+        }
+        // Code invalid or exchange failed — redirect to login so the user
+        // re-authenticates (never leaves them on a broken state).
+        const loginUrl = hostname === 'admin.ozpos.my.id'
+          ? `https://${MARKETING_HOST}/admin/login`
+          : `https://${MARKETING_HOST}/en/login?redirect=${encodeURIComponent(cleanUrl)}`;
+        return new Response(null, { status: 302, headers: { Location: loginUrl } });
+      }
+
+      // Step 1a: Fallback — direct ?token= set (deprecated; replaced by the
+      // one-time exchange code in Step 1). Kept for backward compatibility
+      // while the old login pages transition.
       const tokenParam = url.searchParams.get('token');
       if (tokenParam) {
-        // Remove the token from the URL so it doesn't persist in history.
         url.searchParams.delete('token');
         const cleanUrl = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
         return new Response(null, {
           status: 302,
           headers: {
             Location: cleanUrl,
-            'Set-Cookie': setCookieHeader(tokenParam, 30 * 24 * 3600), // 30 days
-            // The URL briefly carried the session token — never cache it.
+            'Set-Cookie': setCookieHeader(tokenParam, 30 * 24 * 3600),
             'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
             'Referrer-Policy': 'no-referrer',
             'Pragma': 'no-cache',
@@ -123,7 +196,7 @@ export default {
           rewritten.hostname = MARKETING_HOST;
           rewritten.pathname = '/admin/login';
           rewritten.search = '';
-          return env.ASSETS.fetch(new Request(rewritten.toString(), request));
+          return withStrictCSP(await env.ASSETS.fetch(new Request(rewritten.toString(), request)));
         }
         const redirectTo = `${url.pathname}${url.search}`;
         const loginUrl = `https://${MARKETING_HOST}/en/login?redirect=${encodeURIComponent(redirectTo)}`;
@@ -142,7 +215,8 @@ export default {
       rewritten.hostname = MARKETING_HOST;
       rewritten.pathname = appBase + (url.pathname === '/' ? '/' : url.pathname);
       rewritten.search = '';
-      return env.ASSETS.fetch(new Request(rewritten.toString(), request));
+      const spaResp = await env.ASSETS.fetch(new Request(rewritten.toString(), request));
+      return withStrictCSP(spaResp);
     }
 
     // ── Marketing site (ozpos.my.id) — no auth required ───────────

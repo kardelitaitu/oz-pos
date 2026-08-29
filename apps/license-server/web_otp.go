@@ -124,6 +124,16 @@ func (s *otpStore) createSession(tokenHash, tenantID string) time.Time {
 	return expires
 }
 
+// touchSession extends the TTL of an existing session (active-use refresh).
+// No-op for unknown or expired sessions.
+func (s *otpStore) touchSession(tokenHash string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sess, exists := s.sessions[tokenHash]; exists && time.Now().Before(sess.expiresAt) {
+		sess.expiresAt = time.Now().Add(webSessionTTL())
+	}
+}
+
 // getSession returns the tenant bound to a token hash, or "" if the
 // session is unknown/expired (both treated identically → 401).
 func (s *otpStore) getSession(tokenHash string) string {
@@ -771,6 +781,11 @@ func handleMe(app core.App) func(e *core.RequestEvent) error {
 				"error": "invalid or expired session",
 			})
 		}
+
+		// Active-use refresh: every /me call extends the session TTL so an
+		// operator who keeps the dashboard open stays signed in without
+		// re-authenticating (hardening F6).
+		webOtpStore.touchSession(hashWebToken(token))
 
 		tenant, err := app.FindRecordById("tenants", tenantID)
 		if err != nil {
