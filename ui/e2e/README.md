@@ -37,8 +37,8 @@ npx playwright test --config e2e/playwright.config.ts --project=tablet
 ### Dev-mock IPC
 
 All Tauri `invoke()` calls are intercepted by `ui/src/dev-mock/tauri-api.ts`
-via a Vite alias. The mock provides deterministic data for 18 products, 5
-workspaces, 3 staff members, and cart/order lifecycle operations.
+via a Vite alias. The mock provides deterministic data for 45 products, 5
+workspaces, 5 staff members, and cart/order lifecycle operations.
 
 Each spec's `beforeEach` calls `page.goto('/')` which loads a fresh app
 instance. The dev-mock resets on page load (no shared mutable state), so
