@@ -1,6 +1,6 @@
 # ADR #42: Website Admin Dashboard & User Dashboard (Subdomain Architecture)
 
-**Status:** Draft  
+**Status:** Draft — Domain provisioning complete (2026-08-28)  
 **Date:** 2026-08-28  
 **Author:** Architecture Team & OZ-POS Contributors  
 **Tags:** website, dashboard, admin, subdomain, auth, license-server, billing, tenant-management
