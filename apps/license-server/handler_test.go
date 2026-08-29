@@ -1043,6 +1043,13 @@ func resetRateLimiters() {
 	webResetVerifyLimiter.entries = make(map[string]*windowEntry)
 	webResetVerifyLimiter.mu.Unlock()
 
+	// Escalating brute-force login lockout (login_lockout.go) — clear so
+	// tests that exercise repeated failed attempts start from a clean slate.
+	loginLockoutTrackerInst.mu.Lock()
+	loginLockoutTrackerInst.entries = make(map[string]*loginFailures)
+	loginLockoutTrackerInst.db = nil
+	loginLockoutTrackerInst.mu.Unlock()
+
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
 	contactRateLimiter.startCleanup()
