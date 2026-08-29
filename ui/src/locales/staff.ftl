@@ -105,6 +105,7 @@ staff-login-digit-aria =
 staff-login-submit = Login
 staff-login-submitting = Logging in…
 staff-login-error-connection = Could not verify username. Check your connection.
+staff-login-pin-min-length = PIN must be at least 4 digits.
 staff-login-back = ← Back
 staff-login-copyright = © 2026 OZ-POS. All rights reserved.
 staff-login-attempts-remaining = ({ $count } attempt{ $count -> [1] { "" } *{ "s" } } remaining)

@@ -79,21 +79,34 @@ pub async fn staff_check_username(
     let username = args.username.trim().to_lowercase();
     validate_not_empty("username", &username).map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let user = store.get_user_by_username(&username)?;
-    match &user {
-        Some(u) => tracing::debug!(
-            username = %username,
-            is_active = u.is_active,
-            "staff_check_username: account exists (server-side detail only)"
-        ),
-        None => tracing::debug!(
-            username = %username,
-            "staff_check_username: no such account (server-side detail only)"
-        ),
-    }
-    drop(db);
+    // S3: Random delay (50–200ms) to mask timing side-channels.
+    // Computed before the DB lock so the delay is not blocked by the mutex.
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    let delay_ms: u64 = 50 + (nanos % 151) as u64;
+
+    // Scope the DB lock so Store<'_> (which is not Send) is dropped
+    // before the tokio::time::sleep await point.
+    {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let user = store.get_user_by_username(&username)?;
+        match &user {
+            Some(u) => tracing::debug!(
+                username = %username,
+                is_active = u.is_active,
+                "staff_check_username: account exists (server-side detail only)"
+            ),
+            None => tracing::debug!(
+                username = %username,
+                "staff_check_username: no such account (server-side detail only)"
+            ),
+        }
+    } // db + Store dropped here — not held across the await
+
+    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
 
     Ok(CheckUsernameResult { proceed: true })
 }
@@ -125,6 +138,12 @@ pub async fn staff_login(
 ) -> Result<StaffLoginResult, AppError> {
     let username = args.username.trim().to_lowercase();
     validate_not_empty("username", &username).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    // S1: Enforce minimum 4-digit PIN at the server boundary.
+    // Prevents brute-force on short PINs and keeps client/server in sync.
+    if args.pin.len() < 4 {
+        return Err(AppError::Invalid("PIN must be at least 4 digits".into()));
+    }
 
     // STAFF-07: resolve the device id — prefer the caller's, else the host.
     let device_id = args

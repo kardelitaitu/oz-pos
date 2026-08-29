@@ -80,21 +80,32 @@ pub async fn staff_check_username(
         return Err(AppError::Invalid("username must not be empty".into()));
     }
 
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let user = store.get_user_by_username(&username)?;
-    match &user {
-        Some(u) => tracing::debug!(
-            username = %username,
-            is_active = u.is_active,
-            "staff_check_username: account exists (server-side detail only)"
-        ),
-        None => tracing::debug!(
-            username = %username,
-            "staff_check_username: no such account (server-side detail only)"
-        ),
+    // S3: Random delay (50–200ms) to mask timing side-channels.
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    let delay_ms: u64 = 50 + (nanos % 151) as u64;
+
+    // Scope the DB lock so Store<'_> (not Send) is dropped before await.
+    {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let user = store.get_user_by_username(&username)?;
+        match &user {
+            Some(u) => tracing::debug!(
+                username = %username,
+                is_active = u.is_active,
+                "staff_check_username: account exists (server-side detail only)"
+            ),
+            None => tracing::debug!(
+                username = %username,
+                "staff_check_username: no such account (server-side detail only)"
+            ),
+        }
     }
-    drop(db);
+
+    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
 
     Ok(CheckUsernameResult { proceed: true })
 }
@@ -127,6 +138,11 @@ pub async fn staff_login(
     let username = args.username.trim().to_lowercase();
     if username.is_empty() {
         return Err(AppError::Invalid("username must not be empty".into()));
+    }
+
+    // S1: Enforce minimum 4-digit PIN at the server boundary.
+    if args.pin.len() < 4 {
+        return Err(AppError::Invalid("PIN must be at least 4 digits".into()));
     }
 
     // STAFF-07: resolve the device id — prefer the caller's, else the host.
