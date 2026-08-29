@@ -327,6 +327,7 @@ pub async fn sync_pull(
 }
 
 /// Session-scoped variant of `get_sync_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_sync_settings_scoped(
     session_token: String,
@@ -349,6 +350,7 @@ pub async fn get_sync_settings_scoped(
 }
 
 /// Session-scoped variant of `update_sync_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_sync_settings_scoped(
     session_token: String,
@@ -366,6 +368,7 @@ pub async fn update_sync_settings_scoped(
 }
 
 /// Session-scoped variant of `sync_run`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn sync_run_scoped(
     session_token: String,
@@ -435,6 +438,7 @@ pub async fn sync_run_scoped(
 }
 
 /// Session-scoped variant of `pending_sync_count`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn pending_sync_count_scoped(
     session_token: String,
@@ -452,6 +456,7 @@ pub async fn pending_sync_count_scoped(
 }
 
 /// Session-scoped variant of `request_sync_token`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn request_sync_token_scoped(
     session_token: String,
@@ -483,6 +488,7 @@ pub async fn request_sync_token_scoped(
 }
 
 /// Session-scoped variant of `get_sync_plan`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_sync_plan_scoped(
     session_token: String,
@@ -514,6 +520,7 @@ pub async fn get_sync_plan_scoped(
 }
 
 /// Session-scoped variant of `test_sync_connection`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn test_sync_connection_scoped(
     session_token: String,
@@ -542,6 +549,7 @@ pub async fn test_sync_connection_scoped(
 }
 
 /// Session-scoped variant of `sync_pull`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn sync_pull_scoped(
     session_token: String,

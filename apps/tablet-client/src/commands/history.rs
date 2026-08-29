@@ -264,6 +264,7 @@ pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, 
 // ── Tests ──────────────────────────────────────────────────────────────
 
 /// Session-scoped variant of `list_sales`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_sales_scoped(
     session_token: String,
@@ -299,6 +300,7 @@ pub async fn list_sales_scoped(
 }
 
 /// Session-scoped variant of `get_sale`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_sale_scoped(
     session_token: String,
@@ -327,6 +329,7 @@ pub async fn get_sale_scoped(
 }
 
 /// Session-scoped variant of `export_daily_summary`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn export_daily_summary_scoped(
     session_token: String,
@@ -344,6 +347,7 @@ pub async fn export_daily_summary_scoped(
 }
 
 /// Session-scoped variant of `export_sales_by_hour`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn export_sales_by_hour_scoped(
     session_token: String,
@@ -361,6 +365,7 @@ pub async fn export_sales_by_hour_scoped(
 }
 
 /// Session-scoped variant of `export_eod_report`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn export_eod_report_scoped(
     session_token: String,

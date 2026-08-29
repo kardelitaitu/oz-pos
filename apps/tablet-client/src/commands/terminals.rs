@@ -204,6 +204,7 @@ pub async fn set_device_binding(
 /// ADR #7 variant: the session token binds the caller instead of a
 /// client-supplied `user_id`. The binding row still lives in the GLOBAL
 /// identity DB where the tablet's `resolve_boot_store` reads it.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_device_binding_scoped(
     session_token: String,
@@ -469,6 +470,7 @@ pub async fn delete_terminal_override(
 }
 
 /// Session-scoped variant of `list_terminals`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_terminals_scoped(
     session_token: String,
@@ -483,6 +485,7 @@ pub async fn list_terminals_scoped(
 }
 
 /// Session-scoped variant of `get_terminal`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_terminal_scoped(
     session_token: String,
@@ -504,6 +507,7 @@ pub async fn get_terminal_scoped(
 }
 
 /// Session-scoped variant of `register_terminal`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn register_terminal_scoped(
     session_token: String,
@@ -538,6 +542,7 @@ pub async fn register_terminal_scoped(
 }
 
 /// Session-scoped variant of `update_terminal`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_terminal_scoped(
     session_token: String,
@@ -586,6 +591,7 @@ pub async fn update_terminal_scoped(
 }
 
 /// Session-scoped variant of `ping_terminal`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn ping_terminal_scoped(
     session_token: String,
@@ -608,6 +614,7 @@ pub async fn ping_terminal_scoped(
 }
 
 /// Session-scoped variant of `delete_terminal`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn delete_terminal_scoped(
     session_token: String,
@@ -632,6 +639,7 @@ pub async fn delete_terminal_scoped(
 }
 
 /// Session-scoped variant of `list_terminal_overrides`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_terminal_overrides_scoped(
     session_token: String,
@@ -654,6 +662,7 @@ pub async fn list_terminal_overrides_scoped(
 }
 
 /// Session-scoped variant of `set_terminal_override`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_terminal_override_scoped(
     session_token: String,
@@ -687,6 +696,7 @@ pub async fn set_terminal_override_scoped(
 }
 
 /// Session-scoped variant of `delete_terminal_override`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn delete_terminal_override_scoped(
     session_token: String,

@@ -134,6 +134,7 @@ pub async fn unfreeze_gift_card(
 }
 
 /// Session-scoped variant of `issue_gift_card`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn issue_gift_card_scoped(
     session_token: String,
@@ -152,6 +153,7 @@ pub async fn issue_gift_card_scoped(
 }
 
 /// Session-scoped variant of `get_gift_card`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_gift_card_scoped(
     session_token: String,
@@ -170,6 +172,7 @@ pub async fn get_gift_card_scoped(
 }
 
 /// Session-scoped variant of `list_gift_cards`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_gift_cards_scoped(
     session_token: String,
@@ -188,6 +191,7 @@ pub async fn list_gift_cards_scoped(
 }
 
 /// Session-scoped variant of `get_gift_card_balance`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_gift_card_balance_scoped(
     session_token: String,
@@ -212,6 +216,7 @@ pub async fn get_gift_card_balance_scoped(
 }
 
 /// Session-scoped variant of `redeem_gift_card`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn redeem_gift_card_scoped(
     session_token: String,
@@ -232,6 +237,7 @@ pub async fn redeem_gift_card_scoped(
 }
 
 /// Session-scoped variant of `top_up_gift_card`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn top_up_gift_card_scoped(
     session_token: String,
@@ -251,6 +257,7 @@ pub async fn top_up_gift_card_scoped(
 }
 
 /// Session-scoped variant of `freeze_gift_card`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn freeze_gift_card_scoped(
     session_token: String,
@@ -269,6 +276,7 @@ pub async fn freeze_gift_card_scoped(
 }
 
 /// Session-scoped variant of `unfreeze_gift_card`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn unfreeze_gift_card_scoped(
     session_token: String,

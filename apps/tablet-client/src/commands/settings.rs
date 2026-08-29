@@ -546,6 +546,7 @@ fn enqueue_settings_update(
 }
 
 /// Session-scoped variant of `get_receipt_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_receipt_settings_scoped(
     session_token: String,
@@ -560,6 +561,7 @@ pub async fn get_receipt_settings_scoped(
 }
 
 /// Session-scoped variant of `set_receipt_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_receipt_settings_scoped(
     session_token: String,
@@ -578,6 +580,7 @@ pub async fn set_receipt_settings_scoped(
 }
 
 /// Session-scoped variant of `get_store_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_store_settings_scoped(
     session_token: String,
@@ -592,6 +595,7 @@ pub async fn get_store_settings_scoped(
 }
 
 /// Session-scoped variant of `set_store_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_store_settings_scoped(
     session_token: String,
@@ -610,6 +614,7 @@ pub async fn set_store_settings_scoped(
 }
 
 /// Session-scoped variant of `get_credit_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_credit_settings_scoped(
     session_token: String,
@@ -628,6 +633,7 @@ pub async fn get_credit_settings_scoped(
 }
 
 /// Session-scoped variant of `set_credit_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_credit_settings_scoped(
     session_token: String,
@@ -651,6 +657,7 @@ pub async fn set_credit_settings_scoped(
 }
 
 /// Session-scoped variant of `list_credit_sales`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_credit_sales_scoped(
     session_token: String,
@@ -686,6 +693,7 @@ pub async fn list_credit_sales_scoped(
 }
 
 /// Session-scoped variant of `settle_credit`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn settle_credit_scoped(
     session_token: String,
@@ -711,6 +719,7 @@ pub async fn settle_credit_scoped(
 }
 
 /// Session-scoped variant of `get_hardware_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_hardware_settings_scoped(
     session_token: String,
@@ -731,6 +740,7 @@ pub async fn get_hardware_settings_scoped(
 }
 
 /// Session-scoped variant of `set_hardware_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_hardware_settings_scoped(
     session_token: String,
@@ -756,6 +766,7 @@ pub async fn set_hardware_settings_scoped(
 }
 
 /// Session-scoped variant of `get_setting`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_setting_scoped(
     session_token: String,
@@ -771,6 +782,7 @@ pub async fn get_setting_scoped(
 }
 
 /// Session-scoped variant of `set_setting`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_setting_scoped(
     session_token: String,

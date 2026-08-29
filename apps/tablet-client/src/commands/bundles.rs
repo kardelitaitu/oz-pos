@@ -129,6 +129,7 @@ pub async fn lookup_bundle_by_sku(
 }
 
 /// Session-scoped variant of `list_bundles`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_bundles_scoped(
     session_token: String,
@@ -144,6 +145,7 @@ pub async fn list_bundles_scoped(
 }
 
 /// Session-scoped variant of `get_bundle`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_bundle_scoped(
     session_token: String,
@@ -160,6 +162,7 @@ pub async fn get_bundle_scoped(
 }
 
 /// Session-scoped variant of `create_bundle`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn create_bundle_scoped(
     session_token: String,
@@ -204,6 +207,7 @@ pub async fn create_bundle_scoped(
 }
 
 /// Session-scoped variant of `update_bundle`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_bundle_scoped(
     session_token: String,
@@ -224,6 +228,7 @@ pub async fn update_bundle_scoped(
 }
 
 /// Session-scoped variant of `delete_bundle`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn delete_bundle_scoped(
     session_token: String,
@@ -241,6 +246,7 @@ pub async fn delete_bundle_scoped(
 }
 
 /// Session-scoped variant of `lookup_bundle_by_sku`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn lookup_bundle_by_sku_scoped(
     session_token: String,

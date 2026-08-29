@@ -88,6 +88,7 @@ pub async fn create_category(
 /// Create category in the store resolved from a session token (CAT-01).
 ///
 /// Enforces `products:create` on the session user. ADR #7.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn create_category_scoped(
     session_token: String,
@@ -147,6 +148,7 @@ pub async fn update_category(
 /// Update a category in the store resolved from a session token (CAT-01).
 ///
 /// Enforces `products:update` on the session user. ADR #7.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_category_scoped(
     session_token: String,
@@ -200,6 +202,7 @@ pub async fn delete_category(
 /// category with the explicit unlink policy — products in the category are
 /// set to `category_id = NULL` in the same transaction, and the number of
 /// unlinked products is returned to the UI. ADR #7.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn delete_category_scoped(
     session_token: String,
@@ -233,6 +236,7 @@ async fn require_category_permission(
 }
 
 /// Session-scoped variant of `list_categories`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_categories_scoped(
     session_token: String,

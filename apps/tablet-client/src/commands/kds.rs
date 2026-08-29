@@ -79,6 +79,7 @@ pub async fn get_kds_order(
 }
 
 /// Session-scoped variant of `list_kds_orders`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_kds_orders_scoped(
     session_token: String,
@@ -97,6 +98,7 @@ pub async fn list_kds_orders_scoped(
 }
 
 /// Session-scoped variant of `get_kds_queue`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_kds_queue_scoped(
     session_token: String,
@@ -115,6 +117,7 @@ pub async fn get_kds_queue_scoped(
 }
 
 /// Session-scoped variant of `update_kds_status`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_kds_status_scoped(
     session_token: String,
@@ -134,6 +137,7 @@ pub async fn update_kds_status_scoped(
 }
 
 /// Session-scoped variant of `create_kds_order_from_sale`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn create_kds_order_from_sale_scoped(
     session_token: String,
@@ -152,6 +156,7 @@ pub async fn create_kds_order_from_sale_scoped(
 }
 
 /// Session-scoped variant of `get_kds_order`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_kds_order_scoped(
     session_token: String,

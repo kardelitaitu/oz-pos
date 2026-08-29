@@ -375,6 +375,7 @@ pub async fn stop_scanner(state: State<'_, AppState>) -> Result<(), AppError> {
 }
 
 /// Session-scoped variant of `open_cash_drawer`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn open_cash_drawer_scoped(
     session_token: String,
@@ -393,6 +394,7 @@ pub async fn open_cash_drawer_scoped(
 }
 
 /// Session-scoped variant of `print_receipt`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn print_receipt_scoped(
     session_token: String,
@@ -416,6 +418,7 @@ pub async fn print_receipt_scoped(
 }
 
 /// Session-scoped variant of `print_sales_receipt`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn print_sales_receipt_scoped(
     session_token: String,
@@ -522,6 +525,7 @@ pub async fn print_sales_receipt_scoped(
 }
 
 /// Session-scoped variant of `list_scanners`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_scanners_scoped(
     session_token: String,
@@ -533,6 +537,7 @@ pub async fn list_scanners_scoped(
 }
 
 /// Session-scoped variant of `start_scanner`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn start_scanner_scoped(
     session_token: String,
@@ -614,6 +619,7 @@ pub async fn start_scanner_scoped(
 }
 
 /// Session-scoped variant of `stop_scanner`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn stop_scanner_scoped(
     session_token: String,

@@ -445,6 +445,7 @@ pub struct ReceivePoLineDto {
 // ── Tests ──────────────────────────────────────────────────────────────
 
 /// Session-scoped variant of `list_suppliers`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_suppliers_scoped(
     session_token: String,
@@ -462,6 +463,7 @@ pub async fn list_suppliers_scoped(
 }
 
 /// Session-scoped variant of `get_supplier`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_supplier_scoped(
     session_token: String,
@@ -480,6 +482,7 @@ pub async fn get_supplier_scoped(
 }
 
 /// Session-scoped variant of `create_supplier`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn create_supplier_scoped(
     session_token: String,
@@ -511,6 +514,7 @@ pub async fn create_supplier_scoped(
 }
 
 /// Session-scoped variant of `update_supplier`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_supplier_scoped(
     session_token: String,
@@ -544,6 +548,7 @@ pub async fn update_supplier_scoped(
 }
 
 /// Session-scoped variant of `list_purchase_orders`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_purchase_orders_scoped(
     session_token: String,
@@ -561,6 +566,7 @@ pub async fn list_purchase_orders_scoped(
 }
 
 /// Session-scoped variant of `get_purchase_order`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_purchase_order_scoped(
     session_token: String,
@@ -579,6 +585,7 @@ pub async fn get_purchase_order_scoped(
 }
 
 /// Session-scoped variant of `create_purchase_order`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn create_purchase_order_scoped(
     session_token: String,
@@ -617,6 +624,7 @@ pub async fn create_purchase_order_scoped(
 }
 
 /// Session-scoped variant of `update_po_status`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_po_status_scoped(
     session_token: String,
@@ -635,6 +643,7 @@ pub async fn update_po_status_scoped(
 }
 
 /// Session-scoped variant of `receive_purchase_order`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn receive_purchase_order_scoped(
     session_token: String,
@@ -653,6 +662,7 @@ pub async fn receive_purchase_order_scoped(
 }
 
 /// Session-scoped variant of `receive_purchase_order_with_lines`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn receive_purchase_order_with_lines_scoped(
     session_token: String,

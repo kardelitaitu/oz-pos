@@ -365,6 +365,7 @@ fn run_list_remote_failures(
 }
 
 /// Session-scoped variant of `enqueue_offline`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn enqueue_offline_scoped(
     session_token: String,
@@ -399,6 +400,7 @@ pub async fn enqueue_offline_scoped(
 }
 
 /// Session-scoped variant of `list_pending_offline`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_pending_offline_scoped(
     session_token: String,
@@ -413,6 +415,7 @@ pub async fn list_pending_offline_scoped(
 }
 
 /// Session-scoped variant of `list_all_offline`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_all_offline_scoped(
     session_token: String,
@@ -430,6 +433,7 @@ pub async fn list_all_offline_scoped(
 }
 
 /// Session-scoped variant of `pending_offline_count`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn pending_offline_count_scoped(
     session_token: String,
@@ -447,6 +451,7 @@ pub async fn pending_offline_count_scoped(
 }
 
 /// Session-scoped variant of `retry_offline_sync`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn retry_offline_sync_scoped(
     session_token: String,
@@ -523,6 +528,7 @@ pub async fn retry_offline_sync_scoped(
 }
 
 /// Session-scoped variant of `delete_offline_item`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn delete_offline_item_scoped(
     session_token: String,
@@ -545,6 +551,7 @@ pub async fn delete_offline_item_scoped(
 }
 
 /// Session-scoped variant of `requeue_remote_failure`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn requeue_remote_failure_scoped(
     session_token: String,
@@ -566,6 +573,7 @@ pub async fn requeue_remote_failure_scoped(
 }
 
 /// Session-scoped variant of `list_remote_failures`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_remote_failures_scoped(
     session_token: String,

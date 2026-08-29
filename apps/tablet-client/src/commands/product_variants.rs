@@ -284,6 +284,7 @@ pub async fn delete_product_variant(
 }
 
 /// Session-scoped variant of `list_product_variants`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_product_variants_scoped(
     session_token: String,
@@ -306,6 +307,7 @@ pub async fn list_product_variants_scoped(
 }
 
 /// Session-scoped variant of `get_product_variant`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_product_variant_scoped(
     session_token: String,
@@ -327,6 +329,7 @@ pub async fn get_product_variant_scoped(
 }
 
 /// Session-scoped variant of `create_product_variant`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn create_product_variant_scoped(
     session_token: String,
@@ -378,6 +381,7 @@ pub async fn create_product_variant_scoped(
 }
 
 /// Session-scoped variant of `update_product_variant`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_product_variant_scoped(
     session_token: String,
@@ -431,6 +435,7 @@ pub async fn update_product_variant_scoped(
 }
 
 /// Session-scoped variant of `delete_product_variant`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn delete_product_variant_scoped(
     session_token: String,

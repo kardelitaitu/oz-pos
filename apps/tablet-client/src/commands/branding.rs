@@ -62,6 +62,7 @@ pub async fn set_brand_store_name(
 }
 
 /// Session-scoped variant of `get_brand_settings`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_brand_settings_scoped(
     session_token: String,
@@ -80,6 +81,7 @@ pub async fn get_brand_settings_scoped(
 }
 
 /// Session-scoped variant of `set_brand_primary_colour`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_brand_primary_colour_scoped(
     session_token: String,
@@ -95,6 +97,7 @@ pub async fn set_brand_primary_colour_scoped(
 }
 
 /// Session-scoped variant of `set_brand_logo_path`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_brand_logo_path_scoped(
     session_token: String,
@@ -110,6 +113,7 @@ pub async fn set_brand_logo_path_scoped(
 }
 
 /// Session-scoped variant of `set_brand_store_name`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn set_brand_store_name_scoped(
     session_token: String,

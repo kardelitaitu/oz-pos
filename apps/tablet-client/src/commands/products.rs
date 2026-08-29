@@ -55,6 +55,7 @@ pub async fn adjust_stock(
         let db = state.db.lock().await;
         let tid = state.terminal_id.lock().await.clone();
         let store = oz_core::db::Store::new(&db).with_terminal_id(tid);
+        #[allow(deprecated)]
         store.adjust_stock(&args.sku, args.delta)?
     };
 
@@ -667,6 +668,7 @@ pub async fn delete_product(
 }
 
 /// Session-scoped variant of `adjust_stock`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn adjust_stock_scoped(
     session_token: String,
@@ -692,6 +694,7 @@ pub async fn adjust_stock_scoped(
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let db = &*db_guard;
         let store = oz_core::db::Store::new(&db).with_terminal_id(tid);
+        #[allow(deprecated)]
         store.adjust_stock(&args.sku, args.delta)?
     };
 
@@ -718,6 +721,7 @@ pub async fn adjust_stock_scoped(
 }
 
 /// Session-scoped variant of `list_products`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_products_scoped(
     session_token: String,
@@ -732,6 +736,7 @@ pub async fn list_products_scoped(
 }
 
 /// Session-scoped variant of `list_warehouse_products`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_warehouse_products_scoped(
     session_token: String,
@@ -746,6 +751,7 @@ pub async fn list_warehouse_products_scoped(
 }
 
 /// Session-scoped variant of `lookup_by_barcode`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn lookup_by_barcode_scoped(
     session_token: String,
@@ -765,6 +771,7 @@ pub async fn lookup_by_barcode_scoped(
 }
 
 /// Session-scoped variant of `lookup_product_by_sku`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn lookup_product_by_sku_scoped(
     session_token: String,
@@ -784,6 +791,7 @@ pub async fn lookup_product_by_sku_scoped(
 }
 
 /// Session-scoped variant of `create_product`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn create_product_scoped(
     session_token: String,
@@ -869,6 +877,7 @@ pub async fn create_product_scoped(
 }
 
 /// Session-scoped variant of `update_product`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_product_scoped(
     session_token: String,
@@ -918,6 +927,7 @@ pub async fn update_product_scoped(
 }
 
 /// Session-scoped variant of `get_product_track_serial`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_product_track_serial_scoped(
     session_token: String,
@@ -936,6 +946,7 @@ pub async fn get_product_track_serial_scoped(
 }
 
 /// Session-scoped variant of `get_product_track_serial_batch`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_product_track_serial_batch_scoped(
     session_token: String,
@@ -954,6 +965,7 @@ pub async fn get_product_track_serial_batch_scoped(
 }
 
 /// Session-scoped variant of `record_product_search`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn record_product_search_scoped(
     session_token: String,
@@ -977,6 +989,7 @@ pub async fn record_product_search_scoped(
 }
 
 /// Session-scoped variant of `delete_product`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn delete_product_scoped(
     session_token: String,

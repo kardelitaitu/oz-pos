@@ -133,6 +133,7 @@ pub async fn list_sections(state: State<'_, AppState>) -> Result<Vec<String>, Ap
 }
 
 /// Session-scoped variant of `list_tables`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_tables_scoped(
     session_token: String,
@@ -151,6 +152,7 @@ pub async fn list_tables_scoped(
 }
 
 /// Session-scoped variant of `get_table`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_table_scoped(
     session_token: String,
@@ -169,6 +171,7 @@ pub async fn get_table_scoped(
 }
 
 /// Session-scoped variant of `create_table`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn create_table_scoped(
     session_token: String,
@@ -189,6 +192,7 @@ pub async fn create_table_scoped(
 }
 
 /// Session-scoped variant of `update_table`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_table_scoped(
     session_token: String,
@@ -209,6 +213,7 @@ pub async fn update_table_scoped(
 }
 
 /// Session-scoped variant of `delete_table`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn delete_table_scoped(
     session_token: String,
@@ -229,6 +234,7 @@ pub async fn delete_table_scoped(
 }
 
 /// Session-scoped variant of `update_table_status`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_table_status_scoped(
     session_token: String,
@@ -250,6 +256,7 @@ pub async fn update_table_status_scoped(
 }
 
 /// Session-scoped variant of `assign_table_order`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn assign_table_order_scoped(
     session_token: String,
@@ -271,6 +278,7 @@ pub async fn assign_table_order_scoped(
 }
 
 /// Session-scoped variant of `release_table`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn release_table_scoped(
     session_token: String,
@@ -291,6 +299,7 @@ pub async fn release_table_scoped(
 }
 
 /// Session-scoped variant of `list_sections`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_sections_scoped(
     session_token: String,

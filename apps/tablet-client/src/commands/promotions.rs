@@ -248,6 +248,7 @@ pub async fn get_sale_promotions(
 }
 
 /// Session-scoped variant of `list_promotions`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn list_promotions_scoped(
     session_token: String,
@@ -263,6 +264,7 @@ pub async fn list_promotions_scoped(
 }
 
 /// Session-scoped variant of `get_promotion`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_promotion_scoped(
     session_token: String,
@@ -279,6 +281,7 @@ pub async fn get_promotion_scoped(
 }
 
 /// Session-scoped variant of `create_promotion`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn create_promotion_scoped(
     session_token: String,
@@ -317,6 +320,7 @@ pub async fn create_promotion_scoped(
 }
 
 /// Session-scoped variant of `update_promotion`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn update_promotion_scoped(
     session_token: String,
@@ -338,6 +342,7 @@ pub async fn update_promotion_scoped(
 }
 
 /// Session-scoped variant of `delete_promotion`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn delete_promotion_scoped(
     session_token: String,
@@ -356,6 +361,7 @@ pub async fn delete_promotion_scoped(
 }
 
 /// Session-scoped variant of `apply_promotion`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn apply_promotion_scoped(
     session_token: String,
@@ -469,6 +475,7 @@ pub async fn apply_promotion_scoped(
 }
 
 /// Session-scoped variant of `get_sale_promotions`.
+#[allow(clippy::needless_borrow, dropping_references)]
 #[command]
 pub async fn get_sale_promotions_scoped(
     session_token: String,
