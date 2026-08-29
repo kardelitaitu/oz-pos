@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (counts refreshed) · F1: test counts 228 files/3476 tests -> 400 files/~6700 tests · F2: api/ 34 -> 40 .ts files · F3: locales 48 -> 50 .ftl files (en + id variants) · verified accurate: ui/src/locales per-feature bundles; ui/src/frontend/themes/ (reset.css/tokens.css/components.css/responsive.css); Vite ^6.0.0 in ui/package.json; React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
+<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (counts refreshed) · F1: test counts 228 files/3476 tests -> 400 files/~6700 tests · F2: api/ 34 -> 40 .ts files · F3: locales 48 -> 50 .ftl files (en + id variants) · verified accurate: ui/src/locales per-feature bundles; ui/src/frontend/themes/ (reset.css/tokens.css/components.css/responsive.css); Vite ^6.0.0 in ui/package.json; React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
 
 # `ui/` — OZ-POS Frontend
 
@@ -143,4 +143,4 @@ ui/src/
 | Every screen has a test file | `__tests__/` audit |
 | Money displayed via `formatMoney()` | Import from `types/domain.ts` |
 
-> last audited 30-08-26 by docs-auditor
+> last audited 29-08-26 by docs-auditor

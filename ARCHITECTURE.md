@@ -1,6 +1,6 @@
 # OZ-POS Architecture
 
-<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (counts refreshed) · F1: 14/14 modules active (was 10 — giftcards/kitchen/promotions/purchasing added) · F2: 61 ADRs in docs/decisions/ (was 58) · F3: 13 crates + 4 platform + 1 foundation + 14 modules + 3 apps = 35 workspace members (was 29) · F4: 14/14 modules have README · re-audited 2026-08-30: module/crate/ADR counts refreshed to current tree -->
+<!-- Audit stamp: 2026-08-29 · docs-auditor · status: ACCURATE (counts refreshed) · F1: 14/14 modules active (was 10 — giftcards/kitchen/promotions/purchasing added) · F2: 61 ADRs in docs/decisions/ (was 58) · F3: 13 crates + 4 platform + 1 foundation + 14 modules + 3 apps = 35 workspace members (was 29) · F4: 14/14 modules have README · re-audited 2026-08-29: module/crate/ADR counts refreshed to current tree -->
 
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
@@ -513,7 +513,7 @@ For the full list see the `docs/decisions/` directory.
 not hard deadlines. Every PR should move the codebase closer to the target
 architecture.*
 
-> last audited 30-08-26 by docs-auditor
+> last audited 29-08-26 by docs-auditor
 
 > status: ACCURATE (verified against actual codebase) · verified accurate: 35 workspace members (13 crates + 4 platform + 1 foundation + 14 modules + 3 apps); 61 ADRs in docs/decisions/; foundation crate verified; cloud-server config consolidation; OpenAPI spec; N+1 SKU lookup fix; all clippy warnings resolved workspace-wide
 
