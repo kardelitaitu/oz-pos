@@ -229,7 +229,7 @@ migration mechanism, unwrap/expect scan, file-size and doc-header rule complianc
 
 ## S3 — Platform Layer (core / kernel / startup / sync)
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** `platform/core/` (auth.rs, rbac.rs, permission_registry.rs, settings/,
 terminal_profile.rs), `platform/kernel/` (event_bus, manifest), `platform/startup/`
@@ -244,7 +244,51 @@ conflict, replication, transport).
 
 ### S3 Notes
 
-- (empty)
+**Checked:** rbac.rs + permission_registry.rs design; command-level authorization
+coverage via body-level analysis of all desktop scoped commands (session resolution,
+permission helper calls, per-command); kernel event_bus; sync conflict strategies;
+startup event_handlers; platform file sizes.
+
+- `platform/core/src/rbac.rs`: `<domain>:<action>` permission format, wildcard resolver
+  (`*`, `family:*`, `domain:action`), doctested.
+- `permission_registry.rs` (ADR #35 D3 / spec 0046): code-resident single source of
+  truth; `sensitive` keys (voids, refunds, settlement, role mgmt, bulk export) can never
+  ride family wildcards; `validate_grant` rejects unregistered keys.
+- Enforcement chain (healthy example): `resolve_session` (token→SessionContext, expiry
+  sweep) → `require_*_permission` (DB-backed `require_permission_for_user`) →
+  `resolve_store` (scoped connection). The command doc comments correctly state the UI
+  role gate is *not* a security boundary.
+- Body-level authorization audit: 137 scoped commands check permissions; 169 do not
+  (session-scoping only) — see F-017 for the sensitive subset.
+- Kernel event bus: in-process topic-based synchronous dispatch, `Send + Sync`, handler
+  errors logged-not-propagated (ADR #2).
+- Sync: ADR-21 entity-dispatched conflict strategies — Version LWW (product/category/
+  tax/user/staff), Sale-status LWW (sale.*/complete/void/refund), CRDT merge (stock.*),
+  created-at LWW fallback.
+- Startup `event_handlers.rs::fresh_db` (graph hotspot fan-in 268) is a **test helper**
+  (in-memory DB + migrations for handler tests) — not a prod path.
+- Sizes: platform/sync is the heavyweight — daemon.rs 2061, lib.rs 1850, queue.rs 1490,
+  pg_daemon.rs 1331, transport.rs 1167, pg_transport.rs 1022; rbac.rs 1310;
+  event_handlers.rs 1053.
+
+### S3 Findings
+
+- **F-017 (P1, S3)**: Systemic RBAC enforcement gap — 169 registered desktop scoped
+  commands authenticate + scope but never check permissions. Highlights:
+  `rotate_encryption_key_scoped` (ANY valid session rotates encryption keys; `_session`
+  unused), 8 gift-card mutations (issue/redeem/top-up/freeze/unfreeze), `adjust_stock_scoped`,
+  `create_cash_payout_scoped`, bundle CRUD, supplier/PO lifecycle (6 cmds), store-profile
+  CRUD, `pg_sync_start/stop`, workspace recover/suspend; sensitive reads/exports: sales
+  history, 24 report commands, EOD/sales-by-hour/daily exports (registry itself declares
+  bulk export sensitive), gift-card balances, credit sales. 137 sibling commands do
+  enforce — inconsistent adoption, not absent infrastructure. Recommend a command→
+  registry-key parity gate.
+- **F-018 (P2, S3)**: platform file-size rule violations: 8 files over 1000 lines
+  (see S3 Notes sizes), worst `sync/daemon.rs` 2061.
+- **F-019 (INFO, S3)**: Permission registry design is strong (sensitivity model,
+  wildcard restrictions, validation) — the gap is command-side adoption, not design.
+- **F-020 (INFO, S3)**: Event bus design sound; `fresh_db` hotspot is test-only.
+- **F-021 (INFO, S3)**: Sync conflict strategy documented and entity-dispatched (ADR-21).
 
 ---
 
@@ -422,6 +466,11 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 | F-014 | 2026-07-25 | S2 | INFO | `crates/oz-core/src/db/sales.rs` | Explicit tx params, ADR-19 §5.2 single-tx guard, MONEY-06/07 import validation |
 | F-015 | 2026-07-25 | S2 | INFO | `crates/oz-core/migrations/` | Forward-only compile-time migrations, 17 files |
 | F-016 | 2026-07-25 | S2 | P3 | `crates/oz-core/src/features.rs:1056` | Inline `mod proptests` alongside sibling tests file |
+| F-017 | 2026-07-25 | S3 | P1 | `apps/desktop-client/src/commands/*` (169 cmds) | Scoped commands authenticate but skip permission checks — incl. `rotate_encryption_key_scoped`, gift-card mutations, exports |
+| F-018 | 2026-07-25 | S3 | P2 | `platform/sync/src/*`, `platform/core/src/rbac.rs` | 8 platform files over 1000-line limit (worst 2061) |
+| F-019 | 2026-07-25 | S3 | INFO | `platform/core/src/permission_registry.rs` | Strong sensitivity model (ADR #35 D3); adoption inconsistent |
+| F-020 | 2026-07-25 | S3 | INFO | `platform/kernel/src/event_bus.rs` | Sound synchronous topic bus (ADR #2); fresh_db hotspot is test-only |
+| F-021 | 2026-07-25 | S3 | INFO | `platform/sync/src/conflict.rs` | ADR-21 entity-dispatched conflict strategies |
 
 ---
 
@@ -440,4 +489,8 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 - **S2 reviewed**: Money invariant solid (F-013), tx discipline verified (F-014),
   migrations clean (F-015); P2s: 6 oversized files (F-011), 11 missing module headers
   (F-012), inline proptests (F-016). Committed.
-- Next: S3 platform layer.
+- **S3 reviewed**: body-level authorization audit of all desktop scoped commands found
+  systemic RBAC gap (169 unguarded cmds incl. encryption-key rotation, gift-card
+  mutations, exports — F-017); registry design strong (F-019); event bus + sync
+  conflict documented (F-020/F-021); 8 oversized platform files (F-018). Committed.
+- Next: S4 business modules.
