@@ -112,7 +112,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       // X axis labels (every 2nd)
       let xLabels = '';
       data.forEach((d,i) => { if (i % 2 === 0 || i === data.length-1) { xLabels += `<text x="${x(i)}" y="${py+ph+15}" text-anchor="middle" fill="var(--muted)" font-size="9">${d.month.slice(5)}</text>`; } });
-      return `<svg viewBox="0 0 ${w} ${h}" style="max-height:180px">${fills}${paths}${yLabels}${xLabels}</svg>`;
+      return `<svg viewBox="0 0 ${w} ${h}" class="chart-svg">${fills}${paths}${yLabels}${xLabels}</svg>`;
     }
 
     function svgDonut(id, data, labelKey, valueKey, colors) {
@@ -135,8 +135,8 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       });
       // Legend
       let legend = '';
-      data.forEach((d,i) => { const c = colors && colors[i] ? colors[i] : colorList[i % colorList.length]; legend += `<div style="display:flex;align-items:center;gap:.4rem;font-size:.75rem;margin:.15rem 0"><span style="width:8px;height:8px;border-radius:2px;background:${c};flex-shrink:0"></span>${d[labelKey]} <span style="color:var(--muted)">${Math.round(pct*100)}%</span></div>`; });
-      return { svg: `<svg viewBox="0 0 160 160" style="max-height:160px">${slices}</svg>`, legend };
+      data.forEach((d,i) => { const c = colors && colors[i] ? colors[i] : colorList[i % colorList.length]; legend += `<div class="donut-legend-item"><span class="donut-swatch" style="background:${c}"></span><span class="donut-label">${d[labelKey]}</span> <span class="donut-pct">${Math.round(pct*100)}%</span></div>`; });
+      return { svg: `<svg viewBox="0 0 160 160">${slices}</svg>`, legend };
     }
 
     // ── Dashboard tab ────────────────────────────────────────────────
@@ -218,9 +218,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       tierCard.appendChild(el('h3', null, 'Tier Distribution'));
       const donut = svgDonut('tiers', m.tierDistribution, 'tier', 'count');
       const tierRow = el('div', 'donut-row');
-      const donutDiv = el('div', null); donutDiv.innerHTML = donut.svg;
+      const donutDiv = el('div', 'donut-chart'); donutDiv.innerHTML = donut.svg;
       tierRow.appendChild(donutDiv);
-      const legendDiv = el('div', null); legendDiv.innerHTML = donut.legend;
+      const legendDiv = el('div', 'donut-legend'); legendDiv.innerHTML = donut.legend;
       tierRow.appendChild(legendDiv);
       tierCard.appendChild(tierRow);
       chartGrid.appendChild(tierCard);
@@ -230,9 +230,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       provCard.appendChild(el('h3', null, 'Payment Provider'));
       const donut2 = svgDonut('prov', m.providerSplit, 'provider', 'count', ['#147efb','#22c55e']);
       const provRow = el('div', 'donut-row');
-      const donutDiv2 = el('div', null); donutDiv2.innerHTML = donut2.svg;
+      const donutDiv2 = el('div', 'donut-chart'); donutDiv2.innerHTML = donut2.svg;
       provRow.appendChild(donutDiv2);
-      const legendDiv2 = el('div', null); legendDiv2.innerHTML = donut2.legend;
+      const legendDiv2 = el('div', 'donut-legend'); legendDiv2.innerHTML = donut2.legend;
       provRow.appendChild(legendDiv2);
       provCard.appendChild(provRow);
       chartGrid.appendChild(provCard);
