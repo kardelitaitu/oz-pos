@@ -29,4 +29,4 @@ CLI tool for OZ-POS maintenance — migrations, backup, export, and data CRUD.
 - Prices and monetary values are `i64` minor units (e.g. `350` for $3.50).
 - `oz import-ozpkg` currently supports dry-run inspection only; write logic is pending.
 
-> last audited 28-06-26 by docs-auditor
+> last audited 30-08-26 by docs-auditor
