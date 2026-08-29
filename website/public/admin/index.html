@@ -83,7 +83,7 @@
     const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
     let currentTab = 'dashboard';
 
-    // ── ═══ MOCK DATA (Phase 1 — real Paddle/Midtrans data replaces this) ═══ ──
+    // ── ═══ MOCK DATA (Phase 1 — replaced by real /stats API when available) ═══ ──
     const MOCK = {
       kpis: { totalUsers:1247, activeUsers:1084, totalSubscribers:386, mrrUsd:4280, arpuUsd:11.09, activeDevices:812, trialToPaidRate:22.4 },
       revenueTrend: [
@@ -218,20 +218,28 @@
       const c = document.getElementById('content');
       c.innerHTML = '<div class="skeleton" style="height:8rem"></div>';
 
-      // Fetch FX rate
-      await fetchFxRate();
+      // Try real stats API first; fall back to MOCK
+      let stats = null;
+      try { stats = await api('/api/v1/admin/stats'); } catch { /* fall through */ }
+      const m = stats || MOCK;
+      const isReal = !!stats;
 
-      const m = MOCK;
-      // Convert all revenue data to IDR
-      m.revenueTrend.forEach(d => d.idr = Math.round(d.usd * fxRate));
+      // FX rate: prefer the real endpoint's value; otherwise fetch live.
+      if (isReal && m.kpis && m.kpis.fxRate) { fxRate = m.kpis.fxRate; fxLive = !!m.kpis.fxLive; fxUpdatedAt = m.kpis.fxUpdatedAt || ''; }
+      else { await fetchFxRate(); }
+      // Convert all revenue data to IDR (client-side fallback for mock)
+      if (!isReal) { m.revenueTrend.forEach(d => d.idr = Math.round(d.usd * fxRate)); }
       const mrrIdr = Math.round(m.kpis.mrrUsd * fxRate);
 
       c.innerHTML = '';
 
-      // --- Mock badge + FX chip ---
+      // --- Mock/Real badge ---
       const top = el('div', null);
       top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem';
-      const badge = el('span', 'mock-badge', 'MOCK DATA');
+      const badgeLabel = isReal ? 'LIVE DATA' : 'MOCK DATA';
+      const badgeStyle = isReal ? 'background:rgba(34,197,94,.15);color:#4ade80' : 'background:rgba(245,158,11,.15);color:#fbbf24';
+      const badge = el('span', null, badgeLabel);
+      badge.style.cssText = 'display:inline-block;padding:.1rem .5rem;border-radius:999px;font-size:.65rem;font-weight:600;' + badgeStyle;
       top.appendChild(badge);
       const fx = el('div', 'fx-chip');
       const fxDot = el('span', null, fxLive ? '●' : '○');
@@ -328,11 +336,15 @@
 
       // --- Tables ---
       // Top subscribers
-      c.appendChild(tableCard('Top Subscribers', ['Email','Tier','MRR','Renewal','Provider'], m.topSubscribers.map(d => [d.email, d.tier, fmtUsd(d.mrrUsd), d.renewal, d.provider])));
+      if (m.topSubscribers && m.topSubscribers.length > 0) {
+        c.appendChild(tableCard('Top Subscribers', ['Email','Tier','MRR','Renewal','Provider'], m.topSubscribers.map(d => [d.email, d.tier, fmtUsd(d.mrrUsd), d.renewal, d.provider])));
+      }
       // Recent signups
-      c.appendChild(tableCard('Recent Signups', ['Email','Created','Verified','Tier'], m.recentSignups.map(d => [d.email, d.created, d.verified ? '✓' : '○', d.tier])));
+      if (m.recentSignups && m.recentSignups.length > 0) {
+        c.appendChild(tableCard('Recent Signups', ['Email','Created','Verified','Tier'], m.recentSignups.map(d => [d.email, d.created, d.verified ? '✓' : '○', d.tier])));
+      }
       // Expiring soon
-      if (m.expiringSoon.length > 0) {
+      if (m.expiringSoon && m.expiringSoon.length > 0) {
         c.appendChild(tableCard('Expiring Soon (within 30 days)', ['Email','Tier','Expires','Days Left'], m.expiringSoon.map(d => [d.email, d.tier, d.expiresAt, String(d.daysLeft)])));
       }
     }
