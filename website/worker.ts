@@ -40,6 +40,7 @@ interface Env {
 
 const RUNTIME_CONFIG_PATH = '/__oz/runtime-config.js';
 const SESSION_PATH = '/__oz/session';
+const LOGOUT_PATH = '/__oz/logout';
 const COOKIE_NAME = 'oz_session';
 
 /** Dashboard subdomains that require authentication. */
@@ -198,6 +199,26 @@ export default {
         }
         return new Response(JSON.stringify({ token: sessionCookie }), {
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        });
+      }
+
+      // Step 1c: Logout — clear the httpOnly cookie and redirect to the
+      // login page. The cookie is HttpOnly so page JS cannot delete it;
+      // the Worker must expire it here (Max-Age=0). The SPA's Log out
+      // button navigates to this endpoint.
+      if (url.pathname === LOGOUT_PATH) {
+        const loginUrl = hostname === 'admin.ozpos.my.id'
+          ? `https://${MARKETING_HOST}/admin/login`
+          : `https://${MARKETING_HOST}/en/login`;
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: loginUrl,
+            'Set-Cookie': `${COOKIE_NAME}=; Domain=.ozpos.my.id; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'Referrer-Policy': 'no-referrer',
+            'Pragma': 'no-cache',
+          },
         });
       }
 

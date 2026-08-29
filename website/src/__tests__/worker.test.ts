@@ -124,6 +124,20 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(setCookie).toContain('Domain=.ozpos.my.id');
   });
 
+  it('clears the httpOnly cookie on /__oz/logout and redirects to login', async () => {
+    const req = new Request('https://admin.ozpos.my.id/__oz/logout', {
+      headers: { Cookie: 'oz_session=stale.jwt.token' },
+    });
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://ozpos.my.id/admin/login');
+    const setCookie = res.headers.get('Set-Cookie');
+    expect(setCookie).toContain('oz_session=;');
+    expect(setCookie).toContain('Max-Age=0');
+    expect(setCookie).toContain('HttpOnly');
+  });
+
   it('serves placeholder dashboard page when cookie is present', async () => {
     const req = new Request('https://dashboard.ozpos.my.id/', {
       headers: { Cookie: 'oz_session=valid.jwt.token' },
