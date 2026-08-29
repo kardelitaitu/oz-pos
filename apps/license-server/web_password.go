@@ -366,6 +366,16 @@ func handleLoginPassword(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Escalating brute-force lockout (per email), FIRST ──────
+		// 5s minimum gap; +30s after 3rd consecutive failure, more 30s
+		// each, capped at 15 minutes. Persisted to SQLite (H2 audit).
+		if locked, retryAfter := checkLoginLockout(email); locked {
+			return e.JSON(http.StatusTooManyRequests, map[string]any{
+				"error":       describeLoginLockout(retryAfter),
+				"retry_after": retryAfter,
+			})
+		}
+
 		// ── Rate limit (per email + per IP), BEFORE tenant lookup ──
 		if !webLoginLimiter.allow(email) || !otpIPLimiter.allow(clientIP) {
 			return e.JSON(http.StatusTooManyRequests, map[string]any{
@@ -376,6 +386,7 @@ func handleLoginPassword(app core.App) func(e *core.RequestEvent) error {
 		// ── Resolve tenant ────────────────────────────────────────
 		tenant, err := app.FindFirstRecordByData("tenants", "email", email)
 		if tenant == nil || err != nil {
+			recordLoginFailure(email)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "invalid email or password",
 			})
@@ -384,6 +395,7 @@ func handleLoginPassword(app core.App) func(e *core.RequestEvent) error {
 		// Non-active tenants get the same generic 401 (their passwords
 		// are never honored, but the response must not differ).
 		if tenant.GetString("status") != "active" {
+			recordLoginFailure(email)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "invalid email or password",
 			})
@@ -396,10 +408,14 @@ func handleLoginPassword(app core.App) func(e *core.RequestEvent) error {
 		storedHash := tenant.GetString("password_hash")
 		if storedHash == "" ||
 			bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(req.Password)) != nil {
+			recordLoginFailure(email)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "invalid email or password",
 			})
 		}
+
+		// Successful login clears the escalating lockout.
+		clearLoginLockout(email)
 
 		// ── Issue session token (same store as verify-otp) ───────
 		token, expiresAt, err := issueWebSession(tenant.Id)

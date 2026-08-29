@@ -221,6 +221,8 @@ func main() {
 		// need the persistence handle.
 		ipRateLimiter.attachPersistence(app)
 		keyFailTracker.attachPersistence(app)
+		// Escalating brute-force login lockout (H2 audit restart survival)
+		registerLoginLockoutPersistence(app)
 
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))

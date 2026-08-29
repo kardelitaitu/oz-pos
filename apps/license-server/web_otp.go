@@ -676,6 +676,17 @@ func handleVerifyOTP(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
+		// ── Escalating brute-force lockout (per email), FIRST ──────
+		// Wrong-code guessing escalates the same way as password login:
+		// 5s minimum gap, +30s after 3rd consecutive failure, capped at
+		// 15 minutes (login_lockout.go).
+		if locked, retryAfter := checkLoginLockout(email); locked {
+			return e.JSON(http.StatusTooManyRequests, map[string]any{
+				"error":       describeLoginLockout(retryAfter),
+				"retry_after": retryAfter,
+			})
+		}
+
 		if !otpVerifyLimiter.allow(email) || !otpIPLimiter.allow(clientIP) {
 			return e.JSON(http.StatusTooManyRequests, map[string]any{
 				"error": "rate limit exceeded, try again later",
@@ -687,6 +698,7 @@ func handleVerifyOTP(app core.App) func(e *core.RequestEvent) error {
 		// codes are never issued, but the response must not differ).
 		tenant, err := app.FindFirstRecordByData("tenants", "email", email)
 		if err != nil || tenant.GetString("status") != "active" {
+			recordLoginFailure(email)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "invalid or expired code",
 			})
@@ -694,10 +706,14 @@ func handleVerifyOTP(app core.App) func(e *core.RequestEvent) error {
 
 		storedHash, ok := webOtpStore.takeCode(email)
 		if !ok || !constantTimeHashEq(storedHash, hashOtpCode(code)) {
+			recordLoginFailure(email)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "invalid or expired code",
 			})
 		}
+
+		// Successful OTP verification clears the escalating lockout.
+		clearLoginLockout(email)
 
 		// ── Mark the email verified ─────────────────────────────
 		// Proving inbox ownership completes registration. Best-effort:

@@ -61,14 +61,14 @@ jobs:
         run: docker build -f Dockerfile.server -t oz-pos-cloud:security .
       - name: Build license image
         run: docker build -f apps/license-server/Dockerfile -t oz-pos-license:security apps/license-server
-      # DOCKER-03: `ignorefile` is not a valid trivy-action@v0.42.0 input
+      # DOCKER-03: `ignorefile` is not a valid trivy-action input — use `trivyignores`
       # (silently dropped → baseline never applied); use `trivyignores`.
       # Also set `limit-severities-for-sarif: true` so SARIF mode keeps the
       # CRITICAL/HIGH filter (otherwise the action scans ALL severities).
       # continue-on-error + the explicit gate keep both SARIFs uploaded even
       # when findings exist, then fail the job AFTER uploads.
       - name: Scan cloud image (blocking)
-        uses: aquasecurity/trivy-action@v0.42.0
+        uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
           image-ref: oz-pos-cloud:security
@@ -79,7 +79,7 @@ jobs:
           trivyignores: .trivyignore
           output: trivy-cloud.sarif
       - name: Scan license image (blocking)
-        uses: aquasecurity/trivy-action@v0.42.0
+        uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
           image-ref: oz-pos-license:security

@@ -81,6 +81,7 @@ func TestLoginPassword_HappyPathIssuesSession(t *testing.T) {
 // non-active tenant all return the identical 401 body — the endpoint can
 // never be used to probe account state.
 func TestLoginPassword_Generic401ForEveryFailure(t *testing.T) {
+	t.Setenv("LOGIN_LOCKOUT_DISABLED", "1")
 	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
@@ -125,6 +126,7 @@ func TestLoginPassword_Generic401ForEveryFailure(t *testing.T) {
 }
 
 func TestLoginPassword_RateLimitedPerEmail(t *testing.T) {
+	t.Setenv("LOGIN_LOCKOUT_DISABLED", "1")
 	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
@@ -222,6 +224,7 @@ func TestSetPassword_WeakPasswordRejected(t *testing.T) {
 // account sets its first password, logs in with it, rotates it, and the
 // old password stops working while the new one authenticates.
 func TestSetPassword_SetsAndRotates(t *testing.T) {
+	t.Setenv("LOGIN_LOCKOUT_DISABLED", "1")
 	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
@@ -571,6 +574,7 @@ func TestRequestPasswordReset_RateLimited(t *testing.T) {
 // code, reset with a new valid password → session issued, old password
 // dead, new one works, email marked verified, and the cooldown is stamped.
 func TestResetPassword_HappyPath(t *testing.T) {
+	t.Setenv("LOGIN_LOCKOUT_DISABLED", "1")
 	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
