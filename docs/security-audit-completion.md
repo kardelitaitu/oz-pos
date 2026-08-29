@@ -16,11 +16,11 @@ The security audit identified 17 findings across 4 severity levels (2 Critical, 
 
 | Metric | Before | After |
 |--------|--------|-------|
-| Desktop registered commands | 451 | 371 (80 removed) |
+| Desktop registered commands | 451 | 376 (75 removed, 5 utility added) |
 | Tablet registered commands | 278 | 363 (116 _scoped added, net increase from additions) |
-| Desktop `_scoped` command variants | ~266 | 299 |
+| Desktop `_scoped` command variants | ~266 | 304 |
 | Tablet `_scoped` command variants | ~120 | 223 |
-| Unregistered legacy commands | 0 | 192 (deprecated) |
+| Unregistered legacy commands | 0 | 182 (deprecated) |
 | Secret keys encrypted at rest | 0 of 6 | 6 of 6 |
 
 ---
@@ -91,12 +91,21 @@ grep -n "is_secret_key\|REDACTED" apps/desktop-client/src/commands/settings.rs
 | 80 `_scoped` variants added across 11 desktop modules (sync, settings, hardware, scale, branding, bundles, product_variants, products, offline, gift_cards, etc.) | `security(H-1)` × 3 |
 | 116 `_scoped` variants added to tablet across 16 modules | `0f4c0cac` |
 | 14 `_scoped` variants added for remaining desktop commands (data, email, edc, features, license, security) | `62e30fd7` |
+| 5 `_scoped` variants for final utility commands (branding, currencies, health) | `f8642fc4` |
 | CI scoped-coverage gate to prevent regression | `e6ca4cfc` |
 
 **Remaining unscoped commands (by design):**
 - Pre-auth: `staff_login`, `staff_check_username`, `has_users`, `bootstrap_owner`, `resolve_boot_store`, `activate_license`, `setup::*`
 - Utility: `health::ping`, `health::get_device_id`, `health::get_local_ip`
 - Pure functions: `picker_ticket::sign/verify`, `branding::pick_logo_file`
+
+**Remaining unscoped commands (12, by design):**
+- Auth pre-login: `staff_login`, `staff_check_username`, `has_users`, `create_session`
+- Setup: `get_enabled_features`, `complete_setup`, `get_setup_status`, `dismiss_setup_wizard`
+- Bootstrap: `bootstrap_owner`
+- Boot: `resolve_boot_store`
+- License: `activate_license`
+- Subscription: `get_subscription_capabilities`
 
 **Verification:**
 ```bash
@@ -404,10 +413,10 @@ grep -n "allowBackup" apps/tablet-client/gen/android/app/src/main/AndroidManifes
 |--------|-------------------|------------------|------------------|-----------------|
 | `#[tauri::command]` in source | 474 | 474 | 290 | 290 |
 | Registered in `invoke_handler!` | 451 | 371 | 278 | 363 |
-| Take `session_token` (scoped) | ~266 | 299 | ~120 | 223 |
+| Take `session_token` (scoped) | ~266 | 304 | ~120 | 223 |
 | Take client-supplied `user_id` | ~41 | 0 | ~40 | 0 |
-| Take neither (no-auth) | ~141 | ~72 | ~118 | ~140* |
-| `_scoped` variants registered | ~80 | 145+ | 0 | 223 |
+| Take neither (no-auth) | ~141 | 12 (pre-auth by design) | ~118 | ~140* |
+| `_scoped` variants registered | ~80 | 165+ | 0 | 223 |
 
 *\*Tablet count increase reflects 116 newly generated _scoped variants that are now registered. The net security posture is dramatically improved because every sensitive operation now has a session-gated path.*
 
