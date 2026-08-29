@@ -548,6 +548,25 @@ claims completion conditionally, and is checked-arithmetic throughout.
 > `workspaces.rs` (1,106), `popularity.rs` (813), `staff.rs` (636) — the
 > last four mid files — then slices C and D.
 
+### Slice B5 closeout — db/staff.rs (678) + db/popularity.rs (858), fully read — **db layer 100% done**
+
+Both exemplary, zero new findings. `staff.rs`: STAFF-07 three-tier login
+rate limiter (per-account / per-device / global + exponential backoff, all
+tunables in one `LoginLimits` object), role-preset upsert-sync that
+converges existing databases onto current grants, fail-closed permission
+resolution (an unresolvable role denies instead of crashing), normalized
+usernames with conflict → typed error, and a default global assignment per
+ADR #35 D5. User PINs are stored hashed (`pin_hash`) — contrast COR-17's
+plaintext *gift-card* PINs. `popularity.rs`: the B5-part-6 flagged
+`format!`-SQL spots verified injection-safe (whitelisted period-expression
+trio), full-catalog pass runs as 4 grouped queries with atomic score writes
+in one transaction, category-smoothed means per ADR #37 D6, breadth factor
+documented; day buckets UTC (COR-21 family, tracked).
+
+**The entire `db/` layer — 43 files, ~19.5k production lines — is now
+audited and stamped.** oz-core remaining: `workspaces.rs` (1,106),
+`kds.rs` (1,312), then slices C and D.
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs

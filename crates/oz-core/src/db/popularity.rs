@@ -1,4 +1,10 @@
 //! Popularity recompute methods (ADR #37 D3).
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5 closeout)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: clean — format!-SQL interpolates only the whitelisted period-expression trio (verified injection-safe, closes the B5-part-6 flag); full pass is 4 grouped queries (no N+1) with atomic score writes in one tx; category-smoothed means per ADR #37 D6 documented; day buckets UTC (COR-21 family); record_product_search is fire-and-forget by documented contract
+next: none | perf: grouped single-pass recompute
+*/
 //!
 //! The sales signal is read straight from `sale_lines` (already the durable
 //! ledger); search and edit signals come from the `product_activity` ledger
