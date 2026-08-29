@@ -203,14 +203,14 @@ jobs:
           docker save oz-pos-license:${{ github.ref_name }} -o oz-pos-license.tar
 
       # DOCKER-03/08: blocking scan on the EXACT release-tagged image.
-      # `ignorefile` is not a valid trivy-action@v0.36.0 input (silently
+      # `ignorefile` is not a valid trivy-action@v0.42.0 input (silently
       # dropped → baseline never applied); use `trivyignores`.
       # `limit-severities-for-sarif: true` keeps the CRITICAL/HIGH filter in
       # SARIF mode (otherwise the action scans ALL severities and this gate
       # would block on 76 LOW + 62 MEDIUM too).
       - name: Scan cloud Docker image (blocking)
         if: matrix.target == 'docker-cloud'
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@v0.42.0
         with:
           image-ref: oz-pos-cloud:${{ github.ref_name }}
           format: sarif
@@ -222,7 +222,7 @@ jobs:
 
       - name: Scan license Docker image (blocking)
         if: matrix.target == 'docker-license'
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@v0.42.0
         with:
           image-ref: oz-pos-license:${{ github.ref_name }}
           format: sarif

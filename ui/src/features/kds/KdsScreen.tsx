@@ -661,6 +661,17 @@ export default function KdsScreen() {
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19l-7-7 7-7" /></svg>
           </button>
+          {/* Title and order count — expected by E2E tests (CSS contract) */}
+          <div className="kds-title-group">
+            <h1 className="kds-title">
+              <Localized id="kds-screen-title"><span>Kitchen Display</span></Localized>
+            </h1>
+            <span className="kds-order-count">
+              <Localized id="kds-order-count" vars={{ count: String(orders.length) }}>
+                <span>{orders.length} order{orders.length !== 1 ? 's' : ''}</span>
+              </Localized>
+            </span>
+          </div>
           {/* Filter dropdown — All / Prepared view mode (hidden on Completed tab) */}
           {activeTab !== 'completed' && (
             <div className="kds-filter">

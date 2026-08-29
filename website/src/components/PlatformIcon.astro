@@ -1,13 +1,17 @@
 ---
-// Outline-style (stroke-only) platform logo icons, drawn with currentColor so
-// they inherit the surrounding text color. Used on the download page.
+// Platform logo icons for the download page.
 //
-// Improved icons for better recognition:
-// - Windows: Modern 4-pane grid (Windows 10/11 style)
-// - macOS: Apple logo (clean path)
-// - Linux: Simplified Tux penguin outline
-// - Android: Material robot head
-// - iOS: iPhone device frame with Apple mark
+// Windows and Android use the real brand assets (logo-os-windows.svg,
+// logo-os-android.svg) rendered through a CSS mask tinted with
+// `currentColor` — the logo's silhouette is preserved but it inherits the
+// surrounding text color, matching the outline-style icons below.
+//
+// The remaining platforms (macOS, Linux, iOS) stay as hand-drawn
+// stroke-only (outline) SVGs with `currentColor`, since we have no brand
+// asset for them yet.
+import windowsLogo from '../assets/logo-os-windows.svg?url';
+import androidLogo from '../assets/logo-os-android.svg?url';
+
 interface Props {
   platform: 'windows' | 'macos' | 'linux' | 'android' | 'ios';
   class?: string;
@@ -15,108 +19,135 @@ interface Props {
 
 const { platform, class: className } = Astro.props;
 
+// Native aspect ratio of each brand asset (width / height). Used to size
+// the mask container so a wide logo (the Android wordmark) keeps its shape
+// instead of being squashed into a square box.
+const logoAspect: Record<string, number> = {
+  windows: 2499.6 / 2500, // ~square
+  android: 1257 / 201,    // wide wordmark
+};
+const brandAsset: Record<string, string> = {
+  windows: windowsLogo,
+  android: androidLogo,
+};
+
 const applePath =
   'M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.56-1.702';
 ---
 
 {
-  platform === 'windows' && (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+  brandAsset[platform] !== undefined ? (
+    <span
       class={className}
+      style={{
+        display: 'inline-block',
+        backgroundColor: 'currentColor',
+        WebkitMaskImage: `url("${brandAsset[platform]}")`,
+        WebkitMaskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskImage: `url("${brandAsset[platform]}")`,
+        maskSize: 'contain',
+        maskRepeat: 'no-repeat',
+        maskPosition: 'center',
+        // The class controls the height (h-10 etc.); width follows from the
+        // asset's native aspect ratio so a wide wordmark (Android) is not
+        // squashed into a square box.
+        aspectRatio: String(logoAspect[platform]),
+        width: 'auto',
+      }}
       aria-hidden="true"
-    >
-      {/* Modern Windows 10/11 logo: 4 panes with perspective */}
-      <path d="M3 5.5h8v6.5H3V5.5z" />
-      <path d="M13 5.5h8v6h-8V5.5z" />
-      <path d="M3 13.5h8v6H3v-6z" />
-      <path d="M13 13h8v6.5h-8V13z" />
-    </svg>
-  )
-}
-{
-  platform === 'macos' && (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={className}
-      aria-hidden="true"
-    >
-      <path d={applePath} />
-    </svg>
-  )
-}
-{
-  platform === 'linux' && (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={className}
-      aria-hidden="true"
-    >
-      {/* Terminal prompt >_ */}
-      <rect x="2" y="3" width="20" height="18" rx="3" />
-      <path d="M7 9l4 3-4 3" />
-      <line x1="14" y1="15" x2="18" y2="15" />
-    </svg>
-  )
-}
-{
-  platform === 'android' && (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={className}
-      aria-hidden="true"
-    >
-      {/* Android robot head: dome + eyes + antennae, centered in 24x24 */}
-      {/* Dome head — half circle, flat bottom */}
-      <path d="M4 15 A8 8 0 0 1 20 15" />
-      <line x1="4" y1="15" x2="20" y2="15" />
-      {/* Eyes — filled circles, symmetric around center */}
-      <circle cx="9" cy="12" r="1.8" fill="currentColor" stroke="none" />
-      <circle cx="15" cy="12" r="1.8" fill="currentColor" stroke="none" />
-      {/* Antennae — angled lines from dome sides */}
-      <line x1="7" y1="8" x2="4.5" y2="4" />
-      <line x1="17" y1="8" x2="19.5" y2="4" />
-    </svg>
-  )
-}
-{
-  platform === 'ios' && (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={className}
-      aria-hidden="true"
-    >
-      {/* iPhone device frame */}
-      <rect x="5" y="1.5" width="14" height="21" rx="3" />
-      {/* Screen notch */}
-      <line x1="9" y1="4" x2="15" y2="4" />
-      {/* Home indicator */}
-      <line x1="9.5" y1="20" x2="14.5" y2="20" />
-    </svg>
+    />
+  ) : (
+    <>
+      {platform === 'windows' && (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class={className}
+          aria-hidden="true"
+        >
+          {/* Modern Windows 10/11 logo: 4 panes with perspective (fallback) */}
+          <path d="M3 5.5h8v6.5H3V5.5z" />
+          <path d="M13 5.5h8v6h-8V5.5z" />
+          <path d="M3 13.5h8v6H3v-6z" />
+          <path d="M13 13h8v6.5h-8V13z" />
+        </svg>
+      )}
+      {platform === 'macos' && (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class={className}
+          aria-hidden="true"
+        >
+          <path d={applePath} />
+        </svg>
+      )}
+      {platform === 'linux' && (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class={className}
+          aria-hidden="true"
+        >
+          {/* Terminal prompt >_ */}
+          <rect x="2" y="3" width="20" height="18" rx="3" />
+          <path d="M7 9l4 3-4 3" />
+          <line x1="14" y1="15" x2="18" y2="15" />
+        </svg>
+      )}
+      {platform === 'android' && (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class={className}
+          aria-hidden="true"
+        >
+          {/* Android robot head: dome + eyes + antennae (fallback) */}
+          <path d="M4 15 A8 8 0 0 1 20 15" />
+          <line x1="4" y1="15" x2="20" y2="15" />
+          <circle cx="9" cy="12" r="1.8" fill="currentColor" stroke="none" />
+          <circle cx="15" cy="12" r="1.8" fill="currentColor" stroke="none" />
+          <line x1="7" y1="8" x2="4.5" y2="4" />
+          <line x1="17" y1="8" x2="19.5" y2="4" />
+        </svg>
+      )}
+      {platform === 'ios' && (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class={className}
+          aria-hidden="true"
+        >
+          {/* iPhone device frame */}
+          <rect x="5" y="1.5" width="14" height="21" rx="3" />
+          {/* Screen notch */}
+          <line x1="9" y1="4" x2="15" y2="4" />
+          {/* Home indicator */}
+          <line x1="9.5" y1="20" x2="14.5" y2="20" />
+        </svg>
+      )}
+    </>
   )
 }
