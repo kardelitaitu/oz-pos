@@ -121,7 +121,12 @@ function statusPillClass(status: string | undefined): string {
 function fmtDate(dateStr: string | undefined, locale: string): string {
   if (!dateStr) return '—';
   try {
-    return new Date(dateStr).toLocaleDateString(locale === 'id' ? 'id-ID' : 'en-US', {
+    // Use the parsed Date's local components so the displayed calendar day
+    // never shifts due to UTC offset — a user in UTC-8 sees the same date
+    // as a user in UTC+8.
+    const d = new Date(dateStr);
+    const localDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    return localDate.toLocaleDateString(locale === 'id' ? 'id-ID' : 'en-US', {
       year: 'numeric', month: 'short', day: 'numeric',
     });
   } catch {
@@ -133,8 +138,16 @@ function fmtDate(dateStr: string | undefined, locale: string): string {
 function daysUntil(dateStr: string | undefined): number | null {
   if (!dateStr) return null;
   try {
-    const diff = new Date(dateStr).getTime() - Date.now();
-    return Math.ceil(diff / 86_400_000);
+    // Calendar-day count, timezone- and clock-independent: the difference
+    // between the expiry date's local midnight and today's local midnight.
+    // Rounding the midnight-to-midnight span means a subscription expiring
+    // "in 10 days" reports exactly 10 regardless of the wall clock or
+    // whether the machine is east or west of UTC.
+    const d = new Date(dateStr);
+    const localDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((localDate.getTime() - today.getTime()) / 86_400_000);
   } catch {
     return null;
   }
@@ -153,7 +166,11 @@ function renewsLabel(locale: string, days: number): string {
 function renderRenewBadge(locale: string, status: string | undefined, expiresAt: string | undefined) {
   if (status !== 'active' || !expiresAt) return null;
   const d = daysUntil(expiresAt);
-  if (d === null) return null;
+  // A negative/past countdown is meaningless ("Renews in -3 days") — the
+  // server can report status=active while the expiry has already lapsed
+  // (clock skew, grace-period data). Hide the badge rather than show a
+  // nonsensical countdown.
+  if (d === null || d < 0) return null;
   const cls = d < 7 ? 'bg-danger/15 text-danger' : d < 30 ? 'bg-warning/15 text-warning' : 'bg-ink/10 text-muted';
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{renewsLabel(locale, d)}</span>;
 }

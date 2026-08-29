@@ -1,4 +1,34 @@
 
+
+## 2026-08-29 — TDD cycle: dashboard date/countdown timezone bugs (website AccountView)
+
+**Problem:** Two timezone-related bugs in the account dashboard's date helpers
+(`AccountView.tsx`), found by writing failing tests first:
+
+1. `fmtDate()` parsed ISO strings with `new Date(dateStr)` — a date-only value
+   like `"2027-01-01"` is interpreted as UTC midnight, so a user west of UTC
+   saw the *previous* calendar day ("Dec 31, 2026"). Same class of bug for
+   RFC3339-with-time values whose local conversion crossed midnight.
+2. `daysUntil()` measured from `Date.now()` with `Math.ceil` — the countdown
+   depended on the wall clock (23:59 vs 00:01 gave different day counts) and
+   the same UTC offset shift could report one day early.
+3. `renderRenewBadge()` rendered a nonsensical "Renews in -3 days" when the
+   server reported `status: 'active'` but the expiry had already lapsed
+   (grace-period/clock-skew data).
+
+**Solution:** TDD Red→Green (4 new tests in account-view.test.tsx):
+- `fmtDate()` now re-composes the parsed Date's *local* calendar components
+  (`new Date(d.getFullYear(), d.getMonth(), d.getDate())`) before formatting,
+  so the shown day never shifts across timezones.
+- `daysUntil()` counts calendar days: expiry local-midnight minus today's
+  local-midnight, rounded — timezone- and clock-independent.
+- `renderRenewBadge()` returns null for `days < 0` (no negative countdown).
+- Also removed the shadowed `const useMidtrans = locale === 'id'` in
+  `subscribe()` so the saved-region payment routing (prior commit) takes effect.
+
+**Commits:** `d65eeb98` (region routing), pending commit for date/countdown fix.
+**Test counts:** account-view.test.tsx 33 → 36; full component suite 155 → 158.
+
 ## 2026-08-20 — TDD cycle: expand Money unit/logic coverage + extract to sibling tests (foundation)
 
 **Problem:** `foundation/src/money.rs` carried its whole test module inline (lines

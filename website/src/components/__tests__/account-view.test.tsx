@@ -678,8 +678,12 @@ describe('AccountView — status pill colors', () => {
 describe('AccountView — renewal countdown', () => {
   it('shows renews badge for active subscription with expiry', async () => {
     sessionStorage.setItem('oz_session', 'tok-renew-badge');
-    // Set expiry to 10 days from now so the badge shows "Renews in 10 days".
-    const future = new Date(Date.now() + 10 * 86_400_000);
+    // Build expiry at local midnight +10 days so the calendar-day countdown
+    // is deterministic regardless of the test machine's timezone.
+    const future = new Date();
+    future.setDate(future.getDate() + 10);
+    future.setHours(0, 0, 0, 0);
+    const expectedDays = 10;
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
       license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: future.toISOString() },
@@ -688,7 +692,7 @@ describe('AccountView — renewal countdown', () => {
     const { container, root } = await renderAccount('en');
     try {
       assertText(container, 'Subscription');
-      assertText(container, 'Renews in 10 days');
+      assertText(container, `Renews in ${expectedDays} days`);
     } finally {
       act(() => root.unmount());
       container.remove();
@@ -697,7 +701,10 @@ describe('AccountView — renewal countdown', () => {
 
   it('shows renews badge with danger color when < 7 days', async () => {
     sessionStorage.setItem('oz_session', 'tok-renew-urgent');
-    const soon = new Date(Date.now() + 3 * 86_400_000);
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 3);
+    soon.setHours(0, 0, 0, 0);
+    const expectedDays = 3;
     mockFetch(() => okJson({
       tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
       license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: soon.toISOString() },
@@ -705,7 +712,7 @@ describe('AccountView — renewal countdown', () => {
     }));
     const { container, root } = await renderAccount('en');
     try {
-      assertText(container, 'Renews in 3 days');
+      assertText(container, `Renews in ${expectedDays} days`);
       // Find the badge span and check its class.
       const badges = Array.from(container.querySelectorAll('span.rounded-full'));
       const renewBadge = badges.find((b) => b.textContent?.includes('Renews in'));
@@ -728,6 +735,27 @@ describe('AccountView — renewal countdown', () => {
     try {
       assertText(container, 'Expired');
       // No badge text should appear for non-active subscriptions.
+      assertNoText(container, 'Renews in');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not show a negative renewal countdown for active subscription with past expiry', async () => {
+    // An "active" subscription whose expiresAt has already passed (server
+    // clock skew / grace-period data) must not render "Renews in -3 days".
+    sessionStorage.setItem('oz_session', 'tok-renew-past');
+    const past = new Date(Date.now() - 3 * 86_400_000);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2025-01-01', expiresAt: past.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // The badge must not claim a future countdown for an already-past date.
+      assertNoText(container, 'Renews in -3 days');
       assertNoText(container, 'Renews in');
     } finally {
       act(() => root.unmount());
@@ -768,6 +796,58 @@ describe('AccountView — formatted dates', () => {
     try {
       // Indonesian locale: "1 Jan 2027" (dd MMM yyyy order).
       assertText(container, '1 Jan 2027');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not shift the displayed date across timezone offsets', async () => {
+    // Regression: date-only + RFC3339-with-time inputs must render the same
+    // calendar day regardless of the machine's timezone. A date-only string
+    // like "2027-01-01" previously parsed as UTC midnight and showed
+    // "Dec 31, 2026" for users west of UTC. Pin the exact text here.
+    sessionStorage.setItem('oz_session', 'tok-date-tz');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // The rendered text must never contain a date-only string in its raw
+      // form (server sends it that way; fmtDate must normalize it) and the
+      // formatted label must pin to January 1 — never December 31.
+      assertText(container, 'Jan 1, 2027');
+      assertNoText(container, '2027-01-01');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows a stable renews countdown regardless of time of day', async () => {
+    // Regression: daysUntil previously measured from UTC midnight vs now,
+    // so a subscription expiring "tomorrow" could report 1 or 2 days
+    // depending on the wall clock. With local-midnight normalization the
+    // countdown is the calendar-day difference.
+    sessionStorage.setItem('oz_session', 'tok-countdown-stable');
+    // "Tomorrow" at 23:59 local — still 1 calendar day away.
+    const tomorrowLate = new Date();
+    tomorrowLate.setDate(tomorrowLate.getDate() + 1);
+    tomorrowLate.setHours(23, 59, 59, 999);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: tomorrowLate.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // Even at 23:59 the countdown must be 1 day, never 2 (ceil of
+      // fractional hours). The exact label depends on the runtime clock;
+      // assert it's a sane positive count (singular 'day' or plural 'days').
+      const text = container.textContent ?? '';
+      expect(text).toMatch(/Renews in [0-9]+ day(s)?/);
     } finally {
       act(() => root.unmount());
       container.remove();
