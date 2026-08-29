@@ -44,6 +44,8 @@ COPY crates/oz-security/Cargo.toml crates/oz-security/
 COPY crates/oz-payment/Cargo.toml crates/oz-payment/
 COPY crates/oz-reporting/Cargo.toml crates/oz-reporting/
 COPY crates/oz-cli/Cargo.toml crates/oz-cli/
+COPY crates/oz-crypto/Cargo.toml crates/oz-crypto/
+COPY crates/oz-media/Cargo.toml crates/oz-media/
 COPY foundation/Cargo.toml foundation/
 COPY platform/core/Cargo.toml platform/core/
 COPY platform/kernel/Cargo.toml platform/kernel/
@@ -59,6 +61,13 @@ COPY modules/reporting/Cargo.toml modules/reporting/
 COPY modules/terminal/Cargo.toml modules/terminal/
 COPY modules/currency/Cargo.toml modules/currency/
 COPY modules/loyalty/Cargo.toml modules/loyalty/
+COPY modules/giftcards/Cargo.toml modules/giftcards/
+COPY modules/kitchen/Cargo.toml modules/kitchen/
+COPY modules/promotions/Cargo.toml modules/promotions/
+COPY modules/purchasing/Cargo.toml modules/purchasing/
+COPY fuzz/Cargo.toml fuzz/
+COPY fuzz/hfuzz/Cargo.toml fuzz/hfuzz/
+COPY scripts/updater-compat-check/Cargo.toml scripts/updater-compat-check/
 COPY apps/cloud-server/Cargo.toml apps/cloud-server/
 
 # Prime the dependency cache. This layer is cached unless a manifest
@@ -76,13 +85,17 @@ COPY apps/cloud-server/Cargo.toml apps/cloud-server/
 RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
              crates/oz-hal/src crates/oz-lua/src crates/oz-notification/src \
              crates/oz-plugin/src crates/oz-security/src crates/oz-payment/src \
-             crates/oz-reporting/src crates/oz-cli/src foundation/src \
+             crates/oz-reporting/src crates/oz-cli/src \
+             crates/oz-crypto/src crates/oz-media/src \
+             foundation/src \
              platform/core/src platform/kernel/src platform/startup/src \
              platform/sync/src \
              modules/sales/src modules/inventory/src \
              modules/crm/src modules/tax/src modules/settings/src \
              modules/staff/src modules/reporting/src modules/terminal/src \
              modules/currency/src modules/loyalty/src \
+             modules/giftcards/src modules/kitchen/src \
+             modules/promotions/src modules/purchasing/src \
              apps/cloud-server/src apps/desktop-client/src apps/tablet-client/src \
     && echo "// dummy" > crates/oz-core/src/lib.rs \
     && echo "// dummy" > crates/oz-api/src/lib.rs \
@@ -95,6 +108,8 @@ RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
     && echo "// dummy" > crates/oz-payment/src/lib.rs \
     && echo "// dummy" > crates/oz-reporting/src/lib.rs \
     && echo "// dummy" > crates/oz-cli/src/lib.rs \
+    && echo "// dummy" > crates/oz-crypto/src/lib.rs \
+    && echo "// dummy" > crates/oz-media/src/lib.rs \
     && echo "// dummy" > foundation/src/lib.rs \
     && echo "// dummy" > platform/core/src/lib.rs \
     && echo "// dummy" > platform/kernel/src/lib.rs \
@@ -110,6 +125,10 @@ RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
     && echo "// dummy" > modules/terminal/src/lib.rs \
     && echo "// dummy" > modules/currency/src/lib.rs \
     && echo "// dummy" > modules/loyalty/src/lib.rs \
+    && echo "// dummy" > modules/giftcards/src/lib.rs \
+    && echo "// dummy" > modules/kitchen/src/lib.rs \
+    && echo "// dummy" > modules/promotions/src/lib.rs \
+    && echo "// dummy" > modules/purchasing/src/lib.rs \
     && echo "// dummy" > apps/cloud-server/src/main.rs \
     && echo "// dummy" > apps/desktop-client/src/main.rs \
     && printf '[package]\nname = "oz-pos-app"\nversion = "0.0.31"\nedition = "2021"\n' > apps/desktop-client/Cargo.toml \

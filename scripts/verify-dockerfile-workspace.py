@@ -37,10 +37,26 @@ def workspace_members() -> list[str]:
     body = m.group(1)
     # Match `"crates/oz-core",` lines (trailing comma, CRLF-safe). Only the
     # members list itself — workspace.dependencies entries contain '='.
-    members = [
+    raw = [
         x for x in re.findall(r'^\s*"([^"]+)",?\s*$', body, re.M) if "=" not in x
     ]
-    return sorted(set(members))
+    # Expand glob patterns (e.g. "crates/*") to actual directory members.
+    expanded: list[str] = []
+    for pat in raw:
+        if '*' in pat or '?' in pat:
+            # Use Path.glob on the workspace root to resolve the pattern.
+            hits = sorted(
+                p.relative_to(ROOT).as_posix()
+                for p in ROOT.glob(pat)
+                if p.is_dir()
+            )
+            if hits:
+                expanded.extend(hits)
+            else:
+                expanded.append(pat)
+        else:
+            expanded.append(pat)
+    return sorted(set(expanded))
 
 
 def dockerfile_text() -> str:

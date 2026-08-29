@@ -30,6 +30,7 @@ This skill defines the standardized, disciplined workflow for diagnosing, reprod
 | 6 | **Scope verification to the affected area.** | Run targeted tests during iteration. Full `scripts/check.sh` is reserved for final pre-push or explicit requests. |
 | 7 | **Never kill running background processes.** | Do not kill `.exe` or background services that may belong to other agents or active dev servers. |
 | 8 | **Never `git push` without an explicit direct command.** | Always stop at local commit. Even after full verification, ask or wait for the user to explicitly tell you to push. |
+| 9 | **Catch early, repair instantly — 30s fail-fast polling.** | The CI matrix contains 38+ jobs taking 15–25 minutes. Never run bare `gh pr checks --watch` which hangs until all checks finish. Instead, poll every 30s with fail-fast early exit (`gh pr checks <PR> --watch --fail-fast -i 30` or `pwsh scripts/poll-pr-checks.ps1`). As soon as 1 or 2 fast checks fail, catch them immediately and start repairing without waiting for the rest. |
 
 ---
 
@@ -70,22 +71,31 @@ git pull origin $(git branch --show-current)
 
 ---
 
-### Phase 2 — Diagnose CI Failure Logs
+### Phase 2 — Diagnose CI Failure Logs (Fail-Fast Early Catch)
 
-Inspect which checks failed and download the specific failure logs:
+> [!IMPORTANT]
+> **Never run bare `gh pr checks --watch` to wait for all checks to finish.**
+> In OZ-POS, CI runs 38+ jobs across multiple OS matrices taking 15–25 minutes. Fast gates (Docker, lints, UI tests) often fail in seconds. Use 30-second fail-fast polling to catch early failures immediately and start fixing them while the rest of the matrix is still pending!
 
 ```powershell
-# View all checks for the PR
+# Option A: Native gh CLI with 30s interval and fail-fast (exits on the first failed check!):
+gh pr checks <PR_NUMBER> --watch --fail-fast -i 30
+
+# Option B: Dedicated repo polling script (prints progress and halts on early failure):
+pwsh scripts/poll-pr-checks.ps1 -Pr <PR_NUMBER> -Interval 30
+# (or on bash: ./scripts/poll-pr-checks.sh <PR_NUMBER> 30)
+
+# Option C: Non-blocking instant snapshot:
 gh pr checks <PR_NUMBER>
 
-# Filter only failed checks
-gh pr checks <PR_NUMBER> --failed
-
-# Find recent workflow runs for the PR branch
+# Find recent workflow runs for the PR branch:
 gh run list --branch $(git branch --show-current) --limit 3
 
-# View the exact failing step logs directly in terminal
+# View the exact failing step logs immediately:
 gh run view <RUN_ID> --log-failed
+
+# Or target a specific failed job:
+gh run view <RUN_ID> --job <JOB_ID> --log
 ```
 
 Analyze the log output to determine which category the failure belongs to:
@@ -242,11 +252,14 @@ git commit -m "fix(<scope>): repair <test_name_or_failure_description>"
 > Once the local commit is made, present your findings and the applied fix to the user, and ask for permission before pushing.
 
 ```powershell
-# Only run after user explicitly says to push:
+# 1. Only run push after user explicitly instructs to push:
 git push origin $(git branch --show-current)
 
-# Monitor the CI checks until green
-gh pr checks <PR_NUMBER> --watch
+# 2. Quick check: watches and auto-stops on the first failure!
+gh pr checks <PR_NUMBER> --watch --fail-fast
+
+# 3. If it auto-stops on failure, run the one-shot diagnoser immediately:
+python scripts/diagnose-pr.py <PR_NUMBER>
 ```
 
 ---
@@ -265,3 +278,6 @@ gh pr checks <PR_NUMBER> --watch
 | `E2E Playwright` | Browser flow timeout or diff | `cd ui && npm run e2e:ui` |
 | `i18n Lint / bundle-parity` | Missing key in `.ftl` | `bash scripts/lint-i18n.sh && python scripts/verify-bundle-parity.py` |
 | `CI Docs Drift` | Undocumented script or workflow | `python scripts/verify-ci-docs-drift.py` |
+| `Skill Drift Tests` | Stale audit date or broken ref | `bash .agents/skills/skill-drift-guard/scripts/detect.sh` |
+
+> last audited 29-08-26 by skill-drift-guard

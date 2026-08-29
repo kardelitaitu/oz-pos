@@ -184,8 +184,9 @@ gh pr view
 # 2. Inspect CI workflow execution status
 gh pr checks
 
-# 3. (Optional) Watch checks until completion
-gh pr checks --watch
+# 3. Monitor checks with 30s interval, failing fast on early failure:
+gh pr checks --watch --fail-fast -i 30
+# Or: pwsh scripts/poll-pr-checks.ps1
 ```
 
 ---
@@ -200,3 +201,5 @@ gh pr checks --watch
 | Create PR from body file | `gh pr create --base main --head <branch> --title "<branch> <title>" --body-file pr_body.md` |
 | Update existing PR body | `gh pr edit <PR_NUMBER> --body-file pr_body.md` |
 | Check PR CI status | `gh pr checks <PR_NUMBER>` |
+
+> last audited 29-08-26 by skill-drift-guard
