@@ -389,6 +389,7 @@ func TestVerifyOTP_WrongCodeGeneric401(t *testing.T) {
 }
 
 func TestVerifyOTP_RateLimited(t *testing.T) {
+	t.Setenv("LOGIN_LOCKOUT_DISABLED", "1")
 	resetRateLimiters()
 	app, se := setupDirectApp(t)
 	defer app.Cleanup()
