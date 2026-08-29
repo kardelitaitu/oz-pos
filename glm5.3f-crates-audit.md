@@ -501,6 +501,30 @@ accounting bug) and includes safe-drop payouts; the shift report's gross
 profit matches the reporting layer's cost semantics; hour *labels* are UTC
 (inside COR-21's blast radius) but totals are unaffected.
 
+### Slice B5 part 6 — 14 remaining small/mid db files read + stamped
+
+Files fully read: `cash_payouts` (86), `plans` (98), `settings` (280 — pure
+CurrencyRepository delegation), `store_profiles` (213), `tables` (330),
+`assignments` (273), `terminals` (260), `suppliers` (253), `promotions`
+(252), `product_bundles` (251), `analytics` (234), `cart` (211),
+`terminal_overrides` (133), `terminal_profiles` (104). Consolidated sweep
+confirmed: all parameterized, zero unwraps, zero format!-SQL.
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-28 | ℹ️ INFO | db/cash_payouts.rs:28–49 | Open-shift check runs outside the insert — a concurrently closed shift can still receive a payout (TOCTOU, advisory class, low stakes). | Move check+insert into one tx. |
+
+**Notes:** `promotions.update_promotion` validates only the name while
+create validates type/amounts too (COR-12-class asymmetry, INFO).
+`terminals.terminal_secret` plaintext (same class as COR-17).
+`store_profiles.timezone` **exists in the schema** — the COR-21 fix already
+has a data home that reports never consult. `analytics.rs` DATE() bucketing
+joins COR-21's blast radius. Clean highlights: `assignments.rs` fail-closed
+scope evaluation matches ADR #35 D5 exactly; `cart.rs` preserves the
+ADR-19 §5.1 location lock via COALESCE upsert; `tables.rs` TBL-08 geometry
+validation is exemplary; `store_profiles` swaps the primary invariant in a
+transaction with rollback.
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs
