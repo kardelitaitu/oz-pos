@@ -124,26 +124,28 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(setCookie).toContain('Domain=.ozpos.my.id');
   });
 
-  it('serves static assets on dashboard when cookie is present', async () => {
+  it('serves placeholder dashboard page when cookie is present', async () => {
     const req = new Request('https://dashboard.ozpos.my.id/', {
       headers: { Cookie: 'oz_session=valid.jwt.token' },
     });
     const res = await worker.fetch(req, mockEnv);
 
-    expect(mockEnv.ASSETS.fetch).toHaveBeenCalledWith(req);
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe('static asset');
+    expect(res.headers.get('Content-Type')).toContain('text/html');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(await res.text()).toContain('OZ-POS Dashboard');
   });
 
-  it('serves static assets on admin when cookie is present', async () => {
+  it('serves placeholder admin page when cookie is present', async () => {
     const req = new Request('https://admin.ozpos.my.id/', {
       headers: { Cookie: 'oz_session=valid.jwt.token' },
     });
     const res = await worker.fetch(req, mockEnv);
 
-    expect(mockEnv.ASSETS.fetch).toHaveBeenCalledWith(req);
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe('static asset');
+    const body = await res.text();
+    expect(body).toContain('OZ-POS Admin');
+    expect(body).toContain('Admin Dashboard');
   });
 
   it('removes token param from URL after setting cookie', async () => {

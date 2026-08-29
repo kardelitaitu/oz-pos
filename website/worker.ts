@@ -47,6 +47,41 @@ const DASHBOARD_HOSTS = new Set(['dashboard.ozpos.my.id', 'admin.ozpos.my.id']);
 /** Marketing site domain — no auth required. */
 const MARKETING_HOST = 'ozpos.my.id';
 
+/** Placeholder dashboard page — served to authenticated visitors until the
+ *  Phase 2 dashboard SPA is built. Returning this (not the marketing ASSETS)
+ *  keeps the auth gate deterministic: the root of a dashboard hostname can
+ *  never be served from the marketing site's edge cache. */
+function placeholderDashboardPage(hostname: string): Response {
+  const admin = hostname === 'admin.ozpos.my.id';
+  const title = admin ? 'OZ-POS Admin' : 'OZ-POS Dashboard';
+  const heading = admin ? 'Admin Dashboard' : 'Your Dashboard';
+  const body = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b1220;color:#e6edf7;display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .card{max-width:28rem;padding:2.5rem;border:1px solid rgba(255,255,255,.1);border-radius:1rem;background:rgba(255,255,255,.03);text-align:center}
+  .logo{font-size:1.25rem;font-weight:700;color:#147efb;letter-spacing:.02em;margin-bottom:.5rem}
+  h1{font-size:1.5rem;margin:0 0 .5rem}
+  p{color:#93a4bd;font-size:.9rem;margin:0 0 1.5rem}
+  .pill{display:inline-block;padding:.35rem .9rem;border-radius:9999px;font-size:.75rem;font-weight:600;background:rgba(20,126,251,.15);color:#7ab3ff}
+  a{color:#147efb;text-decoration:none;font-weight:600}
+  a:hover{text-decoration:underline}
+</style></head>
+<body><div class="card">
+  <div class="logo">OZ-POS</div>
+  <h1>${heading}</h1>
+  <p>You are signed in. This dashboard is under construction — check back soon.</p>
+  <span class="pill">Authenticated</span>
+</div></body></html>`;
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
 /** Parse a named cookie value from the Cookie header. */
 function getCookie(headers: Headers, name: string): string | null {
   const raw = headers.get('Cookie');
@@ -98,11 +133,10 @@ export default {
         });
       }
 
-      // Step 3: Cookie present. For now, serve the marketing site as a
-      // placeholder. The dashboard/admin SPA will be built in Phase 2.
-      // This keeps the auth gate working while the actual dashboard
-      // content is being developed.
-      return env.ASSETS.fetch(request);
+      // Step 3: Cookie present. Serve the Phase 2 placeholder page until the
+      // dashboard/admin SPA is built. Deliberately NOT the marketing ASSETS —
+      // those are edge-cached and would bypass the auth gate on the root.
+      return placeholderDashboardPage(hostname);
     }
 
     // ── Marketing site (ozpos.my.id) — no auth required ───────────

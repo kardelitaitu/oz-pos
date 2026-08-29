@@ -18,7 +18,7 @@ name = "oz-pos"
 # binding, so the backend URL can change at runtime without rebuilding the
 # bundle (the build-time PUBLIC_LICENSE_API_URL stays as the fallback).
 main = "worker.ts"
-assets = { directory = "./dist", binding = "ASSETS" }
+assets = { directory = "./dist", binding = "ASSETS", run_worker_first = true }
 
 # The runtime compatibility date. Bump deliberately (never forward-date):
 # `npx wrangler deploy` warns if this is more than a few days old.
@@ -38,4 +38,13 @@ CONTACT_WEBHOOK_URL = "https://discord.com/api/webhooks/154258447961xxxxxx"
 [observability.logs]
 enabled = true
 invocation_logs = true
+
+# ── Routes (ADR #42) ─────────────────────────────────────────────
+# dashboard.ozpos.my.id and admin.ozpos.my.id route to this Worker.
+# The Worker's hostname dispatch auth-gates them (302 → login when
+# no session cookie, placeholder when authenticated).
+routes = [
+  "dashboard.ozpos.my.id/*",
+  "admin.ozpos.my.id/*",
+]
 
