@@ -2120,6 +2120,71 @@
 .kds-modal-actions .kds-btn { min-height: 28px; }
 .kds-modal-actions .kds-btn.danger { --btn-bg: #ef4444; --btn-hover: #dc2626; --btn-active: #b91c1c; }
 
+/* ── Title group & Kanban column header (E2E CSS contract) ─────────── */
+.kds-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: var(--space-2);
+}
+
+.kds-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--kds-text);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.kds-order-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 1.75rem;
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--kds-fg-inverse);
+  background: var(--kds-accent);
+  border-radius: var(--kds-radius-switch);
+  white-space: nowrap;
+}
+
+.kds-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  background: var(--kds-bg-tabs);
+  border-radius: var(--kds-r-sm);
+  border: 1px solid var(--kds-border);
+}
+
+.kds-column-title {
+  font-size: var(--kds-font-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--kds-text);
+  opacity: 0.7;
+}
+
+.kds-column-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 var(--space-2);
+  font-size: var(--kds-font-xs);
+  font-weight: 700;
+  color: var(--kds-fg-inverse);
+  background: var(--kds-accent);
+  border-radius: var(--kds-radius-switch);
+}
+
 /* ── Reduced motion: disable decorative animations ────────────────────
    Entrance/exit and slide effects are cut; functional feedback that
    must communicate with reduced motion (urgent/rush blink, new-ticket

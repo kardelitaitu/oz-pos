@@ -49,7 +49,7 @@ export function KdsLayoutMasonry({
 
   if (orders.length === 0) {
     return (
-      <div className="kds-main empty">
+      <div className="kds-main kds-columns empty">
         <p className="kds-empty" role="status">
           <Localized id={filtered ? 'kds-no-orders-filtered' : 'kds-no-orders'}>
             <span>{filtered ? 'No orders in this status' : 'No orders yet'}</span>
@@ -59,10 +59,25 @@ export function KdsLayoutMasonry({
     );
   }
 
+  const statusClasses = ['kds-column--pending', 'kds-column--preparing', 'kds-column--ready'];
+
   return (
-    <div className="kds-main">
+    <div className="kds-main kds-columns">
       {columns.map((col, ci) => (
-        <div key={ci} className="kds-col">
+        <div key={ci} className={`kds-col kds-column ${statusClasses[ci] ?? ''}`}>
+          {/* Column header with title and count — expected by E2E tests */}
+          <div className="kds-column-header">
+            <span className="kds-column-title">
+              <Localized id={`kds-column-${ci}`}>
+                <span>{['Pending', 'Preparing', 'Ready'][ci]}</span>
+              </Localized>
+            </span>
+            <span className="kds-column-count">
+              <Localized id="kds-column-count" vars={{ count: String(col.length) }}>
+                <span>{col.length}</span>
+              </Localized>
+            </span>
+          </div>
           {col.map((order) => (
             <KdsTicketCard
               key={order.id}
