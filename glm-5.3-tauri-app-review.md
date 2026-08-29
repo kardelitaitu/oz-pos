@@ -92,7 +92,7 @@ Pre-existing dirty tree at review start (NOT mine, do not commit):
 
 ## S1 — Tauri Shells & IPC Surface
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** `apps/desktop-client/`, `apps/tablet-client/` (Tauri v2), incl.
 `src/commands/`, `src/state/`, `lib.rs` registration, `tauri.conf.json`,
@@ -108,7 +108,63 @@ capabilities/permissions; the IPC boundary `ui/src/api/*` + `ui/src/utils/logged
 
 ### S1 Notes
 
-- (empty)
+**Checked:** command registration completeness (programmatic diff of `#[tauri::command]`
+definitions vs `generate_handler` entries, both shells), Tauri security config, IPC
+boundary discipline (direct-invoke audit of all of `ui/src`), dead-command surface
+cross-referenced against every UI call site, dev-mock fallback behavior, `AppState`
+lifecycle, capabilities files.
+
+- Scale: desktop 53 prod command files / 568 `#[tauri::command]` attrs / 374 registered
+  in `generate_handler` (lib.rs 721 lines); tablet 41 files / 403 attrs / 363 registered
+  (578 lines).
+- **ADR #7 (multi-store scoping) migration is half-landed:** desktop registers
+  `_scoped` variants only; tablet registers unscoped AND scoped for several commands
+  (e.g. `settings::get_setting`/`set_setting` registered on tablet, absent on desktop).
+- The UI api layer still exports ~80 wrappers calling unscoped command names; only a
+  handful have live callers (all enumerated in findings).
+- Dev-mock (`ui/src/dev-mock/tauri-api.ts`) delegates to real IPC inside a webview but
+  answers everything in browser E2E; a `SCOPED_ALIASES` table (line ~2997) with an
+  honest comment admits scoped/unscoped registration gaps.
+- CSP is tight on both shells (see F-009). Desktop capability: `default.json`; tablet
+  adds `mobile.json`.
+- Desktop `AppState` is `Arc<Mutex<Connection>>` + `DriverRegistry` + `Option<AppHandle>`;
+  `Drop` aborts plugin hot-reload task and signals kernel shutdown — orderly teardown.
+  Single-connection SQLite model noted for S2.
+- Topology commands flagged "registered-but-undefined" by the parser are false positives:
+  `topology.rs` re-exports from a submodule; verified defined.
+
+### S1 Findings
+
+- **F-004 (P1, S1)**: Desktop-unregistered commands still invoked by live UI shell code —
+  silent failures on desktop, working on tablet:
+  - `UpdateBanner.tsx:211` → `set_setting` (updater persistence; comment says "unscoped
+    invoke" deliberately, but unscoped is NOT registered on desktop; try/catch masks it)
+  - `useCloudSync.ts:162,335` → `get_setting`/`set_setting` (cloud-sync token restore
+    silently broken on desktop — catch treats it as "IPC not available yet")
+  - `useGatewayStatus.ts:23` → `get_setting`('stripe.api_key') (gateway always shows
+    "not configured" on desktop)
+- **F-005 (P1, S1)**: Live purchasing screens call desktop-unregistered commands:
+  `PurchaseOrdersScreen.tsx:64` → `update_po_status`, `WarehouseConsole.tsx:345` →
+  `receive_purchase_order_with_lines` (both registered on tablet; scoped variants are
+  registered on desktop). Desktop PO status/receiving flows likely fail at runtime —
+  verify on a real desktop build.
+- **F-006 (P2, S1)**: Dead IPC surface: 196 desktop / 40 tablet command fns defined but
+  never registered (deprecated ADR #7 unscoped family); ~80 dead exports in `ui/src/api`
+  (sales/terminals/tables/settings/promotions/purchasing/products/customers). Cleanup +
+  drift hazard.
+- **F-007 (P2, S1)**: AGENTS violation — 4 production sites bypass `ui/src/api` with
+  direct `invoke()`/dynamic import (`UpdateBanner.tsx:211`, `useCloudSync.ts:162,335`,
+  `useGatewayStatus.ts:23`). The pre-login justification exists, but the bypass is what
+  hid the desktop registration gap.
+- **F-008 (P2, S1)**: E2E false confidence: browser-mode E2E answers every command via
+  dev-mock (incl. unregistered names), so registration asymmetries cannot surface in CI.
+  Recommend a parity gate: every `loggedInvoke`/`invoke` command string must exist in the
+  per-shell `generate_handler` list.
+- **F-009 (INFO, S1)**: CSP tight on both shells: `script-src 'self'`, `frame-src 'none'`,
+  `object-src 'none'`, `upgrade-insecure-requests`; `connect-src` pinned to self +
+  github.com + the one cloud host. devCsp only adds localhost Vite ports.
+- **F-010 (INFO, S1)**: Desktop `AppState::drop` orderly: aborts plugin hot-reload task,
+  signals kernel shutdown. Single `Arc<Mutex<Connection>>` DB model.
 
 ---
 
@@ -313,6 +369,13 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 | F-001 | 2026-07-25 | S0 | INFO | `apps/unified/`, `Cargo.toml:12` | Docker deployment bundle, deliberately outside workspace — by design |
 | F-002 | 2026-07-25 | S0 | INFO | `.github/workflows/` | 11 workflows, broader than AGENTS.md "CI only on main" summary — verify in S9 |
 | F-003 | 2026-07-25 | S0 | INFO | repo-wide | 2,551 files → sampling methodology (structural + invariant checks + hotspot deep-dives) |
+| F-004 | 2026-07-25 | S1 | P1 | `UpdateBanner.tsx:211`, `useCloudSync.ts:162,335`, `useGatewayStatus.ts:23` | UI invokes desktop-unregistered `get_setting`/`set_setting`; silent desktop failures (updater persistence, cloud-sync token, gateway status) |
+| F-005 | 2026-07-25 | S1 | P1 | `PurchaseOrdersScreen.tsx:64`, `WarehouseConsole.tsx:345` | Live PO flows call `update_po_status` / `receive_purchase_order_with_lines`, unregistered on desktop |
+| F-006 | 2026-07-25 | S1 | P2 | desktop/tablet commands + `ui/src/api` | 196/40 dead unregistered command fns; ~80 dead UI api exports — ADR #7 half-migration |
+| F-007 | 2026-07-25 | S1 | P2 | `UpdateBanner.tsx`, `useCloudSync.ts`, `useGatewayStatus.ts` | Direct `invoke()` bypasses `ui/src/api` boundary (AGENTS rule) |
+| F-008 | 2026-07-25 | S1 | P2 | `ui/e2e`, `ui/src/dev-mock` | Browser-mode E2E mocks all commands; registration asymmetries invisible to CI |
+| F-009 | 2026-07-25 | S1 | INFO | `tauri.conf.json` ×2 | CSP tight; connect-src pinned; capabilities default.json (+mobile.json tablet) |
+| F-010 | 2026-07-25 | S1 | INFO | `apps/desktop-client/src/state.rs` | Orderly AppState teardown; single-connection SQLite model |
 
 ---
 
@@ -324,4 +387,8 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 - Recorded graph hotspots (S0) and pre-existing dirty worktree files (excluded from my commits).
 - **S0 reviewed**: workspace members, scale stats (246k Rust LoC / 199k TS LoC), 11 CI
   workflows, methodology declaration, findings F-001..F-003. Committed.
-- Next: S1 Tauri shells & IPC.
+- **S1 reviewed**: programmatic command-registration diff (desktop 567 defined/374
+  registered; tablet 403/363), found ADR #7 half-migration with 2 P1s (desktop-silent
+  failures F-004, live PO flow breakage F-005), dead IPC surface (F-006), direct-invoke
+  violations (F-007), E2E blind spot (F-008). Committed.
+- Next: S2 data core (oz-core).
