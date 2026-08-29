@@ -1,6 +1,6 @@
 # OZ-POS Architecture
 
-<!-- Audit stamp: 2026-08-12 · Buffy-Agent · status: ACCURATE · F1: 10/10 modules active · F2: 58 ADRs in docs/decisions/ · F3: 11 crates + 4 platform + 1 foundation + 10 modules + 3 apps = 29 workspace members · F4: 10/10 modules have README · re-audited 2026-08-12: 58 ADRs (was 34), foundation listing corrected, cloud-server config consolidation noted -->
+<!-- Audit stamp: 2026-08-30 · docs-auditor · status: ACCURATE (counts refreshed) · F1: 14/14 modules active (was 10 — giftcards/kitchen/promotions/purchasing added) · F2: 61 ADRs in docs/decisions/ (was 58) · F3: 13 crates + 4 platform + 1 foundation + 14 modules + 3 apps = 35 workspace members (was 29) · F4: 14/14 modules have README · re-audited 2026-08-30: module/crate/ADR counts refreshed to current tree -->
 
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
@@ -99,8 +99,10 @@ the authoritative data store. Cloud sync is eventual and non-blocking.
 > ⚠️ The diagram below shows the **long-term target architecture** the codebase
 > is evolving toward. It is NOT the current state — many of these directories
 > (`integrations/`, top-level `frontend/`, `tooling/`, `config/`, `tests/`,
-> and modules like `loyalty`, `accounting`, `purchasing`, `warehouse`,
-> `restaurant`, `ecommerce`) do not yet exist. See the **Project Layout
+> and modules like `accounting`, `warehouse`,
+> `restaurant`, `ecommerce`) do not yet exist (`loyalty`, `purchasing`,
+> `kitchen`, `giftcards`, `promotions` were added since this diagram was
+> drawn). See the **Project Layout
 > (Post-Restructuring) — Current State** section below for the actual
 > current directory structure.
 
@@ -120,7 +122,7 @@ oz-pos/
 │   ├─ api/            Backend HTTP API (today: crates/oz-api/)
 │   └─ ui/             Frontend infrastructure (today: ui/src/frontend/)
 │
-├─ modules/           Business features (top 10 shown; today 10 exist)
+├─ modules/           Business features (14 exist today; top 14 shown)
 │   ├─ sales/
 │   ├─ inventory/
 │   ├─ crm/
@@ -350,7 +352,7 @@ oz-pos/
 │   ├─ startup/        Shared startup: module registration + event wiring
 │   └─ sync/           Offline-first sync engine (queue, transport, replication, LWW conflict)
 │
-├─ modules/           Business features (10 modules)
+├─ modules/           Business features (14 modules)
 │   ├─ sales/          Point-of-sale (core cart, checkout, sales history)
 │   ├─ inventory/      Product catalog, stock management
 │   ├─ crm/            Customer management
@@ -360,15 +362,21 @@ oz-pos/
 │   ├─ reporting/      Dashboard widgets, sales reports
 │   ├─ terminal/       POS terminal management
 │   ├─ currency/       Multi-currency + exchange rates
-│   └─ loyalty/        Customer loyalty & rewards management
+│   ├─ loyalty/        Customer loyalty & rewards management
+│   ├─ giftcards/      Gift card management
+│   ├─ kitchen/        Kitchen Display System (KDS)
+│   ├─ promotions/     Promotions & discounts
+│   └─ purchasing/     Purchase orders & suppliers
 │
 ├─ crates/            Low-level utility crates
 │   ├─ oz-core/        Database migrations, domain types, Store, sync_client, events
 │   ├─ oz-api/         HTTP API server (axum) — now injects config via AppState
 │   ├─ oz-cli/         CLI tool for data import/export and maintenance
+│   ├─ oz-crypto/      Cryptographic primitives (key generation, hashing, encryption)
 │   ├─ oz-hal/         Hardware abstraction layer (printers, scanners, cash drawers, scales)
 │   ├─ oz-logging/     Structured logging setup
 │   ├─ oz-lua/         Lua scripting integration
+│   ├─ oz-media/       Media/image handling
 │   ├─ oz-notification/ Email & push notification dispatching
 │   ├─ oz-payment/     Card payment processing (Stripe, QRIS, Square, mock)
 │   ├─ oz-plugin/      Plugin sandbox & lifecycle (Lua scripting bridge)
@@ -406,7 +414,7 @@ oz-pos/
 │
 ├─ ARCHITECTURE.md    This file
 ├─ AGENTS.md           AI agent configuration
-└─ Cargo.toml          Workspace definition (29 crates)
+└─ Cargo.toml          Workspace definition (35 members)
 ```
 
 ---
@@ -467,7 +475,7 @@ Every module must contain:
 - `CHANGELOG.md` — Version history
 
 Every architectural change must create an Architecture Decision Record (ADR).
-As of August 2026 there are 58 ADRs in `docs/decisions/`. Key documents include:
+As of August 2026 there are 61 ADRs in `docs/decisions/`. Key documents include:
 ```
 docs/decisions/2026-01-15-module-system-design.md
 docs/decisions/2026-02-01-event-bus-design.md
@@ -505,8 +513,7 @@ For the full list see the `docs/decisions/` directory.
 not hard deadlines. Every PR should move the codebase closer to the target
 architecture.*
 
-> last audited 12-08-26 by buffy
-> audit: Architecture doc drift correction + env-var config consolidation
+> last audited 30-08-26 by docs-auditor
 
-> status: ACCURATE (verified against actual codebase) · verified accurate: 29 workspace members (11 crates + 4 platform + 1 foundation + 10 modules + 3 apps); 58 ADRs in docs/decisions/; foundation crate has 14 source files; cloud-server uses centralized CloudServerConfig (env vars consolidated from 14 scattered reads to 1 struct); OpenAPI spec covers 22 endpoints with 23 named schemas; N+1 SKU lookup fixed in complete_sale_deduction; all clippy warnings resolved workspace-wide
+> status: ACCURATE (verified against actual codebase) · verified accurate: 35 workspace members (13 crates + 4 platform + 1 foundation + 14 modules + 3 apps); 61 ADRs in docs/decisions/; foundation crate verified; cloud-server config consolidation; OpenAPI spec; N+1 SKU lookup fix; all clippy warnings resolved workspace-wide
 
