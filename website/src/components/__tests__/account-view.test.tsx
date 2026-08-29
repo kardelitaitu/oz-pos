@@ -343,6 +343,41 @@ describe('AccountView — subscription display', () => {
       container.remove();
     }
   });
+
+  it('shows the checkout error message when the Midtrans checkout fails', async () => {
+    // Regression: when openMidtransCheckout throws (e.g. snap token request
+    // fails or the SDK is unavailable), the subscribe click must surface the
+    // localized checkout.error message, not fail silently.
+    sessionStorage.setItem('oz_session', 'tok-sub-midtrans-error');
+    localStorage.setItem('oz_region', 'id');
+    midtrans.openMidtransCheckout.mockRejectedValue(new Error('snap unavailable'));
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      // The localized error message is rendered with role="alert".
+      const alert = container.querySelector('[role="alert"]');
+      expect(alert).not.toBeNull();
+      expect(alert!.textContent).toContain("Couldn't start the checkout. Please try again.");
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── License display ───────────────────────────────────────────────────
@@ -537,6 +572,56 @@ describe('AccountView — region selector', () => {
       expect(trigger.getAttribute('aria-expanded')).toBe('false');
       expect(container.querySelector('[data-region-option]')).toBeNull();
       expect(document.activeElement).toBe(trigger);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('keeps the listbox open while the user navigates options with the keyboard', async () => {
+    // Regression: the trigger's onBlur schedules setRegionOpen(false) in
+    // 150ms. In a real browser, moving focus to an option fires the trigger's
+    // blur — that timer would close the listbox mid-navigation. jsdom does
+    // not fire blur on programmatic .focus(), so this test dispatches the
+    // blur explicitly to model the browser, then asserts the listbox stays
+    // open past the 150ms window.
+    sessionStorage.setItem('oz_session', 'tok-region-blur-nav');
+    stubMe();
+    const { container, root } = await renderAccount('en');
+    try {
+      const trigger = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Global',
+      )!;
+      act(() => {
+        trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+      expect(options.length).toBe(2);
+
+      // Model the browser: focus moved to the option, so the trigger blurred.
+      // React's synthetic onBlur listens for the bubbling `focusout` event,
+      // and the browser sets relatedTarget to the newly-focused option —
+      // which lives inside the listbox.
+      act(() => {
+        trigger.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: options[0] }));
+      });
+
+      // Wait past the 150ms blur-close window while an option is focused.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 200));
+      });
+
+      // The listbox must STILL be open and navigable.
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(container.querySelector('[data-region-option]')).not.toBeNull();
+      // And ArrowDown still moves focus between options.
+      act(() => {
+        options[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      });
+      expect(document.activeElement).toBe(options[1]);
     } finally {
       act(() => root.unmount());
       container.remove();

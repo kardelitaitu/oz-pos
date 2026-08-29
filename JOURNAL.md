@@ -1,4 +1,17 @@
 
+## 2026-08-29 — TDD round 7: region dropdown closes mid-keyboard-nav on blur (website AccountView)
+
+**Problem:** The region selector's trigger button had `onBlur={() => setTimeout(() => setRegionOpen(false), 150)}`. When a keyboard user pressed ArrowDown, focus moved to the first option, the trigger's `onBlur` fired, and the 150ms timer closed the listbox — even while the user was still navigating it with ArrowDown/ArrowUp. A keyboard user had ~150ms to read and navigate before the dropdown vanished.
+
+The existing keyboard-nav test passed in jsdom because jsdom does not fire `blur`/`focusout` on programmatic focus changes. The fix was validated by explicitly dispatching `focusout` with `relatedTarget` set to the option (modeling the browser's real behavior).
+
+**Solution:** TDD Red→Green (1 new test, account-view.test.tsx 47→48):
+- Red: dispatched `focusout` on the trigger with `relatedTarget` pointing to an option; after 200ms the listbox had closed — `aria-expanded` was `false`.
+- Green: the `onBlur` handler now checks `e.relatedTarget` — if it's an element inside `[role="listbox"]`, the close timer is skipped (the focus moved to an option, not away from the widget). The 150ms close still fires when focus leaves the entire listbox (click outside, Tab away).
+
+**Commits:** pending round-7 commit.
+**Test counts:** account-view.test.tsx 47→48; full suite 169→171.
+
 ## 2026-08-29 — TDD round 6: "Renews in NaN days" on invalid expiry (website AccountView)
 
 **Problem:** `daysUntil()` used `new Date(dateStr)`. For a non-date string like

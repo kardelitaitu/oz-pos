@@ -806,7 +806,16 @@ export default function AccountView({ locale }: Props) {
             <button
               type="button"
               onClick={() => setRegionOpen(!regionOpen)}
-              onBlur={() => setTimeout(() => setRegionOpen(false), 150)}
+              onBlur={(e) => {
+                // Only close when focus leaves the whole listbox. When the
+                // user keyboard-navigates to an option, focus moves to a
+                // button inside the listbox — that blur must NOT close it,
+                // otherwise a keyboard user loses the dropdown mid-arrow.
+                if (e.relatedTarget instanceof HTMLElement && e.relatedTarget.closest('[role="listbox"]')) {
+                  return;
+                }
+                setTimeout(() => setRegionOpen(false), 150);
+              }}
               onKeyDown={(e) => {
                 // ArrowDown/ArrowUp open the listbox and move focus to the first option;
                 // Escape closes it.
