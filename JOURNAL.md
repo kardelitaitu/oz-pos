@@ -1,4 +1,31 @@
 
+## 2026-08-29 — TDD round 4: timezone fix still wrong for negative offsets (website AccountView)
+
+**Problem:** The round-1 timezone fix (`new Date(d.getFullYear(), d.getMonth(),
+d.getDate())`) recomposed the date from the parsed Date's LOCAL components. On
+this UTC+7 machine the tests passed — but on a UTC-8 machine the same input
+("2027-01-01T00:00:00Z") still rendered the PREVIOUS calendar day
+("Dec 31, 2026"). The fix was machine-dependent, not timezone-independent.
+Verified with `TZ=America/Los_Angeles` node run: local-component approach → "Dec
+31, 2026"; the new UTC-based approach → "Jan 1, 2027".
+
+The backend always sends UTC timestamps (`GetString("expires_at")` on a
+PocketBase DateField, which serializes with `Z`). Showing the UTC calendar day
+is the deterministic, correct behavior — "expires Jan 1" means the same day for
+every user, matching the server's intent.
+
+**Solution:** TDD (regression pinned by the existing "does not shift the
+displayed date" test, which only passed on UTC+7 before):
+- `fmtDate()` now formats with `timeZone: 'UTC'` explicitly.
+- `daysUntil()` now counts UTC calendar days (`Date.UTC(...)` of the parsed
+  components minus today's UTC date), rounding — timezone- and
+  clock-independent on every machine.
+- Verified in LA timezone: all three input forms render "Jan 1, 2027" and
+  "Renews in N days" is stable.
+
+**Commits:** pending round-4 commit.
+**Test counts:** account-view.test.tsx 44/44; full component suite 166/166.
+
 ## 2026-08-29 — TDD round 3: device list collapse after revoke-refresh failure (website AccountView)
 
 **Problem:** In `revokeDevice()`, after a successful revoke POST the code

@@ -121,13 +121,11 @@ function statusPillClass(status: string | undefined): string {
 function fmtDate(dateStr: string | undefined, locale: string): string {
   if (!dateStr) return '—';
   try {
-    // Use the parsed Date's local components so the displayed calendar day
-    // never shifts due to UTC offset — a user in UTC-8 sees the same date
-    // as a user in UTC+8.
-    const d = new Date(dateStr);
-    const localDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    return localDate.toLocaleDateString(locale === 'id' ? 'id-ID' : 'en-US', {
-      year: 'numeric', month: 'short', day: 'numeric',
+    // Use UTC timezone so the displayed calendar day is the same on every
+    // machine — "2027-01-01" and "2027-01-01T00:00:00Z" both show "Jan 1,
+    // 2027" regardless of whether the user is in Los Angeles or Jakarta.
+    return new Date(dateStr).toLocaleDateString(locale === 'id' ? 'id-ID' : 'en-US', {
+      timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
     });
   } catch {
     return dateStr;
@@ -138,16 +136,14 @@ function fmtDate(dateStr: string | undefined, locale: string): string {
 function daysUntil(dateStr: string | undefined): number | null {
   if (!dateStr) return null;
   try {
-    // Calendar-day count, timezone- and clock-independent: the difference
-    // between the expiry date's local midnight and today's local midnight.
-    // Rounding the midnight-to-midnight span means a subscription expiring
-    // "in 10 days" reports exactly 10 regardless of the wall clock or
-    // whether the machine is east or west of UTC.
+    // UTC-based calendar-day count, timezone- and clock-independent: the
+    // difference between the expiry's UTC date and today's UTC date. A
+    // subscription expiring "in 10 days" reports exactly 10 on any machine.
     const d = new Date(dateStr);
-    const localDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return Math.round((localDate.getTime() - today.getTime()) / 86_400_000);
+    const expiryUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const now = new Date();
+    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    return Math.round((expiryUTC - todayUTC) / 86_400_000);
   } catch {
     return null;
   }

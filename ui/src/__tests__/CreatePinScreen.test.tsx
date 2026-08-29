@@ -212,4 +212,59 @@ describe('CreatePinScreen', () => {
       expect(input.value).toBe('admin');
     });
   });
+
+  // ── PIN security: strip non-digits and enforce max length ─────────
+
+  describe('PIN security', () => {
+    it('strips non-digit characters from PIN on submit', async () => {
+      // CreatePinScreen accepts letters in the PIN field via paste.
+      // Non-digits are stripped on submit (cleaning pass), then the
+      // second submit proceeds with the cleaned digits.
+      mockBootstrapOwner.mockResolvedValue({
+        session: { user_id: 'owner-1', display_name: 'Owner', role_name: 'owner', role_id: 'role-owner' },
+        picker_ticket: 'ticket-boot',
+      });
+      renderScreen();
+
+      fillField('Display Name', 'Owner');
+      fillField('Username', 'owner');
+      fillField('PIN', 'abcd1234');
+      fillField('Confirm PIN', '1234');
+
+      // First submit: digits stripped, PIN cleaned to '1234', early return.
+      clickSubmit();
+      // Second submit: cleaned PIN passes validation, calls bootstrapOwner.
+      clickSubmit();
+
+      await waitFor(() => {
+        expect(mockBootstrapOwner).toHaveBeenCalledWith(
+          expect.objectContaining({ pin: '1234' }),
+        );
+      });
+    });
+
+    it('truncates PIN to 8 digits on submit', async () => {
+      mockBootstrapOwner.mockResolvedValue({
+        session: { user_id: 'owner-1', display_name: 'Owner', role_name: 'owner', role_id: 'role-owner' },
+        picker_ticket: 'ticket-boot',
+      });
+      renderScreen();
+
+      fillField('Display Name', 'Owner');
+      fillField('Username', 'owner');
+      fillField('PIN', '123456789');
+      fillField('Confirm PIN', '123456789');
+
+      // First submit: truncated to 8 digits, early return.
+      clickSubmit();
+      // Second submit: truncated PIN passes validation.
+      clickSubmit();
+
+      await waitFor(() => {
+        expect(mockBootstrapOwner).toHaveBeenCalledWith(
+          expect.objectContaining({ pin: '12345678' }),
+        );
+      });
+    });
+  });
 });
