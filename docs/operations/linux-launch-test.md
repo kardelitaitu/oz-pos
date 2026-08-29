@@ -477,4 +477,4 @@ Notes:
 - [VPS Migration Guide](./vps-migration.md) — Cloud server deployment
 - [Docker Deployment Guide](./docker-deployment.md) — Full stack deployment
 - [Runbook](./runbook.md) — Incident response procedures
-- [QUICKSTART](../../docs/QUICKSTART.md) — Project quick start
+- [QUICKSTART](../../docs/archived/QUICKSTART.md) — Project quick start
