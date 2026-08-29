@@ -1017,6 +1017,51 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 	}
 }
 
+// resetLimiterBuckets clears only the in-memory rate-limiter buckets,
+// WITHOUT detaching the SQLite DB handle. Unlike resetRateLimiters (which
+// nils out .db so the next attachPersistence binds to a fresh app), this is
+// safe to call between subtests that SHARE one TestApp — it lets repeated
+// requests pass the limiter while keeping the app's persistence attached.
+func resetLimiterBuckets() {
+	ipRateLimiter.mu.Lock()
+	ipRateLimiter.buckets = make(map[string]*tokenBucket)
+	ipRateLimiter.mu.Unlock()
+
+	contactRateLimiter.mu.Lock()
+	contactRateLimiter.buckets = make(map[string]*tokenBucket)
+	contactRateLimiter.mu.Unlock()
+
+	webLoginLimiter.mu.Lock()
+	webLoginLimiter.entries = make(map[string]*windowEntry)
+	webLoginLimiter.mu.Unlock()
+	otpRequestLimiter.mu.Lock()
+	otpRequestLimiter.entries = make(map[string]*windowEntry)
+	otpRequestLimiter.mu.Unlock()
+	otpVerifyLimiter.mu.Lock()
+	otpVerifyLimiter.entries = make(map[string]*windowEntry)
+	otpVerifyLimiter.mu.Unlock()
+	otpIPLimiter.mu.Lock()
+	otpIPLimiter.entries = make(map[string]*windowEntry)
+	otpIPLimiter.mu.Unlock()
+	webRegisterLimiter.mu.Lock()
+	webRegisterLimiter.entries = make(map[string]*windowEntry)
+	webRegisterLimiter.mu.Unlock()
+	webResetRequestLimiter.mu.Lock()
+	webResetRequestLimiter.entries = make(map[string]*windowEntry)
+	webResetRequestLimiter.mu.Unlock()
+	webResetVerifyLimiter.mu.Lock()
+	webResetVerifyLimiter.entries = make(map[string]*windowEntry)
+	webResetVerifyLimiter.mu.Unlock()
+}
+
+// ── Test infrastructure: shared-app helpers ──────────────────────
+//
+// sharedApp wraps one TestApp that multiple subtests reuse, cutting the
+// per-subtest setup cost (each newTestApp + createTestCollections +
+// registerTestRoutes is ~250ms). resetLimiterBuckets() (above) clears
+// only in-memory limiter state between subtests without detaching the
+// app's SQLite handle.
+
 func resetRateLimiters() {
 	ipRateLimiter.stop()
 	keyFailTracker.stop()
