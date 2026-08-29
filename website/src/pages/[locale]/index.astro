@@ -8,6 +8,13 @@ import PricingPreviewCard from '../../components/PricingPreviewCard.astro';
 import { t, dict } from '../../i18n';
 import { pricingFor } from '../../content/pricing';
 import { getRelativeLocaleUrl } from 'astro:i18n';
+// Tech-stack logos (order = left to right on the home page).
+import rustLogo from '../../assets/logo-rust.svg?url';
+import tauriLogo from '../../assets/logo-tauri.svg?url';
+import paddleLogo from '../../assets/logo-paddle.svg?url';
+import midtransLogo from '../../assets/logo-midtrans.svg?url';
+import trivyLogo from '../../assets/logo-trivy.svg?url';
+import postgresLogo from '../../assets/logo-postgresql.svg?url';
 
 const locale = Astro.currentLocale ?? 'en';
 const pageTitle = `OZ-POS — ${t(locale, 'hero.title')}`;
@@ -19,6 +26,15 @@ const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
 // cafe owners / minimarket operators / warung owners, not tier names.
 const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
 const verticals = dict(locale).vertical as Record<(typeof verticalKeys)[number], { label: string }>;
+// Tech-stack logos shown after the features grid.
+const techStack = [
+  { name: 'Rust', src: rustLogo },
+  { name: 'Tauri', src: tauriLogo },
+  { name: 'Paddle', src: paddleLogo },
+  { name: 'Midtrans', src: midtransLogo },
+  { name: 'Trivy', src: trivyLogo },
+  { name: 'PostgreSQL', src: postgresLogo },
+];
 ---
 
 <Base title={pageTitle}>
@@ -55,6 +71,24 @@ const verticals = dict(locale).vertical as Record<(typeof verticalKeys)[number],
           </div>
         ))
       }
+    </div>
+  </section>
+
+  <!-- Tech stack (brand logos) -->
+  <section data-reveal class="mx-auto max-w-6xl px-4 py-8" aria-label={t(locale, 'techStack.title')}>
+    <div class="text-center">
+      <h2 class="text-3xl font-bold">{t(locale, 'techStack.title')}</h2>
+      <p class="mt-2 text-muted">{t(locale, 'techStack.subtitle')}</p>
+    </div>
+    <div class="mt-10 flex flex-wrap items-center justify-center gap-x-12 gap-y-8">
+      {techStack.map((logo) => (
+        <img
+          src={logo.src}
+          alt={logo.name}
+          loading="lazy"
+          class="h-8 w-auto max-w-[10rem] opacity-80 transition-opacity duration-200 hover:opacity-100"
+        />
+      ))}
     </div>
   </section>
 

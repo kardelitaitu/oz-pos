@@ -103,6 +103,10 @@
     "ctaPrimary": "Download free",
     "ctaSecondary": "See Pricing"
   },
+  "techStack": {
+    "title": "Built on a modern tech stack",
+    "subtitle": "Reliable open-source foundations, battle-tested payments, and security-first tooling."
+  },
   "features": {
     "title": "Enterprise Features, Regular Subscription",
     "subtitle": "Nine core capabilities engineered for maximum efficiency, uninterrupted uptime, and continuous business growth.",
@@ -233,9 +237,10 @@
     "requirementsTitle": "System requirements",
     "requirements": [
       "Windows 10 / 11 (64-bit) — available now",
-      "macOS 12 or newer — coming soon",
+      "macOS 10.13 or newer — coming soon",
       "Linux (x86_64, glibc 2.31+) — coming soon",
-      "Android · iOS (tablets & phones) — coming soon",
+      "Android 7.0 Nougat or newer — coming soon",
+      "iOS 14.0 or newer — coming soon",
       "4 GB RAM · 1 GB free disk"
     ],
     "note": "Release downloads are published on GitHub Releases.",

@@ -103,6 +103,10 @@
     "ctaPrimary": "Unduh Gratis",
     "ctaSecondary": "Lihat Harga"
   },
+  "techStack": {
+    "title": "Dibangun di atas teknologi modern",
+    "subtitle": "Fondasi open-source yang andal, pembayaran teruji, dan alat keamanan tingkat pertama."
+  },
   "features": {
     "title": "Fitur Kelas Enterprise, Tanpa Biaya Enterprise",
     "subtitle": "Sembilan kapabilitas inti yang dirancang untuk efisiensi maksimal, keandalan tanpa henti, dan pertumbuhan bisnis Anda.",
@@ -233,9 +237,10 @@
     "requirementsTitle": "Persyaratan sistem",
     "requirements": [
       "Windows 10 / 11 (64-bit) — tersedia sekarang",
-      "macOS 12 atau lebih baru — segera hadir",
+      "macOS 10.13 atau lebih baru — segera hadir",
       "Linux (x86_64, glibc 2.31+) — segera hadir",
-      "Android · iOS (tablet & ponsel) — segera hadir",
+      "Android 7.0 Nougat atau lebih baru — segera hadir",
+      "iOS 14.0 atau lebih baru — segera hadir",
       "RAM 4 GB · Disk kosong 1 GB"
     ],
     "note": "Unduhan rilis dipublikasikan di GitHub Releases.",
