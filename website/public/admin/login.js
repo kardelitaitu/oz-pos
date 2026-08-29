@@ -121,39 +121,87 @@ async function exchangeForCode(token) {
   window.location.href = '/?code=' + encodeURIComponent(body.code);
 }
 
+let isSubmitting = false;
+
 async function handleLogin() {
+  if (isSubmitting) return;
+  isSubmitting = true;
   hideError();
   hideSuccess();
 
-  const email = document.getElementById('email').value.trim();
-  if (!email) {
-    showError('Please enter your email address');
-    document.getElementById('email').focus();
-    return;
-  }
+  try {
+    const email = document.getElementById('email').value.trim();
+    if (!email) {
+      showError('Please enter your email address');
+      document.getElementById('email').focus();
+      return;
+    }
 
-  if (currentMode === 'otp') {
-    const otpGroup = document.getElementById('otp-group');
-    const isCodePromptVisible = otpGroup && !otpGroup.classList.contains('hidden');
+    if (currentMode === 'otp') {
+      const otpGroup = document.getElementById('otp-group');
+      const isCodePromptVisible = otpGroup && !otpGroup.classList.contains('hidden');
 
-    if (!isCodePromptVisible) {
-      // Step 1: Request OTP code
-      setLoading(true, 'Sending verification code…');
+      if (!isCodePromptVisible) {
+        // Step 1: Request OTP code
+        setLoading(true, 'Sending verification code…');
+        try {
+          const res = await fetch(API + '/api/v1/web/request-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          const body = await res.json();
+          if (res.status === 200) {
+            otpGroup.classList.remove('hidden');
+            document.getElementById('login-btn').textContent = 'Verify Code & Sign In';
+            showSuccess('✓ Verification code sent! Please check your email inbox (and spam folder).');
+            startOtpCooldown(60);
+            setLoading(false);
+            const otpInput = document.getElementById('otp-code');
+            if (otpInput) otpInput.focus();
+            return;
+          }
+          if (res.status === 429) {
+            showLockoutCountdown(body.retry_after || 60);
+            setLoading(false);
+            return;
+          }
+          if (res.status === 403) {
+            showError(body.error || 'Access denied: origin not allowed');
+            setLoading(false);
+            return;
+          }
+          if (res.status === 503) {
+            showError('Email delivery is not configured on server');
+            setLoading(false);
+            return;
+          }
+          showError(body.error || 'Failed to send verification code');
+        } catch (err) {
+          showError('Could not connect to authentication server');
+        }
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: Verify OTP code
+      const code = document.getElementById('otp-code').value.trim();
+      if (!code) {
+        showError('Please enter the 6-digit code from your email');
+        document.getElementById('otp-code').focus();
+        return;
+      }
+      setLoading(true, 'Verifying code…');
       try {
-        const res = await fetch(API + '/api/v1/web/request-otp', {
+        const res = await fetch(API + '/api/v1/web/verify-otp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          body: JSON.stringify({ email, code })
         });
         const body = await res.json();
-        if (res.status === 200) {
-          otpGroup.classList.remove('hidden');
-          document.getElementById('login-btn').textContent = 'Verify Code & Sign In';
-          showSuccess('✓ Verification code sent! Please check your email inbox (and spam folder).');
-          startOtpCooldown(60);
-          setLoading(false);
-          const otpInput = document.getElementById('otp-code');
-          if (otpInput) otpInput.focus();
+        if (res.status === 200 && body.token) {
+          showSuccess('✓ Code verified! Signing in…');
+          await exchangeForCode(body.token);
           return;
         }
         if (res.status === 429) {
@@ -166,12 +214,7 @@ async function handleLogin() {
           setLoading(false);
           return;
         }
-        if (res.status === 503) {
-          showError('Email delivery is not configured on server');
-          setLoading(false);
-          return;
-        }
-        showError(body.error || 'Failed to send verification code');
+        showError(body.error || 'Invalid or expired verification code');
       } catch (err) {
         showError('Could not connect to authentication server');
       }
@@ -179,28 +222,29 @@ async function handleLogin() {
       return;
     }
 
-    // Step 2: Verify OTP code
-    const code = document.getElementById('otp-code').value.trim();
-    if (!code) {
-      showError('Please enter the 6-digit code from your email');
-      document.getElementById('otp-code').focus();
+    // Password login
+    const password = document.getElementById('password').value;
+    if (!password) {
+      showError('Please enter your password');
+      document.getElementById('password').focus();
       return;
     }
-    setLoading(true, 'Verifying code…');
+    setLoading(true, 'Signing in…');
     try {
-      const res = await fetch(API + '/api/v1/web/verify-otp', {
+      const res = await fetch(API + '/api/v1/web/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code })
+        body: JSON.stringify({ email, password })
       });
       const body = await res.json();
       if (res.status === 200 && body.token) {
-        showSuccess('✓ Code verified! Signing in…');
+        showSuccess('✓ Signing in…');
         await exchangeForCode(body.token);
         return;
       }
       if (res.status === 429) {
-        showLockoutCountdown(body.retry_after || 60);
+        const retryAfter = body.retry_after || 60;
+        showLockoutCountdown(retryAfter);
         setLoading(false);
         return;
       }
@@ -209,50 +253,14 @@ async function handleLogin() {
         setLoading(false);
         return;
       }
-      showError(body.error || 'Invalid or expired verification code');
+      showError(body.error || 'Invalid email or password');
     } catch (err) {
       showError('Could not connect to authentication server');
     }
     setLoading(false);
-    return;
+  } finally {
+    isSubmitting = false;
   }
-
-  // Password login
-  const password = document.getElementById('password').value;
-  if (!password) {
-    showError('Please enter your password');
-    document.getElementById('password').focus();
-    return;
-  }
-  setLoading(true, 'Signing in…');
-  try {
-    const res = await fetch(API + '/api/v1/web/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const body = await res.json();
-    if (res.status === 200 && body.token) {
-      showSuccess('✓ Signing in…');
-      await exchangeForCode(body.token);
-      return;
-    }
-    if (res.status === 429) {
-      const retryAfter = body.retry_after || 60;
-      showLockoutCountdown(retryAfter);
-      setLoading(false);
-      return;
-    }
-    if (res.status === 403) {
-      showError(body.error || 'Access denied: origin not allowed');
-      setLoading(false);
-      return;
-    }
-    showError(body.error || 'Invalid email or password');
-  } catch (err) {
-    showError('Could not connect to authentication server');
-  }
-  setLoading(false);
 }
 
 // ── Lockout countdown (429 with retry_after) ─────────────────
@@ -274,13 +282,14 @@ function showLockoutCountdown(seconds) {
   }, 1000);
 }
 
-function handleFormSubmit(e) {
-  if (e && e.preventDefault) e.preventDefault();
-  handleLogin();
+// Wire single submit event on form
+const form = document.getElementById('auth-form');
+if (form) {
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleLogin();
+  });
 }
-
-window.handleFormSubmit = handleFormSubmit;
-window.handleLogin = handleLogin;
 
 // Initialize default mode
 setAuthMode('otp');
