@@ -28,7 +28,7 @@
 
 ## S0 — Orientation & Baseline
 
-**Status:** in-progress
+**Status:** reviewed (2026-07-25)
 
 Repo shape (from codebase-memory graph, 40,314 nodes / 204,452 edges):
 
@@ -64,7 +64,29 @@ Pre-existing dirty tree at review start (NOT mine, do not commit):
 
 ### S0 Notes
 
-- (empty — fill as orientation proceeds)
+- **Workspace members** (`Cargo.toml`): `crates/*`, `modules/*`, `platform/*`, `foundation`,
+  `apps/cloud-server`, `apps/desktop-client`, `apps/tablet-client`.
+- **Scale**: Rust ≈ 246k LoC (819 files; 316 sibling `*_tests.rs` files), `ui/src` ≈ 199k
+  LoC TS/TSX, 379 UI test files, 31 Playwright e2e specs, ~100 scripts, 11 CI workflows.
+- **CI workflows**: `ci.yml`, `e2e-pr.yml`, `nightly.yml`, `security.yml`, `release.yml`,
+  `website.yml`, `deploy.yml`, `android.yml`, `ios.yml`, `docker-digest-drift.yml`,
+  `docker-persistence.yml`. Trigger topology to be verified in S9 (AGENTS.md says CI
+  runs only on main; mobile/website/docker flows may differ).
+- **Methodology declaration**: with 2,551 files, this review is (a) structural sweeps via
+  codebase-memory graph, (b) automated invariant checks (grep/pattern), and (c) targeted
+  deep-dives on graph hotspots + entry points. It is not a line-by-line read of every
+  file; sector notes state exactly what was checked.
+- Dirty worktree files present at review start are listed above and excluded from all
+  review commits.
+
+### S0 Findings
+
+- **F-001 (INFO, S0)**: `apps/unified/` is a Docker deployment bundle (Caddyfile,
+  supervisord.conf, healthcheck scripts), deliberately excluded from the Cargo workspace
+  per `Cargo.toml:12` comment — by design, no action.
+- **F-002 (INFO, S0)**: CI surface (11 workflows incl. mobile/website/docker) is broader
+  than the AGENTS.md "CI only triggers on main" summary — S9 verifies each trigger.
+- **F-003 (INFO, S0)**: review scale requires sampling strategy (see methodology above).
 
 ---
 
@@ -288,7 +310,9 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 
 | ID | Date | Sector | Severity | Location | Finding |
 |----|------|--------|----------|----------|---------|
-| —  |      |        |          |          |         |
+| F-001 | 2026-07-25 | S0 | INFO | `apps/unified/`, `Cargo.toml:12` | Docker deployment bundle, deliberately outside workspace — by design |
+| F-002 | 2026-07-25 | S0 | INFO | `.github/workflows/` | 11 workflows, broader than AGENTS.md "CI only on main" summary — verify in S9 |
+| F-003 | 2026-07-25 | S0 | INFO | repo-wide | 2,551 files → sampling methodology (structural + invariant checks + hotspot deep-dives) |
 
 ---
 
@@ -298,6 +322,6 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 - Created this journal; mapped repo via codebase-memory graph (architecture overview +
   file tree + crate/app/module inventory).
 - Recorded graph hotspots (S0) and pre-existing dirty worktree files (excluded from my commits).
-- Next: begin sector reviews, starting with S1 (Tauri shells & IPC) and S2 (data core)
-  since they anchor everything else.
-- Commits: journal scaffold.
+- **S0 reviewed**: workspace members, scale stats (246k Rust LoC / 199k TS LoC), 11 CI
+  workflows, methodology declaration, findings F-001..F-003. Committed.
+- Next: S1 Tauri shells & IPC.
