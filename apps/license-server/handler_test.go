@@ -269,6 +269,7 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		// ADR #42 dashboard endpoints (user + admin).
 		se.Router.GET("/api/v1/web/usage", handleWebUsage(app))
 		se.Router.GET("/api/v1/web/devices", handleWebDevices(app))
+		se.Router.POST("/api/v1/web/devices/{id}/revoke", handleWebRevokeDevice(app))
 		se.Router.GET("/api/v1/admin/tenants", handleAdminListTenants(app))
 		se.Router.GET("/api/v1/admin/tenants/{id}", handleAdminGetTenant(app))
 		se.Router.POST("/api/v1/admin/tenants/{id}/activate", handleAdminActivate(app))

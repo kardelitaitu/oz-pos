@@ -22,6 +22,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -84,7 +85,7 @@ func adminAuth(app core.App, e *core.RequestEvent) bool {
 // ── GET /api/v1/admin/tenants ─────────────────────────────────────
 
 // handleAdminListTenants returns a paginated tenant list with summary
-// counts. Supports ?page= and ?perPage= query params.
+// counts. Supports ?page=, ?perPage=, and ?search= query params.
 func handleAdminListTenants(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		if !adminAuth(app, e) {
@@ -99,8 +100,28 @@ func handleAdminListTenants(app core.App) func(e *core.RequestEvent) error {
 			page = 1
 		}
 
+		search := strings.TrimSpace(e.Request.URL.Query().Get("search"))
+		filter := "status != ''"
+		var params map[string]any
+		if search != "" {
+			// Email is stored lowercased (normalizeEmail). Use a simple
+			// substring regex (case-sensitive, since both sides are lowered).
+			lc := strings.ToLower(search)
+			filter += " && email ~ {:search}"
+			params = map[string]any{"search": regexp.QuoteMeta(lc)}
+		}
+
+		// Total count (for pagination controls) — uses the established
+		// FindRecordsByFilter + len pattern (no dbx.Expression needed).
+		all, err := app.FindRecordsByFilter("tenants", filter, "-created", 0, 0, params)
+		if err != nil {
+			log.Printf("/admin/tenants: count failed: %v", err)
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "query failed"})
+		}
+		total := len(all)
+
 		records, err := app.FindRecordsByFilter("tenants",
-			"status != ''", "-created", perPage, (page-1)*perPage)
+			filter, "-created", perPage, (page-1)*perPage, params)
 		if err != nil {
 			log.Printf("/admin/tenants: query failed: %v", err)
 			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "query failed"})
@@ -123,6 +144,8 @@ func handleAdminListTenants(app core.App) func(e *core.RequestEvent) error {
 			"tenants": tenants,
 			"page":    page,
 			"perPage": perPage,
+			"total":   total,
+			"search":  search,
 		})
 	}
 }

@@ -66,6 +66,8 @@ interface Props {
 
 /** A registered terminal/device from GET /api/v1/web/devices. */
 interface Device {
+  /** PocketBase record id — used as the revoke target. */
+  id?: string;
   machine_id: string;
   created?: string;
   revoked_at?: string | null;
@@ -218,6 +220,10 @@ export default function AccountView({ locale }: Props) {
   const [regionMsg, setRegionMsg] = useState(false);
   const [regionOpen, setRegionOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+  // Device revoke state: record id currently being revoked, plus the last
+  // failure message (shown inline on the device row).
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!API) {
@@ -341,6 +347,35 @@ export default function AccountView({ locale }: Props) {
       }
       if (mountedRef.current) setRefreshState(found ? 'idle' : 'pending');
     })();
+  };
+
+  /** Revoke a device via POST /web/devices/{id}/revoke, then refresh the list. */
+  const revokeDevice = async (device: Device) => {
+    if (!device.id || !API) return;
+    const token = sessionStorage.getItem('oz_session');
+    if (!token) return;
+    setRevokingId(device.id);
+    setRevokeError(null);
+    try {
+      const res = await fetch(`${API}/api/v1/web/devices/${encodeURIComponent(device.id)}/revoke`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`revoke failed (${res.status})`);
+      // Mark this device revoked in local state immediately; refresh the
+      // full list so any server-side ordering is preserved.
+      const fresh = await fetchDevices();
+      if (mountedRef.current) {
+        setDevices(fresh);
+        // Keep the just-revoked device visible as revoked even if the refresh
+        // raced ahead (fetchDevices can return before the revoke commit).
+        setDevices((prev) => prev?.map((d) => (d.id === device.id ? { ...d, revoked_at: d.revoked_at ?? new Date().toISOString() } : d)) ?? fresh);
+      }
+    } catch (err) {
+      if (mountedRef.current) setRevokeError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (mountedRef.current) setRevokingId(null);
+    }
   };
 
   if (state === 'loading') {
@@ -582,19 +617,16 @@ export default function AccountView({ locale }: Props) {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">{t(locale, 'account.devices')}</h2>
             <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-link">
-              {/* WIP: shows tier entitlement text, not wired to devices.length for live count */}
-              {license?.tierKey === 'pro' || license?.tierKey === 'enterprise' || license?.tierKey === 'premium'
-                ? t(locale, 'account.terminalUnlimited')
-                : t(locale, 'account.terminalCount')}
+              {devices !== null
+                ? t(locale, 'account.terminalCountLive').replace('{count}', String(devices.length))
+                : license?.tierKey === 'pro' || license?.tierKey === 'enterprise' || license?.tierKey === 'premium'
+                  ? t(locale, 'account.terminalUnlimited')
+                  : t(locale, 'account.terminalCount')}
             </span>
           </div>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.devicesHint')}</p>
           {devices && devices.length > 0 ? (
             <div className="mt-4 space-y-2">
-              {/* WIP: read-only list — no per-device unbind/revoke action wired
-                  (unbind happens on-device via the license key; the license
-                  server has no web endpoint for a tenant to revoke its own
-                  machine — admin-only /api/v1/admin/tenants/{id}/revoke). */}
               {devices.slice(0, 5).map((d) => (
                 <div key={d.machine_id} className="rounded-lg border border-ink/10 bg-surface p-3 flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0">
@@ -610,13 +642,28 @@ export default function AccountView({ locale }: Props) {
                       <p className="text-xs text-muted">{d.created ? fmtDate(d.created, locale) : '—'}</p>
                     </div>
                   </div>
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 ml-2 ${
-                    d.revoked_at ? 'bg-danger/15 text-danger' : 'bg-success/15 text-success'
-                  }`}>
-                    {d.revoked_at ? t(locale, 'account.statusRevoked') : t(locale, 'account.statusActive')}
-                  </span>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      d.revoked_at ? 'bg-danger/15 text-danger' : 'bg-success/15 text-success'
+                    }`}>
+                      {d.revoked_at ? t(locale, 'account.statusRevoked') : t(locale, 'account.statusActive')}
+                    </span>
+                    {!d.revoked_at && d.id && (
+                      <button
+                        type="button"
+                        onClick={() => void revokeDevice(d)}
+                        disabled={revokingId === d.id}
+                        className="inline-flex items-center gap-1 rounded border border-ink/15 bg-surface px-2 py-1 text-xs font-medium text-ink transition hover:bg-ink/5 hover:border-danger/40 disabled:opacity-50"
+                      >
+                        {revokingId === d.id ? '…' : t(locale, 'account.revokeDevice')}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
+              {revokeError && (
+                <p className="text-xs text-danger" role="alert">{revokeError}</p>
+              )}
               {devices.length > 5 && (
                 <p className="text-xs text-muted text-center pt-1">+{devices.length - 5} more</p>
               )}

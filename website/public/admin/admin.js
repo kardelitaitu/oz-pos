@@ -54,8 +54,17 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
     // ── SVG chart helpers ────────────────────────────────────────────
     function svgChart(id, data, series, opts) {
+      // Guard against empty / NaN data (M1) — render a flat baseline
+      // instead of a broken SVG (Math.max(...[]) === -Infinity).
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        return '<div class="chart-empty">No data</div>';
+      }
+      const vals = data.map(d => series.map(s => Number(d[s]))).flat().filter(Number.isFinite);
+      if (vals.length === 0) {
+        return '<div class="chart-empty">No data</div>';
+      }
       const w = 600, h = 180, px = 40, py = 20, pw = w - px, ph = h - py - 20;
-      const max = Math.max(...data.map(d => Math.max(...series.map(s => d[s]))));
+      const max = Math.max(...vals);
       const min = 0;
       const rng = max - min || 1;
       const x = (i) => px + (i / (data.length - 1 || 1)) * pw;
@@ -63,7 +72,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       const colors = { usd: '#147efb', idr: '#22c55e', count: '#147efb', mrr: '#147efb' };
       let paths = '', fills = '';
       series.forEach(s => {
-        const pts = data.map((d,i) => `${x(i)},${y(d[s])}`).join(' L ');
+        const pts = data.map((d,i) => `${x(i)},${y(Number(d[s]) || 0)}`).join(' L ');
         paths += `<path d="M ${pts}" stroke="${colors[s]||'#147efb'}" stroke-width="2" fill="none" class="chart-line"/>`;
         if (opts && opts.area) {
           const base = `${x(0)},${py+ph} L ${pts} L ${x(data.length-1)},${py+ph} Z`;
@@ -80,13 +89,20 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     }
 
     function svgDonut(id, data, labelKey, valueKey, colors) {
-      const total = data.reduce((s,d) => s + d[valueKey], 0);
+      // Guard against empty / zero-total data (M1).
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        return { svg: '<div class="chart-empty">No data</div>', legend: '' };
+      }
+      const total = data.reduce((s,d) => s + (Number(d[valueKey]) || 0), 0);
+      if (total <= 0) {
+        return { svg: '<div class="chart-empty">No data</div>', legend: '' };
+      }
       let acc = 0;
       let slices = '';
       const cx = 80, cy = 80, r = 60;
       const colorList = ['#147efb','#22c55e','#e879f9','#fb923c','#22d3ee','#f59e0b'];
       data.forEach((d,i) => {
-        const pct = d[valueKey] / total;
+        const pct = (Number(d[valueKey]) || 0) / total;
         const ang = pct * 360;
         const start = (acc / 360) * 2 * Math.PI - Math.PI/2;
         const end = ((acc + ang) / 360) * 2 * Math.PI - Math.PI/2;
@@ -305,14 +321,46 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       });
     });
 
-    // ── Tenants list (from ADR #42 Phase 3) ─────────────────────────
+    // ── Tenants list (from ADR #42 Phase 3) — search + pagination ─────
     let tenants = [];
+    let tenantsPage = 1;
+    let tenantsPerPage = 25;
+    let tenantsTotal = 0;
+    let tenantsSearch = '';
+
     async function renderTenants() {
       const c = document.getElementById('content');
       c.innerHTML = '<div class="card"><p class="empty">Loading tenants…</p></div>';
-      try { const data = await api('/api/v1/admin/tenants'); tenants = data.tenants || []; } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">Failed to load tenants.</p></div>'; return; }
+      let data;
+      try {
+        const qs = '?page=' + tenantsPage + '&perPage=' + tenantsPerPage +
+          (tenantsSearch ? '&search=' + encodeURIComponent(tenantsSearch) : '');
+        data = await api('/api/v1/admin/tenants' + qs);
+      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">Failed to load tenants.</p></div>'; return; }
+      tenants = data.tenants || [];
+      tenantsTotal = data.total || 0;
+
       c.innerHTML = '';
-      const card = el('div', 'card'); card.appendChild(el('h2', null, `Tenants (${tenants.length})`));
+
+      // ── Search + pagination toolbar ─────────────────────────────
+      const toolbar = el('div', 'tenant-toolbar');
+      const searchBox = el('input', 'input search-input');
+      searchBox.placeholder = 'Search by email…';
+      searchBox.value = tenantsSearch;
+      searchBox.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { tenantsSearch = searchBox.value.trim(); tenantsPage = 1; renderTenants(); }
+      });
+      const searchBtn = el('button', 'btn btn-sm', 'Search');
+      searchBtn.addEventListener('click', () => { tenantsSearch = searchBox.value.trim(); tenantsPage = 1; renderTenants(); });
+      const clearBtn = el('button', 'btn btn-sm btn-ghost', 'Clear');
+      clearBtn.addEventListener('click', () => { tenantsSearch = ''; searchBox.value = ''; tenantsPage = 1; renderTenants(); });
+      toolbar.appendChild(searchBox); toolbar.appendChild(searchBtn); toolbar.appendChild(clearBtn);
+      const totalLabel = el('span', 'tenant-total', 'Showing ' + tenants.length + ' of ' + tenantsTotal);
+      toolbar.appendChild(totalLabel);
+      c.appendChild(toolbar);
+
+      const card = el('div', 'card'); card.appendChild(el('h2', null, 'Tenants'));
+      if (tenants.length === 0) { card.appendChild(el('p', 'empty', 'No tenants match.')); c.appendChild(card); return; }
       const table = el('table');
       const thead = el('thead'); const tr = el('tr');
       ['Email','Status','License','Tier','Created',''].forEach(h => tr.appendChild(el('th', null, h)));
@@ -330,6 +378,23 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         tbody.appendChild(row);
       });
       table.appendChild(tbody); card.appendChild(table); c.appendChild(card);
+
+      // ── Pagination controls ─────────────────────────────────────
+      const totalPages = Math.max(1, Math.ceil(tenantsTotal / tenantsPerPage));
+      if (totalPages > 1) {
+        const nav = el('div', 'pagination');
+        const prev = el('button', 'btn btn-sm btn-ghost', '← Prev');
+        prev.disabled = tenantsPage <= 1;
+        prev.addEventListener('click', () => { if (tenantsPage > 1) { tenantsPage--; renderTenants(); } });
+        nav.appendChild(prev);
+        const pageInfo = el('span', 'page-info', 'Page ' + tenantsPage + ' of ' + totalPages);
+        nav.appendChild(pageInfo);
+        const next = el('button', 'btn btn-sm btn-ghost', 'Next →');
+        next.disabled = tenantsPage >= totalPages;
+        next.addEventListener('click', () => { if (tenantsPage < totalPages) { tenantsPage++; renderTenants(); } });
+        nav.appendChild(next);
+        c.appendChild(nav);
+      }
     }
 
     // ── Tenant detail (from ADR #42 Phase 3) ────────────────────────

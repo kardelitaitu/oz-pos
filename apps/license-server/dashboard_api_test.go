@@ -166,6 +166,72 @@ func TestWebDevices_ReturnsMachines(t *testing.T) {
 	}
 }
 
+// ── POST /api/v1/web/devices/{id}/revoke ─────────────────────────
+
+func TestWebRevokeDevice_SetsRevokedAt(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	_, token := seedDashboardTenant(t, app, "revoke@test.com")
+
+	// Fetch the device to learn its record id.
+	rec := doJSON(mux, http.MethodGet, "/api/v1/web/devices", "Bearer "+token, "")
+	var list struct {
+		Devices []map[string]any `json:"devices"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if len(list.Devices) != 1 {
+		t.Fatalf("expected 1 device, got %d", len(list.Devices))
+	}
+	id := list.Devices[0]["id"].(string)
+
+	rec = doJSON(mux, http.MethodPost, "/api/v1/web/devices/"+id+"/revoke", "Bearer "+token, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Status    string `json:"status"`
+		RevokedAt string `json:"revoked_at"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if body.Status != "revoked" {
+		t.Errorf("expected status revoked, got %q", body.Status)
+	}
+	if body.RevokedAt == "" {
+		t.Error("expected revoked_at timestamp")
+	}
+
+	// Second call is idempotent — still 200, still revoked.
+	rec2 := doJSON(mux, http.MethodPost, "/api/v1/web/devices/"+id+"/revoke", "Bearer "+token, "")
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on repeat revoke, got %d", rec2.Code)
+	}
+}
+
+func TestWebRevokeDevice_RejectsMissingDevice(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	_, token := seedDashboardTenant(t, app, "revoke-missing@test.com")
+
+	rec := doJSON(mux, http.MethodPost, "/api/v1/web/devices/nonexistent/revoke", "Bearer "+token, "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestWebRevokeDevice_RejectsNoSession(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+
+	rec := doJSON(mux, http.MethodPost, "/api/v1/web/devices/x/revoke", "", "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rec.Code)
+	}
+}
+
 // ── GET /api/v1/admin/tenants ─────────────────────────────────────
 
 func TestAdminListTenants_RequiresKey(t *testing.T) {
@@ -204,6 +270,74 @@ func TestAdminListTenants_ReturnsTenants(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected seeded tenant in list")
+	}
+}
+
+// ── GET /api/v1/admin/tenants?search= + pagination ────────────────
+
+func TestAdminListTenants_SearchFilters(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	seedDashboardTenant(t, app, "search-alpha@test.com")
+	seedDashboardTenant(t, app, "search-beta@test.com")
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	rec := doJSON(mux, http.MethodGet,
+		"/api/v1/admin/tenants?search=ALPHA", "Bearer secret-admin-key", "")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Tenants []map[string]any `json:"tenants"`
+		Total   int              `json:"total"`
+		Search  string           `json:"search"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if body.Total != 1 {
+		t.Errorf("expected total=1 for search=ALPHA, got %d", body.Total)
+	}
+	if len(body.Tenants) != 1 || body.Tenants[0]["email"] != "search-alpha@test.com" {
+		t.Errorf("expected only alpha tenant, got %v", body.Tenants)
+	}
+	if body.Search != "ALPHA" {
+		t.Errorf("expected search echo ALPHA, got %q", body.Search)
+	}
+}
+
+func TestAdminListTenants_Pagination(t *testing.T) {
+	app, mux := dashboardMux(t)
+	defer app.Cleanup()
+	seedDashboardTenant(t, app, "page-a@test.com")
+	seedDashboardTenant(t, app, "page-b@test.com")
+	seedDashboardTenant(t, app, "page-c@test.com")
+	t.Setenv("OZ_ADMIN_KEY", "secret-admin-key")
+
+	// perPage=2 → page 1 should return 2 tenants, total=3.
+	rec := doJSON(mux, http.MethodGet,
+		"/api/v1/admin/tenants?page=1&perPage=2", "Bearer secret-admin-key", "")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Tenants []map[string]any `json:"tenants"`
+		Total   int              `json:"total"`
+		Page    int              `json:"page"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if body.Total != 3 {
+		t.Errorf("expected total=3, got %d", body.Total)
+	}
+	if len(body.Tenants) != 2 {
+		t.Errorf("expected 2 tenants on page 1, got %d", len(body.Tenants))
+	}
+	if body.Page != 1 {
+		t.Errorf("expected page=1, got %d", body.Page)
 	}
 }
 

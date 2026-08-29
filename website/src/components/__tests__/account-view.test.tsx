@@ -437,19 +437,64 @@ describe('AccountView — Quick actions & License Copy', () => {
 describe('AccountView — Devices & Invoices', () => {
   it('renders registered terminals section and billing invoices section', async () => {
     sessionStorage.setItem('oz_session', 'tok-enterprise');
-    stubMe({
-      tierKey: 'enterprise',
-      status: 'active',
+    // Route /me to the tenant payload and /devices to a one-device list.
+    mockFetch((url) => {
+      if (url.includes('/devices')) {
+        return okJson({ devices: [{ id: 'mac-1', machine_id: 'MACHINE-001', created: '2026-08-01T00:00:00Z', revoked_at: null }] });
+      }
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'enterprise', status: 'active', expiresAt: '2027-01-01' },
+        subscription: { tierKey: 'enterprise', status: 'active' },
+      });
     });
     const { container, root } = await renderAccount('en');
     try {
       assertText(container, 'Registered Terminals');
-      assertText(container, 'Unlimited terminals');
+      // Live count badge (devices.length) replaces the entitlement text.
+      assertText(container, '1 terminal');
+      assertText(container, 'MACHINE-001');
       assertText(container, 'Billing & Receipts');
       assertText(container, 'Access Billing Portal & Receipts');
 
       const mailtoInvoice = container.querySelector('a[href^="mailto:sales@ozpos.my.id"]');
       expect(mailtoInvoice).not.toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('revokes a device via POST /web/devices/{id}/revoke and marks it revoked', async () => {
+    sessionStorage.setItem('oz_session', 'tok-revoke');
+    const revokeCalls: string[] = [];
+    mockFetch((url, init) => {
+      if (url.includes('/devices') && init?.method === 'POST') {
+        revokeCalls.push(url);
+        return okJson({ status: 'revoked', revoked_at: '2026-08-29T00:00:00Z' });
+      }
+      if (url.includes('/devices')) {
+        return okJson({ devices: [{ id: 'mac-1', machine_id: 'MACHINE-001', created: '2026-08-01T00:00:00Z', revoked_at: null }] });
+      }
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // The active device shows a Revoke button.
+      const revokeBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Revoke');
+      expect(revokeBtn).not.toBeNull();
+      act(() => {
+        revokeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(revokeCalls).toHaveLength(1);
+      expect(revokeCalls[0]).toContain('/api/v1/web/devices/mac-1/revoke');
     } finally {
       act(() => root.unmount());
       container.remove();

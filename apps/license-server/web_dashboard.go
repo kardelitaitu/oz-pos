@@ -9,6 +9,7 @@ package main
 //
 //	GET  /api/v1/web/usage    — tenant usage stats (device/terminal count + limits)
 //	GET  /api/v1/web/devices  — registered devices for the tenant
+//	POST /api/v1/web/devices/{machine_id}/revoke — revoke one device (self-service)
 //	PATCH /api/v1/web/settings — update tenant preferences (region, notifications)
 
 import (
@@ -121,5 +122,52 @@ func handleWebDevices(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{"devices": devices})
+	}
+}
+
+// ── POST /api/v1/web/devices/{id}/revoke ─────────────────────────
+
+// handleWebRevokeDevice lets a tenant revoke their own device (self-service).
+// Sets the revoked_at timestamp on the tenant_machine record. The device
+// must belong to the authenticated tenant. Idempotent: already-revoked
+// devices return 200 with the existing revoked_at.
+func handleWebRevokeDevice(app core.App) func(e *core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		tenant, ok := resolveWebSession(app, e)
+		if !ok {
+			return nil
+		}
+
+		deviceID := e.Request.PathValue("id")
+		if deviceID == "" {
+			return e.JSON(http.StatusBadRequest, map[string]any{"error": "device id is required"})
+		}
+
+		// Load the machine record.
+		machine, err := app.FindRecordById("tenant_machines", deviceID)
+		if err != nil {
+			return e.JSON(http.StatusNotFound, map[string]any{"error": "device not found"})
+		}
+
+		// Ownership check — only the device's tenant can revoke it.
+		if machine.GetString("tenant_id") != tenant.Id {
+			return e.JSON(http.StatusForbidden, map[string]any{"error": "device does not belong to this account"})
+		}
+
+		// Idempotent: if already revoked, return the existing timestamp.
+		existing := machine.GetString("revoked_at")
+		if existing != "" {
+			return e.JSON(http.StatusOK, map[string]any{"status": "revoked", "revoked_at": existing})
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		machine.Set("revoked_at", now)
+		if err := app.Save(machine); err != nil {
+			log.Printf("/web/devices/%s/revoke: save failed: %v", deviceID, err)
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "revoke failed"})
+		}
+
+		log.Printf("/web/devices/%s/revoke: device %q revoked by tenant %q", deviceID, machine.GetString("machine_id"), tenant.GetString("email"))
+		return e.JSON(http.StatusOK, map[string]any{"status": "revoked", "revoked_at": now})
 	}
 }
