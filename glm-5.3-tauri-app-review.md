@@ -522,7 +522,7 @@ oz-notification design.
 
 ## S8 — Cloud, Licensing & Web
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** `apps/cloud-server/` (PG, RLS, tenant keys), `apps/license-server/` (Go —
 Paddle/Midtrans/Square/Stripe webhooks; note: webhook files currently dirty in worktree),
@@ -536,7 +536,38 @@ Paddle/Midtrans/Square/Stripe webhooks; note: webhook files currently dirty in w
 
 ### S8 Notes
 
-- (empty)
+**Checked:** license-server webhook verification + idempotency (Go), website worker
+routes/auth model, cloud-server tenant isolation + RLS, route-attribution of graph
+HTTP nodes.
+
+- **license-server (Go)**: Paddle webhook verifies `Paddle-Signature`
+  (HMAC-SHA256 over `ts:rawBody`, `PADDLE_WEBHOOK_SECRET`) + RSA-signed subscription
+  payload; Midtrans verifies `signature_key` (SHA512, `MIDTRANS_SERVER_KEY`); dedup by
+  event id with an explicit replay test (`TestMidtransWebhook_DuplicateReplay`).
+  Signature is the gate (no Origin allowlist reliance).
+- **website worker.ts**: routes = `/api/v1/*` proxy, `/__oz/session` (JWT issuance from
+  httpOnly `oz_session` cookie), logout, runtime-config, `/api/contact` (Discord webhook
+  secret server-side). Token never appears in a URL (M6). **No payment webhooks in the
+  worker** — the graph's `/api/webhooks/{stripe,square}` routes belong to oz-payment
+  drivers/oz-api, not the worker.
+- **cloud-server**: headless binary (REST + sync push/pull, one port). Tenant isolation
+  at the query layer (`AND s.tenant_id = $n` — "every one tenant-filtered"),
+  JWT-bound tenant, per-tenant rate limiting (`{tenant_id}|{endpoint}` keys), per-tenant
+  snapshot cache. `scripts/rls-cutover.sql` carries 6 RLS statements
+  (ENABLE/FORCE/POLICY) as PG defense-in-depth. AGENTS dev-PG drift procedure applies
+  after schema changes.
+
+### S8 Findings
+
+- **F-044 (INFO, S8)**: Webhook security solid (HMAC/SHA512 verification, event dedup,
+  replay tests) on both providers.
+- **F-045 (INFO, S8)**: Worker auth model clean: httpOnly cookie → JWT, no token in
+  URL, secrets server-side; worker scope correctly excludes payment webhooks.
+- **F-046 (INFO, S8)**: Tenant isolation: query-layer filters + rate limits + snapshot
+  cache keyed by tenant; RLS cutover script present as DB-level backstop.
+- **F-047 (P3, S8)**: license-server worktree carries another agent's uncommitted
+  changes — S8 reviewed the committed baseline only; the uncommitted delta is out of
+  scope for this journal.
 
 ---
 
@@ -640,6 +671,10 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 | F-041 | 2026-07-25 | S7 | INFO | `crates/oz-plugin/src/db.rs` | SQL keyword blocklist acceptable for plugin-scoped DB |
 | F-042 | 2026-07-25 | S7 | INFO | `foundation/src` | Barcode/Money validated, serde-safe |
 | F-043 | 2026-07-25 | S7 | INFO | `crates/oz-reporting`, `crates/oz-api` | Reporting boundary clean; oz-api SQL parameterized |
+| F-044 | 2026-07-25 | S8 | INFO | `apps/license-server/*webhook*.go` | Paddle HMAC+RSA, Midtrans SHA512, event dedup + replay tests |
+| F-045 | 2026-07-25 | S8 | INFO | `website/worker.ts` | httpOnly cookie → JWT, token never in URL, no payment webhooks in worker |
+| F-046 | 2026-07-25 | S8 | INFO | `apps/cloud-server`, `scripts/rls-cutover.sql` | Query-layer tenant filters + per-tenant limits; RLS backstop script |
+| F-047 | 2026-07-25 | S8 | P3 | `apps/license-server/` | Another agent's uncommitted changes present — reviewed committed baseline only |
 
 ---
 
@@ -678,4 +713,7 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 - **S7 reviewed**: Lua sandbox solid (F-039) with CPU-hook residual (F-040); plugin SQL
   gatekeeper verified (F-041); foundation/reporting/oz-api clean (F-042/F-043).
   Committed.
-- Next: S8 cloud/licensing/web.
+- **S8 reviewed**: webhook verification + replay protection solid (F-044); worker auth
+  model clean, no payment webhooks in worker (F-045); tenant isolation query-layer + RLS
+  backstop (F-046); concurrent-agent caveat recorded (F-047). Committed.
+- Next: S9 build/CI/tooling.
