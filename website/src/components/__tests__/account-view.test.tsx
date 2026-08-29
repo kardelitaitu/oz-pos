@@ -500,6 +500,329 @@ describe('AccountView — Devices & Invoices', () => {
       container.remove();
     }
   });
+
+  it('shows overflow hint when more than 5 devices exist', async () => {
+    sessionStorage.setItem('oz_session', 'tok-overflow');
+    const devices = Array.from({ length: 7 }, (_, i) => ({
+      id: `mac-${i}`,
+      machine_id: `MACHINE-${String(i).padStart(3, '0')}`,
+      created: '2026-08-01T00:00:00Z',
+      revoked_at: null,
+    }));
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Registered Terminals');
+      assertText(container, '+2 more');
+      // First 5 device IDs should be visible, the 6th and 7th should not.
+      assertText(container, 'MACHINE-000');
+      assertText(container, 'MACHINE-004');
+      assertNoText(container, 'MACHINE-005');
+      assertNoText(container, 'MACHINE-006');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows terminal slots hint when devices list is empty', async () => {
+    sessionStorage.setItem('oz_session', 'tok-empty-devices');
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Terminal Slots');
+      assertText(container, 'Activation guide');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows revoke error when API call fails', async () => {
+    sessionStorage.setItem('oz_session', 'tok-revoke-error');
+    let revokeAttempted = false;
+    const deviceId = 'mac-1';
+    mockFetch((url, init) => {
+      if (url.includes('/devices') && init?.method === 'POST') {
+        revokeAttempted = true;
+        return badRequest(500);
+      }
+      if (url.includes('/devices')) {
+        return okJson({ devices: [{ id: deviceId, machine_id: 'MACHINE-001', created: '2026-08-01T00:00:00Z', revoked_at: null }] });
+      }
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      const revokeBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Revoke');
+      expect(revokeBtn).not.toBeNull();
+      act(() => revokeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(revokeAttempted).toBe(true);
+      // The error message should appear (contains the HTTP status code).
+      assertText(container, '500');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Status pill colors ────────────────────────────────────────────────
+
+describe('AccountView — status pill colors', () => {
+  it('shows success pill for active status', async () => {
+    sessionStorage.setItem('oz_session', 'tok-pill-active');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // The license status pill shows "Active" with green classes.
+      const pills = Array.from(container.querySelectorAll('span.rounded-full'));
+      const activePill = pills.find((p) => p.textContent?.trim() === 'Active');
+      expect(activePill).not.toBeNull();
+      expect(activePill!.className).toContain('bg-success/15');
+      expect(activePill!.className).toContain('text-success');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows warning pill for grace_period status', async () => {
+    sessionStorage.setItem('oz_session', 'tok-pill-grace');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'grace_period' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'grace_period', expiresAt: '2026-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      const pills = Array.from(container.querySelectorAll('span.rounded-full'));
+      const gracePill = pills.find((p) => p.textContent?.trim() === 'In grace period');
+      expect(gracePill).not.toBeNull();
+      expect(gracePill!.className).toContain('bg-warning/15');
+      expect(gracePill!.className).toContain('text-warning');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows danger pill for expired status', async () => {
+    sessionStorage.setItem('oz_session', 'tok-pill-expired');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'expired' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'expired', expiresAt: '2025-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      const pills = Array.from(container.querySelectorAll('span.rounded-full'));
+      const expiredPill = pills.find((p) => p.textContent?.trim() === 'Expired');
+      expect(expiredPill).not.toBeNull();
+      expect(expiredPill!.className).toContain('bg-danger/15');
+      expect(expiredPill!.className).toContain('text-danger');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows danger pill for revoked status', async () => {
+    sessionStorage.setItem('oz_session', 'tok-pill-revoked');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'revoked' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'revoked', expiresAt: '2025-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      const pills = Array.from(container.querySelectorAll('span.rounded-full'));
+      const revokedPill = pills.find((p) => p.textContent?.trim() === 'Revoked');
+      expect(revokedPill).not.toBeNull();
+      expect(revokedPill!.className).toContain('bg-danger/15');
+      expect(revokedPill!.className).toContain('text-danger');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Renewal countdown badge ───────────────────────────────────────────
+
+describe('AccountView — renewal countdown', () => {
+  it('shows renews badge for active subscription with expiry', async () => {
+    sessionStorage.setItem('oz_session', 'tok-renew-badge');
+    // Set expiry to 10 days from now so the badge shows "Renews in 10 days".
+    const future = new Date(Date.now() + 10 * 86_400_000);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: future.toISOString() },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: future.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Subscription');
+      assertText(container, 'Renews in 10 days');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows renews badge with danger color when < 7 days', async () => {
+    sessionStorage.setItem('oz_session', 'tok-renew-urgent');
+    const soon = new Date(Date.now() + 3 * 86_400_000);
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: soon.toISOString() },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: soon.toISOString() },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Renews in 3 days');
+      // Find the badge span and check its class.
+      const badges = Array.from(container.querySelectorAll('span.rounded-full'));
+      const renewBadge = badges.find((b) => b.textContent?.includes('Renews in'));
+      expect(renewBadge).not.toBeNull();
+      expect(renewBadge!.className).toContain('bg-danger/15');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not show renew badge for inactive subscription', async () => {
+    sessionStorage.setItem('oz_session', 'tok-renew-inactive');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'expired', startsAt: '2025-01-01', expiresAt: '2026-01-01' },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Expired');
+      // No badge text should appear for non-active subscriptions.
+      assertNoText(container, 'Renews in');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Formatted dates ───────────────────────────────────────────────────
+
+describe('AccountView — formatted dates', () => {
+  it('formats license expiry date', async () => {
+    sessionStorage.setItem('oz_session', 'tok-date-license');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01T00:00:00Z' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // Should show "Jan 1, 2027" not raw "2027-01-01".
+      assertText(container, 'Jan 1, 2027');
+      assertNoText(container, '2027-01-01');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('formats dates in Indonesian locale', async () => {
+    sessionStorage.setItem('oz_session', 'tok-date-id');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01T00:00:00Z' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('id');
+    try {
+      // Indonesian locale: "1 Jan 2027" (dd MMM yyyy order).
+      assertText(container, '1 Jan 2027');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Copy key ──────────────────────────────────────────────────────────
+
+describe('AccountView — copy key', () => {
+  it('copies license key to clipboard and shows Copied feedback', async () => {
+    sessionStorage.setItem('oz_session', 'tok-copy');
+    stubMe();
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    const { container, root } = await renderAccount('en');
+    try {
+      const copyBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Copy key',
+      );
+      expect(copyBtn).not.toBeNull();
+      act(() => copyBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(writeText).toHaveBeenCalledWith('OZ-TEST-0001');
+      // After click, the button text should change to "Copied!".
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      assertText(container, 'Copied!');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Language locale ───────────────────────────────────────────────────
+
+describe('AccountView — Indonesian locale', () => {
+  it('renders all section labels in Indonesian', async () => {
+    sessionStorage.setItem('oz_session', 'tok-id-locale');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01T00:00:00Z' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: '2027-01-01' },
+    }));
+    const { container, root } = await renderAccount('id');
+    try {
+      assertText(container, 'Lisensi');
+      assertText(container, 'Langganan');
+      assertText(container, 'Wilayah');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 
