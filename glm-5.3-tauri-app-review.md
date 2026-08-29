@@ -466,7 +466,7 @@ compliance-police test inventory.
 
 ## S7 — Auxiliary Crates
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** `crates/oz-api`, `oz-cli`, `oz-lua` (plugin scripting — `scripts/examples/*.lua`,
 `plugins/example-discount/`), `oz-media`, `oz-notification`, `oz-reporting`, `oz-logging`,
@@ -480,7 +480,43 @@ compliance-police test inventory.
 
 ### S7 Notes
 
-- (empty)
+**Checked:** crate inventory/sizes, oz-lua sandbox config, oz-plugin SQL validation,
+foundation primitives, oz-reporting dependency boundary, oz-api SQL hygiene + purpose,
+oz-notification design.
+
+- Sizes: oz-api 14/3417, oz-cli 6/2038, oz-plugin 7/1668, oz-media 7/868,
+  oz-notification 4/773, oz-lua 3/679, oz-reporting 6/634, oz-logging 5/510,
+  foundation 14/5141 (prod files/lines).
+- **oz-lua sandbox**: mlua 0.9, native **10 MiB memory limit**, dangerous globals
+  removed (io, loadfile, dofile, require, package, debug, rawget, rawset); event bridge
+  (`oz.on/oz.off`) with per-plugin callback ownership via RegistryKeys; business hooks
+  (apply_discount, calc_line_tax, validate_order) with overflow proptests.
+- **oz-plugin**: `PluginDb` validates EVERY SQL statement to enforce the
+  `plugin_<sanitised-id>_` table prefix; PRAGMA and ATTACH blocked (keyword blocklist);
+  plugin id sanitised (hyphens→underscores); per-plugin namespacing lets plugins share
+  one DB file safely.
+- **foundation**: validated `Barcode` FromStr (+ serde path routes through validation),
+  canonical `Money`, 14 files/5141 lines. `Barcode::from_str` hotspot fan-in 478 has a
+  proper error type, no panic path found.
+- **oz-reporting**: imports only `oz_core` types + rusqlite + prometheus — dependency
+  boundary clean; no layering violation in imports.
+- **oz-api**: axum REST server (port 3099) with JWT middleware, RSA-audited SAFE, 104
+  unit tests. The 2 string-built SQL sites interpolate only a constant SELECT fragment
+  with parameterized `$1/$2` placeholders — no injection path.
+- **oz-notification**: WhatsApp Cloud API client + mock driver abstraction.
+
+### S7 Findings
+
+- **F-039 (INFO, S7)**: Lua sandbox story solid (memory limit + globals removal +
+  ownership); plugin SQL gatekeeper enforced statement-by-statement.
+- **F-040 (P3, S7)**: oz-lua has no instruction-count/CPU hook — memory is capped but a
+  Lua infinite loop can still hang the synchronous host dispatch.
+- **F-041 (INFO, S7)**: plugin SQL validation is keyword-blocklist-based; acceptable
+  for the local plugin-scoped DB, worth keeping an allowlist mindset long-term.
+- **F-042 (INFO, S7)**: foundation primitives validated (Barcode/Money error-typed,
+  serde-safe).
+- **F-043 (INFO, S7)**: oz-reporting dependency boundary clean; oz-api SQL hygiene
+  verified (2 sites benign, parameterized).
 
 ---
 
@@ -599,6 +635,11 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 | F-036 | 2026-07-25 | S6 | INFO | `ui/src/utils/logged-invoke.ts` | ERR-06 single-point normalization exemplary |
 | F-037 | 2026-07-25 | S6 | INFO | `ui/src/__tests__/*Compliance*` | ~30 compliance test files police i18n/a11y conventions |
 | F-038 | 2026-07-25 | S6 | INFO | `ui/src/contexts/AppProviders.tsx` | Documented provider order; desktop canonical |
+| F-039 | 2026-07-25 | S7 | INFO | `crates/oz-lua`, `crates/oz-plugin` | Lua sandbox + plugin SQL gatekeeper solid |
+| F-040 | 2026-07-25 | S7 | P3 | `crates/oz-lua/src/lib.rs` | No CPU/instruction hook — Lua infinite loop can hang host |
+| F-041 | 2026-07-25 | S7 | INFO | `crates/oz-plugin/src/db.rs` | SQL keyword blocklist acceptable for plugin-scoped DB |
+| F-042 | 2026-07-25 | S7 | INFO | `foundation/src` | Barcode/Money validated, serde-safe |
+| F-043 | 2026-07-25 | S7 | INFO | `crates/oz-reporting`, `crates/oz-api` | Reporting boundary clean; oz-api SQL parameterized |
 
 ---
 
@@ -634,4 +675,7 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 - **S6 reviewed**: tablet provider drift + throwing-hook hazard (F-034), tablet locale
   frozen en-US (F-035); loggedInvoke exemplary (F-036); compliance police strong
   (F-037). Committed.
-- Next: S7 auxiliary crates.
+- **S7 reviewed**: Lua sandbox solid (F-039) with CPU-hook residual (F-040); plugin SQL
+  gatekeeper verified (F-041); foundation/reporting/oz-api clean (F-042/F-043).
+  Committed.
+- Next: S8 cloud/licensing/web.
