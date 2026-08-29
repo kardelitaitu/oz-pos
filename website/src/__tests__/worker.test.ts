@@ -92,4 +92,66 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('static asset');
   });
+
+  // ── Auth gate (ADR #42) ─────────────────────────────────────────
+
+  it('redirects dashboard.ozpos.my.id to login when no cookie', async () => {
+    const req = new Request('https://dashboard.ozpos.my.id/');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/login\?redirect=/);
+  });
+
+  it('redirects admin.ozpos.my.id to login when no cookie', async () => {
+    const req = new Request('https://admin.ozpos.my.id/');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/login\?redirect=/);
+  });
+
+  it('sets cookie from ?token= param and redirects to clean URL', async () => {
+    const req = new Request('https://dashboard.ozpos.my.id/dashboard?token=my.jwt.token');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/dashboard');
+    const setCookie = res.headers.get('Set-Cookie');
+    expect(setCookie).toContain('oz_session=my.jwt.token');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('Secure');
+    expect(setCookie).toContain('Domain=.ozpos.my.id');
+  });
+
+  it('serves static assets on dashboard when cookie is present', async () => {
+    const req = new Request('https://dashboard.ozpos.my.id/', {
+      headers: { Cookie: 'oz_session=valid.jwt.token' },
+    });
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(mockEnv.ASSETS.fetch).toHaveBeenCalledWith(req);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('static asset');
+  });
+
+  it('serves static assets on admin when cookie is present', async () => {
+    const req = new Request('https://admin.ozpos.my.id/', {
+      headers: { Cookie: 'oz_session=valid.jwt.token' },
+    });
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(mockEnv.ASSETS.fetch).toHaveBeenCalledWith(req);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('static asset');
+  });
+
+  it('removes token param from URL after setting cookie', async () => {
+    const req = new Request('https://dashboard.ozpos.my.id/settings?token=abc.def&theme=dark');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(302);
+    // The remaining query params should be preserved
+    expect(res.headers.get('Location')).toBe('/settings?theme=dark');
+  });
 });

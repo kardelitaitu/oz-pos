@@ -83,6 +83,23 @@ export default function AuthForm({ locale }: Props) {
     // only for same-site paths — never a protocol-relative or external
     // URL (open-redirect guard).
     const next = new URLSearchParams(window.location.search).get('next');
+    // Honor ?redirect= (from the dashboard auth gate, ADR #42) — a full
+    // URL to a dashboard subdomain. Pass the JWT as ?token= so the Worker
+    // can set the httpOnly cookie.
+    const redirect = new URLSearchParams(window.location.search).get('redirect');
+    const token = sessionStorage.getItem('oz_session');
+    if (redirect && token) {
+      try {
+        const u = new URL(redirect);
+        if (u.hostname === 'dashboard.ozpos.my.id' || u.hostname === 'admin.ozpos.my.id') {
+          u.searchParams.set('token', token);
+          window.location.href = u.toString();
+          return;
+        }
+      } catch {
+        // Invalid URL — fall through to the next handler.
+      }
+    }
     const target = next && next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/account`;
     window.location.href = target;
   };

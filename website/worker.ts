@@ -1,5 +1,19 @@
 /**
- * Cloudflare Worker for the OZ-POS marketing site (Worker + static assets).
+ * Cloudflare Worker for the OZ-POS website — marketing site + dashboard subdomains.
+ *
+ * Hostname routing:
+ *   ozpos.my.id          → marketing site (static assets, runtime config, contact form)
+ *   dashboard.ozpos.my.id → user dashboard (auth-gated, placeholder for now)
+ *   admin.ozpos.my.id     → admin panel (auth-gated, placeholder for now)
+ *
+ * Auth gate (ADR #42):
+ *   Dashboard subdomains check for an httpOnly `oz_session` cookie. If missing:
+ *     1. User is redirected to https://ozpos.my.id/login?redirect=<original_url>
+ *     2. After login, AuthForm.tsx redirects to the dashboard subdomain with
+ *        ?token=<jwt> in the URL
+ *     3. This worker catches the ?token= param, sets the httpOnly cookie,
+ *        and redirects to the clean URL (no token in URL)
+ *     4. Subsequent requests carry the cookie
  *
  * The site used to be an assets-only Worker, which forced every backend-URL
  * change to rebuild + redeploy the whole bundle (PUBLIC_LICENSE_API_URL is
@@ -25,10 +39,74 @@ interface Env {
 }
 
 const RUNTIME_CONFIG_PATH = '/__oz/runtime-config.js';
+const COOKIE_NAME = 'oz_session';
+
+/** Dashboard subdomains that require authentication. */
+const DASHBOARD_HOSTS = new Set(['dashboard.ozpos.my.id', 'admin.ozpos.my.id']);
+
+/** Marketing site domain — no auth required. */
+const MARKETING_HOST = 'ozpos.my.id';
+
+/** Parse a named cookie value from the Cookie header. */
+function getCookie(headers: Headers, name: string): string | null {
+  const raw = headers.get('Cookie');
+  if (!raw) return null;
+  for (const pair of raw.split(';')) {
+    const [k, ...v] = pair.trim().split('=');
+    if (k === name) return v.join('=');
+  }
+  return null;
+}
+
+/** Build a Set-Cookie header string for the oz_session token. */
+function setCookieHeader(token: string, maxAge: number): string {
+  return `${COOKIE_NAME}=${token}; Domain=.ozpos.my.id; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const hostname = url.hostname;
+
+    // ── Hostname-based auth gate ──────────────────────────────────
+    if (DASHBOARD_HOSTS.has(hostname)) {
+      const sessionCookie = getCookie(request.headers, COOKIE_NAME);
+
+      // Step 1: If the request carries a ?token= query param, set the
+      // httpOnly cookie from it and redirect to the clean URL (no token).
+      const tokenParam = url.searchParams.get('token');
+      if (tokenParam) {
+        // Remove the token from the URL so it doesn't persist in history.
+        url.searchParams.delete('token');
+        const cleanUrl = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: cleanUrl,
+            'Set-Cookie': setCookieHeader(tokenParam, 30 * 24 * 3600), // 30 days
+          },
+        });
+      }
+
+      // Step 2: No session cookie — redirect to login.
+      if (!sessionCookie) {
+        const redirectTo = `${url.pathname}${url.search}`;
+        const loginUrl = `https://${MARKETING_HOST}/login?redirect=${encodeURIComponent(redirectTo)}`;
+        return new Response(null, {
+          status: 302,
+          headers: { Location: loginUrl },
+        });
+      }
+
+      // Step 3: Cookie present. For now, serve the marketing site as a
+      // placeholder. The dashboard/admin SPA will be built in Phase 2.
+      // This keeps the auth gate working while the actual dashboard
+      // content is being developed.
+      return env.ASSETS.fetch(request);
+    }
+
+    // ── Marketing site (ozpos.my.id) — no auth required ───────────
+    // Serve the runtime config, contact form API, and static assets.
 
     // Serve the runtime config. no-store: the value can change (a var edit)
     // without a new bundle, so a cached stale config would defeat the point.
