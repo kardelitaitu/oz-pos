@@ -88,6 +88,10 @@ export interface CreditSaleDto {
 export const getCreditSettings = (): Promise<CreditSettingsDto> =>
   loggedInvoke<CreditSettingsDto>('get_credit_settings');
 
+/** Get credit settings (scoped — ADR #7). */
+export const getCreditSettingsScoped = (sessionToken: string): Promise<CreditSettingsDto> =>
+  loggedInvoke<CreditSettingsDto>('get_credit_settings_scoped', { sessionToken });
+
 /** Update the credit / tab sale settings. */
 export const setCreditSettings = (args: CreditSettingsDto, userId: string): Promise<void> =>
   loggedInvoke<void>('set_credit_settings', { args, userId });

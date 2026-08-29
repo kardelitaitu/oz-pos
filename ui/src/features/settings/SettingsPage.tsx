@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } fro
 const SYNC_STATUS_POLL_MS = 30_000;
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  setReceiptSettings,
-  setStoreSettings,
+  setReceiptSettingsScoped,
+  setStoreSettingsScoped,
   setUserPreferencesScoped,
   setSettingScoped,
   type ReceiptSettingsDto,
@@ -23,8 +23,8 @@ import {
   updateSyncSettings,
   syncRun,
   syncPull,
-  getOfflineQueueStatusSummary,
-  getSyncPlan,
+  getOfflineQueueStatusSummaryScoped,
+  getSyncPlanScoped,
   testSyncConnection,
   requestSyncToken,
   type SyncSettingsDto,
@@ -478,8 +478,8 @@ function SettingsPageContent() {
     const syncedStore = { ...store, currency: defaultCurrency };
 
     const results = await Promise.allSettled([
-      setReceiptSettings(receipt, session?.user_id ?? ''),
-      setStoreSettings(syncedStore, session?.user_id ?? ''),
+      setReceiptSettingsScoped(sessionToken ?? '', receipt),
+      setStoreSettingsScoped(sessionToken ?? '', syncedStore),
       setCtxCurrency(defaultCurrency),
       // Scoped write matches the scoped read in SettingsContext: the
       // unscoped variant writes the global DB while every consumer reads
@@ -580,23 +580,23 @@ function SettingsPageContent() {
   // is active, so the Cloud Sync panel can show detailed status.
   const refreshQueueSummary = useCallback(async () => {
     try {
-      const summary = await getOfflineQueueStatusSummary();
+      const summary = await getOfflineQueueStatusSummaryScoped(sessionToken ?? '');
       setQueueSummary(summary);
     } catch {
       setQueueSummary(null);
     }
-  }, []);
+  }, [sessionToken]);
 
   // Poll the summary + plan while the Cloud Sync section is open so the
   // status panel (counts + last-synced + plan) stays live without manual
   // refreshes.
   const refreshSyncPlan = useCallback(async () => {
     try {
-      setSyncPlan(await getSyncPlan());
+      setSyncPlan(await getSyncPlanScoped(sessionToken ?? ''));
     } catch {
       setSyncPlan(null);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => {
     if (activeSection !== 'sync') {

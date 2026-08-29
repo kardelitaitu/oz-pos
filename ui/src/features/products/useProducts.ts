@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocalization } from '@fluent/react';
-import { listProducts, listCategories, type ProductDto, type CategoryDto } from '@/api/products';
+import { listProducts, listCategories, listProductsScoped, listCategoriesScoped, type ProductDto, type CategoryDto } from '@/api/products';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { isDemoMode } from '@/utils/demo-mode';
 import { type Product, type Sku } from '@/types/domain';
@@ -103,7 +103,7 @@ export interface UseProductsResult {
  * const { products, categories, loading, error, reload } = useProducts();
  * ```
  */
-export function useProducts(): UseProductsResult {
+export function useProducts(sessionToken?: string): UseProductsResult {
   const { l10n } = useLocalization();
   // Capture l10n in a ref so the effect below only runs on mount.
   // Using l10n directly as a dep would re-fetch all products on every
@@ -129,7 +129,9 @@ export function useProducts(): UseProductsResult {
 
     (async () => {
       try {
-        const [dtos, cats] = await Promise.all([listProducts(), listCategories()]);
+        const fetchProducts = sessionToken ? () => listProductsScoped(sessionToken) : listProducts;
+        const fetchCategories = sessionToken ? () => listCategoriesScoped(sessionToken) : listCategories;
+        const [dtos, cats] = await Promise.all([fetchProducts(), fetchCategories()]);
         if (cancelled) return;
         setCategoryMeta(cats);
         if (dtos.length > 0) {

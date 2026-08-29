@@ -257,6 +257,10 @@ export interface SerialTrackRow {
 export const getProductTrackSerialBatch = (skus: string[]): Promise<SerialTrackRow[]> =>
   loggedInvoke<SerialTrackRow[]>('get_product_track_serial_batch', { skus });
 
+/** ADR #7: Scoped batch serial-tracking — `userId` is read from session. */
+export const getProductTrackSerialBatchScoped = (sessionToken: string, skus: string[]): Promise<SerialTrackRow[]> =>
+  loggedInvoke<SerialTrackRow[]>('get_product_track_serial_batch_scoped', { sessionToken, skus });
+
 /** Apply a percentage-based discount to a cart. */
 export const setCartDiscount = (args: SetCartDiscountArgs): Promise<void> =>
   loggedInvoke<void>('set_cart_discount', { args });

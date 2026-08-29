@@ -122,7 +122,7 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
     if (cmd === 'check_license_status') {
       return Promise.resolve({ tier: 'pro', tenantId: 'tenant-1', status: 'active', active: true, expiresAt: null, maxStores: 5 });
     }
-    if (cmd === 'offline_queue_status_summary') {
+    if (cmd === 'offline_queue_status_summary_scoped') {
       return Promise.resolve({
         pendingCount: 0,
         syncedCount: 0,
@@ -965,7 +965,7 @@ describe('CloudSyncSettings', () => {
       await act(async () => { await Promise.resolve(); });
 
       const summaryCalls = () =>
-        invokeMock.mock.calls.filter(([cmd]) => cmd === 'offline_queue_status_summary').length;
+        invokeMock.mock.calls.filter(([cmd]) => cmd === 'offline_queue_status_summary_scoped').length;
       const callsAfterMount = summaryCalls();
       expect(callsAfterMount).toBeGreaterThanOrEqual(1);
 

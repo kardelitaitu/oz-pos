@@ -791,6 +791,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   }, [addToast, sessionToken]);
 
   const { handlePaymentComplete: customerDisplayPaymentComplete } = useCustomerDisplay({
+    sessionToken,
     lines,
     total,
   });

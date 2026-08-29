@@ -71,6 +71,8 @@ export interface ProductGridActions {
 }
 
 export interface RetailProductGridProps {
+  /** Session token for scoped API calls. */
+  sessionToken?: string;
   data: ProductGridData;
   actions: ProductGridActions;
   isScaleEnabled: boolean;
@@ -373,6 +375,7 @@ const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, ha
 
 /** Product grid — categories, search, product table with sorting, pagination, SKU input, and scale indicator. */
 export default function RetailProductGrid({
+  sessionToken,
   data,
   actions,
   isScaleEnabled,
@@ -535,6 +538,7 @@ export default function RetailProductGrid({
 
       {isScaleEnabled && (
         <ScaleIndicator
+          {...(sessionToken ? { sessionToken } : {})}
           weighTarget={weighTarget}
           onWeighAdd={actions.onWeighAdd}
           onClearWeighTarget={actions.onClearWeighTarget}
