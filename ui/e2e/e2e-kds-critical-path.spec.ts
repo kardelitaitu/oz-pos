@@ -77,10 +77,13 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     const ticketNumberText = await firstPending.locator('.order-no').textContent() || '';
     expect(ticketNumberText).toMatch(/#\d+/);
 
-    const trackedTicket = page.locator('.kds-ticket').filter({ hasText: ticketNumberText }).first();
+    // The advance button is in the card footer (.kds-status-btn),
+    // NOT the card header (which toggles collapse).
+    const advanceBtn = firstPending.locator('.kds-status-btn');
+    await expect(advanceBtn).toBeVisible({ timeout: 5_000 });
 
     // ── Advance 1: pending → preparing ─────────────────────────────
-    await firstPending.click();
+    await advanceBtn.click();
     await expect.poll(
       async () => await page.locator('.kds-column--pending').locator('.kds-ticket').filter({ hasText: ticketNumberText }).count(),
       { timeout: 8_000, message: `${ticketNumberText} should leave pending` },
@@ -88,7 +91,10 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     await expect(page.locator('.kds-column--preparing').locator('.kds-ticket').filter({ hasText: ticketNumberText })).toHaveCount(1, { timeout: 3_000 });
 
     // ── Advance 2: preparing → ready ───────────────────────────────
-    await trackedTicket.click();
+    const preparingTicket = page.locator('.kds-column--preparing .kds-ticket').filter({ hasText: ticketNumberText }).first();
+    const preparingAdvanceBtn = preparingTicket.locator('.kds-status-btn');
+    await expect(preparingAdvanceBtn).toBeVisible({ timeout: 5_000 });
+    await preparingAdvanceBtn.click();
     await expect.poll(
       async () => await page.locator('.kds-column--preparing').locator('.kds-ticket').filter({ hasText: ticketNumberText }).count(),
       { timeout: 8_000, message: `${ticketNumberText} should leave preparing` },
@@ -96,7 +102,10 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     await expect(page.locator('.kds-column--ready').locator('.kds-ticket').filter({ hasText: ticketNumberText })).toHaveCount(1, { timeout: 3_000 });
 
     // ── Advance 3: ready → served ──────────────────────────────────
-    await trackedTicket.click();
+    const readyTicket = page.locator('.kds-column--ready .kds-ticket').filter({ hasText: ticketNumberText }).first();
+    const readyAdvanceBtn = readyTicket.locator('.kds-status-btn');
+    await expect(readyAdvanceBtn).toBeVisible({ timeout: 5_000 });
+    await readyAdvanceBtn.click();
     await expect.poll(
       async () => await page.locator('.kds-column--ready').locator('.kds-ticket').filter({ hasText: ticketNumberText }).count(),
       { timeout: 8_000, message: `${ticketNumberText} should leave ready` },
