@@ -170,7 +170,7 @@ lifecycle, capabilities files.
 
 ## S2 — Data Core (oz-core)
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** `crates/oz-core/` — `db::Store` (hotspot, fan-in 1312), migrations,
 Money/i64 representation, schema.
@@ -183,7 +183,47 @@ Money/i64 representation, schema.
 
 ### S2 Notes
 
-- (empty)
+**Checked:** Money representation (canonical impl + all float usage in oz-core),
+`Store` design (db/mod.rs + domain files), transaction discipline in write paths,
+migration mechanism, unwrap/expect scan, file-size and doc-header rule compliance.
+
+- `Money` canonical in `foundation/src/money.rs`: `minor_units: i64`, checked
+  add/sub/mul/div, documented `i64::MIN` edge behavior, safe `format_minor`. `oz-core`
+  `money.rs` is a 6-line compatibility re-export.
+- Float usage in oz-core (128 matches) confined to non-monetary domains: `popularity.rs`
+  (42×, menu-engineering scores) and `table.rs` (pos_x/pos_y/width/height layout coords).
+  No currency leakage found.
+- `Store<'a>` = thin borrowed-connection wrapper (`&Connection` + optional cache +
+  terminal_id); caller owns synchronization and transaction boundaries — explains the
+  fan-in 1312 hotspot (everything touches Store; Store itself is stateless).
+- Transaction discipline verified in `db/sales.rs`: insert helpers take explicit
+  `&Transaction`; `unchecked_transaction` guards concurrent-sale integrity (ADR-19 §5.2);
+  `create_sale` (legacy global-db door for oz-cli imports) validates negative qty /
+  line_total / tax (MONEY-06/07 audit IDs) before insert. 66 `transaction()` call sites
+  across db domain files.
+- Migrations: forward-only, compile-time `ALL` array, 17 SQL files
+  (`20260813_init.sql` → `20260825_payment_infra.sql`), generic runner; test harness
+  unwraps are `// SAFETY:`-commented.
+- unwrap/expect scan: 53 occurrences in prod-side files; sampled contexts are
+  doc-comments, doctests, and SAFETY-commented test harness code — no prod-path panic
+  found in sample.
+
+### S2 Findings
+
+- **F-011 (P2, S2)**: AGENTS file-size rule (prod `.rs` < 1000 lines) violated in
+  oz-core: `sales.rs` 2261, `products.rs` 2064, `kds.rs` 1312, `sync_client.rs` 1243,
+  `features.rs` 1223, `workspaces.rs` 1106.
+- **F-012 (P2, S2)**: 11 oz-core prod files missing the mandatory `//!` module doc
+  header: `audit.rs`, `cash_payout.rs`, `config_validator.rs`, `crypto.rs`, `error.rs`,
+  `events.rs`, `lib.rs`, `payment.rs`, `rate_limiter.rs`, `session.rs`, `db/tables.rs`.
+- **F-013 (INFO, S2)**: Money invariant solid (i64 checked arithmetic, documented
+  overflow edges); floats confined to non-monetary domains.
+- **F-014 (INFO, S2)**: Transaction discipline strong: explicit tx params, ADR-19 §5.2
+  single-tx concurrency guard, MONEY-06/07 validation at the legacy import door.
+- **F-015 (INFO, S2)**: Migration system: forward-only, compile-time ordered, 17 files,
+  init matches AGENTS' PG baseline name (`20260813_init`).
+- **F-016 (P3, S2)**: `features.rs` carries an inline `mod proptests` (line 1056+) in
+  addition to its sibling tests file — mild deviation from the sibling-file test rule.
 
 ---
 
@@ -376,6 +416,12 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 | F-008 | 2026-07-25 | S1 | P2 | `ui/e2e`, `ui/src/dev-mock` | Browser-mode E2E mocks all commands; registration asymmetries invisible to CI |
 | F-009 | 2026-07-25 | S1 | INFO | `tauri.conf.json` ×2 | CSP tight; connect-src pinned; capabilities default.json (+mobile.json tablet) |
 | F-010 | 2026-07-25 | S1 | INFO | `apps/desktop-client/src/state.rs` | Orderly AppState teardown; single-connection SQLite model |
+| F-011 | 2026-07-25 | S2 | P2 | `crates/oz-core/src/{sales,products,kds,sync_client,features,workspaces}.rs` | Prod files 1106–2261 lines, over the 1000-line AGENTS limit |
+| F-012 | 2026-07-25 | S2 | P2 | 11 files in `crates/oz-core/src` | Missing `//!` module doc headers (AGENTS rule) |
+| F-013 | 2026-07-25 | S2 | INFO | `foundation/src/money.rs` | Money: i64 checked arithmetic, documented i64::MIN edges; no currency float leakage |
+| F-014 | 2026-07-25 | S2 | INFO | `crates/oz-core/src/db/sales.rs` | Explicit tx params, ADR-19 §5.2 single-tx guard, MONEY-06/07 import validation |
+| F-015 | 2026-07-25 | S2 | INFO | `crates/oz-core/migrations/` | Forward-only compile-time migrations, 17 files |
+| F-016 | 2026-07-25 | S2 | P3 | `crates/oz-core/src/features.rs:1056` | Inline `mod proptests` alongside sibling tests file |
 
 ---
 
@@ -391,4 +437,7 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
   registered; tablet 403/363), found ADR #7 half-migration with 2 P1s (desktop-silent
   failures F-004, live PO flow breakage F-005), dead IPC surface (F-006), direct-invoke
   violations (F-007), E2E blind spot (F-008). Committed.
-- Next: S2 data core (oz-core).
+- **S2 reviewed**: Money invariant solid (F-013), tx discipline verified (F-014),
+  migrations clean (F-015); P2s: 6 oversized files (F-011), 11 missing module headers
+  (F-012), inline proptests (F-016). Committed.
+- Next: S3 platform layer.
