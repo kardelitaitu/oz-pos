@@ -33,7 +33,7 @@
 | 1 | crates/oz-crypto | 339 | ✅ DONE | 1 / 2 / 3 / 1 | `082e7f0f` |
 | 2 | crates/oz-security | 2,068 | ✅ DONE | 0 / 2 / 4 / 3 | (this commit) |
 | 3 | crates/oz-payment | 6,251 | ✅ DONE | 1 / 4 / 5 / 3 | (this commit) |
-| 4 | crates/oz-core (sliced by subsystem) | 80,216 | 🟡 slice A done | 0 / 1 / 2 / 2 | (this commit) |
+| 4 | crates/oz-core (sliced by subsystem) | 80,216 | 🟡 slices A+B1–B4 done | 0 / 3 / 4 / 12 | 7284c2a0 |
 | 5 | crates/oz-api | 7,479 | ⬜ pending | — | — |
 | 6 | foundation | 6,326 | ⬜ pending | — | — |
 | 7 | platform/kernel | 3,385 | ⬜ pending | — | — |
@@ -277,9 +277,43 @@ persistence)** + `export/` (3,121) + `sync/` (279). Heavy hitters:
 
 **Slice plan:** **A** — lib/error/session/audit/events/rate_limiter/
 config_validator/payment/cash_payout/crypto + shims ✅ · **B1** — db facade,
-migrations, structural sweeps, payments ✅ · **B2** — aggregate stores deep
-read (sales/products/inventory) · **C** — sync_client/topology/features/
-settings · **D** — export/subscription/license_verification/kds + remainder.
+migrations, structural sweeps, payments ✅ · **B2** — sales/products/
+inventory ✅ · **B3** — gift_cards/loyalty ✅ · **B4** — stock_transfers ✅ ·
+**B5** — offline/kds/workspaces/reports + remaining stores · **C** —
+sync_client/topology/features/settings · **D** —
+export/subscription/license_verification/kds + remainder.
+
+### Slice A baseline evidence (2026-07-25)
+
+- `cargo check -p oz-core` — clean (re-verified post-stamp).
+- `cargo test -p oz-core` — **2,536 tests pass** (2,026 unit + 510
+  integration across 24 suites), 0 warnings.
+- `#![deny(unsafe_code)]`; source sweep confirms **zero actual unsafe** (4
+  keyword hits are all comments/stamp text).
+- `new_id()` = UUIDv7 everywhere (ADR #6); Money stays `i64` minor units via
+  `foundation::money` re-export.
+
+### Slice A findings
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-1 | 🟡 LOW | audit.rs:16, payment.rs:22, cash_payout.rs:12 | **Stale "UUID v4" field docs** — constructors correctly generate v7 per ADR #6/house rule (`new_id()`), the docs lie. | Docs-only fix: change field docs to "UUID v7". |
+| COR-2 | 🟡 LOW | rate_limiter.rs:20 | **Unbounded per-username HashMap** in the login rate limiter — spamming the login form with random usernames grows memory without cap (desktop-local blast radius). | Cap map size / evict idle usernames on prune. |
+| COR-3 | 🟠 MEDIUM | config_validator.rs:110–119, 195–205 | **Credential leakage in validator errors.** On misconfiguration, the message embeds a `DATABASE_URL` prefix (typically `postgresql://user:password@…` within 40 chars) and the **full** `REDIS_URL` (may embed `redis://user:pass@host`). These land in tracing logs — retained long-term per logging policy. | Redact userinfo before embedding: print `scheme://[redacted]@host[:port]` only. |
+| COR-4 | ℹ️ INFO | error.rs:205 | `TopologyValidation` folds into `kind() == Validation`, so the front-end `AppError.subKind` cannot single out topology failures (the structured `code` field does carry specificity). | Acceptable; revisit if UI needs a distinct kind. |
+| COR-5 | ℹ️ INFO | session.rs:52–54 | `expires_at: None` = never-expiring session, available in production — enforcement lives with the settings layer. | Verify the production default TTL during slice C (settings.rs). |
+
+**Cross-crate threads confirmed:** `Payment.idempotency_key` is captured at
+the oz-core sale level → PAY-2's drop point is confirmed to be the
+oz-payment drivers, not oz-core. `crypto.rs` shim inherits CRY-1…8 verbatim.
+
+### Slice A positives
+
+- Honest, documented re-export shims (16 files) with zero logic.
+- `error.rs` is a model typed-error surface (UI discriminator + structured
+  payloads + `#[non_exhaustive]`).
+- Rate limiter logic is correct including the `max_attempts = 0` edge and
+  poison recovery on the hot path.
 
 ### Slice B1 evidence (2026-07-25)
 
@@ -311,6 +345,13 @@ settings · **D** — export/subscription/license_verification/kds + remainder.
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
 | COR-6 | ℹ️ INFO | migrations.rs:177–183, db/profile.rs:124/134 (pattern also PAY-10) | **Recurring mislabeled `// SAFETY:` comments on safe code** (guard-backed unwraps, test-harness locks). Pollutes unsafe-code grep hygiene crate-wide. | Reword as plain comments; keep `SAFETY:` exclusively for `unsafe` blocks. |
+
+### Slice B1 positives
+
+- The transaction contract (RUST-08) is not just documented — the code
+  matches it, and the tests pin the no-nesting boundary.
+- Injection safety is systematic, not accidental (escape + bind everywhere).
+- Backup/repair path is prior-audit-hardened (RUST-02/03 notes in-line).
 
 ### Slice B2 findings — db/sales.rs deep read (2,419 lines, fully read)
 
@@ -363,44 +404,18 @@ completed-status, cap-at-total), and atomic conditional balance UPDATEs.
 in-transaction balance re-reads and an `i64::MAX` overflow guard; expiry
 parse-failure fails safe (card treated as expired).
 
-### Slice B1 positives
-
-- The transaction contract (RUST-08) is not just documented — the code
-  matches it, and the tests pin the no-nesting boundary.
-- Injection safety is systematic, not accidental (escape + bind everywhere).
-- Backup/repair path is prior-audit-hardened (RUST-02/03 notes in-line).
-
-### Slice A baseline evidence (2026-07-25)
-
-- `cargo check -p oz-core` — clean (re-verified post-stamp).
-- `cargo test -p oz-core` — **2,536 tests pass** (2,026 unit + 510
-  integration across 24 suites), 0 warnings.
-- `#![deny(unsafe_code)]`; source sweep confirms **zero actual unsafe** (4
-  keyword hits are all comments/stamp text).
-- `new_id()` = UUIDv7 everywhere (ADR #6); Money stays `i64` minor units via
-  `foundation::money` re-export.
-
-### Slice A findings
+### Slice B4 findings — db/stock_transfers.rs (779 lines), fully read
 
 | ID | Sev | Location | Finding | Proposed solution |
 |---|---|---|---|---|
-| COR-1 | 🟡 LOW | audit.rs:16, payment.rs:22, cash_payout.rs:12 | **Stale "UUID v4" field docs** — constructors correctly generate v7 per ADR #6/house rule (`new_id()`), the docs lie. | Docs-only fix: change field docs to "UUID v7". |
-| COR-2 | 🟡 LOW | rate_limiter.rs:20 | **Unbounded per-username HashMap** in the login rate limiter — spamming the login form with random usernames grows memory without cap (desktop-local blast radius). | Cap map size / evict idle usernames on prune. |
-| COR-3 | 🟠 MEDIUM | config_validator.rs:110–119, 195–205 | **Credential leakage in validator errors.** On misconfiguration, the message embeds a `DATABASE_URL` prefix (typically `postgresql://user:password@…` within 40 chars) and the **full** `REDIS_URL` (may embed `redis://user:pass@host`). These land in tracing logs — retained long-term per logging policy. | Redact userinfo before embedding: print `scheme://[redacted]@host[:port]` only. |
-| COR-4 | ℹ️ INFO | error.rs:205 | `TopologyValidation` folds into `kind() == Validation`, so the front-end `AppError.subKind` cannot single out topology failures (the structured `code` field does carry specificity). | Acceptable; revisit if UI needs a distinct kind. |
-| COR-5 | ℹ️ INFO | session.rs:52–54 | `expires_at: None` = never-expiring session, available in production — enforcement lives with the settings layer. | Verify the production default TTL during slice C (settings.rs). |
+| COR-19 | 🟠 MEDIUM | db/stock_transfers.rs:458–484, 591–610, 723–744 (also db/stock_counts.rs, `get_stock` in db/products.rs) | **Dual-ledger divergence: transfers bypass the canonical stock ledger.** Sales pre-check and deduct `stock_summary` (per-location, ADR-18/19 canonical — verified `adjust_stock_batch` reads `stock_summary WHERE item_id/location_id`), but `send_transfer`/`receive_transfer`/`cancel_transfer` read/write the **legacy `inventory` table** (single PK on `product_id` — its bolted-on `location_id` column has a DEFAULT and cannot represent per-location state). No schema trigger bridges the two (init.sql triggers are audit-immutability + tier validation only). A transfer therefore never appears in sale-time availability or the retail grid (`ProductWithDetails.stock_qty` prefers `SUM(stock_summary)` per ADR-36), and the two totals drift apart. This is the §3.4 foot-gun the codebase self-documents for a *deprecated wrapper* — here it applies to **live production flows**. | Complete ADR-19 §3.4: route transfers (and stock counts) through `stock_summary` rows at the source/destination locations; interim alternative: maintain both tables inside the same transaction. |
 
-**Cross-crate threads confirmed:** `Payment.idempotency_key` is captured at
-the oz-core sale level → PAY-2's drop point is confirmed to be the
-oz-payment drivers, not oz-core. `crypto.rs` shim inherits CRY-1…8 verbatim.
-
-### Slice A positives
-
-- Honest, documented re-export shims (16 files) with zero logic.
-- `error.rs` is a model typed-error surface (UI discriminator + structured
-  payloads + `#[non_exhaustive]`).
-- Rate limiter logic is correct including the `max_attempts = 0` edge and
-  poison recovery on the hot path.
+**Slice B4 positives:** the transfer state machine is the strongest
+lifecycle code in the crate — claim-first conditional status UPDATEs in the
+same transaction as the stock writes, in-transaction status reads
+(documented as fixing a prior cancel/send race), receive quantities
+validated non-negative/ordered-cap/monotonic with delta-only crediting, and
+`checked_add`/`checked_sub` on every inventory mutation.
 
 ---
 
