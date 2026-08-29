@@ -2,7 +2,7 @@
 
 - **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 0d of 11 (Workspace Settings Architecture — ADR #22)
-- **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
+- **Parent:** `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** PREREQUISITE (blocks Phase 2)
 - **Owner:** TBD
 - **Est. effort:** 3-5 days (largest single refactor in the ADR)
@@ -105,7 +105,7 @@ WHERE key = ? AND terminal_id = ?
 
 ## References
 
-- `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar D, §Edge Case #8, §Phase 0d
+- `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar D, §Edge Case #8, §Phase 0d
 - `platform/core/src/settings.rs`
 - `crates/oz-core/migrations/` (existing migration pattern)
 

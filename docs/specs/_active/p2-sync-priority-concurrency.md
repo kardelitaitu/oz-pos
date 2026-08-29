@@ -76,7 +76,7 @@ Ensure critical sale records propagate before inventory syncs by introducing pri
 - `docs/decisions/2026-07-13-sync-performance-compression-batching.md` (Strategy overview — priority tiers and concurrency limits)
 - `docs/specs/_active/p1-sync-batching-compression-retention.md`
 - `crates/oz-core/src/offline.rs`
-- `crates/oz-core/migrations/018_offline_queue.sql`
+- `crates/oz-core/migrations/20260813_init.sql`
 - `platform/startup/src/event_handlers.rs`
 - `apps/cloud-server/src/main.rs`
 - `apps/cloud-server/src/sync_api.rs`

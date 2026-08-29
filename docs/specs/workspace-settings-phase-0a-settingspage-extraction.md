@@ -2,7 +2,7 @@
 
 - **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 0a of 11 (Workspace Settings Architecture — ADR #22)
-- **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
+- **Parent:** `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** PREREQUISITE (blocks Phase 3)
 - **Owner:** TBD
 - **Est. effort:** 1-2 days
@@ -127,7 +127,7 @@ interface SectionProps {
 
 ## References
 
-- `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar A, §Phase 0a
+- `docs/specs/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar A, §Phase 0a
 - `ui/src/features/settings/SettingsPage.tsx`
 
 > Last audited: 2026-08-08 by docs-auditor (status corrected to IMPLEMENTED).
