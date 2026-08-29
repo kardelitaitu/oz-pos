@@ -348,7 +348,8 @@
     "billingInvoices": "Billing & Receipts",
     "billingInvoicesHint": "View transaction receipts and tax invoice history for your account.",
     "viewReceipts": "Access Billing Portal & Receipts",
-    "invoiceNote": "Need a formal corporate tax invoice? Contact sales@ozpos.my.id with your company NPWP/VAT details."
+    "invoiceNote": "Need a formal corporate tax invoice? Contact sales@ozpos.my.id with your company NPWP/VAT details.",
+    "invoiceSubject": "Invoice Request - {email}"
   },
   "footer": {
     "rights": "All rights reserved.",

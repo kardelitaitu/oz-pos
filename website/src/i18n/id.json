@@ -348,7 +348,8 @@
     "billingInvoices": "Tagihan & Kuitansi",
     "billingInvoicesHint": "Lihat kuitansi transaksi dan riwayat faktur pajak untuk akun Anda.",
     "viewReceipts": "Akses Portal Tagihan & Kuitansi",
-    "invoiceNote": "Butuh faktur pajak perusahaan resmi? Hubungi sales@ozpos.my.id dengan detail NPWP perusahaan Anda."
+    "invoiceNote": "Butuh faktur pajak perusahaan resmi? Hubungi sales@ozpos.my.id dengan detail NPWP perusahaan Anda.",
+    "invoiceSubject": "Permintaan Faktur - {email}"
   },
   "footer": {
     "rights": "Hak cipta dilindungi.",
