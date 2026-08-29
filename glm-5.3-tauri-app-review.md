@@ -294,7 +294,7 @@ startup event_handlers; platform file sizes.
 
 ## S4 — Business Modules (modules/*)
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** 14 modules under `modules/`, each with `manifest.json`, `models.rs`,
 `repository.rs`, `service.rs`, `error.rs`, sibling `*_tests.rs`.
@@ -308,7 +308,42 @@ startup event_handlers; platform file sizes.
 
 ### S4 Notes
 
-- (empty)
+**Checked:** structural uniformity across all 14 modules (manifest/README/Cargo/file
+layout), kernel manifest validation, sibling-test presence, tx discipline in module
+repositories, pricing/checkout interplay (sales + tax + promotions).
+
+- All 14 modules carry `manifest.json` + `README.md` + `Cargo.toml`; typical layout
+  `error/models/repository/service(+commands)`. Sizes small-to-moderate (largest:
+  `currency/repository.rs` 996).
+- `platform/kernel/tests/module_manifests.rs` validates every `modules/*/manifest.json`
+  against the schema (kebab-case id, semver, `dependencies` ↔ `Module::dependencies()`
+  parity) — complementary per-module unit tests exist.
+- **The module layer is mid-migration**: `modules/promotions/src/lib.rs` is a declared
+  stub ("No-op Module implementation. No DB access yet. next: Migrate the promotion rule
+  engine and cart-time evaluation into this module") — promotion engine still lives in
+  oz-core + desktop commands. `modules/tax` service is a 27-line rate lookup. Several
+  modules are thin wrappers over oz-core `db::Store` domains.
+- Checkout rigor re-verified in `oz-core/db/sales.rs::complete_sale`: payment split
+  validation (`validate_payment_splits_cover_total`) strictly before writes, stock
+  deduction batch in-tx, versioned `deduction_locations` JSON; tax-inclusive pricing
+  double-charge guard documented (sales.rs:28); tips/service charges as dedicated i64
+  columns.
+- Only `modules/tax` has a boundary contract test (`tests/boundary_contract.rs`).
+
+### S4 Findings
+
+- **F-022 (P2, S4)**: `modules/currency`: 996-line repository with 16
+  INSERT/UPDATE/DELETE statements and **zero transactions** and **zero tests** —
+  violates both the tx rule and the sibling-test rule; exchange rates are
+  money-adjacent (they feed i64 conversions).
+- **F-023 (P2, S4)**: `modules/sales`: 5 prod files, no sibling tests (AGENTS rule).
+  Mitigated by heavily-tested `oz-core/db/sales.rs` beneath it.
+- **F-024 (INFO, S4)**: Module layer mid-migration to growable-workspace plan;
+  promotions stub declared, tax thin — gaps are known and banner-commented.
+- **F-025 (INFO, S4)**: Manifest governance solid: kernel integration test covers all
+  14 manifests (schema + dependency parity).
+- **F-026 (P3, S4)**: Boundary contract tests exist only for tax; pattern not yet
+  replicated to sibling modules.
 
 ---
 
@@ -471,6 +506,11 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 | F-019 | 2026-07-25 | S3 | INFO | `platform/core/src/permission_registry.rs` | Strong sensitivity model (ADR #35 D3); adoption inconsistent |
 | F-020 | 2026-07-25 | S3 | INFO | `platform/kernel/src/event_bus.rs` | Sound synchronous topic bus (ADR #2); fresh_db hotspot is test-only |
 | F-021 | 2026-07-25 | S3 | INFO | `platform/sync/src/conflict.rs` | ADR-21 entity-dispatched conflict strategies |
+| F-022 | 2026-07-25 | S4 | P2 | `modules/currency/src/repository.rs` | 16 writes, 0 transactions, 0 tests in 996-line repo |
+| F-023 | 2026-07-25 | S4 | P2 | `modules/sales/` | No sibling tests in the sales module itself |
+| F-024 | 2026-07-25 | S4 | INFO | `modules/promotions/src/lib.rs` | Declared stub — promotion engine still in oz-core; module layer mid-migration |
+| F-025 | 2026-07-25 | S4 | INFO | `platform/kernel/tests/module_manifests.rs` | All 14 manifests schema+dependency validated |
+| F-026 | 2026-07-25 | S4 | P3 | `modules/tax/tests/` | Boundary contract test pattern not replicated to other modules |
 
 ---
 
@@ -493,4 +533,8 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
   systemic RBAC gap (169 unguarded cmds incl. encryption-key rotation, gift-card
   mutations, exports — F-017); registry design strong (F-019); event bus + sync
   conflict documented (F-020/F-021); 8 oversized platform files (F-018). Committed.
-- Next: S4 business modules.
+- **S4 reviewed**: module uniformity + manifest governance solid (F-025); module layer
+  mid-migration, promotions is a declared stub (F-024); P2s: currency repo
+  no-tx/no-tests (F-022), sales module untested (F-023); boundary-test pattern only in
+  tax (F-026). Committed.
+- Next: S5 payments/hardware/security crates.
