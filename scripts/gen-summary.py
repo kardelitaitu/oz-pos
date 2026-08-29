@@ -41,9 +41,19 @@ def chapter(name: str, title: str, folder: str) -> str:
 
 
 def guides() -> list[str]:
-    """Every markdown file at the docs/ root, sorted by title."""
-    entries = sorted(DOCS.glob("*.md"), key=lambda p: prettify(p.stem).lower())
-    return [chapter(p.name, prettify(p.stem), "guides") for p in entries]
+    """Every markdown file at the docs/ root + docs/archived/, sorted by title."""
+    entries = sorted(
+        list(DOCS.glob("*.md")) + list((DOCS / "archived").glob("*.md")),
+        key=lambda p: prettify(p.stem).lower(),
+    )
+    seen = set()
+    result: list[str] = []
+    for p in entries:
+        if p.name in seen:
+            continue
+        seen.add(p.name)
+        result.append(chapter(p.name, prettify(p.stem), "guides"))
+    return result
 
 
 def decisions() -> list[str]:

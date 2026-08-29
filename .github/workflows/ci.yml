@@ -539,18 +539,17 @@ jobs:
             exit 1
           fi
           echo "Binary size check passed"
-      # DOCKER-03/08: `ignorefile` is NOT a valid trivy-action@v0.42.0
-      # input — it was silently dropped, so the documented .trivyignore
-      # baseline was never applied and the 15 accepted Debian CVEs failed
-      # the gate. The supported input is `trivyignores`. The action ALSO
-      # unsets TRIVY_SEVERITY in SARIF mode unless `limit-severities-for-
-      # sarif: true`, so the "blocking CRITICAL/HIGH" gate was actually
-      # scanning ALL severities (76 LOW + 62 MEDIUM on cloud). Both are
-      # fixed below. continue-on-error guarantees BOTH SARIF files are
-      # emitted even when findings exist; the explicit gate step after the
-      # uploads fails the job, so diagnostics always reach the log first.
+      # DOCKER-03/08: `ignorefile` is NOT a valid trivy-action input —
+      # it is silently dropped. Use `trivyignores` instead. The action
+      # also unsets TRIVY_SEVERITY in SARIF mode unless
+      # `limit-severities-for-sarif: true`, so the "blocking CRITICAL/HIGH"
+      # gate was actually scanning ALL severities (76 LOW + 62 MEDIUM on
+      # cloud). Both are fixed below. continue-on-error guarantees BOTH
+      # SARIF files are emitted even when findings exist; the explicit
+      # gate step after the uploads fails the job, so diagnostics always
+      # reach the log first.
       - name: Trivy vulnerability scan (cloud, blocking)
-        uses: aquasecurity/trivy-action@v0.42.0
+        uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
           image-ref: oz-pos-cloud:ci
@@ -561,7 +560,7 @@ jobs:
           trivyignores: .trivyignore
           output: trivy-cloud.sarif
       - name: Trivy vulnerability scan (license, blocking)
-        uses: aquasecurity/trivy-action@v0.42.0
+        uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
           image-ref: oz-pos-license:ci

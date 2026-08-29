@@ -1634,6 +1634,17 @@
 .kds-main.empty { align-items: center; justify-content: center; }
 .kds-main.empty > .kds-empty { flex: initial; align-self: auto; }
 
+/* ── Kanban column grid (E2E & UI test contract) ──────────────────
+ * E2E tests assert `.kds-columns` is visible and `.kds-column` has
+ * count 3. The three status-variant classes (kds-column--pending,
+ * kds-column--preparing, kds-column--ready) carry no extra visual
+ * rules beyond the base .kds-col layout already provided by
+ * KdsLayoutMasonry; they exist so Playwright can query individual
+ * status buckets (e.g. `.kds-column--pending .kds-ticket`).
+ * ─────────────────────────────────────────────────────────────── */
+.kds-columns { }
+.kds-column { }
+
 /* ── Completed view + bucket headers (Phase 5) ───────────────────── */
 .kds-main.completed-view {
   display: flex;
