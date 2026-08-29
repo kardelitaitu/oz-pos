@@ -1136,6 +1136,71 @@ describe('AccountView — status pill colors', () => {
   });
 });
 
+// ── Status label — edge cases ─────────────────────────────────────────
+
+describe('AccountView — status label edge cases', () => {
+  it('shows the localized label for unused status', async () => {
+    // statusLabel('unused') was untested — the server can report a license
+    // key as 'unused' (minted by the webhook, not yet activated). The
+    // dashboard must show the localized label, not the raw value.
+    sessionStorage.setItem('oz_session', 'tok-label-unused');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'unused', expiresAt: '2027-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // 'Not activated' is the statusLabel return for 'unused' status.
+      assertText(container, 'Not activated');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows the raw value for an unknown status (fallback path)', async () => {
+    // statusLabel's default case returns the raw status value — the
+    // dashboard must not crash when the server sends a new/unexpected
+    // status string.
+    sessionStorage.setItem('oz_session', 'tok-label-unknown');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'suspended' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'suspended', expiresAt: '2027-01-01' },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'suspended');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+// ── Formatted dates — edge cases ──────────────────────────────────────
+
+describe('AccountView — formatted dates edge cases', () => {
+  it('shows an em-dash when the license has no expiry date', async () => {
+    // fmtDate(undefined) returns '—' — the license section must not crash
+    // or show a raw JavaScript value when expiresAt is absent.
+    sessionStorage.setItem('oz_session', 'tok-date-missing');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: undefined },
+      subscription: null,
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, '—');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
 // ── Renewal countdown badge ───────────────────────────────────────────
 
 describe('AccountView — renewal countdown', () => {
