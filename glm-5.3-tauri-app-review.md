@@ -406,7 +406,7 @@ management, oz-hal mocks, secrets hygiene scan, audit-banner cross-verification.
 
 ## S6 — Front-end UI (ui/)
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** `ui/src/features/**` (33 feature dirs), `components/`, `contexts/`, `hooks/`,
 `i18n/` + `locales/` (FTL bundles), `utils/` (chart-policy, list-policy, currency),
@@ -421,7 +421,46 @@ management, oz-hal mocks, secrets hygiene scan, audit-banner cross-verification.
 
 ### S6 Notes
 
-- (empty)
+**Checked:** entry-point/provider topology (desktop vs tablet), context defaults and
+hook guards, locale handling per shell, FTL bundle layout, loggedInvoke boundary,
+compliance-police test inventory.
+
+- Desktop `main.tsx` renders `<App/>` (canonical stack via `AppProviders`, order
+  documented "optimal dependency order": Locale → Brand → Theme → Currency → Auth →
+  Toast → Workspace → Subscription → Zoom → HardwareAccel).
+- Tablet `main.tablet.tsx` **hand-rolls its own provider stack** and omits
+  Subscription/Zoom/HardwareAccel; comment references TAB-04 boot blocker — this drift
+  class has bitten before.
+- Context defaults: `SubscriptionContext` has a full default object (safe, degraded);
+  `ZoomContext` + `HardwareAccelContext` default to `undefined`, and `useHardwareAccel`
+  **throws** outside its provider. `useHardwareAccel` consumer: AppearanceSettings.
+  Zoom has no consumers today.
+- Tablet locale: `createEnUsLocalization()` frozen at entry; no LocaleContext reference
+  found in TabletAppShell — Indonesian bundles (`.id.ftl` per domain) exist and the
+  product targets Indonesia (QRIS/Midtrans).
+- FTL: per-domain en/id pairs under `locales/` (analytics, bundles, currency,
+  customers, gift-cards, …) — bundle-parity gate applies.
+- `loggedInvoke` (ERR-06): single-point normalization, typed parse, retry
+  classification, correlation id, redacted diagnostics, PERF-06 aggregate-only IPC
+  timing; original error rethrown unchanged. Clean choke point.
+- Compliance police: ~30 dedicated test files (colorContrast, keyboardNavigation,
+  touchTargetSizing, reducedMotion, forcedColors, focusVisible, themeTokenCompliance,
+  a11yTransitions, …) + CI i18n gates — conventions are actively enforced by tests.
+
+### S6 Findings
+
+- **F-034 (P2, S6)**: Tablet/desktop provider drift: tablet entry omits
+  Subscription/Zoom/HardwareAccel providers; `useHardwareAccel` throws outside provider
+  (consumer: AppearanceSettings — crash if rendered on tablet, subject to tablet
+  settings registry); Subscription degrades silently to default caps. TAB-04 proves the
+  drift class recurs — recommend a single shared provider composition.
+- **F-035 (P2, S6)**: Tablet locale frozen to en-US at entry; Indonesian bundles unused
+  on the tablet path (verify no later re-provision in TabletAppLayout).
+- **F-036 (INFO, S6)**: loggedInvoke design (ERR-06/PERF-06) is exemplary — the S1
+  finding (F-007 bypasses) stands out against it.
+- **F-037 (INFO, S6)**: i18n/a11y compliance actively policed by ~30 dedicated test
+  files plus CI gates — convention risk on these axes is low.
+- **F-038 (INFO, S6)**: AppProviders composition documented; desktop is canonical.
 
 ---
 
@@ -555,6 +594,11 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 | F-031 | 2026-07-25 | S5 | P2 | `crates/oz-payment/src/drivers/qris.rs` | PAY-3/6/7/8: partial refund, QR-issued semantics, empty-key Default, expire mapping |
 | F-032 | 2026-07-25 | S5 | INFO | `crates/oz-hal` | HAL mock coverage complete; secrets scan clean |
 | F-033 | 2026-07-25 | S5 | INFO | crates/* (banners) | RSA-Agent audit banners verified accurate — keep updating |
+| F-034 | 2026-07-25 | S6 | P2 | `ui/src/main.tablet.tsx` | Tablet omits Subscription/Zoom/HardwareAccel providers; throwing hook hazard |
+| F-035 | 2026-07-25 | S6 | P2 | `ui/src/main.tablet.tsx` | Tablet locale frozen en-US; id bundles unused on tablet path |
+| F-036 | 2026-07-25 | S6 | INFO | `ui/src/utils/logged-invoke.ts` | ERR-06 single-point normalization exemplary |
+| F-037 | 2026-07-25 | S6 | INFO | `ui/src/__tests__/*Compliance*` | ~30 compliance test files police i18n/a11y conventions |
+| F-038 | 2026-07-25 | S6 | INFO | `ui/src/contexts/AppProviders.tsx` | Documented provider order; desktop canonical |
 
 ---
 
@@ -587,4 +631,7 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 - **S5 reviewed**: discovered + verified RSA-Agent audit banners; confirmed PAY-1
   money-zeroing (F-027) and PAY-2 idempotency (F-028) live in code; crypto/security
   P2s recorded (F-029..F-031); HAL mocks complete (F-032). Committed.
-- Next: S6 front-end UI.
+- **S6 reviewed**: tablet provider drift + throwing-hook hazard (F-034), tablet locale
+  frozen en-US (F-035); loggedInvoke exemplary (F-036); compliance police strong
+  (F-037). Committed.
+- Next: S7 auxiliary crates.
