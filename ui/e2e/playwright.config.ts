@@ -36,8 +36,9 @@ export default defineConfig({
   // Run all tests in parallel (up to 4 workers).
   workers: process.env['CI'] ? 2 : 4,
 
-  // Each test gets 30 seconds to finish.
-  timeout: 30_000,
+  // Each test gets 30 seconds to finish locally, 45 seconds on CI
+  // where Docker + Vite + Playwright compete for CPU on shared runners.
+  timeout: process.env['CI'] ? 45_000 : 30_000,
 
   // Reporters: list output in terminal, produce JSON + HTML on CI.
   reporter: process.env['CI']

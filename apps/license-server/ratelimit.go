@@ -664,6 +664,7 @@ func init() {
 	// accumulate in memory.
 	go webSweepLoop()
 	go windowSweepLoop()
+	go exchangeSweepLoop()
 }
 
 // ── Tenant-level activation lock (Fix #3: renewal TOCTOU) ─────────

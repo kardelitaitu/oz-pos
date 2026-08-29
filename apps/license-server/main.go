@@ -269,6 +269,10 @@ func main() {
 		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		// One-time session exchange (hardening F1) — lets the login flow hand
+		// a session to the Worker without the token ever appearing in a URL.
+		se.Router.POST("/api/v1/web/exchange-issue", handleExchangeIssue(app))
+		se.Router.POST("/api/v1/web/exchange-consume", handleExchangeConsume(app))
 		// User dashboard (ADR #42 Phase 2) — session-authed read endpoints.
 		se.Router.GET("/api/v1/web/usage", handleWebUsage(app))
 		se.Router.GET("/api/v1/web/devices", handleWebDevices(app))

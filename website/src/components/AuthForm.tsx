@@ -78,26 +78,41 @@ export default function AuthForm({ locale }: Props) {
     return <p className="rounded-md border border-ink/10 p-4 text-sm text-muted">{t(locale, 'login.notConfigured')}</p>;
   }
 
-  const redirectAfterAuth = () => {
+  const redirectAfterAuth = async () => {
     // Honor ?next= (e.g. back to pricing after the sign-in gate) but
     // only for same-site paths — never a protocol-relative or external
     // URL (open-redirect guard).
     const next = new URLSearchParams(window.location.search).get('next');
     // Honor ?redirect= (from the dashboard auth gate, ADR #42) — a full
-    // URL to a dashboard subdomain. Pass the JWT as ?token= so the Worker
-    // can set the httpOnly cookie.
+    // URL to a dashboard subdomain. Exchange the JWT for a short-lived
+    // one-time code (hardening F1) so the real session token never appears
+    // in a URL; the Worker consumes the code and sets the httpOnly cookie.
     const redirect = new URLSearchParams(window.location.search).get('redirect');
     const token = sessionStorage.getItem('oz_session');
     if (redirect && token) {
       try {
         const u = new URL(redirect);
         if (u.hostname === 'dashboard.ozpos.my.id' || u.hostname === 'admin.ozpos.my.id') {
+          const res = await fetch(`${API}/api/v1/web/exchange-issue`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const body = await res.json() as { code?: string };
+            if (body.code) {
+              u.searchParams.set('code', body.code);
+              window.location.href = u.toString();
+              return;
+            }
+          }
+          // Exchange failed — fall back to the direct ?token= path (the
+          // Worker still accepts it while the rollout completes).
           u.searchParams.set('token', token);
           window.location.href = u.toString();
           return;
         }
       } catch {
-        // Invalid URL — fall through to the next handler.
+        // Invalid URL or network error — fall through to the next handler.
       }
     }
     const target = next && next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/account`;

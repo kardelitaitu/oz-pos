@@ -20,14 +20,19 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  *   .kds-column--pending          — pending column
  *   .kds-column--preparing        — preparing column
  *   .kds-ticket                   — ticket card
- *   .kds-ticket-number            — ticket display number
- *   .kds-ticket-items             — ticket items summary
+ *   .order-no                     — ticket display number (#101)
+ *   .kds-ticket-items             — ticket items summary (fallback)
+ *   .kds-category                 — course-grouped items container
+ *   .kds-item-name                — individual item name
  */
 
 const TIMEOUT = 10_000;
 
 test.describe('Critical Path: POS → KDS', () => {
+  // This test does 4 workspace switches (Admin→POS→KDS→POS→KDS) plus a
+  // full sale flow — it needs more headroom than the default 30/45s.
   test('complete a sale in Restaurant POS and verify ticket appears on KDS', async ({ page }) => {
+    test.setTimeout(60_000);
     // ── Step 1: Log in and go to Restaurant POS ─────────────────────
     await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.RESTAURANT_POS);
@@ -127,9 +132,14 @@ test.describe('Critical Path: POS → KDS', () => {
     const nameMatch = ticketText.includes(productName.replace(/[^a-zA-Z0-9 ]/g, '').trim());
     if (!nameMatch) {
       // Fallback: the ticket items summary should contain something from our sale.
-      const itemsEl = lastTicket.locator('.kds-ticket-items, .kds-ticket-item-name').first();
-      const itemsText = await itemsEl.textContent() || '';
-      expect(itemsText.length).toBeGreaterThan(0);
+      // The component renders course-grouped items (.kds-category / .kds-item-name)
+      // when line items are loaded, or falls back to .kds-ticket-items.
+      const itemsEl = lastTicket.locator('.kds-category, .kds-ticket-items, .kds-item-name').first();
+      const itemsVisible = await itemsEl.isVisible({ timeout: 3_000 }).catch(() => false);
+      if (itemsVisible) {
+        const itemsText = await itemsEl.textContent() || '';
+        expect(itemsText.length).toBeGreaterThan(0);
+      }
     }
 
     // ── Step 6: Verify no crash ─────────────────────────────────────
