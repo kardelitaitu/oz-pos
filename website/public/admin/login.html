@@ -12,28 +12,42 @@
     <h1>Admin Sign in</h1>
     <p class="sub">Sign in to manage tenants, licenses, and system settings</p>
 
+    <!-- Clear Segmented Mode Tabs -->
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab active" id="tab-otp" role="tab" aria-selected="true" onclick="setAuthMode('otp')">Email Code</button>
+      <button type="button" class="auth-tab" id="tab-password" role="tab" aria-selected="false" onclick="setAuthMode('password')">Password</button>
+    </div>
+
     <div id="login-form">
-      <label for="email">Email</label>
-      <input id="email" type="email" placeholder="admin@example.com" autocomplete="email" />
+      <form id="auth-form" onsubmit="handleFormSubmit(event)">
+        <label for="email">Admin Email</label>
+        <input id="email" type="email" placeholder="admin@example.com" autocomplete="email" required />
 
-      <label for="password">Password</label>
-      <input id="password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password" />
+        <!-- Password Mode Input -->
+        <div id="password-group" class="hidden">
+          <label for="password">Password</label>
+          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
 
-      <div class="otp-row hidden" id="otp-row">
-        <input id="otp-code" type="text" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code" />
-      </div>
+        <!-- Email Code (OTP) Input -->
+        <div id="otp-group" class="hidden">
+          <label for="otp-code">6-Digit Verification Code</label>
+          <div class="otp-row">
+            <input id="otp-code" type="text" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="123456" autocomplete="one-time-code" />
+          </div>
+        </div>
 
-      <div id="error-msg" class="error hidden"></div>
+        <div id="success-msg" class="success hidden"></div>
+        <div id="error-msg" class="error hidden"></div>
 
-      <button class="btn" id="login-btn">Sign in</button>
+        <button type="submit" class="btn" id="login-btn">Send Verification Code</button>
+      </form>
 
-      <p id="otp-toggle" class="note clickable">Send a code to my email instead</p>
-
-      <p id="otp-cooldown" class="hidden"></p>
+      <p id="otp-cooldown" class="note hidden"></p>
     </div>
 
     <div id="loading-state" class="hidden">
-      <p class="loading-text">Signing in…</p>
+      <p class="loading-text">Communicating with server…</p>
     </div>
   </div>
   <script src="/admin/login.js"></script>

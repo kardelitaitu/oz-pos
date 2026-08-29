@@ -73,7 +73,7 @@ function setCookieHeader(token: string, maxAge: number): string {
 function withStrictCSP(resp: Response): Response {
   const strictCSP = [
     "default-src 'none'",
-    "script-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
@@ -102,6 +102,22 @@ export default {
 
     // ── Hostname-based auth gate ──────────────────────────────────
     if (DASHBOARD_HOSTS.has(hostname)) {
+      // ── API Proxy to license server (resolves CORS and in-handler Origin checks) ──
+      if (url.pathname.startsWith('/api/v1/')) {
+        const targetUrl = (env.LICENSE_API_URL ?? 'https://license.ozpos.my.id') + url.pathname + url.search;
+        const reqHeaders = new Headers(request.headers);
+        reqHeaders.set('Origin', 'https://ozpos.my.id');
+        const res = await fetch(targetUrl, {
+          method: request.method,
+          headers: reqHeaders,
+          body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+          redirect: 'follow',
+        });
+        const respHeaders = new Headers(res.headers);
+        respHeaders.set('Access-Control-Allow-Origin', '*');
+        return new Response(res.body, { status: res.status, headers: respHeaders });
+      }
+
       const sessionCookie = getCookie(request.headers, COOKIE_NAME);
 
       // Step 1: One-time exchange code (hardening F1). The login page
