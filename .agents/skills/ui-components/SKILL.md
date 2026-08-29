@@ -62,7 +62,7 @@ sale-pay-button-aria = Charge the customer for the current cart
 - The fallback text inside `<Localized>` is **only** used by English developers in dev. The runtime always reads from the active locale.
 - Never `concat` translated strings. Use Fluent's `{ $count ->` plural variants and `{ $name }` substitutions.
 - For one-off strings in non-component code (e.g., a notification), call `useLocalization()` and use `l10n.getString('id')`.
-- Adding a new locale? Create the matching `.<code>.ftl` for each bundle, and register the locale in `src/i18n/` and `src/main.tsx`.
+- Adding a new locale? Create the matching `.<code>.ftl` for each bundle, and register the locale in `ui/src/i18n/` and `ui/src/main.tsx`.
 
 ---
 
