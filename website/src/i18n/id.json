@@ -329,6 +329,8 @@
     "statusGracePeriod": "Dalam masa tenggang",
     "statusExpired": "Kedaluwarsa",
     "statusRevoked": "Dicabut",
+    "statusPaused": "Ditangguhkan",
+    "statusPaused": "Ditangguhkan",
     "renewHint": "Langganan Anda tidak lagi aktif.",
     "renewLink": "Perpanjang di halaman harga",
     "renewsInDays": "Perpanjang dalam {days} hari",

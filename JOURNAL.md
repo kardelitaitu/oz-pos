@@ -1,4 +1,26 @@
 
+## 2026-08-29 — TDD round 8: unhandled 'paused' subscription status in statusLabel (website AccountView)
+
+**Problem:** The license-server `subscriptions` schema allows `status: 'paused'`
+(among `active`, `expired`, `grace_period`, `revoked`), but `statusLabel()`
+had no `case 'paused'` — it fell through to the default `return status ?? '—'`
+which rendered the raw English value `"paused"` even for `id`-locale users.
+The dashboard incorrectly showed the untranslated server value.
+
+**Solution:** TDD Red→Green (1 new test, account-view.test.tsx 50→51):
+- Red: mocked a `paused` subscription status for the `id` locale; the test
+  asserted `'Ditangguhkan'` (Indonesian) and `assertNoText('paused')` — it
+  failed because the raw value `"paused"` was displayed.
+- Green: added `case 'paused': return t(locale, 'account.statusPaused')` to
+  `statusLabel()` and `"statusPaused": "Ditangguhkan"` / `"Paused"` i18n
+  keys. The pill color stays the default muted gray (neutral state).
+- Also pinned two previously-untested paths: logout failure (API 500 → still
+  clears session + redirects) and Paddle no-email (getSessionEmail null →
+  shows checkout error).
+
+**Commits:** pending round-8 commit.
+**Test counts:** account-view.test.tsx 50→51; full suite 172→174.
+
 ## 2026-08-29 — TDD round 7: region dropdown closes mid-keyboard-nav on blur (website AccountView)
 
 **Problem:** The region selector's trigger button had `onBlur={() => setTimeout(() => setRegionOpen(false), 150)}`. When a keyboard user pressed ArrowDown, focus moved to the first option, the trigger's `onBlur` fired, and the 150ms timer closed the listbox — even while the user was still navigating it with ArrowDown/ArrowUp. A keyboard user had ~150ms to read and navigate before the dropdown vanished.

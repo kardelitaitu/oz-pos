@@ -329,6 +329,8 @@
     "statusGracePeriod": "In grace period",
     "statusExpired": "Expired",
     "statusRevoked": "Revoked",
+    "statusPaused": "Paused",
+    "statusPaused": "Paused",
     "renewHint": "Your subscription is no longer active.",
     "renewLink": "Renew on the pricing page",
     "renewsInDays": "Renews in {days} days",

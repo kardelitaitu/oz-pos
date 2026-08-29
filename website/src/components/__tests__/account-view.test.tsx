@@ -250,6 +250,42 @@ describe('AccountView — subscription display', () => {
     }
   });
 
+  it('shows the checkout error when Paddle subscribe fails due to missing session email', async () => {
+    // Regression: when getSessionEmail() returns null (no email cached and
+    // /me unavailable), the Paddle subscribe path must surface the localized
+    // checkout.error message, not fail silently.
+    sessionStorage.setItem('oz_session', 'tok-sub-paddle-noemail');
+    paddle.isPlaceholderPriceId.mockReturnValue(false);
+    paddle.getSessionEmail.mockResolvedValue(null); // no email available
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      const subscribeBtn = Array.from(container.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Subscribe',
+      );
+      expect(subscribeBtn).not.toBeNull();
+      act(() => subscribeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      // The error message must appear — Paddle was not called.
+      expect(paddle.openPaddleCheckout).not.toHaveBeenCalled();
+      const alert = container.querySelector('[role="alert"]');
+      expect(alert).not.toBeNull();
+      expect(alert!.textContent).toContain("Couldn't start the checkout. Please try again.");
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
   it('routes subscribe through Midtrans Snap for the id locale', async () => {
     sessionStorage.setItem('oz_session', 'tok-sub-midtrans');
     midtrans.openMidtransCheckout.mockResolvedValue(undefined);
@@ -657,6 +693,45 @@ describe('AccountView — logout', () => {
       container.remove();
     }
   });
+
+  it('clears the session and redirects even when the logout API call fails', async () => {
+    // Regression: logout is idempotent server-side. A network error or 500
+    // must not prevent the local session from being cleared and the user
+    // being redirected — the catch block must still run clearSession.
+    sessionStorage.setItem('oz_session', 'tok-logout-fail');
+    sessionStorage.setItem('oz_email', 'test@example.com');
+    let capturedHref = '';
+    Object.defineProperty(window, 'location', {
+      value: {
+        get href() { return capturedHref; },
+        set href(v: string) { capturedHref = v; },
+      },
+      writable: true,
+    });
+    mockFetch((url, init) => {
+      // /me succeeds so the profile card (with Sign out) renders; only the
+      // logout POST fails.
+      if (url.includes('/logout')) return badRequest(500);
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      clickButton(container, 'Sign out');
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(paddle.clearSession).toHaveBeenCalled();
+      expect(capturedHref).toBe('/en');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── Password section ──────────────────────────────────────────────────
@@ -1032,6 +1107,28 @@ describe('AccountView — status pill colors', () => {
       expect(revokedPill).not.toBeNull();
       expect(revokedPill!.className).toContain('bg-danger/15');
       expect(revokedPill!.className).toContain('text-danger');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('shows a localized label for paused status instead of the raw server value', async () => {
+    // Regression: the license-server subscriptions schema allows status
+    // 'paused', but statusLabel did not handle it — it fell through to the
+    // raw English value ('paused') even for the id locale.
+    sessionStorage.setItem('oz_session', 'tok-pill-paused');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'paused', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'paused', startsAt: '2026-01-01', expiresAt: '2027-01-01' },
+    }));
+    const { container, root } = await renderAccount('id');
+    try {
+      // The localized Indonesian label ('Ditangguhkan') must be shown, never
+      // the raw English 'paused' value.
+      assertText(container, 'Ditangguhkan');
+      assertNoText(container, 'paused');
     } finally {
       act(() => root.unmount());
       container.remove();

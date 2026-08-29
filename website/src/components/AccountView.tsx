@@ -97,6 +97,8 @@ function statusLabel(locale: string, status: string | undefined): string {
       return t(locale, 'account.statusExpired');
     case 'revoked':
       return t(locale, 'account.statusRevoked');
+    case 'paused':
+      return t(locale, 'account.statusPaused');
     default:
       return status ?? '—';
   }
