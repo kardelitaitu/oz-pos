@@ -14,6 +14,39 @@
 
 ---
 
+## Review summary (final — 2026-07-25)
+
+**All 11 sectors (S0–S10) reviewed.** 53 findings: **5 P1 · 14 P2 · 4 P3 · 30 INFO**.
+
+| Sector | Area | Status | Headline |
+|--------|------|--------|----------|
+| S0 | Orientation | ✅ | 11 workflows, 246k Rust LoC / 199k TS LoC, methodology declared |
+| S1 | Tauri shells & IPC | ✅ | ADR #7 half-migration: desktop-unregistered commands still invoked (F-004/F-005) |
+| S2 | Data core | ✅ | Money/tx/migrations solid; size + doc-header rule P2s |
+| S3 | Platform layer | ✅ | **Systemic RBAC gap** — 169 commands authenticate w/o authorization (F-017) |
+| S4 | Business modules | ✅ | Uniform + manifest-governed; currency repo no-tx/no-tests; promotions stub |
+| S5 | Payments/HW/security | ✅ | **PAY-1 amount zeroing + PAY-2 idempotency verified live** (F-027/F-028) |
+| S6 | Front-end UI | ✅ | Tablet provider drift + locale frozen en-US; loggedInvoke exemplary |
+| S7 | Auxiliary crates | ✅ | Lua sandbox + plugin SQL gate solid; CPU-hook residual |
+| S8 | Cloud/licensing/web | ✅ | Webhook verification + replay tests solid; tenant isolation layered |
+| S9 | Build/CI/tooling | ✅ | Invariants machine-enforced (28 CI jobs); IPC parity gate missing (F-050) |
+| S10 | Docs & drift | ✅ | Docs stamped accurate — counts independently verified true |
+
+**Top-priority repairs (P1 cluster):**
+1. RBAC enforcement parity (F-017) — map every registered command → registry key;
+   gate with CI (mechanically closes the class, complements F-050).
+2. Command-registration parity between shells (F-004/F-005/F-006) — desktop vs tablet
+   `generate_handler` diff as a CI gate + finish or excise the unscoped ADR #7 family.
+3. QRIS PAY-1 `parse_amount` zeroing decimal amounts (F-027) + PAY-2 order_id
+   idempotency (F-028) — live money-corruption paths, verified in code.
+
+**Cross-cutting verdict:** the architecture, invariants infrastructure (Money, tx,
+panic inventory, boundary checks, compliance tests), and docs governance are strong;
+the residual risk concentrates in (a) server-side authorization adoption, (b) the
+scoped/unscoped migration tail across two shells, and (c) the QRIS amount parsing.
+
+---
+
 ## How to use this journal
 
 - **Sector map** below defines the review areas. Each sector gets a status line
@@ -626,7 +659,7 @@ check.sh ↔ CI parity, architecture-boundaries baseline, pre-push gate.
 
 ## S10 — Docs & Drift
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** `ARCHITECTURE.md`, `docs/` (incl. `docs/specs/`), `JOURNAL.md`, `TODO.md`,
 `CHANGELOG.md`, `.agents/skills/**`, `documentation.md`, root-level plan docs.
@@ -638,7 +671,32 @@ check.sh ↔ CI parity, architecture-boundaries baseline, pre-push gate.
 
 ### S10 Notes
 
-- (empty)
+**Checked:** version-lock manifests, skill-drift-report, docs/specs lifecycle,
+ARCHITECTURE.md accuracy stamp vs measured reality, repo tracking docs.
+
+- **Version lock verified**: `Cargo.toml`, `apps/desktop-client/tauri.conf.json`,
+  root `package.json`, `ui/package.json` all read `0.0.33`.
+- `skill-drift-report.md` (29-08-26): active self-repair run (path drift fixed across
+  hal-drivers/onboarding/rust-backend/skill-drift-guard, tauri-ipc examples re-pointed
+  to current files, commit-referenced).
+- `docs/specs/` has a real lifecycle: `_active` (boundary checker 0043, sync replay
+  safety 0044, dead-letter recovery 0045, security audits c1–c5, KDS redesign, sync
+  batching/priority), `_done`, `testing`.
+- `ARCHITECTURE.md` (438 lines) carries a docs-auditor ACCURATE stamp (2026-08-29) with
+  refreshed counts — **they match this review's independent measurements** (14/14
+  modules with manifests, 13 crates + 4 platform + foundation, 3 Tauri/cloud apps).
+- Repo's own `JOURNAL.md` + `TODO.md` track agent audit rounds and improvement phases
+  (with status legend). A `ci-docs-drift` CI job polices doc drift mechanically.
+
+### S10 Findings
+
+- **F-051 (INFO, S10)**: Documentation freshness is unusually strong — auditor stamps
+  with concrete counts, drift gates in CI, and the counts verified true in this review.
+- **F-052 (INFO, S10)**: Active spec portfolio includes security audits (c1 money
+  safety, c2 env-var unsafe, c3 CSP-null, c4 LAN-plaintext, c5 license-plaintext);
+  this review independently corroborated several (c1 ↔ F-013/F-027, c3 ↔ F-009).
+- **F-053 (INFO, S10)**: Version lock intact at `0.0.33` across all checked manifests;
+  JOURNAL.md/TODO.md provide continuity for multi-agent work.
 
 ---
 
@@ -711,6 +769,9 @@ check.sh ↔ CI parity, architecture-boundaries baseline, pre-push gate.
 | F-048 | 2026-07-25 | S9 | INFO | `.githooks/`, `.github/workflows/ci.yml` | Invariants machine-enforced: 4 commit gates + 28 CI jobs; "CI only main" accurate |
 | F-049 | 2026-07-25 | S9 | INFO | branch `0.0.33` | Feature branch gets no CI until PR — local gates only |
 | F-050 | 2026-07-25 | S9 | P2 | CI gap | No command→handler registration parity gate (the F-006/F-008 class) |
+| F-051 | 2026-07-25 | S10 | INFO | `ARCHITECTURE.md`, `skill-drift-report.md` | Docs stamped ACCURATE; counts verified true in this review |
+| F-052 | 2026-07-25 | S10 | INFO | `docs/specs/_active/` | Security audit specs (c1–c5) map to corroborated findings |
+| F-053 | 2026-07-25 | S10 | INFO | manifests | Version lock intact at 0.0.33 across all checked manifests |
 
 ---
 
@@ -755,4 +816,8 @@ check.sh ↔ CI parity, architecture-boundaries baseline, pre-push gate.
 - **S9 reviewed**: hooks active in clone, 28-job CI, check.sh parity (F-048); branch
   un-CI'd until PR (F-049); the one unpoliced invariant = IPC registration parity
   (F-050). Committed.
-- Next: S10 docs & drift — final sector.
+- **S10 reviewed**: version lock verified, docs stamps accurate (independently
+  corroborated), spec lifecycle + drift gates active (F-051..F-053). Committed.
+- **REVIEW COMPLETE** — all 11 sectors reviewed, 53 findings (5 P1 / 14 P2 / 4 P3 /
+  30 INFO), final summary written into the journal header. Total: 10 review commits
+  (S0–S10 + scaffold), journal-only pathspec commits throughout.
