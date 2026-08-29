@@ -142,14 +142,14 @@ Update-File "ui/package-lock.json" "`"version`": `"$currentVersion`"," "`"versio
 # Cargo.toml is bumped above. No per-file updates needed.
 
 Update-File "ui/src/features/auth/LicenseActivationScreen.tsx" ("useState<string>('{0}')" -f $currentVersion) ("useState<string>('{0}')" -f $TargetVersion)
-Update-File "ui/src/features/auth/StaffLoginScreen.tsx" "OZ-POS Enterprise v$currentVersion" "OZ-POS Enterprise v$TargetVersion"
+Update-File "ui/src/features/auth/StaffLoginScreen.tsx" "v$currentVersion" "v$TargetVersion"
 Update-File "ui/src/features/auth/__tests__/LicenseActivationScreen.test.tsx" "Version $currentVersion" "Version $TargetVersion"
 Update-File "ui/src/features/design/TooltipPreview.tsx" "OZ-POS v$currentVersion" "OZ-POS v$TargetVersion"
 
 # The status-bar version label lives in Fluent, not TSX (StatusBar.tsx renders the
 # `statusbar-version` key), so the FTL files are the real bump targets.
-Update-File "ui/src/locales/shared.ftl" "statusbar-version = OZ-POS Enterprise v$currentVersion" "statusbar-version = OZ-POS Enterprise v$TargetVersion"
-Update-File "ui/src/locales/shared.id.ftl" "statusbar-version = OZ-POS Enterprise v$currentVersion" "statusbar-version = OZ-POS Enterprise v$TargetVersion"
+Update-File "ui/src/locales/shared.ftl" "statusbar-version = v$currentVersion" "statusbar-version = v$TargetVersion"
+Update-File "ui/src/locales/shared.id.ftl" "statusbar-version = v$currentVersion" "statusbar-version = v$TargetVersion"
 
 # Website (marketing site): package version + i18n version strings. Single-quoted
 # format strings keep the em-dash out of the source; it is injected via [char]0x2014.
