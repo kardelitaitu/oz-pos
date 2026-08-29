@@ -232,6 +232,33 @@ async fn require_category_permission(
     require_permission_for_user(&store, user_id, permission)
 }
 
+/// Session-scoped variant of `list_categories`.
+#[command]
+pub async fn list_categories_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CategoryDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let categories = store.list_categories()?;
+
+    let dtos: Vec<CategoryDto> = categories
+        .into_iter()
+        .map(|c| CategoryDto {
+            id: c.id,
+            name: c.name,
+            colour: c.colour,
+            icon: c.icon,
+        })
+        .collect();
+
+    Ok(dtos)
+}
+
 #[cfg(test)]
 #[path = "categories_tests.rs"]
 mod tests;

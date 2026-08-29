@@ -61,6 +61,69 @@ pub async fn set_brand_store_name(
     Ok(Settings::set_brand_store_name(&conn, &name)?)
 }
 
+/// Session-scoped variant of `get_brand_settings`.
+#[command]
+pub async fn get_brand_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<BrandSettingsDto, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let conn = &*db_guard;
+    Ok(BrandSettingsDto {
+        primary_colour: Settings::get_brand_primary_colour(&conn)?,
+        logo_path: Settings::get_brand_logo_path(&conn)?,
+        store_name: Settings::get_brand_store_name(&conn)?,
+    })
+}
+
+/// Session-scoped variant of `set_brand_primary_colour`.
+#[command]
+pub async fn set_brand_primary_colour_scoped(
+    session_token: String,
+    colour: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let conn = &*db_guard;
+    Ok(Settings::set_brand_primary_colour(&conn, &colour)?)
+}
+
+/// Session-scoped variant of `set_brand_logo_path`.
+#[command]
+pub async fn set_brand_logo_path_scoped(
+    session_token: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let conn = &*db_guard;
+    Ok(Settings::set_brand_logo_path(&conn, &path)?)
+}
+
+/// Session-scoped variant of `set_brand_store_name`.
+#[command]
+pub async fn set_brand_store_name_scoped(
+    session_token: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let conn = &*db_guard;
+    Ok(Settings::set_brand_store_name(&conn, &name)?)
+}
+
 #[cfg(test)]
 #[path = "branding_tests.rs"]
 mod tests;

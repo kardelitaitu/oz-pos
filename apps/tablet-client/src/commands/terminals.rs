@@ -468,6 +468,251 @@ pub async fn delete_terminal_override(
     Ok(())
 }
 
+/// Session-scoped variant of `list_terminals`.
+#[command]
+pub async fn list_terminals_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalDto>, AppError> {
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    run_list_terminals(&db)
+}
+
+/// Session-scoped variant of `get_terminal`.
+#[command]
+pub async fn get_terminal_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<TerminalDto>, AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let terminal = store.get_terminal(&id)?;
+    drop(db);
+
+    Ok(terminal.map(TerminalDto::from))
+}
+
+/// Session-scoped variant of `register_terminal`.
+#[command]
+pub async fn register_terminal_scoped(
+    session_token: String,
+    user_id: String,
+    args: RegisterTerminalArgs,
+    state: State<'_, AppState>,
+) -> Result<RegisterTerminalResult, AppError> {
+    validate_not_empty("name", &args.name).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("device_id", &args.device_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let mut terminal = Terminal::new(args.name, args.device_id);
+    if let Some(secret) = args.terminal_secret {
+        terminal = terminal.with_secret(secret);
+    }
+    if let Some(meta) = args.metadata {
+        terminal = terminal.with_metadata(meta);
+    }
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_REGISTER)?;
+    store.create_terminal(&terminal)?;
+    drop(db);
+
+    tracing::info!(id = %terminal.id, name = %terminal.name, "terminal registered");
+    Ok(RegisterTerminalResult { id: terminal.id })
+}
+
+/// Session-scoped variant of `update_terminal`.
+#[command]
+pub async fn update_terminal_scoped(
+    session_token: String,
+    user_id: String,
+    args: UpdateTerminalArgs,
+    state: State<'_, AppState>,
+) -> Result<UpdateTerminalResult, AppError> {
+    validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+
+    let mut terminal = store
+        .get_terminal(&args.id)?
+        .ok_or_else(|| AppError::Invalid(format!("terminal '{}' not found", args.id)))?;
+
+    if let Some(name) = args.name {
+        validate_not_empty("name", &name).map_err(|e| AppError::Invalid(e.to_string()))?;
+        terminal.name = name;
+    }
+    if let Some(device_id) = args.device_id {
+        validate_not_empty("device_id", &device_id)
+            .map_err(|e| AppError::Invalid(e.to_string()))?;
+        terminal.device_id = device_id;
+    }
+    if let Some(secret) = args.terminal_secret {
+        terminal.terminal_secret = Some(secret);
+    }
+    if let Some(active) = args.is_active {
+        terminal.is_active = active;
+    }
+    if let Some(meta) = args.metadata {
+        terminal.metadata = Some(meta);
+    }
+
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.update_terminal(&terminal)?;
+    drop(db);
+
+    tracing::info!(id = %terminal.id, "terminal updated");
+    Ok(UpdateTerminalResult { id: terminal.id })
+}
+
+/// Session-scoped variant of `ping_terminal`.
+#[command]
+pub async fn ping_terminal_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    store.ping_terminal(&id)?;
+    drop(db);
+
+    tracing::debug!(id, "terminal pinged");
+    Ok(())
+}
+
+/// Session-scoped variant of `delete_terminal`.
+#[command]
+pub async fn delete_terminal_scoped(
+    session_token: String,
+    user_id: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_DELETE)?;
+    store.delete_terminal(&id)?;
+    drop(db);
+
+    tracing::info!(id, "terminal deleted");
+    Ok(())
+}
+
+/// Session-scoped variant of `list_terminal_overrides`.
+#[command]
+pub async fn list_terminal_overrides_scoped(
+    session_token: String,
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TerminalFeatureOverride>, AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    let overrides = store.list_terminal_overrides(&terminal_id)?;
+    drop(db);
+
+    Ok(overrides)
+}
+
+/// Session-scoped variant of `set_terminal_override`.
+#[command]
+pub async fn set_terminal_override_scoped(
+    session_token: String,
+    user_id: String,
+    terminal_id: String,
+    feature: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.set_terminal_override(&terminal_id, &feature, enabled)?;
+    drop(db);
+
+    tracing::info!(
+        terminal_id,
+        feature,
+        enabled,
+        "terminal feature override set"
+    );
+    Ok(())
+}
+
+/// Session-scoped variant of `delete_terminal_override`.
+#[command]
+pub async fn delete_terminal_override_scoped(
+    session_token: String,
+    user_id: String,
+    terminal_id: String,
+    feature: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("terminal_id", &terminal_id)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+    let db_guard = conn_arc
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let db = &*db_guard;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
+    store.delete_terminal_override(&terminal_id, &feature)?;
+    drop(db);
+
+    tracing::info!(terminal_id, feature, "terminal feature override deleted");
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "terminals_tests.rs"]
 mod tests;

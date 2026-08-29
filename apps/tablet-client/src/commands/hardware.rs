@@ -374,6 +374,259 @@ pub async fn stop_scanner(state: State<'_, AppState>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Session-scoped variant of `open_cash_drawer`.
+#[command]
+pub async fn open_cash_drawer_scoped(
+    session_token: String,
+    args: OpenCashDrawerArgs,
+    state: State<'_, AppState>,
+) -> Result<OpenCashDrawerResult, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    let id = args.device_id.as_deref().unwrap_or("default");
+    let drawer = state
+        .registry
+        .cash_drawer(id)
+        .await
+        .ok_or_else(|| AppError::Invalid(format!("no cash drawer registered as '{id}'")))?;
+    drawer.open().await?;
+    Ok(OpenCashDrawerResult { opened: true })
+}
+
+/// Session-scoped variant of `print_receipt`.
+#[command]
+pub async fn print_receipt_scoped(
+    session_token: String,
+    args: PrintReceiptArgs,
+    state: State<'_, AppState>,
+) -> Result<PrintReceiptResult, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    let printer = state
+        .registry
+        .printer("default")
+        .await
+        .ok_or_else(|| AppError::Invalid("no receipt printer registered".into()))?;
+    let lines: Vec<&str> = args.body.lines().collect();
+    let n = lines.len();
+    printer.print_receipt(&args.body).await?;
+    // Emit a completion event so the front-end can show a toast.
+    if let Some(ref app) = state.app {
+        let _ = app.emit("receipt:printed", serde_json::json!({ "lines": n }));
+    }
+    Ok(PrintReceiptResult { printed_lines: n })
+}
+
+/// Session-scoped variant of `print_sales_receipt`.
+#[command]
+pub async fn print_sales_receipt_scoped(
+    session_token: String,
+    args: PrintSalesReceiptArgs,
+    state: State<'_, AppState>,
+) -> Result<PrintSalesReceiptResult, AppError> {
+    let printer = state
+        .registry
+        .printer("default")
+        .await
+        .ok_or_else(|| AppError::Invalid("no receipt printer registered".into()))?;
+
+    // Load store info + display settings from the DB in a block
+    // so the MutexGuard is dropped before any .await point.
+    let (config, store_info) = {
+        let (_session, conn_arc) = state.resolve_scope(&session_token)?;
+        let db_guard = conn_arc
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let conn = &*db_guard;
+        let store_name = Settings::get_store_name(&conn)?.unwrap_or_else(|| "OZ-POS Store".into());
+        let store_address = Settings::get_store_address(&conn)?.unwrap_or_default();
+        let store_tax_id = Settings::get_store_tax_id(&conn)?;
+        let decimals = Settings::get_receipt_decimal_separator(&conn)?;
+        let decimal_separator = match decimals.as_str() {
+            "comma" => receipt::DecimalSeparator::Comma,
+            "none" => receipt::DecimalSeparator::None,
+            _ => receipt::DecimalSeparator::Dot,
+        };
+        let paper_width = match Settings::get_receipt_paper_width(&conn)?.as_str() {
+            "narrow" => receipt::PaperWidth::Narrow,
+            _ => receipt::PaperWidth::Standard,
+        };
+        let cfg = receipt::ReceiptConfig {
+            paper_width,
+            show_currency: Settings::get_receipt_show_currency(&conn)?,
+            decimal_separator,
+            show_tax: Settings::get_receipt_show_tax(&conn)?,
+            footer: {
+                let f = Settings::get_receipt_footer(&conn)?;
+                if f.is_empty() { None } else { Some(f) }
+            },
+            show_table_number: Settings::get_receipt_show_table_number(&conn)?,
+            barcode_enabled: false,
+            payment_link_template: None,
+        };
+        (
+            cfg,
+            receipt::StoreInfo {
+                name: store_name,
+                address: store_address,
+                tax_id: store_tax_id,
+            },
+        )
+    }; // db_guard dropped here
+
+    let receipt = receipt::SalesReceipt {
+        store: store_info,
+        date: args.date,
+        receipt_number: args.receipt_number,
+        table_number: args.table_number,
+        items: args
+            .items
+            .into_iter()
+            .map(|i| {
+                Ok::<_, AppError>(receipt::LineItem {
+                    name: i.name,
+                    quantity: i.quantity,
+                    unit_price: i.unit_price.to_money()?,
+                    total_price: i.total_price.to_money()?,
+                    tax_amount: i.tax_amount.map(|t| t.to_money()).transpose()?,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        subtotal: args.subtotal.to_money()?,
+        tax: args.tax.map(|t| t.to_money()).transpose()?,
+        total: args.total.to_money()?,
+        payments: args
+            .payments
+            .into_iter()
+            .map(|p| {
+                Ok::<_, AppError>(receipt::PaymentInfo {
+                    method: p.method,
+                    amount: p.amount.to_money()?,
+                    change: p.change.map(|c| c.to_money()).transpose()?,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+
+    let data = receipt::format_sales_receipt(&receipt, &config);
+    let line_count = receipt.items.len() + 6;
+
+    printer.print_raw(&data).await?;
+
+    if let Some(ref app) = state.app {
+        let _ = app.emit(
+            "receipt:printed",
+            serde_json::json!({ "lines": line_count }),
+        );
+    }
+
+    Ok(PrintSalesReceiptResult { printed: true })
+}
+
+/// Session-scoped variant of `list_scanners`.
+#[command]
+pub async fn list_scanners_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ScannerInfo>, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    let ids = state.registry.scanner_ids().await;
+    Ok(ids.into_iter().map(|id| ScannerInfo { id }).collect())
+}
+
+/// Session-scoped variant of `start_scanner`.
+#[command]
+pub async fn start_scanner_scoped(
+    session_token: String,
+    scanner_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    // Stop any existing scanner first.
+    {
+        let mut cancel = state.scanner_cancel.lock().await;
+        if let Some(sender) = cancel.take() {
+            let _ = sender.send(());
+        }
+    }
+
+    let driver: Arc<dyn BarcodeScanner> = state
+        .registry
+        .scanner(&scanner_id)
+        .await
+        .ok_or_else(|| AppError::Invalid(format!("no scanner registered as '{scanner_id}'")))?;
+
+    let app = state
+        .app
+        .clone()
+        .ok_or_else(|| AppError::Internal("AppHandle unavailable".into()))?;
+
+    let (tx, mut rx) = oneshot::channel::<()>();
+
+    tokio::spawn(async move {
+        // Attempt to connect (idempotent – a second connect is a no-op).
+        let mut scanner = match driver.connect().await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(scanner = %scanner_id, error = %e, "scanner connect failed");
+                let _ = app.emit(
+                    "barcode:error",
+                    serde_json::json!({ "error": e.to_string() }),
+                );
+                return;
+            }
+        };
+
+        tracing::info!(scanner = %scanner_id, "barcode scanner started");
+
+        loop {
+            tokio::select! {
+                _ = &mut rx => {
+                    tracing::info!(scanner = %scanner_id, "barcode scanner stopped");
+                    break;
+                }
+                result = scanner.poll(300) => {
+                    match result {
+                        Ok(Some(barcode)) => {
+                            let payload = serde_json::json!({
+                                "code": barcode.code,
+                                "symbology": format!("{:?}", barcode.symbology),
+                            });
+                            let _ = app.emit("barcode:scanned", payload);
+                        }
+                        Ok(None) => {
+                            // Timeout — loop again.
+                        }
+                        Err(e) => {
+                            tracing::warn!(scanner = %scanner_id, error = %e, "scanner poll error");
+                            let _ = app.emit("barcode:error", serde_json::json!({ "error": e.to_string() }));
+                            // Keep trying after a brief backoff.
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Store the cancel-sender so a subsequent start_scanner or stop_scanner can shut it down.
+    state.scanner_cancel.lock().await.replace(tx);
+
+    Ok(())
+}
+
+/// Session-scoped variant of `stop_scanner`.
+#[command]
+pub async fn stop_scanner_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    let mut cancel = state.scanner_cancel.lock().await;
+    if let Some(sender) = cancel.take() {
+        let _ = sender.send(());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "hardware_tests.rs"]
 mod tests;
