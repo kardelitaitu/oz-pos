@@ -1,4 +1,10 @@
 //! Recipe / BOM queries — composite product ingredient lookups.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: single parameterized query; correct
+next: none | perf: N/A
+*/
 //!
 //! When a composite menu item is sold, the system needs to know which
 //! raw ingredients to deduct from inventory rather than (or in addition

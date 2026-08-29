@@ -1,4 +1,10 @@
 //! Stripe customer → tenant mapping (ADR sync-plan-gating follow-up).
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B5)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: upsert with ON CONFLICT + NoRows-aware lookup; correct and minimal
+next: none | perf: N/A
+*/
 //!
 //! Cloud sync plans are keyed by `tenant_id`. Stripe subscription events
 //! carry a `cus_xxx` customer id; to turn billing state into a plan we

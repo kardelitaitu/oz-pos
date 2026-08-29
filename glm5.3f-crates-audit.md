@@ -417,6 +417,24 @@ same transaction as the stock writes, in-transaction status reads
 validated non-negative/ordered-cap/monotonic with delta-only crediting, and
 `checked_add`/`checked_sub` on every inventory mutation.
 
+### Slice B5 (in progress) — db/offline.rs (684 lines) fully read + 6 small files
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-20 | ℹ️ INFO | db/offline.rs:87–95, 394–431 | Silent degradation on DB errors in the enqueue-dedup EXISTS check (`.unwrap_or(false)` → duplicate enqueue) and the observability summary (`.ok()`/`.unwrap_or(0)` → zeros). Both are benign-direction failures (replay-safe apply side; dashboard-only) but errors become invisible. | Log at warn before falling back. |
+
+**Slice B5 notes so far:** `offline.rs` is production-grade sync plumbing —
+tenant-scoped variants throughout (SYNC-07: cross-tenant reads as
+NotFound/no-op), a `sync_applied_items` idempotency ledger with an
+in-transaction variant co-located with the domain mutation, a durable pull
+anchor written only after successful page application (crash-safe), and an
+atomic dead-letter requeue (predicate inside the DELETE) that rewinds the
+anchor safely. The six small files (`edc_terminals`, `media`,
+`payment_settlements`, `payment_gateways`, `stripe`, `recipes`) are clean —
+four are honest fail-fast PLANNED stubs; one forward note: when
+`payment_gateways.config_json` starts holding gateway API keys, it needs
+at-rest encryption (ties to CRY-1 remediation).
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs
