@@ -185,6 +185,30 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	if err := app.Save(trialClaims); err != nil {
 		t.Fatalf("failed to create trial_claims collection: %v", err)
 	}
+
+	revenueEvents := core.NewBaseCollection("revenue_events")
+	revenueEvents.Fields.Add(
+		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
+		&core.TextField{Name: "event_id", Required: true, Max: 128},
+		&core.SelectField{Name: "provider", Required: true, Values: []string{"paddle", "midtrans"}},
+		&core.NumberField{Name: "amount_usd"},
+		&core.NumberField{Name: "amount_idr", OnlyInt: true},
+		&core.SelectField{Name: "currency", Required: true, Values: []string{"USD", "IDR"}},
+		&core.SelectField{Name: "tier_key", Required: false, Values: []string{"plus", "pro", "premium", "enterprise"}},
+		&core.TextField{Name: "subscription_id", Max: 128},
+		&core.TextField{Name: "notes", Max: 512},
+	)
+	revenueEvents.Fields.Add(&core.AutodateField{Name: "created", OnCreate: true})
+	revenueEvents.Fields.Add(&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true})
+	revenueEvents.Indexes = append(revenueEvents.Indexes,
+		"CREATE UNIQUE INDEX idx_revenue_events_event ON revenue_events (event_id)")
+	revenueEvents.CreateRule = types.Pointer("")
+	revenueEvents.ListRule = types.Pointer("")
+	revenueEvents.ViewRule = types.Pointer("")
+	revenueEvents.UpdateRule = types.Pointer("")
+	if err := app.Save(revenueEvents); err != nil {
+		t.Fatalf("failed to create revenue_events collection: %v", err)
+	}
 }
 
 func registerTestRoutes(t *testing.T, app *tests.TestApp) {
