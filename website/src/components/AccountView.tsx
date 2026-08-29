@@ -64,6 +64,20 @@ interface Props {
   locale: string;
 }
 
+/** A registered terminal/device from GET /api/v1/web/devices. */
+interface Device {
+  machine_id: string;
+  created?: string;
+  revoked_at?: string | null;
+  status?: string;
+}
+
+/** Region options for the billing-region selector. */
+const REGION_OPTIONS: { value: Region; labelKey: string }[] = [
+  { value: 'global', labelKey: 'signup.regionGlobal' },
+  { value: 'id', labelKey: 'signup.regionIndonesia' },
+];
+
 /**
  * Localized label for the raw status values the license server writes
  * (license_keys + subscriptions collections). Unknown values pass through
@@ -86,11 +100,68 @@ function statusLabel(locale: string, status: string | undefined): string {
   }
 }
 
+/** CSS classes for a status pill based on the raw server status value. */
+function statusPillClass(status: string | undefined): string {
+  switch (status) {
+    case 'active':
+      return 'bg-success/15 text-success';
+    case 'grace_period':
+      return 'bg-warning/15 text-warning';
+    case 'expired':
+    case 'revoked':
+      return 'bg-danger/15 text-danger';
+    default:
+      return 'bg-ink/10 text-muted';
+  }
+}
+
+/** Format an ISO date string to a locale-aware short date, or fallback. */
+function fmtDate(dateStr: string | undefined, locale: string): string {
+  if (!dateStr) return '—';
+  try {
+    return new Date(dateStr).toLocaleDateString(locale === 'id' ? 'id-ID' : 'en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+/** Days until an ISO date string, or null when missing/parse fails. */
+function daysUntil(dateStr: string | undefined): number | null {
+  if (!dateStr) return null;
+  try {
+    const diff = new Date(dateStr).getTime() - Date.now();
+    return Math.ceil(diff / 86_400_000);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Localized "Renews in N days" label with correct singular/plural, or the
+ * raw date fallback. `locale` picks the string; `days` drives the form.
+ */
+function renewsLabel(locale: string, days: number): string {
+  const key = days === 1 ? 'account.renewsInDay' : 'account.renewsInDays';
+  return t(locale, key).replace('{days}', String(days));
+}
+
+/** Renewal countdown pill for an active subscription, color-coded by urgency. */
+function renderRenewBadge(locale: string, status: string | undefined, expiresAt: string | undefined) {
+  if (status !== 'active' || !expiresAt) return null;
+  const d = daysUntil(expiresAt);
+  if (d === null) return null;
+  const cls = d < 7 ? 'bg-danger/15 text-danger' : d < 30 ? 'bg-warning/15 text-warning' : 'bg-ink/10 text-muted';
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{renewsLabel(locale, d)}</span>;
+}
+
 export default function AccountView({ locale }: Props) {
   // Read API at component level so window.__OZ_CONFIG__ is available after hydration
   const API = licenseApiUrl();
   const [state, setState] = useState<'loading' | 'anon' | 'error' | 'ready'>('loading');
   const [me, setMe] = useState<MeResponse | null>(null);
+  const [devices, setDevices] = useState<Device[] | null>(null);
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [subscribeError, setSubscribeError] = useState(false);
   // Post-checkout refresh: 'checking' polls /me after a completed purchase;
@@ -120,6 +191,23 @@ export default function AccountView({ locale }: Props) {
     if (!res.ok) throw new Error('me failed');
     return (await res.json()) as MeResponse;
   }, []);
+
+  /** Fetch the tenant's registered devices (best-effort; null on any error). */
+  const fetchDevices = useCallback(async (): Promise<Device[] | null> => {
+    const token = sessionStorage.getItem('oz_session');
+    if (!token || !API) return null;
+    try {
+      const res = await fetch(`${API}/api/v1/web/devices`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      const body = (await res.json()) as { devices?: Device[] };
+      return body.devices ?? [];
+    } catch {
+      return null;
+    }
+  }, []);
+
   // Password state: the optional login credential managed via set-password.
   const [pw, setPw] = useState('');
   const [pwConfirm, setPwConfirm] = useState('');
@@ -154,7 +242,15 @@ export default function AccountView({ locale }: Props) {
       .catch(() => {
         if (mountedRef.current) setState('error');
       });
-  }, [fetchMe]);
+    // Best-effort device list — a failure here must not fail the dashboard.
+    void fetchDevices()
+      .then((list) => {
+        if (mountedRef.current) setDevices(list);
+      })
+      .catch(() => {
+        if (mountedRef.current) setDevices(null);
+      });
+  }, [fetchMe, fetchDevices]);
 
   const savePassword = async (e: { preventDefault(): void }) => {
     e.preventDefault();
@@ -247,7 +343,38 @@ export default function AccountView({ locale }: Props) {
     })();
   };
 
-  if (state === 'loading') return <p className="text-muted">{t(locale, 'account.loading')}</p>;
+  if (state === 'loading') {
+    return (
+      <div className="space-y-4 animate-pulse">
+        <div className="rounded-xl border border-ink/10 bg-surface/40 p-6">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-full bg-ink/10" />
+            <div className="space-y-2 flex-1">
+              <div className="h-4 w-48 rounded bg-ink/10" />
+              <div className="h-3 w-32 rounded bg-ink/10" />
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-ink/10 bg-surface/40 p-6">
+          <div className="h-4 w-24 rounded bg-ink/10 mb-4" />
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <div className="h-3 w-full rounded bg-ink/10" />
+            <div className="h-3 w-full rounded bg-ink/10" />
+            <div className="h-3 w-full rounded bg-ink/10" />
+            <div className="h-3 w-full rounded bg-ink/10" />
+          </div>
+        </div>
+        <div className="rounded-xl border border-ink/10 bg-surface/40 p-6">
+          <div className="h-4 w-28 rounded bg-ink/10 mb-4" />
+          <div className="grid grid-cols-3 gap-3">
+            <div className="h-20 rounded-lg bg-ink/10" />
+            <div className="h-20 rounded-lg bg-ink/10" />
+            <div className="h-20 rounded-lg bg-ink/10" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (state === 'anon') {
     return (
@@ -391,18 +518,14 @@ export default function AccountView({ locale }: Props) {
             <div>
               <dt className="text-muted">{t(locale, 'account.status')}</dt>
               <dd className="mt-1 capitalize">
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  (license?.status ?? tenant.status) === 'active'
-                    ? 'bg-success/15 text-success'
-                    : 'bg-ink/10 text-muted'
-                }`}>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusPillClass(license?.status ?? tenant.status)}`}>
                   {statusLabel(locale, license?.status ?? tenant.status)}
                 </span>
               </dd>
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.expires')}</dt>
-              <dd className="mt-1">{license?.expiresAt ?? '—'}</dd>
+              <dd className="mt-1">{fmtDate(license?.expiresAt, locale)}</dd>
             </div>
           </dl>
         </section>
@@ -459,27 +582,57 @@ export default function AccountView({ locale }: Props) {
             </span>
           </div>
           <p className="mt-1 text-sm text-muted">{t(locale, 'account.devicesHint')}</p>
-          <div className="mt-4 rounded-lg border border-ink/10 bg-surface p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-ink/5 flex items-center justify-center text-muted">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                  <line x1="8" y1="21" x2="16" y2="21" />
-                  <line x1="12" y1="17" x2="12" y2="21" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-ink">{t(locale, 'account.terminalSlots')}</p>
-                <p className="text-xs text-muted">{t(locale, 'account.unbindHint')}</p>
-              </div>
+          {devices && devices.length > 0 ? (
+            <div className="mt-4 space-y-2">
+              {devices.slice(0, 5).map((d) => (
+                <div key={d.machine_id} className="rounded-lg border border-ink/10 bg-surface p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-ink/5 flex items-center justify-center text-muted flex-shrink-0">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                        <line x1="8" y1="21" x2="16" y2="21" />
+                        <line x1="12" y1="17" x2="12" y2="21" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-ink truncate">{d.machine_id}</p>
+                      <p className="text-xs text-muted">{d.created ? fmtDate(d.created, locale) : '—'}</p>
+                    </div>
+                  </div>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 ml-2 ${
+                    d.revoked_at ? 'bg-danger/15 text-danger' : 'bg-success/15 text-success'
+                  }`}>
+                    {d.revoked_at ? t(locale, 'account.statusRevoked') : t(locale, 'account.statusActive')}
+                  </span>
+                </div>
+              ))}
+              {devices.length > 5 && (
+                <p className="text-xs text-muted text-center pt-1">+{devices.length - 5} more</p>
+              )}
             </div>
-            <a
-              href={`/${locale}/docs/activation`}
-              className="rounded-md border border-ink/15 bg-surface px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-ink/5"
-            >
-              {t(locale, 'account.activationGuide')}
-            </a>
-          </div>
+          ) : (
+            <div className="mt-4 rounded-lg border border-ink/10 bg-surface p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-ink/5 flex items-center justify-center text-muted">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                    <line x1="8" y1="21" x2="16" y2="21" />
+                    <line x1="12" y1="17" x2="12" y2="21" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-ink">{t(locale, 'account.terminalSlots')}</p>
+                  <p className="text-xs text-muted">{t(locale, 'account.unbindHint')}</p>
+                </div>
+              </div>
+              <a
+                href={`/${locale}/docs/activation`}
+                className="rounded-md border border-ink/15 bg-surface px-2.5 py-1 text-xs font-medium text-ink transition hover:bg-ink/5 flex-shrink-0 ml-2"
+              >
+                {t(locale, 'account.activationGuide')}
+              </a>
+            </div>
+          )}
         </section>
       )}
 
@@ -542,7 +695,7 @@ export default function AccountView({ locale }: Props) {
             <button
               type="submit"
               disabled={pwSaving || !isStrongPassword(pw) || !passwordsMatch(pw, pwConfirm)}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+              className="rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
             >
               {pwSaving ? '…' : t(locale, 'account.passwordSave')}
             </button>
@@ -560,6 +713,23 @@ export default function AccountView({ locale }: Props) {
               type="button"
               onClick={() => setRegionOpen(!regionOpen)}
               onBlur={() => setTimeout(() => setRegionOpen(false), 150)}
+              onKeyDown={(e) => {
+                // ArrowDown/ArrowUp open the listbox and move focus to the first option;
+                // Escape closes it.
+                if (!regionOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                  e.preventDefault();
+                  setRegionOpen(true);
+                  setTimeout(() => {
+                    const first = document.querySelector<HTMLButtonElement>('[data-region-option]');
+                    first?.focus();
+                  }, 0);
+                } else if (regionOpen && e.key === 'Escape') {
+                  setRegionOpen(false);
+                  e.currentTarget.focus();
+                }
+              }}
+              aria-haspopup="listbox"
+              aria-expanded={regionOpen}
               className="w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-left outline-none transition focus:border-accent flex items-center justify-between"
             >
               <span>{t(locale, region === 'id' ? 'signup.regionIndonesia' : 'signup.regionGlobal')}</span>
@@ -576,28 +746,56 @@ export default function AccountView({ locale }: Props) {
               </svg>
             </button>
             {regionOpen && (
-              <div className="absolute z-50 mt-1 w-full rounded-md border border-ink/10 bg-surface shadow-lg overflow-hidden">
-                {([
-                  { value: 'global' as Region, label: t(locale, 'signup.regionGlobal') },
-                  { value: 'id' as Region, label: t(locale, 'signup.regionIndonesia') },
-                ]).map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => {
-                      setRegionState(opt.value);
-                      setRegion(opt.value);
-                      setRegionOpen(false);
-                      setRegionMsg(true);
-                      setTimeout(() => setRegionMsg(false), 3000);
-                    }}
-                    className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors duration-150 ${
-                      region === opt.value ? 'text-link font-medium' : 'text-ink hover:bg-ink/5'
-                    }`}
-                  >
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
+              <div
+                className="absolute z-50 mt-1 w-full rounded-md border border-ink/10 bg-surface shadow-lg overflow-hidden"
+                role="listbox"
+                aria-label={t(locale, 'account.region')}
+              >
+                {REGION_OPTIONS.map((opt) => {
+                  const selected = region === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      data-region-option
+                      onClick={() => {
+                        setRegionState(opt.value);
+                        setRegion(opt.value);
+                        setRegionOpen(false);
+                        setRegionMsg(true);
+                        setTimeout(() => setRegionMsg(false), 3000);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          const options = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-region-option]'));
+                          const idx = options.indexOf(e.currentTarget);
+                          const next = e.key === 'ArrowDown' ? options[idx + 1] : options[idx - 1];
+                          next?.focus();
+                        } else if (e.key === 'Escape') {
+                          setRegionOpen(false);
+                          const trigger = document.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]');
+                          trigger?.focus();
+                        } else if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.currentTarget.click();
+                        }
+                      }}
+                      className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors duration-150 ${
+                        selected ? 'text-link font-medium' : 'text-ink hover:bg-ink/5'
+                      }`}
+                    >
+                      <span>{t(locale, opt.labelKey)}</span>
+                      {selected && (
+                        <svg className="w-4 h-4 ml-auto text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -620,15 +818,22 @@ export default function AccountView({ locale }: Props) {
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.status')}</dt>
-              <dd className="capitalize">{statusLabel(locale, subscription.status)}</dd>
+              <dd className="capitalize">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusPillClass(subscription.status)}`}>
+                  {statusLabel(locale, subscription.status)}
+                </span>
+              </dd>
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.starts')}</dt>
-              <dd>{subscription.startsAt ?? '—'}</dd>
+              <dd>{fmtDate(subscription.startsAt, locale)}</dd>
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.expires')}</dt>
-              <dd>{subscription.expiresAt ?? '—'}</dd>
+              <dd className="flex items-center gap-2">
+                <span>{fmtDate(subscription.expiresAt, locale)}</span>
+                {renderRenewBadge(locale, subscription.status, subscription.expiresAt)}
+              </dd>
             </div>
             <div>
               <dt className="text-muted">{t(locale, 'account.grace')}</dt>

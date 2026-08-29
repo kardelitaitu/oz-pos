@@ -230,9 +230,9 @@
   },
   "download": {
     "title": "Unduh OZ-POS",
-    "subtitle": "Versi 0.0.32 — gratis selamanya, tanpa pendaftaran.",
+    "subtitle": "Versi 0.0.33 — gratis selamanya, tanpa pendaftaran.",
     "version": "Versi saat ini",
-    "versionValue": "0.0.32",
+    "versionValue": "0.0.33",
     "platformsTitle": "Pilih platform Anda",
     "requirementsTitle": "Persyaratan sistem",
     "requirements": [
@@ -331,6 +331,8 @@
     "statusRevoked": "Dicabut",
     "renewHint": "Langganan Anda tidak lagi aktif.",
     "renewLink": "Perpanjang di halaman harga",
+    "renewsInDays": "Perpanjang dalam {days} hari",
+    "renewsInDay": "Perpanjang dalam 1 hari",
     "bundleUpgrade": "Tingkatkan ke paket",
     "bundleUpgradeHint": "Menambahkan Layar Dapur (KDS) ke paket Plus Anda.",
     "copyKey": "Salin kunci",
