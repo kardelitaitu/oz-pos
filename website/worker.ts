@@ -106,9 +106,10 @@ export default {
       }
 
       // Step 2: No session cookie — redirect to login.
+      // Login pages are at /[locale]/login (Astro i18n). Default to /en/.
       if (!sessionCookie) {
         const redirectTo = `${url.pathname}${url.search}`;
-        const loginUrl = `https://${MARKETING_HOST}/login?redirect=${encodeURIComponent(redirectTo)}`;
+        const loginUrl = `https://${MARKETING_HOST}/en/login?redirect=${encodeURIComponent(redirectTo)}`;
         return new Response(null, {
           status: 302,
           headers: { Location: loginUrl },

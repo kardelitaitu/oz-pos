@@ -70,7 +70,7 @@
     async function api(path) {
       const token = (await (await fetch('/__oz/session')).json()).token;
       const res = await fetch(API + path, { headers: { Authorization: 'Bearer ' + token } });
-      if (res.status === 401) { window.location.href = '/login?redirect=/'; return null; }
+      if (res.status === 401) { window.location.href = '/en/login?redirect=/'; return null; }
       if (!res.ok) throw new Error(path + ' failed (' + res.status + ')');
       return res.json();
     }
