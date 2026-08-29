@@ -1,9 +1,9 @@
 # ADR #42: Website Admin Dashboard & User Dashboard (Subdomain Architecture)
 
-**Status:** Draft — Domain provisioning complete (2026-08-28)  
+**Status:** Draft — Domain provisioning + auth gate + password rotation complete (2026-08-28)  
 **Date:** 2026-08-28  
 **Author:** Architecture Team & OZ-POS Contributors  
-**Tags:** website, dashboard, admin, subdomain, auth, license-server, billing, tenant-management
+**Tags:** website, dashboard, admin, subdomain, auth, license-server, billing, tenant-management, password-rotation
 
 ---
 
@@ -269,6 +269,16 @@ The login flow (`ozpos.my.id/login` → `AuthForm.tsx`) is updated to:
 14. Invoice/payment history from Paddle webhook log
 15. Webhook delivery log on admin panel
 16. E2E tests for auth gate + dashboard flows
+
+### Phase 5 — Admin Password Rotation (Implemented)
+
+17. **Password rotation reminder** — implemented in `apps/license-server/password_rotation.go`:
+    - `OnRecordAfterUpdateSuccess("_superusers")` hook detects password hash changes by diffing against a stored snapshot in `password_rotation_state` collection
+    - Daily scheduler (`startPasswordRotationScheduler`) runs at 08:00 UTC
+    - Sends reminder email to the superuser (default `adikaradwiatmaja@gmail.com`, overridable via `OZ_ADMIN_EMAIL`) when password age >= 120 days
+    - Repeats every 30 days until the password is changed (idempotent via `last_reminder_at`)
+    - Uses the same SMTP relay as the trial email system (Brevo via `OZ_SMTP_*` env vars)
+    - 5 tests covering seed, scanner, 30-day interval, and email content
 
 ---
 

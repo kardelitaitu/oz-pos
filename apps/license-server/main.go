@@ -296,6 +296,17 @@ func main() {
 		}
 		go startTrialEmailScheduler(app)
 
+		// ── Admin password rotation reminder (ADR #42 security) ────
+		// Emails the superuser when the admin password is older than 120
+		// days, repeating every 30 days until changed. The hook stamps
+		// password_changed_at on every detected hash change; the daily
+		// scheduler sends the reminder. Idempotent via last_reminder_at.
+		if err := ensurePasswordRotationStateCollection(app); err != nil {
+			log.Printf("warning: failed to create password_rotation_state collection: %v", err)
+		}
+		bindPasswordRotationHook(app)
+		go startPasswordRotationScheduler(app)
+
 		// ── Root → PocketBase admin UI redirect ───────────────────
 		// The bare domain (https://license.ozpos.my.id) 301-redirects to
 		// the PocketBase admin console at /_/ — which then auto-navigates
