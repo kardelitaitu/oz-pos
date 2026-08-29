@@ -142,7 +142,9 @@
     .chart-grid { grid-template-columns:1fr; gap:1rem; }
     .kpi-grid { grid-template-columns:repeat(2,1fr); gap:.8rem; }
     .topbar-inner { flex-wrap:wrap; }
-    .nav { margin-left:auto; width:auto; order:0; }
+    .brand { margin-right:auto; }
+    .nav { order:3; width:100%; justify-content:center; margin-left:0; margin-top:.35rem; padding-top:.4rem; border-top:1px solid var(--border); }
+    .topbar-actions { margin-left:auto; }
     .wrap { padding:1rem; }
     .chart-card { padding:1rem; }
   }
