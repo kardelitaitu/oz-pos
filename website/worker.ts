@@ -92,6 +92,9 @@ function withStrictCSP(resp: Response): Response {
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('X-Content-Type-Options', 'nosniff');
+  // SPA HTML is auth-gated — never cache it at the edge so a deploy (or a
+  // session state change) is reflected immediately (M6).
+  headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   return new Response(resp.body, { status: resp.status, headers });
 }
 

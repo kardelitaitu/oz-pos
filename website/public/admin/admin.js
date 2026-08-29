@@ -1,51 +1,6 @@
 const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'https://license.ozpos.my.id';
     let currentTab = 'dashboard';
 
-    // ── ═══ MOCK DATA (Phase 1 — replaced by real /stats API when available) ═══ ──
-    const MOCK = {
-      kpis: { totalUsers:1247, activeUsers:1084, totalSubscribers:386, mrrUsd:4280, arpuUsd:11.09, activeDevices:812, trialToPaidRate:22.4 },
-      revenueTrend: [
-        {month:'2025-09',usd:1280,idr:0},{month:'2025-10',usd:1560,idr:0},{month:'2025-11',usd:1820,idr:0},{month:'2025-12',usd:2140,idr:0},
-        {month:'2026-01',usd:2450,idr:0},{month:'2026-02',usd:2710,idr:0},{month:'2026-03',usd:2980,idr:0},{month:'2026-04',usd:3260,idr:0},
-        {month:'2026-05',usd:3550,idr:0},{month:'2026-06',usd:3780,idr:0},{month:'2026-07',usd:4020,idr:0},{month:'2026-08',usd:4280,idr:0}
-      ],
-      subscriberGrowth: [
-        {month:'2025-09',count:112},{month:'2025-10',count:145},{month:'2025-11',count:168},{month:'2025-12',count:189},
-        {month:'2026-01',count:215},{month:'2026-02',count:238},{month:'2026-03',count:262},{month:'2026-04',count:289},
-        {month:'2026-05',count:312},{month:'2026-06',count:338},{month:'2026-07',count:362},{month:'2026-08',count:386}
-      ],
-      signupsPerMonth: [
-        {month:'2025-09',count:41},{month:'2025-10',count:53},{month:'2025-11',count:47},{month:'2025-12',count:62},
-        {month:'2026-01',count:58},{month:'2026-02',count:44},{month:'2026-03',count:71},{month:'2026-04',count:66},
-        {month:'2026-05',count:55},{month:'2026-06',count:78},{month:'2026-07',count:83},{month:'2026-08',count:87}
-      ],
-      churnPerMonth: [
-        {month:'2025-09',count:2},{month:'2025-10',count:3},{month:'2025-11',count:5},{month:'2025-12',count:4},
-        {month:'2026-01',count:6},{month:'2026-02',count:7},{month:'2026-03',count:5},{month:'2026-04',count:8},
-        {month:'2026-05',count:6},{month:'2026-06',count:9},{month:'2026-07',count:7},{month:'2026-08',count:12}
-      ],
-      tierDistribution: [{tier:'plus',count:210},{tier:'pro',count:128},{tier:'premium',count:38},{tier:'enterprise',count:10}],
-      providerSplit: [{provider:'paddle',count:264},{provider:'midtrans',count:122}],
-      topSubscribers: [
-        {email:'resto@warungmakmur.com',tier:'pro',mrrUsd:9.99,renewal:'2026-09-28',provider:'midtrans'},
-        {email:'manager@tokosembako.com',tier:'plus',mrrUsd:4.99,renewal:'2026-10-05',provider:'paddle'},
-        {email:'owner@bajubatik.com',tier:'premium',mrrUsd:39.99,renewal:'2026-09-15',provider:'paddle'},
-        {email:'chef@restoranenak.com',tier:'pro',mrrUsd:9.99,renewal:'2026-11-01',provider:'midtrans'},
-        {email:'admin@minimarket24.com',tier:'enterprise',mrrUsd:99.99,renewal:'2026-12-01',provider:'paddle'}
-      ],
-      recentSignups: [
-        {email:'baru@warungbaru.com',created:'2026-08-28',verified:true,tier:'free'},
-        {email:'test@coba.com',created:'2026-08-27',verified:false,tier:'free'},
-        {email:'owner@tokoabc.com',created:'2026-08-26',verified:true,tier:'plus'},
-        {email:'kasir@restoxyz.com',created:'2026-08-24',verified:true,tier:'free'},
-        {email:'admin@grosirmurah.com',created:'2026-08-22',verified:true,tier:'pro'}
-      ],
-      expiringSoon: [
-        {email:'owner@bajubatik.com',tier:'premium',expiresAt:'2026-09-15',daysLeft:17},
-        {email:'resto@warungmakmur.com',tier:'pro',expiresAt:'2026-09-28',daysLeft:30}
-      ]
-    };
-
     // ── FX rate (live from open.er-api.com, fallback to 16000) ───
     let fxRate = 16000;
     let fxUpdatedAt = '';
@@ -61,6 +16,11 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
     // ── Helpers ──────────────────────────────────────────────────────
     function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+    // Escape HTML entities for any API-sourced string interpolated into
+    // innerHTML (defense-in-depth — donut legend labels, chart text).
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
     function fmtIdr(val) { return 'Rp ' + Math.round(val).toLocaleString('id-ID'); }
     function fmtUsd(val) { return '$' + Number(val).toFixed(2); }
 
@@ -82,7 +42,11 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
           '<p class="empty">Your session is not authorized for the admin panel. ' +
           'If you are the admin, please <a href="/" style="color:var(--accent)">sign in again</a>.</p>' +
           '</div>';
-        return null;
+        // Throw so callers don't overwrite the access-denied screen with a
+        // generic error state (the fetch was fine; auth is the problem).
+        const err = new Error(path + ' (auth denied)');
+        err.authDenied = true;
+        throw err;
       }
       if (!res.ok) throw new Error(path + ' (' + res.status + ')');
       return res.json();
@@ -90,8 +54,17 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
 
     // ── SVG chart helpers ────────────────────────────────────────────
     function svgChart(id, data, series, opts) {
+      // Guard against empty / NaN data (M1) — render a flat baseline
+      // instead of a broken SVG (Math.max(...[]) === -Infinity).
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        return '<div class="chart-empty">No data</div>';
+      }
+      const vals = data.map(d => series.map(s => Number(d[s]))).flat().filter(Number.isFinite);
+      if (vals.length === 0) {
+        return '<div class="chart-empty">No data</div>';
+      }
       const w = 600, h = 180, px = 40, py = 20, pw = w - px, ph = h - py - 20;
-      const max = Math.max(...data.map(d => Math.max(...series.map(s => d[s]))));
+      const max = Math.max(...vals);
       const min = 0;
       const rng = max - min || 1;
       const x = (i) => px + (i / (data.length - 1 || 1)) * pw;
@@ -99,7 +72,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       const colors = { usd: '#147efb', idr: '#22c55e', count: '#147efb', mrr: '#147efb' };
       let paths = '', fills = '';
       series.forEach(s => {
-        const pts = data.map((d,i) => `${x(i)},${y(d[s])}`).join(' L ');
+        const pts = data.map((d,i) => `${x(i)},${y(Number(d[s]) || 0)}`).join(' L ');
         paths += `<path d="M ${pts}" stroke="${colors[s]||'#147efb'}" stroke-width="2" fill="none" class="chart-line"/>`;
         if (opts && opts.area) {
           const base = `${x(0)},${py+ph} L ${pts} L ${x(data.length-1)},${py+ph} Z`;
@@ -112,17 +85,24 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       // X axis labels (every 2nd)
       let xLabels = '';
       data.forEach((d,i) => { if (i % 2 === 0 || i === data.length-1) { xLabels += `<text x="${x(i)}" y="${py+ph+15}" text-anchor="middle" fill="var(--muted)" font-size="9">${d.month.slice(5)}</text>`; } });
-      return `<svg viewBox="0 0 ${w} ${h}" style="max-height:180px">${fills}${paths}${yLabels}${xLabels}</svg>`;
+      return `<svg viewBox="0 0 ${w} ${h}" class="chart-svg">${fills}${paths}${yLabels}${xLabels}</svg>`;
     }
 
     function svgDonut(id, data, labelKey, valueKey, colors) {
-      const total = data.reduce((s,d) => s + d[valueKey], 0);
+      // Guard against empty / zero-total data (M1).
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        return { svg: '<div class="chart-empty">No data</div>', legend: '' };
+      }
+      const total = data.reduce((s,d) => s + (Number(d[valueKey]) || 0), 0);
+      if (total <= 0) {
+        return { svg: '<div class="chart-empty">No data</div>', legend: '' };
+      }
       let acc = 0;
       let slices = '';
       const cx = 80, cy = 80, r = 60;
       const colorList = ['#147efb','#22c55e','#e879f9','#fb923c','#22d3ee','#f59e0b'];
       data.forEach((d,i) => {
-        const pct = d[valueKey] / total;
+        const pct = (Number(d[valueKey]) || 0) / total;
         const ang = pct * 360;
         const start = (acc / 360) * 2 * Math.PI - Math.PI/2;
         const end = ((acc + ang) / 360) * 2 * Math.PI - Math.PI/2;
@@ -135,8 +115,8 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       });
       // Legend
       let legend = '';
-      data.forEach((d,i) => { const c = colors && colors[i] ? colors[i] : colorList[i % colorList.length]; legend += `<div style="display:flex;align-items:center;gap:.4rem;font-size:.75rem;margin:.15rem 0"><span style="width:8px;height:8px;border-radius:2px;background:${c};flex-shrink:0"></span>${d[labelKey]} <span style="color:var(--muted)">${Math.round(pct*100)}%</span></div>`; });
-      return { svg: `<svg viewBox="0 0 160 160" style="max-height:160px">${slices}</svg>`, legend };
+      data.forEach((d,i) => { const c = colors && colors[i] ? colors[i] : colorList[i % colorList.length]; legend += `<div class="donut-legend-item"><span class="donut-swatch" style="background:${c}"></span><span class="donut-label">${escapeHtml(d[labelKey])}</span> <span class="donut-pct">${Math.round(pct*100)}%</span></div>`; });
+      return { svg: `<svg viewBox="0 0 160 160">${slices}</svg>`, legend };
     }
 
     // ── Dashboard tab ────────────────────────────────────────────────
@@ -144,29 +124,39 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       const c = document.getElementById('content');
       c.innerHTML = '<div class="skeleton" style="height:8rem"></div>';
 
-      // Try real stats API first; fall back to MOCK
+      // Load real stats; on failure show an error state (no MOCK fallback).
       let stats = null;
-      try { stats = await api('/api/v1/admin/stats'); } catch { /* fall through */ }
-      const m = stats || MOCK;
-      const isReal = !!stats;
+      let loadError = null;
+      try { stats = await api('/api/v1/admin/stats'); } catch (err) { loadError = err; }
+      if (!stats) {
+        // api() already rendered an "Access denied" screen for 401/403 —
+        // don't overwrite it with a generic error. Only show the retry UI
+        // for network / server errors.
+        if (loadError && loadError.authDenied) { return; }
+        c.innerHTML =
+          '<div class="card" style="text-align:center;padding:2rem">' +
+          '<h2 style="margin:0 0 .5rem;color:var(--bad)">Stats unavailable</h2>' +
+          '<p class="empty">The dashboard API did not respond. Try again.</p>' +
+          '<button class="btn" id="retry-stats">Retry</button>' +
+          '</div>';
+        const retry = document.getElementById('retry-stats');
+        if (retry) { retry.addEventListener('click', renderDashboard); }
+        return;
+      }
+      const m = stats;
 
       // FX rate: prefer the real endpoint's value; otherwise fetch live.
-      if (isReal && m.kpis && m.kpis.fxRate) { fxRate = m.kpis.fxRate; fxLive = !!m.kpis.fxLive; fxUpdatedAt = m.kpis.fxUpdatedAt || ''; }
+      if (m.kpis && m.kpis.fxRate) { fxRate = m.kpis.fxRate; fxLive = !!m.kpis.fxLive; fxUpdatedAt = m.kpis.fxUpdatedAt || ''; }
       else { await fetchFxRate(); }
-      // Convert all revenue data to IDR (client-side fallback for mock)
-      if (!isReal) { m.revenueTrend.forEach(d => d.idr = Math.round(d.usd * fxRate)); }
+      // Convert all revenue data to IDR.
+      m.revenueTrend.forEach(d => d.idr = Math.round(d.usd * fxRate));
       const mrrIdr = Math.round(m.kpis.mrrUsd * fxRate);
 
       c.innerHTML = '';
 
-      // --- Mock/Real badge ---
+      // --- FX chip ---
       const top = el('div', null);
       top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem';
-      const badgeLabel = isReal ? 'LIVE DATA' : 'MOCK DATA';
-      const badgeStyle = isReal ? 'background:rgba(34,197,94,.15);color:#4ade80' : 'background:rgba(245,158,11,.15);color:#fbbf24';
-      const badge = el('span', null, badgeLabel);
-      badge.style.cssText = 'display:inline-block;padding:.1rem .5rem;border-radius:999px;font-size:.65rem;font-weight:600;' + badgeStyle;
-      top.appendChild(badge);
       const fx = el('div', 'fx-chip');
       const fxDot = el('span', null, fxLive ? '●' : '○');
       fxDot.style.color = fxLive ? 'var(--ok)' : 'var(--warn)';
@@ -185,7 +175,6 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         devices: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
         trend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
         conversion: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
-        devices2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
         arpu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
       };
       const kpiGrid = el('div', 'kpi-grid');
@@ -194,7 +183,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       kpiGrid.appendChild(kpiC('MRR', fmtUsd(m.kpis.mrrUsd), '', ICONS.mrr, 'kpi-icon-orange'));
       kpiGrid.appendChild(kpiC('Monthly Gross (IDR)', fmtIdr(mrrIdr), `≈ $${m.kpis.mrrUsd} × ${fxRate.toLocaleString()}`, ICONS.trend, 'kpi-icon-cyan'));
       kpiGrid.appendChild(kpiC('ARPU', fmtUsd(m.kpis.arpuUsd), 'per subscriber', ICONS.arpu, 'kpi-icon-pink'));
-      kpiGrid.appendChild(kpiC('Active Devices', String(m.kpis.activeDevices), '', ICONS.devices, 'kpi-icon-blue'));
+      kpiGrid.appendChild(kpiC('Active Terminals', String(m.kpis.activeDevices), '', ICONS.devices, 'kpi-icon-blue'));
       kpiGrid.appendChild(kpiC('Trial → Paid', m.kpis.trialToPaidRate + '%', 'conversion rate', ICONS.conversion, 'kpi-icon-green'));
       c.appendChild(kpiGrid);
 
@@ -218,9 +207,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       tierCard.appendChild(el('h3', null, 'Tier Distribution'));
       const donut = svgDonut('tiers', m.tierDistribution, 'tier', 'count');
       const tierRow = el('div', 'donut-row');
-      const donutDiv = el('div', null); donutDiv.innerHTML = donut.svg;
+      const donutDiv = el('div', 'donut-chart'); donutDiv.innerHTML = donut.svg;
       tierRow.appendChild(donutDiv);
-      const legendDiv = el('div', null); legendDiv.innerHTML = donut.legend;
+      const legendDiv = el('div', 'donut-legend'); legendDiv.innerHTML = donut.legend;
       tierRow.appendChild(legendDiv);
       tierCard.appendChild(tierRow);
       chartGrid.appendChild(tierCard);
@@ -230,9 +219,9 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       provCard.appendChild(el('h3', null, 'Payment Provider'));
       const donut2 = svgDonut('prov', m.providerSplit, 'provider', 'count', ['#147efb','#22c55e']);
       const provRow = el('div', 'donut-row');
-      const donutDiv2 = el('div', null); donutDiv2.innerHTML = donut2.svg;
+      const donutDiv2 = el('div', 'donut-chart'); donutDiv2.innerHTML = donut2.svg;
       provRow.appendChild(donutDiv2);
-      const legendDiv2 = el('div', null); legendDiv2.innerHTML = donut2.legend;
+      const legendDiv2 = el('div', 'donut-legend'); legendDiv2.innerHTML = donut2.legend;
       provRow.appendChild(legendDiv2);
       provCard.appendChild(provRow);
       chartGrid.appendChild(provCard);
@@ -248,7 +237,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         const bx = 10 + i * (barW + 2);
         bars += `<rect x="${bx}" y="${150 - bh}" width="${barW * 0.7}" height="${bh}" rx="2" fill="var(--accent)" opacity=".8"/>
                  <text x="${bx + barW * 0.35}" y="${150 - bh - 4}" text-anchor="middle" fill="var(--text)" font-size="9">${d.count}</text>
-                 <text x="${bx + barW * 0.35}" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">${d.month.slice(5)}</text>`;
+                 <text x="${bx + barW * 0.35}" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">${escapeHtml(d.month.slice(5))}</text>`;
       });
       signupCard.innerHTML += `<svg viewBox="0 0 440 180" style="max-height:180px">${bars}</svg>`;
       chartGrid.appendChild(signupCard);
@@ -263,7 +252,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         const bx = 10 + i * (barW + 2);
         churnBars += `<rect x="${bx}" y="${150 - bh}" width="${barW * 0.7}" height="${bh}" rx="2" fill="var(--bad)" opacity=".8"/>
                       <text x="${bx + barW * 0.35}" y="${150 - bh - 4}" text-anchor="middle" fill="var(--text)" font-size="9">${d.count}</text>
-                      <text x="${bx + barW * 0.35}" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">${d.month.slice(5)}</text>`;
+                      <text x="${bx + barW * 0.35}" y="165" text-anchor="middle" fill="var(--muted)" font-size="8">${escapeHtml(d.month.slice(5))}</text>`;
       });
       churnCard.innerHTML += `<svg viewBox="0 0 440 180" style="max-height:180px">${churnBars}</svg>`;
       chartGrid.appendChild(churnCard);
@@ -332,14 +321,46 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       });
     });
 
-    // ── Tenants list (from ADR #42 Phase 3) ─────────────────────────
+    // ── Tenants list (from ADR #42 Phase 3) — search + pagination ─────
     let tenants = [];
+    let tenantsPage = 1;
+    let tenantsPerPage = 25;
+    let tenantsTotal = 0;
+    let tenantsSearch = '';
+
     async function renderTenants() {
       const c = document.getElementById('content');
       c.innerHTML = '<div class="card"><p class="empty">Loading tenants…</p></div>';
-      try { const data = await api('/api/v1/admin/tenants'); if (!data) return; tenants = data.tenants || []; } catch { c.innerHTML = '<div class="card"><p class="empty">Failed to load tenants.</p></div>'; return; }
+      let data;
+      try {
+        const qs = '?page=' + tenantsPage + '&perPage=' + tenantsPerPage +
+          (tenantsSearch ? '&search=' + encodeURIComponent(tenantsSearch) : '');
+        data = await api('/api/v1/admin/tenants' + qs);
+      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">Failed to load tenants.</p></div>'; return; }
+      tenants = data.tenants || [];
+      tenantsTotal = data.total || 0;
+
       c.innerHTML = '';
-      const card = el('div', 'card'); card.appendChild(el('h2', null, `Tenants (${tenants.length})`));
+
+      // ── Search + pagination toolbar ─────────────────────────────
+      const toolbar = el('div', 'tenant-toolbar');
+      const searchBox = el('input', 'input search-input');
+      searchBox.placeholder = 'Search by email…';
+      searchBox.value = tenantsSearch;
+      searchBox.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { tenantsSearch = searchBox.value.trim(); tenantsPage = 1; renderTenants(); }
+      });
+      const searchBtn = el('button', 'btn btn-sm', 'Search');
+      searchBtn.addEventListener('click', () => { tenantsSearch = searchBox.value.trim(); tenantsPage = 1; renderTenants(); });
+      const clearBtn = el('button', 'btn btn-sm btn-ghost', 'Clear');
+      clearBtn.addEventListener('click', () => { tenantsSearch = ''; searchBox.value = ''; tenantsPage = 1; renderTenants(); });
+      toolbar.appendChild(searchBox); toolbar.appendChild(searchBtn); toolbar.appendChild(clearBtn);
+      const totalLabel = el('span', 'tenant-total', 'Showing ' + tenants.length + ' of ' + tenantsTotal);
+      toolbar.appendChild(totalLabel);
+      c.appendChild(toolbar);
+
+      const card = el('div', 'card'); card.appendChild(el('h2', null, 'Tenants'));
+      if (tenants.length === 0) { card.appendChild(el('p', 'empty', 'No tenants match.')); c.appendChild(card); return; }
       const table = el('table');
       const thead = el('thead'); const tr = el('tr');
       ['Email','Status','License','Tier','Created',''].forEach(h => tr.appendChild(el('th', null, h)));
@@ -357,6 +378,23 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         tbody.appendChild(row);
       });
       table.appendChild(tbody); card.appendChild(table); c.appendChild(card);
+
+      // ── Pagination controls ─────────────────────────────────────
+      const totalPages = Math.max(1, Math.ceil(tenantsTotal / tenantsPerPage));
+      if (totalPages > 1) {
+        const nav = el('div', 'pagination');
+        const prev = el('button', 'btn btn-sm btn-ghost', '← Prev');
+        prev.disabled = tenantsPage <= 1;
+        prev.addEventListener('click', () => { if (tenantsPage > 1) { tenantsPage--; renderTenants(); } });
+        nav.appendChild(prev);
+        const pageInfo = el('span', 'page-info', 'Page ' + tenantsPage + ' of ' + totalPages);
+        nav.appendChild(pageInfo);
+        const next = el('button', 'btn btn-sm btn-ghost', 'Next →');
+        next.disabled = tenantsPage >= totalPages;
+        next.addEventListener('click', () => { if (tenantsPage < totalPages) { tenantsPage++; renderTenants(); } });
+        nav.appendChild(next);
+        c.appendChild(nav);
+      }
     }
 
     // ── Tenant detail (from ADR #42 Phase 3) ────────────────────────
@@ -365,19 +403,26 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       modal.innerHTML = '<div class="modal-back"><div class="modal"><h3>Loading…</h3></div></div>';
       try {
         const data = await api('/api/v1/admin/tenants/' + id);
-        if (!data) { modal.innerHTML = ''; return; }
         const t = data.tenant || {}, lic = data.license || {}, sub = data.subscription || {}, devices = data.devices || [];
         const m = el('div', 'modal-back'), box = el('div', 'modal');
         box.appendChild(el('h3', null, 'Tenant: ' + (t.email || '')));
         const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
-        kv.innerHTML = '<span class="muted">Status</span><span style="text-align:right">'+(t.status||'—')+'</span>' +
-          '<span class="muted">Email verified</span><span style="text-align:right">'+(t.emailVerified?'✓':'○')+'</span>' +
-          '<span class="muted">Created</span><span style="text-align:right">'+(t.created?t.created.slice(0,10):'—')+'</span>' +
-          '<span class="muted">License key</span><span style="text-align:right;font-family:monospace;font-size:.75rem">'+(lic.key||'—')+'</span>' +
-          '<span class="muted">Tier</span><span style="text-align:right">'+(sub.tierKey||lic.tierKey||'—')+'</span>' +
-          '<span class="muted">Subscription status</span><span style="text-align:right">'+(sub.status||'—')+'</span>' +
-          '<span class="muted">Expires</span><span style="text-align:right">'+(sub.expiresAt||'—')+'</span>' +
-          '<span class="muted">Devices</span><span style="text-align:right">'+devices.length+'</span>';
+        // Build the key-value grid safely — never innerHTML with API data.
+        function addRow(label, val) {
+          kv.appendChild(el('span', 'muted', label));
+          const vs = el('span', null, val === undefined || val === null ? '—' : String(val));
+          vs.style.textAlign = 'right';
+          if (label === 'License key') { vs.style.cssText += ';font-family:monospace;font-size:.75rem'; }
+          kv.appendChild(vs);
+        }
+        addRow('Status', t.status);
+        addRow('Email verified', t.emailVerified ? '✓' : '○');
+        addRow('Created', t.created ? t.created.slice(0,10) : '—');
+        addRow('License key', lic.key || '—');
+        addRow('Tier', sub.tierKey || lic.tierKey || '—');
+        addRow('Subscription status', sub.status || '—');
+        addRow('Expires', sub.expiresAt || '—');
+        addRow('Devices', devices.length);
         box.appendChild(kv);
         const actions = el('div', null); actions.style.cssText = 'display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap';
         if (t.status === 'active') { const revoke = el('button', 'btn btn-sm btn-bad', 'Revoke'); revoke.addEventListener('click', () => doAction(id,'revoke','Revoked')); actions.appendChild(revoke); }
@@ -388,7 +433,10 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
         const close = el('button', 'btn btn-ghost', 'Close'); close.style.cssText = 'margin-top:.8rem;width:100%'; close.addEventListener('click', () => { modal.innerHTML = ''; }); box.appendChild(close);
         m.appendChild(box); modal.appendChild(m);
         m.addEventListener('click', e => { if (e.target === m) { modal.innerHTML = ''; } });
-      } catch { modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">Failed to load tenant detail.</p></div></div>'; }
+      } catch (err) {
+        if (err && err.authDenied) { modal.innerHTML = ''; return; }
+        modal.innerHTML = '<div class="modal-back"><div class="modal"><p class="empty">Failed to load tenant detail.</p></div></div>';
+      }
     }
 
     async function doAction(id, action, label, body) {
@@ -399,7 +447,8 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     function upgradePrompt(id, data) {
       const modal = document.getElementById('modal-root'), m = el('div', 'modal-back'), box = el('div', 'modal');
       box.appendChild(el('h3', null, 'Change tier'));
-      box.innerHTML += '<p class="small" style="margin-bottom:.6rem">Current tier: ' + ((data.subscription && data.subscription.tierKey) || 'none') + '</p>';
+      const p = el('p', 'small'); p.style.marginBottom = '.6rem'; p.textContent = 'Current tier: ' + ((data.subscription && data.subscription.tierKey) || 'none');
+      box.appendChild(p);
       const select = el('select', 'input'); ['plus','pro','premium','enterprise'].forEach(t => { const opt = el('option', null, t); if (t === (data.subscription && data.subscription.tierKey)) opt.selected = true; select.appendChild(opt); });
       box.appendChild(select);
       const reason = el('input', 'input'); reason.placeholder = 'Reason for override (audit)'; reason.style.cssText = 'margin-top:.5rem;' + reason.style.cssText; box.appendChild(reason);
@@ -413,17 +462,17 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
     // ── Health tab ──────────────────────────────────────────────────
     async function renderHealth() {
       const c = document.getElementById('content'); c.innerHTML = '<div class="card"><p class="empty">Loading…</p></div>';
-      try { const h = await api('/api/v1/admin/health'); if (!h) return;
+      try { const h = await api('/api/v1/admin/health');
         c.innerHTML = ''; const card = el('div', 'card'); card.appendChild(el('h2', null, 'System Health'));
         const kv = el('div'); kv.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem';
         const status = h.status === 'ok' ? '✓ OK' : '✗ Degraded';
-        kv.innerHTML = '<span class="muted">Status</span><span style="text-align:right">'+status+'</span>' +
+        kv.innerHTML = '<span class="muted">Status</span><span style="text-align:right">'+escapeHtml(status)+'</span>' +
           '<span class="muted">Database</span><span style="text-align:right">'+(h.db_ok?'✓ Connected':'✗ Unreachable')+'</span>' +
           '<span class="muted">SMTP</span><span style="text-align:right">'+(h.smtp_host?'✓ Configured':'— Not configured')+'</span>' +
-          '<span class="muted">Version</span><span style="text-align:right">'+(h.version||'—')+'</span>' +
-          '<span class="muted">Time</span><span style="text-align:right">'+(h.time||'—')+'</span>';
+          '<span class="muted">Version</span><span style="text-align:right">'+escapeHtml(h.version||'—')+'</span>' +
+          '<span class="muted">Time</span><span style="text-align:right">'+escapeHtml(h.time||'—')+'</span>';
         card.appendChild(kv); c.appendChild(card);
-      } catch { c.innerHTML = '<div class="card"><p class="empty">Failed to load health.</p></div>'; }
+      } catch (err) { if (err && err.authDenied) { return; } c.innerHTML = '<div class="card"><p class="empty">Failed to load health.</p></div>'; }
     }
 
     // ── Flash ───────────────────────────────────────────────────────
