@@ -1,4 +1,33 @@
 
+## 2026-08-29 — Strategy shift: property tests catch fmtDate "Invalid Date" leak (website AccountView)
+
+**Strategy:** The user asked whether continuing ad-hoc TDD bug-hunting was the
+best approach. I recommended a systematic gap analysis + property tests instead
+(they approved). Two moves:
+
+**Move 1 — gap analysis:** audited AccountView's branches for untested
+behaviors. Pinned 3: statusLabel('unused') → 'Not activated' (not "Unused" —
+a wrong test expectation I caught and corrected), statusLabel(unknown) → raw
+pass-through, fmtDate(undefined) → em-dash. These were correct, now pinned.
+
+**Move 2 — property tests (dependency-free):** exported the 5 pure helpers
+(fmtDate, daysUntil, statusLabel, statusPillClass, renewsLabel) and wrote
+17 invariant tests in a new file account-view-properties.test.ts. The
+invariant "fmtDate returns the raw string for an invalid date" immediately
+caught a REAL bug:
+
+- `new Date('not-a-date')` creates an Invalid Date whose
+  `toLocaleDateString()` returns the STRING "Invalid Date" — it does NOT
+  throw, so the try/catch never fired and fmtDate leaked "Invalid Date"
+  into the UI instead of the raw input (e.g. a malformed expiresAt from a
+  webhook). Same class as the round-6 NaN countdown, but in fmtDate.
+- Fixed with an explicit `Number.isNaN(d.getTime())` guard returning the
+  raw date string.
+
+**Commits:** pending commit for the strategy round.
+**Test counts:** account-view.test.tsx 54/54; new account-view-properties 17;
+full suite 177→194 (18 files).
+
 ## 2026-08-29 — TDD round 8: unhandled 'paused' subscription status in statusLabel (website AccountView)
 
 **Problem:** The license-server `subscriptions` schema allows `status: 'paused'`

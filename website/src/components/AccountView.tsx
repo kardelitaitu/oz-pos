@@ -85,7 +85,7 @@ const REGION_OPTIONS: { value: Region; labelKey: string }[] = [
  * (license_keys + subscriptions collections). Unknown values pass through
  * unchanged so a new server status never renders blank.
  */
-function statusLabel(locale: string, status: string | undefined): string {
+export function statusLabel(locale: string, status: string | undefined): string {
   switch (status) {
     case 'active':
       return t(locale, 'account.statusActive');
@@ -105,7 +105,7 @@ function statusLabel(locale: string, status: string | undefined): string {
 }
 
 /** CSS classes for a status pill based on the raw server status value. */
-function statusPillClass(status: string | undefined): string {
+export function statusPillClass(status: string | undefined): string {
   switch (status) {
     case 'active':
       return 'bg-success/15 text-success';
@@ -120,13 +120,18 @@ function statusPillClass(status: string | undefined): string {
 }
 
 /** Format an ISO date string to a locale-aware short date, or fallback. */
-function fmtDate(dateStr: string | undefined, locale: string): string {
+export function fmtDate(dateStr: string | undefined, locale: string): string {
   if (!dateStr) return '—';
   try {
+    const d = new Date(dateStr);
+    // new Date('not-a-date') produces an Invalid Date whose
+    // toLocaleDateString returns "Invalid Date" (it does NOT throw), so the
+    // try/catch below never fires. Guard explicitly and return the raw value.
+    if (Number.isNaN(d.getTime())) return dateStr;
     // Use UTC timezone so the displayed calendar day is the same on every
     // machine — "2027-01-01" and "2027-01-01T00:00:00Z" both show "Jan 1,
     // 2027" regardless of whether the user is in Los Angeles or Jakarta.
-    return new Date(dateStr).toLocaleDateString(locale === 'id' ? 'id-ID' : 'en-US', {
+    return d.toLocaleDateString(locale === 'id' ? 'id-ID' : 'en-US', {
       timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric',
     });
   } catch {
@@ -135,7 +140,7 @@ function fmtDate(dateStr: string | undefined, locale: string): string {
 }
 
 /** Days until an ISO date string, or null when missing/parse fails. */
-function daysUntil(dateStr: string | undefined): number | null {
+export function daysUntil(dateStr: string | undefined): number | null {
   if (!dateStr) return null;
   try {
     // UTC-based calendar-day count, timezone- and clock-independent: the
@@ -160,7 +165,7 @@ function daysUntil(dateStr: string | undefined): number | null {
  * Localized "Renews in N days" label with correct singular/plural, or the
  * raw date fallback. `locale` picks the string; `days` drives the form.
  */
-function renewsLabel(locale: string, days: number): string {
+export function renewsLabel(locale: string, days: number): string {
   const key = days === 1 ? 'account.renewsInDay' : 'account.renewsInDays';
   return t(locale, key).replace('{days}', String(days));
 }
