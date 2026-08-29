@@ -278,6 +278,7 @@ export default function StaffLoginScreen() {
   const goBack = useCallback(() => {
     setStep('username');
     setPin([]);
+    setUsernameAccepted(false);
     pinSubmitted.current = false;
   }, []);
 
@@ -300,7 +301,7 @@ export default function StaffLoginScreen() {
         goBack();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (pin.length >= 1 && !pinSubmitted.current) attemptLogin();
+        if (pin.length >= MAX_PIN_LENGTH && !pinSubmitted.current) attemptLogin();
       }
     },
     [step, authLoading, handlePinDigit, handlePinBackspace, handlePinClear, goBack, attemptLogin, pin.length],
@@ -334,6 +335,7 @@ export default function StaffLoginScreen() {
 
   const handleUsernameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setUsername(e.target.value);
+    setUsernameAccepted(false);
   }, []);
 
   const handleUsernameKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
