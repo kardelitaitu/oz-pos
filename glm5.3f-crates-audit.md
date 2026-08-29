@@ -525,6 +525,29 @@ ADR-19 §5.1 location lock via COALESCE upsert; `tables.rs` TBL-08 geometry
 validation is exemplary; `store_profiles` swaps the primary invariant in a
 transaction with rollback.
 
+### Slice B5 finale — db/audit.rs (479) + db/purchase_orders.rs (520) + db/stock_counts.rs (609), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-29 | 🟡 LOW | db/purchase_orders.rs:452 | `received + damaged > line.qty` uses plain `+` — the one unchecked add in an otherwise fully checked file; i64 overflow wraps negative in release builds and bypasses the ordered-qty cap (stock itself stays guarded by `checked_add` inside the stock API, so corruption is limited to PO line records). | `checked_add` to match the file's own MONEY-05 contract. |
+
+**Slice B5 finale positives:** `audit.rs` is a model append-only log —
+AUD-06 secret redaction (20 sensitive keys, case-insensitive, with a
+byte-preserving fast path), payload truncation with an explicit marker,
+keyset `(created_at, id)` pagination, a 100k-row export bound, review
+checkpoints committing with their own audit event, and schema-level
+immutability triggers backing the append-only claim. `purchase_orders.rs`
+implements the MONEY-05 checked-arithmetic contract at the IPC boundary
+(doctored dev-build overflow rationale included) with atomic create and
+atomic receive; `stock_counts.rs` allocates count numbers inside the INSERT
+under `BEGIN IMMEDIATE` (with dangling-transaction rollback discipline),
+claims completion conditionally, and is checked-arithmetic throughout.
+
+> **Slice B5 complete:** all 41 production files in `db/` + `migrations.rs`
+> are now read and stamped. Remaining oz-core: `kds.rs` (1,312),
+> `workspaces.rs` (1,106), `popularity.rs` (813), `staff.rs` (636) — the
+> last four mid files — then slices C and D.
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs
