@@ -344,10 +344,10 @@ describe('SessionLockScreen lockout', () => {
       });
     }
 
-    // The error alert div should contain the lockout countdown span.
-    const rateLimit = document.querySelector('.session-lock-rate-limit');
-    expect(rateLimit).toBeTruthy();
-    expect(rateLimit?.textContent).toContain('Wait');
+    // The countdown div should show the lockout message.
+    const countdown = document.querySelector('.session-lock-countdown');
+    expect(countdown).toBeTruthy();
+    expect(countdown?.textContent).toContain('Wait');
   });
 
   it('respects backend rate-limit instructions from error message', async () => {
@@ -367,9 +367,9 @@ describe('SessionLockScreen lockout', () => {
       await vi.advanceTimersByTimeAsync(50);
     });
 
-    const rateLimit = document.querySelector('.session-lock-rate-limit');
-    expect(rateLimit).toBeTruthy();
-    expect(rateLimit?.textContent).toContain('Wait');
+    const countdown = document.querySelector('.session-lock-countdown');
+    expect(countdown).toBeTruthy();
+    expect(countdown?.textContent).toContain('Wait');
   });
 });// ── Keyboard input ──────────────────────────────────────────────
 
@@ -465,7 +465,7 @@ describe('SessionLockScreen visual contract', () => {
     renderScreen();
     const footer = document.querySelector('.session-lock-footer');
     expect(footer).toBeTruthy();
-    expect(footer?.querySelector('.session-lock-footer-version')?.textContent).toContain('OZ-POS');
+    expect(footer?.querySelector('.session-lock-footer-version')?.textContent).toContain('v0.0.33');
     expect(footer?.querySelectorAll('.connection-status').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('Auth')).toBeInTheDocument();
     expect(screen.getByText('Sync')).toBeInTheDocument();

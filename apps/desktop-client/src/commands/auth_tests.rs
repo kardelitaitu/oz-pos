@@ -518,3 +518,103 @@ async fn refreshed_picker_ticket_can_be_used_for_create_session() {
     assert_eq!(result.context.role_id, "role-owner");
     assert!(!result.session_token.is_empty());
 }
+
+// ── S1: PIN minimum length enforcement ──────────────────────────────
+
+#[tokio::test]
+async fn staff_login_rejects_short_pin() {
+    // S1: A 3-digit PIN must be rejected with a clear error message,
+    // even if the user exists and the hash would match.
+    let conn = migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    let hash = oz_core::auth::hash_pin("123").unwrap(); // 3 digits
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+         VALUES ('user-1', 'testuser', ?1, 'Test User', 'role-staff', 1, '2026-08-30T00:00:00.000Z', '2026-08-30T00:00:00.000Z')",
+        [hash],
+    )
+    .unwrap();
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = staff_login(
+        StaffLoginArgs {
+            username: "testuser".into(),
+            pin: "123".into(),
+            device_id: None,
+        },
+        app.state(),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(AppError::Invalid(ref msg)) if msg.contains("at least 4 digits")),
+        "3-digit PIN must be rejected with 'at least 4 digits' error, got: {:?}",
+        result
+    );
+}
+
+#[tokio::test]
+async fn staff_login_rejects_empty_pin() {
+    // S1: An empty PIN must be rejected.
+    let conn = migrations::fresh_db();
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = staff_login(
+        StaffLoginArgs {
+            username: "anyone".into(),
+            pin: "".into(),
+            device_id: None,
+        },
+        app.state(),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(AppError::Invalid(ref msg)) if msg.contains("at least 4 digits")),
+        "empty PIN must be rejected, got: {:?}",
+        result
+    );
+}
+
+#[tokio::test]
+async fn staff_login_accepts_exactly_4_digit_pin() {
+    // S1: A 4-digit PIN should pass the length check (even if wrong password).
+    let conn = migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    let hash = oz_core::auth::hash_pin("5678").unwrap();
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+         VALUES ('user-1', 'testuser', ?1, 'Test User', 'role-staff', 1, '2026-08-30T00:00:00.000Z', '2026-08-30T00:00:00.000Z')",
+        [hash],
+    )
+    .unwrap();
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = staff_login(
+        StaffLoginArgs {
+            username: "testuser".into(),
+            pin: "1234".into(), // 4 digits but wrong
+            device_id: None,
+        },
+        app.state(),
+    )
+    .await;
+
+    // Should NOT be rejected for length — should be rejected for wrong PIN
+    assert!(
+        matches!(result, Err(AppError::Invalid(ref msg)) if msg.contains("invalid username or PIN")),
+        "4-digit wrong PIN should get 'invalid username or PIN', not length error, got: {:?}",
+        result
+    );
+}
