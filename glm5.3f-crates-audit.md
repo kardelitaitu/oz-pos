@@ -450,6 +450,28 @@ week-boundary idiom is explained inline (`'-6 days', 'weekday 1'`);
 alerts correctly use the canonical `stock_summary` with custom-threshold
 precedence.
 
+### Slice B5 part 3 — db/profile.rs (631) + db/customers.rs (281), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-23 | ℹ️ INFO | db/customers.rs:263–274 | `delete_customer` hard-deletes regardless of sales history or a linked loyalty account — dangling references possible. | Soft-delete or referential guard. |
+| COR-24 | ℹ️ INFO | db/profile.rs:296–298 | `decrypt_sensitive` returns `None` silently on decrypt failure — fail-closed (good direction) but a corrupt ciphertext reads as a missing field with no signal. | Log at warn before returning None. |
+
+**Cross-crate escalation for CRY-1:** `profile.rs` encrypts national id and
+payroll at rest via `encrypt_profile_field` → `oz-crypto` — whose static
+key is derivable from repo constants (CRY-1 🔴). The PII "at-rest" guarantee
+therefore inherits CRY-1's weakness; **CRY-1's fix priority should be raised**
+on that basis (staff SSN/KTP ciphertext is currently reproducible by anyone
+with repo access).
+
+**Slice B5 part 3 positives:** `profile.rs` is a model PII implementation —
+sensitive fields encrypted, uniqueness preserved via a SHA-256 hash of the
+plaintext (never stored), last-4 masking in every surface, sensitive reads
+both permission-gated (`staff:read_identity`/`staff:read_payroll`) and
+audit-logged (access recorded, never values), and an incomplete-profile
+guard blocking sensitive-role assignment. `customers.rs` implements the
+CUST-06 PII-bounded search correctly (escaped LIKE + clamped page).
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs
