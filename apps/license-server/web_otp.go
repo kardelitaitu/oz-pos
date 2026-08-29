@@ -346,6 +346,8 @@ func webAllowedOrigins() []string {
 	if v == "" {
 		out = []string{
 			"https://ozpos.my.id",
+			"https://dashboard.ozpos.my.id",
+			"https://admin.ozpos.my.id",
 			"http://localhost:4321",
 		}
 	} else {

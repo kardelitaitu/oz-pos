@@ -815,11 +815,14 @@ func TestWebSessionTTL_InvalidEnvFallsBack(t *testing.T) {
 
 func TestWebAllowedOrigins_Default(t *testing.T) {
 	origins := webAllowedOrigins()
-	if len(origins) != 2 {
-		t.Fatalf("expected 2 default origins, got %d", len(origins))
+	if len(origins) != 4 {
+		t.Fatalf("expected 4 default origins, got %d: %v", len(origins), origins)
 	}
 	if !strings.Contains(strings.Join(origins, ","), "ozpos.my.id") {
 		t.Errorf("expected ozpos.my.id origin in defaults, got %v", origins)
+	}
+	if !strings.Contains(strings.Join(origins, ","), "dashboard.ozpos.my.id") {
+		t.Errorf("expected dashboard.ozpos.my.id origin in defaults, got %v", origins)
 	}
 }
 
@@ -881,8 +884,8 @@ func TestWebAllowedOrigins_CorsOriginsEmpty(t *testing.T) {
 	// Empty OZ_CORS_ORIGINS should not add anything.
 	t.Setenv("OZ_CORS_ORIGINS", "")
 	origins := webAllowedOrigins()
-	if len(origins) != 2 {
-		t.Errorf("expected 2 default origins with empty OZ_CORS_ORIGINS, got %d: %v", len(origins), origins)
+	if len(origins) != 4 {
+		t.Errorf("expected 4 default origins with empty OZ_CORS_ORIGINS, got %d: %v", len(origins), origins)
 	}
 }
 

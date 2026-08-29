@@ -131,9 +131,8 @@ describe('Cloudflare Worker — worker.ts', () => {
     const res = await worker.fetch(req, mockEnv);
 
     expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toContain('text/html');
-    expect(res.headers.get('Cache-Control')).toBe('no-store');
-    expect(await res.text()).toContain('OZ-POS Dashboard');
+    // The dashboard SPA is served from ASSETS (rewritten to /dashboard/ path)
+    expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
   });
 
   it('serves placeholder admin page when cookie is present', async () => {
@@ -143,9 +142,27 @@ describe('Cloudflare Worker — worker.ts', () => {
     const res = await worker.fetch(req, mockEnv);
 
     expect(res.status).toBe(200);
-    const body = await res.text();
-    expect(body).toContain('OZ-POS Admin');
-    expect(body).toContain('Admin Dashboard');
+    expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
+  });
+
+  it('returns 401 from /__oz/session when no cookie', async () => {
+    const req = new Request('https://dashboard.ozpos.my.id/__oz/session');
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(401);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('not signed in');
+  });
+
+  it('returns token from /__oz/session when cookie present', async () => {
+    const req = new Request('https://dashboard.ozpos.my.id/__oz/session', {
+      headers: { Cookie: 'oz_session=my.jwt.token' },
+    });
+    const res = await worker.fetch(req, mockEnv);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { token: string };
+    expect(body.token).toBe('my.jwt.token');
   });
 
   it('removes token param from URL after setting cookie', async () => {

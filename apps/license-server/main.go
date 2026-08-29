@@ -267,6 +267,17 @@ func main() {
 		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		// User dashboard (ADR #42 Phase 2) — session-authed read endpoints.
+		se.Router.GET("/api/v1/web/usage", handleWebUsage(app))
+		se.Router.GET("/api/v1/web/devices", handleWebDevices(app))
+		// Admin dashboard (ADR #42 Phase 3) — OZ_ADMIN_KEY gated.
+		se.Router.GET("/api/v1/admin/tenants", handleAdminListTenants(app))
+		se.Router.GET("/api/v1/admin/tenants/{id}", handleAdminGetTenant(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/activate", handleAdminActivate(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/renew", handleAdminRenew(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/revoke", handleAdminRevoke(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/tier-override", handleAdminTierOverride(app))
+		se.Router.GET("/api/v1/admin/health", handleAdminHealth(app))
 		// Midtrans Snap checkout (see midtrans_checkout.go) — session-authed
 		// web endpoint like /api/v1/web/*: the id-locale pricing button
 		// requests a snap token for a tier + period, which Snap.js opens.

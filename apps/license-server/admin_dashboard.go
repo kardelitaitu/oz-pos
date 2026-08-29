@@ -1,0 +1,351 @@
+package main
+
+// Admin dashboard API endpoints (ADR #42 Phase 3) — internal operations
+// for the OZ-POS admin panel at admin.ozpos.my.id. All endpoints require
+// Authorization: Bearer <OZ_ADMIN_KEY> (a server-side secret, never the
+// tenant API key). They expose tenant management: list, drill-down, and
+// lifecycle actions (activate/renew/revoke/tier-override).
+//
+// Endpoints:
+//
+//	GET  /api/v1/admin/tenants            — list tenants (paginated, filterable)
+//	GET  /api/v1/admin/tenants/{id}       — single tenant detail + summary
+//	POST /api/v1/admin/tenants/{id}/activate — activate license for tenant
+//	POST /api/v1/admin/tenants/{id}/renew     — extend subscription expiry
+//	POST /api/v1/admin/tenants/{id}/revoke    — revoke tenant access
+//	POST /api/v1/admin/tenants/{id}/tier-override — set tier (with audit reason)
+//	GET  /api/v1/admin/health             — server + DB health
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/pocketbase/pocketbase/core"
+)
+
+// adminKeyOK validates the Authorization: Bearer <admin_key> header.
+// Reads the key from OZ_ADMIN_KEY env; a missing env or wrong key is 401.
+func adminKeyOK(e *core.RequestEvent) bool {
+	authHeader := e.Request.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, bearerPrefix) {
+		return false
+	}
+	provided := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
+	expected := strings.TrimSpace(os.Getenv("OZ_ADMIN_KEY"))
+	return expected != "" && provided == expected
+}
+
+// adminAuth is the middleware wrapper for admin endpoints: returns a 401
+// JSON response (and false) when the caller is neither the admin key holder
+// (server-to-server) nor a signed-in web session belonging to the admin
+// tenant (OZ_ADMIN_EMAIL). The admin dashboard uses the browser session;
+// scripts and the cloud server use the admin key.
+func adminAuth(app core.App, e *core.RequestEvent) bool {
+	if adminKeyOK(e) {
+		return true
+	}
+	// Fall back to a web session owned by the admin tenant.
+	token, err := extractBearerToken(e)
+	if err != nil {
+		e.JSON(http.StatusUnauthorized, map[string]any{
+			"error": "Authorization: Bearer <admin_key> header required",
+		})
+		return false
+	}
+	tenantID := webOtpStore.getSession(hashWebToken(token))
+	if tenantID == "" {
+		e.JSON(http.StatusUnauthorized, map[string]any{
+			"error": "Authorization: Bearer <admin_key> header required",
+		})
+		return false
+	}
+	tenant, err := app.FindRecordById("tenants", tenantID)
+	if err != nil {
+		return false
+	}
+	adminEmail := strings.TrimSpace(os.Getenv("OZ_ADMIN_EMAIL"))
+	if adminEmail == "" {
+		adminEmail = defaultAdminEmail
+	}
+	if strings.EqualFold(tenant.GetString("email"), adminEmail) {
+		return true
+	}
+	e.JSON(http.StatusForbidden, map[string]any{
+		"error": "account is not an admin",
+	})
+	return false
+}
+
+// ── GET /api/v1/admin/tenants ─────────────────────────────────────
+
+// handleAdminListTenants returns a paginated tenant list with summary
+// counts. Supports ?page= and ?perPage= query params.
+func handleAdminListTenants(app core.App) func(e *core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if !adminAuth(app, e) {
+			return nil
+		}
+		page := atoiDefault(e.Request.URL.Query().Get("page"), 1)
+		perPage := atoiDefault(e.Request.URL.Query().Get("perPage"), 25)
+		if perPage < 1 || perPage > 100 {
+			perPage = 25
+		}
+		if page < 1 {
+			page = 1
+		}
+
+		records, err := app.FindRecordsByFilter("tenants",
+			"status != ''", "-created", perPage, (page-1)*perPage)
+		if err != nil {
+			log.Printf("/admin/tenants: query failed: %v", err)
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "query failed"})
+		}
+
+		tenants := make([]map[string]any, 0, len(records))
+		for _, rec := range records {
+			tenants = append(tenants, map[string]any{
+				"id":            rec.Id,
+				"email":         rec.GetString("email"),
+				"status":        rec.GetString("status"),
+				"emailVerified": rec.GetBool("email_verified"),
+				"license":       licenseSummary(app, rec.Id),
+				"subscription":  subscriptionSummary(app, rec.Id),
+				"created":       rec.GetDateTime("created").Time().Format(time.RFC3339),
+			})
+		}
+
+		return e.JSON(http.StatusOK, map[string]any{
+			"tenants": tenants,
+			"page":    page,
+			"perPage": perPage,
+		})
+	}
+}
+
+// ── GET /api/v1/admin/tenants/{id} ────────────────────────────────
+
+// handleAdminGetTenant returns the full detail for one tenant including
+// its license, subscription, and device list.
+func handleAdminGetTenant(app core.App) func(e *core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if !adminAuth(app, e) {
+			return nil
+		}
+		tenantID := e.Request.PathValue("id")
+		tenant, err := app.FindRecordById("tenants", tenantID)
+		if err != nil {
+			return e.JSON(http.StatusNotFound, map[string]any{"error": "tenant not found"})
+		}
+
+		// Device list.
+		machines, _ := app.FindRecordsByFilter("tenant_machines",
+			"tenant_id = {:tid}", "-created", 0, 0,
+			map[string]any{"tid": tenant.Id})
+		devices := make([]map[string]any, 0, len(machines))
+		for _, m := range machines {
+			devices = append(devices, map[string]any{
+				"id":           m.Id,
+				"machine_id":   m.GetString("machine_id"),
+				"last_seen_at": m.GetString("last_seen_at"),
+				"revoked_at":   m.GetString("revoked_at"),
+			})
+		}
+
+		return e.JSON(http.StatusOK, map[string]any{
+			"tenant": map[string]any{
+				"id":            tenant.Id,
+				"email":         tenant.GetString("email"),
+				"phone":         tenant.GetString("phone"),
+				"status":        tenant.GetString("status"),
+				"emailVerified": tenant.GetBool("email_verified"),
+				"created":       tenant.GetDateTime("created").Time().Format(time.RFC3339),
+			},
+			"license":      licenseSummary(app, tenant.Id),
+			"subscription": subscriptionSummary(app, tenant.Id),
+			"devices":      devices,
+		})
+	}
+}
+
+// ── POST /api/v1/admin/tenants/{id}/activate ─────────────────────
+
+// handleAdminActivate marks a tenant active. Requires OZ_ADMIN_KEY.
+func handleAdminActivate(app core.App) func(e *core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if !adminAuth(app, e) {
+			return nil
+		}
+		tenant, err := app.FindRecordById("tenants", e.Request.PathValue("id"))
+		if err != nil {
+			return e.JSON(http.StatusNotFound, map[string]any{"error": "tenant not found"})
+		}
+		tenant.Set("status", "active")
+		if err := app.Save(tenant); err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "activate failed"})
+		}
+		log.Printf("/admin/tenants/%s/activate: tenant %q activated", tenant.Id, tenant.GetString("email"))
+		return e.JSON(http.StatusOK, map[string]any{"status": "active"})
+	}
+}
+
+// ── POST /api/v1/admin/tenants/{id}/renew ─────────────────────────
+
+// renewRequest is the body for the renew endpoint.
+type renewRequest struct {
+	// Days to extend the subscription expiry by (default 365).
+	Days int `json:"days"`
+}
+
+// handleAdminRenew extends the tenant's latest subscription expiry.
+func handleAdminRenew(app core.App) func(e *core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if !adminAuth(app, e) {
+			return nil
+		}
+		tenant, err := app.FindRecordById("tenants", e.Request.PathValue("id"))
+		if err != nil {
+			return e.JSON(http.StatusNotFound, map[string]any{"error": "tenant not found"})
+		}
+
+		var req renewRequest
+		if e.Request.Body != nil {
+			_ = json.NewDecoder(e.Request.Body).Decode(&req)
+		}
+		if req.Days <= 0 {
+			req.Days = 365
+		}
+
+		// Find the latest subscription.
+		subs, err := app.FindRecordsByFilter("subscriptions",
+			"tenant_id = {:tid}", "-starts_at", 1, 0,
+			map[string]any{"tid": tenant.Id})
+		if err != nil || len(subs) == 0 {
+			return e.JSON(http.StatusNotFound, map[string]any{"error": "no subscription found"})
+		}
+		sub := subs[0]
+
+		// Extend expiry from now.
+		newExpiry := time.Now().UTC().Add(time.Duration(req.Days) * 24 * time.Hour)
+		sub.Set("expires_at", newExpiry.Format(time.RFC3339))
+		sub.Set("status", "active")
+		if err := app.Save(sub); err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "renew failed"})
+		}
+
+		log.Printf("/admin/tenants/%s/renew: tenant %q renewed +%dd to %s",
+			tenant.Id, tenant.GetString("email"), req.Days, newExpiry.Format(time.RFC3339))
+		return e.JSON(http.StatusOK, map[string]any{
+			"status":     "active",
+			"expires_at": newExpiry.Format(time.RFC3339),
+		})
+	}
+}
+
+// ── POST /api/v1/admin/tenants/{id}/revoke ────────────────────────
+
+// handleAdminRevoke marks a tenant revoked.
+func handleAdminRevoke(app core.App) func(e *core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if !adminAuth(app, e) {
+			return nil
+		}
+		tenant, err := app.FindRecordById("tenants", e.Request.PathValue("id"))
+		if err != nil {
+			return e.JSON(http.StatusNotFound, map[string]any{"error": "tenant not found"})
+		}
+		tenant.Set("status", "revoked")
+		if err := app.Save(tenant); err != nil {
+			return e.JSON(http.StatusInternalServerError, map[string]any{"error": "revoke failed"})
+		}
+		log.Printf("/admin/tenants/%s/revoke: tenant %q revoked", tenant.Id, tenant.GetString("email"))
+		return e.JSON(http.StatusOK, map[string]any{"status": "revoked"})
+	}
+}
+
+// ── POST /api/v1/admin/tenants/{id}/tier-override ─────────────────
+
+// tierOverrideRequest is the body for the tier override endpoint.
+type tierOverrideRequest struct {
+	// New tier key (plus/pro/premium/enterprise).
+	TierKey string `json:"tier_key"`
+	// Reason for the override (audit trail).
+	Reason string `json:"reason"`
+}
+
+// handleAdminTierOverride sets the tenant's subscription tier.
+func handleAdminTierOverride(app core.App) func(e *core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if !adminAuth(app, e) {
+			return nil
+		}
+		tenant, err := app.FindRecordById("tenants", e.Request.PathValue("id"))
+		if err != nil {
+			return e.JSON(http.StatusNotFound, map[string]any{"error": "tenant not found"})
+		}
+
+		var req tierOverrideRequest
+		if err := json.NewDecoder(e.Request.Body).Decode(&req); err != nil {
+			return e.JSON(http.StatusBadRequest, map[string]any{"error": "invalid JSON body"})
+		}
+		if req.TierKey == "" {
+			return e.JSON(http.StatusBadRequest, map[string]any{"error": "tier_key is required"})
+		}
+
+		// Update the latest subscription's tier.
+		subs, err := app.FindRecordsByFilter("subscriptions",
+			"tenant_id = {:tid}", "-starts_at", 1, 0,
+			map[string]any{"tid": tenant.Id})
+		if err == nil && len(subs) > 0 {
+			sub := subs[0]
+			sub.Set("tier_key", req.TierKey)
+			sub.Set("status", "active")
+			if err := app.Save(sub); err != nil {
+				return e.JSON(http.StatusInternalServerError, map[string]any{"error": "tier override failed"})
+			}
+		}
+
+		log.Printf("/admin/tenants/%s/tier-override: tenant %q → %s (reason: %q)",
+			tenant.Id, tenant.GetString("email"), req.TierKey, req.Reason)
+		return e.JSON(http.StatusOK, map[string]any{"status": "ok", "tier_key": req.TierKey})
+	}
+}
+
+// ── GET /api/v1/admin/health ──────────────────────────────────────
+
+// handleAdminHealth returns server + DB health for the admin panel.
+func handleAdminHealth(app core.App) func(e *core.RequestEvent) error {
+	return func(e *core.RequestEvent) error {
+		if !adminAuth(app, e) {
+			return nil
+		}
+		// Simple DB ping: count tenants (any error → unhealthy).
+		dbOK := true
+		if _, err := app.FindRecordsByFilter("tenants", "status != ''", "-created", 1, 0); err != nil {
+			dbOK = false
+		}
+		return e.JSON(http.StatusOK, map[string]any{
+			"status":    "ok",
+			"db_ok":     dbOK,
+			"time":      time.Now().UTC().Format(time.RFC3339),
+			"version":   "0.0.31",
+			"smtp_host": os.Getenv("OZ_SMTP_HOST") != "",
+		})
+	}
+}
+
+// atoiDefault parses s as an int, returning def when empty/invalid.
+func atoiDefault(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	var n int
+	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
+		return def
+	}
+	return n
+}

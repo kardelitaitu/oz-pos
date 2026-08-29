@@ -59,6 +59,9 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.TextField{Name: "api_key_lookup"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
 	)
+	// Autodate created/updated mirror production so "-created" sorts work.
+	tenants.Fields.Add(&core.AutodateField{Name: "created", OnCreate: true})
+	tenants.Fields.Add(&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true})
 	tenants.CreateRule = types.Pointer("")
 	tenants.ListRule = types.Pointer("")
 	tenants.ViewRule = types.Pointer("")
@@ -111,6 +114,9 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.TextField{Name: "signature", Required: true},
 		&core.TextField{Name: "paddle_sub_id"},
 	)
+	// Autodate created/updated mirror production so "-created" sorts work.
+	subscriptions.Fields.Add(&core.AutodateField{Name: "created", OnCreate: true})
+	subscriptions.Fields.Add(&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true})
 	subscriptions.CreateRule = types.Pointer("")
 	subscriptions.ListRule = types.Pointer("")
 	subscriptions.ViewRule = types.Pointer("")
@@ -127,6 +133,9 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.TextField{Name: "machine_id"},
 		&core.DateField{Name: "revoked_at"},
 	)
+	// Autodate created/updated mirror production so "-created" sorts work.
+	tenantMachines.Fields.Add(&core.AutodateField{Name: "created", OnCreate: true})
+	tenantMachines.Fields.Add(&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true})
 	tenantMachines.CreateRule = types.Pointer("")
 	tenantMachines.ListRule = types.Pointer("")
 	tenantMachines.ViewRule = types.Pointer("")
@@ -255,6 +264,16 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/web/reset-password", handleResetPassword(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		// ADR #42 dashboard endpoints (user + admin).
+		se.Router.GET("/api/v1/web/usage", handleWebUsage(app))
+		se.Router.GET("/api/v1/web/devices", handleWebDevices(app))
+		se.Router.GET("/api/v1/admin/tenants", handleAdminListTenants(app))
+		se.Router.GET("/api/v1/admin/tenants/{id}", handleAdminGetTenant(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/activate", handleAdminActivate(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/renew", handleAdminRenew(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/revoke", handleAdminRevoke(app))
+		se.Router.POST("/api/v1/admin/tenants/{id}/tier-override", handleAdminTierOverride(app))
+		se.Router.GET("/api/v1/admin/health", handleAdminHealth(app))
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		// Midtrans webhook + Snap checkout (C3.1) — mirror production boot.
 		se.Router.POST(midtransWebhookPath, handleMidtransWebhook(app))
