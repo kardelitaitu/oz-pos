@@ -359,6 +359,7 @@ pub fn run() {
             commands::auth::destroy_session,
             commands::auth::session_keepalive,
             commands::auth::verify_pin,
+            commands::auth::refresh_picker_ticket,
             commands::branding::get_brand_settings_scoped,
             commands::branding::pick_logo_file,
             commands::customers::list_customers_scoped,

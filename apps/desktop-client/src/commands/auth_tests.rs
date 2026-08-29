@@ -356,3 +356,165 @@ async fn create_session_allows_real_owner() {
     let state = app.state::<AppState>();
     assert_eq!(state.session_store.read().unwrap().len(), 1);
 }
+
+// ── refresh_picker_ticket ───────────────────────────────────────────
+
+#[tokio::test]
+async fn refresh_picker_ticket_returns_fresh_ticket() {
+    let conn = migrations::fresh_db();
+    seed_owner(&conn);
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Create a session first.
+    let session_token = create_session(
+        CreateSessionArgs {
+            user_id: "user-owner".into(),
+            role_id: "role-owner".into(),
+            store_id: "default".into(),
+            instance_id: "default-restaurant-pos".into(),
+            type_key: "restaurant-pos".into(),
+            terminal_id: "terminal-1".into(),
+            picker_ticket: test_picker_ticket("user-owner"),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap()
+    .session_token;
+
+    let result = refresh_picker_ticket(session_token, app.state())
+        .await
+        .unwrap();
+
+    // The fresh ticket must be a valid, non-empty HMAC ticket.
+    assert!(!result.picker_ticket.is_empty());
+
+    // Verify it against the process secret — must bind the same user.
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let state = app.state::<AppState>();
+    assert_eq!(
+        picker_ticket::verify_picker_ticket(
+            &state.picker_ticket_secret,
+            &result.picker_ticket,
+            now,
+        )
+        .as_deref(),
+        Some("user-owner"),
+        "refreshed ticket must bind the session user"
+    );
+}
+
+#[tokio::test]
+async fn refresh_picker_ticket_rejects_invalid_session() {
+    let conn = migrations::fresh_db();
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    let result = refresh_picker_ticket("nonexistent-token".into(), app.state()).await;
+    assert!(
+        matches!(result, Err(AppError::InvalidSession)),
+        "invalid session must be rejected"
+    );
+}
+
+#[tokio::test]
+async fn refresh_picker_ticket_rejects_expired_session() {
+    let conn = migrations::fresh_db();
+    let store = Store::new(&conn);
+    store.seed_default_roles().unwrap();
+    let hash = oz_core::auth::hash_pin("1234").unwrap();
+    conn.execute(
+        "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+         VALUES ('user-owner', 'owner', ?1, 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+        [hash],
+    )
+    .unwrap();
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Manually insert an expired session.
+    {
+        let state = app.state::<AppState>();
+        let mut session_store = state.session_store.write().unwrap();
+        let ctx = oz_core::session::SessionContext::new(
+            "user-owner".into(),
+            "role-owner".into(),
+            "terminal-1".into(),
+            "default".into(),
+            "default-restaurant-pos".into(),
+            "restaurant-pos".into(),
+            Some(-1), // already expired
+            0,
+        );
+        session_store.insert("expired-session-token".into(), ctx);
+    }
+
+    let result = refresh_picker_ticket("expired-session-token".into(), app.state()).await;
+    assert!(
+        matches!(result, Err(AppError::InvalidSession)),
+        "expired session must be rejected"
+    );
+}
+
+#[tokio::test]
+async fn refreshed_picker_ticket_can_be_used_for_create_session() {
+    // End-to-end: login → refresh ticket → create_session with refreshed ticket.
+    let conn = migrations::fresh_db();
+    seed_owner(&conn);
+    let app = tauri::test::mock_builder()
+        .manage(AppState::for_test_with_conn(conn))
+        .build(tauri::generate_context!())
+        .unwrap();
+
+    // Step 1: Create a session.
+    let session_token = create_session(
+        CreateSessionArgs {
+            user_id: "user-owner".into(),
+            role_id: "role-owner".into(),
+            store_id: "default".into(),
+            instance_id: "default-restaurant-pos".into(),
+            type_key: "restaurant-pos".into(),
+            terminal_id: "terminal-1".into(),
+            picker_ticket: test_picker_ticket("user-owner"),
+        },
+        app.state(),
+    )
+    .await
+    .unwrap()
+    .session_token;
+
+    // Step 2: Refresh the picker ticket.
+    let refresh_result = refresh_picker_ticket(session_token, app.state())
+        .await
+        .unwrap();
+
+    // Step 3: Use the refreshed ticket to create ANOTHER session.
+    let result = create_session(
+        CreateSessionArgs {
+            user_id: "user-owner".into(),
+            role_id: "role-owner".into(),
+            store_id: "default".into(),
+            instance_id: "default-restaurant-pos".into(),
+            type_key: "restaurant-pos".into(),
+            terminal_id: "terminal-1".into(),
+            picker_ticket: refresh_result.picker_ticket,
+        },
+        app.state(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.context.user_id, "user-owner");
+    assert_eq!(result.context.role_id, "role-owner");
+    assert!(!result.session_token.is_empty());
+}

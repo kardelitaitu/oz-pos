@@ -565,6 +565,52 @@ pub async fn verify_pin(
     Ok(valid)
 }
 
+/// Result of `refresh_picker_ticket` — a fresh HMAC-signed ticket.
+#[derive(Debug, Serialize)]
+pub struct RefreshPickerTicketResult {
+    /// Fresh picker ticket valid for another 5 minutes.
+    pub picker_ticket: String,
+}
+
+/// Mint a fresh picker ticket for a caller who already holds a valid session token.
+///
+/// Used when the UI returns to the workspace picker (e.g. Back button from KDS)
+/// and needs to re-call `create_session` without going through `staff_login`
+/// again. The picker ticket has a short TTL (5 minutes) so if the user was
+/// browsing the workspace picker for longer than that, the original ticket
+/// from login has expired.
+///
+/// Security: re-minting is safe because it requires a valid, non-expired
+/// session token — proving the caller has already authenticated. The new
+/// ticket is bound to the session's `user_id`, so identity is preserved.
+#[tauri::command]
+pub async fn refresh_picker_ticket(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<RefreshPickerTicketResult, AppError> {
+    // Verify the existing session token — this proves the caller is already
+    // authenticated (STAFF-01 / ADR #4).
+    let session = state.resolve_session(&session_token)?;
+
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    let picker_ticket = picker_ticket::sign_picker_ticket(
+        &state.picker_ticket_secret,
+        &session.user_id,
+        now_ts + picker_ticket::PICKER_TICKET_TTL_SECS,
+    );
+
+    tracing::debug!(
+        user_id = %session.user_id,
+        "picker ticket refreshed via session token"
+    );
+
+    Ok(RefreshPickerTicketResult { picker_ticket })
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]

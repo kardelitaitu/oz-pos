@@ -53,6 +53,11 @@ export interface AuthContextValue extends AuthState {
    * when available so the picker stays bound to the new user (audit-open-findings).
    */
   swapSession: (session: LoginSessionDto, pickerTicket?: string) => void;
+  /**
+   * ADR #6: Replace the picker ticket without changing the session.
+   * Used by WorkspaceContext when refreshing a stale picker ticket.
+   */
+  updatePickerTicket?: (ticket: string) => void;
 }
 
 // ── Context ─────────────────────────────────────────────────────────
@@ -129,6 +134,10 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
     setError(null);
   }, []);
 
+  const updatePickerTicket = useCallback((ticket: string) => {
+    setPickerTicket(ticket);
+  }, []);
+
   // The backend returns display names from the seeded roles ("Owner",
   // "Manager", "Staff"), while older clients and tests may provide the
   // stable lowercase role keys. Normalize once so authorization-sensitive UI
@@ -160,6 +169,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
       logout,
       clearError,
       swapSession,
+      updatePickerTicket,
       isManager,
       isOwner,
     }),
@@ -172,6 +182,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
       logout,
       clearError,
       swapSession,
+      updatePickerTicket,
       isManager,
       isOwner,
     ],
