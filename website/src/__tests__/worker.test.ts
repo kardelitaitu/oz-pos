@@ -103,12 +103,12 @@ describe('Cloudflare Worker — worker.ts', () => {
     expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/en\/login\?redirect=/);
   });
 
-  it('redirects admin.ozpos.my.id to login when no cookie', async () => {
+  it('serves dedicated admin login page when no cookie', async () => {
     const req = new Request('https://admin.ozpos.my.id/');
     const res = await worker.fetch(req, mockEnv);
 
-    expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toMatch(/^https:\/\/ozpos\.my\.id\/en\/login\?redirect=/);
+    expect(res.status).toBe(200);
+    expect(mockEnv.ASSETS.fetch).toHaveBeenCalled();
   });
 
   it('sets cookie from ?token= param and redirects to clean URL', async () => {
