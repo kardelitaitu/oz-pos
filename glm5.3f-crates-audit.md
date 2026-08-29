@@ -567,6 +567,19 @@ documented; day buckets UTC (COR-21 family, tracked).
 audited and stamped.** oz-core remaining: `workspaces.rs` (1,106),
 `kds.rs` (1,312), then slices C and D.
 
+### Slice B final — db/workspaces.rs (1,196 lines), fully read
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-30 | 🟡 LOW | db/workspaces.rs:385, 395, 1169, 1188 | **Access-resolution guards fail toward the permissive tier.** Four `.unwrap_or(false)` sites treat a DB error as "no rows" and fall through to the next (broader) resolution tier — e.g. an explicit-instance check error promotes the user to role-type fallback. Same family as COR-11/COR-25, rare under the single-connection mutex. | Propagate errors with `?`, or fail closed (deny) in the access path. Also: the hardcoded 8-variant role-id allowlist for the owner bypass is fragile if `ROLE_PRESETS` changes — derive it from the presets. |
+
+**Workspaces positives:** the ADR #4 type/instance resolution chain is
+clearly layered with documented semantics, quota enforcement validates the
+*signed entitlement's* `allowed_types` (C3.2) rather than trusting static
+tier defaults, the no-nesting transaction caveat is documented *and* pinned
+by a test, and the dynamic-SQL fragments interpolate only internal
+parameter markers (injection-safe).
+
 ---
 
 *This file is appended after each completed crate audit. Findings get IDs

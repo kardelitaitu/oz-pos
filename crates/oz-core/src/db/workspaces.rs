@@ -1,5 +1,11 @@
 //! Workspace CRUD — workspace types, instances, navigation screens,
 //! per-user instance assignments, role-to-type access, and session resolution.
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B: workspaces deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: ADR #4 resolution chain well built (role-owner bypass -> explicit user instances -> role types), quota enforcement checks the signed entitlement's allowed_types (C3.2), no-nesting caveat documented per RUST-08 with a pinned test; dynamic SQL interpolates only internal param markers (injection-safe); COR-30 LOW: four .unwrap_or(false) sites on access-resolution queries (385/395/1169/1188) fail toward the MORE PERMISSIVE tier on DB error — access guards should propagate or deny (same family as COR-11/25, rare under single-connection mutex); hardcoded role-id allowlist (8 variants) is fragile if presets change
+next: propagate access-check errors or fail closed (COR-30) | perf: indexed resolution queries
+*/
 //!
 //! ADR #4 Phase 1: Type/Instance Separation
 //!
