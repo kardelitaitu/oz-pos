@@ -67,10 +67,13 @@ if (-not $SkipUI) {
 }
 
 Write-Host "`n[3/7] Copying detailed docs into the book source..." -ForegroundColor Yellow
+# The hand-written guides were archived to docs/archived/ (commit d0fe7481,
+# 2026-08-29) as stale content; copy them from there so the book's Docs
+# category is not empty. See documentation.md §2026-08-30 drift note.
 if (Test-Path "$BookSrc\guides") { Remove-Item -Recurse -Force "$BookSrc\guides" }
 if (Test-Path "$BookSrc\decisions") { Remove-Item -Recurse -Force "$BookSrc\decisions" }
 New-Item -ItemType Directory -Force -Path "$BookSrc\guides", "$BookSrc\decisions" | Out-Null
-Copy-Item (Join-Path $WorkspaceRoot "docs\*.md") "$BookSrc\guides\" -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $WorkspaceRoot "docs\archived\*.md") "$BookSrc\guides\" -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $WorkspaceRoot "docs\decisions\*.md") "$BookSrc\decisions\" -ErrorAction SilentlyContinue
 Write-Host "[SUCCESS] guides + ADRs copied into docs/src/" -ForegroundColor Green
 
