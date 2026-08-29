@@ -139,6 +139,27 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 
 		fxRate, fxUpdatedAt, fxLive := getFxRate()
 
+		// ── Real revenue from revenue_events (Phase D) ───────────
+		// Sum recorded payments (Paddle USD + Midtrans IDR) into a
+		// per-month USD/IDR map, plus lifetime totals. Falls back to the
+		// price-map estimate below when no events exist yet.
+		realByMonth := make(map[string]struct{ usd, idr float64 })
+		lifetimeUsd, lifetimeIdr := 0.0, 0.0
+		revEvents, _ := app.FindRecordsByFilter("revenue_events",
+			"id != ''", "-created", 0, 0)
+		for _, re := range revEvents {
+			usd := re.GetFloat("amount_usd")
+			idr := float64(re.GetInt("amount_idr"))
+			created := re.GetDateTime("created").Time()
+			key := fmt.Sprintf("%d-%02d", created.Year(), created.Month())
+			b := realByMonth[key]
+			b.usd += usd
+			b.idr += idr
+			realByMonth[key] = b
+			lifetimeUsd += usd
+			lifetimeIdr += idr
+		}
+
 		// ── Time series (12 months) ─────────────────────────────────
 		now := time.Now()
 		type monthBucket struct {
@@ -196,12 +217,18 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// Build revenue trend, subscriber growth, churn arrays.
+		// Revenue uses REAL revenue_events when present for a month,
+		// else the price-map estimate (fallback for months without
+		// recorded transactions, e.g. new installs).
 		revenueTrend := make([]monthBucket, 0, 12)
 		subGrowth := make([]monthBucket, 0, 12)
 		churnArr := make([]monthBucket, 0, 12)
 		cumulative := 0
 		for _, key := range bucketKeys {
 			rev := revenueByMonth[key]
+			if real, ok := realByMonth[key]; ok && (real.usd > 0 || real.idr > 0) {
+				rev = real.usd
+			}
 			revenueTrend = append(revenueTrend, monthBucket{
 				Month: key, Usd: math.Round(rev*100) / 100, Idr: math.Round(rev*fxRate*100) / 100,
 			})
@@ -354,6 +381,8 @@ func handleAdminStats(app core.App) func(e *core.RequestEvent) error {
 				"totalSubscribers": totalSubscribers,
 				"mrrUsd":           math.Round(mrrUsd*100) / 100,
 				"mrrIdr":           math.Round(mrrUsd * fxRate),
+				"lifetimeUsd":      math.Round(lifetimeUsd*100) / 100,
+				"lifetimeIdr":      math.Round(lifetimeIdr),
 				"arpuUsd":          arpuUsd,
 				"activeDevices":    activeDevices,
 				"trialToPaidRate":  trialToPaidRate,

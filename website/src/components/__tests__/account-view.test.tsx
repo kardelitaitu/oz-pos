@@ -1043,6 +1043,28 @@ describe('AccountView — renewal countdown', () => {
       container.remove();
     }
   });
+
+  it('does not show a countdown badge for an invalid expiry date', async () => {
+    // Regression: new Date('not-a-date') creates an Invalid Date (not a
+    // throw), so daysUntil returned NaN. Math.round(NaN) = NaN, and NaN < 0
+    // is false — the guard failed and "Renews in NaN days" was rendered.
+    sessionStorage.setItem('oz_session', 'tok-renew-nan');
+    mockFetch(() => okJson({
+      tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+      license: { key: 'OZ-TEST-0001', tierKey: 'pro', status: 'active', expiresAt: '2027-01-01' },
+      subscription: { tierKey: 'pro', status: 'active', startsAt: '2026-01-01', expiresAt: 'not-a-date' },
+    }));
+    const { container, root } = await renderAccount('en');
+    try {
+      // The subscription section shows, but no countdown badge.
+      assertText(container, 'Subscription');
+      assertNoText(container, 'Renews in');
+      assertNoText(container, 'NaN');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── Formatted dates ───────────────────────────────────────────────────

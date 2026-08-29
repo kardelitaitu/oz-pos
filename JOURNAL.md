@@ -1,4 +1,24 @@
 
+## 2026-08-29 — TDD round 6: "Renews in NaN days" on invalid expiry (website AccountView)
+
+**Problem:** `daysUntil()` used `new Date(dateStr)`. For a non-date string like
+`"not-a-date"` this creates an **Invalid Date** (it does not throw), whose UTC
+getters return `NaN`. The arithmetic produced `Math.round(NaN) = NaN`, and
+`renderRenewBadge`'s guard `if (d === null || d < 0)` did **not** catch it —
+`NaN < 0` is `false` — so the badge rendered **"Renews in NaN days"** for an
+active subscription with a malformed `expiresAt` (bad data from a webhook or a
+legacy record).
+
+**Solution:** TDD Red→Green (1 new test, account-view.test.tsx 45→46):
+- Red: subscription with `expiresAt: 'not-a-date'` rendered "Renews in NaN
+  days".
+- Green: `daysUntil()` returns `null` when the parsed Date is invalid
+  (`Number.isNaN(d.getTime())`) or the computed day count is `NaN`. The
+  existing `renderRenewBadge` guard then hides the badge, as for past dates.
+
+**Commits:** pending round-6 commit.
+**Test counts:** account-view.test.tsx 45→46; full suite 166→169.
+
 ## 2026-08-29 — TDD round 5: currency mismatch when region=id on en-locale dashboard (website AccountView)
 
 **Problem:** The dashboard's subscribe section and bundle upgrade card built

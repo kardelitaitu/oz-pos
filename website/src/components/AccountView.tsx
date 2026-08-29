@@ -140,10 +140,15 @@ function daysUntil(dateStr: string | undefined): number | null {
     // difference between the expiry's UTC date and today's UTC date. A
     // subscription expiring "in 10 days" reports exactly 10 on any machine.
     const d = new Date(dateStr);
+    // new Date('not-a-date') produces an Invalid Date (not a throw); its
+    // UTC getters return NaN. Treat that as "no date" instead of leaking
+    // NaN into the countdown label.
+    if (Number.isNaN(d.getTime())) return null;
     const expiryUTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
     const now = new Date();
     const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    return Math.round((expiryUTC - todayUTC) / 86_400_000);
+    const days = Math.round((expiryUTC - todayUTC) / 86_400_000);
+    return Number.isNaN(days) ? null : days;
   } catch {
     return null;
   }
