@@ -349,7 +349,7 @@ repositories, pricing/checkout interplay (sales + tax + promotions).
 
 ## S5 — Payments, Hardware & Security Crates
 
-**Status:** not-started
+**Status:** reviewed (2026-07-25)
 
 **Scope:** `crates/oz-payment/` (drivers incl. `qris`, hotspot `QrisPaymentProcessor::clone` 731),
 `crates/oz-hal/` (embedded-hal drivers + `drivers/mock.rs`), `crates/oz-crypto/`,
@@ -363,7 +363,44 @@ repositories, pricing/checkout interplay (sales + tax + promotions).
 
 ### S5 Notes
 
-- (empty)
+**Checked:** oz-payment drivers + QRIS flow, oz-crypto primitives, oz-security secret
+management, oz-hal mocks, secrets hygiene scan, audit-banner cross-verification.
+
+- Discovery: production files carry **RSA-Agent audit banners** with per-crate known
+  findings and remediation plans — this review verified the banners against code rather
+  than re-deriving from scratch.
+- `oz-payment` (20 files/2825 lines): `PaymentProcessor` trait + registry + drivers
+  (mock/paddle/qris/square/midtrans). QRIS = Midtrans REST (authorize → poll settlement;
+  sale = authorize+poll). Each driver has sibling tests.
+- `oz-crypto` (346 lines): AES-256-GCM at-rest helpers, `base64(nonce‖ct‖tag)`, fresh
+  nonce per call; machine-bound or portable key derivation.
+- `oz-security` (8 files/1045 lines): Keyring trait + InMemoryKeyring + platform
+  dispatch (windows/macos/linux, each with tests), mask.rs, tls.rs, PCI-DSS helpers.
+- `oz-hal`: 15 mock impls — AGENTS HAL-mock requirement satisfied.
+- Secrets scan over the 4 crates: 1 hit, a test fixture string — clean.
+- The `QrisPaymentProcessor::clone` graph hotspot (fan-in 731) is derive-`Clone` of a
+  config-style processor — low aliasing risk; fan-in inflated by derive/test edges.
+
+### S5 Findings
+
+- **F-027 (P1, S5)**: PAY-1 open, verified in code: `qris.rs:261` `parse_amount` =
+  `s.parse().unwrap_or(0)` — Midtrans `"14500.00"`-style decimal amounts fail i64 parse
+  and **zero the amount** in charge/status mapping (lines 427, 451) across
+  authorize/capture/refund/receipt. Silent money corruption path.
+- **F-028 (P1, S5)**: PAY-2 open: fresh `order_id` per call defeats Midtrans idempotency
+  on retries — duplicate-charge exposure on network retry.
+- **F-029 (P2, S5)**: oz-crypto banner findings unremediated: portable at-rest keys are
+  publicly derivable (obfuscation, not confidentiality); `encrypt_smtp_at_rest` fails
+  OPEN (returns plaintext on encrypt failure); SHA-256 used directly as unsalted KDF for
+  machine_id. Tests inline instead of sibling file (banner notes it).
+- **F-030 (P2, S5)**: oz-security SEC-4: default `rotate_key` non-atomic
+  (get→archive→write); SEC-6: secrets returned as `String` without zeroize.
+- **F-031 (P2, S5)**: Remaining PAY banner items: PAY-3 (refund ignores partial amount),
+  PAY-6 (`sale()` success = QR-issued not settled; 60s poll vs 300s QR validity),
+  PAY-7 (Default constructs empty-key processor), PAY-8 (expire mapped to InvalidCard).
+- **F-032 (INFO, S5)**: HAL mock coverage complete (15 impls); secrets hygiene clean.
+- **F-033 (INFO, S5)**: RSA-Agent audit banners are an effective per-crate findings
+  trail — verified accurate against code in this pass; recommend keeping them updated.
 
 ---
 
@@ -511,6 +548,13 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
 | F-024 | 2026-07-25 | S4 | INFO | `modules/promotions/src/lib.rs` | Declared stub — promotion engine still in oz-core; module layer mid-migration |
 | F-025 | 2026-07-25 | S4 | INFO | `platform/kernel/tests/module_manifests.rs` | All 14 manifests schema+dependency validated |
 | F-026 | 2026-07-25 | S4 | P3 | `modules/tax/tests/` | Boundary contract test pattern not replicated to other modules |
+| F-027 | 2026-07-25 | S5 | P1 | `crates/oz-payment/src/drivers/qris.rs:261,427,451` | PAY-1: decimal Midtrans amounts zeroed via `unwrap_or(0)` — money corruption |
+| F-028 | 2026-07-25 | S5 | P1 | `crates/oz-payment/src/drivers/qris.rs` | PAY-2: fresh order_id defeats Midtrans idempotency on retry |
+| F-029 | 2026-07-25 | S5 | P2 | `crates/oz-crypto/src/lib.rs` | Derivable at-rest keys, smtp encrypt fails open, unsalted KDF |
+| F-030 | 2026-07-25 | S5 | P2 | `crates/oz-security/src/lib.rs` | SEC-4 non-atomic rotate_key; SEC-6 secrets not zeroized |
+| F-031 | 2026-07-25 | S5 | P2 | `crates/oz-payment/src/drivers/qris.rs` | PAY-3/6/7/8: partial refund, QR-issued semantics, empty-key Default, expire mapping |
+| F-032 | 2026-07-25 | S5 | INFO | `crates/oz-hal` | HAL mock coverage complete; secrets scan clean |
+| F-033 | 2026-07-25 | S5 | INFO | crates/* (banners) | RSA-Agent audit banners verified accurate — keep updating |
 
 ---
 
@@ -537,4 +581,10 @@ docker-compose matrix, `packaging/`, coverage/flaky-quarantine infra.
   mid-migration, promotions is a declared stub (F-024); P2s: currency repo
   no-tx/no-tests (F-022), sales module untested (F-023); boundary-test pattern only in
   tax (F-026). Committed.
-- Next: S5 payments/hardware/security crates.
+- **S4 commit repaired**: concurrent agent's staged files (sales.rs, audit md) swept
+  into the first attempt; soft-reset + pathspec-only commit re-landed (0cfba59d).
+  All future commits use `git commit <file>` pathspec form.
+- **S5 reviewed**: discovered + verified RSA-Agent audit banners; confirmed PAY-1
+  money-zeroing (F-027) and PAY-2 idempotency (F-028) live in code; crypto/security
+  P2s recorded (F-029..F-031); HAL mocks complete (F-032). Committed.
+- Next: S6 front-end UI.
