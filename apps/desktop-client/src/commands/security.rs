@@ -7,8 +7,10 @@
 
 use oz_security::{Keyring, RotationInfo};
 use serde::Serialize;
+use tauri::State;
 
 use crate::error::AppError;
+use crate::state::AppState;
 
 /// Key name used for the primary encryption key in the OS keyring.
 pub const ENCRYPTION_KEY_NAME: &str = "oz-pos/encryption-key";
@@ -120,6 +122,26 @@ pub async fn rotate_encryption_key() -> Result<RotationInfo, AppError> {
         rotate_key,
     )
     .await
+}
+
+/// Session-scoped variant of [`get_key_rotation_info`].
+#[tauri::command]
+pub async fn get_key_rotation_info_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<KeyRotationStatus, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    get_key_rotation_info().await
+}
+
+/// Session-scoped variant of [`rotate_encryption_key`].
+#[tauri::command]
+pub async fn rotate_encryption_key_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<RotationInfo, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    rotate_encryption_key().await
 }
 
 #[cfg(test)]

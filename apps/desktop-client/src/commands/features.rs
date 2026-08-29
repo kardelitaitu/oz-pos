@@ -626,6 +626,22 @@ fn all_feature_metadata() -> Vec<(Feature, &'static str, &'static str, &'static 
     ]
 }
 
+/// Session-scoped variant of [`list_all_features`].
+#[tauri::command]
+pub async fn list_all_features_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<ListAllFeaturesResult, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let reg = store.load_features()?;
+    let features = build_feature_list(&reg);
+    Ok(ListAllFeaturesResult { features })
+}
+
 #[cfg(test)]
 #[path = "features_tests.rs"]
 mod tests;

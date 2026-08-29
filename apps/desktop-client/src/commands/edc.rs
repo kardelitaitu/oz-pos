@@ -146,6 +146,16 @@ pub async fn edc_void(
     Ok(result.into())
 }
 
+/// Session-scoped variant of [`edc_terminal_status`].
+#[tauri::command]
+pub async fn edc_terminal_status_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<EdcStatusDto, AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    edc_terminal_status(state).await
+}
+
 #[cfg(test)]
 #[path = "edc_tests.rs"]
 mod tests;
