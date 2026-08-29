@@ -217,7 +217,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       const tierCard = el('div', 'chart-card');
       tierCard.appendChild(el('h3', null, 'Tier Distribution'));
       const donut = svgDonut('tiers', m.tierDistribution, 'tier', 'count');
-      const tierRow = el('div', null); tierRow.style.cssText = 'display:flex;align-items:center;gap:1rem';
+      const tierRow = el('div', 'donut-row');
       const donutDiv = el('div', null); donutDiv.innerHTML = donut.svg;
       tierRow.appendChild(donutDiv);
       const legendDiv = el('div', null); legendDiv.innerHTML = donut.legend;
@@ -229,7 +229,7 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       const provCard = el('div', 'chart-card');
       provCard.appendChild(el('h3', null, 'Payment Provider'));
       const donut2 = svgDonut('prov', m.providerSplit, 'provider', 'count', ['#147efb','#22c55e']);
-      const provRow = el('div', null); provRow.style.cssText = 'display:flex;align-items:center;gap:1rem';
+      const provRow = el('div', 'donut-row');
       const donutDiv2 = el('div', null); donutDiv2.innerHTML = donut2.svg;
       provRow.appendChild(donutDiv2);
       const legendDiv2 = el('div', null); legendDiv2.innerHTML = donut2.legend;
