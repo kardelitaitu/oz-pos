@@ -17,10 +17,10 @@ The security audit identified 17 findings across 4 severity levels (2 Critical, 
 | Metric | Before | After |
 |--------|--------|-------|
 | Desktop registered commands | 451 | 376 (75 removed, 5 utility added) |
-| Tablet registered commands | 278 | 363 (116 _scoped added, net increase from additions) |
+| Tablet registered commands | 278 | 363 (116 _scoped added) |
 | Desktop `_scoped` command variants | ~266 | 304 |
-| Tablet `_scoped` command variants | ~120 | 223 |
-| Unregistered legacy commands | 0 | 182 (deprecated) |
+| Tablet `_scoped` command variants | ~120 | 223 (3 pre-auth remaining) |
+| Unregistered legacy commands | 0 | 192 (deprecated) |
 | Secret keys encrypted at rest | 0 of 6 | 6 of 6 |
 
 ---
