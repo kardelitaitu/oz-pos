@@ -1054,7 +1054,27 @@ mod tests {
                     rack_location TEXT, notes TEXT, unit TEXT, is_active BIGINT DEFAULT 1,
                     category_id TEXT, barcode TEXT
                  );
+                 CREATE TABLE IF NOT EXISTS tax_rates (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    rate_bps BIGINT NOT NULL DEFAULT 0,
+                    is_default TEXT DEFAULT '0',
+                    is_inclusive TEXT DEFAULT '0',
+                    tenant_id TEXT NOT NULL DEFAULT 'default',
+                    created_at TEXT, updated_at TEXT
+                 );
+                 CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    display_name TEXT,
+                    role_id TEXT,
+                    is_active TEXT DEFAULT '1',
+                    tenant_id TEXT NOT NULL DEFAULT 'default',
+                    created_at TEXT, updated_at TEXT
+                 );
                  DELETE FROM products WHERE tenant_id LIKE '{ns}%';
+                 DELETE FROM tax_rates WHERE tenant_id LIKE '{ns}%';
+                 DELETE FROM users WHERE tenant_id LIKE '{ns}%';
                  INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
                  VALUES ('{ns}-pa', 'SKU-A', 'Alpha', 100, 'USD', '{tenant_a}'),
                         ('{ns}-pb', 'SKU-B', 'Beta', 200, 'USD', '{tenant_b}');"
@@ -1075,7 +1095,9 @@ mod tests {
 
         client
             .batch_execute(&format!(
-                "DELETE FROM products WHERE tenant_id LIKE '{ns}%';"
+                "DELETE FROM products WHERE tenant_id LIKE '{ns}%';
+                 DELETE FROM tax_rates WHERE tenant_id LIKE '{ns}%';
+                 DELETE FROM users WHERE tenant_id LIKE '{ns}%';"
             ))
             .await
             .ok();

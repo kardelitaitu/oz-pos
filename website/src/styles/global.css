@@ -60,10 +60,10 @@
   --r-md: 10px;
   --r-lg: 12px;
   --r-pill: 999px;
-  /* Elevation / shadows — from design-language.html */
-  --shadow-sm: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1);
-  --shadow-md: 0 4px 6px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.06);
-  --shadow-lg: 0 10px 15px rgba(16,24,40,.08), 0 4px 6px rgba(16,24,40,.05);
+  /* Elevation / shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.08);
   /* Tooltip */
   --tooltip-bg: #1A1D23;
   /* Tailwind utility aliases — map old names to design language tokens
@@ -113,145 +113,6 @@ body {
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 1s cubic-bezier(0.2, 0, 0, 1), color 1s cubic-bezier(0.2, 0, 0, 1);
-}
-
-/* Smooth crossfade for themed elements — 1s duration for visible transition.
-   Only animate transform/opacity per design language (GPU compositor).
-   background-color and color are theme-critical, so we allow them. */
-header, main, footer, section, nav, div, span, p, h1, h2, h3, h4, a, button, article {
-  transition: background-color 1s cubic-bezier(0.2, 0, 0, 1), color 1s cubic-bezier(0.2, 0, 0, 1), border-color 1s cubic-bezier(0.2, 0, 0, 1), opacity 1s cubic-bezier(0.2, 0, 0, 1);
-}
-
-/* Theme transitions always run — reduced motion only disables non-essential animations. */
-
-/* Button press feedback — design language: fast = 120ms, scale .97 */
-.btn-press {
-  transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 120ms ease;
-}
-.btn-press:hover {
-  transform: scale(1.03);
-}
-.btn-press:active {
-  transform: scale(0.97);
-  transition-duration: 60ms;
-}
-
-/* Nav link underline animation — design language: base = 200ms */
-.nav-link:hover .nav-underline {
-  width: 100%;
-}
-
-/* Scroll-reveal animation — design language: slow = 350ms, standard easing */
-[data-reveal] {
-  opacity: 0;
-  transform: translateY(20px);
-  transition: opacity 0.35s cubic-bezier(0.2, 0, 0, 1), transform 0.35s cubic-bezier(0.2, 0, 0, 1);
-}
-[data-reveal].revealed {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Footer link underline animation — design language: base = 200ms */
-.footer-link:hover .footer-underline {
-  width: 100%;
-}
-
-/* ═══ Design Language Component Styles ═══════════════════════════════════
-   Forms, inputs, buttons, toggles, cards, badges, alerts, and tooltips.
-   All built from semantic tokens only — never raw hex. */
-
-/* ── Form Inputs ──────────────────────────────────────────────────────── */
-input, textarea, select {
-  font-family: var(--font);
-  font-size: 13px;
-  color: var(--color-ink);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--r-sm);
-  height: 36px;
-  padding: 0 0.75rem;
-  outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-input::placeholder, textarea::placeholder {
-  color: var(--color-muted);
-}
-input:focus, input:focus-visible,
-textarea:focus, textarea:focus-visible,
-select:focus, select:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: -2px;
-  border-color: var(--primary);
-}
-/* Checkbox and radio: use accent-color, suppress outer focus ring */
-input[type="checkbox"]:focus, input[type="radio"]:focus,
-input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-input[type="checkbox"], input[type="radio"] {
-  accent-color: var(--primary);
-}
-/* Disabled inputs */
-input:disabled, textarea:disabled, select:disabled {
-  opacity: 0.45;
-  pointer-events: none;
-  background: var(--color-ghost-bg);
-}
-/* Validation states */
-input.validate { border-width: 2px; transition: border-color 0.2s ease; }
-input.validate:focus { border-color: var(--primary) !important; outline: 2px solid var(--primary); outline-offset: -2px; }
-input.input-field--error { border-color: var(--danger); }
-input.input-field--success { border-color: var(--success); }
-input.input-field--warning { border-color: var(--warning); }
-/* Textarea */
-textarea {
-  height: auto;
-  min-height: 80px;
-  padding: 0.5rem 0.75rem;
-  resize: vertical;
-}
-/* Range slider */
-input[type="range"] {
-  appearance: none;
-  height: 6px;
-  border-radius: 999px;
-  border: none;
-  background: var(--color-chip-bg);
-}
-input[type="range"]:focus { outline: none; box-shadow: none; }
-
-/* ── Toggle Switch ────────────────────────────────────────────────────── */
-/* Track: 2.5rem × 1.375rem, knob: 1.125rem, bounce easing */
-input[role="switch"]:checked ~ .toggle-track {
-  background: var(--primary);
-}
-input[role="switch"]:checked ~ .toggle-knob {
-  transform: translateX(1.125rem);
-}
-
-/* ── Buttons (design language emphasis ladder) ─────────────────────────── */
-/* Disabled = 45% opacity + pointer-events: none */
-button:disabled, a[aria-disabled="true"] {
-  opacity: 0.45;
-  pointer-events: none;
-}
-/* Focus ring for keyboard navigation */
-button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-/* Global press feedback — design language: fast = 120ms, scale .97 */
-button:not(:disabled):active {
-  transform: scale(0.97);
-  transition: transform 60ms ease;
-}
-
-/* ── Tooltip ──────────────────────────────────────────────────────────── */
-:root {
-  --tooltip-arrow: var(--tooltip-bg);
 }
 
 /* Theme toggle icon: both icons overlap absolutely inside the button;
@@ -264,7 +125,7 @@ button:not(:disabled):active {
   position: absolute;
   inset: 0;
   margin: auto;
-  transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1), transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity 200ms ease, transform 300ms ease;
 }
 /* Light is default: sun visible, moon hidden */
 .theme-toggle .icon-sun {
@@ -286,27 +147,8 @@ button:not(:disabled):active {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Design language rule 09: honor reduced motion — collapse durations to 0,
-     skip entrance/spin/shake, but the after-state must still confirm.
-     Theme transitions are exempt — they're a core UX affordance. */
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-  /* Restore theme transition for all elements */
-  header, main, footer, section, nav, div, span, p, h1, h2, h3, h4, a, button, article, html, body {
-    transition: background-color 1s cubic-bezier(0.2, 0, 0, 1), color 1s cubic-bezier(0.2, 0, 0, 1), border-color 1s cubic-bezier(0.2, 0, 0, 1), opacity 1s cubic-bezier(0.2, 0, 0, 1) !important;
-  }
-  [data-reveal] {
-    opacity: 1 !important;
-    transform: none !important;
-    transition: none !important;
-  }
-  [data-reveal].revealed {
-    opacity: 1;
-    transform: none;
+  .theme-toggle svg {
+    transition: none;
   }
 }
 
@@ -478,71 +320,3 @@ button:not(:disabled):active {
   max-width: 100%;
   height: auto;
 }
-
-/* Tactile shake animation for form errors */
-@keyframes formShake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-6px); }
-  40%, 80% { transform: translateX(6px); }
-}
-.animate-shake {
-  animation: formShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
-}
-
-/* Linear-style Card Gradient Glow & Hover Depth */
-.glow-card {
-  position: relative;
-  transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
-}
-.glow-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 24px -10px color-mix(in srgb, var(--color-primary) 20%, transparent);
-}
-
-.popular-glow-border {
-  position: relative;
-}
-.popular-glow-border::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, transparent 60%, var(--color-sky) 100%);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-/* Copy code block wrapper & button */
-.code-block-wrapper {
-  position: relative;
-  margin-top: 1rem;
-}
-.code-block-wrapper pre {
-  margin-top: 0 !important;
-}
-.copy-code-btn {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-  font-family: var(--font-mono);
-  color: var(--color-muted);
-  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
-  border-radius: 0.375rem;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  backdrop-filter: blur(4px);
-  z-index: 10;
-}
-.copy-code-btn:hover {
-  color: var(--color-ink);
-  background: var(--color-surface);
-  border-color: var(--color-primary);
-}
-
-
