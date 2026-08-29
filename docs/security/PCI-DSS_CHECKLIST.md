@@ -65,7 +65,7 @@ OZ-POS processes, transmits, and stores cardholder data when processing credit/d
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| 12.1.1 Information security policy | ✅ Implemented | See `docs/security/` and `architecture/whitepaper.md` |
+| 12.1.1 Information security policy | ✅ Implemented | See `docs/security/` and `docs/archived/WHITEPAPER.md` |
 | 12.3.1 Usage policies for critical technologies | ✅ Implemented | `AGENTS.md` coding standards |
 | 12.5.1 Incident response plan | ✅ Implemented | P12-2: Full incident response plan at `docs/security/INCIDENT_RESPONSE.md` — P1-P4 severity matrix, containment procedures, evidence preservation, escalation matrix, post-mortem template. |
 | 12.8.1 Manage service providers with access to CDE | N/A | No third-party service providers |
