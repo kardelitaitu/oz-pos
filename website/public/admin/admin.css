@@ -128,10 +128,11 @@
   .kpi-sub { color:var(--muted); font-size:.72rem; margin-top:.15rem; overflow-wrap:anywhere; }
 
   .chart-grid { display:grid; gap:1.25rem; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); margin-top:1.25rem; }
-  .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:.7rem; padding:1.1rem; min-width:0; }
-  .chart-card h3 { margin:0 0 .6rem; font-size:.9rem; }
-  .chart-card .chart-svg { display:block; width:100%; height:auto; }
-  .donut-row { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+  .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:.7rem; padding:1.1rem; min-width:0;
+    display:flex; flex-direction:column; aspect-ratio:2 / 1; }
+  .chart-card h3 { margin:0 0 .6rem; font-size:.9rem; flex-shrink:0; }
+  .chart-card .chart-svg, .chart-card svg { display:block; width:100%; flex:1; min-height:0; }
+  .donut-row { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; flex:1; min-height:0; }
   .donut-row .donut-chart { flex:0 0 auto; width:45%; max-width:170px; }
   .donut-row .donut-chart svg { display:block; width:100%; height:auto; }
   .donut-row .donut-legend { flex:1 1 40%; min-width:120px; }
