@@ -315,6 +315,34 @@ describe('AccountView — subscription display', () => {
       container.remove();
     }
   });
+
+  it('shows IDR prices when the saved region is Indonesia even on the en-locale page', async () => {
+    // Regression: on /en/account with region=id the checkout routes through
+    // Midtrans (IDR), so the displayed plan prices must be the IDR ones —
+    // not the en-locale USD prices. The currency shown and the currency
+    // billed must match.
+    localStorage.setItem('oz_region', 'id');
+    sessionStorage.setItem('oz_session', 'tok-region-id-prices');
+    midtrans.openMidtransCheckout.mockResolvedValue(undefined);
+    mockFetch((url) => {
+      if (url.includes('/devices')) return okJson({ devices: [] });
+      return okJson({
+        tenant: { email: 'test@example.com', emailVerified: true, status: 'active' },
+        license: { key: 'OZ-TEST-0001', tierKey: 'free', status: 'active', expiresAt: '2027-01-01' },
+        subscription: null,
+      });
+    });
+    const { container, root } = await renderAccount('en');
+    try {
+      // IDR yearly Plus price from pricing/id.ts.
+      assertText(container, 'Rp 500.000');
+      assertNoText(container, '$4.99');
+      assertNoText(container, '$49.99');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 // ── License display ───────────────────────────────────────────────────

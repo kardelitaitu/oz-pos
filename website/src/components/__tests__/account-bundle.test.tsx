@@ -183,4 +183,22 @@ describe('AccountView bundle upgrade', () => {
       container.remove();
     }
   });
+
+  it('shows the bundle card with IDR prices when the saved region is Indonesia on an en-locale page', async () => {
+    // Regression: the bundle upgrade card's pricing source must follow the
+    // payment provider region (id → Midtrans → IDR prices), not the URL
+    // locale (en → USD). The bundle card for Plus users on /en/account with
+    // region=id must show 'Rp 750.000', not '$74.99'.
+    localStorage.setItem('oz_region', 'id');
+    stubMe({ tierKey: 'plus', status: 'active' });
+    const { container, root } = await renderAccount('en');
+    try {
+      assertText(container, 'Paket Restaurant Starter');
+      assertText(container, 'Rp 750.000');
+      assertNoText(container, '$74.99');
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
 });

@@ -1,4 +1,25 @@
 
+## 2026-08-29 — TDD round 5: currency mismatch when region=id on en-locale dashboard (website AccountView)
+
+**Problem:** The dashboard's subscribe section and bundle upgrade card built
+their pricing from `pricingFor(locale)` — the URL locale, not the payment
+provider's region. When `useMidtrans` became true via a saved region=id
+preference (fixed in round 2), the checkout routed through Midtrans (IDR) but
+the displayed prices were the en-locale USD ones ("$4.99"/"$49.99"). A user on
+`/en/account` with region=id saw USD prices yet got billed in IDR — the shown
+currency and the billed currency disagreed.
+
+**Solution:** TDD Red→Green (2 new tests, account-view 44→45, bundle 5→6):
+- Red: `/en/account` with region=id showed `$4.99` instead of `Rp 500.000`.
+- Green: both `subscribable` and `plusBundle` now derive their pricing source
+  from the payment provider: `pricingFor(useMidtrans ? 'id' : locale)` — when
+  checkout goes through Midtrans, the displayed price is the IDR one.
+- Bundle regression test pins `Rp 750.000` (not `$74.99`) for the id-region
+  Plus bundle card.
+
+**Commits:** pending round-5 commit.
+**Test counts:** account-view.test.tsx 44→45; account-bundle 5→6; full suite 166→168.
+
 ## 2026-08-29 — TDD round 4: timezone fix still wrong for negative offsets (website AccountView)
 
 **Problem:** The round-1 timezone fix (`new Date(d.getFullYear(), d.getMonth(),

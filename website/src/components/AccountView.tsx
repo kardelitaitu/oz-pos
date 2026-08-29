@@ -473,7 +473,10 @@ export default function AccountView({ locale }: Props) {
   // MIDTRANS_PRICE_TIERS map), so Paddle price ids don't gate it; other
   // markets need a real, non-placeholder Paddle price. useMidtrans is the
   // region-derived state (see state init) — do not redeclare it here.
-  const subscribable = (pricingFor(locale) ?? [])
+  // The pricing source follows the payment provider: when useMidtrans is true
+  // the checkout goes through Midtrans (IDR) so the displayed prices must
+  // match — use the id pricing content, not the URL locale.
+  const subscribable = (pricingFor(useMidtrans ? 'id' : locale) ?? [])
     .filter((tier) => tier.tierKey === 'plus' || tier.tierKey === 'pro' || tier.tierKey === 'premium')
     .map((tier) => {
       const yearly = tier.prices.yearly;
@@ -491,7 +494,9 @@ export default function AccountView({ locale }: Props) {
   // the subscribe section hides placeholder plans.
   // WIP: bundle checkout needs a real Paddle bundle price id (currently
   // pri_placeholder_plus_bundle_*) — the card stays hidden until then.
-  const plusBundle = (pricingFor(locale) ?? []).find((tier) => tier.tierKey === 'plus')?.bundle;
+  // Pricing source follows the payment provider, same as the subscribe
+  // section: Midtrans (useMidtrans) bills in IDR, so show the id pricing.
+  const plusBundle = (pricingFor(useMidtrans ? 'id' : locale) ?? []).find((tier) => tier.tierKey === 'plus')?.bundle;
   const bundleYearly = plusBundle?.prices.yearly;
   const bundleCheckoutAvailable =
     Boolean(plusBundle) &&
