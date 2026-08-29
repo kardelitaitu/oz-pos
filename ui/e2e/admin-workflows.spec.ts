@@ -25,8 +25,13 @@ const SIDEBAR_TIMEOUT = 10_000;
 const SCREEN_TIMEOUT = 8_000;
 
 async function navigateToSettings(page: Page) {
+  // If already on settings (from selectWorkspace's tool card click), skip.
+  const alreadyOnSettings = await page.locator('[data-testid="settings-sidebar"]').isVisible({ timeout: 1_000 }).catch(() => false);
+  if (alreadyOnSettings) return;
+
   await page.evaluate(() => {
     window.location.hash = '#/settings';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
   });
   await page.waitForSelector('[data-testid="settings-sidebar"]', { timeout: SIDEBAR_TIMEOUT });
 }

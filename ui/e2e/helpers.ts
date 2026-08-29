@@ -119,8 +119,9 @@ export async function selectWorkspace(
     } else {
       await toolCard.click();
     }
-    // Wait for the admin workspace to activate and route to resolve.
-    await page.waitForTimeout(2_000);
+    // Wait for the admin workspace to activate — the settings sidebar
+    // confirms the admin workspace and route are resolved.
+    await page.waitForSelector('[data-testid="settings-sidebar"], [class*="admin"]', { timeout: 10_000 }).catch(() => {});
     return;
   }
 
@@ -146,8 +147,19 @@ export async function selectWorkspace(
     await card.click();
   }
 
-  // Wait for navigation to complete.
-  await page.waitForTimeout(2_000);
+  // Wait for the workspace-specific content to appear instead of a hard sleep.
+  const workspaceIndicators: Record<string, string> = {
+    'store-pos': '.retail-product-btn',
+    'restaurant-pos': '.restaurant-card',
+    kds: '.kds',
+    warehouse: '.warehouse',
+  };
+  const indicator = workspaceIndicators[typeKey];
+  if (indicator) {
+    await page.waitForSelector(indicator, { timeout: 10_000 }).catch(() => {});
+  } else {
+    await page.waitForTimeout(1_000);
+  }
 }
 
 /**
