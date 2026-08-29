@@ -21,25 +21,25 @@ Browser → admin.ozpos.my.id
 
 ---
 
-## 2. Critical Findings
+## 2. Top Findings (highest-impact issues)
 
-### C1 — Stored XSS in Tenant Detail Modal
+### C1 — Unsafe `innerHTML` in Tenant Detail Modal (defense-in-depth, currently LOW exploitability)
 
 **File**: `admin.js:373-380`  
-**Risk**: The `showTenantDetail` function builds the modal content via `kv.innerHTML = '<span>...' + (t.status || '—') + '...</span>'`. The `license.key` field (`lic.key`) is a user-controlled string — a tenant's license key is a store-level identifier. If a tenant (or an attacker who can register a tenant) sets a license key containing `<script>` or HTML event attributes, the admin viewing their details will execute that code.
+**Risk**: `showTenantDetail` builds the modal via `kv.innerHTML = '<span>...' + (t.status || '—') + '...</span>'`. **Assessment after verifying the data model**: license keys are server-generated hex (`hex.EncodeToString` in `api_key.go`/`helpers.go`), and `tierKey`/`status`/`provider` are enum/select fields constrained at the PocketBase schema level — so none of the fields interpolated into this HTML are currently free-text user input. The tenant **email** (the one genuinely user-controlled field) is rendered via `el('h3')` → `textContent`, which is safe.
 
-**Severity**: **HIGH** — stored XSS in the admin panel with full access to the `/__oz/session` endpoint (JWT theft).
+**Severity**: **MEDIUM** (was initially assessed HIGH) — not directly exploitable today, but the `innerHTML`-with-string-concatenation pattern is fragile. Any future field that becomes free-text (e.g., a tenant `notes` column, an editable `display_name`) instantly becomes stored XSS in the admin panel with JWT-theft capability via `/__oz/session`.
 
-**Fix**: Use `textContent` / `el()` for all user-controlled data in the modal. The `kv` div currently uses `innerHTML` with concatenated strings. Replace with `el('span', ...)` + `textContent`.
+**Fix**: Replace `innerHTML` concatenation with `el('span', ...)` + `textContent` in `showTenantDetail`. Cheap, removes the whole class of future bugs.
 
-### C2 — Stored XSS in Upgrade Prompt
+### C2 — Unsafe `innerHTML` in Upgrade Prompt (defense-in-depth)
 
 **File**: `admin.js:402`  
-**Risk**: `box.innerHTML += '<p>... Current tier: ' + (data.subscription.tierKey || 'none') + '...</p>'`. The `tierKey` from the API is interpolated into HTML. Currently constrained to a select enum (plus/pro/premium/enterprise), but a future API change or injection during transit could insert arbitrary HTML.
+**Risk**: `box.innerHTML += '<p>... Current tier: ' + (data.subscription.tierKey || 'none') + '...</p>'`. Same pattern as C1 — `tierKey` is a schema-constrained enum today, but the pattern is unsafe for future fields.
 
-**Severity**: **HIGH** — same propagation path as C1.
+**Severity**: **MEDIUM** (was initially assessed HIGH) — same rationale as C1.
 
-**Fix**: Use `textContent` or `el()` for the tier key display.
+**Fix**: Use `el('p', ...)` + `textContent` for the tier display.
 
 ### C3 — No Pagination in Frontend for Tenants List
 
@@ -116,9 +116,9 @@ Browser → admin.ozpos.my.id
 **File**: `admin.js:340-359`  
 **Risk**: With 25 tenants per page and no search/filter, finding a specific tenant requires manually paging through hundreds of records. The backend has no search endpoint.
 
-### M6 — Missing `Cache-Control` Headers on SPA HTML
+### M6 — SPA HTML is Edge-Cached (acceptable, but worth documenting)
 
-**File**: `worker.ts:227` — the SPA response (`withStrictCSP(spaResp)`) copies the ASSETS response headers, which may include `Cache-Control: public, max-age=0, must-revalidate`. The `withStrictCSP` function doesn't set an explicit `no-store` for the HTML page, so the edge CDN may serve stale SPA content on hash-free static file requests.
+**File**: `worker.ts:248` — the SPA response (`withStrictCSP(spaResp)`) copies the ASSETS headers including `Cache-Control: public, max-age=0, must-revalidate`. Live check confirms `CF-Cache-Status: HIT`. **Assessment**: this is acceptable — `max-age=0` + `must-revalidate` means the edge/browser revalidates every request, so stale SPA content isn't served long-term. The one subtlety is that a deploy changing the SPA's hash-less file paths can serve the *previous* version for one revalidation cycle. Not a bug, but the admin dashboard's HTML/JS should be considered immutable-per-deploy; a future improvement is fingerprinting asset filenames (e.g. `admin-<hash>.js`) to eliminate even that window.
 
 ---
 
@@ -146,7 +146,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 
 | # | Priority | Finding | Action |
 |---|----------|---------|--------|
-| 1 | **CRITICAL** | Stored XSS in modal/upgrade prompt (C1, C2) | Replace `innerHTML` with `textContent` / `el()` for all API-sourced strings |
+| 1 | **HIGH** | Unsafe `innerHTML` patterns (C1, C2) | Replace with `textContent` / `el()` for all API-sourced strings (defense-in-depth; not exploitable today due to server-generated hex keys + enum-constrained fields) |
 | 2 | **HIGH** | MOCK fallback masks failures (C4) | Show error banner when API fails; keep MOCK only as last-resort skeleton |
 | 3 | **HIGH** | Tenants list has no pagination (C3) | Add page controls + pass `?page=` / `?perPage=` to the API |
 | 4 | **HIGH** | Monolithic admin.js (H1) | Split into testable modules (stats.js, tenants.js, charts.js) or move to a build step |
@@ -157,7 +157,7 @@ The admin login page (`login.html`) is always dark. The dashboard has a theme to
 | 9 | **MEDIUM** | Remove `?token=` fallback (M3) | Delete the deprecated path once exchange-code rollout is confirmed stable |
 | 10 | **MEDIUM** | Duplicate `devices2` icon (M2) | Remove dead code |
 | 11 | **MEDIUM** | No search on tenants (M5) | Add a search endpoint on the backend + search input in the frontend |
-| 12 | **MEDIUM** | SPA caching headers (M6) | Set `Cache-Control: no-store` on the SPA HTML response in `withStrictCSP` |
+| 12 | **INFO** | SPA HTML edge-cached (M6) | Acceptable (`max-age=0, must-revalidate`); optional future: fingerprint asset filenames |
 | 13 | **LOW** | Login page always dark (L4) | Add theme.js to the login page or auto-detect OS preference |
 
 ---
