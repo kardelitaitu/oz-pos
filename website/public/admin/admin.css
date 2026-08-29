@@ -15,6 +15,29 @@
   --cyan: #22d3ee;
 }
 
+/* ── Light theme (data-theme="light" on <html>) ────────────── */
+:root[data-theme="light"] {
+  --accent: #147efb;
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface2: #eef1f8;
+  --text: #101828;
+  --muted: #5b6b82;
+  --border: rgba(16, 24, 40, 0.12);
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+  --green: #16a34a;
+  --orange: #ea580c;
+  --pink: #c026d3;
+  --cyan: #0891b2;
+  color-scheme: light;
+}
+
+:root {
+  color-scheme: dark;
+}
+
 * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
 
@@ -34,6 +57,14 @@
   .nav-active svg { color:var(--accent); }
 
   .topbar-actions { display:flex; align-items:center; gap:.5rem; }
+
+  /* ── Theme toggle ──────────────────────────────────────────── */
+  .theme-toggle svg { width:1rem; height:1rem; display:block; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display:block; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display:none; }
+  :root[data-theme="light"] .theme-toggle .icon-sun { display:none; }
+  :root[data-theme="light"] .theme-toggle .icon-moon { display:block; }
+  body, .topbar, .card, .kpi, .chart-card, .modal, .btn, input { transition:background .15s, border-color .15s, color .15s; }
 
   /* ── Buttons ───────────────────────────────────────────────── */
   .btn { background:var(--accent); color:#fff; border:none; border-radius:.5rem; padding:.5rem .9rem; font-size:.82rem; font-weight:600; cursor:pointer; transition:opacity .15s; }
@@ -105,3 +136,19 @@
   .fx-chip-live { color:var(--ok); }
   .fx-chip-stale { color:var(--warn); }
   @media (max-width:800px) { .chart-grid { grid-template-columns:1fr; } .kpi-grid { grid-template-columns:repeat(2,1fr); } .topbar-inner { flex-wrap:wrap; } .nav { order:3; width:100%; justify-content:flex-start; margin-left:0; } }
+
+  /* ── Light-theme tweaks for hardcoded pastel colors ────────── */
+  :root[data-theme="light"] .db-link { color:#16a34a; border-color:rgba(22,163,74,.4); }
+  :root[data-theme="light"] .db-link:hover { color:#15803d; border-color:#16a34a; }
+  :root[data-theme="light"] .pill-ok { background:rgba(22,163,74,.12); color:#15803d; }
+  :root[data-theme="light"] .pill-warn { background:rgba(217,119,6,.12); color:#b45309; }
+  :root[data-theme="light"] .pill-bad { background:rgba(220,38,38,.12); color:#b91c1c; }
+  :root[data-theme="light"] .pill-muted { background:rgba(16,24,40,.06); color:var(--muted); }
+  :root[data-theme="light"] .kpi-icon-blue { background:rgba(20,126,251,.12); color:#1d4ed8; }
+  :root[data-theme="light"] .kpi-icon-green { background:rgba(22,163,74,.12); color:#15803d; }
+  :root[data-theme="light"] .kpi-icon-orange { background:rgba(234,88,12,.12); color:#c2410c; }
+  :root[data-theme="light"] .kpi-icon-pink { background:rgba(192,38,211,.12); color:#a21caf; }
+  :root[data-theme="light"] .kpi-icon-cyan { background:rgba(8,145,178,.12); color:#0e7490; }
+  :root[data-theme="light"] .kpi-icon-red { background:rgba(220,38,38,.12); color:#b91c1c; }
+  :root[data-theme="light"] .mock-badge { background:rgba(217,119,6,.15); color:#b45309; }
+  :root[data-theme="light"] .modal-back { background:rgba(16,24,40,.45); }

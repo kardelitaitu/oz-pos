@@ -435,5 +435,14 @@ const API = (window.__OZ_CONFIG__ && window.__OZ_CONFIG__.licenseApiUrl) || 'htt
       window.location.href = '/';
     });
 
+    // Theme toggle (light/dark) — theme.js sets data-theme on <html> and
+    // exposes window.__ozAdminTheme.{get,set,toggle}; the icons flip via CSS.
+    const themeToggle = document.getElementById('theme-toggle');
+    if (themeToggle) {
+      themeToggle.addEventListener('click', () => {
+        if (window.__ozAdminTheme) { window.__ozAdminTheme.toggle(); }
+      });
+    }
+
     renderDashboard();
   
