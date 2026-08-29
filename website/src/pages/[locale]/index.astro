@@ -27,13 +27,15 @@ const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
 const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
 const verticals = dict(locale).vertical as Record<(typeof verticalKeys)[number], { label: string }>;
 // Tech-stack logos shown after the features grid.
+// Native aspect ratios (width/height) from each SVG's viewBox or width/height,
+// so the masked monochrome rendition keeps the logo's original shape.
 const techStack = [
-  { name: 'Rust', src: rustLogo },
-  { name: 'Tauri', src: tauriLogo },
-  { name: 'Paddle', src: paddleLogo },
-  { name: 'Midtrans', src: midtransLogo },
-  { name: 'Trivy', src: trivyLogo },
-  { name: 'PostgreSQL', src: postgresLogo },
+  { name: 'Rust', src: rustLogo, ratio: 540 / 201 },
+  { name: 'Tauri', src: tauriLogo, ratio: 432 / 137 },
+  { name: 'Paddle', src: paddleLogo, ratio: 600 / 450 },
+  { name: 'Midtrans', src: midtransLogo, ratio: 185 / 30 },
+  { name: 'Trivy', src: trivyLogo, ratio: 1920 / 891 },
+  { name: 'PostgreSQL', src: postgresLogo, ratio: 1342 / 251 },
 ];
 ---
 
@@ -82,11 +84,25 @@ const techStack = [
     </div>
     <div class="mt-10 flex flex-wrap items-center justify-center gap-x-12 gap-y-8">
       {techStack.map((logo) => (
-        <img
-          src={logo.src}
-          alt={logo.name}
-          loading="lazy"
-          class="h-8 w-auto max-w-[10rem] opacity-80 transition-opacity duration-200 hover:opacity-100"
+        <span
+          class="h-8 opacity-70 transition-opacity duration-200 hover:opacity-100"
+          style={{
+            display: 'inline-block',
+            backgroundColor: 'var(--color-muted)',
+            aspectRatio: String(logo.ratio),
+            width: `calc(2rem * ${logo.ratio})`,
+            maxWidth: '100%',
+            WebkitMaskImage: `url("${logo.src}")`,
+            WebkitMaskSize: 'contain',
+            WebkitMaskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskImage: `url("${logo.src}")`,
+            maskSize: 'contain',
+            maskRepeat: 'no-repeat',
+            maskPosition: 'center',
+          }}
+          aria-label={logo.name}
+          role="img"
         />
       ))}
     </div>
