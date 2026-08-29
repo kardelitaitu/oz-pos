@@ -319,7 +319,7 @@ export default function AccountView({ locale }: Props) {
                 <span className="capitalize">{tenant.status}</span>
                 <span>•</span>
                 {tenant.emailVerified ? (
-                  <span className="text-green-500 font-medium inline-flex items-center gap-1">
+                  <span className="text-success font-medium inline-flex items-center gap-1">
                     <span aria-hidden="true">✓</span> {t(locale, 'account.verified')}
                   </span>
                 ) : (
@@ -376,7 +376,7 @@ export default function AccountView({ locale }: Props) {
                     aria-label={t(locale, 'account.copyKey')}
                   >
                     {copiedKey ? (
-                      <span className="text-green-500 font-semibold">{t(locale, 'account.copied')}</span>
+                      <span className="text-success font-semibold">{t(locale, 'account.copied')}</span>
                     ) : (
                       <span>{t(locale, 'account.copyKey')}</span>
                     )}
@@ -393,7 +393,7 @@ export default function AccountView({ locale }: Props) {
               <dd className="mt-1 capitalize">
                 <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                   (license?.status ?? tenant.status) === 'active'
-                    ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                    ? 'bg-success/15 text-success'
                     : 'bg-ink/10 text-muted'
                 }`}>
                   {statusLabel(locale, license?.status ?? tenant.status)}
@@ -533,10 +533,10 @@ export default function AccountView({ locale }: Props) {
               }}
             />
             {pwMsg === 'saved' && (
-              <p className="text-sm text-link" role="status">{t(locale, 'account.passwordSaved')}</p>
+              <p className="text-sm text-success" role="status">{t(locale, 'account.passwordSaved')}</p>
             )}
             {pwMsg === 'error' && (
-              <p className="text-sm text-link" role="alert">{t(locale, 'account.passwordError')}</p>
+              <p className="text-sm text-danger" role="alert">{t(locale, 'account.passwordError')}</p>
             )}
             <PasswordStrength locale={locale} password={pw} />
             <button
@@ -602,7 +602,7 @@ export default function AccountView({ locale }: Props) {
             )}
           </div>
           {regionMsg && (
-            <p className="mt-2 text-sm text-link" role="status">{t(locale, 'account.regionSaved')}</p>
+            <p className="mt-2 text-sm text-success" role="status">{t(locale, 'account.regionSaved')}</p>
           )}
         </section>
       )}
@@ -707,7 +707,7 @@ export default function AccountView({ locale }: Props) {
       {/* Checkout feedback shared by the subscribe section AND the bundle
           upgrade card (a Plus subscriber's bundle purchase also polls /me). */}
       {subscribeError && (
-        <p className="text-sm text-link" role="alert">
+        <p className="text-sm text-danger" role="alert">
           {t(locale, 'checkout.error')}
         </p>
       )}
@@ -721,31 +721,6 @@ export default function AccountView({ locale }: Props) {
           {t(locale, 'account.subscriptionPending')}
         </p>
       )}
-
-      <button
-        type="button"
-        onClick={async () => {
-          // Best-effort server-side invalidation; the local token is always
-          // cleared regardless of network outcome so the user is never
-          // stuck signed in.
-          const token = sessionStorage.getItem('oz_session');
-          if (API && token) {
-            try {
-              await fetch(`${API}/api/v1/web/logout`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-              });
-            } catch {
-              // Ignore network errors — logout is idempotent server-side.
-            }
-          }
-          clearSession();
-          window.location.href = `/${locale}`;
-        }}
-        className="text-sm text-muted transition hover:text-ink"
-      >
-        {t(locale, 'account.logout')}
-      </button>
     </div>
   );
 }

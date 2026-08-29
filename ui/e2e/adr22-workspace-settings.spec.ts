@@ -83,16 +83,16 @@ test.describe('ADR #22 — Topology canvas', () => {
 
   test('topology nav item exists and navigates to topology screen', async ({ page }) => {
     // Hard assertion: topology nav item must exist.
-    // The Management category is collapsed by default. Expand it.
-    const managementHeader = page.locator('.settings-sidebar-section-header')
-      .filter({ hasText: 'Management' });
-    await expect(managementHeader).toBeVisible({ timeout: 5_000 });
-    const isExpanded = await managementHeader
+    // The System category is collapsed by default. Expand it (Topology lives here).
+    const systemHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'System' });
+    await expect(systemHeader).toBeVisible({ timeout: 5_000 });
+    const isExpanded = await systemHeader
       .getAttribute('aria-expanded')
       .then((v) => v === 'true')
       .catch(() => false);
     if (!isExpanded) {
-      await managementHeader.click();
+      await systemHeader.click();
     }
 
     const topologyNav = page.locator('.settings-nav-item')
@@ -110,14 +110,14 @@ test.describe('ADR #22 — Topology canvas', () => {
   });
 
   test('topology screen renders interactive element', async ({ page }) => {
-    const managementHeader = page.locator('.settings-sidebar-section-header')
-      .filter({ hasText: 'Management' });
-    const isExpanded = await managementHeader
+    const systemHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'System' });
+    const isExpanded = await systemHeader
       .getAttribute('aria-expanded')
       .then((v) => v === 'true')
       .catch(() => false);
     if (!isExpanded) {
-      await managementHeader.click();
+      await systemHeader.click();
     }
 
     const topologyNav = page.locator('.settings-nav-item')
@@ -133,14 +133,14 @@ test.describe('ADR #22 — Topology canvas', () => {
     // ADR #22 Pillar E + branch rename: the in-canvas card rename must
     // flow through the store-profile update and show up in the header
     // branch selector (both derive from the same stores state).
-    const managementHeader = page.locator('.settings-sidebar-section-header')
-      .filter({ hasText: 'Management' });
-    const isExpanded = await managementHeader
+    const systemHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'System' });
+    const isExpanded = await systemHeader
       .getAttribute('aria-expanded')
       .then((v) => v === 'true')
       .catch(() => false);
     if (!isExpanded) {
-      await managementHeader.click();
+      await systemHeader.click();
     }
 
     const topologyNav = page.locator('.settings-nav-item')
@@ -173,14 +173,14 @@ test.describe('ADR #22 — Topology canvas', () => {
     // graph the moment the branch list updates (merge/rebuild drops the
     // card + wires), and the selector falls back to its placeholder when
     // no branch remains.
-    const managementHeader = page.locator('.settings-sidebar-section-header')
-      .filter({ hasText: 'Management' });
-    const isExpanded = await managementHeader
+    const systemHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'System' });
+    const isExpanded = await systemHeader
       .getAttribute('aria-expanded')
       .then((v) => v === 'true')
       .catch(() => false);
     if (!isExpanded) {
-      await managementHeader.click();
+      await systemHeader.click();
     }
 
     const topologyNav = page.locator('.settings-nav-item')
@@ -217,14 +217,14 @@ test.describe('ADR #22 — Topology canvas', () => {
 
   test('clicking a topology node shows inspector drawer', async ({ page }) => {
     // ADR #22 Pillar E: selecting a node opens inspector with workspace card.
-    const managementHeader = page.locator('.settings-sidebar-section-header')
-      .filter({ hasText: 'Management' });
-    const isExpanded = await managementHeader
+    const systemHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'System' });
+    const isExpanded = await systemHeader
       .getAttribute('aria-expanded')
       .then((v) => v === 'true')
       .catch(() => false);
     if (!isExpanded) {
-      await managementHeader.click();
+      await systemHeader.click();
     }
 
     const topologyNav = page.locator('.settings-nav-item')
@@ -353,14 +353,14 @@ test.describe('ADR #22 — Topology canvas', () => {
     // there, so containment math is only asserted on the desktop project.
     test.skip(testInfo.project.name !== 'desktop', 'tablet load race keeps fitted geometry variable');
 
-    const managementHeader = page.locator('.settings-sidebar-section-header')
-      .filter({ hasText: 'Management' });
-    const isExpanded = await managementHeader
+    const systemHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'System' });
+    const isExpanded = await systemHeader
       .getAttribute('aria-expanded')
       .then((v) => v === 'true')
       .catch(() => false);
     if (!isExpanded) {
-      await managementHeader.click();
+      await systemHeader.click();
     }
 
     const topologyNav = page.locator('.settings-nav-item')
@@ -402,14 +402,14 @@ test.describe('ADR #22 — Topology canvas', () => {
     // there, so containment math is only asserted on the desktop project.
     test.skip(testInfo.project.name !== 'desktop', 'tablet load race keeps fitted geometry variable');
 
-    const managementHeader = page.locator('.settings-sidebar-section-header')
-      .filter({ hasText: 'Management' });
-    const isExpanded = await managementHeader
+    const systemHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'System' });
+    const isExpanded = await systemHeader
       .getAttribute('aria-expanded')
       .then((v) => v === 'true')
       .catch(() => false);
     if (!isExpanded) {
-      await managementHeader.click();
+      await systemHeader.click();
     }
 
     const topologyNav = page.locator('.settings-nav-item')

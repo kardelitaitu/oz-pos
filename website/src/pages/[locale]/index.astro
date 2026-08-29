@@ -27,15 +27,16 @@ const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
 const verticalKeys = ['kafe', 'minimarket', 'warung', 'restoran'] as const;
 const verticals = dict(locale).vertical as Record<(typeof verticalKeys)[number], { label: string }>;
 // Tech-stack logos shown after the features grid.
-// Native aspect ratios (width/height) from each SVG's viewBox or width/height,
-// so the masked monochrome rendition keeps the logo's original shape.
+// Tech-stack logos shown after the features grid.
+// Tightened aspect ratios (width/height) and optical heights so all logos
+// align with uniform visual weight.
 const techStack = [
-  { name: 'Rust', src: rustLogo, ratio: 540 / 201 },
-  { name: 'Tauri', src: tauriLogo, ratio: 432 / 137 },
-  { name: 'Paddle', src: paddleLogo, ratio: 600 / 450 },
-  { name: 'Midtrans', src: midtransLogo, ratio: 185 / 30 },
-  { name: 'Trivy', src: trivyLogo, ratio: 1920 / 891 },
-  { name: 'PostgreSQL', src: postgresLogo, ratio: 1342 / 251 },
+  { name: 'Rust', src: rustLogo, ratio: 540 / 201, height: '1.65rem' },
+  { name: 'Tauri', src: tauriLogo, ratio: 432 / 137, height: '1.6rem' },
+  { name: 'Paddle', src: paddleLogo, ratio: 430.9 / 132.6, height: '1.45rem' },
+  { name: 'Midtrans', src: midtransLogo, ratio: 185 / 30, height: '1.5rem' },
+  { name: 'Trivy', src: trivyLogo, ratio: 1581 / 691, height: '1.8rem' },
+  { name: 'PostgreSQL', src: postgresLogo, ratio: 1308.7 / 174.4, height: '1.5rem' },
 ];
 ---
 
@@ -74,23 +75,18 @@ const techStack = [
         ))
       }
     </div>
-  </section>
 
-  <!-- Tech stack (brand logos) -->
-  <section data-reveal class="mx-auto max-w-6xl px-4 py-8" aria-label={t(locale, 'techStack.title')}>
-    <div class="text-center">
-      <h2 class="text-3xl font-bold">{t(locale, 'techStack.title')}</h2>
-      <p class="mt-2 text-muted">{t(locale, 'techStack.subtitle')}</p>
-    </div>
-    <div class="mt-10 flex flex-wrap items-center justify-center gap-x-12 gap-y-8">
+    <!-- Tech stack logos inside features area -->
+    <div class="mt-12 flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
       {techStack.map((logo) => (
         <span
-          class="h-8 opacity-70 transition-opacity duration-200 hover:opacity-100"
+          class="opacity-70 transition-opacity duration-200 hover:opacity-100 flex-shrink-0"
           style={{
             display: 'inline-block',
+            height: logo.height,
             backgroundColor: 'var(--color-muted)',
             aspectRatio: String(logo.ratio),
-            width: `calc(2rem * ${logo.ratio})`,
+            width: `calc(${logo.height} * ${logo.ratio})`,
             maxWidth: '100%',
             WebkitMaskImage: `url("${logo.src}")`,
             WebkitMaskSize: 'contain',

@@ -267,7 +267,7 @@ export default function AuthForm({ locale }: Props) {
   };
 
   const inputClass =
-    'w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent';
+    'w-full rounded-md border border-ink/10 bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-primary/30';
 
   const tabClass = (active: boolean) =>
     `rounded-md px-3 py-1.5 text-sm font-medium transition ${
@@ -278,7 +278,7 @@ export default function AuthForm({ locale }: Props) {
   if (view === 'reset') {
     if (resetStep === 'email') {
       return (
-        <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
+        <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm">
           <form onSubmit={requestResetCode} className="space-y-4" aria-label={t(locale, 'login.resetTitle')}>
             <label className="block">
               <span className="mb-1 block text-sm text-muted">{t(locale, 'login.email')}</span>
@@ -303,11 +303,11 @@ export default function AuthForm({ locale }: Props) {
                 .
               </p>
             )}
-            {error && <p className="text-sm text-link" role="alert">{error}</p>}
+            {error && <p className="text-sm text-danger" role="alert">{error}</p>}
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
+              className="w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
             >
               {loading ? '…' : t(locale, 'login.sendResetCode')}
             </button>
@@ -323,7 +323,7 @@ export default function AuthForm({ locale }: Props) {
       );
     }
     return (
-      <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
+      <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm ${error ? 'animate-shake' : ''}`}>
         <p className="mb-4 text-sm text-muted">{t(locale, 'login.resetCodeSent')}</p>
         <form onSubmit={submitResetPassword} className="space-y-4" aria-label={t(locale, 'login.resetTitle')}>
           <div>
@@ -352,11 +352,11 @@ export default function AuthForm({ locale }: Props) {
             onConfirmChange={setResetConfirm}
           />
           <PasswordStrength locale={locale} password={resetPassword} />
-          {error && <p className="text-sm text-link" role="alert">{error}</p>}
+          {error && <p className="text-sm text-danger" role="alert">{error}</p>}
           <button
             type="submit"
             disabled={loading || resetCode.length < 6 || !isStrongPassword(resetPassword) || !passwordsMatch(resetPassword, resetConfirm)}
-            className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
+            className="w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.resetPassword')}
           </button>
@@ -375,7 +375,7 @@ export default function AuthForm({ locale }: Props) {
   // ── OTP code step ────────────────────────────────────────────────
   if (step === 'code') {
     return (
-      <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
+      <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm ${error ? 'animate-shake' : ''}`}>
         <p className="mb-4 text-sm text-muted">{t(locale, 'login.codeSent')}</p>
         <form onSubmit={verifyOtp} className="space-y-4" aria-label={t(locale, 'login.title')}>
           <div>
@@ -396,11 +396,11 @@ export default function AuthForm({ locale }: Props) {
               ✓ {t(locale, 'login.codeResent')}
             </p>
           )}
-          {error && <p className="text-sm text-link" role="alert">{error}</p>}
+          {error && <p className="text-sm text-danger" role="alert">{error}</p>}
           <button
             type="submit"
             disabled={loading || code.length < 6}
-            className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
+            className="w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.verify')}
           </button>
@@ -466,7 +466,7 @@ export default function AuthForm({ locale }: Props) {
 
   // ── Sign-in view (tabs) ──────────────────────────────────────────
   return (
-    <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 ${error ? 'animate-shake' : ''}`}>
+    <div className={`mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6 shadow-sm ${error ? 'animate-shake' : ''}`}>
       <div
         role="tablist"
         aria-label={t(locale, 'login.title')}
@@ -515,11 +515,11 @@ export default function AuthForm({ locale }: Props) {
               {t(locale, 'login.forgotPasswordLink')}
             </button>
           </div>
-          {error && <p className="text-sm text-link" role="alert">{error}</p>}
+          {error && <p className="text-sm text-danger" role="alert">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
+            className="w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.signIn')}
           </button>
@@ -544,11 +544,11 @@ export default function AuthForm({ locale }: Props) {
               className={inputClass}
             />
           </label>
-          {error && <p className="text-sm text-link" role="alert">{error}</p>}
+          {error && <p className="text-sm text-danger" role="alert">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
+            className="w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
           >
             {loading ? '…' : t(locale, 'login.sendCode')}
           </button>
