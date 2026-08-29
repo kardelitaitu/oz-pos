@@ -276,9 +276,48 @@ persistence)** + `export/` (3,121) + `sync/` (279). Heavy hitters:
 `topology.rs` 681 · `subscription.rs` 621 · `license_verification.rs` 550.
 
 **Slice plan:** **A** — lib/error/session/audit/events/rate_limiter/
-config_validator/payment/cash_payout/crypto + shims ✅ · **B** — `db/` layer
-(transactions, migrations) · **C** — sync_client/topology/features/settings ·
-**D** — export/subscription/license_verification/kds + remainder.
+config_validator/payment/cash_payout/crypto + shims ✅ · **B1** — db facade,
+migrations, structural sweeps, payments ✅ · **B2** — aggregate stores deep
+read (sales/products/inventory) · **C** — sync_client/topology/features/
+settings · **D** — export/subscription/license_verification/kds + remainder.
+
+### Slice B1 evidence (2026-07-25)
+
+- Structural sweeps over all 41 production db files:
+  - **Money policy holds** — `f64` appears only in loyalty *points* math
+    (`earn_multiplier`, documented i64-first) and popularity analytics
+    scores; zero currency stored as float.
+  - **Panic paths nearly absent** — 2 `unwrap()`s total (`db/profile.rs`
+    125/135, both guarded by presence checks immediately above).
+  - **Transactions** — `unchecked_transaction` at ~70 sites across 22 files,
+    matching the documented RUST-08 contract; no nesting violations surfaced
+    by the 2,536-test suite.
+  - **SQL construction** — all 6 `format!`-built SQL sites verified
+    injection-safe: interpolated fragments are internal whitelists/column
+    lists; every user-supplied value binds through `?N` params; LIKE inputs
+    escape `%`/`_`/`\` with an explicit `ESCAPE '\'` clause
+    (db/audit.rs, db/customers.rs).
+- `db/payments.rs`: idempotency dedup (check-then-return-existing) runs
+  inside the transaction; **`UNIQUE idx_payments_idempotency_key`** exists in
+  both `20260813_init.sql:1204` and the PG schema — the concurrent-insert
+  race resolves as a constraint error, not a duplicate. PAY-2 confirmed
+  driver-side only.
+- `db/mod.rs`: backup via online Backup API (not `VACUUM INTO` — no path
+  interpolation, RUST-02/03), `PRAGMA integrity_check`, fail-loud tenant
+  integrity gate.
+
+### Slice B1 findings
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-6 | ℹ️ INFO | migrations.rs:177–183, db/profile.rs:124/134 (pattern also PAY-10) | **Recurring mislabeled `// SAFETY:` comments on safe code** (guard-backed unwraps, test-harness locks). Pollutes unsafe-code grep hygiene crate-wide. | Reword as plain comments; keep `SAFETY:` exclusively for `unsafe` blocks. |
+
+### Slice B1 positives
+
+- The transaction contract (RUST-08) is not just documented — the code
+  matches it, and the tests pin the no-nesting boundary.
+- Injection safety is systematic, not accidental (escape + bind everywhere).
+- Backup/repair path is prior-audit-hardened (RUST-02/03 notes in-line).
 
 ### Slice A baseline evidence (2026-07-25)
 
