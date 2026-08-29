@@ -1031,29 +1031,29 @@ describe('SettingsPage', () => {
     });
   });
 
-  it('renders Data Management section when navigating to Data tab', async () => {
+  it('renders Email Reports section when navigating to Email tab', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('treeitem', { name: /system/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
-    fireEvent.click(screen.getByRole('treeitem', { name: /^data$/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /email reports/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /data management/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: /email reports/i })).toBeInTheDocument();
     });
   });
 
-  it('renders Features section when navigating to Features tab', async () => {
+  it('renders About section when navigating to About tab', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('treeitem', { name: /system/i })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
-    fireEvent.click(screen.getByRole('treeitem', { name: /^features$/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /about/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /feature toggles/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: /system.*license/i })).toBeInTheDocument();
     });
   });
 

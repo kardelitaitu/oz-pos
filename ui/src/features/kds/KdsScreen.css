@@ -154,30 +154,6 @@
   min-width: 0;
 }
 
-.kds-title {
-  margin: 0;
-  font-size: var(--kds-font-md);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  color: var(--kds-text);
-}
-
-.kds-order-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2rem;
-  padding: 0 0.5rem;
-  font-size: var(--kds-font-sm);
-  font-weight: 600;
-  color: var(--kds-text);
-  background: var(--kds-bg-tabs);
-  border-radius: var(--kds-r-sm);
-  user-select: none;
-  opacity: 0.6;
-}
-
 /* ── Back / icon buttons (prototype .kds-btn--icon: 40×40) ───────── */
 .kds-back-btn {
   display: inline-flex;
