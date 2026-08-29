@@ -334,6 +334,8 @@ func handleMidtransWebhook(app core.App) func(e *core.RequestEvent) error {
 					"error": "provisioning failed",
 				})
 			}
+			// Revenue capture (best-effort, logged only).
+			midtransCaptureRevenue(app, n)
 			return e.JSON(http.StatusOK, map[string]any{"status": "ok"})
 
 		case midtransChargeFailed(n):
@@ -574,6 +576,40 @@ func midtransSetGrace(app core.App, n midtransNotification) error {
 	}
 	log.Printf("midtrans webhook: %s -> grace_period for order %s (grace_until=%s)", n.TransactionStatus, n.OrderID, graceUntil)
 	return nil
+}
+
+// midtransCaptureRevenue records a settled Midtrans charge as a
+// revenue_events row (revenue-data-pipeline-plan.md Phase C). Best-effort:
+// failures are logged, never returned (the webhook already 200'd).
+func midtransCaptureRevenue(app core.App, n midtransNotification) {
+	email := strings.TrimSpace(n.CustomField2)
+	if email == "" {
+		return
+	}
+	tenant, err := app.FindFirstRecordByData("tenants", "email", email)
+	if err != nil {
+		log.Printf("midtrans revenue: tenant not found for email=%s (transaction=%s): %v", email, n.TransactionID, err)
+		return
+	}
+	amountIDR := parseMidtransGrossAmount(n.GrossAmount)
+	if amountIDR <= 0 {
+		return
+	}
+	tier, _, _, _ := midtransTierForNotification(n)
+	notes := "payment_type=" + n.PaymentType
+	if n.SubscriptionID != "" {
+		notes += " subscription_id=" + n.SubscriptionID
+	}
+	saveRevenueEvent(app, revenueEvent{
+		Provider:       "midtrans",
+		EventID:        n.TransactionID,
+		TenantID:       tenant.Id,
+		TierKey:        tier,
+		NativeAmount:   amountIDR,
+		NativeCurrency: "IDR",
+		SubscriptionID: n.SubscriptionID,
+		Notes:          notes,
+	})
 }
 
 // verifyMidtransConfig is the boot-time webhook gate (called from main

@@ -1374,4 +1374,187 @@
       "CREATE INDEX idx_enterprise_approvals_status ON enterprise_approvals (status)"
     ]
   }
+  ,
+  {
+    "id": "rev_events_0000001",
+    "name": "revenue_events",
+    "type": "base",
+    "system": false,
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text_rev_pk_0001",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "help": "Tenant that paid",
+        "hidden": false,
+        "id": "rel_rev_tenant_1",
+        "name": "tenant_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation",
+        "cascadeDelete": false,
+        "collectionId": "64d11bd2cc57a18",
+        "maxSelect": 1,
+        "minSelect": 0
+      },
+      {
+        "help": "Provider event id (Paddle event_id or Midtrans transaction_id) — dedup key",
+        "hidden": false,
+        "id": "text_rev_event_01",
+        "max": 128,
+        "min": 0,
+        "name": "event_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Billing provider: paddle (USD) or midtrans (IDR)",
+        "hidden": false,
+        "id": "select_rev_prov_1",
+        "maxSelect": 1,
+        "name": "provider",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "values": [
+          "paddle",
+          "midtrans"
+        ]
+      },
+      {
+        "help": "Amount in USD (Paddle native; Midtrans converted via FX)",
+        "hidden": false,
+        "id": "num_rev_usd_001",
+        "max": null,
+        "min": 0,
+        "name": "amount_usd",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "Amount in IDR (Midtrans native; Paddle converted via FX)",
+        "hidden": false,
+        "id": "num_rev_idr_001",
+        "max": null,
+        "min": 0,
+        "name": "amount_idr",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "Original charge currency: USD or IDR",
+        "hidden": false,
+        "id": "select_rev_curr_1",
+        "maxSelect": 1,
+        "name": "currency",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "values": [
+          "USD",
+          "IDR"
+        ]
+      },
+      {
+        "help": "Tier purchased (plus/pro/premium/enterprise)",
+        "hidden": false,
+        "id": "select_rev_tier_1",
+        "maxSelect": 1,
+        "name": "tier_key",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "select",
+        "values": [
+          "plus",
+          "pro",
+          "premium",
+          "enterprise"
+        ]
+      },
+      {
+        "help": "Provider subscription id (paddle_sub_id or midtrans_sub_id)",
+        "hidden": false,
+        "id": "text_rev_sub_001",
+        "max": 128,
+        "min": 0,
+        "name": "subscription_id",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "Optional metadata (payment_type, bundle, etc.)",
+        "hidden": false,
+        "id": "text_rev_notes_1",
+        "max": 512,
+        "min": 0,
+        "name": "notes",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "autodate_rev_cr_01",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate_rev_up_01",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": true,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_revenue_events_event ON revenue_events (event_id)",
+      "CREATE INDEX idx_revenue_events_tenant ON revenue_events (tenant_id)",
+      "CREATE INDEX idx_revenue_events_created ON revenue_events (created)"
+    ]
+  }
 ]

@@ -639,10 +639,11 @@ func handlePaddleWebhook(app core.App) func(e *core.RequestEvent) error {
 			return e.JSON(http.StatusOK, map[string]any{"status": "ok"})
 
 		case "transaction.completed", "transaction.payment_failed":
-			// One-time purchases (transaction.completed) only provision once
-			// a lifetime tier ships; payment failures are flagged in logs.
-			log.Printf("paddle webhook: %s event=%s acknowledged (no provisioning for one-time payments)",
-				ev.EventType, ev.EventID)
+			// Record revenue for completed transactions (skip payment_failed).
+			if ev.EventType == "transaction.completed" {
+				paddleCaptureRevenue(app, ev)
+			}
+			log.Printf("paddle webhook: %s event=%s acknowledged", ev.EventType, ev.EventID)
 			return e.JSON(http.StatusOK, map[string]any{"status": "ok"})
 
 		default:
@@ -664,6 +665,134 @@ func parsePaddleSubscription(ev paddleEvent) (*paddleSubscription, error) {
 		return nil, fmt.Errorf("subscription entity has no id")
 	}
 	return &sub, nil
+}
+
+// paddleTransaction is the subset of the Paddle Billing transaction entity
+// used to record a revenue event on transaction.completed. Amounts are in
+// minor units (cents for USD); currency_code is ISO 4217.
+type paddleTransaction struct {
+	ID             string `json:"id"`
+	Status         string `json:"status"`
+	CurrencyCode   string `json:"currency_code"`
+	CustomerID     string `json:"customer_id"`
+	SubscriptionID string `json:"subscription_id"`
+	CreatedAt      string `json:"created_at"`
+	Items          []struct {
+		Price struct {
+			ID        string `json:"id"`
+			ProductID string `json:"product_id"`
+		} `json:"price"`
+		Totals *struct {
+			Subtotal int64 `json:"subtotal"`
+			Total    int64 `json:"total"`
+			Tax      int64 `json:"tax"`
+		} `json:"totals"`
+	} `json:"items"`
+	Totals *struct {
+		Subtotal   int64 `json:"subtotal"`
+		Total      int64 `json:"total"`
+		Tax        int64 `json:"tax"`
+		GrandTotal int64 `json:"grand_total"`
+	} `json:"totals"`
+	CustomData map[string]string `json:"custom_data"`
+	Customer   *paddleCustomer   `json:"customer"`
+}
+
+// parsePaddleTransaction decodes the event data as a transaction entity.
+func parsePaddleTransaction(ev paddleEvent) (*paddleTransaction, error) {
+	var txn paddleTransaction
+	if err := json.Unmarshal(ev.Data, &txn); err != nil {
+		return nil, fmt.Errorf("failed to decode transaction entity: %w", err)
+	}
+	if txn.ID == "" {
+		return nil, fmt.Errorf("transaction entity has no id")
+	}
+	return &txn, nil
+}
+
+// paddleTransactionTotalCents returns the charged amount in minor units
+// (grand_total at transaction level, else sum of item totals, else 0).
+func paddleTransactionTotalCents(txn *paddleTransaction) int64 {
+	if txn.Totals != nil {
+		if txn.Totals.GrandTotal > 0 {
+			return txn.Totals.GrandTotal
+		}
+		if txn.Totals.Total > 0 {
+			return txn.Totals.Total
+		}
+	}
+	var sum int64
+	for _, it := range txn.Items {
+		if it.Totals != nil && it.Totals.Total > 0 {
+			sum += it.Totals.Total
+		}
+	}
+	return sum
+}
+
+// paddleTransactionTier resolves the tier for a transaction from its price
+// ids against the PADDLE_PRICE_TIERS map (may be empty for one-off items).
+func paddleTransactionTier(txn *paddleTransaction) string {
+	tiers, err := paddlePriceTiers()
+	if err != nil || len(tiers) == 0 {
+		return ""
+	}
+	for _, it := range txn.Items {
+		if val, ok := tiers[it.Price.ID]; ok {
+			// Map value is "tier:period:bundle" — split to get the tier.
+			parts := strings.SplitN(val, ":", 2)
+			if len(parts) >= 1 && parts[0] != "" {
+				return parts[0]
+			}
+		}
+	}
+	return ""
+}
+
+// paddleCaptureRevenue parses a transaction.completed event and records
+// the payment as a revenue_events record. Best-effort: failures are logged
+// but never returned (the webhook already acknowledged the event).
+func paddleCaptureRevenue(app core.App, ev paddleEvent) {
+	txn, err := parsePaddleTransaction(ev)
+	if err != nil {
+		log.Printf("paddle revenue: failed to parse transaction: %v", err)
+		return
+	}
+	if txn.Status != "completed" {
+		return
+	}
+	// Resolve the buyer email (custom_data > customer entity).
+	email := ""
+	if e := strings.TrimSpace(strings.ToLower(txn.CustomData["email"])); e != "" {
+		email = e
+	} else if txn.Customer != nil {
+		email = strings.TrimSpace(strings.ToLower(txn.Customer.Email))
+	}
+	if email == "" {
+		log.Printf("paddle revenue: no email for transaction=%s", txn.ID)
+		return
+	}
+	tenant, err := app.FindFirstRecordByData("tenants", "email", email)
+	if err != nil {
+		log.Printf("paddle revenue: tenant not found for email=%s (transaction=%s): %v", email, txn.ID, err)
+		return
+	}
+	cents := paddleTransactionTotalCents(txn)
+	amount := float64(cents) / 100.0
+	notes := ""
+	if txn.SubscriptionID != "" {
+		notes = "subscription_id=" + txn.SubscriptionID
+	}
+	saveRevenueEvent(app, revenueEvent{
+		Provider:       "paddle",
+		EventID:        ev.EventID,
+		TenantID:       tenant.Id,
+		TierKey:        paddleTransactionTier(txn),
+		NativeAmount:   amount,
+		NativeCurrency: "USD",
+		SubscriptionID: txn.SubscriptionID,
+		Notes:          notes,
+	})
 }
 
 // subscriptionTimes resolves starts_at/expires_at from the Paddle payload:
