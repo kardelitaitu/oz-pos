@@ -1,3 +1,9 @@
+/*
+last audited 25-07-26 by RSA-Agent (oz-core slice B2: sales deep read)
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: money paths exemplary (MONEY-01..04 + TAX-02..06 in-line, checked arithmetic at every IPC boundary, explicit rounding modes, TAX-06 exclusive-total correction); COR-7 MEDIUM: complete_sale_deduction inserts payment splits WITHOUT the idempotency_key column it carries — bypasses create_payments dedup persistence; COR-8 LOW: void_sale comment claims optimistic concurrency but UPDATE has no version CAS (WHERE id only); COR-9 INFO: receipt-barcode lookup swallows DB errors via .ok(); COR-10 INFO: PartialStockResult travels inside Validation.message JSON (documented tradeoff)
+next: persist idempotency_key on the sale-path payment insert (COR-7); add version CAS to void_sale (COR-8) | perf: batch SKU lookup avoids N+1; popularity recompute outside tx
+*/
 //! Sale CRUD — create, list, get, update status, held carts, exports.
 
 use std::collections::HashMap;

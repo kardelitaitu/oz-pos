@@ -312,6 +312,21 @@ settings · **D** — export/subscription/license_verification/kds + remainder.
 |---|---|---|---|---|
 | COR-6 | ℹ️ INFO | migrations.rs:177–183, db/profile.rs:124/134 (pattern also PAY-10) | **Recurring mislabeled `// SAFETY:` comments on safe code** (guard-backed unwraps, test-harness locks). Pollutes unsafe-code grep hygiene crate-wide. | Reword as plain comments; keep `SAFETY:` exclusively for `unsafe` blocks. |
 
+### Slice B2 findings — db/sales.rs deep read (2,419 lines, fully read)
+
+| ID | Sev | Location | Finding | Proposed solution |
+|---|---|---|---|---|
+| COR-7 | 🟠 MEDIUM | db/sales.rs:1025–1046 | **Sale-completion path drops payment idempotency keys.** `complete_sale_deduction` inserts payment splits directly and omits the `idempotency_key` column even though `PaymentSplitArg` carries it — bypassing the dedup-aware `create_payments` route (payments.rs). Keys captured at the IPC boundary never reach the ledger on the main sale path. | Include `split.idempotency_key` in the INSERT (column + index already exist), or route through `create_payments` within the same transaction. |
+| COR-8 | 🟡 LOW | db/sales.rs:1991–2001 | **`void_sale` claims optimistic concurrency but has no CAS.** Comment cites ADR #6, yet the UPDATE is `WHERE id = ?2` only (version is incremented, never compared) — a concurrent mutation between `get_sale` and the update is silently overwritten. | `WHERE id = ?2 AND version = ?3` using the version read by `get_sale`; map 0 rows to `Conflict`. |
+| COR-9 | ℹ️ INFO | db/sales.rs:1950–1958 | Receipt-barcode lookup swallows DB errors via `.ok()` → a real I/O failure reads as "no sale". Lookup-only path, not money-moving. | Log the error before falling back to `None`. |
+| COR-10 | ℹ️ INFO | db/sales.rs:538–552 | Partial-stock result travels as JSON inside `CoreError::Validation.message` — documented in-file as a known tradeoff; the front-end parses the message. | Dedicated `PartialStock` error variant when the IPC error surface is next touched. |
+
+> **Provenance note:** the slice-B2 stamp and this section landed in commit
+> `11a6822b` (a parallel review session swept the working-tree changes into
+> its own commit) rather than a dedicated audit commit. Content verified
+> present at HEAD; no history rewrite performed to avoid disturbing the
+> concurrent session.
+
 ### Slice B1 positives
 
 - The transaction contract (RUST-08) is not just documented — the code
